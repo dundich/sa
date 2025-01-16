@@ -22,8 +22,8 @@ public class KeepLockerTests
         // Act
         using (var locker = KeepLocker.KeepLocked(lockExpiration, extendLocked, cancellationToken: cancellationToken))
         {
-            await Task.Delay(200); // Give it some time to run
-            cancellationTokenSource.Cancel();
+            await Task.Delay(200, TestContext.Current.CancellationToken); // Give it some time to run
+            await cancellationTokenSource.CancelAsync();
         }
 
         // Assert
@@ -48,8 +48,8 @@ public class KeepLockerTests
         // Act
         using (var locker = KeepLocker.KeepLocked(lockExpiration, extendLocked, blockImmediately: true, cancellationToken: cancellationToken))
         {
-            await Task.Delay(100); // Give it some time to run
-            cancellationTokenSource.Cancel();
+            await Task.Delay(100, TestContext.Current.CancellationToken); // Give it some time to run
+            await cancellationTokenSource.CancelAsync();
         }
 
         // Assert
@@ -74,7 +74,7 @@ public class KeepLockerTests
         // Act
         var locker = KeepLocker.KeepLocked(lockExpiration, extendLocked, cancellationToken: cancellationToken);
 
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
 
         locker.Dispose();
 
@@ -83,7 +83,7 @@ public class KeepLockerTests
         // Assert
         Assert.True(extensionCount > 0, "The lock should have been extended immediately.");
 
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, extensionCount);
     }

@@ -34,9 +34,9 @@ public abstract class SaFixture<TSettings> : IAsyncLifetime
 
     public IServiceProvider ServiceProvider => _serviceProvider.Value;
 
-    public virtual Task InitializeAsync() => Task.CompletedTask;
+    public virtual ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
-    public async virtual Task DisposeAsync()
+    public async virtual ValueTask DisposeAsync()
     {
         if (_serviceProvider.IsValueCreated) await _serviceProvider.Value.DisposeAsync();
     }

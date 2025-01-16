@@ -54,9 +54,9 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture) : IClassFi
         Assert.True(i > 0);
 
         Console.WriteLine(fixture.ConnectionString);
-        await Task.Delay(800);
+        await Task.Delay(800, TestContext.Current.CancellationToken);
 
-        var list = await Sub.GetPartsFromDate("customer", DateTimeOffset.Now.StartOfDay());
+        var list = await Sub.GetPartsFromDate("customer", DateTimeOffset.Now.StartOfDay(), TestContext.Current.CancellationToken);
         Assert.NotEmpty(list);
     }
 }

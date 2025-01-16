@@ -50,7 +50,7 @@ public class PartitionManagerTests(PartitionManagerTests.Fixture fixture) : ICla
     {
         Console.WriteLine(fixture.ConnectionString);
         // Act
-        int i = await Sub.Migrate();
+        int i = await Sub.Migrate(TestContext.Current.CancellationToken);
         Assert.True(i > 0);
     }
 
@@ -63,7 +63,7 @@ public class PartitionManagerTests(PartitionManagerTests.Fixture fixture) : ICla
         DateTimeOffset tomorrow = today.AddDays(1);
 
         // Act
-        int i = await Sub.Migrate([today, tomorrow]);
+        int i = await Sub.Migrate([today, tomorrow], TestContext.Current.CancellationToken);
 
         Assert.NotEqual(0, i);
 

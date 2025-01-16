@@ -135,11 +135,11 @@ internal partial class JobController(IJobSettings settings, IInterceptorSettings
         EventId = 401,
         Level = LogLevel.Warning,
         Message = "[{JobName}] the error: “{Error}” on job was suppressed to continue.")]
-    partial void LogJobWasSuppressed(ILogger logger, string jobName, string error);
+    static partial void LogJobWasSuppressed(ILogger logger, string jobName, string error);
 
     [LoggerMessage(
         EventId = 402,
         Level = LogLevel.Warning,
         Message = "[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: “{Error}”")]
-    partial void LogFailedRetryAttempts(ILogger logger,  string jobName, int failedRetryAttempts, int retryCount, string error);
+    static partial void LogFailedRetryAttempts(ILogger logger,  string jobName, int failedRetryAttempts, int retryCount, string error);
 }

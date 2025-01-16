@@ -10,7 +10,7 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
     public async Task ExecuteNonQueryTest()
     {
         const int expected = -1;
-        var actual = await fixture.DataSource.ExecuteNonQuery("SELECT 2");
+        var actual = await fixture.DataSource.ExecuteNonQuery("SELECT 2", TestContext.Current.CancellationToken);
         Assert.Equal(expected, actual);
     }
 
@@ -25,12 +25,10 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
             );
 
             INSERT INTO users (name, age) VALUES (@p1, @p2);
-            """,
-              [
+            """, [
                   new("p1", "Tom"),
                   new("p2", 18)
-              ])
-            ;
+              ], TestContext.Current.CancellationToken);
         Assert.Equal(expected, actual);
     }
 
@@ -43,7 +41,7 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
         const int expected = 1;
         int actual = 0;
 
-        await fixture.DataSource.ExecuteReader("SELECT 1", (reader, i) => actual = reader.GetInt32(0));
+        await fixture.DataSource.ExecuteReader("SELECT 1", (reader, i) => actual = reader.GetInt32(0), TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, actual);
     }
@@ -61,7 +59,7 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
         const int expected = 1;
         int actual = 0;
 
-        await dataSource.ExecuteReader("SELECT 1", (reader, i) => actual = reader.GetInt32(0));
+        await dataSource.ExecuteReader("SELECT 1", (reader, i) => actual = reader.GetInt32(0), TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, actual);
     }

@@ -76,9 +76,9 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
     [Fact]
     public async Task InCache_TableNotExists_ReturnsFalse()
     {
-        Console.WriteLine(fixture.ConnectionString);
+        Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
-        bool actual = await Sub.InCache("different_table", DateTimeOffset.Now, ["p1", 145]);
+        bool actual = await Sub.InCache("different_table", DateTimeOffset.Now, ["p1", 145], TestContext.Current.CancellationToken);
         // Assert
         Assert.False(actual);
     }
@@ -88,10 +88,10 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
     {
         var date = DateTimeOffset.Now;
 
-        await fixture.PartRepository.CreatePart("test_20", date, [1, "some"]);
+        await fixture.PartRepository.CreatePart("test_20", date, [1, "some"], TestContext.Current.CancellationToken);
 
         // Act
-        bool result = await Sub.InCache("test_20", date, [1, "some"]);
+        bool result = await Sub.InCache("test_20", date, [1, "some"], TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(result);
@@ -100,10 +100,10 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
     [Fact]
     public async Task InCache_DateNotInCache_ReturnsFalse()
     {
-        await fixture.PartRepository.CreatePart("test_21", DateTimeOffset.Now, [1, "some"]);
+        await fixture.PartRepository.CreatePart("test_21", DateTimeOffset.Now, [1, "some"], TestContext.Current.CancellationToken);
 
         // Act
-        bool result = await Sub.InCache("test_21", DateTimeOffset.Now.AddDays(1), [1, "some"]);
+        bool result = await Sub.InCache("test_21", DateTimeOffset.Now.AddDays(1), [1, "some"], TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(result);
@@ -116,16 +116,16 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
         StrOrNum[] parValues = [1, "some1"];
 
         // Act
-        bool result = await Sub.InCache("test_22", date, parValues);
+        bool result = await Sub.InCache("test_22", date, parValues, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(result);
 
-        result = await Sub.EnsureCache("test_22", date, parValues);
+        result = await Sub.EnsureCache("test_22", date, parValues, TestContext.Current.CancellationToken);
 
         Assert.True(result);
 
-        result = await Sub.InCache("test_22", date, parValues);
+        result = await Sub.InCache("test_22", date, parValues, TestContext.Current.CancellationToken);
 
         Assert.True(result);
     }
@@ -135,13 +135,13 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
     {
         DateTimeOffset date = DateTimeOffset.Now;
 
-        bool result = await Sub.EnsureCache("test_23", date, []);
+        bool result = await Sub.EnsureCache("test_23", date, [], TestContext.Current.CancellationToken);
 
         Assert.True(result);
 
-        await Sub.RemoveCache("test_23");
+        await Sub.RemoveCache("test_23", TestContext.Current.CancellationToken);
 
-        result = await Sub.InCache("test_23", date, []);
+        result = await Sub.InCache("test_23", date, [], TestContext.Current.CancellationToken);
 
         Assert.True(result);
     }
@@ -154,15 +154,15 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
         StrOrNum[] partValues_1 = [1, "some1"];
         StrOrNum[] partValues_2 = [2, "some1"];
 
-        var result = await Sub.EnsureCache("test_24", date, partValues_1);
+        var result = await Sub.EnsureCache("test_24", date, partValues_1, TestContext.Current.CancellationToken);
 
         Assert.True(result);
 
-        result = await Sub.InCache("test_24", date, partValues_2);
+        result = await Sub.InCache("test_24", date, partValues_2, TestContext.Current.CancellationToken);
 
         Assert.False(result);
 
-        result = await Sub.EnsureCache("test_24", date, partValues_2);
+        result = await Sub.EnsureCache("test_24", date, partValues_2, TestContext.Current.CancellationToken);
 
         Assert.True(result);
     }

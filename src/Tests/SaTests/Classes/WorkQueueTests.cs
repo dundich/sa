@@ -49,10 +49,10 @@ public class WorkQueueTests
         var work = new SampleWork { };
 
         // Act
-        workService.Enqueue(model, work);
+        workService.Enqueue(model, work, TestContext.Current.CancellationToken);
 
         // Wait for a short time to allow the work to be processed
-        await Task.Delay(200);
+        await Task.Delay(200, TestContext.Current.CancellationToken);
 
         // Stop the work service
         await workService.Stop(model);
@@ -79,7 +79,7 @@ public class WorkQueueTests
         await cancellationTokenSource.CancelAsync();
 
         // Wait for a short time to allow the work to be processed
-        await Task.Delay(200);
+        await Task.Delay(200, TestContext.Current.CancellationToken);
 
         // Stop the work service
         await workService.Stop(model);
@@ -107,9 +107,7 @@ public class WorkQueueTests
             var work = new SampleWork { };
 
             // Act
-            workService
-                .Enqueue(model, work)
-                ;
+            workService.Enqueue(model, work, TestContext.Current.CancellationToken);
         }
 
         // Wait for a short time to allow the work to be processed
@@ -148,7 +146,7 @@ public class WorkQueueTests
         var work = new SampleFailWork { };
 
         // Act
-        workService.Enqueue(model, work);
+        workService.Enqueue(model, work, TestContext.Current.CancellationToken);
 
         await workService.DisposeAsync();
 

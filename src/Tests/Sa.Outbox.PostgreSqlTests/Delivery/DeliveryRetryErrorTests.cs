@@ -51,11 +51,11 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
     [Fact]
     public async Task Deliver_RetriesOnErrorProcess_MustBe_Logged_501()
     {
-        Console.Write(fixture.ConnectionString);
+        Console.Write(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
         List<TestMessage> messages = [new TestMessage { PayloadId = "11", Content = "Message 1", TenantId = 1 }];
 
-        ulong cnt = await fixture.Publisher.Publish(messages);
+        ulong cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
         const int MaxDeliveryAttempts = 2;
@@ -77,7 +77,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
         cnt = 0;
         while (cnt < MaxDeliveryAttempts)
         {
-            await Task.Delay(300);
+            await Task.Delay(300, TestContext.Current.CancellationToken);
 
             await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);
             int attempt = await GetDeliveries();
@@ -87,15 +87,15 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
             }
         }
 
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>("select count(error_id) from outbox__$error");
+        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>("select count(error_id) from outbox__$error", TestContext.Current.CancellationToken);
         Assert.Equal(1, errCount);
 
-        string delivery_id = await fixture.DataSource.ExecuteReaderFirst<string>("select delivery_id from outbox__$delivery where delivery_status_code = 501");
+        string delivery_id = await fixture.DataSource.ExecuteReaderFirst<string>("select delivery_id from outbox__$delivery where delivery_status_code = 501", TestContext.Current.CancellationToken);
         Assert.NotEmpty(delivery_id);
 
-        string outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<string>("SELECT outbox_delivery_id FROM public.outbox WHERE outbox_delivery_status_code = 501");
+        string outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<string>("SELECT outbox_delivery_id FROM public.outbox WHERE outbox_delivery_status_code = 501", TestContext.Current.CancellationToken);
         Assert.Equal(delivery_id, outbox_delivery_id);
     }
 
-    private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>("select count(delivery_id) from outbox__$delivery");
+    private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>("select count(delivery_id) from outbox__$delivery", TestContext.Current.CancellationToken);
 }

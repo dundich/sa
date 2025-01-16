@@ -23,12 +23,12 @@ public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture) : IClass
         ];
 
         // Act
-        ulong result = await Sub.Publish(messages);
+        ulong result = await Sub.Publish(messages, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, (int)result);
 
-        int count = await fixture.DataSource.ExecuteReaderFirst<int>("select count(*) from outbox");
+        int count = await fixture.DataSource.ExecuteReaderFirst<int>("select count(*) from outbox", TestContext.Current.CancellationToken);
         Assert.Equal(2, count);
     }
 }

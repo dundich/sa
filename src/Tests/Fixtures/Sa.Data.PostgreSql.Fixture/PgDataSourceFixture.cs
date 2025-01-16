@@ -15,7 +15,7 @@ public class PgDataSourceFixture<TSub> : PostgreSqlFixture<TSub, PostgreSqlFixtu
 
     public IPgDataSource DataSource => _dataSource.Value;
 
-    public async override Task DisposeAsync()
+    public async override ValueTask DisposeAsync()
     {
         if (_dataSource.IsValueCreated && _dataSource.Value is IAsyncDisposable disposable)
         {

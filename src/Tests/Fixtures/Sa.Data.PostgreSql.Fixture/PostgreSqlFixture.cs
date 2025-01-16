@@ -28,13 +28,13 @@ public abstract class PostgreSqlFixture<TSub, TSettings> : SaFixture<TSub, TSett
 
     public string ContainerId => $"{container.Id}";
 
-    public override async Task InitializeAsync()
+    public override async ValueTask InitializeAsync()
     {
         await base.InitializeAsync();
         await container.StartAsync();
     }
 
-    public override async Task DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
         await container.DisposeAsync();
         await base.DisposeAsync();

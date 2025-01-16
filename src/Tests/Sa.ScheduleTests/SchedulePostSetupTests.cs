@@ -66,7 +66,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture) : IC
 
         Assert.Equal(2, i);
 
-        await Task.Delay(300);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, Fixture.Count);
     }

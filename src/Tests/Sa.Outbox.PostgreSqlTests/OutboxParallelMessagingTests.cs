@@ -37,12 +37,13 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     public static class CommonCounter
     {
-        internal static int Counter = 0;
+        static int s_counter = 0;
 
         public static void Add(int count)
         {
-            Interlocked.Add(ref Counter, count);
+            Interlocked.Add(ref s_counter, count);
         }
+        public static int Counter => s_counter;
     }
 
     public class SomeMessageConsumer1 : IConsumer<SomeMessage1>
@@ -110,7 +111,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     [Fact]
     public async Task ParallelMessaging_MustBeProcessed()
     {
-        Console.WriteLine(fixture.ConnectionString);
+        Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
         // start cron schedules
         IScheduler scheduler = ServiceProvider.GetRequiredService<IScheduler>();
@@ -134,14 +135,14 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
         var migrationService = ServiceProvider.GetRequiredService<IPartMigrationService>();
 
-        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3));
+        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.True(r, "none migration");
 
         // delay for consume
         while (CommonCounter.Counter < (int)total)
         {
             // delay for consume
-            await Task.Delay(300);
+            await Task.Delay(300, TestContext.Current.CancellationToken);
         }
 
         await scheduler.Stop();
@@ -164,13 +165,13 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 messages.Add(new T());
             }
 
-            await publisher.Publish(messages);
+            await publisher.Publish(messages, TestContext.Current.CancellationToken);
         });
 
 
         while (!loop.IsCompleted)
         {
-            await Task.Delay(300);
+            await Task.Delay(300, TestContext.Current.CancellationToken);
         }
 
         return total;

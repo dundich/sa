@@ -19,13 +19,15 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 
     public class SomeMessageConsumer : IConsumer<SomeMessage>
     {
-        internal static int Counter = 0;
+        static int s_Counter = 0;
 
         public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
         {
-            Interlocked.Add(ref Counter, outboxMessages.Count);
+            Interlocked.Add(ref s_Counter, outboxMessages.Count);
             await Task.Delay(100, cancellationToken);
         }
+
+        public static int Counter => s_Counter;
     }
 
     public class Fixture : PgDataSourceFixture
@@ -83,11 +85,11 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
             , new SomeMessage { TenantId = 1 }
             , new SomeMessage { TenantId = 1 }
             , new SomeMessage { TenantId = 1 }
-        ]);
+        ], TestContext.Current.CancellationToken);
 
         var migrationService = ServiceProvider.GetRequiredService<IPartMigrationService>();
 
-        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3));
+        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.True(r, "none migration");
 
         // delay for consume
@@ -95,7 +97,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         while (SomeMessageConsumer.Counter < (int)total && j++ < 10)
         {
             // delay for consume
-            await Task.Delay(300);
+            await Task.Delay(300, TestContext.Current.CancellationToken);
         }
 
         await scheduler.Stop();

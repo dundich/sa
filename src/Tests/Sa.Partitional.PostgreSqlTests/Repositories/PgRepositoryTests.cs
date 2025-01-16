@@ -52,9 +52,9 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     [Fact()]
     public async Task CreatePartTest()
     {
-        Console.WriteLine(fixture.ConnectionString);
+        Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
-        int i = await fixture.Sub.CreatePart("test_11", DateTimeOffset.Now, ["some", 12]);
+        int i = await fixture.Sub.CreatePart("test_11", DateTimeOffset.Now, ["some", 12], TestContext.Current.CancellationToken);
         Assert.NotEqual(0, i);
     }
 
@@ -62,7 +62,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     public async Task CreatePart_WithEmptyListTest()
     {
 
-        int i = await fixture.Sub.CreatePart("test_12", DateTimeOffset.Now, []);
+        int i = await fixture.Sub.CreatePart("test_12", DateTimeOffset.Now, [], TestContext.Current.CancellationToken);
         Assert.NotEqual(0, i);
     }
 
@@ -72,8 +72,8 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     {
         var timeExpected = new DateTimeOffset(2024, 12, 03, 00, 00, 00, TimeSpan.Zero);
 
-        await fixture.Sub.CreatePart("test_10", timeExpected.AddMinutes(22).AddHours(12), [1, "some1", "some2"]);
-        IReadOnlyCollection<PartByRangeInfo> list = await fixture.Sub.GetPartsFromDate("test_10", timeExpected.AddDays(-3));
+        await fixture.Sub.CreatePart("test_10", timeExpected.AddMinutes(22).AddHours(12), [1, "some1", "some2"], TestContext.Current.CancellationToken);
+        IReadOnlyCollection<PartByRangeInfo> list = await fixture.Sub.GetPartsFromDate("test_10", timeExpected.AddDays(-3), TestContext.Current.CancellationToken);
         Assert.NotEmpty(list);
         PartByRangeInfo item = list.First(c => c.Id == "public.\"test_10__1__some1__some2__y2024m12d03\"");
         Assert.NotNull(item);
@@ -95,7 +95,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
             };
 
             return Task.FromResult(result);
-        });
+        }, TestContext.Current.CancellationToken);
 
         Assert.True(i > 0);
     }

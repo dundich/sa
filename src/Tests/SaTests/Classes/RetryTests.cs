@@ -21,7 +21,7 @@ public class RetryTests
         }
 
         // Act
-        int result = await Retry.Constant(func, 42, retryCount: 3, waitTime: 10);
+        int result = await Retry.Constant(func, 42, retryCount: 3, waitTime: 10, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(42, result);
@@ -44,7 +44,7 @@ public class RetryTests
         }
 
         // Act
-        int result = await Retry.Exponential(func, 42, retryCount: 3, initialDelay: 10);
+        int result = await Retry.Exponential(func, 42, retryCount: 3, initialDelay: 10, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(42, result);
@@ -67,7 +67,7 @@ public class RetryTests
         }
 
         // Act
-        int result = await Retry.Linear(func, 42, retryCount: 3, initialDelay: 10);
+        int result = await Retry.Linear(func, 42, retryCount: 3, initialDelay: 10, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(42, result);
@@ -90,7 +90,7 @@ public class RetryTests
         }
 
         // Act
-        int result = await Retry.Jitter(func, 42, retryCount: 3, initialDelay: 10);
+        int result = await Retry.Jitter(func, 42, retryCount: 3, initialDelay: 10, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(42, result);
@@ -109,7 +109,7 @@ public class RetryTests
         }
 
         // Act and Assert
-        await Assert.ThrowsAsync<Exception>(() => Retry.Constant(func, 42, retryCount: 3, waitTime: 10).AsTask());
+        await Assert.ThrowsAsync<Exception>(() => Retry.Constant(func, 42, retryCount: 3, waitTime: 10, cancellationToken: TestContext.Current.CancellationToken).AsTask());
         Assert.Equal(3, attemptCount);
     }
 
@@ -134,9 +134,9 @@ public class RetryTests
 
         _ = Task.Run(async () =>
         {
-            await Task.Delay(200);
-            cts.Cancel();
-        });
+            await Task.Delay(200, TestContext.Current.CancellationToken);
+            await cts.CancelAsync();
+        }, TestContext.Current.CancellationToken);
 
         int result = await Retry.Constant(func, 42, retryCount: 3, waitTime: 10, cancellationToken: cts.Token);
 

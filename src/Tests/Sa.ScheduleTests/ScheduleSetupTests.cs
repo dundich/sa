@@ -49,7 +49,7 @@ public class ScheduleSetupTests(ScheduleSetupTests.Fixture fixture) : IClassFixt
 
         Assert.NotEqual(0, i);
 
-        await Task.Delay(300);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
 
         Assert.True(Fixture.Count > 0);
     }

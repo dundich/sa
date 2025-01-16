@@ -49,7 +49,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
             new TestMessage { PayloadId = "12", Content = "Message 2", TenantId = 2}
         ];
 
-        var cnt = await fixture.Publisher.Publish(messages);
+        var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
         var settings = new OutboxDeliverySettings(Guid.NewGuid())

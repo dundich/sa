@@ -51,7 +51,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     [Fact]
     public async Task Deliver_ErrorProcess_MustBe_Logged()
     {
-        Console.Write(fixture.ConnectionString);
+        Console.Write(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
         List<TestMessage> messages =
         [
@@ -59,7 +59,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
             new TestMessage { PayloadId = "12", Content = "Message 2", TenantId = 2}
         ];
 
-        var cnt = await fixture.Publisher.Publish(messages);
+        var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
         var settings = new OutboxDeliverySettings(Guid.NewGuid())
@@ -75,7 +75,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         Assert.Equal(0, result);
 
 
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>("select count(error_id) from outbox__$error");
+        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>("select count(error_id) from outbox__$error", TestContext.Current.CancellationToken);
 
         Assert.Equal(1, errCount);
     }

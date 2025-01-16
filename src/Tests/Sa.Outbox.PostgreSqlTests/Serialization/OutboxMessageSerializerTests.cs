@@ -29,7 +29,7 @@ public class OutboxMessageSerializerTests(OutboxMessageSerializerTests.Fixture f
 
         using var stream = new MemoryStream();
         // Act
-        await sub.SerializeAsync(stream, obj);
+        await sub.SerializeAsync(stream, obj, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(stream.Length > 0);
@@ -41,7 +41,7 @@ public class OutboxMessageSerializerTests(OutboxMessageSerializerTests.Fixture f
         using var stream = new MemoryStream();
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentNullException>(()
-            => sub.SerializeAsync<TestMessage>(stream, default!));
+            => sub.SerializeAsync<TestMessage>(stream, default!, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -52,10 +52,10 @@ public class OutboxMessageSerializerTests(OutboxMessageSerializerTests.Fixture f
 
         // Act
         using var stream = new MemoryStream();
-        stream.Write(json.StrToBytes());
+        await stream.WriteAsync(json.StrToBytes(), TestContext.Current.CancellationToken);
         stream.Position = 0;
 
-        TestMessage? message = await sub.DeserializeAsync<TestMessage>(stream);
+        TestMessage? message = await sub.DeserializeAsync<TestMessage>(stream, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(message);
@@ -70,22 +70,22 @@ public class OutboxMessageSerializerTests(OutboxMessageSerializerTests.Fixture f
         var invalidJson = "invalid json";
 
         using var stream = new MemoryStream();
-        stream.Write(invalidJson.StrToBytes());
+        await stream.WriteAsync(invalidJson.StrToBytes(), TestContext.Current.CancellationToken);
         stream.Position = 0;
 
         // Act & Assert
-        await Assert.ThrowsAsync<JsonException>(() => sub.DeserializeAsync<TestMessage>(stream));
+        await Assert.ThrowsAsync<JsonException>(() => sub.DeserializeAsync<TestMessage>(stream, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task Deserialize_WithNullJson_ThrowsArgumentNullException()
     {
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentNullException>(() => sub.DeserializeAsync<TestMessage>(default!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => sub.DeserializeAsync<TestMessage>(default!, TestContext.Current.CancellationToken));
     }
 
 
-    private class TestMessage
+    private sealed class TestMessage
     {
         public int Id { get; set; }
         public string? Content { get; set; }

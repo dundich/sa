@@ -34,13 +34,13 @@ public class PartitionIndexTests(PartitionIndexTests.Fixture fixture) : IClassFi
     [Fact]
     public async Task InsertingDoubleParts()
     {
-        Console.WriteLine(fixture.ConnectionString);
+        Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
         DateTimeOffset today = DateTimeOffset.Now;
         DateTimeOffset tomorrow = today.AddDays(1);
 
         // Act
-        int i = await Sub.Migrate([today, tomorrow]);
+        int i = await Sub.Migrate([today, tomorrow], TestContext.Current.CancellationToken);
 
         Assert.Equal(2, i);
 
@@ -54,7 +54,7 @@ VALUES
     (1,{unixTime}),
     (1,{unixTime + 1})
 ON CONFLICT DO NOTHING
-""");
+""", TestContext.Current.CancellationToken);
 
         Assert.Equal(2, i);
     }
