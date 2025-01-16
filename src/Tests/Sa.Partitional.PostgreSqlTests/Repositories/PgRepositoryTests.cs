@@ -53,17 +53,17 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     public async Task CreatePartTest()
     {
         Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
-
-        int i = await fixture.Sub.CreatePart("test_11", DateTimeOffset.Now, ["some", 12], TestContext.Current.CancellationToken);
-        Assert.NotEqual(0, i);
+        await fixture.Sub.CreatePart("test_11", DateTimeOffset.Now, ["some", 12], TestContext.Current.CancellationToken);
+        int i = await fixture.DataSource.ExecuteReaderFirst<int>("SELECT count(*) FROM public.\"test_11__$part\";", TestContext.Current.CancellationToken);
+        Assert.True(i > 0);
     }
 
     [Fact()]
     public async Task CreatePart_WithEmptyListTest()
     {
-
-        int i = await fixture.Sub.CreatePart("test_12", DateTimeOffset.Now, [], TestContext.Current.CancellationToken);
-        Assert.NotEqual(0, i);
+        await fixture.Sub.CreatePart("test_12", DateTimeOffset.Now, [], TestContext.Current.CancellationToken);
+        int i = await fixture.DataSource.ExecuteReaderFirst<int>("SELECT count(*) FROM public.\"test_12__$part\";", TestContext.Current.CancellationToken);
+        Assert.True(i > 0);
     }
 
 
