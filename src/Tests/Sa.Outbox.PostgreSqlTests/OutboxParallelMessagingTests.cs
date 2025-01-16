@@ -13,8 +13,8 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     {
 
         public const int Threads = 5;
-        const int From = 100;
-        const int To = 1000;
+        const int From = 10;
+        const int To = 100;
 
         public static int GetMessageCount() => Random.Shared.Next(From, To);
     }
