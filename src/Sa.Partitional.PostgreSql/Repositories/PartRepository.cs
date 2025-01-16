@@ -7,7 +7,7 @@ using Sa.Partitional.PostgreSql.SqlBuilder;
 
 namespace Sa.Partitional.PostgreSql.Repositories;
 
-internal sealed class PartRepository(IPgDataSource dataSource, ISqlBuilder sqlBuilder, ILogger<PartRepository>? logger = null) : IPartRepository, IDisposable
+internal sealed partial class PartRepository(IPgDataSource dataSource, ISqlBuilder sqlBuilder, ILogger<PartRepository>? logger = null) : IPartRepository, IDisposable
 {
 
     /// <summary>
@@ -129,7 +129,7 @@ internal sealed class PartRepository(IPgDataSource dataSource, ISqlBuilder sqlBu
         int droppedCount = 0;
         List<PartByRangeInfo> list = await GetPartsToDate(tableName, toDate, cancellationToken);
 
-        logger?.LogInformation("Starting to drop parts for table {TableName} up to date {ToDate}.", tableName, toDate);
+        LogStartingToDrop(tableName, toDate);
 
         foreach (PartByRangeInfo part in list)
         {
@@ -142,28 +142,29 @@ internal sealed class PartRepository(IPgDataSource dataSource, ISqlBuilder sqlBu
                 {
                     await ExecuteDDL(sql, cancellationToken);
                     droppedCount++;
-                    logger?.LogInformation("Successfully dropped part with ID {PartId} from table {TableName}.", part.Id, part.RootTableName);
+                    LogSuccessfullyDropped(part.Id, part.RootTableName);
                 }
                 catch (PostgresException pgErr) when (UndefinedTable(pgErr))
                 {
-                    logger?.LogWarning(pgErr, "Skip to drop part with ID {PartId}.", part.Id);
+                    LogSkipToDrop(pgErr, part.Id);
                 }
                 catch (Exception ex)
                 {
-                    logger?.LogError(ex, "Failed to drop part with ID {PartId}.", part.Id);
+                    LogFailedToDrop(ex, part.Id);
                 }
             }
             else
             {
-                logger?.LogDebug("No settings found for root table {RootTableName}. Skipping part with ID {PartId}.", part.RootTableName, part.Id);
+                LogSkipToDropIfNoSettings(part.RootTableName, part.Id);
             }
         }
 
-
-        logger?.LogInformation("Finished dropping parts. Total dropped: {DroppedCount}.", droppedCount);
+        FinishedDropping(droppedCount);
 
         return droppedCount;
     }
+
+
 
     private static PartByRangeInfo ReadPartInfo(NpgsqlDataReader reader)
     {
@@ -206,4 +207,43 @@ internal sealed class PartRepository(IPgDataSource dataSource, ISqlBuilder sqlBu
     {
         _migrationSemaphore.Dispose();
     }
+
+
+    [LoggerMessage(
+    EventId = 101,
+    Level = LogLevel.Information,
+    Message = "Starting to drop parts for table {TableName} up to date {ToDate}.")]
+    partial void LogStartingToDrop(string tableName, DateTimeOffset toDate);
+
+    [LoggerMessage(
+        EventId = 202,
+        Level = LogLevel.Information,
+        Message = "Successfully dropped part with ID {PartId} from table {TableName}.")]
+    partial void LogSuccessfullyDropped(string partId, string tableName);
+
+    [LoggerMessage(
+        EventId = 403,
+        Level = LogLevel.Warning,
+        Message = "Skip to drop part with ID {PartId}.")]
+    partial void LogSkipToDrop(Exception exception, string partId);
+
+    [LoggerMessage(
+        EventId = 501,
+        Level = LogLevel.Error,
+        Message = "Failed to drop part with ID {PartId}.")]
+    partial void LogFailedToDrop(Exception exception, string partId);
+
+
+    [LoggerMessage(
+        EventId = 203,
+        Level = LogLevel.Information,
+        Message = "Finished dropping parts. Total dropped: {DroppedCount}.")]
+    partial void FinishedDropping(int droppedCount);
+
+
+    [LoggerMessage(
+        EventId = 102,
+        Level = LogLevel.Debug,
+        Message = "No settings found for root table {RootTableName}. Skipping part with ID {PartId}")]
+    partial void LogSkipToDropIfNoSettings(string rootTableName, string partId);
 }

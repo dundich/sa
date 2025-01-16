@@ -9,7 +9,7 @@ namespace Sa.Schedule.Engine;
 /// <summary>
 /// job lifecycly controller with context
 /// </summary>
-internal class JobController(IJobSettings settings, IInterceptorSettings interceptorSettings, IServiceScopeFactory scopeFactory) : IJobController
+internal partial class JobController(IJobSettings settings, IInterceptorSettings interceptorSettings, IServiceScopeFactory scopeFactory) : IJobController
 {
     private readonly JobContext context = new(settings);
 
@@ -116,17 +116,30 @@ internal class JobController(IJobSettings settings, IInterceptorSettings interce
 
         if (errorHandling.HasSuppressError && errorHandling.SuppressError?.Invoke(exception) == true)
         {
-            context.Logger.LogWarning("[{JobName}] the error: “{Error}” on job was suppressed to continue", context.JobName, exception.Message);
+            LogJobWasSuppressed(context.Logger, context.JobName, exception.Message);
             return;
         }
 
         if (context.FailedRetries < settings.ErrorHandling.RetryCount)
         {
             context.FailedRetries++;
-            context.Logger.LogWarning("[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: “{Error}”", context.JobName, context.FailedRetries, errorHandling.RetryCount, exception.Message);
+            LogFailedRetryAttempts(context.Logger, context.JobName, context.FailedRetries, errorHandling.RetryCount, exception.Message);
             return;
         }
 
         context.JobServices.GetService<IJobErrorHandler>()?.HandleError(Context, error);
     }
+
+
+    [LoggerMessage(
+        EventId = 401,
+        Level = LogLevel.Warning,
+        Message = "[{JobName}] the error: “{Error}” on job was suppressed to continue.")]
+    partial void LogJobWasSuppressed(ILogger logger, string jobName, string error);
+
+    [LoggerMessage(
+        EventId = 402,
+        Level = LogLevel.Warning,
+        Message = "[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: “{Error}”")]
+    partial void LogFailedRetryAttempts(ILogger logger,  string jobName, int failedRetryAttempts, int retryCount, string error);
 }
