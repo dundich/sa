@@ -1,5 +1,5 @@
 dist/
-.vscode/##
+.vscode/
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
 # User-specific files
@@ -795,3 +795,4 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+src/.vscode/
