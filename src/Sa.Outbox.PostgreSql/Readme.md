@@ -52,7 +52,7 @@ public class Startup
 
 ### Message
 
-```
+```csharp
 [OutboxMessage]
 public record MyMessage(string PayloadId, string Content, int TenantId) : IOutboxPayloadMessage;
 ```
