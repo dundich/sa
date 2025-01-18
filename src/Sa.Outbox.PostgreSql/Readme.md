@@ -50,19 +50,20 @@ public class Startup
 }
 ```
 
-### Example of a message consumer
+### Message
+
+```
+[OutboxMessage]
+public record MyMessage(string PayloadId, string Content, int TenantId) : IOutboxPayloadMessage;
+```
+
+### Consume
 
 ```csharp
 using Sa.Outbox;
 
 namespace MyNamespace
 {
-    [OutboxMessage]
-    public record MyMessage(string PayloadId, string Content) : IOutboxPayloadMessage
-    {
-        public int TenantId { get; init; }
-    }
-
     public class MyMessageConsumer : IConsumer<MyMessage>
     {
         public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<MyMessage>> outboxMessages, CancellationToken cancellationToken)
@@ -77,7 +78,7 @@ namespace MyNamespace
 }
 ```
 
-### Example of sending a message
+### Sending
 
 ```csharp
 public class MessageSender(IOutboxMessagePublisher publisher)
