@@ -1,25 +1,23 @@
 # Sa.Partitional.PostgreSql
 
-Библиотека, предназначенная для управления партиционированием таблиц в PostgreSQL
-c целью улучшения производительности и управляемости в больших объемах данных.
+A library designed for managing table partitioning in PostgreSQL
+to improve performance and manageability with large volumes of data.
 
-## Позволяет
+## Capabilities
 
-- Декларативно описать секционируемую таблицу по времени (день, месяц, год).
-- Задать секции по спискам ключей для строк или чисел. 
-- Задать расписание миграций для создания новых партиций.
-- Задать расписание для удаления старых партиций.
-- Управлять партициями.
+- Declaratively describe a time-partitioned table (by day, month, year).
+- Define partitions based on lists of keys for strings or numbers.
+- Schedule migrations for creating new partitions.
+- Schedule the removal of old partitions.
+- Manage partitions.
 
+## Features
 
-## Особенности
+- Since the maximum length of a table name is 63 characters, it is important to consider the naming when creating partitions.
+- All tables have a final time interval section represented by a column of type `int64` in Unix timestamp format (in seconds).
+- Old partitions are deleted using `DROP`.
 
-- Так как макс. длина наименования таблицы составляет 63 символа, то следует учитывать выбор значения при создании партиции.
-- Все таблицы имеют финальной секцией интервал по времени, который представлен столбцом с типом `int64` в формате Unix timestamps in seconds.
-- Удаление старых партиций производится через DROP.
-
-
-## Пример конфигурирования
+## Configuration Example
 
 ```csharp
 
@@ -31,29 +29,29 @@ public static class PartitioningSetup
         {
             builder.AddSchema("public", schema =>
             {
-                // Настройка таблицы orders
+                // Configure the 'orders' table
                 schema.AddTable("orders",
                     "id INT NOT NULL",
                     "tenant_id INT NOT NULL",
                     "region TEXT NOT NULL",
                     "amount DECIMAL(10, 2) NOT NULL"
                 )
-                // Партиционирование по tenant_id и region
+                // Partition by 'tenant_id' and 'region'
                 .PartByList("tenant_id", "region") 
-                // с интервалом в месяц по заданному столбцу
+                // with a monthly interval based on the specified column
                 .PartByRange(PgPartBy.Month, "created_at")
                 ; 
 
 
-                // Настройка таблицы customer
+                // Configure the 'customer' table
                 schema.AddTable("customer",
                     "id INT NOT NULL",
                     "country TEXT NOT NULL",
                     "city TEXT NOT NULL"
                 )
-                // разделить в таблицах меж партиций
+                // Separate partitions in tables
                 .WithPartSeparator("_")
-                // Партиционирование по country и city (если не задан PartByRange то по дням)
+                // Partition by 'country' and 'city' (if PartByRange is not specified, defaults to daily)
                 .PartByList("country", "city") 
                 // Миграция партиций каждого тенанта по city
                 .AddMigration("RU", ["Moscow", "Samara"])
@@ -61,14 +59,14 @@ public static class PartitioningSetup
                 .AddMigration("FR", ["Paris", "Lyon", "Bordeaux"]);
             });
         })
-        // расписание миграций - создания новых партиций
+        // Schedule for creating new partitions
         .AddPartMigrationSchedule((sp, opts) =>
         {
             opts.AsJob = true;
             opts.ExecutionInterval = TimeSpan.FromHour(12);
             opts.ForwardDays = 2;
         })
-        // расписание удаления старых партиций
+        // Schedule for removing old partitions
         .AddPartCleanupSchedule((sp, opts) =>
         {
             opts.AsJob = true;
@@ -82,18 +80,18 @@ public static class PartitioningSetup
 
 ```
 
-### Результат миграции
+### Migration Result
 
-Для примера выше - результатом миграции будут две таблицы:
+For the example above, the migration will result in two tables:
 
-`customer` - *таблица с данными* 
+`customer` - *data table* 
 
 |id|country|city|created_at|
 |--|-------|----|----------|
 |||||
 
  
-`customer_$part` - *таблица для учета партиций (фрагмент)*
+`customer_$part` - *partition tracking table (fragment)*
 
 |id|root|part_values|part_by|from_date|to_date|
 |--|----|-----------|-------|---------|-------|
@@ -102,7 +100,7 @@ public static class PartitioningSetup
 |public."customer_USA_Alabama_y2025m01d08"|public.customer|["s:USA","s:Alabama"]|Day|1736294400|1736380800|
 
 
-#### Итоговый DDL
+#### Final DDL
 
 ```sql
 
@@ -179,7 +177,7 @@ CREATE TAB...
 
 ## PartByRange 
 
-Используется для обозначения интервалов партиционирования данных - разбиение данных на части по дням, месяцам или годам. 
+Used to define intervals for data partitioning—splitting data into parts by days, months, or years.
 
 ```csharp
 /// <summary>
@@ -192,12 +190,12 @@ public enum PartByRange
     Year
 }
 ```
-*По умолчанию используется столбец `created_at` с разбиением по дням*
+*By default, the `created_at` column is used with daily partitioning.*
 
 
 ## IPartitionManager
 
-Интерфейс для управления партициями в базе данных.
+Interface for managing partitions in the database.
 
 ```csharp
 public interface IPartitionManager
