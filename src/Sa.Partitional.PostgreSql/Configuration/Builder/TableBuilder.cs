@@ -98,8 +98,6 @@ internal class TableBuilder(string schemaName, string tableName) : ITableBuilder
         return this;
     }
 
-
-
     internal class PartTableMigrationSupport(IReadOnlyCollection<StrOrNum[]>? partValues, Func<CancellationToken, Task<StrOrNum[][]>>? getPartValues, IPartTableMigrationSupport? original) : IPartTableMigrationSupport
     {
         public async Task<StrOrNum[][]> GetPartValues(CancellationToken cancellationToken)
@@ -121,5 +119,4 @@ internal class TableBuilder(string schemaName, string tableName) : ITableBuilder
             return [.. result];
         }
     }
-
 }

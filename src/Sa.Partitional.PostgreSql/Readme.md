@@ -39,7 +39,7 @@ public static class PartitioningSetup
                 .WithPartSeparator("_")
                 // Partition by 'country' and 'city' (if PartByRange is not specified, defaults to daily)
                 .PartByList("country", "city") 
-                // Миграция партиций каждого тенанта по city
+                // Migration of partitions for each tenant by city
                 .AddMigration("RU", ["Moscow", "Samara"])
                 .AddMigration("USA", ["Alabama", "New York"])
                 .AddMigration("FR", ["Paris", "Lyon", "Bordeaux"]);

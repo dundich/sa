@@ -69,7 +69,7 @@ public class StrOrNumTests
         string input = "s:world";
 
         // Act
-        StrOrNum parsed = StrOrNum.ParseFmtStr(input);
+        StrOrNum parsed = StrOrNum.FromFmtStr(input);
 
         // Assert
         Assert.IsType<StrOrNum.ChoiceStr>(parsed);
@@ -83,7 +83,7 @@ public class StrOrNumTests
         string input = "n:123";
 
         // Act
-        StrOrNum parsed = StrOrNum.ParseFmtStr(input);
+        StrOrNum parsed = StrOrNum.FromFmtStr(input);
 
         // Assert
         Assert.IsType<StrOrNum.ChoiceNum>(parsed);
@@ -95,7 +95,7 @@ public class StrOrNumTests
     {
         // Arrange
         string input = "";
-        Assert.Equal("", StrOrNum.ParseFmtStr(input));
+        Assert.Equal("", StrOrNum.FromFmtStr(input));
     }
 
 }

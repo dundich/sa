@@ -8,7 +8,7 @@ public static class Setup
 {
     public static IServiceCollection AddHybridStorage(this IServiceCollection services, Action<IServiceProvider, IHybridFileStorageBuilder>? configure = null)
     {
-
+        services.AddSaInfrastructure();
         services.TryAddSingleton<IHybridFileStorageBuilder>(sp =>
         {
             var builder = new HybridFileStorageBuilder();

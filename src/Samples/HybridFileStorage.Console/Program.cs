@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Sa;
 using Sa.HybridFileStorage;
 using Sa.HybridFileStorage.Domain;
 using Sa.Timing.Providers;
@@ -18,8 +17,6 @@ IHostBuilder builder = Host.CreateDefaultBuilder();
 
 builder.ConfigureServices(services =>
 {
-    services.AddSaInfrastructure();
-
     services.AddHybridStorage((sp, builder) =>
     {
         var tp = sp.GetRequiredService<ICurrentTimeProvider>();

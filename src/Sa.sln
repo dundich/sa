@@ -78,6 +78,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sa.HybridFileStorage.FileSy
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HybridFileStorage.Console", "Samples\HybridFileStorage.Console\HybridFileStorage.Console.csproj", "{8BF84A00-E90B-4223-9D67-9C03FE1D38E7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Partitional.ConsoleApp", "Samples\Partitional.ConsoleApp\Partitional.ConsoleApp.csproj", "{5882EE9F-DC0D-46C6-8273-5E80455F424C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -172,6 +174,10 @@ Global
 		{8BF84A00-E90B-4223-9D67-9C03FE1D38E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8BF84A00-E90B-4223-9D67-9C03FE1D38E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8BF84A00-E90B-4223-9D67-9C03FE1D38E7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5882EE9F-DC0D-46C6-8273-5E80455F424C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5882EE9F-DC0D-46C6-8273-5E80455F424C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5882EE9F-DC0D-46C6-8273-5E80455F424C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5882EE9F-DC0D-46C6-8273-5E80455F424C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -201,6 +207,7 @@ Global
 		{1B1DD442-8EB2-C9C1-E7CC-119CF6769E04} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{96F60070-8629-DBDC-838B-E9708358A04C} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{8BF84A00-E90B-4223-9D67-9C03FE1D38E7} = {610D8708-2CB6-403A-B865-3C1FE0115519}
+		{5882EE9F-DC0D-46C6-8273-5E80455F424C} = {610D8708-2CB6-403A-B865-3C1FE0115519}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {968372C4-E303-4F1F-A924-7568CCDE3E7C}

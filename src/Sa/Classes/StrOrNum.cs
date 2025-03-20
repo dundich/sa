@@ -62,21 +62,21 @@ public abstract record StrOrNum
 
     public string ToFmtString() => Match(str => $"s:{str}", num => $"n:{num}");
 
-    public static StrOrNum ParseFmtStr(string? input)
+    public static StrOrNum FromFmtStr(string? fmtInput)
     {
-        if (string.IsNullOrEmpty(input)) return new ChoiceStr(string.Empty);
+        if (string.IsNullOrEmpty(fmtInput)) return new ChoiceStr(string.Empty);
 
-        if (input.StartsWith("s:", StringComparison.Ordinal))
+        if (fmtInput.StartsWith("s:", StringComparison.Ordinal))
         {
-            return new ChoiceStr(input[2..]);
+            return new ChoiceStr(fmtInput[2..]);
         }
-        else if (input.StartsWith("n:", StringComparison.Ordinal))
+        else if (fmtInput.StartsWith("n:", StringComparison.Ordinal))
         {
-            return new ChoiceNum(input[2..].StrToLong() ?? 0);
+            return new ChoiceNum(fmtInput[2..].StrToLong() ?? 0);
         }
         else
         {
-            return new ChoiceStr(input);
+            return new ChoiceStr(fmtInput);
         }
     }
 
@@ -88,7 +88,7 @@ public abstract record StrOrNum
 public class StrOrNumConverter : JsonConverter<StrOrNum>
 {
     public override StrOrNum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-      => StrOrNum.ParseFmtStr(reader.GetString());
+      => StrOrNum.FromFmtStr(reader.GetString());
 
     public override void Write(Utf8JsonWriter writer, StrOrNum value, JsonSerializerOptions options)
         => writer.WriteStringValue(value.ToFmtString());

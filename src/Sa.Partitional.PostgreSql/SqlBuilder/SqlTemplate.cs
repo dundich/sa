@@ -162,7 +162,7 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id='{qualifiedTableName}
 
     internal static StrOrNum[] ParseStrOrNums(string fmtInput) => [.. fmtInput
             .Split(NumOrStrSplitter, StringSplitOptions.RemoveEmptyEntries)
-            .Select(StrOrNum.ParseFmtStr)];
+            .Select(StrOrNum.FromFmtStr)];
 
     private static string StrOrNumsToFmtString(StrOrNum[] input)
         => string.Join(NumOrStrSplitter, input.Select(c => c.ToFmtString()));

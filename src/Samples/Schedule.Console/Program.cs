@@ -5,79 +5,74 @@ using Sa.Schedule;
 using Sa.Timing.Providers;
 using Schedule.Console;
 
-internal class Program
+
+Console.Write("Hello, Schedule! As host service (Y/n): ");
+
+bool isHostService = Console.ReadKey().Key == ConsoleKey.Y;
+
+Console.WriteLine();
+
+// default configure...
+IHostBuilder builder = Host.CreateDefaultBuilder();
+
+builder.ConfigureServices(services =>
 {
-    static async Task Main()
+    services.AddSchedule(builder =>
     {
-        Console.Write("As host service (Y/n): ");
+        if (isHostService) builder.UseHostedService();
 
-        bool isHostService = Console.ReadKey().Key == ConsoleKey.Y;
+        builder.AddJob<SomeJob>()
+            .EverySeconds(2)
+            .WithName("Some 2")
+            .ConfigureErrorHandling(c => c.IfErrorRetry(2).ThenStopJob())
+            ;
 
-        Console.WriteLine();
+        builder.AddInterceptor<SomeInterceptor>();
+    });
 
-        // default configure...
-        IHostBuilder builder = Host.CreateDefaultBuilder();
+    services.AddLogging(builder => builder.AddConsole());
+});
 
-        builder.ConfigureServices(services =>
-        {
-            services.AddSchedule(builder =>
-            {
-                if (isHostService) builder.UseHostedService();
+builder.UseConsoleLifetime();
 
-                builder.AddJob<SomeJob>()
-                    .WithContextStackSize(3)
-                    .EverySeconds(2)
-                    .WithName("Some 2")
-                    .ConfigureErrorHandling(c => c.IfErrorRetry(2).ThenStopJob())
-                    ;
+var host = builder.Build();
 
-                builder.AddInterceptor<SomeInterceptor>();
-            });
+var controller = host.Services.GetRequiredService<IScheduler>();
 
-            services.AddLogging(builder => builder.AddConsole());
-        });
+var cts = new CancellationTokenSource();
 
-        builder.UseConsoleLifetime();
-
-        var host = builder.Build();
-
-        var controller = host.Services.GetRequiredService<IScheduler>();
-
-
-        if (isHostService)
-        {
-            _ = host.RunAsync();
-        }
-        else
-        {
-            var cts = new CancellationTokenSource();
-            controller.Start(cts.Token);
-
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(30000);
-                await cts.CancelAsync();
-                cts.Dispose();
-                Console.WriteLine($"cancelled on timeout");
-            });
-        }
-
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(5000);
-            await controller.Stop();
-            Console.WriteLine($"*** stopped & restart after 2 sec");
-            await Task.Delay(2000);
-            controller.Restart();
-        });
-
-
-        IHostApplicationLifetime applicationLifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
-        await host.WaitForShutdownAsync(applicationLifetime.ApplicationStopping);
-
-        Console.WriteLine("*** THE END ***");
-    }
+if (isHostService)
+{
+    _ = host.RunAsync(cts.Token);
 }
+else
+{
+    controller.Start(cts.Token);
+}
+
+_ = Task.Run(async () =>
+{
+    await Task.Delay(5000);
+    await controller.Stop();
+    Console.WriteLine($"*** stopped & restart after 2 sec");
+    await Task.Delay(2000);
+    controller.Restart();
+});
+
+_ = Task.Run(async () =>
+{
+    await Task.Delay(30000);
+    await cts.CancelAsync();
+    Console.WriteLine($"*** cancelled on timeout");
+});
+
+
+IHostApplicationLifetime applicationLifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
+await host.WaitForShutdownAsync(applicationLifetime.ApplicationStopping);
+
+cts.Dispose();
+Console.WriteLine("*** THE END ***");
+
 
 
 namespace Schedule.Console
@@ -101,9 +96,9 @@ namespace Schedule.Console
     {
         public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
         {
-            System.Console.WriteLine($"<");
+            System.Console.WriteLine($"<beg>");
             await next();
-            System.Console.WriteLine($">");
+            System.Console.WriteLine($"<end>");
         }
     }
 }
