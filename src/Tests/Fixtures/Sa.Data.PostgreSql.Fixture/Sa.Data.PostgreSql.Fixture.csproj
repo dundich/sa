@@ -1,0 +1,10 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../../Host.Test.Properties.xml" />
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
+    <ProjectReference Include="..\Sa.Fixture\Sa.Fixture.csproj" />
+  </ItemGroup>
+</Project>

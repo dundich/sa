@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Product>Sa</Product>
+    <Company>abt</Company>
+    <Authors>dundich</Authors>
+    <Copyright>Copyright © 2024</Copyright>
+    <PackageReleaseNotes>See https://github.com/dundich/Sa/releases</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/dundich/Sa</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/dundich/Sa</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup/>
+  <ItemDefinitionGroup/>
+  <ProjectExtensions/>
+  <ImportGroup/>
+</Project>

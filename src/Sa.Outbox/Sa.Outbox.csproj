@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sa.Data.Cache\Sa.Data.Cache.csproj" />
+    <ProjectReference Include="..\Sa.Outbox.Attributes\Sa.Outbox.Support.csproj" />
+    <ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
+  </ItemGroup>
+
+</Project>

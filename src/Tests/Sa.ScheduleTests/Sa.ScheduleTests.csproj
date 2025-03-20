@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Host.Test.Properties.xml" />
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Sa.Schedule\Sa.Schedule.csproj" />
+    <ProjectReference Include="..\Fixtures\Sa.Fixture\Sa.Fixture.csproj" />
+  </ItemGroup>
+
+</Project>
