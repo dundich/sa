@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS {cacheTablename} (
 ;
 
 INSERT INTO {cacheTablename} (id,root,part_values,part_by,from_date,to_date) 
-VALUES ('{timeRangeTablename}','{settings.FullName}','{StrOrNumsToString(values)}','{settings.PartBy.Name}',{range.Start.ToUnixTimeSeconds()},{range.End.ToUnixTimeSeconds()}) 
+VALUES ('{timeRangeTablename}','{settings.FullName}','{StrOrNumsToFmtString(values)}','{settings.PartBy.Name}',{range.Start.ToUnixTimeSeconds()},{range.End.ToUnixTimeSeconds()}) 
 ON CONFLICT (id) DO NOTHING
 ;
 
@@ -160,11 +160,11 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id='{qualifiedTableName}
     static string Pk(this ITableSettings settings) => settings.ConstraintPkSql?.Invoke() ?? $"pk_{settings.DatabaseTableName}";
 
 
-    internal static StrOrNum[] ParseStrOrNums(string input) => [.. input
+    internal static StrOrNum[] ParseStrOrNums(string fmtInput) => [.. fmtInput
             .Split(NumOrStrSplitter, StringSplitOptions.RemoveEmptyEntries)
-            .Select(StrOrNum.Parse)];
+            .Select(StrOrNum.ParseFmtStr)];
 
-    private static string StrOrNumsToString(StrOrNum[] input)
-        => string.Join(NumOrStrSplitter, input.Select(c => c.ToString()));
+    private static string StrOrNumsToFmtString(StrOrNum[] input)
+        => string.Join(NumOrStrSplitter, input.Select(c => c.ToFmtString()));
 
 }

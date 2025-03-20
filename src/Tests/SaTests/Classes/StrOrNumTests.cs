@@ -37,11 +37,14 @@ public class StrOrNumTests
         // Arrange
         StrOrNum strValue = "hello";
 
-        // Act
-        string result = strValue.ToString();
-
+        string str = strValue.ToString();
+        
         // Assert
-        Assert.Equal("s:hello", result);
+        Assert.Equal("hello", str);
+
+
+        str = strValue.ToFmtString();
+        Assert.Equal("s:hello", str);
     }
 
     [Fact]
@@ -52,7 +55,9 @@ public class StrOrNumTests
 
         // Act
         string result = numValue.ToString();
+        Assert.Equal("42", result);
 
+        result = numValue.ToFmtString();
         // Assert
         Assert.Equal("n:42", result);
     }
@@ -64,7 +69,7 @@ public class StrOrNumTests
         string input = "s:world";
 
         // Act
-        StrOrNum parsed = StrOrNum.Parse(input);
+        StrOrNum parsed = StrOrNum.ParseFmtStr(input);
 
         // Assert
         Assert.IsType<StrOrNum.ChoiceStr>(parsed);
@@ -78,7 +83,7 @@ public class StrOrNumTests
         string input = "n:123";
 
         // Act
-        StrOrNum parsed = StrOrNum.Parse(input);
+        StrOrNum parsed = StrOrNum.ParseFmtStr(input);
 
         // Assert
         Assert.IsType<StrOrNum.ChoiceNum>(parsed);
@@ -90,7 +95,7 @@ public class StrOrNumTests
     {
         // Arrange
         string input = "";
-        Assert.Equal("", StrOrNum.Parse(input));
+        Assert.Equal("", StrOrNum.ParseFmtStr(input));
     }
 
 }

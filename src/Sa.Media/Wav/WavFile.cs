@@ -5,7 +5,6 @@ namespace Sa.Media.Wav;
 
 /// <summary>
 /// Структура, описывающая заголовок WAV файла.
-/// <seealso href="https://gitlab.activebc.ru/ABC/activebc.tools.media/-/blob/master/src/ActiveBC.Tools.Media/WavReader.cs?ref_type=heads"/>
 /// <seealso href="https://audiocoding.cc/articles/2008-05-22-wav-file-structure/"/>
 /// <seealso href="https://stackoverflow.com/questions/8754111/how-to-read-the-data-in-a-wav-file-to-an-array/34667370#34667370"/>
 /// </summary>

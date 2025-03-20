@@ -21,14 +21,14 @@ namespace Sa.Classes;
 [JsonConverter(typeof(StrOrNumConverter))]
 public abstract record StrOrNum
 {
-    public record ChoiceStr(string Item) : StrOrNum
+    public record ChoiceStr(string Item) : StrOrNum 
     {
-        public override string ToString() => $"s:{Item}";
+        public override string ToString() => Item;
     }
 
-    public record ChoiceNum(long Item) : StrOrNum
+    public record ChoiceNum(long Item) : StrOrNum 
     {
-        public override string ToString() => $"n:{Item}";
+        public override string ToString() => $"{Item}";
     }
 
     public U Match<U>(Func<string, U> onChoiceStr, Func<long, U> onChoiceNum)
@@ -58,9 +58,11 @@ public abstract record StrOrNum
         return result;
     }
 
-    public override string ToString() => Match(str => $"s:{str}", num => $"n:{num}");
+    public override string ToString() => Match(str => str, num => $"{num}");
 
-    public static StrOrNum Parse(string? input)
+    public string ToFmtString() => Match(str => $"s:{str}", num => $"n:{num}");
+
+    public static StrOrNum ParseFmtStr(string? input)
     {
         if (string.IsNullOrEmpty(input)) return new ChoiceStr(string.Empty);
 
@@ -86,8 +88,8 @@ public abstract record StrOrNum
 public class StrOrNumConverter : JsonConverter<StrOrNum>
 {
     public override StrOrNum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-      => StrOrNum.Parse(reader.GetString());
+      => StrOrNum.ParseFmtStr(reader.GetString());
 
     public override void Write(Utf8JsonWriter writer, StrOrNum value, JsonSerializerOptions options)
-        => writer.WriteStringValue(value.Match(s => $"s:{s}", n => $"n:{n}"));
+        => writer.WriteStringValue(value.ToFmtString());
 }
