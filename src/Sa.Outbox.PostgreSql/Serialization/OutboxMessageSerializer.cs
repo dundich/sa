@@ -1,5 +1,4 @@
-﻿using Sa.Serialization.Converter;
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -39,18 +38,9 @@ internal class OutboxMessageSerializer : IOutboxMessageSerializer
             AllowTrailingCommas = true,
             Encoder = encoder,
         };
-        options.Converters.Add(new ObjectToInferredTypesConverter());
         return options;
     }
 
-    public Task<T?> DeserializeAsync<T>(Stream stream, CancellationToken cancellationToken = default)
-        => JsonSerializer.DeserializeAsync<T>(stream, Options, cancellationToken).AsTask();
-
-    public T? Deserialize<T>(Stream stream) => JsonSerializer.Deserialize<T>(stream, Options);
-
-
-    public Task SerializeAsync<T>(Stream stream, [NotNull] T value, CancellationToken cancellationToken = default)
-        => JsonSerializer.SerializeAsync<T>(stream, value ?? throw new ArgumentNullException(nameof(value)), Options, cancellationToken);
-
-    public void Serialize<T>(Stream stream, [NotNull] T value) => JsonSerializer.Serialize<T>(stream, value ?? throw new ArgumentNullException(nameof(value)), Options);
+    public T? Deserialize<T>(Stream stream) => default; // JsonSerializer.Deserialize<T>(stream, Options);
+    public void Serialize<T>(Stream stream, [NotNull] T value) { } // JsonSerializer.Serialize<T>(stream, value ?? throw new ArgumentNullException(nameof(value)), Options);
 }

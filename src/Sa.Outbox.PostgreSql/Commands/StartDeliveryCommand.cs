@@ -4,6 +4,7 @@ using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.PostgreSql.TypeHashResolve;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
@@ -14,6 +15,7 @@ internal class StartDeliveryCommand(
     , IMsgTypeHashResolver hashResolver
 ) : IStartDeliveryCommand
 {
+
     public async Task<int> Execute<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> writeBuffer, int batchSize, TimeSpan lockDuration, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
 
@@ -38,7 +40,6 @@ internal class StartDeliveryCommand(
         ]
         , cancellationToken);
     }
-
 
     internal static class DeliveryReader<TMessage>
     {
@@ -74,6 +75,7 @@ internal class StartDeliveryCommand(
                 , reader.GetInt64("outbox_delivery_created_at").ToDateTimeOffsetFromUnixTimestamp()
             );
         }
+
 
         private static TMessage ReadPayload(NpgsqlDataReader reader, IOutboxMessageSerializer serializer)
         {
