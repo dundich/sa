@@ -1,6 +1,5 @@
 ﻿using Sa.Classes;
 using Sa.Extensions;
-using Sa.Host.MessageTypeResolver;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Repository;
@@ -10,7 +9,6 @@ namespace Sa.Outbox.Delivery;
 
 internal sealed class DeliveryRelay(
     IDeliveryRepository repository
-    , IMessageTypeResolver typeResolver
     , IArrayPoolFactory arrayPoolFactory
     , IPartitionalSupportCache partCache
     , ICurrentTimeProvider timeProvider
@@ -84,7 +82,7 @@ internal sealed class DeliveryRelay(
 
         return new OutboxMessageFilter(
             GenTransactId()
-            , typeResolver.ToName<TMessage>()
+            , typeof(TMessage).Name
             , tenantId
             , ti.PartName
             , fromDate

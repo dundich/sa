@@ -2,5 +2,5 @@
 
 internal interface IOutboxBulkCommand
 {
-    ValueTask<ulong> BulkWrite<TMessage>(string payloadType, ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken);
+    ValueTask<ulong> BulkWrite<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken);
 }

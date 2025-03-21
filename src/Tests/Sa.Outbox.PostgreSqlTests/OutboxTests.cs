@@ -52,12 +52,13 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                 )
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.AddDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
-                    cfg.WithPgOutboxSettings((_, settings) =>
+                    cfg.ConfigureDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
+                    cfg.ConfigureOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "test";
                         settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
                     });
+                    cfg.WithMessageSerializer(sp => new OutboxMessageSerializer());
                 })
             ;
         }
