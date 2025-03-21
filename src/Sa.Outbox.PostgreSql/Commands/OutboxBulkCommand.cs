@@ -19,9 +19,9 @@ internal class OutboxBulkCommand(
 ) : IOutboxBulkCommand
 {
 
-    public async ValueTask<ulong> BulkWrite<TMessage>(string payloadType, ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken)
+    public async ValueTask<ulong> BulkWrite<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetCode(payloadType, cancellationToken);
+        long typeCode = await hashResolver.GetCode(typeof(TMessage).Name, cancellationToken);
 
         ulong result = await dataSource.BeginBinaryImport(sqlTemplate.SqlBulkOutboxCopy, async (writer, t) =>
         {

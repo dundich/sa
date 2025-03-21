@@ -4,7 +4,6 @@ using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.PostgreSql.TypeHashResolve;
 using System.Data;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 

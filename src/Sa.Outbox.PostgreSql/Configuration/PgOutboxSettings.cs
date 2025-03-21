@@ -1,6 +1,4 @@
-﻿using System.Text.Json;
-
-namespace Sa.Outbox.PostgreSql;
+﻿namespace Sa.Outbox.PostgreSql;
 
 /// <summary>
 /// Represents the settings for the PostgreSQL Outbox configuration.
@@ -14,20 +12,15 @@ public class PgOutboxSettings
     public PgOutboxTableSettings TableSettings { get; } = new();
 
     /// <summary>
-    /// Gets the settings related to serialization of messages.
-    /// </summary>
-    public PgOutboxSerializeSettings SerializationSettings { get; } = new();
-    
-    /// <summary>
     /// Gets the settings related to caching of message types.
     /// </summary>
     public PgOutboxCacheSettings CacheSettings { get; } = new();
-    
+
     /// <summary>
     /// Gets the settings related to migration of the Outbox schema.
     /// </summary>
     public PgOutboxMigrationSettings MigrationSettings { get; } = new();
-    
+
     /// <summary>
     /// Gets the settings related to cleanup of old Outbox messages and parts.
     /// </summary>
@@ -93,14 +86,6 @@ public class PgOutboxTableSettings
     /// </summary>
     /// <returns>The qualified name of the error table.</returns>
     public string GetQualifiedErrorTableName() => $@"{DatabaseSchemaName}.""{DatabaseErrorTableName}""";
-}
-
-/// <summary>
-/// Represents the settings for serialization of messages in the Outbox.
-/// </summary>
-public class PgOutboxSerializeSettings
-{
-    public JsonSerializerOptions? JsonSerializerOptions { get; set; }
 }
 
 

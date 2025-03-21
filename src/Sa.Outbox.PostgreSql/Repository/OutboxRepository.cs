@@ -7,13 +7,13 @@ internal class OutboxRepository(IOutboxBulkCommand bulkCmd, IOutboxPartRepositor
     : IOutboxRepository
 {
 
-    public async ValueTask<ulong> Save<TMessage>(string payloadType, ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken = default)
+    public async ValueTask<ulong> Save<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken = default)
     {
         if (messages.Length == 0) return 0;
 
         OutboxPartInfo[] parts = messages.Span.SelectWhere(c => c.PartInfo);
         await partRepository.EnsureOutboxParts(parts, cancellationToken);
 
-        return await bulkCmd.BulkWrite(payloadType, messages, cancellationToken);
+        return await bulkCmd.BulkWrite(messages, cancellationToken);
     }
 }

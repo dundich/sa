@@ -96,12 +96,14 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 })
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.AddDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
-                    cfg.WithPgOutboxSettings((_, settings) =>
-                    {
-                        settings.TableSettings.DatabaseSchemaName = "parallel";
-                        settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
-                    });
+                    cfg
+                        .ConfigureDataSource(c => c.WithConnectionString(_ => this.ConnectionString))
+                        .ConfigureOutboxSettings((_, settings) =>
+                        {
+                            settings.TableSettings.DatabaseSchemaName = "parallel";
+                            settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
+                        })
+                        .WithMessageSerializer(sp => new OutboxMessageSerializer());
                 });
         }
     }
@@ -154,7 +156,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         where T : IOutboxPayloadMessage, new()
     {
         long total = 0;
-        List<int> nodes = Enumerable.Range(1, GenMessageRange.Threads).ToList();
+        List<int> nodes = [.. Enumerable.Range(1, GenMessageRange.Threads)];
         ParallelLoopResult loop = Parallel.ForEach(nodes, async node =>
         {
             List<T> messages = [];

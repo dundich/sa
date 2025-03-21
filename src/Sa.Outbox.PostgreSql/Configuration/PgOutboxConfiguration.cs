@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
+using Sa.Outbox.PostgreSql.Serialization;
 using System.Collections.Concurrent;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
@@ -9,7 +10,7 @@ internal class PgOutboxConfiguration(IServiceCollection services) : IPgOutboxCon
 {
     private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, PgOutboxSettings>>> s_invokers = [];
 
-    public IPgOutboxConfiguration WithPgOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
+    public IPgOutboxConfiguration ConfigureOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
     {
         if (configure != null)
         {
@@ -43,17 +44,20 @@ internal class PgOutboxConfiguration(IServiceCollection services) : IPgOutboxCon
         return this;
     }
 
-    public IPgOutboxConfiguration AddDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
+    public IPgOutboxConfiguration ConfigureDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
     {
         services.AddPgDataSource(configure);
         return this;
     }
 
+    public IPgOutboxConfiguration WithMessageSerializer(Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
+    {
+        services.AddSingleton<IOutboxMessageSerializer>(messageSerializerFactory);
+        return this;
+    }
 
     private void AddSettings()
     {
-        services.TryAddSingleton<PgOutboxSerializeSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().SerializationSettings);
-
         services.TryAddSingleton<PgOutboxTableSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().TableSettings);
         services.TryAddSingleton<PgOutboxCacheSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().CacheSettings);
         services.TryAddSingleton<PgOutboxMigrationSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().MigrationSettings);
