@@ -2,6 +2,6 @@
 
 internal interface IMsgTypeHashResolver
 {
-    ValueTask<long> GetCode(string typeName, CancellationToken cancellationToken);
-    ValueTask<string> GetTypeName(long typeCode, CancellationToken cancellationToken);
+    Task<long> GetCode(string typeName, CancellationToken cancellationToken);
+    Task<string> GetTypeName(long typeCode, CancellationToken cancellationToken);
 }

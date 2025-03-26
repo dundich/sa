@@ -4,7 +4,7 @@ namespace Sa.Partitional.PostgreSql.Cache;
 
 public interface IPartCache
 {
-    ValueTask<bool> InCache(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default);
-    ValueTask<bool> EnsureCache(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default);
-    ValueTask RemoveCache(string tableName, CancellationToken cancellationToken = default);
+    Task<bool> InCache(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default);
+    Task<bool> EnsureCache(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default);
+    Task RemoveCache(string tableName, CancellationToken cancellationToken = default);
 }

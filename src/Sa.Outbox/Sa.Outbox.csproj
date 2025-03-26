@@ -9,7 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Sa.Data.Cache\Sa.Data.Cache.csproj" />
     <ProjectReference Include="..\Sa.Outbox.Attributes\Sa.Outbox.Support.csproj" />
     <ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
   </ItemGroup>

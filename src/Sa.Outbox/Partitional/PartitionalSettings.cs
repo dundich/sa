@@ -13,12 +13,6 @@ public class PartitionalSettings
     public bool ForEachTenant { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the duration for which tenant IDs are cached.
-    /// Default is set to 2 minutes.
-    /// </summary>
-    public TimeSpan CacheTenantIdsDuration { get; set; } = TimeSpan.FromMinutes(2);
-
-    /// <summary>
     /// Gets or sets a function that retrieves tenant IDs asynchronously.
     /// This function takes a <see cref="CancellationToken"/> as a parameter and returns an array of tenant IDs.
     /// </summary>
