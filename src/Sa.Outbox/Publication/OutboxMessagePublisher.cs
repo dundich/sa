@@ -44,7 +44,7 @@ internal class OutboxMessagePublisher(
                     TMessage message = enumerator.Current;
 
                     payloads[i] = new OutboxMessage<TMessage>(
-                        PayloadId: message.PayloadId ?? string.Empty,
+                        PayloadId: message.Message ?? string.Empty,
                         Payload: message,
                         PartInfo: new OutboxPartInfo(TenantId: message.TenantId, typeInfo.PartName, now));
 

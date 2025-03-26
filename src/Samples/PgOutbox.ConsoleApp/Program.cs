@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using PgOutbox.ConsoleApp;
 using Sa.Outbox;
 using Sa.Outbox.PostgreSql;
@@ -9,10 +10,7 @@ using System.Text.Json.Serialization;
 
 Console.WriteLine("Hello, Pg Outbox!");
 
-
-
 var connectionString = "Host=localhost;Username=service_user;Password=service_user;Database=test_1";
-
 
 // default configure...
 IHostBuilder builder = Host.CreateDefaultBuilder();
@@ -50,14 +48,37 @@ builder.UseConsoleLifetime();
 var host = builder.Build();
 
 
+// -- code
+
+var publisher = host.Services.GetRequiredService<IOutboxMessagePublisher>();
+
+var messages = new[]
+{
+    new SomeMessage { TenantId = Random.Shared.Next(1, 3), Message = "Hi 1" },
+    new SomeMessage { TenantId = Random.Shared.Next(1, 3), Message = "Hi 2" },
+    new SomeMessage { TenantId = Random.Shared.Next(1, 3), Message = "Hi 3" },
+    new SomeMessage { TenantId = Random.Shared.Next(1, 3), Message = "Hi 4" }
+};
+
+var id = await publisher.Publish(messages);
+
+Console.WriteLine("sent: {0}", id);
+
+await host.RunAsync();
+
+Console.WriteLine("recived: {0}", SomeMessageConsumer.Counter);
+
+
 namespace PgOutbox.ConsoleApp
 {
 
     [OutboxMessage(part: "some")]
     public class SomeMessage : IOutboxPayloadMessage
     {
-        public string PayloadId { get; set; } = default!;
+        public string Message { get; set; } = default!;
         public int TenantId { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
 
@@ -67,56 +88,45 @@ namespace PgOutbox.ConsoleApp
     {
     }
 
-
-    //https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/source-generation
-    //public class WeatherForecast
-    //{
-    //    public DateTime Date { get; set; }
-    //    public int TemperatureCelsius { get; set; }
-    //    public string? Summary { get; set; }
-    //}
-
-    //[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Serialization)]
-    //[JsonSerializable(typeof(WeatherForecast))]
-    //internal partial class SerializeOnlyContext : JsonSerializerContext
-    //{
-    //}
-
-    //[JsonSerializable(typeof(WeatherForecast), GenerationMode = JsonSourceGenerationMode.Serialization)]
-    //internal partial class SerializeOnlyWeatherForecastOnlyContext : JsonSerializerContext
-    //{
-    //}
-
-
-
-
     public class SomeMessageConsumer : IConsumer<SomeMessage>
     {
-        static int s_Counter = 0;
+        private static int s_Counter = 0;
 
         public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             Interlocked.Add(ref s_Counter, outboxMessages.Count);
+
+            foreach (var outboxMessage in outboxMessages)
+            {
+                Console.WriteLine("Consume [#{0}, tenant:{1}] {2}", outboxMessage.OutboxId, outboxMessage.PartInfo.TenantId, outboxMessage.Payload.Message);
+            }
+
             await Task.Delay(100, cancellationToken);
         }
 
         public static int Counter => s_Counter;
     }
 
-    // https://stackoverflow.com/questions/78639150/use-system-text-json-converters-with-jsontypeinfo-for-aot
-    // https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/source-generation
-    // https://learn.microsoft.com/en-us/aspnet/core/fundamentals/native-aot?view=aspnetcore-9.0
-    // https://okyrylchuk.dev/blog/intro-to-serialization-with-source-generation-in-system-text-json/
+    // for AOT
     public class OutboxMessageSerializer : IOutboxMessageSerializer
     {
         public T? Deserialize<T>(Stream stream)
         {
-            // return JsonSerializer.Deserialize<T>(stream);
+            if (typeof(T) == typeof(SomeMessage))
+            {
+                SomeMessage? message = JsonSerializer.Deserialize<SomeMessage>(stream, SomeMessageJsonSerializerContext.Default.SomeMessage);
+                return (T?)(object?)message;
+            }
+
+            return default;
         }
 
         public void Serialize<T>(Stream stream, T value)
         {
-            // JsonSerializer.Serialize(stream, value);
+            if (typeof(T) == typeof(SomeMessage))
+            {
+                JsonSerializer.Serialize(stream, value!, SomeMessageJsonSerializerContext.Default.SomeMessage);
+            }
         }
     }
 }

@@ -13,7 +13,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
     [OutboxMessage(part: "some")]
     public class SomeMessage : IOutboxPayloadMessage
     {
-        public string PayloadId { get; set; } = default!;
+        public string Message { get; set; } = default!;
         public int TenantId { get; set; }
     }
 

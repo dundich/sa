@@ -52,7 +52,7 @@ internal class PgOutboxConfiguration(IServiceCollection services) : IPgOutboxCon
 
     public IPgOutboxConfiguration WithMessageSerializer(Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
     {
-        services.AddSingleton<IOutboxMessageSerializer>(messageSerializerFactory);
+        services.TryAddSingleton<IOutboxMessageSerializer>(messageSerializerFactory);
         return this;
     }
 
