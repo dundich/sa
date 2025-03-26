@@ -9,7 +9,7 @@ public interface IOutboxPayloadMessage
     /// <summary>
     /// Gets the unique identifier for the payload.
     /// </summary>
-    string Message { get; }
+    string PayloadId { get; }
 
     /// <summary>
     /// Gets the identifier for the tenant associated with the payload.

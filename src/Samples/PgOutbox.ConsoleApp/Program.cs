@@ -52,12 +52,12 @@ var host = builder.Build();
 
 var publisher = host.Services.GetRequiredService<IOutboxMessagePublisher>();
 
-var messages = new[]
+var messages = new SomeMessage[]
 {
-    new SomeMessage { TenantId = Random.Shared.Next(1, 3), Message = "Hi 1" },
-    new SomeMessage { TenantId = Random.Shared.Next(1, 3), Message = "Hi 2" },
-    new SomeMessage { TenantId = Random.Shared.Next(1, 3), Message = "Hi 3" },
-    new SomeMessage { TenantId = Random.Shared.Next(1, 3), Message = "Hi 4" }
+    new() { Message = "Hi 1" },
+    new() { Message = "Hi 2" },
+    new() { Message = "Hi 3" },
+    new() { Message = "Hi 4" }
 };
 
 var id = await publisher.Publish(messages);
@@ -75,9 +75,9 @@ namespace PgOutbox.ConsoleApp
     [OutboxMessage(part: "some")]
     public class SomeMessage : IOutboxPayloadMessage
     {
-        public string Message { get; set; } = default!;
-        public int TenantId { get; set; }
-
+        public string PayloadId { get; set; } = Guid.NewGuid().ToString();
+        public int TenantId { get; set; } = Random.Shared.Next(1, 3);
+        public string Message { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 

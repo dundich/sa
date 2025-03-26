@@ -18,8 +18,8 @@ public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture) : IClass
         // Arrange
         List<TestMessage> messages =
         [
-            new TestMessage { Message = "1", Content = "Message 1", TenantId = 1},
-            new TestMessage { Message = "2", Content = "Message 2", TenantId = 2}
+            new TestMessage { PayloadId = "1", Content = "Message 1", TenantId = 1},
+            new TestMessage { PayloadId = "2", Content = "Message 2", TenantId = 2}
         ];
 
         // Act

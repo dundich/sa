@@ -4,7 +4,7 @@
 [OutboxMessage]
 public record PingMessage(long Payload) : IOutboxPayloadMessage
 {
-    public string Message => String.Empty;
+    public string PayloadId => String.Empty;
 
     public int TenantId => 0;
 }

@@ -53,7 +53,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
     {
         Console.Write(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
-        List<TestMessage> messages = [new TestMessage { Message = "11", Content = "Message 1", TenantId = 1 }];
+        List<TestMessage> messages = [new TestMessage { PayloadId = "11", Content = "Message 1", TenantId = 1 }];
 
         ulong cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
