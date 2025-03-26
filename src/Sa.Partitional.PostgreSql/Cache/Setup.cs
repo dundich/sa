@@ -1,8 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-using Sa.Data.Cache;
-
 namespace Sa.Partitional.PostgreSql.Cache;
 
 
@@ -10,14 +8,11 @@ internal static class Setup
 {
     public static IServiceCollection AddPartCache(this IServiceCollection services, Action<IServiceProvider, PartCacheSettings>? configure = null)
     {
-
-        services.AddTransient<PartCacheSettings>();
-
-        services.AddFusionCacheEx(PartCache.Env.CacheName, (sp, opts) =>
+        services.AddTransient<PartCacheSettings>(sp =>
         {
-            PartCacheSettings cacheSettings = sp.GetRequiredService<PartCacheSettings>();
+            PartCacheSettings cacheSettings = new();
             configure?.Invoke(sp, cacheSettings);
-            opts.Duration = cacheSettings.CacheDuration;
+            return cacheSettings;
         });
 
         services.TryAddSingleton<IPartCache, PartCache>();

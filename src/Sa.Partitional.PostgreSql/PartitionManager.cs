@@ -6,7 +6,7 @@ namespace Sa.Partitional.PostgreSql;
 
 internal class PartitionManager(IPartCache cache, IPartMigrationService migrationService) : IPartitionManager
 {
-    public ValueTask<bool> EnsureParts(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
+    public Task<bool> EnsureParts(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
     {
         return cache.EnsureCache(tableName, date, partValues, cancellationToken);
     }

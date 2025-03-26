@@ -31,5 +31,5 @@ public interface IPartitionManager
     /// <param name="partValues">An array of values that define the partitions (could be strings or numbers).</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A value task representing the asynchronous operation, with a boolean result indicating whether the partitions were ensured successfully.</returns>
-    ValueTask<bool> EnsureParts(string tableName, DateTimeOffset date, Classes.StrOrNum[] partValues, CancellationToken cancellationToken = default);
+    Task<bool> EnsureParts(string tableName, DateTimeOffset date, Classes.StrOrNum[] partValues, CancellationToken cancellationToken = default);
 }

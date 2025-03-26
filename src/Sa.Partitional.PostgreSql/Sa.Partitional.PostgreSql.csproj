@@ -17,7 +17,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Sa.Data.Cache\Sa.Data.Cache.csproj" />
     <ProjectReference Include="..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
     <ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
   </ItemGroup>
