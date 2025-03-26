@@ -8,7 +8,7 @@ internal class MsgTypeHashResolver(IMsgTypeCache cache, IMsgTypeRepository repos
 {
     private int _triggered = 0;
 
-    public async ValueTask<long> GetCode(string typeName, CancellationToken cancellationToken)
+    public async Task<long> GetCode(string typeName, CancellationToken cancellationToken)
     {
 
         long code = await cache.GetCode(typeName, cancellationToken);
@@ -32,7 +32,7 @@ internal class MsgTypeHashResolver(IMsgTypeCache cache, IMsgTypeRepository repos
         return code;
     }
 
-    public async ValueTask<string> GetTypeName(long typeCode, CancellationToken cancellationToken)
+    public async Task<string> GetTypeName(long typeCode, CancellationToken cancellationToken)
     {
         string? typeName = await cache.GetTypeName(typeCode, cancellationToken);
         if (typeName != null) return typeName;

@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-using Sa.Data.Cache;
 
 namespace Sa.Outbox.Partitional;
 
@@ -17,8 +16,6 @@ internal static class Setup
             configure.Invoke(sp, settings);
             return settings;
         });
-
-        services.AddFusionCacheEx(PartitionalSupportCache.Env.CacheName);
 
         services.TryAddSingleton<IPartitionalSupportCache, PartitionalSupportCache>();
 

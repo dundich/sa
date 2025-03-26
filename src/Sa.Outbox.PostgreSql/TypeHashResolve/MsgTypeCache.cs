@@ -1,20 +1,19 @@
-﻿using Sa.Outbox.PostgreSql.Repository;
-using ZiggyCreatures.Caching.Fusion;
+﻿using Sa.Classes;
+using Sa.Outbox.PostgreSql.Repository;
 
 namespace Sa.Outbox.PostgreSql.TypeHashResolve;
 
-internal sealed class MsgTypeCache(
-    IFusionCacheProvider cacheProvider
-    , IMsgTypeRepository repository
-    , PgOutboxCacheSettings cacheSettings)
-    : IDisposable, IMsgTypeCache
+internal sealed class MsgTypeCache : IMsgTypeCache
 {
-    internal static class Env
-    {
-        public const string CacheName = "sa-msgtype";
-    }
+    private readonly IMsgTypeRepository _repository;
 
-    private readonly IFusionCache _cache = cacheProvider.GetCache(Env.CacheName);
+    private readonly ResetLazy<Task<Storage>> _cache;
+
+    public MsgTypeCache(IMsgTypeRepository repository)
+    {
+        _repository = repository;
+        _cache = new(Load);
+    }
 
     internal class Storage
     {
@@ -43,35 +42,25 @@ internal sealed class MsgTypeCache(
         }
     }
 
-    public async ValueTask<long> GetCode(string typeName, CancellationToken cancellationToken)
+    public async Task<long> GetCode(string typeName, CancellationToken cancellationToken)
     {
-        var storage = await GetStorage(cancellationToken);
+        Storage storage = await GetStorage();
         return storage.GetCode(typeName);
     }
 
-    public async ValueTask<string?> GetTypeName(long code, CancellationToken cancellationToken)
+    public async Task<string?> GetTypeName(long code, CancellationToken cancellationToken)
     {
-        var storage = await GetStorage(cancellationToken);
+        Storage storage = await GetStorage();
         return storage.GetType(code);
     }
 
-    public ValueTask Reset(CancellationToken cancellationToken) => _cache.RemoveAsync(Env.CacheName, token: cancellationToken);
+    public Task Reset(CancellationToken cancellationToken) => Task.FromResult(() => _cache.Reset());
 
-    private ValueTask<Storage> GetStorage(CancellationToken cancellationToken)
-    {
-        return _cache.GetOrSetAsync<Storage>(
-            Env.CacheName
-            , async (context, t) => await Load(context, t)
-            , options: null
-            , token: cancellationToken);
-    }
+    private Task<Storage> GetStorage() => _cache.Value;
 
-    private async Task<Storage> Load(FusionCacheFactoryExecutionContext<Storage> context, CancellationToken cancellationToken)
+    private async Task<Storage> Load()
     {
-        List<(long id, string typeName)> hashCodes = await repository.SelectAll(cancellationToken);
-        context.Options.Duration = hashCodes.Count > 0 ? cacheSettings.CacheTypeDuration : TimeSpan.Zero;
+        List<(long id, string typeName)> hashCodes = await _repository.SelectAll(default);
         return new Storage(hashCodes);
     }
-
-    public void Dispose() => _cache.Dispose();
 }

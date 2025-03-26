@@ -3,7 +3,7 @@ namespace Sa.Outbox.PostgreSql.TypeHashResolve;
 
 internal interface IMsgTypeCache
 {
-    ValueTask<long> GetCode(string typeName, CancellationToken cancellationToken);
-    ValueTask<string?> GetTypeName(long code, CancellationToken cancellationToken);
-    ValueTask Reset(CancellationToken cancellationToken);
+    Task<long> GetCode(string typeName, CancellationToken cancellationToken);
+    Task<string?> GetTypeName(long code, CancellationToken cancellationToken);
+    Task Reset(CancellationToken cancellationToken);
 }
