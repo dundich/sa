@@ -18,9 +18,10 @@ internal class OutboxBulkCommand(
     , IMsgTypeHashResolver hashResolver
 ) : IOutboxBulkCommand
 {
-    public async ValueTask<ulong> BulkWrite<TMessage>(string payloadType, ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken)
+
+    public async ValueTask<ulong> BulkWrite<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetCode(payloadType, cancellationToken);
+        long typeCode = await hashResolver.GetCode(typeof(TMessage).Name, cancellationToken);
 
         ulong result = await dataSource.BeginBinaryImport(sqlTemplate.SqlBulkOutboxCopy, async (writer, t) =>
         {
@@ -55,16 +56,22 @@ internal class OutboxBulkCommand(
             // payload_type
             writer.Write(payloadTypeCode, NpgsqlDbType.Bigint);
             // payload
-            using RecyclableMemoryStream stream = streamManager.GetStream();
-            serializer.Serialize(stream, row.Payload);
-            stream.Position = 0;
-            writer.Write(stream, NpgsqlDbType.Bytea);
+            int streamLength = WritePayload(writer, row.Payload);
             // payload_size
-            writer.Write(stream.Length, NpgsqlDbType.Integer);
+            writer.Write(streamLength, NpgsqlDbType.Integer);
 
 
             // created_at
             writer.Write(row.PartInfo.CreatedAt.ToUnixTimeSeconds(), NpgsqlDbType.Bigint);
         }
+    }
+
+    private int WritePayload<TMessage>(NpgsqlBinaryImporter writer, TMessage? payload)
+    {
+        using RecyclableMemoryStream stream = streamManager.GetStream();
+        serializer.Serialize(stream, payload);
+        stream.Position = 0;
+        writer.Write(stream, NpgsqlDbType.Bytea);
+        return (int)stream.Length;
     }
 }

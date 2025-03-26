@@ -10,8 +10,8 @@ internal static class Setup
         configure?.Invoke(cfg);
         
         cfg
-            .WithPgOutboxSettings()
-            .AddDataSource()
+            .ConfigureOutboxSettings()
+            .ConfigureDataSource()
             ;
         
         return services;

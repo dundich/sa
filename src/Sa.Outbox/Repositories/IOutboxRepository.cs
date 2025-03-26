@@ -13,5 +13,5 @@ public interface IOutboxRepository
     /// <param name="messages">The collection of outbox messages to save.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task representing the asynchronous operation, containing the number of messages saved.</returns>
-    ValueTask<ulong> Save<TMessage>(string payloadType, ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken = default);
+    ValueTask<ulong> Save<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken = default);
 }

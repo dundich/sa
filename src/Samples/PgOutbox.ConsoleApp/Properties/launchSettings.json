@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "PgOutbox.ConsoleApp": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

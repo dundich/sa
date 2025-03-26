@@ -1,5 +1,4 @@
 ﻿using Sa.Classes;
-using Sa.Host.MessageTypeResolver;
 using Sa.Outbox.Support;
 using Sa.Timing.Providers;
 
@@ -7,7 +6,6 @@ namespace Sa.Outbox.Publication;
 
 internal class OutboxMessagePublisher(
     ICurrentTimeProvider timeProvider,
-    IMessageTypeResolver typeResolver,
     IArrayPoolFactory poolFactory,
     IOutboxRepository outboxRepository,
     OutboxPublishSettings publishSettings
@@ -25,7 +23,6 @@ internal class OutboxMessagePublisher(
     {
         OutboxMessageTypeInfo typeInfo = OutboxMessageTypeHelper.GetOutboxMessageTypeInfo<TMessage>();
         DateTimeOffset now = timeProvider.GetUtcNow();
-        string payloadType = typeResolver.ToName<TMessage>();
         int maxBatchSize = publishSettings.MaxBatchSize;
         IArrayPooler<OutboxMessage<TMessage>> pooler = poolFactory.Create<OutboxMessage<TMessage>>();
         IEnumerator<TMessage> enumerator = messages.GetEnumerator();
@@ -54,7 +51,7 @@ internal class OutboxMessagePublisher(
                     i++;
                 }
 
-                sent += await outboxRepository.Save<TMessage>(payloadType, payloads.AsMemory()[..len], cancellationToken);
+                sent += await outboxRepository.Save<TMessage>(payloads.AsMemory()[..len], cancellationToken);
             }
             finally
             {

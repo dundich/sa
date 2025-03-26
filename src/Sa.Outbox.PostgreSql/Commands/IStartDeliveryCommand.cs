@@ -1,4 +1,6 @@
-﻿namespace Sa.Outbox.PostgreSql.Commands;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Sa.Outbox.PostgreSql.Commands;
 
 internal interface IStartDeliveryCommand
 {
