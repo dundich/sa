@@ -3,8 +3,7 @@ using Sa.Partitional.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
-internal class OutboxPartRepository(IPartitionManager partManager, PgOutboxTableSettings tableSettings)
-    : IOutboxPartRepository
+internal class OutboxPartRepository(IPartitionManager partManager, PgOutboxTableSettings tableSettings): IOutboxPartRepository
 {
 
     public Task<int> EnsureDeliveryParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)

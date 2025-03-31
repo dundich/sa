@@ -36,6 +36,8 @@ public abstract class SaFixture<TSettings> : IAsyncLifetime
 
     public virtual ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
+    public CancellationToken CancellationToken => TestContext.Current.CancellationToken;
+
     public async virtual ValueTask DisposeAsync()
     {
         if (_serviceProvider.IsValueCreated) await _serviceProvider.Value.DisposeAsync();

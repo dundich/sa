@@ -13,7 +13,7 @@ internal sealed class PartMigrationService(
     private int s_triggered = 0;
     private readonly CancellationTokenSource _cts = new();
 
-    public CancellationToken OutboxMigrated => _cts.Token;
+    public CancellationToken OnMigrated => _cts.Token;
 
     public void Dispose()
     {

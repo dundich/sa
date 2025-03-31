@@ -4,6 +4,6 @@ namespace Sa.HybridFileStorage;
 
 public interface IHybridFileStorageBuilder
 {
-    IHybridFileStorageBuilder AddStorage(IHybridFileStorage storage);
+    IHybridFileStorageBuilder AddStorage(IFileStorage storage);
     IHybridFileStorage Build();
 }

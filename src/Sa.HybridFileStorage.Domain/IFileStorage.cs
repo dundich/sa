@@ -3,7 +3,7 @@
 /// <summary>
 /// Interface for working with file storage.
 /// </summary>
-public interface IHybridFileStorage
+public interface IFileStorage
 {
     /// <summary>
     /// Gets the type of the storage.
@@ -37,7 +37,7 @@ public interface IHybridFileStorage
     /// <param name="fileId">File ID.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The file stream.</returns>
-    Task<Stream> DownloadFileAsync(string fileId, CancellationToken cancellationToken);
+    Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken);
 
     /// <summary>
     /// Deletes a file from the storage by its ID.

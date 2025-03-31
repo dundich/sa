@@ -2,6 +2,7 @@
 
 public class FileSystemStorageOption
 {
+    public string StorageType { get; set; } = "file";
     public string BasePath { get; set; } = string.Empty;
-    public bool IsReadOnly { get; set; }
+    public bool? IsReadOnly { get; set; }
 }

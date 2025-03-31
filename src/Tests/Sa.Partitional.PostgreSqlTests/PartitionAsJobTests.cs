@@ -53,7 +53,6 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture) : IClassFi
         int i = fixture.ServiceProvider.GetRequiredService<IScheduler>().Start(CancellationToken.None);
         Assert.True(i > 0);
 
-        Console.WriteLine(fixture.ConnectionString);
         await Task.Delay(800, TestContext.Current.CancellationToken);
 
         var list = await Sub.GetPartsFromDate("customer", DateTimeOffset.Now.StartOfDay(), TestContext.Current.CancellationToken);

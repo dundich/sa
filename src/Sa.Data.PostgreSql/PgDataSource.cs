@@ -36,7 +36,7 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
         return result;
     }
 
-    public async Task<int> ExecuteNonQuery(string sql, NpgsqlParameter[] parameters, CancellationToken cancellationToken = default)
+    public async Task<int> ExecuteNonQuery(string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
     {
         using NpgsqlConnection connection = await OpenDbConnection(cancellationToken);
         using NpgsqlCommand cmd = new(sql, connection);
@@ -44,7 +44,15 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, NpgsqlParameter[] parameters, CancellationToken cancellationToken = default)
+    public async Task<object?> ExecuteScalar(string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
+    {
+        using NpgsqlConnection connection = await OpenDbConnection(cancellationToken);
+        using NpgsqlCommand cmd = new(sql, connection);
+        AddParameters(cmd, parameters);
+        return await cmd.ExecuteScalarAsync(cancellationToken);
+    }
+
+    public async Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
     {
         int rowCount = 0;
 
@@ -61,11 +69,12 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
     }
 
 
-    static void AddParameters(NpgsqlCommand cmd, NpgsqlParameter[] parameters)
+    static void AddParameters(NpgsqlCommand cmd, IReadOnlyCollection<NpgsqlParameter> parameters)
     {
-        if (parameters != null && parameters.Length > 0)
+        if (parameters?.Count > 0)
         {
-            cmd.Parameters.AddRange(parameters);
+            foreach (var parameter in parameters)
+                cmd.Parameters.Add(parameter);
         }
     }
 }

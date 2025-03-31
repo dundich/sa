@@ -12,8 +12,6 @@ internal class OutboxMigrationSupport(IOutboxPartitionalSupport? partitionalSupp
 
         IReadOnlyCollection<OutboxTenantPartPair> parts = await partitionalSupport.GetPartValues(cancellationToken);
 
-        return parts
-            .Select(c => new StrOrNum[] { c.TenantId, c.Part })
-            .ToArray();
+        return [.. parts.Select(c => new StrOrNum[] { c.TenantId, c.Part })];
     }
 }

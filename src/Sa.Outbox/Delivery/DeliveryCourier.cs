@@ -1,10 +1,9 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Sa.Extensions;
+﻿using Sa.Extensions;
 using Sa.Outbox.Exceptions;
 
 namespace Sa.Outbox.Delivery;
 
-internal class DeliveryCourier(IServiceProvider serviceProvider) : IDeliveryCourier
+internal class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliveryCourier
 {
     // Asynchronous method to deliver messages
     public async ValueTask<int> Deliver<TMessage>(
@@ -14,7 +13,7 @@ internal class DeliveryCourier(IServiceProvider serviceProvider) : IDeliveryCour
     {
         try
         {
-            await ProcessInScopeMessagesAsync(outboxMessages, cancellationToken);
+            await scopedConsumer.MessageProcessingAsync(outboxMessages, cancellationToken);
         }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {
@@ -25,15 +24,7 @@ internal class DeliveryCourier(IServiceProvider serviceProvider) : IDeliveryCour
     }
 
 
-    // Method to process messages using a consumer in scope
-    private async Task ProcessInScopeMessagesAsync<TMessage>(
-        IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages,
-        CancellationToken cancellationToken)
-    {
-        using IServiceScope scope = serviceProvider.CreateScope();
-        IConsumer<TMessage> consumer = scope.ServiceProvider.GetRequiredService<IConsumer<TMessage>>();
-        await consumer.Consume(outboxMessages, cancellationToken);
-    }
+
 
     // Method to handle errors during message delivery
     private static void HandleError<TMessage>(Exception error, IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages)
