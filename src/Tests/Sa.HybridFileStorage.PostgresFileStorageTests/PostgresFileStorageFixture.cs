@@ -7,7 +7,7 @@ namespace Sa.HybridFileStorage.PostgresFileStorage.Tests;
 
 public class PostgresFileStorageFixturee : PgDataSourceFixture<IFileStorage>
 {
-    protected PostgresFileStorageFixturee(PostgresStorageOption option)
+    protected PostgresFileStorageFixturee(PostgresStorageOptions option)
     {
         Services.AddPgDataSource(b => b.WithConnectionString(sp => ConnectionString));
 
@@ -15,5 +15,5 @@ public class PostgresFileStorageFixturee : PgDataSourceFixture<IFileStorage>
         Services.AddPostgresHybridFileStorage(option);
     }
 
-    public PostgresStorageOption Options { get; private set; }
+    public PostgresStorageOptions Options { get; private set; }
 }

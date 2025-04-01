@@ -3,7 +3,7 @@ using Sa.Timing.Providers;
 
 namespace Sa.HybridFileStorage.FileSystemStorage;
 
-internal class FileSystemStorage(FileSystemStorageOption options, ICurrentTimeProvider currentTime) : IFileStorage
+internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeProvider currentTime) : IFileStorage
 {
     private readonly string _basePath = options.BasePath;
 

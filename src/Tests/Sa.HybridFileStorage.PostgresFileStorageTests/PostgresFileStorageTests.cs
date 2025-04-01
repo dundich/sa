@@ -10,7 +10,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
 
     public class Fixture : PostgresFileStorageFixturee
     {
-        public Fixture() : base(new PostgresStorageOption { TableName = "files" }) { }
+        public Fixture() : base(new PostgresStorageOptions { TableName = "files" }) { }
     }
 
     private IFileStorage Sub => fixture.Sub;

@@ -19,11 +19,11 @@ internal class PostgresFileStorage(
 
     private string _tableName = "public.files";
 
-    internal PostgresFileStorage WithOptions(PostgresStorageOption option)
+    internal PostgresFileStorage WithOptions(PostgresStorageOptions options)
     {
-        if (!string.IsNullOrWhiteSpace(option.StorageType)) StorageType = option.StorageType;
-        if (option.IsReadOnly.HasValue) IsReadOnly = option.IsReadOnly.Value;
-        _tableName = $"{option.SchemaName}.{option.TableName}";
+        if (!string.IsNullOrWhiteSpace(options.StorageType)) StorageType = options.StorageType;
+        if (options.IsReadOnly.HasValue) IsReadOnly = options.IsReadOnly.Value;
+        _tableName = $"{options.SchemaName}.{options.TableName}";
 
         return this;
     }

@@ -1,6 +1,6 @@
 ﻿namespace Sa.HybridFileStorage.PostgresFileStorage;
 
-public class PostgresStorageOption
+public class PostgresStorageOptions
 {
     public string SchemaName { get; set; } = "public";
     public string TableName { get; set; } = "files";

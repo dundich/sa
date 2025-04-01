@@ -1,6 +1,6 @@
 ﻿namespace Sa.HybridFileStorage.FileSystemStorage;
 
-public class FileSystemStorageOption
+public class FileSystemStorageOptions
 {
     public string StorageType { get; set; } = "file";
     public string BasePath { get; set; } = string.Empty;

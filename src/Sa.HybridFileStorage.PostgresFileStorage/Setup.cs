@@ -8,7 +8,7 @@ namespace Sa.HybridFileStorage.PostgresFileStorage;
 
 public static class Setup
 {
-    public static IServiceCollection AddPostgresHybridFileStorage(this IServiceCollection services, PostgresStorageOption option)
+    public static IServiceCollection AddPostgresHybridFileStorage(this IServiceCollection services, PostgresStorageOptions option)
     {
         services.AddPartitional((sp, builder) =>
         {
@@ -41,7 +41,7 @@ public static class Setup
         })
         ;
 
-        services.TryAddKeyedSingleton<PostgresStorageOption>(option);
+        services.TryAddKeyedSingleton<PostgresStorageOptions>(option);
         services.TryAddKeyedSingleton<PostgresFileStorage>(option);
 
         services.AddSingleton<IFileStorage>(sp =>
