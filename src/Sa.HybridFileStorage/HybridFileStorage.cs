@@ -13,7 +13,7 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
 
     public bool CanProcessFileId(string fileId) => _storages.Any(c => c.CanProcessFileId(fileId));
 
-    public async Task<StorageResult> UploadFileAsync(FileMetadataInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
         if (IsReadOnly)
         {

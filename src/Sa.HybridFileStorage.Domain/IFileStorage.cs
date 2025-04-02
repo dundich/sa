@@ -22,7 +22,7 @@ public interface IFileStorage
     /// <param name="fileStream">Stream of the file to upload.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The result of the file upload.</returns>
-    Task<StorageResult> UploadFileAsync(FileMetadataInput metadata, Stream fileStream, CancellationToken cancellationToken);
+    Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken);
 
     /// <summary>
     /// Checks if the storage can process the specified file ID.

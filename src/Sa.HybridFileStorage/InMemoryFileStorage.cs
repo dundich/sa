@@ -12,7 +12,7 @@ public class InMemoryFileStorage(ICurrentTimeProvider currentTime) : IFileStorag
 
     public bool IsReadOnly => false;
 
-    public async Task<StorageResult> UploadFileAsync(FileMetadataInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
         byte[] buffer = new byte[fileStream.Length];
         await fileStream.ReadExactlyAsync(buffer, cancellationToken);

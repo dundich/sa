@@ -15,17 +15,17 @@ internal class PostgresFileStorage(
 ) : IFileStorage
 {
 
-    private readonly string _tableName = $"{options.SchemaName}.\"{options.TableName}\"";
+    private readonly string _qualifiedTableName = $"{options.SchemaName}.\"{options.TableName.Trim('"')}\"";
 
     public string StorageType => options.StorageType;
 
     public bool IsReadOnly => options.IsReadOnly;
 
-    public async Task<StorageResult> UploadFileAsync(FileMetadataInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
         var now = currentTime.GetUtcNow();
 
-        await partManager.EnsureParts(_tableName, now, [metadata.TenantId], cancellationToken);
+        await partManager.EnsureParts(_qualifiedTableName, now, [metadata.TenantId], cancellationToken);
 
 
         string fileId = Parser.FormatToFileId(StorageType, metadata.TenantId, now, metadata.FileName);
@@ -48,7 +48,7 @@ internal class PostgresFileStorage(
             }
 
             await dataSource.ExecuteNonQuery($"""
-INSERT INTO {_tableName} (id, name, file_ext, data, size, tenant_id, created_at) 
+INSERT INTO {_qualifiedTableName} (id, name, file_ext, data, size, tenant_id, created_at) 
 VALUES (@id, @name, @file_ext, @data, @size, @tenant_id, @created_at)
 ON CONFLICT DO NOTHING
 """
@@ -80,7 +80,10 @@ ON CONFLICT DO NOTHING
     public async Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
     {
         (int tenantId, long timestamp) = Parser.ParseFromFileId(fileId);
-        int rowsAffected = await dataSource.ExecuteNonQuery($"DELETE FROM {_tableName} WHERE tenant_id = @tenant_id AND created_at >= @timestamp AND id = @id"
+        int rowsAffected = await dataSource.ExecuteNonQuery(
+            $"""
+            DELETE FROM {_qualifiedTableName} WHERE tenant_id = @tenant_id AND created_at >= @timestamp AND id = @id
+            """
         , [new("tenant_id", tenantId), new("timestamp", timestamp), new("id", fileId)]
         , cancellationToken);
         return rowsAffected > 0;
@@ -90,7 +93,10 @@ ON CONFLICT DO NOTHING
     {
         (int tenantId, long timestamp) = Parser.ParseFromFileId(fileId);
 
-        int rowsAffected = await dataSource.ExecuteReader($"SELECT data FROM {_tableName} WHERE tenant_id = @tenant_id AND created_at >= @timestamp AND id = @id"
+        int rowsAffected = await dataSource.ExecuteReader(
+            $"""
+            SELECT data FROM {_qualifiedTableName} WHERE tenant_id = @tenant_id AND created_at >= @timestamp AND id = @id
+            """
         , async (reader, i) =>
         {
             using var fs = await reader.GetStreamAsync(0, cancellationToken);

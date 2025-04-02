@@ -46,7 +46,7 @@ namespace HybridFileStorage.Console
             var expected = "Hello, HybridFileStorage!";
             using var stream = expected.ToStream();
 
-            var result = await storage.UploadFileAsync(new FileMetadataInput { FileName = "file.txt" }, stream, cancellationToken);
+            var result = await storage.UploadFileAsync(new UploadFileInput { FileName = "file.txt" }, stream, cancellationToken);
 
             string? actual = default;
 

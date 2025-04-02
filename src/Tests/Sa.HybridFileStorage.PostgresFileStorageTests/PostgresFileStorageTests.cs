@@ -21,7 +21,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         Console.WriteLine(fixture.ConnectionString);
 
         // Arrange
-        var metadata = new FileMetadataInput { FileName = "test.txt", TenantId = 1 };
+        var metadata = new UploadFileInput { FileName = "test.txt", TenantId = 1 };
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
 
 
@@ -44,7 +44,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
     {
         // Arrange
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
-        var upload = await Sub.UploadFileAsync(new FileMetadataInput { FileName = "test17.txt", TenantId = 17 }, fileContent, CancellationToken.None);
+        var upload = await Sub.UploadFileAsync(new UploadFileInput { FileName = "test17.txt", TenantId = 17 }, fileContent, CancellationToken.None);
 
         // Act
         var result = await Sub.DeleteFileAsync(upload.FileId, CancellationToken.None);
@@ -64,7 +64,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         // Arrange
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
 
-        var metadata = new FileMetadataInput { FileName = "example.txt", TenantId = 123 };
+        var metadata = new UploadFileInput { FileName = "example.txt", TenantId = 123 };
         var upload = await Sub.UploadFileAsync(metadata, fileContent, CancellationToken.None);
 
         string? actual = null;

@@ -11,7 +11,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
 
     public bool IsReadOnly => options.IsReadOnly ?? false;
 
-    public async Task<StorageResult> UploadFileAsync(FileMetadataInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
         string filePath = Path.Combine(_basePath, metadata.TenantId.ToString(), metadata.FileName).Replace('\\', '/');
 

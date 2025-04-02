@@ -1,8 +1,7 @@
 ﻿namespace Sa.HybridFileStorage.Domain;
 
-public record FileMetadataInput
+public record UploadFileInput
 {
     public int TenantId { get; set; }
     public string FileName { get; set; } = string.Empty;
-    public DateTimeOffset CreatedAt { get; set; }
 }
