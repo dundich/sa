@@ -1,5 +1,4 @@
-﻿using Sa.Data.PostgreSql;
-using Sa.Data.PostgreSql.Fixture;
+﻿using Sa.Data.PostgreSql.Fixture;
 using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage.PostgresFileStorage.Tests;
@@ -7,13 +6,11 @@ namespace Sa.HybridFileStorage.PostgresFileStorage.Tests;
 
 public class PostgresFileStorageFixturee : PgDataSourceFixture<IFileStorage>
 {
-    protected PostgresFileStorageFixturee(PostgresStorageOptions option)
+    protected PostgresFileStorageFixturee(string tableName)
     {
-        Services.AddPgDataSource(b => b.WithConnectionString(sp => ConnectionString));
-
-        Options = option;
-        Services.AddPostgresHybridFileStorage(option);
+        Services.AddPostgresHybridFileStorage(cfg => cfg
+            .AddDataSource(b => b.WithConnectionString(sp => ConnectionString))
+            .WithTableName(tableName)
+        );
     }
-
-    public PostgresStorageOptions Options { get; private set; }
 }

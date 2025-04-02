@@ -21,7 +21,7 @@ public class InMemoryFileStorage(ICurrentTimeProvider currentTime) : IFileStorag
 
         string fileId = $"{StorageType}://{path}";
         _storage[fileId] = buffer;
-        return new StorageResult(fileId, true, StorageType, currentTime.GetUtcNow());
+        return new StorageResult(fileId, StorageType, currentTime.GetUtcNow());
     }
 
     public async Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)

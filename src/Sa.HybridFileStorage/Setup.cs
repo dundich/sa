@@ -14,7 +14,7 @@ public static class Setup
             var builder = new HybridFileStorageBuilder();
             var storages = sp.GetServices<IFileStorage>();
 
-            foreach (var storage in storages)
+            foreach (IFileStorage storage in storages)
                 builder.AddStorage(storage);
 
             configure?.Invoke(sp, builder);

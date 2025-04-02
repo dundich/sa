@@ -10,23 +10,16 @@ internal class PostgresFileStorage(
     IPgDataSource dataSource,
     IPartitionManager partManager,
     ICurrentTimeProvider currentTime,
-    RecyclableMemoryStreamManager streamManager
+    RecyclableMemoryStreamManager streamManager,
+    StorageOptions options
 ) : IFileStorage
 {
-    public string StorageType { get; private set; } = "pg";
 
-    public bool IsReadOnly { get; private set; } = false;
+    private readonly string _tableName = $"{options.SchemaName}.\"{options.TableName}\"";
 
-    private string _tableName = "public.files";
+    public string StorageType => options.StorageType;
 
-    internal PostgresFileStorage WithOptions(PostgresStorageOptions options)
-    {
-        if (!string.IsNullOrWhiteSpace(options.StorageType)) StorageType = options.StorageType;
-        if (options.IsReadOnly.HasValue) IsReadOnly = options.IsReadOnly.Value;
-        _tableName = $"{options.SchemaName}.{options.TableName}";
-
-        return this;
-    }
+    public bool IsReadOnly => options.IsReadOnly;
 
     public async Task<StorageResult> UploadFileAsync(FileMetadataInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
@@ -79,7 +72,7 @@ ON CONFLICT DO NOTHING
             }
         }
 
-        return new StorageResult(fileId, true, StorageType, now);
+        return new StorageResult(fileId, StorageType, now);
     }
 
     public bool CanProcessFileId(string fileId) => fileId.StartsWith($"{StorageType}:://");

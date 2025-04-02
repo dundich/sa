@@ -10,7 +10,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
 
     public class Fixture : PostgresFileStorageFixturee
     {
-        public Fixture() : base(new PostgresStorageOptions { TableName = "files" }) { }
+        public Fixture() : base("files") { }
     }
 
     private IFileStorage Sub => fixture.Sub;
@@ -30,7 +30,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
 
         // Assert
         Assert.NotNull(result);
-        Assert.True(result.Success);
+        Assert.NotEmpty(result.FileId);
 
         object? v = await fixture.DataSource.ExecuteScalar("SELECT COUNT(*) FROM public.files WHERE id = @id", [new("id", result.FileId)], fixture.CancellationToken);
         var count = (long)v!;
