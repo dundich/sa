@@ -4,9 +4,9 @@ namespace Sa.HybridFileStorage;
 
 public class HybridFileStorageBuilder: IHybridFileStorageBuilder
 {
-    private readonly List<IHybridFileStorage> _storages = [];
+    private readonly List<IFileStorage> _storages = [];
 
-    public IHybridFileStorageBuilder AddStorage(IHybridFileStorage storage)
+    public IHybridFileStorageBuilder AddStorage(IFileStorage storage)
     {
         _storages.Add(storage);
         return this;

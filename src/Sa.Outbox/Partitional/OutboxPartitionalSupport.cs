@@ -6,7 +6,7 @@ namespace Sa.Outbox.Partitional;
 
 internal class OutboxPartitionalSupport(IScheduleSettings scheduleSettings, PartitionalSettings partSettings) : IOutboxPartitionalSupport
 {
-    private readonly Lazy<string[]> s_lazyParts = new(() =>
+    private readonly Lazy<string[]> _lazyParts = new(() =>
     {
         Type baseType = typeof(DeliveryJob<>);
 
@@ -24,17 +24,19 @@ internal class OutboxPartitionalSupport(IScheduleSettings scheduleSettings, Part
 
     public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPartValues(CancellationToken cancellationToken)
     {
-        string[] parts = s_lazyParts.Value;
+        string[] parts = _lazyParts.Value;
 
-        if (parts.Length == 0) return [];
-
-        if (partSettings?.GetTenantIds == null) return [];
-
+        if (parts.Length == 0 || partSettings?.GetTenantIds == null) return [];
 
         int[] tenantIds = await partSettings.GetTenantIds(cancellationToken);
         if (tenantIds.Length == 0) return [];
 
-        List<OutboxTenantPartPair> result = [];
+        return GenerateOutboxTenantPartPairs(tenantIds, parts);
+    }
+
+    private static IReadOnlyCollection<OutboxTenantPartPair> GenerateOutboxTenantPartPairs(int[] tenantIds, string[] parts)
+    {
+        var result = new List<OutboxTenantPartPair>();
 
         foreach (int tenantId in tenantIds)
         {
@@ -55,9 +57,8 @@ internal class OutboxPartitionalSupport(IScheduleSettings scheduleSettings, Part
         if (type.IsGenericType && type.GetGenericTypeDefinition() == baseType)
             return type.GenericTypeArguments[0];
 
-        if (type.BaseType != null)
-            return GetMessageTypeIfInheritsFromDeliveryJob(type.BaseType, baseType);
-
-        return null;
+        return type.BaseType != null
+            ? GetMessageTypeIfInheritsFromDeliveryJob(type.BaseType, baseType)
+            : null;
     }
 }

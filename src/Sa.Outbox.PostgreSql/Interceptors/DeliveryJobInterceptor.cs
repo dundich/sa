@@ -8,7 +8,7 @@ internal class DeliveryJobInterceptor(IPartMigrationService migrationService) : 
 {
     public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
     {
-        if (!migrationService.OutboxMigrated.IsCancellationRequested && context.Settings.JobType.Name.StartsWith("DeliveryJob"))
+        if (!migrationService.OnMigrated.IsCancellationRequested && context.Settings.JobType.Name.StartsWith("DeliveryJob"))
         {
             return;
         }

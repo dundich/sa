@@ -22,7 +22,6 @@ internal sealed class DeliveryRelay(
     public async Task<int> StartDelivery<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)
     {
         IArrayPooler<OutboxDeliveryMessage<TMessage>> arrayPooler = arrayPoolFactory.Create<OutboxDeliveryMessage<TMessage>>();
-
         int batchSize = settings.ExtractSettings.MaxBatchSize;
 
         if (batchSize == 0) return 0;
@@ -31,25 +30,27 @@ internal sealed class DeliveryRelay(
         Memory<OutboxDeliveryMessage<TMessage>> slice = buffer.AsMemory(0, batchSize);
         try
         {
-            if (_globalForEachTenant || settings.ExtractSettings.ForEachTenant)
-            {
-                int count = 0;
-                int[] tenantIds = await partCache.GetTenantIds(cancellationToken);
-                foreach (int tenantId in tenantIds)
-                {
-                    count += await FillBuffer(slice, settings, tenantId, cancellationToken);
-                }
-                return count;
-            }
-            else
-            {
-                return await FillBuffer(slice, settings, 0, cancellationToken);
-            }
+            return _globalForEachTenant || settings.ExtractSettings.ForEachTenant
+              ? await ProcessMultipleTenants(slice, settings, cancellationToken)
+              : await FillBuffer(slice, settings, 0, cancellationToken);
         }
         finally
         {
             arrayPooler.Return(buffer);
         }
+    }
+
+    private async Task<int> ProcessMultipleTenants<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> slice, OutboxDeliverySettings settings, CancellationToken cancellationToken)
+    {
+        int count = 0;
+        int[] tenantIds = await partCache.GetTenantIds(cancellationToken);
+
+        foreach (int tenantId in tenantIds)
+        {
+            count += await FillBuffer(slice, settings, tenantId, cancellationToken);
+        }
+
+        return count;
     }
 
     private async Task<int> FillBuffer<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> buffer, OutboxDeliverySettings settings, int tenantId, CancellationToken cancellationToken)
@@ -106,7 +107,7 @@ internal sealed class DeliveryRelay(
 
     private async Task<int> DeliverBatches<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> deliveryMessages, OutboxDeliverySettings settings, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
-        int iOk = 0;
+        int successfulDeliveries = 0;
 
         foreach (IOutboxContext<TMessage>[] outboxMessages in deliveryMessages
             .GetChunks(settings.ConsumeSettings.ConsumeBatchSize ?? settings.ExtractSettings.MaxBatchSize)
@@ -116,18 +117,18 @@ internal sealed class DeliveryRelay(
         {
             if (cancellationToken.IsCancellationRequested) break;
 
-            iOk += await DeliveryCourier(settings, filter, outboxMessages, cancellationToken);
+            successfulDeliveries += await DeliveryCourier(settings, filter, outboxMessages, cancellationToken);
         }
 
-        return iOk;
+        return successfulDeliveries;
     }
 
     private async Task<int> DeliveryCourier<TMessage>(OutboxDeliverySettings settings, OutboxMessageFilter filter, IOutboxContext<TMessage>[] outboxMessages, CancellationToken cancellationToken)
     {
-        int iOk = await deliveryCourier.Deliver(outboxMessages, settings.ConsumeSettings.MaxDeliveryAttempts, cancellationToken);
+        int successfulDeliveries = await deliveryCourier.Deliver(outboxMessages, settings.ConsumeSettings.MaxDeliveryAttempts, cancellationToken);
 
         await repository.FinishDelivery(outboxMessages, filter, cancellationToken);
 
-        return iOk;
+        return successfulDeliveries;
     }
 }

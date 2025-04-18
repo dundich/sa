@@ -12,6 +12,11 @@ public static class Setup
         services.TryAddSingleton<IHybridFileStorageBuilder>(sp =>
         {
             var builder = new HybridFileStorageBuilder();
+            var storages = sp.GetServices<IFileStorage>();
+
+            foreach (IFileStorage storage in storages)
+                builder.AddStorage(storage);
+
             configure?.Invoke(sp, builder);
             return builder;
         });

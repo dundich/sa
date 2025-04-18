@@ -11,7 +11,7 @@ using System.Text;
 
 
 Console.WriteLine("Hello, HybridFileStorage!");
-    
+
 // default configure...
 IHostBuilder builder = Host.CreateDefaultBuilder();
 
@@ -46,13 +46,15 @@ namespace HybridFileStorage.Console
             var expected = "Hello, HybridFileStorage!";
             using var stream = expected.ToStream();
 
-            var result = await storage.UploadFileAsync(new FileMetadataInput { FileName = "file.txt" }, stream, cancellationToken);
+            var result = await storage.UploadFileAsync(new UploadFileInput { FileName = "file.txt" }, stream, cancellationToken);
 
-            var rStream = await storage.DownloadFileAsync(result.FileId, cancellationToken);
+            string? actual = default;
 
-            var actual = rStream.ToStr();
+            var isDowload = await storage.DownloadFileAsync(result.FileId, async (fs, t) => actual = await fs.ToStrAsync(t), cancellationToken);
 
-            logger.LogInformation($"completed: {actual}");
+            Debug.Assert(isDowload);
+
+            System.Console.WriteLine("completed:{0}", actual ?? String.Empty);
 
             Debug.Assert(expected == actual);
 
@@ -74,6 +76,13 @@ namespace HybridFileStorage.Console
             stream.Position = 0;
             using StreamReader reader = new(stream, Encoding.UTF8);
             return reader.ReadToEnd();
+        }
+
+        public async static Task<string> ToStrAsync(this Stream stream, CancellationToken cancellationToken)
+        {
+            stream.Position = 0;
+            using StreamReader reader = new(stream, Encoding.UTF8);
+            return await reader.ReadToEndAsync(cancellationToken);
         }
     }
 }

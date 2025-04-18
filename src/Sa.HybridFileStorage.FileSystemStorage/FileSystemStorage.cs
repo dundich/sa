@@ -3,18 +3,17 @@ using Sa.Timing.Providers;
 
 namespace Sa.HybridFileStorage.FileSystemStorage;
 
-
-public class FileSystemStorage(FileSystemStorageOption options, ICurrentTimeProvider currentTime) : IHybridFileStorage
+internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeProvider currentTime) : IFileStorage
 {
     private readonly string _basePath = options.BasePath;
 
-    public string StorageType => "file";
+    public string StorageType => options.StorageType ?? "file";
 
-    public bool IsReadOnly => options.IsReadOnly;
+    public bool IsReadOnly => options.IsReadOnly ?? false;
 
-    public async Task<StorageResult> UploadFileAsync(FileMetadataInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
-        string filePath = Path.Combine(_basePath, metadata.TenantId, metadata.FileName).Replace('\\', '/');
+        string filePath = Path.Combine(_basePath, metadata.TenantId.ToString(), metadata.FileName).Replace('\\', '/');
 
         string? dir = Path.GetDirectoryName(filePath);
         if (!Directory.Exists(dir))
@@ -26,17 +25,19 @@ public class FileSystemStorage(FileSystemStorageOption options, ICurrentTimeProv
 
         using var fileStreamOutput = new FileStream(filePath, FileMode.Create, FileAccess.Write);
         await fileStream.CopyToAsync(fileStreamOutput, cancellationToken);
-        return new StorageResult(fileId, Success: true, StorageType, currentTime.GetUtcNow());
+        return new StorageResult(fileId, StorageType, currentTime.GetUtcNow());
     }
 
-    public Task<Stream> DownloadFileAsync(string fileId, CancellationToken cancellationToken)
+    public async Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
     {
         var filePath = Path.Combine(_basePath, fileId);
         if (File.Exists(filePath))
         {
-            return Task.FromResult<Stream>(new FileStream(filePath, FileMode.Open, FileAccess.Read));
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+            await loadStream(fs, cancellationToken);
+            return true;
         }
-        throw new FileNotFoundException("File not found in file system storage.", fileId);
+        return false;
     }
 
     public Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)

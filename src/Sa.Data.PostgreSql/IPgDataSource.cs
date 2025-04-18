@@ -9,15 +9,16 @@ public interface IPgDataSource
 
     // ExecuteNonQuery
 
-    Task<int> ExecuteNonQuery(string sql, NpgsqlParameter[] parameters, CancellationToken cancellationToken = default);
+    Task<int> ExecuteNonQuery(string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default);
 
     async Task<int> ExecuteNonQuery(string sql, CancellationToken cancellationToken = default)
         => await ExecuteNonQuery(sql, [], cancellationToken);
 
+    Task<object?> ExecuteScalar(string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default);
 
     // ExecuteReader
 
-    Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, NpgsqlParameter[] parameters, CancellationToken cancellationToken = default);
+    Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default);
 
     async Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, CancellationToken cancellationToken = default)
         => await ExecuteReader(sql, read, [], cancellationToken);
@@ -33,7 +34,7 @@ public interface IPgDataSource
         return list;
     }
 
-    async Task<List<T>> ExecuteReaderList<T>(string sql, Func<NpgsqlDataReader, T> read, NpgsqlParameter[] parameters, CancellationToken cancellationToken = default)
+    async Task<List<T>> ExecuteReaderList<T>(string sql, Func<NpgsqlDataReader, T> read, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
     {
         List<T> list = [];
         await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), parameters, cancellationToken);
@@ -49,7 +50,7 @@ public interface IPgDataSource
         return ExecuteReaderFirst<T>(sql, [], cancellationToken);
     }
 
-    async Task<T> ExecuteReaderFirst<T>(string sql, NpgsqlParameter[] parameters, CancellationToken cancellationToken = default)
+    async Task<T> ExecuteReaderFirst<T>(string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
     {
         T value = default!;
 

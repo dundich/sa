@@ -5,7 +5,7 @@ namespace Sa.HybridFileStorage;
 
 internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFileStorage
 {
-    private readonly List<IHybridFileStorage> _storages = [.. options.Storages];
+    private readonly List<IFileStorage> _storages = [.. options.Storages];
 
     public string StorageType => string.Join(',', _storages.Select(c => c.StorageType));
 
@@ -13,7 +13,7 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
 
     public bool CanProcessFileId(string fileId) => _storages.Any(c => c.CanProcessFileId(fileId));
 
-    public async Task<StorageResult> UploadFileAsync(FileMetadataInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
         if (IsReadOnly)
         {
@@ -22,7 +22,7 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
 
         var exceptions = new List<Exception>();
 
-        foreach (IHybridFileStorage fileStorage in _storages)
+        foreach (IFileStorage fileStorage in _storages)
         {
             if (fileStorage.IsReadOnly)
             {
@@ -42,21 +42,18 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
         throw new AggregateException("Failed to upload file to all available storages.", exceptions);
     }
 
-    public async Task<Stream> DownloadFileAsync(string fileId, CancellationToken cancellationToken)
+    public async Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
     {
-        foreach (IHybridFileStorage fileStorage in GetStoragesByFieldId(fileId))
+        foreach (IFileStorage fileStorage in GetStoragesByFieldId(fileId))
         {
-            Stream stream = await fileStorage.DownloadFileAsync(fileId, cancellationToken);
-            if (stream is not null)
+            if (await fileStorage.DownloadFileAsync(fileId, loadStream, cancellationToken))
             {
-                return stream;
+                return true;
             }
         }
-
-        throw new FileNotFoundException($"File with ID '{fileId}' not found in any storage.");
+        return false;
     }
 
- 
     public async Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
     {
         if (IsReadOnly)
@@ -66,11 +63,12 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
 
         List<Exception> exceptions = [];
 
-        foreach (IHybridFileStorage fileStorage in GetStoragesByFieldId(fileId))
+        foreach (IFileStorage fileStorage in GetStoragesByFieldId(fileId))
         {
             try
             {
-                return await fileStorage.DeleteFileAsync(fileId, cancellationToken);
+                if (await fileStorage.DeleteFileAsync(fileId, cancellationToken))
+                    return true;
             }
             catch (FileNotFoundException)
             {
@@ -91,5 +89,5 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
         return false;
     }
 
-    private IEnumerable<IHybridFileStorage> GetStoragesByFieldId(string fileId) => _storages.Where(c => c.CanProcessFileId(fileId));
+    private IEnumerable<IFileStorage> GetStoragesByFieldId(string fileId) => _storages.Where(c => c.CanProcessFileId(fileId));
 }

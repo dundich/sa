@@ -4,5 +4,5 @@ namespace Sa.HybridFileStorage;
 
 public class HybridFileStorageOptions
 {
-    public List<IHybridFileStorage> Storages { get; set; } = [];
+    public List<IFileStorage> Storages { get; set; } = [];
 }

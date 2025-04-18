@@ -4,9 +4,10 @@ using Npgsql;
 namespace Sa.Data.PostgreSql;
 
 /// <summary>
-/// <seealso cref="https://www.postgresql.org/docs/9.4/explicit-locking.html#ADVISORY-LOCKS"/>
-/// <seealso cref="https://ankitvijay.net/2021/02/28/distributed-lock-using-postgresql/"/>
+/// lock by pg_try_advisory_lock
 /// </summary>
+/// <seealso href="https://www.postgresql.org/docs/9.4/explicit-locking.html#ADVISORY-LOCKS"/>
+/// <seealso href="https://ankitvijay.net/2021/02/28/distributed-lock-using-postgresql/"/>
 internal sealed class PgDistributedLock(PgDataSourceSettings settings, ILogger<PgDistributedLock>? logger = null) : IPgDistributedLock
 {
     private readonly NpgsqlConnectionStringBuilder builder = new(settings.ConnectionString);

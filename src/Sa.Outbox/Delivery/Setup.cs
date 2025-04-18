@@ -18,6 +18,8 @@ internal static class Setup
         // support - messaging to each tenant
         services.TryAddSingleton<IPartitionalSupportCache, PartitionalSupportCache>();
 
+        services.TryAddSingleton<IScopedConsumer, ScopedConsumer>();
+
         configure.Invoke(new DeliveryBuilder(services));
         
         return services;
