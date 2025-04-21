@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+		    <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+		    <PublishAot>true</PublishAot>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <Title>Sa.Data.S3</Title>
+        <Description>Simple client for S3 (Sa.Data.S3)</Description>
+        <Version>0.6.3</Version>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryUrl></RepositoryUrl>
+        <PackageId>Sa.Data.S3</PackageId>
+        <PackageTags>s3;S3;objectS3;bucketS3;performance</PackageTags>
+        <PackageProjectUrl>https://github.com/teoadal/Sa.Data.S3</PackageProjectUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+    </PropertyGroup>
+
+    <ItemGroup>
+		    <InternalsVisibleTo Include="Sa.Data.S3Tests" />
+    </ItemGroup>
+
+	  <ItemGroup>
+		    <InternalsVisibleTo Include="Sa.Data.S3Tests" />
+	  </ItemGroup>
+
+	<ItemGroup>
+	  <Compile Update="S3Client.Buckets.cs">
+	    <DependentUpon>S3Client.cs</DependentUpon>
+	  </Compile>
+	  <Compile Update="S3Client.Transport.cs">
+	    <DependentUpon>S3Client.cs</DependentUpon>
+	  </Compile>
+	  <Compile Update="S3Client.Multipart.cs">
+	    <DependentUpon>S3Client.cs</DependentUpon>
+	  </Compile>
+	</ItemGroup>
+
+</Project>
