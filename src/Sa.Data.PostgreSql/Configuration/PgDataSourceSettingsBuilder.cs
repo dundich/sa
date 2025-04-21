@@ -1,11 +1,10 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Sa.Data.PostgreSql.Configuration;
 
 internal class PgDataSourceSettingsBuilder(IServiceCollection services) : IPgDataSourceSettingsBuilder
 {
-
     public void WithConnectionString(string connectionString)
     {
         services.TryAddSingleton<PgDataSourceSettings>(new PgDataSourceSettings(connectionString));
