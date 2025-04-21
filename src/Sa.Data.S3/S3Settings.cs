@@ -6,7 +6,7 @@ public sealed class S3Settings
 
 	public required string Bucket { get; init; }
 
-	public required string EndPoint { get; init; }
+	public required string Hostname { get; init; }
 
 	public int? Port { get; init; }
 

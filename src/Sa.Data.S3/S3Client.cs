@@ -42,9 +42,9 @@ public sealed partial class S3Client : IDisposable, IS3Client
         var scheme = settings.UseHttps ? Uri.UriSchemeHttps : Uri.UriSchemeHttp;
         var port = settings.Port.HasValue ? $":{settings.Port}" : string.Empty;
 
-        _bucket = $"{scheme}://{settings.EndPoint}{port}/{bucket}";
+        _bucket = $"{scheme}://{settings.Hostname}{port}/{bucket}";
         _client = client ?? new HttpClient();
-        _endpoint = $"{settings.EndPoint}{port}";
+        _endpoint = $"{settings.Hostname}{port}";
         _http = new HttpDescription(settings.AccessKey, settings.Region, settings.Service, _s3Headers);
         _signature = new Signature(settings.SecretKey, settings.Region, settings.Service);
         _useHttp2 = settings.UseHttp2;

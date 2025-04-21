@@ -16,7 +16,7 @@ public class S3ClientFixture : S3Fixture<IS3Client>
         return new S3Settings
         {
             Bucket = bucket,
-            EndPoint = Container.Hostname,
+            Hostname = Container.Hostname,
             AccessKey = Container.GetAccessKey(),
             Port = Container.GetMappedPublicPort(Settings.MinioInternalPort),
             UseHttps = false,
