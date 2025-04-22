@@ -6,7 +6,7 @@ namespace Sa.Data.S3;
 /// <summary>
 /// Функции управления бакетом
 /// </summary>
-public sealed partial class S3Client
+public sealed partial class S3BucketClient
 {
 	public async Task<bool> CreateBucket(CancellationToken ct)
 	{

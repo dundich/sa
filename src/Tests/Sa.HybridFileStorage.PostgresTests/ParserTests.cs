@@ -1,6 +1,6 @@
-﻿using Sa.HybridFileStorage.PostgresFileStorage;
+using Sa.HybridFileStorage.Postgres;
 
-namespace Sa.HybridFileStorage.PostgresFileStorageTests;
+namespace Sa.HybridFileStorage.PostgresTests;
 
 public class ParserTests
 {

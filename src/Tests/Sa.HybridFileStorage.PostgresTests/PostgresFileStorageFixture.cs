@@ -1,8 +1,8 @@
 using Sa.Data.PostgreSql.Fixture;
 using Sa.HybridFileStorage.Domain;
-using Sa.HybridFileStorage.PostgresFileStorage;
+using Sa.HybridFileStorage.Postgres;
 
-namespace Sa.HybridFileStorage.PostgresFileStorageTests;
+namespace Sa.HybridFileStorage.PostgresTests;
 
 
 public class PostgresFileStorageFixturee : PgDataSourceFixture<IFileStorage>

@@ -11,10 +11,10 @@ public class ObjectShould(S3ClientFixture fixture) : IClassFixture<S3ClientFixtu
 
     private const int DefaultByteArraySize = 1 * 1024 * 1024; // 7Mb
 
-    protected IS3Client Client => fixture.Sub;
+    protected IS3BucketClient Client => fixture.Sub;
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
-    protected S3Client GetNotExistsBucketClient() => fixture.CreateClient(GetRandomFileNameWithoutExtension());
+    protected S3BucketClient GetNotExistsBucketClient() => fixture.CreateClient(GetRandomFileNameWithoutExtension());
 
 
     [Fact]

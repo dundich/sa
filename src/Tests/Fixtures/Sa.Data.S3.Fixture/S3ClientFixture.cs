@@ -2,18 +2,18 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Sa.Data.S3.Fixture;
 
-public class S3ClientFixture : S3Fixture<IS3Client>
+public class S3ClientFixture : S3Fixture<IS3BucketClient>
 {
     public S3ClientFixture()
         : base()
     {
         SetupServices = (services, cfg)
-            => services.TryAddSingleton<IS3Client>(sp => CreateClient(Settings.BucketName));
+            => services.TryAddSingleton<IS3BucketClient>(sp => CreateClient(Settings.BucketName));
     }
 
-    private S3Settings CreateSettings(string bucket)
+    private S3BucketClientSettings CreateSettings(string bucket)
     {
-        return new S3Settings
+        return new S3BucketClientSettings
         {
             Bucket = bucket,
             Hostname = Container.Hostname,
@@ -24,7 +24,7 @@ public class S3ClientFixture : S3Fixture<IS3Client>
         };
     }
 
-    public S3Client CreateClient(string backetName) => new(CreateSettings(backetName));
+    public S3BucketClient CreateClient(string backetName) => new(CreateSettings(backetName));
 
     public async override ValueTask InitializeAsync()
     {

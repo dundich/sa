@@ -1,9 +1,9 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.HybridFileStorage.Domain;
 using Sa.Timing.Providers;
 
-namespace Sa.HybridFileStorage.FileSystemStorage;
+namespace Sa.HybridFileStorage.FileSystem;
 
 
 public static class Setup

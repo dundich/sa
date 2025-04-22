@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Sa.HybridFileStorage.PostgresFileStorage\Sa.HybridFileStorage.PostgresFileStorage.csproj" />
+    <ProjectReference Include="..\..\Sa.HybridFileStorage.Postgres\Sa.HybridFileStorage.Postgres.csproj" />
     <ProjectReference Include="..\Fixtures\Sa.Data.PostgreSql.Fixture\Sa.Data.PostgreSql.Fixture.csproj" />
   </ItemGroup>
 

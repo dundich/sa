@@ -1,6 +1,6 @@
 namespace Sa.Data.S3;
 
-public sealed class S3Settings
+public sealed class S3BucketClientSettings
 {
     public required bool UseHttps { get; init; }
 
@@ -20,13 +20,13 @@ public sealed class S3Settings
 
     public bool UseHttp2 { get; init; } = false;
 
-    public S3Settings() { }
+    public S3BucketClientSettings() { }
 
     /// <summary>
     /// 
     /// </summary>
     /// <param name="uri">https://hostname.com:443/mybucket"</param>
-    public S3Settings(Uri uri, string accessKey, string secretKey, string? bucket = null)
+    public S3BucketClientSettings(Uri uri, string accessKey, string secretKey, string? bucket = null)
     {
         UseHttps = uri.Scheme == "https";
         Hostname = uri.Host;

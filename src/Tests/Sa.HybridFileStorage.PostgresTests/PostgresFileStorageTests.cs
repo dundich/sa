@@ -1,7 +1,7 @@
 using Sa.HybridFileStorage.Domain;
 using System.Text;
 
-namespace Sa.HybridFileStorage.PostgresFileStorageTests;
+namespace Sa.HybridFileStorage.PostgresTests;
 
 public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
     : IClassFixture<PostgresFileStorageTests.Fixture>

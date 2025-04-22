@@ -5,9 +5,9 @@ namespace Sa.Data.S3Tests;
 
 public class BucketShould(S3ClientFixture fixture) : IClassFixture<S3ClientFixture>
 {
-    protected IS3Client Client => fixture.Sub;
+    protected IS3BucketClient Client => fixture.Sub;
 
-    protected S3Client CloneClient(string backetName) => fixture.CreateClient(backetName);
+    protected S3BucketClient CloneClient(string backetName) => fixture.CreateClient(backetName);
 
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 

@@ -8,7 +8,7 @@ namespace Sa.Data.S3;
 /// <summary>
 /// Transport functions
 /// </summary>
-public sealed partial class S3Client
+public sealed partial class S3BucketClient
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private HttpRequestMessage CreateRequest(HttpMethod method, string? fileName = null)

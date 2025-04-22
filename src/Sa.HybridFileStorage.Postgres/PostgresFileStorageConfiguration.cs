@@ -1,11 +1,11 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IO;
 using Sa.Data.PostgreSql;
 using Sa.HybridFileStorage.Domain;
 using Sa.Partitional.PostgreSql;
 using Sa.Timing.Providers;
 
-namespace Sa.HybridFileStorage.PostgresFileStorage;
+namespace Sa.HybridFileStorage.Postgres;
 
 internal class PostgresFileStorageConfiguration : IPostgresFileStorageConfiguration
 {

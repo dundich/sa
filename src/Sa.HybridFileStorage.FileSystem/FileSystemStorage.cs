@@ -1,7 +1,7 @@
-﻿using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.Domain;
 using Sa.Timing.Providers;
 
-namespace Sa.HybridFileStorage.FileSystemStorage;
+namespace Sa.HybridFileStorage.FileSystem;
 
 internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeProvider currentTime) : IFileStorage
 {

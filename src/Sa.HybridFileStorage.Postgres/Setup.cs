@@ -1,6 +1,6 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace Sa.HybridFileStorage.PostgresFileStorage;
+namespace Sa.HybridFileStorage.Postgres;
 
 
 public static class Setup

@@ -1,6 +1,6 @@
-﻿using Sa.Data.PostgreSql;
+using Sa.Data.PostgreSql;
 
-namespace Sa.HybridFileStorage.PostgresFileStorage;
+namespace Sa.HybridFileStorage.Postgres;
 
 public interface IPostgresFileStorageConfiguration
 {

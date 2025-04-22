@@ -12,7 +12,7 @@ namespace Sa.Data.S3;
 /// </summary>
 /// <seealso href="https://github.com/teoadal/Storage"/>
 [DebuggerDisplay("Client for '{Bucket}'")]
-public sealed partial class S3Client : IDisposable, IS3Client
+public sealed partial class S3BucketClient : IDisposable, IS3BucketClient
 {
     internal const int DefaultPartSize = 5 * 1024 * 1024; // 5 Mb
 
@@ -34,7 +34,7 @@ public sealed partial class S3Client : IDisposable, IS3Client
 
     private bool _disposed;
 
-    public S3Client(S3Settings settings, HttpClient? client = null)
+    public S3BucketClient(S3BucketClientSettings settings, HttpClient? client = null)
     {
         Bucket = settings.Bucket;
 

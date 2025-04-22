@@ -8,7 +8,7 @@ namespace Sa.Data.S3;
 /// <summary>
 /// Функции управления multipart-загрузкой
 /// </summary>
-public sealed partial class S3Client
+public sealed partial class S3BucketClient
 {
 	internal async Task<bool> MultipartAbort(string encodedFileName, string uploadId, CancellationToken ct)
 	{

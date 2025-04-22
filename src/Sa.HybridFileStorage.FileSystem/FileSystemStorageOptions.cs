@@ -1,4 +1,4 @@
-﻿namespace Sa.HybridFileStorage.FileSystemStorage;
+namespace Sa.HybridFileStorage.FileSystem;
 
 public class FileSystemStorageOptions
 {

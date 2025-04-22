@@ -1,6 +1,6 @@
-﻿using Sa.Partitional.PostgreSql;
+using Sa.Partitional.PostgreSql;
 
-namespace Sa.HybridFileStorage.PostgresFileStorage;
+namespace Sa.HybridFileStorage.Postgres;
 
 public class StorageOptions
 {

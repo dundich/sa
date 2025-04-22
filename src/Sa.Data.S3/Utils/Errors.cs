@@ -14,7 +14,7 @@ internal static class Errors
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static void Disposed()
 	{
-		throw new ObjectDisposedException(nameof(S3Client));
+		throw new ObjectDisposedException(nameof(S3BucketClient));
 	}
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
