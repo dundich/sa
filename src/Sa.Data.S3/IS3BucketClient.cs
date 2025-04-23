@@ -3,6 +3,7 @@ namespace Sa.Data.S3;
 
 public interface IS3BucketClient
 {
+    string BuildFileUrl(string fileName);
     string BuildFileUrl(string fileName, TimeSpan expiration);
     Task<bool> CreateBucket(CancellationToken ct);
     Task<bool> DeleteBucket(CancellationToken ct);

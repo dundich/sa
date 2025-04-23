@@ -2,23 +2,19 @@ namespace Sa.Data.S3;
 
 public sealed class S3BucketClientSettings
 {
-    public required bool UseHttps { get; init; }
+    public required string Endpoint { get; set; }
 
-    public required string Hostname { get; init; }
+    public required string Bucket { get; set; }
 
-    public required string Bucket { get; init; }
+    public required string AccessKey { get; set; }
 
-    public int? Port { get; init; }
+    public required string SecretKey { get; set; }
 
-    public required string AccessKey { get; init; }
+    public string Region { get; set; } = "eu-central-1";
 
-    public required string SecretKey { get; init; }
+    public string Service { get; set; } = "s3";
 
-    public string Region { get; init; } = "us-east-1";
-
-    public string Service { get; init; } = "s3";
-
-    public bool UseHttp2 { get; init; } = false;
+    public bool UseHttp2 { get; set; } = false;
 
     public S3BucketClientSettings() { }
 
@@ -26,27 +22,27 @@ public sealed class S3BucketClientSettings
     /// 
     /// </summary>
     /// <param name="uri">https://hostname.com:443/mybucket"</param>
-    public S3BucketClientSettings(Uri uri, string accessKey, string secretKey, string? bucket = null)
+    public static S3BucketClientSettings Create(Uri uri, string accessKey, string secretKey, string? bucket = null, string? region = null)
     {
-        UseHttps = uri.Scheme == "https";
-        Hostname = uri.Host;
-        Port = uri.Port;
-
         if (string.IsNullOrWhiteSpace(bucket))
         {
             string path = uri.AbsolutePath;
-            // Проверяем, есть ли путь
             if (!string.IsNullOrEmpty(path) || path != "/")
             {
-                Bucket = path.TrimStart('/').Split('/')[0];
+                bucket = path.TrimStart('/').Split('/')[0];
             }
         }
-        else
-        {
-            Bucket = bucket;
-        }
 
-        AccessKey = accessKey;
-        SecretKey = secretKey;
+        var settings = new S3BucketClientSettings
+        {
+            Endpoint = uri.AbsoluteUri,
+            AccessKey = accessKey,
+            SecretKey = secretKey,
+            Bucket = bucket ?? throw new ArgumentNullException(nameof(bucket))
+        };
+
+        if (!string.IsNullOrWhiteSpace(region)) settings.Region = region;
+
+        return settings;
     }
 }

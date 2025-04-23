@@ -14,7 +14,7 @@ public sealed partial class S3BucketClient
 	private HttpRequestMessage CreateRequest(HttpMethod method, string? fileName = null)
 	{
 		var url = new ValueStringBuilder(stackalloc char[512]);
-		url.Append(_bucket);
+		url.Append(_bucketUrl);
 
 		// ReSharper disable once InvertIf
 		if (!string.IsNullOrEmpty(fileName))
@@ -36,7 +36,7 @@ public sealed partial class S3BucketClient
 		var now = DateTime.UtcNow;
 
 		var headers = request.Headers;
-		headers.Add("host", _endpoint);
+		headers.Add("host", _host);
 		headers.Add("x-amz-content-sha256", payloadHash);
 		headers.Add("x-amz-date", now.ToString(Signature.Iso8601DateTime, CultureInfo.InvariantCulture));
 

@@ -25,8 +25,8 @@ public sealed partial class S3BucketClient : IDisposable, IS3BucketClient
         "x-amz-date",
     ];
 
-    private readonly string _bucket;
-    private readonly string _endpoint;
+    private readonly string _bucketUrl;
+    private readonly string _host;
     private readonly HttpDescription _http;
     private readonly HttpClient _client;
     private readonly Signature _signature;
@@ -34,17 +34,15 @@ public sealed partial class S3BucketClient : IDisposable, IS3BucketClient
 
     private bool _disposed;
 
-    public S3BucketClient(S3BucketClientSettings settings, HttpClient? client = null)
+    public S3BucketClient(HttpClient client, S3BucketClientSettings settings)
     {
-        Bucket = settings.Bucket;
+        var endpoint = new Uri(settings.Endpoint);
 
-        var bucket = Bucket.ToLowerInvariant();
-        var scheme = settings.UseHttps ? Uri.UriSchemeHttps : Uri.UriSchemeHttp;
-        var port = settings.Port.HasValue ? $":{settings.Port}" : string.Empty;
+        Bucket = settings.Bucket ?? throw new ArgumentException(nameof(settings.Bucket));
 
-        _bucket = $"{scheme}://{settings.Hostname}{port}/{bucket}";
-        _client = client ?? new HttpClient();
-        _endpoint = $"{settings.Hostname}{port}";
+        _bucketUrl = $"{endpoint.AbsoluteUri}{Bucket.ToLowerInvariant()}";
+        _client = client;
+        _host = $"{endpoint.Host}:{endpoint.Port}";
         _http = new HttpDescription(settings.AccessKey, settings.Region, settings.Service, _s3Headers);
         _signature = new Signature(settings.SecretKey, settings.Region, settings.Service);
         _useHttp2 = settings.UseHttp2;
@@ -59,10 +57,15 @@ public sealed partial class S3BucketClient : IDisposable, IS3BucketClient
     public string BuildFileUrl(string fileName, TimeSpan expiration)
     {
         var now = DateTime.UtcNow;
-        var url = _http.BuildUrl(_bucket, fileName, now, expiration);
+        var url = _http.BuildUrl(_bucketUrl, fileName, now, expiration);
         var signature = _signature.Calculate(url, now);
 
         return $"{url}&X-Amz-Signature={signature}";
+    }
+
+    public string BuildFileUrl(string fileName)
+    {
+        return HttpDescription.BuildUrl(_bucketUrl, fileName);
     }
 
     public async Task DeleteFile(string fileName, CancellationToken ct)
@@ -180,8 +183,8 @@ public sealed partial class S3BucketClient : IDisposable, IS3BucketClient
     public async IAsyncEnumerable<string> List(string? prefix, [EnumeratorCancellation] CancellationToken ct)
     {
         var url = string.IsNullOrEmpty(prefix)
-            ? $"{_bucket}?list-type=2"
-            : $"{_bucket}?list-type=2&prefix={HttpDescription.EncodeName(prefix)}";
+            ? $"{_bucketUrl}?list-type=2"
+            : $"{_bucketUrl}?list-type=2&prefix={HttpDescription.EncodeName(prefix)}";
 
         HttpResponseMessage response;
         using (var request = new HttpRequestMessage(HttpMethod.Get, url))
@@ -334,4 +337,5 @@ public sealed partial class S3BucketClient : IDisposable, IS3BucketClient
         Errors.UnexpectedResult(response);
         return false;
     }
+
 }

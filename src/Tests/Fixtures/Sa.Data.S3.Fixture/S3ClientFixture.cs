@@ -16,15 +16,13 @@ public class S3ClientFixture : S3Fixture<IS3BucketClient>
         return new S3BucketClientSettings
         {
             Bucket = bucket,
-            Hostname = Container.Hostname,
+            Endpoint = $"http://{Container.Hostname}:{Container.GetMappedPublicPort(Settings.MinioInternalPort)}",
             AccessKey = Container.GetAccessKey(),
-            Port = Container.GetMappedPublicPort(Settings.MinioInternalPort),
-            UseHttps = false,
-            SecretKey = Container.GetSecretKey(),
+            SecretKey = Container.GetSecretKey()
         };
     }
 
-    public S3BucketClient CreateClient(string backetName) => new(CreateSettings(backetName));
+    public S3BucketClient CreateClient(string backetName) => new(new HttpClient(), CreateSettings(backetName));
 
     public async override ValueTask InitializeAsync()
     {

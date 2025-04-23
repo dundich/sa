@@ -12,7 +12,7 @@ public sealed partial class S3BucketClient
 {
 	internal async Task<bool> MultipartAbort(string encodedFileName, string uploadId, CancellationToken ct)
 	{
-		var url = $"{_bucket}/{encodedFileName}?uploadId={uploadId}";
+		var url = $"{_bucketUrl}/{encodedFileName}?uploadId={uploadId}";
 
 		HttpResponseMessage? response = null;
 		using (var request = new HttpRequestMessage(HttpMethod.Delete, url))
@@ -77,7 +77,7 @@ public sealed partial class S3BucketClient
 		HttpResponseMessage response;
 		using (var request = new HttpRequestMessage(
 			       HttpMethod.Post,
-			       $"{_bucket}/{encodedFileName}?uploadId={uploadId}"))
+			       $"{_bucketUrl}/{encodedFileName}?uploadId={uploadId}"))
         {
             using var content = new StringContent(data, Encoding.UTF8);
             request.Content = content;
@@ -99,7 +99,7 @@ public sealed partial class S3BucketClient
 		CancellationToken ct)
 	{
 		var payloadHash = HashHelper.GetPayloadHash(partData.AsSpan(0, partSize));
-		var url = $"{_bucket}/{encodedFileName}?partNumber={partNumber}&uploadId={uploadId}";
+		var url = $"{_bucketUrl}/{encodedFileName}?partNumber={partNumber}&uploadId={uploadId}";
 
 		HttpResponseMessage response;
 		using (var request = new HttpRequestMessage(HttpMethod.Put, url))
@@ -156,7 +156,7 @@ public sealed partial class S3BucketClient
 	private async Task<string> MultipartStart(string encodedFileName, string contentType, CancellationToken ct)
 	{
 		HttpResponseMessage response;
-		using (var request = new HttpRequestMessage(HttpMethod.Post, $"{_bucket}/{encodedFileName}?uploads"))
+		using (var request = new HttpRequestMessage(HttpMethod.Post, $"{_bucketUrl}/{encodedFileName}?uploads"))
 		{
             using var content = new ByteArrayContent([]);
             content.Headers.Add("content-type", contentType);
