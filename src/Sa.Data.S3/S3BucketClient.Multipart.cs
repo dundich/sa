@@ -10,7 +10,7 @@ namespace Sa.Data.S3;
 /// </summary>
 public sealed partial class S3BucketClient
 {
-	internal async Task<bool> MultipartAbort(string encodedFileName, string uploadId, CancellationToken ct)
+	internal async Task<bool> MultipartAbort(string encodedFileName, string uploadId, CancellationToken cancellationToken)
 	{
 		var url = $"{_bucketUrl}/{encodedFileName}?uploadId={uploadId}";
 
@@ -19,7 +19,7 @@ public sealed partial class S3BucketClient
 		{
 			try
 			{
-				response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+				response = await Send(request, HashHelper.EmptyPayloadHash, cancellationToken).ConfigureAwait(false);
 			}
 			catch
 			{
@@ -50,7 +50,7 @@ public sealed partial class S3BucketClient
 		string uploadId,
 		string[] partTags,
 		int tagsCount,
-		CancellationToken ct)
+		CancellationToken cancellationToken)
 	{
 		var builder = StringUtils.GetBuilder();
 
@@ -81,7 +81,7 @@ public sealed partial class S3BucketClient
         {
             using var content = new StringContent(data, Encoding.UTF8);
             request.Content = content;
-            response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+            response = await Send(request, payloadHash, cancellationToken).ConfigureAwait(false);
         }
 
 		var result = response is { IsSuccessStatusCode: true, StatusCode: HttpStatusCode.OK };
@@ -153,7 +153,7 @@ public sealed partial class S3BucketClient
 		return false;
 	}
 
-	private async Task<string> MultipartStart(string encodedFileName, string contentType, CancellationToken ct)
+	private async Task<string> MultipartStart(string encodedFileName, string contentType, CancellationToken cancellationToken)
 	{
 		HttpResponseMessage response;
 		using (var request = new HttpRequestMessage(HttpMethod.Post, $"{_bucketUrl}/{encodedFileName}?uploads"))
@@ -162,12 +162,12 @@ public sealed partial class S3BucketClient
             content.Headers.Add("content-type", contentType);
             request.Content = content;
 
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await Send(request, HashHelper.EmptyPayloadHash, cancellationToken).ConfigureAwait(false);
         }
 
 		if (response.StatusCode is HttpStatusCode.OK)
 		{
-			var responseStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+			var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 			var result = XmlStreamReader.ReadString(responseStream, "UploadId");
 
 			await responseStream.DisposeAsync().ConfigureAwait(false);

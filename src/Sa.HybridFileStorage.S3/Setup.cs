@@ -7,12 +7,18 @@ public static class Setup
 {
     public static IServiceCollection AddS3FileStorage(this IServiceCollection services, S3FileStorageOptions options)
     {
-        var uri = new Uri(options.Endpoint);
-        var settings = S3BucketClientSettings.Create(uri, options.AccessKey, options.SecretKey, options.Bucket, options.Region);
+        var settings = new S3BucketClientSettings
+        {
+            AccessKey = options.AccessKey,
+            Bucket = options.Bucket,
+            Endpoint = options.Endpoint,
+            SecretKey = options.SecretKey,
+            Region = options.Region ?? "eu-central-1",
+        };
 
         services
             .AddSaInfrastructure()
-            .AddS3BucketClient(settings);
+            .AddS3BucketClientAsSingleton(settings);
 
         return services;
     }

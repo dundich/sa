@@ -37,4 +37,14 @@ public class S3Fixture<TSub> : SaFixture<TSub, S3FixtureSettings>
             .WithPortBinding(settings.MinioInternalPort, true)
             ;
     }
+    public S3BucketClientSettings CreateSettings(string bucket)
+    {
+        return new S3BucketClientSettings
+        {
+            Bucket = bucket,
+            Endpoint = $"http://{Container.Hostname}:{Container.GetMappedPublicPort(Settings.MinioInternalPort)}",
+            AccessKey = Container.GetAccessKey(),
+            SecretKey = Container.GetSecretKey()
+        };
+    }
 }

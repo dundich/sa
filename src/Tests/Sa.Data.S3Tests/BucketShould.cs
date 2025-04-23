@@ -70,7 +70,7 @@ public class BucketShould(S3ClientFixture fixture) : IClassFixture<S3ClientFixtu
         string backet = "del";
 
         using var client = CloneClient(backet);
-        var result =  await client.CreateBucket(CancellationToken);
+        var result = await client.CreateBucket(CancellationToken);
         Assert.True(result);
 
         var bucketDeleteResult = await client.DeleteBucket(CancellationToken);

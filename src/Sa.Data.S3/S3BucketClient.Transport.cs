@@ -26,7 +26,7 @@ public sealed partial class S3BucketClient
 		return new HttpRequestMessage(method, new Uri(url.Flush(), UriKind.Absolute));
 	}
 
-	private Task<HttpResponseMessage> Send(HttpRequestMessage request, string payloadHash, CancellationToken ct)
+	private Task<HttpResponseMessage> Send(HttpRequestMessage request, string payloadHash, CancellationToken cancellationToken)
 	{
 		if (_disposed)
 		{
@@ -48,6 +48,6 @@ public sealed partial class S3BucketClient
 		var signature = _signature.Calculate(request, payloadHash, _s3Headers, now);
 		headers.TryAddWithoutValidation("Authorization", _http.BuildHeader(now, signature));
 
-		return _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+		return _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 	}
 }
