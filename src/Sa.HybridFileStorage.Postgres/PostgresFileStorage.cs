@@ -72,7 +72,7 @@ ON CONFLICT DO NOTHING
             }
         }
 
-        return new StorageResult(fileId, StorageType, now);
+        return new StorageResult(fileId, fileId, StorageType, now);
     }
 
     public bool CanProcessFileId(string fileId) => fileId.StartsWith($"{StorageType}:://");

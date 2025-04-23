@@ -5,11 +5,9 @@ using System.Net;
 namespace Sa.Data.S3Tests;
 
 
-public class ObjectShould(S3ClientFixture fixture) : IClassFixture<S3ClientFixture>
+public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3BucketClientFixture>
 {
     public const string StreamContentType = "application/octet-stream";
-
-    private const int DefaultByteArraySize = 1 * 1024 * 1024; // 7Mb
 
     protected IS3BucketClient Client => fixture.Sub;
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
@@ -547,31 +545,13 @@ public class ObjectShould(S3ClientFixture fixture) : IClassFixture<S3ClientFixtu
     private Task DeleteTestFile(string fileName) => Client.DeleteFile(fileName, CancellationToken);
 
 
-    public static byte[] GetByteArray(int size = DefaultByteArraySize)
-    {
-        var random = Random.Shared;
-        var bytes = new byte[size];
-        for (var i = 0; i < bytes.Length; i++)
-        {
-            bytes[i] = (byte)random.Next();
-        }
+    public static byte[] GetByteArray(int size = S3FixtureHelper.DefaultByteArraySize) => S3FixtureHelper.GetByteArray(size);
 
-        return bytes;
-    }
-
-    public static string GetRandomFileName() => Path.GetRandomFileName();
+    public static string GetRandomFileName() => S3FixtureHelper.GetRandomFileName();
 
     public static string GetRandomFileNameWithoutExtension() => Path.GetFileNameWithoutExtension(GetRandomFileName());
 
-    public static MemoryStream GetByteStream(int size = DefaultByteArraySize)
-    {
-        return new MemoryStream(GetByteArray(size));
-    }
+    public static MemoryStream GetByteStream(int size = S3FixtureHelper.DefaultByteArraySize) => S3FixtureHelper.GetByteStream(size);
 
-    public static MemoryStream GetEmptyByteStream(long? size = null)
-    {
-        return size.HasValue
-            ? new MemoryStream(new byte[(int)size])
-            : new MemoryStream();
-    }
+    public static MemoryStream GetEmptyByteStream(long? size = null) => S3FixtureHelper.GetEmptyByteStream(size);
 }

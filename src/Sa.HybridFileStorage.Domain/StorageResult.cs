@@ -1,3 +1,3 @@
-﻿namespace Sa.HybridFileStorage.Domain;
+namespace Sa.HybridFileStorage.Domain;
 
-public record StorageResult(string FileId, string StorageType, DateTimeOffset UploadedAt);
+public record StorageResult(string FileId, string AbsoluteUrl, string StorageType, DateTimeOffset UploadedAt);

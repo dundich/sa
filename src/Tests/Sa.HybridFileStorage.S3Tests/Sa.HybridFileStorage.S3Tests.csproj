@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Host.Test.Properties.xml" />
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Sa.HybridFileStorage.S3\Sa.HybridFileStorage.S3.csproj" />
+    <ProjectReference Include="..\Fixtures\Sa.Data.S3.Fixture\Sa.Data.S3.Fixture.csproj" />
+  </ItemGroup>
+
+</Project>

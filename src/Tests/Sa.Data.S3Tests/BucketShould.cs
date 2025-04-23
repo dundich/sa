@@ -3,7 +3,7 @@ using Sa.Data.S3.Fixture;
 
 namespace Sa.Data.S3Tests;
 
-public class BucketShould(S3ClientFixture fixture) : IClassFixture<S3ClientFixture>
+public class BucketShould(S3BucketClientFixture fixture) : IClassFixture<S3BucketClientFixture>
 {
     protected IS3BucketClient Client => fixture.Sub;
 

@@ -2,9 +2,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Sa.Data.S3.Fixture;
 
-public class S3ClientFixture : S3Fixture<IS3BucketClient>
+public class S3BucketClientFixture : S3Fixture<IS3BucketClient>
 {
-    public S3ClientFixture()
+    public S3BucketClientFixture()
         : base()
     {
         SetupServices = (services, cfg)

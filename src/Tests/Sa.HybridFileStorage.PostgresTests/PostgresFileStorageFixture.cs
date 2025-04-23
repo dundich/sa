@@ -5,9 +5,9 @@ using Sa.HybridFileStorage.Postgres;
 namespace Sa.HybridFileStorage.PostgresTests;
 
 
-public class PostgresFileStorageFixturee : PgDataSourceFixture<IFileStorage>
+public class PostgresFileStorageFixture : PgDataSourceFixture<IFileStorage>
 {
-    protected PostgresFileStorageFixturee(string tableName)
+    protected PostgresFileStorageFixture(string tableName)
     {
         Services.AddPostgresHybridFileStorage(cfg => cfg
             .AddDataSource(b => b.WithConnectionString(sp => ConnectionString))

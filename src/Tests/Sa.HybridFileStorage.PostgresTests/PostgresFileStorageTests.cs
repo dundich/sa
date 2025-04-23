@@ -8,7 +8,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
 {
     private const string DataContent = "Hello, World!";
 
-    public class Fixture : PostgresFileStorageFixturee
+    public class Fixture : PostgresFileStorageFixture
     {
         public Fixture() : base("files") { }
     }
@@ -16,7 +16,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
     private IFileStorage Sub => fixture.Sub;
 
     [Fact]
-    public async Task UploadFileAsync_ShouldInsertFile_WhenCalled()
+    public async Task UploadFileAsync()
     {
         Console.WriteLine(fixture.ConnectionString);
 
@@ -40,7 +40,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
 
 
     [Fact]
-    public async Task DeleteFileAsync_ShouldReturnTrue_WhenFileDeleted()
+    public async Task DeleteFileAsync()
     {
         // Arrange
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
@@ -59,7 +59,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
     }
 
     [Fact]
-    public async Task DownloadFileAsync_ShouldLoadStream_WhenFileExists()
+    public async Task DownloadFileAsync()
     {
         // Arrange
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);

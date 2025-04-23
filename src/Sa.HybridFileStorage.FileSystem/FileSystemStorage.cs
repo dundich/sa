@@ -25,7 +25,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
 
         using var fileStreamOutput = new FileStream(filePath, FileMode.Create, FileAccess.Write);
         await fileStream.CopyToAsync(fileStreamOutput, cancellationToken);
-        return new StorageResult(fileId, StorageType, currentTime.GetUtcNow());
+        return new StorageResult(fileId, filePath, StorageType, currentTime.GetUtcNow());
     }
 
     public async Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)

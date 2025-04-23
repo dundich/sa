@@ -1,4 +1,4 @@
-﻿using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.Domain;
 using Sa.Timing.Providers;
 using System.Collections.Concurrent;
 
@@ -21,7 +21,7 @@ public class InMemoryFileStorage(ICurrentTimeProvider currentTime) : IFileStorag
 
         string fileId = $"{StorageType}://{path}";
         _storage[fileId] = buffer;
-        return new StorageResult(fileId, StorageType, currentTime.GetUtcNow());
+        return new StorageResult(fileId, fileId, StorageType, currentTime.GetUtcNow());
     }
 
     public async Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)

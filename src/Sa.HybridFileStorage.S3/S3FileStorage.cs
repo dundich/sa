@@ -1,6 +1,8 @@
+using Sa.Classes;
 using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
 using Sa.Timing.Providers;
+using System.Globalization;
 
 namespace Sa.HybridFileStorage.S3;
 
@@ -21,17 +23,35 @@ internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions option
         return true;
     }
 
-    public Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public async Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        using var stream = await client.GetFileStream(fileId, cancellationToken);
+        if (stream == null || stream == Stream.Null) return false;
+        await loadStream(stream, cancellationToken);
+        return true;
     }
 
     public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
-        var file = $"{metadata.TenantId}/{metadata.FileName}";
+        await EnsureBucket(cancellationToken);
 
-        await client.UploadFile(file, "", fileStream, cancellationToken);
+        var now = currentTime.GetUtcNow();
+        var eventTime = now.ToString("yyyy/MM/dd/HH", CultureInfo.InvariantCulture);
 
-        return new StorageResult(client.BuildFileUrl(file), StorageType, currentTime.GetUtcNow());
+        var file = $"{metadata.TenantId}/{eventTime}/{metadata.FileName}";
+        var extension = Path.GetExtension(file);
+        var contentType = MimeTypeMap.GetMimeType(extension);
+
+        await client.UploadFile(file, contentType, fileStream, cancellationToken);
+
+        return new StorageResult(file, client.BuildFileUrl(file), StorageType, now);
+    }
+
+    private async Task EnsureBucket(CancellationToken cancellationToken)
+    {
+        if (!await client.IsBucketExists(cancellationToken))
+        {
+            await client.CreateBucket(cancellationToken);
+        }
     }
 }

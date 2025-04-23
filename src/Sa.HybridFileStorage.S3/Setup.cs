@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.S3;
+using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage.S3;
 
@@ -19,6 +21,10 @@ public static class Setup
         services
             .AddSaInfrastructure()
             .AddS3BucketClientAsSingleton(settings);
+
+
+        services.TryAddSingleton(options);
+        services.AddSingleton<IFileStorage, S3FileStorage>();
 
         return services;
     }
