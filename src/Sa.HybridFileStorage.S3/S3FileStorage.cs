@@ -14,6 +14,14 @@ internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions option
 
     public bool IsReadOnly => options.IsReadOnly ?? false;
 
+    private void EnsureWritable()
+    {
+        if (IsReadOnly)
+        {
+            throw new InvalidOperationException("Cannot perform this operation. The storage is read-only.");
+        }
+    }
+
     public bool CanProcessFileId(string fileId)
     {
         return fileId.StartsWith(StorageType, StringComparison.OrdinalIgnoreCase);
@@ -21,10 +29,7 @@ internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions option
 
     public async Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
     {
-        if (IsReadOnly)
-        {
-            throw new InvalidOperationException("Cannot delete file. All storage options are read-only.");
-        }
+        EnsureWritable();
 
         string filePath = FileIdToPath(fileId);
         await client.DeleteFile(filePath, cancellationToken);
@@ -42,11 +47,7 @@ internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions option
 
     public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
-        if (IsReadOnly)
-        {
-            throw new InvalidOperationException("Cannot upload file. All storage options are read-only.");
-        }
-
+        EnsureWritable();
         await EnsureBucket(cancellationToken);
 
         var now = currentTime.GetUtcNow();

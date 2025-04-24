@@ -3,6 +3,6 @@ namespace Sa.HybridFileStorage.FileSystem;
 public class FileSystemStorageOptions
 {
     public string StorageType { get; set; } = "file";
-    public string BasePath { get; set; } = string.Empty;
+    public required string BasePath { get; set; }
     public bool? IsReadOnly { get; set; }
 }

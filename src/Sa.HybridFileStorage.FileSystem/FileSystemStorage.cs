@@ -11,12 +11,17 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
 
     public bool IsReadOnly => options.IsReadOnly ?? false;
 
-    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    private void EnsureWritable()
     {
         if (IsReadOnly)
         {
-            throw new InvalidOperationException("Cannot upload file. All storage options are read-only.");
+            throw new InvalidOperationException("Cannot perform this operation. The storage is read-only.");
         }
+    }
+
+    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    {
+        EnsureWritable();
 
         string filePath = $"{_basePath}/{metadata.TenantId}/{metadata.FileName.Replace('\\', '/')}";
 
@@ -46,10 +51,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
 
     public Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
     {
-        if (IsReadOnly)
-        {
-            throw new InvalidOperationException("Cannot delete file. All storage options are read-only.");
-        }
+        EnsureWritable();
 
         var filePath = FileIdToPath(fileId);
         if (File.Exists(filePath))

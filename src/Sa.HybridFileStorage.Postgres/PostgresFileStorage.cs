@@ -21,12 +21,17 @@ internal class PostgresFileStorage(
 
     public bool IsReadOnly => options.IsReadOnly;
 
-    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    private void EnsureWritable()
     {
         if (IsReadOnly)
         {
-            throw new InvalidOperationException("Cannot upload file. All storage options are read-only.");
+            throw new InvalidOperationException("Cannot perform this operation. The storage is read-only.");
         }
+    }
+
+    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    {
+        EnsureWritable();
 
         var now = currentTime.GetUtcNow();
 
@@ -84,10 +89,7 @@ ON CONFLICT DO NOTHING
 
     public async Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
     {
-        if (IsReadOnly)
-        {
-            throw new InvalidOperationException("Cannot delete file. All storage options are read-only.");
-        }
+        EnsureWritable();
 
         (int tenantId, long timestamp) = Parser.ParseFromFileId(fileId);
         int rowsAffected = await dataSource.ExecuteNonQuery(
