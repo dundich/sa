@@ -21,9 +21,10 @@ A library designed for managing table partitioning in PostgreSQL with the aim of
 - Manage partitions.
 
 
-## [Sa.Schedule](src/Sa.Schedule)
-`Sa.Schedule` provides a way to configure and execute tasks on a schedule.
+## [Sa.HybridFileStorage](src/Sa.HybridFileStorage)
+IHybridFileStorage - interface designed for hybrid file storage systems that facilitates the management of file operations, ensuring reliable and resilient access to files across multiple storage providers.
 
-- It allows you to manage a set of tasks that will be executed at specific times or at defined intervals.
-- You can start and stop tasks.
-- Define failure strategies: close the application, stop job, stop all jobs, or ignore the failure.
+- Supports file operations such as uploading, downloading, and deleting files.
+- Integrates multiple storage providers (e.g., file system, s3, PostgreSQL) for enhanced reliability.
+- Automatically switches between providers in case one becomes unavailable, ensuring continuous access to files.
+- Promotes improved resilience and availability of file data in applications requiring dependable storage management.

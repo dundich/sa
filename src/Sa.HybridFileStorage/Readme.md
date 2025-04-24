@@ -1,7 +1,8 @@
 # IHybridFileStorage Interface
 
-The `IHybridFileStorage` interface defines a contract for hybrid file storage systems that can handle file operations such as uploading, downloading, and deleting files. This interface is designed to be implemented by various storage providers, allowing for flexibility in file storage solutions.
+The IHybridFileStorage interface enhances the resilience and availability of file data in applications that require reliable storage management.
 
+This interface defines a contract for hybrid file storage systems capable of handling file operations such as uploading, downloading, and deleting files. The integration of multiple storage providers (such as file system, S3, and PostgreSQL) ensures reliable file storage, as the system can automatically switch between different providers in the event that one becomes unavailable.
 
 ```csharp
 public interface IHybridFileStorage
