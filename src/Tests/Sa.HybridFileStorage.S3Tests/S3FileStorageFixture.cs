@@ -9,7 +9,7 @@ public class S3FileStorageFixture : S3Fixture<IFileStorage>
     public S3FileStorageFixture()
         : base()
     {
-        SetupServices = (services, cfg) 
+        SetupServices = (services, cfg)
             => services.AddS3FileStorage(CreateOptions());
     }
 

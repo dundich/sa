@@ -23,6 +23,11 @@ internal class PostgresFileStorage(
 
     public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
+        if (IsReadOnly)
+        {
+            throw new InvalidOperationException("Cannot upload file. All storage options are read-only.");
+        }
+
         var now = currentTime.GetUtcNow();
 
         await partManager.EnsureParts(_qualifiedTableName, now, [metadata.TenantId], cancellationToken);
@@ -79,6 +84,11 @@ ON CONFLICT DO NOTHING
 
     public async Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
     {
+        if (IsReadOnly)
+        {
+            throw new InvalidOperationException("Cannot delete file. All storage options are read-only.");
+        }
+
         (int tenantId, long timestamp) = Parser.ParseFromFileId(fileId);
         int rowsAffected = await dataSource.ExecuteNonQuery(
             $"""

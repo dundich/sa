@@ -1,5 +1,6 @@
 using Sa.Data.S3;
 using Sa.Data.S3.Fixture;
+using Sa.Fixture;
 
 namespace Sa.Data.S3Tests;
 
@@ -30,7 +31,7 @@ public class SetupBucketClientShould(S3BucketClientFixtureDI fixture) : IClassFi
 
         using var getFileResult = await Client.GetFile(fileName, CancellationToken);
 
-        using var memoryStream = S3FixtureHelper.GetEmptyByteStream(getFileResult.Length);
+        using var memoryStream = FixtureHelper.GetEmptyByteStream(getFileResult.Length);
         var stream = await getFileResult.GetStream(CancellationToken);
         await stream.CopyToAsync(memoryStream, CancellationToken);
 

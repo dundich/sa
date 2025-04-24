@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sa.Schedule.Settings;
 using Sa.Timing.Providers;
@@ -141,5 +141,5 @@ internal partial class JobController(IJobSettings settings, IInterceptorSettings
         EventId = 402,
         Level = LogLevel.Warning,
         Message = "[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: “{Error}”")]
-    static partial void LogFailedRetryAttempts(ILogger logger,  string jobName, int failedRetryAttempts, int retryCount, string error);
+    static partial void LogFailedRetryAttempts(ILogger logger, string jobName, int failedRetryAttempts, int retryCount, string error);
 }

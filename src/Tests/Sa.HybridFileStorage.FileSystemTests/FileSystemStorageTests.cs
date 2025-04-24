@@ -1,16 +1,38 @@
 using Sa.Fixture;
 using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.FileSystem;
 
-namespace Sa.HybridFileStorage.S3Tests;
+namespace Sa.HybridFileStorage.FileSystemTests;
 
-public class S3FileStorageTests(S3FileStorageFixture fixture) : IClassFixture<S3FileStorageFixture>
+public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
+    : IClassFixture<FileSystemStorageTests.Fixture>
 {
+    public sealed class Fixture : SaFixture<IFileStorage, FileSystemStorageOptions>
+    {
+        public Fixture()
+            : base(new FileSystemStorageOptions
+            {
+                BasePath = "mytemp"
+            })
+        {
+            SetupServices = (services, cfg)
+                => services.AddFileSystemFileStorage(Settings);
+        }
+
+        public override ValueTask DisposeAsync()
+        {
+            Directory.Delete(Settings.BasePath, true);
+            return base.DisposeAsync();
+        }
+    }
+
     private IFileStorage Storage => fixture.Sub;
+
 
     [Fact]
     public async Task Crud()
     {
-        var metadata = new UploadFileInput { FileName = "test.txt", TenantId = 1 };
+        var metadata = new UploadFileInput { FileName = "test.bin", TenantId = 1 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
         var result = await Storage.UploadFileAsync(metadata, fileContent, fixture.CancellationToken);

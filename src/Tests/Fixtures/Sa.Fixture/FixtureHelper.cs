@@ -1,6 +1,6 @@
-namespace Sa.Data.S3.Fixture;
+namespace Sa.Fixture;
 
-public static class S3FixtureHelper
+public static class FixtureHelper
 {
     public const string StreamContentType = "application/octet-stream";
 

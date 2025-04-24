@@ -1,5 +1,6 @@
 using Sa.Data.S3;
 using Sa.Data.S3.Fixture;
+using Sa.Fixture;
 using System.Net;
 
 namespace Sa.Data.S3Tests;
@@ -545,13 +546,13 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     private Task DeleteTestFile(string fileName) => Client.DeleteFile(fileName, CancellationToken);
 
 
-    public static byte[] GetByteArray(int size = S3FixtureHelper.DefaultByteArraySize) => S3FixtureHelper.GetByteArray(size);
+    public static byte[] GetByteArray(int size = FixtureHelper.DefaultByteArraySize) => FixtureHelper.GetByteArray(size);
 
-    public static string GetRandomFileName() => S3FixtureHelper.GetRandomFileName();
+    public static string GetRandomFileName() => FixtureHelper.GetRandomFileName();
 
     public static string GetRandomFileNameWithoutExtension() => Path.GetFileNameWithoutExtension(GetRandomFileName());
 
-    public static MemoryStream GetByteStream(int size = S3FixtureHelper.DefaultByteArraySize) => S3FixtureHelper.GetByteStream(size);
+    public static MemoryStream GetByteStream(int size = FixtureHelper.DefaultByteArraySize) => FixtureHelper.GetByteStream(size);
 
-    public static MemoryStream GetEmptyByteStream(long? size = null) => S3FixtureHelper.GetEmptyByteStream(size);
+    public static MemoryStream GetEmptyByteStream(long? size = null) => FixtureHelper.GetEmptyByteStream(size);
 }
