@@ -96,6 +96,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sa.HybridFileStorage.S3Test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sa.HybridFileStorage.FileSystemTests", "Tests\Sa.HybridFileStorage.FileSystemTests\Sa.HybridFileStorage.FileSystemTests.csproj", "{5F02040C-392D-5B04-C80F-71C728693A09}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Configuration", "Configuration", "{21727B12-1186-4C5E-9CA0-C7A9CED092A8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sa.Configuration", "Sa.Configuration\Sa.Configuration.csproj", "{324F7B8C-4EB8-4284-B5E1-C28298EA6BC0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -226,6 +230,10 @@ Global
 		{5F02040C-392D-5B04-C80F-71C728693A09}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5F02040C-392D-5B04-C80F-71C728693A09}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5F02040C-392D-5B04-C80F-71C728693A09}.Release|Any CPU.Build.0 = Release|Any CPU
+		{324F7B8C-4EB8-4284-B5E1-C28298EA6BC0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{324F7B8C-4EB8-4284-B5E1-C28298EA6BC0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{324F7B8C-4EB8-4284-B5E1-C28298EA6BC0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{324F7B8C-4EB8-4284-B5E1-C28298EA6BC0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -264,6 +272,7 @@ Global
 		{77A751E6-628C-4964-8532-4BD505EB2D3B} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{27A12FF2-C9DD-4124-B036-0169B2FED086} = {BDD5208F-0CF4-4C6A-B443-6527514C89E8}
 		{5F02040C-392D-5B04-C80F-71C728693A09} = {BDD5208F-0CF4-4C6A-B443-6527514C89E8}
+		{324F7B8C-4EB8-4284-B5E1-C28298EA6BC0} = {21727B12-1186-4C5E-9CA0-C7A9CED092A8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {968372C4-E303-4F1F-A924-7568CCDE3E7C}
