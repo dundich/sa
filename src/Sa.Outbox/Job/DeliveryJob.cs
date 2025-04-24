@@ -1,10 +1,10 @@
-﻿using Sa.Outbox.Delivery;
+using Sa.Outbox.Delivery;
 using Sa.Schedule;
 
 namespace Sa.Outbox.Job;
 
 
-public interface IDeliveryJob: IJob;
+public interface IDeliveryJob : IJob;
 
 
 internal class DeliveryJob<TMessage>(IDeliveryProcessor processor) : IDeliveryJob

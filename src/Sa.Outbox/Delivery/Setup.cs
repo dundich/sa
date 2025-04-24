@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Configuration;
 using Sa.Outbox.Partitional;
@@ -21,7 +21,7 @@ internal static class Setup
         services.TryAddSingleton<IScopedConsumer, ScopedConsumer>();
 
         configure.Invoke(new DeliveryBuilder(services));
-        
+
         return services;
     }
 }

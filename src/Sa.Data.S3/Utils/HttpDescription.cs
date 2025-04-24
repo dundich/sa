@@ -81,7 +81,19 @@ internal readonly struct HttpDescription(string accessKey, string region, string
 		return builder.Flush();
 	}
 
-	public string BuildUrl(string bucket, string fileName, DateTime now, TimeSpan expires)
+	public static string BuildUrl(string bucket, string fileName)
+	{
+		var builder = new ValueStringBuilder(stackalloc char[512]);
+
+		builder.Append(bucket);
+		builder.Append('/');
+
+		AppendEncodedName(ref builder, fileName);
+        return builder.Flush();
+    }
+
+
+    public string BuildUrl(string bucket, string fileName, DateTime now, TimeSpan expires)
 	{
 		var builder = new ValueStringBuilder(stackalloc char[512]);
 

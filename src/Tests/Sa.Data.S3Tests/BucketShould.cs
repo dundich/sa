@@ -3,11 +3,11 @@ using Sa.Data.S3.Fixture;
 
 namespace Sa.Data.S3Tests;
 
-public class BucketShould(S3ClientFixture fixture) : IClassFixture<S3ClientFixture>
+public class BucketShould(S3BucketClientFixture fixture) : IClassFixture<S3BucketClientFixture>
 {
-    protected IS3Client Client => fixture.Sub;
+    protected IS3BucketClient Client => fixture.Sub;
 
-    protected S3Client CloneClient(string backetName) => fixture.CreateClient(backetName);
+    protected S3BucketClient CloneClient(string backetName) => fixture.CreateClient(backetName);
 
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
@@ -70,7 +70,7 @@ public class BucketShould(S3ClientFixture fixture) : IClassFixture<S3ClientFixtu
         string backet = "del";
 
         using var client = CloneClient(backet);
-        var result =  await client.CreateBucket(CancellationToken);
+        var result = await client.CreateBucket(CancellationToken);
         Assert.True(result);
 
         var bucketDeleteResult = await client.DeleteBucket(CancellationToken);

@@ -1,4 +1,4 @@
-﻿using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage;
 
@@ -13,12 +13,17 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
 
     public bool CanProcessFileId(string fileId) => _storages.Any(c => c.CanProcessFileId(fileId));
 
-    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    private void EnsureWritable()
     {
         if (IsReadOnly)
         {
             throw new InvalidOperationException("Cannot upload file. All storage options are read-only.");
         }
+    }
+
+    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    {
+        EnsureWritable();
 
         var exceptions = new List<Exception>();
 
@@ -56,10 +61,7 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
 
     public async Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
     {
-        if (IsReadOnly)
-        {
-            throw new InvalidOperationException("Cannot delete file. All storage options are read-only.");
-        }
+        EnsureWritable();
 
         List<Exception> exceptions = [];
 
