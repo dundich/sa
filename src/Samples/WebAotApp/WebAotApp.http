@@ -1,0 +1,11 @@
+@WebAotApp_HostAddress = http://localhost:5123
+
+GET {{WebAotApp_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{WebAotApp_HostAddress}}/todos/1
+Accept: application/json
+
+###
