@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 
@@ -15,35 +15,35 @@ public static class StrToExtensions
 
 
     [DebuggerStepThrough]
-    public static int? StrToInt(this string? str) => int.TryParse(str, out int result) ? result : null;
+    public static int? StrToInt(this string? str) => int.TryParse(str, CultureInfo.InvariantCulture, out int result) ? result : null;
     [DebuggerStepThrough]
-    public static int? StrToInt(this ReadOnlySpan<char> str) => int.TryParse(str, out int result) ? result : null;
+    public static int? StrToInt(this ReadOnlySpan<char> str) => int.TryParse(str, CultureInfo.InvariantCulture, out int result) ? result : null;
 
 
     [DebuggerStepThrough]
-    public static short? StrToShort(this string? str) => short.TryParse(str, out short result) ? result : null;
+    public static short? StrToShort(this string? str) => short.TryParse(str, CultureInfo.InvariantCulture, out short result) ? result : null;
     [DebuggerStepThrough]
-    public static short? StrToShort(this ReadOnlySpan<char> str) => short.TryParse(str, out short result) ? result : null;
+    public static short? StrToShort(this ReadOnlySpan<char> str) => short.TryParse(str, CultureInfo.InvariantCulture, out short result) ? result : null;
 
 
     [DebuggerStepThrough]
-    public static ushort? StrToUShort(this string? str) => ushort.TryParse(str, out ushort result) ? result : null;
+    public static ushort? StrToUShort(this string? str) => ushort.TryParse(str, CultureInfo.InvariantCulture, out ushort result) ? result : null;
 
     [DebuggerStepThrough]
-    public static ushort? StrToUShort(this ReadOnlySpan<char> str) => ushort.TryParse(str, out ushort result) ? result : null;
+    public static ushort? StrToUShort(this ReadOnlySpan<char> str) => ushort.TryParse(str, CultureInfo.InvariantCulture, out ushort result) ? result : null;
 
 
     [DebuggerStepThrough]
     public static long? StrToLong(this string? str) => long.TryParse(str, out long result) ? result : null;
     [DebuggerStepThrough]
-    public static long? StrToLong(this ReadOnlySpan<char> str) => long.TryParse(str, out long result) ? result : null;
+    public static long? StrToLong(this ReadOnlySpan<char> str) => long.TryParse(str, CultureInfo.InvariantCulture, out long result) ? result : null;
 
 
     [DebuggerStepThrough]
-    public static ulong? StrToULong(this string? str) => ulong.TryParse(str, out ulong result) ? result : null;
+    public static ulong? StrToULong(this string? str) => ulong.TryParse(str, CultureInfo.InvariantCulture, out ulong result) ? result : null;
 
     [DebuggerStepThrough]
-    public static ulong? StrToULong(this ReadOnlySpan<char> str) => ulong.TryParse(str, out ulong result) ? result : null;
+    public static ulong? StrToULong(this ReadOnlySpan<char> str) => ulong.TryParse(str, CultureInfo.InvariantCulture, out ulong result) ? result : null;
 
 
     [DebuggerStepThrough]
@@ -51,9 +51,9 @@ public static class StrToExtensions
 
 
     [DebuggerStepThrough]
-    public static Guid? StrToGuid(this string? str) => Guid.TryParse(str, out Guid result) ? result : null;
+    public static Guid? StrToGuid(this string? str) => Guid.TryParse(str, CultureInfo.InvariantCulture, out Guid result) ? result : null;
     [DebuggerStepThrough]
-    public static Guid? StrToGuid(this ReadOnlySpan<char> str) => Guid.TryParse(str, out Guid result) ? result : null;
+    public static Guid? StrToGuid(this ReadOnlySpan<char> str) => Guid.TryParse(str, CultureInfo.InvariantCulture, out Guid result) ? result : null;
 
 
     [DebuggerStepThrough]

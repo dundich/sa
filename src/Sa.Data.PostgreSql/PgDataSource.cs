@@ -6,7 +6,7 @@ namespace Sa.Data.PostgreSql;
 /// NpgsqlDataSource lite
 /// </summary>
 /// <param name="settings">connection string</param>
-internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSource, IDisposable, IAsyncDisposable
+public sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSource, IDisposable, IAsyncDisposable
 {
     private readonly Lazy<NpgsqlDataSource> _dataSource = new(() => NpgsqlDataSource.Create(settings.ConnectionString));
 

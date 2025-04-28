@@ -1,4 +1,4 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -21,12 +21,12 @@ namespace Sa.Classes;
 [JsonConverter(typeof(StrOrNumConverter))]
 public abstract record StrOrNum
 {
-    public record ChoiceStr(string Item) : StrOrNum 
+    public record ChoiceStr(string Item) : StrOrNum
     {
         public override string ToString() => Item;
     }
 
-    public record ChoiceNum(long Item) : StrOrNum 
+    public record ChoiceNum(long Item) : StrOrNum
     {
         public override string ToString() => $"{Item}";
     }
