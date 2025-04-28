@@ -1,6 +1,6 @@
-namespace Sa.Configuration.SecretStore;
+namespace Sa.Configuration.SecretStore.Engine;
 
-internal class ChainedSecretStore(params ISecretStore[] list) : ISecretStore
+internal class ChainedSecretStore(IReadOnlyCollection<ISecretStore> list) : ISecretStore
 {
     private readonly List<ISecretStore> _list = [.. list];
 

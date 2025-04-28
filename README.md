@@ -36,3 +36,9 @@ A library designed for managing table partitioning in PostgreSQL with the aim of
 - Integrates multiple storage providers (e.g., file system, s3, PostgreSQL) for enhanced reliability.
 - Automatically switches between providers in case one becomes unavailable, ensuring continuous access to files.
 - Promotes improved resilience and availability of file data in applications requiring dependable storage management.
+
+
+## [Sa.Configuration](src/Sa.Configuration)
+
+- `Arguments` class parses command-line arguments in a C# application, enabling easy retrieval of parameter values through a dictionary-like interface. It supports both single-value and multi-value parameters for flexible command-line configurations.
+- `Secrets` class securely manages sensitive information, such as API keys and database passwords, from various sources. It can load secrets from files, environment variables, and dynamically generated host key files.

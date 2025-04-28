@@ -1,6 +1,6 @@
 namespace Sa.Configuration.SecretStore;
 
-internal interface ISecretStore
+public interface ISecretStore
 {
     string? GetSecret(string key);
 }

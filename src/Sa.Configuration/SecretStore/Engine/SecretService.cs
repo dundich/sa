@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Sa.Configuration.SecretStore;
+namespace Sa.Configuration.SecretStore.Engine;
 
 internal class SecretService(ISecretStore secretStore) : ISecretService
 {

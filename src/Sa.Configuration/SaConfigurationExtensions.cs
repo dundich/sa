@@ -17,7 +17,7 @@ public static class SaConfigurationExtensions
 
         builder
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .AddJsonFile($"appsettings.{SaConfigurationEnvironment.Default.EnvironmentName}.json", optional: true)
+            .AddJsonFile($"appsettings.{SaEnvironment.Default.EnvironmentName}.json", optional: true)
             .AddEnvironmentVariables();
 
         return builder;

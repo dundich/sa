@@ -1,6 +1,6 @@
 namespace Sa.Configuration;
 
-public class SaConfigurationEnvironment
+public class SaEnvironment
 {
     public string DefaultFileSecrets { get; set; } = "secrets.txt";
     public string SA_HOST_KEY { get; set; } = "sa_host_key";
@@ -13,5 +13,5 @@ public class SaConfigurationEnvironment
         ?? "Production"
     );
 
-    public static SaConfigurationEnvironment Default { get; set; } = new();
+    public static SaEnvironment Default { get; set; } = new();
 }

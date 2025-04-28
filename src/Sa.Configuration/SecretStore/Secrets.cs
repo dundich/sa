@@ -1,38 +1,42 @@
+using Sa.Configuration.SecretStore.Engine;
+
 namespace Sa.Configuration.SecretStore;
 
 /// <summary>
 /// </summary>
 /// <seealso href="https://github.com/zarusz/SlimMessageBus/tree/master/src/Tools/SecretStore"/>
-public static class Secrets
+public class Secrets(params IReadOnlyCollection<ISecretStore> stores) : ISecretService
 {
-    public static string FileSecrets => SaConfigurationEnvironment.Default.DefaultFileSecrets;
+    private readonly ChainedSecrets _chainedSecrets = new(stores);
+
+    public string? PopulateSecrets(string? inputString) => _chainedSecrets.PopulateSecrets(inputString);
 
 
-    private static Lazy<ChainedSecrets> s_service = new(() => CreateSecrets(FileSecrets));
-
-    public static void Reload(params string[] path) =>
-        s_service = new Lazy<ChainedSecrets>(() => CreateSecrets(path));
-
-    private static ChainedSecrets CreateSecrets(params string[] paths)
+    private static readonly Lazy<Secrets> s_secrets = new(CreateDefaultSecrets);
+    private static Secrets CreateDefaultSecrets()
     {
-        ChainedSecrets secrets = new([
-            .. paths.Select(path => new FileSecretStore(path))
-            , new EnvironmentVariableSecretStore()
-        ]);
+        string prefixName = Path.GetFileNameWithoutExtension(FileSecrets);
+        string extName = Path.GetExtension(FileSecrets);
+        string envName = SaEnvironment.Default.EnvironmentName;
 
-        string? hostKey = secrets.GetSecret(SaConfigurationEnvironment.Default.SA_HOST_KEY);
+        var store = new Secrets(
+            new FileSecretStore(FileSecrets)
+            , new FileSecretStore($"{prefixName}.{envName}{extName}")
+            , new EnvironmentVariableSecretStore()
+        );
+
+        string? hostKey = store._chainedSecrets.GetSecret(SaEnvironment.Default.SA_HOST_KEY);
 
         if (!string.IsNullOrWhiteSpace(hostKey))
         {
-            string? filename = Path.ChangeExtension(FileSecrets, hostKey + Path.GetExtension(FileSecrets));
-            if (!string.IsNullOrWhiteSpace(filename))
-            {
-                secrets.AddStore(new FileSecretStore(filename));
-            }
+            store._chainedSecrets.AddStore(new FileSecretStore($"{prefixName}.{hostKey}{extName}"));
+            store._chainedSecrets.AddStore(new FileSecretStore($"{prefixName}.{hostKey}.{envName}{extName}"));
         }
 
-        return secrets;
+        return store;
     }
 
-    public static ISecretService Service => s_service.Value.Service;
+
+    public static ISecretService Service => s_secrets.Value;
+    public static string FileSecrets => SaEnvironment.Default.DefaultFileSecrets;
 }
