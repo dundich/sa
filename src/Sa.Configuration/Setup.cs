@@ -4,7 +4,7 @@ using Sa.Configuration.SecretStore;
 namespace Sa.Configuration;
 
 
-public static class SaConfigurationExtensions
+public static class Setup
 {
     public static IConfigurationBuilder AddDefaultSaConfiguration(this IConfigurationBuilder builder, params IReadOnlyCollection<string> jsonFiles)
     {
