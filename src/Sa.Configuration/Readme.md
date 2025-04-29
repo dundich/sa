@@ -11,8 +11,9 @@ Key Features:
 
 ### Example Usage:
 ```csharp
+// some.exe --config_db /share/data.db
 var arguments = new Arguments(args);
-string? configDb = arguments["--config_db"];
+string? configDb = arguments["config_db"];
 ```
 
 
