@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace Sa.Classes;
 
@@ -15,7 +15,7 @@ public interface IResetLazy
 /// </summary>
 /// <typeparam name="T">The type of object that is being lazily initialized.</typeparam>
 [DebuggerStepThrough]
-public sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode = LazyThreadSafetyMode.PublicationOnly, Action<T>? valueReset = null) : IResetLazy
+public sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode = LazyThreadSafetyMode.ExecutionAndPublication, Action<T>? valueReset = null) : IResetLazy
 {
     record Box(T Value);
 
@@ -30,44 +30,43 @@ public sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode
         [DebuggerStepThrough]
         get
         {
-            Box? b1 = _box;
-            if (b1 != null)
-                return b1.Value;
-
-            if (mode == LazyThreadSafetyMode.ExecutionAndPublication)
+            if (_box != null)
             {
-                lock (_syncLock)
-                {
-                    Box? b2 = _box;
-                    if (b2 != null)
-                        return b2.Value;
-
-                    _box = new Box(CreateValue());
-
-                    return _box.Value;
-                }
+                return _box.Value;
             }
-            else if (mode == LazyThreadSafetyMode.PublicationOnly)
+
+            return mode switch
             {
-                T newValue = CreateValue();
+                LazyThreadSafetyMode.ExecutionAndPublication => GetValueWithLock(),
+                LazyThreadSafetyMode.PublicationOnly => GetValueWithPublicationOnly(),
+                _ => CreateValue(),
+            };
+        }
+    }
 
-                lock (_syncLock)
-                {
-                    Box? b2 = _box;
-                    if (b2 != null)
-                        return b2.Value;
+    private T GetValueWithLock()
+    {
+        lock (_syncLock)
+        {
+            Box? b2 = _box;
+            if (b2 != null) return b2.Value;
 
-                    _box = new Box(newValue);
+            _box = new Box(CreateValue());
+            return _box.Value;
+        }
+    }
 
-                    return _box.Value;
-                }
-            }
-            else
-            {
-                Box? b = new(CreateValue());
-                _box = b;
-                return b.Value;
-            }
+    private T GetValueWithPublicationOnly()
+    {
+        T newValue = CreateValue();
+
+        lock (_syncLock)
+        {
+            Box? b2 = _box;
+            if (b2 != null) return b2.Value;
+
+            _box = new Box(newValue);
+            return _box.Value;
         }
     }
 
@@ -81,25 +80,16 @@ public sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode
 
     public void Reset()
     {
-        if (mode != LazyThreadSafetyMode.None)
+        if (IsValueCreated)
         {
             lock (_syncLock)
             {
-                ResetBox();
+                if (_box != null)
+                {
+                    valueReset?.Invoke(_box.Value);
+                    _box = null;
+                }
             }
-        }
-        else
-        {
-            ResetBox();
-        }
-    }
-
-    private void ResetBox()
-    {
-        if (IsValueCreated)
-        {
-            valueReset?.Invoke(_box!.Value);
-            _box = null;
         }
     }
 }

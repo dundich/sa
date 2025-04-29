@@ -34,7 +34,7 @@ public static class StrToExtensions
 
 
     [DebuggerStepThrough]
-    public static long? StrToLong(this string? str) => long.TryParse(str, out long result) ? result : null;
+    public static long? StrToLong(this string? str) => long.TryParse(str, CultureInfo.InvariantCulture, out long result) ? result : null;
     [DebuggerStepThrough]
     public static long? StrToLong(this ReadOnlySpan<char> str) => long.TryParse(str, CultureInfo.InvariantCulture, out long result) ? result : null;
 
