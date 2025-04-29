@@ -22,6 +22,48 @@ string? result = Secrets.Service.PopulateSecrets(input);
 Console.WriteLine(result); // Outputs: "API Key: my_api_key, Database Password: my_db_password"
 ```
 
+## Configuration Loading Order for Secret Information
+Your configuration system follows a hierarchical approach for loading secret information from configurations `.txt` files. Here’s the loading order:
+
+- `secrets.txt`: The base file containing common secrets applicable to all environments and hosts.
+- `secrets.{Env}.txt`: An environment-specific file (e.g., secrets.Development.txt or secrets.Production.txt) that overrides values from secrets.txt.
+- `secrets.{sa_host_key}.txt`: A host-specific file (e.g., secrets.HostA.txt) that can also override values from the previous files.
+- `secrets.{sa_host_key}.{Env}.txt`: The most specific file that combines both host key and environment (e.g., secrets.HostA.Development.txt). This file has the highest priority and overrides all previous values.
+
+### Example 
+
+secrets.txt
+```
+# Host key
+# example: `dev|company1|host2`
+
+sa_host_key="dev"
+
+# Postgres
+
+sa_pg_user=user
+sa_pg_password=password
+sa_pg_host=localhost
+sa_pg_port=5432
+sa_pg_database=postgres
+sa_pg_schema=public
+
+
+# ElasticSearch
+sa_es_connection=http://login:password@localhost:9202
+```
+
+appsettings.json
+```
+{
+    "pg": {
+      "connection": "User ID={{sa_pg_user}};Password={{sa_pg_password}};Host={{sa_pg_host}};Port={{sa_pg_port}};Database={{sa_pg_database}};Pooling=true;SearchPath={{sa_pg_schema}};Command Timeout=180;"
+    },
+    "es": {
+      "connection": "{{sa_es_connection}}"
+    }
+}
+```
 
 ## Conclusion
 The Secrets class simplifies the management of sensitive information in your application, providing a flexible and secure way to access secrets from various sources. By using this class, you can ensure that your application remains configurable and secure across different environments.

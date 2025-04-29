@@ -25,17 +25,26 @@ public class Secrets(params IReadOnlyCollection<ISecretStore> stores) : ISecretS
             , new EnvironmentVariableSecretStore()
         );
 
-        string? hostKey = store._chainedSecrets.GetSecret(SaEnvironment.Default.SA_HOST_KEY);
+        string? hostKey = store.GetSecret(SaEnvironment.Default.SA_HOST_KEY);
 
         if (!string.IsNullOrWhiteSpace(hostKey))
         {
-            store._chainedSecrets.AddStore(new FileSecretStore($"{prefixName}.{hostKey}{extName}"));
-            store._chainedSecrets.AddStore(new FileSecretStore($"{prefixName}.{hostKey}.{envName}{extName}"));
+            store
+                .AddStore(new FileSecretStore($"{prefixName}.{hostKey}{extName}"))
+                .AddStore(new FileSecretStore($"{prefixName}.{hostKey}.{envName}{extName}"))
+                ;
         }
 
         return store;
     }
+    
+    public Secrets AddStore(ISecretStore store)
+    {
+        _chainedSecrets.AddStore(store);
+        return this;
+    }
 
+    public string? GetSecret(string key) => _chainedSecrets.GetSecret(key);
 
     public static ISecretService Service => s_secrets.Value;
     public static string FileSecrets => SaEnvironment.Default.DefaultFileSecrets;
