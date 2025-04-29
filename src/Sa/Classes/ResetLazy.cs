@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace Sa.Classes;
 
@@ -15,7 +15,7 @@ public interface IResetLazy
 /// </summary>
 /// <typeparam name="T">The type of object that is being lazily initialized.</typeparam>
 [DebuggerStepThrough]
-public sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode = LazyThreadSafetyMode.PublicationOnly, Action<T>? valueReset = null) : IResetLazy
+public sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode = LazyThreadSafetyMode.ExecutionAndPublication, Action<T>? valueReset = null) : IResetLazy
 {
     record Box(T Value);
 
@@ -36,38 +36,53 @@ public sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode
 
             if (mode == LazyThreadSafetyMode.ExecutionAndPublication)
             {
-                lock (_syncLock)
-                {
-                    Box? b2 = _box;
-                    if (b2 != null)
-                        return b2.Value;
-
-                    _box = new Box(CreateValue());
-
-                    return _box.Value;
-                }
+                return LockExecutionAndPublication();
             }
             else if (mode == LazyThreadSafetyMode.PublicationOnly)
             {
-                T newValue = CreateValue();
-
-                lock (_syncLock)
-                {
-                    Box? b2 = _box;
-                    if (b2 != null)
-                        return b2.Value;
-
-                    _box = new Box(newValue);
-
-                    return _box.Value;
-                }
+                return LockPublicationOnly();
             }
             else
             {
-                Box? b = new(CreateValue());
-                _box = b;
-                return b.Value;
+                return CreateAndStoreValuw();
             }
+        }
+    }
+
+    private T CreateAndStoreValuw()
+    {
+        Box? b = new(CreateValue());
+        _box = b;
+        return b.Value;
+    }
+
+    private T LockPublicationOnly()
+    {
+        T newValue = CreateValue();
+
+        lock (_syncLock)
+        {
+            Box? b2 = _box;
+            if (b2 != null)
+                return b2.Value;
+
+            _box = new Box(newValue);
+
+            return _box.Value;
+        }
+    }
+
+    private T LockExecutionAndPublication()
+    {
+        lock (_syncLock)
+        {
+            Box? b2 = _box;
+            if (b2 != null)
+                return b2.Value;
+
+            _box = new Box(CreateValue());
+
+            return _box.Value;
         }
     }
 

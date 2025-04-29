@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.ObjectPool;
 using Microsoft.IO;
@@ -17,10 +17,7 @@ public static class Setup
         services.TryAddSingleton<IInstanceIdProvider, DefaultInstanceIdProvider>();
 
         services.TryAddSingleton<ObjectPoolProvider, DefaultObjectPoolProvider>();
-
-
-        services.TryAddSingleton<IArrayPoolFactory, ArrayPoolFactory>();
-        services.TryAddSingleton(typeof(IArrayPooler<>), typeof(ArrayPooler<>));
+        services.TryAddSingleton<IArrayPool>(DefaultArrayPool.Instance);
         return services;
     }
 }

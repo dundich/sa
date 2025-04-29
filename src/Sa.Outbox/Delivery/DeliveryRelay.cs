@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Extensions;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;
@@ -9,7 +9,7 @@ namespace Sa.Outbox.Delivery;
 
 internal sealed class DeliveryRelay(
     IDeliveryRepository repository
-    , IArrayPoolFactory arrayPoolFactory
+    , IArrayPool arrayPool
     , IPartitionalSupportCache partCache
     , ICurrentTimeProvider timeProvider
     , IDeliveryCourier deliveryCourier
@@ -21,12 +21,11 @@ internal sealed class DeliveryRelay(
 
     public async Task<int> StartDelivery<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)
     {
-        IArrayPooler<OutboxDeliveryMessage<TMessage>> arrayPooler = arrayPoolFactory.Create<OutboxDeliveryMessage<TMessage>>();
         int batchSize = settings.ExtractSettings.MaxBatchSize;
 
         if (batchSize == 0) return 0;
 
-        OutboxDeliveryMessage<TMessage>[] buffer = arrayPooler.Rent(batchSize);
+        OutboxDeliveryMessage<TMessage>[] buffer = arrayPool.Rent<OutboxDeliveryMessage<TMessage>>(batchSize);
         Memory<OutboxDeliveryMessage<TMessage>> slice = buffer.AsMemory(0, batchSize);
         try
         {
@@ -36,7 +35,7 @@ internal sealed class DeliveryRelay(
         }
         finally
         {
-            arrayPooler.Return(buffer);
+            arrayPool.Return(buffer);
         }
     }
 
