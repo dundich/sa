@@ -10,10 +10,10 @@ public interface IHybridFileStorage
     bool IsReadOnly { get; }
     string StorageType { get; }
 
-    bool CanProcessFileId(string fileId);
-    Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken);
-    Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken);
-    Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken);
+    bool CanProcess(string fileId);
+    Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken);
+    Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken);
+    Task<StorageResult> UploadAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken);
 }
 ```
 
@@ -46,11 +46,11 @@ namespace HybridFileStorage.Console
             var expected = "Hello, HybridFileStorage!";
             using var stream = expected.ToStream();
 
-            var result = await storage.UploadFileAsync(new UploadFileInput { FileName = "file.txt" }, stream, cancellationToken);
+            var result = await storage.UploadAsync(new UploadFileInput { FileName = "file.txt" }, stream, cancellationToken);
 
             string? actual = null;
 
-            var isDownload = await storage.DownloadFileAsync(result.FileId, async (fs, t) => actual = await fs.ToStrAsync(t), cancellationToken);
+            var isDownload = await storage.DownloadAsync(result.FileId, async (fs, t) => actual = await fs.ToStrAsync(t), cancellationToken);
 
             Debug.Assert(isDownload);
             Debug.Assert(expected == actual);

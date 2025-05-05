@@ -17,7 +17,7 @@ public static class Setup
         services.TryAddSingleton<IInstanceIdProvider, DefaultInstanceIdProvider>();
 
         services.TryAddSingleton<ObjectPoolProvider, DefaultObjectPoolProvider>();
-        services.TryAddSingleton<IArrayPool>(DefaultArrayPool.Instance);
+        services.TryAddSingleton<IArrayPool>(DefaultArrayPool.Shared);
         return services;
     }
 }

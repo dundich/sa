@@ -11,7 +11,7 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
 
     public bool IsReadOnly => _storages.All(f => f.IsReadOnly);
 
-    public bool CanProcessFileId(string fileId) => _storages.Any(c => c.CanProcessFileId(fileId));
+    public bool CanProcessFileId(string fileId) => _storages.Any(c => c.CanProcess(fileId));
 
     private void EnsureWritable()
     {
@@ -36,7 +36,7 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
 
             try
             {
-                return await fileStorage.UploadFileAsync(metadata, fileStream, cancellationToken);
+                return await fileStorage.UploadAsync(metadata, fileStream, cancellationToken);
             }
             catch (Exception e)
             {
@@ -51,7 +51,7 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
     {
         foreach (IFileStorage fileStorage in GetStoragesByFieldId(fileId))
         {
-            if (await fileStorage.DownloadFileAsync(fileId, loadStream, cancellationToken))
+            if (await fileStorage.DownloadAsync(fileId, loadStream, cancellationToken))
             {
                 return true;
             }
@@ -69,7 +69,7 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
         {
             try
             {
-                if (await fileStorage.DeleteFileAsync(fileId, cancellationToken))
+                if (await fileStorage.DeleteAsync(fileId, cancellationToken))
                     return true;
             }
             catch (FileNotFoundException)
@@ -91,5 +91,5 @@ internal class HybridFileStorage(HybridFileStorageOptions options) : IHybridFile
         return false;
     }
 
-    private IEnumerable<IFileStorage> GetStoragesByFieldId(string fileId) => _storages.Where(c => c.CanProcessFileId(fileId));
+    private IEnumerable<IFileStorage> GetStoragesByFieldId(string fileId) => _storages.Where(c => c.CanProcess(fileId));
 }

@@ -19,7 +19,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
         }
     }
 
-    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
         EnsureWritable();
 
@@ -37,7 +37,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
         return new StorageResult(fileId, fileAbsolute, StorageType, currentTime.GetUtcNow());
     }
 
-    public async Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
     {
         var filePath = FileIdToPath(fileId);
         if (File.Exists(filePath))
@@ -49,7 +49,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
         return false;
     }
 
-    public Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
+    public Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
 
@@ -62,7 +62,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
         return Task.FromResult(false);
     }
 
-    public bool CanProcessFileId(string fileId) 
+    public bool CanProcess(string fileId) 
         => fileId.StartsWith(FilePathToId(_basePath));
 
     private static void EnsureDirectory(string? dir)

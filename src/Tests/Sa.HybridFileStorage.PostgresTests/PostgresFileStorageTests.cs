@@ -26,7 +26,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
 
 
         // Act
-        var result = await Sub.UploadFileAsync(metadata, fileContent, fixture.CancellationToken);
+        var result = await Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -44,10 +44,10 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
     {
         // Arrange
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
-        var upload = await Sub.UploadFileAsync(new UploadFileInput { FileName = "test17.txt", TenantId = 17 }, fileContent, CancellationToken.None);
+        var upload = await Sub.UploadAsync(new UploadFileInput { FileName = "test17.txt", TenantId = 17 }, fileContent, CancellationToken.None);
 
         // Act
-        var result = await Sub.DeleteFileAsync(upload.FileId, CancellationToken.None);
+        var result = await Sub.DeleteAsync(upload.FileId, CancellationToken.None);
 
         // Assert
         Assert.True(result);
@@ -65,12 +65,12 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
 
         var metadata = new UploadFileInput { FileName = "example.txt", TenantId = 123 };
-        var upload = await Sub.UploadFileAsync(metadata, fileContent, CancellationToken.None);
+        var upload = await Sub.UploadAsync(metadata, fileContent, CancellationToken.None);
 
         string? actual = null;
 
         // Act
-        var result = await Sub.DownloadFileAsync(upload.FileId, async (s, t) => actual = await StreamToStringAsync(s), CancellationToken.None);
+        var result = await Sub.DownloadAsync(upload.FileId, async (s, t) => actual = await StreamToStringAsync(s), CancellationToken.None);
 
         // Assert
         Assert.True(result);

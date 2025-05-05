@@ -22,12 +22,12 @@ internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions option
         }
     }
 
-    public bool CanProcessFileId(string fileId)
+    public bool CanProcess(string fileId)
     {
         return fileId.StartsWith(StorageType, StringComparison.OrdinalIgnoreCase);
     }
 
-    public async Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
+    public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
 
@@ -36,7 +36,7 @@ internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions option
         return true;
     }
 
-    public async Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
     {
         string filePath = FileIdToPath(fileId);
         using var stream = await client.GetFileStream(filePath, cancellationToken);
@@ -45,7 +45,7 @@ internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions option
         return true;
     }
 
-    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
         EnsureWritable();
         await EnsureBucket(cancellationToken);

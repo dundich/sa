@@ -11,7 +11,7 @@ public interface IArrayPool
 
 internal sealed class DefaultArrayPool : IArrayPool
 {
-    public static readonly IArrayPool Instance = new DefaultArrayPool();
+    public static readonly IArrayPool Shared = new DefaultArrayPool();
 
     public T[] Rent<T>(int minimumLength)
     {

@@ -29,7 +29,7 @@ internal class PostgresFileStorage(
         }
     }
 
-    public async Task<StorageResult> UploadFileAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
     {
         EnsureWritable();
 
@@ -85,9 +85,9 @@ ON CONFLICT DO NOTHING
         return new StorageResult(fileId, fileId, StorageType, now);
     }
 
-    public bool CanProcessFileId(string fileId) => fileId.StartsWith($"{StorageType}:://");
+    public bool CanProcess(string fileId) => fileId.StartsWith($"{StorageType}:://");
 
-    public async Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken)
+    public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
 
@@ -101,7 +101,7 @@ ON CONFLICT DO NOTHING
         return rowsAffected > 0;
     }
 
-    public async Task<bool> DownloadFileAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
     {
         (int tenantId, long timestamp) = Parser.ParseFromFileId(fileId);
 

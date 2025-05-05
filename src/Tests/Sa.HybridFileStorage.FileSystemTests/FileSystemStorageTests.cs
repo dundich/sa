@@ -35,18 +35,18 @@ public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
         var metadata = new UploadFileInput { FileName = "test.bin", TenantId = 1 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadFileAsync(metadata, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync(metadata, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.NotEmpty(result.FileId);
 
-        bool canProcessed = Storage.CanProcessFileId(result.FileId);
+        bool canProcessed = Storage.CanProcess(result.FileId);
         Assert.True(canProcessed);
 
         var isSame = await EnsureFileSame(result.FileId, fileContent);
         Assert.True(isSame);
 
-        var isDeleted = await Storage.DeleteFileAsync(result.FileId, fixture.CancellationToken);
+        var isDeleted = await Storage.DeleteAsync(result.FileId, fixture.CancellationToken);
 
         Assert.True(isDeleted);
 
@@ -61,7 +61,7 @@ public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
 
         using MemoryStream memoryStream = new();
 
-        var isDownloaded = await Storage.DownloadFileAsync(fileName
+        var isDownloaded = await Storage.DownloadAsync(fileName
             , (stream, ct) => stream.CopyToAsync(memoryStream, ct)
             , fixture.CancellationToken);
 
