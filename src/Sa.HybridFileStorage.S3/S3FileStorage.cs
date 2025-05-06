@@ -6,7 +6,7 @@ using System.Globalization;
 
 namespace Sa.HybridFileStorage.S3;
 
-internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions options, ICurrentTimeProvider currentTime) : IFileStorage
+internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions options, ICurrentTimeProvider? currentTime = null) : IFileStorage
 {
     private const string DateFormat = "yyyy/MM/dd/HH";
 
@@ -50,7 +50,7 @@ internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions option
         EnsureWritable();
         await EnsureBucket(cancellationToken);
 
-        var now = currentTime.GetUtcNow();
+        var now = currentTime?.GetUtcNow() ?? DateTimeOffset.UtcNow;
         var eventTime = now.ToString(DateFormat, CultureInfo.InvariantCulture);
 
         var filePath = $"{metadata.TenantId}/{eventTime}/{metadata.FileName}";

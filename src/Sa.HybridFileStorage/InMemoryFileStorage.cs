@@ -4,11 +4,13 @@ using System.Collections.Concurrent;
 
 namespace Sa.HybridFileStorage;
 
-public class InMemoryFileStorage(ICurrentTimeProvider currentTimeProvider, bool isReadOnly = false) : IFileStorage
+public class InMemoryFileStorage(ICurrentTimeProvider? currentTimeProvider = null, bool isReadOnly = false) : IFileStorage
 {
+    public const string DefaultStorageType = "mem";
+
     private readonly ConcurrentDictionary<string, byte[]> _storage = [];
 
-    public string StorageType => "mem";
+    public string StorageType => DefaultStorageType;
 
     public bool IsReadOnly => isReadOnly;
 
@@ -32,7 +34,10 @@ public class InMemoryFileStorage(ICurrentTimeProvider currentTimeProvider, bool 
         string fileId = $"{StorageType}://{path}";
 
         _storage[fileId] = fileData;
-        return new StorageResult(fileId, fileId, StorageType, currentTimeProvider.GetUtcNow());
+
+        var now = currentTimeProvider?.GetUtcNow() ?? DateTimeOffset.UtcNow;
+
+        return new StorageResult(fileId, fileId, StorageType, now);
     }
 
     public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)

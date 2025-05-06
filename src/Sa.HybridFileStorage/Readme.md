@@ -13,7 +13,7 @@ public interface IHybridFileStorage
     bool CanProcess(string fileId);
     Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken);
     Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken);
-    Task<StorageResult> UploadAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken);
+    Task<StorageResult> UploadAsync(UploadFileInput input, Stream fileStream, CancellationToken cancellationToken);
 }
 ```
 
