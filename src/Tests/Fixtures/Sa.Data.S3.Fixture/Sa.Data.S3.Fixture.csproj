@@ -7,4 +7,8 @@
     <ProjectReference Include="..\..\..\Sa.Data.S3\Sa.Data.S3.csproj" />
     <ProjectReference Include="..\Sa.Fixture\Sa.Fixture.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Update="xunit.runner.visualstudio" Version="3.1.0" />
+    <PackageReference Update="xunit.v3" Version="2.0.2" />
+  </ItemGroup>
 </Project>
