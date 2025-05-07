@@ -9,10 +9,9 @@ namespace Sa.HybridFileStorage.Postgres;
 internal class PostgresFileStorage(
     IPgDataSource dataSource,
     IPartitionManager partManager,
-    ICurrentTimeProvider currentTime,
     RecyclableMemoryStreamManager streamManager,
-    StorageOptions options
-) : IFileStorage
+    StorageOptions options,
+    ICurrentTimeProvider? currentTime = null) : IFileStorage
 {
 
     private readonly string _qualifiedTableName = $"{options.SchemaName}.\"{options.TableName.Trim('"')}\"";
@@ -33,7 +32,7 @@ internal class PostgresFileStorage(
     {
         EnsureWritable();
 
-        var now = currentTime.GetUtcNow();
+        var now = currentTime?.GetUtcNow() ?? DateTimeOffset.UtcNow;
 
         await partManager.EnsureParts(_qualifiedTableName, now, [metadata.TenantId], cancellationToken);
 

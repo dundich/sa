@@ -55,7 +55,7 @@ internal class PostgresFileStorageConfiguration : IPostgresFileStorageConfigurat
             var time = sp.GetRequiredService<ICurrentTimeProvider>();
             var sm = sp.GetRequiredService<RecyclableMemoryStreamManager>();
 
-            var storage = new PostgresFileStorage(dataSource, pm, time, sm, _options.StorageOptions);
+            var storage = new PostgresFileStorage(dataSource, pm, sm, _options.StorageOptions, time);
             return storage;
         });
     }

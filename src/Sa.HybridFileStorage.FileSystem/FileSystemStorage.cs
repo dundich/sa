@@ -3,7 +3,7 @@ using Sa.Timing.Providers;
 
 namespace Sa.HybridFileStorage.FileSystem;
 
-internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeProvider currentTime) : IFileStorage
+internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeProvider? currentTime = null) : IFileStorage
 {
     private readonly string _basePath = Path.TrimEndingDirectorySeparator(options.BasePath);
 
@@ -34,7 +34,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
         var fileId = FilePathToId(filePath);
         var fileAbsolute = Path.GetFullPath(filePath);
 
-        return new StorageResult(fileId, fileAbsolute, StorageType, currentTime.GetUtcNow());
+        return new StorageResult(fileId, fileAbsolute, StorageType, currentTime?.GetUtcNow() ?? DateTimeOffset.UtcNow);
     }
 
     public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)

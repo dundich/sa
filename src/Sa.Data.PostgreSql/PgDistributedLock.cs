@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 
 namespace Sa.Data.PostgreSql;
@@ -8,13 +9,15 @@ namespace Sa.Data.PostgreSql;
 /// </summary>
 /// <seealso href="https://www.postgresql.org/docs/9.4/explicit-locking.html#ADVISORY-LOCKS"/>
 /// <seealso href="https://ankitvijay.net/2021/02/28/distributed-lock-using-postgresql/"/>
-internal sealed class PgDistributedLock(PgDataSourceSettings settings, ILogger<PgDistributedLock>? logger = null) : IPgDistributedLock
+internal partial class PgDistributedLock(PgDataSourceSettings settings, ILogger<PgDistributedLock>? logger = null) : IPgDistributedLock
 {
+    private readonly ILogger<PgDistributedLock> _logger = logger ?? NullLogger<PgDistributedLock>.Instance;
+
     private readonly NpgsqlConnectionStringBuilder builder = new(settings.ConnectionString);
 
     public async Task<bool> TryExecuteInDistributedLock(long lockId, Func<CancellationToken, Task> exclusiveLockTask, CancellationToken cancellationToken)
     {
-        logger?.LogInformation("Trying to acquire session lock for Lock Id {@LockId}", lockId);
+        LogTryingToAcquireLock(_logger, lockId);
 
         using var connection = new NpgsqlConnection(builder.ToString());
         await connection.OpenAsync(cancellationToken);
@@ -23,11 +26,11 @@ internal sealed class PgDistributedLock(PgDataSourceSettings settings, ILogger<P
 
         if (!hasLockedAcquired)
         {
-            logger?.LogInformation("Lock {@LockId} rejected", lockId);
+            LogLockRejected(_logger, lockId);
             return false;
         }
 
-        logger?.LogInformation("Lock {@LockId} acquired", lockId);
+        LogLockAcquired(_logger, lockId);
         try
         {
             if (await TryAcquireLockAsync(lockId, connection, cancellationToken))
@@ -37,7 +40,7 @@ internal sealed class PgDistributedLock(PgDataSourceSettings settings, ILogger<P
         }
         finally
         {
-            logger?.LogInformation("Releasing session lock for {@LockId}", lockId);
+            LogReleasingLock(_logger, lockId);
             await ReleaseLock(lockId, connection, cancellationToken);
         }
         return true;
@@ -61,4 +64,29 @@ internal sealed class PgDistributedLock(PgDataSourceSettings settings, ILogger<P
         using var commandQuery = new NpgsqlCommand(transactionLockCommand, connection);
         await commandQuery.ExecuteScalarAsync(cancellationToke);
     }
+
+
+    [LoggerMessage(
+        EventId = 1001,
+        Level = LogLevel.Trace,
+        Message = "Trying to acquire session lock for Lock Id {LockId}")]
+    static partial void LogTryingToAcquireLock(ILogger logger, long lockId);
+    
+    [LoggerMessage(
+        EventId = 1002,
+        Level = LogLevel.Information,
+        Message = "Lock {LockId} rejected")]
+    static partial void LogLockRejected(ILogger logger, long lockId);
+    
+    [LoggerMessage(
+        EventId = 1003,
+        Level = LogLevel.Information,
+        Message = "Lock {LockId} acquired")]
+    static partial void LogLockAcquired(ILogger logger, long lockId);
+
+    [LoggerMessage(
+        EventId = 1004,
+        Level = LogLevel.Information,
+        Message = "Releasing session lock for {LockId}")]
+    static partial void LogReleasingLock(ILogger logger, long lockId);
 }

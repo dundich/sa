@@ -108,6 +108,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sa.Configuration.PostgreSql
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sa.Configuration.PostgreSqlTests", "Tests\Sa.Configuration.PostgreSqlTests\Sa.Configuration.PostgreSqlTests.csproj", "{DC68BF20-F35E-02C7-E7AE-EB276D3B8CD8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sa.HybridFileStorageTests", "Tests\Sa.HybridFileStorageTests\Sa.HybridFileStorageTests.csproj", "{FF81CA73-8518-415E-53F2-DBE53F4AF7CF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -258,6 +260,10 @@ Global
 		{DC68BF20-F35E-02C7-E7AE-EB276D3B8CD8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DC68BF20-F35E-02C7-E7AE-EB276D3B8CD8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DC68BF20-F35E-02C7-E7AE-EB276D3B8CD8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FF81CA73-8518-415E-53F2-DBE53F4AF7CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FF81CA73-8518-415E-53F2-DBE53F4AF7CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FF81CA73-8518-415E-53F2-DBE53F4AF7CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FF81CA73-8518-415E-53F2-DBE53F4AF7CF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -301,6 +307,7 @@ Global
 		{C612C2A5-3237-42D1-911F-2A9197580793} = {BDD5208F-0CF4-4C6A-B443-6527514C89E8}
 		{0FB2C6FE-D291-453A-B6DE-76F97A7E1B99} = {21727B12-1186-4C5E-9CA0-C7A9CED092A8}
 		{DC68BF20-F35E-02C7-E7AE-EB276D3B8CD8} = {BDD5208F-0CF4-4C6A-B443-6527514C89E8}
+		{FF81CA73-8518-415E-53F2-DBE53F4AF7CF} = {BDD5208F-0CF4-4C6A-B443-6527514C89E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {968372C4-E303-4F1F-A924-7568CCDE3E7C}
