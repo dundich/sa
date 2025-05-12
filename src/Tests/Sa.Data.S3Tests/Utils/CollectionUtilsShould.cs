@@ -1,19 +1,17 @@
-using Sa.Data.S3.Utils;
-using System.Buffers;
+using Sa.Storage;
+using Sa.Storage.Utils;
 
 namespace Sa.Data.S3Tests.Utils;
 
 public class CollectionUtilsShould
 {
-	private static readonly ArrayPool<int> Pool = ArrayPool<int>.Shared;
-
 	[Fact]
 	public void ResizeArray()
 	{
-		var array = Pool.Rent(5);
+		var array = DefaultArrayPool.Instance.Rent<int>(5);
 
 		var newLength = array.Length * 2;
-		CollectionUtils.Resize(ref array, Pool, newLength);
+		CollectionUtils.Resize(ref array, DefaultArrayPool.Instance, newLength);
         Assert.True(array.Length >= newLength);
 	}
 
@@ -22,7 +20,7 @@ public class CollectionUtilsShould
 	{
 		const int newLength = 5;
 		var emptyArray = Array.Empty<int>();
-		CollectionUtils.Resize(ref emptyArray, Pool, newLength);
+		CollectionUtils.Resize(ref emptyArray, DefaultArrayPool.Instance, newLength);
 		Assert.True(emptyArray.Length >= newLength);
 	}
 }

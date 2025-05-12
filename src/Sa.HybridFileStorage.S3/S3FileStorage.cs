@@ -1,6 +1,6 @@
 using Sa.Classes;
-using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
+using Sa.Storage;
 using Sa.Timing.Providers;
 using System.Globalization;
 
@@ -10,9 +10,9 @@ internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions option
 {
     private const string DateFormat = "yyyy/MM/dd/HH";
 
-    public string StorageType => options.StorageType;
+    public string StorageType { get; } = options.StorageType;
 
-    public bool IsReadOnly => options.IsReadOnly ?? false;
+    public bool IsReadOnly { get; } = options.IsReadOnly ?? false;
 
     private void EnsureWritable()
     {

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Sa.Storage;
 
 namespace Sa.Data.S3.Fixture;
 

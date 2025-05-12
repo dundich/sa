@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+		<PublishAot>true</PublishAot>
+		<StripSymbols>false</StripSymbols>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <Title>Sa.Forked.Storage</Title>
+        <Description>Simple client for S3-storage</Description>
+        <Version>0.6.5</Version>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryUrl>git://github.com/teoadal/Storage</RepositoryUrl>
+        <PackageId>Storages3</PackageId>
+        <PackageTags>s3;s3storage;objectS3;bucketS3;performance</PackageTags>
+        <PackageProjectUrl>https://github.com/teoadal/Storage</PackageProjectUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <Copyright>sa</Copyright>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\..\README.md" Pack="true" PackagePath="" />
+    </ItemGroup>
+
+    <ItemGroup>
+		<InternalsVisibleTo Include="Sa.Data.S3Tests" />
+    </ItemGroup>
+
+	<ItemGroup>
+	  <Compile Update="S3BucketClient.Buckets.cs">
+	    <DependentUpon>S3BucketClient.cs</DependentUpon>
+	  </Compile>
+	  <Compile Update="S3BucketClient.Transport.cs">
+	    <DependentUpon>S3BucketClient.cs</DependentUpon>
+	  </Compile>
+	  <Compile Update="S3BucketClient.Multipart.cs">
+	    <DependentUpon>S3BucketClient.cs</DependentUpon>
+	  </Compile>
+	</ItemGroup>
+
+</Project>

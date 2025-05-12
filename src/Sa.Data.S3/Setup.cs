@@ -1,19 +1,21 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sa.Storage;
 
 namespace Sa.Data.S3;
 
 public static class Setup
 {
-    public static IServiceCollection AddS3BucketClientAsSingleton(this IServiceCollection services, S3BucketClientSettings settings)
+    public static IServiceCollection AddS3BucketClientAsSingleton(this IServiceCollection services, S3BucketClientSetupSettings settings)
     {
 
-        services.TryAddSingleton<S3BucketClientSettings>(settings);
+        services.TryAddSingleton<S3BucketSettings>(settings);
 
         // https://www.milanjovanovic.tech/blog/the-right-way-to-use-httpclient-in-dotnet
         services
             .AddHttpClient<IS3BucketClient, S3BucketClient>((sp, client) =>
             {
+                client.Timeout = settings.TotalRequestTimeout;
                 client.BaseAddress = new Uri(settings.Endpoint);
             })
             .ConfigurePrimaryHttpMessageHandler(() =>

@@ -7,7 +7,7 @@ public class StorageOptions
     public string SchemaName { get; set; } = "public";
     public string TableName { get; set; } = "files";
     public string StorageType { get; set; } = "pg";
-    public bool IsReadOnly { get; set; } = false;
+    public bool? IsReadOnly { get; set; }
 }
 
 public class CleanupOptions

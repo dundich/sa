@@ -16,9 +16,9 @@ internal class PostgresFileStorage(
 
     private readonly string _qualifiedTableName = $"{options.SchemaName}.\"{options.TableName.Trim('"')}\"";
 
-    public string StorageType => options.StorageType;
+    public string StorageType { get; } = options.StorageType;
 
-    public bool IsReadOnly => options.IsReadOnly;
+    public bool IsReadOnly { get; } = options.IsReadOnly ?? false;
 
     private void EnsureWritable()
     {

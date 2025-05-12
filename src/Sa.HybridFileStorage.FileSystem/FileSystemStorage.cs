@@ -7,9 +7,9 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
 {
     private readonly string _basePath = Path.TrimEndingDirectorySeparator(options.BasePath);
 
-    public string StorageType => options.StorageType ?? "file";
+    public string StorageType { get; } = options.StorageType ?? "file";
 
-    public bool IsReadOnly => options.IsReadOnly ?? false;
+    public bool IsReadOnly { get; } = options.IsReadOnly ?? false;
 
     private void EnsureWritable()
     {

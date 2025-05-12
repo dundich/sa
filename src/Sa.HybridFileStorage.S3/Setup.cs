@@ -9,7 +9,7 @@ public static class Setup
 {
     public static IServiceCollection AddS3FileStorage(this IServiceCollection services, S3FileStorageOptions options)
     {
-        var settings = new S3BucketClientSettings
+        var settings = new S3BucketClientSetupSettings
         {
             AccessKey = options.AccessKey,
             Bucket = options.Bucket,

@@ -30,7 +30,6 @@ public class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions option
         }
         catch (Exception ex)
         {
-            // Обработка ошибок, например, логирование
             throw new InvalidOperationException("Failed to load configuration from PostgreSQL.", ex);
         }
     }
