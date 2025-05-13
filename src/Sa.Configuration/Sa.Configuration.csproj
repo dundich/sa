@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <PackageId>Sa.Configuration</PackageId>
-    <Version>0.0.1</Version>
+    <Version>0.0.1-rc</Version>
   </PropertyGroup>
 
   

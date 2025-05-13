@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Job;
+using Sa.Outbox.Job;
 using Sa.Outbox.Publication;
 using Sa.Schedule;
 
@@ -34,7 +34,7 @@ internal class OutboxPartitionalSupport(IScheduleSettings scheduleSettings, Part
         return GenerateOutboxTenantPartPairs(tenantIds, parts);
     }
 
-    private static IReadOnlyCollection<OutboxTenantPartPair> GenerateOutboxTenantPartPairs(int[] tenantIds, string[] parts)
+    private static List<OutboxTenantPartPair> GenerateOutboxTenantPartPairs(int[] tenantIds, string[] parts)
     {
         var result = new List<OutboxTenantPartPair>();
 
