@@ -11,5 +11,17 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.4" />
   </ItemGroup>
+    
+  <ItemGroup>
+    <Compile Update="CommandLine\Arguments.partial.cs">
+      <DependentUpon>CommandLine\Arguments.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="SecretStore\Engine\SecretService.partial.cs">
+      <DependentUpon>SecretStore\Engine\SecretService.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
 
 </Project>

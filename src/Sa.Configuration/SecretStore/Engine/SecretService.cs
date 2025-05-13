@@ -2,9 +2,9 @@ using System.Text.RegularExpressions;
 
 namespace Sa.Configuration.SecretStore.Engine;
 
-internal class SecretService(ISecretStore secretStore) : ISecretService
+internal partial class SecretService(ISecretStore secretStore) : ISecretService
 {
-    private static readonly Regex s_placeholder = new(@"\{\{(\w+)\}\}", RegexOptions.None, TimeSpan.FromSeconds(2));
+    private static readonly Regex s_placeholder = PlaceholderRegex();
 
     public string? PopulateSecrets(string? inputString)
     {
