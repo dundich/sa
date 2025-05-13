@@ -11,8 +11,8 @@ public class Secrets(params IReadOnlyCollection<ISecretStore> stores) : ISecretS
 
     public string? PopulateSecrets(string? inputString) => _chainedSecrets.PopulateSecrets(inputString);
 
-
     private static readonly Lazy<Secrets> s_secrets = new(CreateDefaultSecrets);
+
     private static Secrets CreateDefaultSecrets()
     {
         string prefixName = Path.GetFileNameWithoutExtension(FileSecrets);
@@ -47,5 +47,6 @@ public class Secrets(params IReadOnlyCollection<ISecretStore> stores) : ISecretS
     public string? GetSecret(string key) => _chainedSecrets.GetSecret(key);
 
     public static ISecretService Service => s_secrets.Value;
+    
     public static string FileSecrets => SaEnvironment.Default.DefaultFileSecrets;
 }

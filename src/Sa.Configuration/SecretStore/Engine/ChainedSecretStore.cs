@@ -1,12 +1,12 @@
 namespace Sa.Configuration.SecretStore.Engine;
 
-internal class ChainedSecretStore(IReadOnlyCollection<ISecretStore> list) : ISecretStore
+internal class ChainedSecretStore(IReadOnlyCollection<ISecretStore> stores) : ISecretStore
 {
-    private readonly List<ISecretStore> _list = [.. list];
+    private readonly Stack<ISecretStore> _stores = new(stores);
 
     public string? GetSecret(string key)
     {
-        foreach (ISecretStore secretStore in _list)
+        foreach (ISecretStore secretStore in _stores)
         {
             string? secret = secretStore.GetSecret(key);
             if (secret != null)
@@ -17,5 +17,5 @@ internal class ChainedSecretStore(IReadOnlyCollection<ISecretStore> list) : ISec
         return null;
     }
 
-    public void Add(ISecretStore store) => _list.Add(store);
+    public void Add(ISecretStore store) => _stores.Push(store);
 }

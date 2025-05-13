@@ -12,6 +12,7 @@ internal class ChainedSecrets : ISecretService, ISecretStore
     }
 
     public void AddStore(ISecretStore store) => _store.Add(store);
+
     public string? GetSecret(string key) => _store.GetSecret(key);
 
     public string? PopulateSecrets(string? inputString) => _service.PopulateSecrets(inputString);
