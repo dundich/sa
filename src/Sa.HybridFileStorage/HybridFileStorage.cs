@@ -71,7 +71,6 @@ internal class HybridFileStorage(IHybridFileStorageContainer container, Intercep
 
         foreach (var storage in storages)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 if (!await beforeOperation(storage, cancellationToken)) continue;

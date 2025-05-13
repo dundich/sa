@@ -82,4 +82,38 @@ public class SecretServiceTests
         // Assert
         Assert.Equal("Secret: secret_value", result);
     }
+
+    [Fact]
+    public void AddStore_AddsNewStore()
+    {
+        // Arrange
+        var secrets = new Secrets(new InMemorySecretStore().AddSecret("AnotherKey", "AnotherValue"));
+
+        // Assert
+        var result = secrets.GetSecret("AnotherKey");
+        Assert.Equal("AnotherValue", result);
+
+        // Act 2
+        var secretStore2 = new InMemorySecretStore();
+        secretStore2.AddSecret("AnotherKey", "AnotherValue 2");
+        secrets.AddStore(secretStore2);
+
+        // Assert 2
+        var result2 = secrets.GetSecret("AnotherKey");
+        Assert.Equal("AnotherValue 2", result2);
+
+        // Act 3
+        secrets.AddStore(new InMemorySecretStore().AddSecret("AnotherKey", default));
+
+        // Assert 3
+        var result3 = secrets.GetSecret("AnotherKey");
+        Assert.Equal("AnotherValue 2", result3);
+
+        // Act 4
+        secrets.AddStore(new InMemorySecretStore().AddSecret("AnotherKey", string.Empty));
+
+        // Assert 4
+        var result4 = secrets.GetSecret("AnotherKey");
+        Assert.Empty(result4!);
+    }
 }
