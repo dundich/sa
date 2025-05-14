@@ -18,6 +18,10 @@
 
   <ItemGroup>
     <None Include="..\..\docs\NuGet.md" Pack="true" PackagePath="\"/>
+    <None Include="..\..\icon.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>
