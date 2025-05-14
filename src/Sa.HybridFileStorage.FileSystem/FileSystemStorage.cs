@@ -1,9 +1,8 @@
 using Sa.HybridFileStorage.Domain;
-using Sa.Timing.Providers;
 
 namespace Sa.HybridFileStorage.FileSystem;
 
-internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeProvider? currentTime = null) : IFileStorage
+internal class FileSystemStorage(FileSystemStorageOptions options, TimeProvider? timeProvider = null) : IFileStorage
 {
     private readonly string _basePath = Path.TrimEndingDirectorySeparator(options.BasePath);
 
@@ -34,7 +33,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
         var fileId = FilePathToId(filePath);
         var fileAbsolute = Path.GetFullPath(filePath);
 
-        return new StorageResult(fileId, fileAbsolute, StorageType, currentTime?.GetUtcNow() ?? DateTimeOffset.UtcNow);
+        return new StorageResult(fileId, fileAbsolute, StorageType, timeProvider?.GetUtcNow() ?? TimeProvider.System.GetUtcNow());
     }
 
     public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
@@ -62,7 +61,7 @@ internal class FileSystemStorage(FileSystemStorageOptions options, ICurrentTimeP
         return Task.FromResult(false);
     }
 
-    public bool CanProcess(string fileId) 
+    public bool CanProcess(string fileId)
         => fileId.StartsWith(FilePathToId(_basePath));
 
     private static void EnsureDirectory(string? dir)

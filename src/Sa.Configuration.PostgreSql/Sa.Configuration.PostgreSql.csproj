@@ -10,8 +10,11 @@
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.4" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' != 'Release'">
     <ProjectReference Include="..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
   </ItemGroup>
-
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <PackageReference Include="Sa.Data.PostgreSql" Version="0.0.1" />
+  </ItemGroup>
+  
 </Project>

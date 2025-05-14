@@ -2,8 +2,7 @@ using System.Diagnostics;
 
 namespace Sa.Extensions;
 
-
-public static class EnumerableExtensions
+internal static class EnumerableExtensions
 {
     [DebuggerStepThrough]
     public static string JoinByString<T>(this IEnumerable<T> source, string? joinWith = null)

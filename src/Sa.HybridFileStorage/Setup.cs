@@ -16,7 +16,6 @@ public static class Setup
 
     public static IServiceCollection AddInMemoryFileStorage(this IServiceCollection services)
     {
-        services.AddSaInfrastructure();
         services.AddSingleton<IFileStorage, InMemoryFileStorage>();
         return services;
     }

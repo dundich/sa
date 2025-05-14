@@ -9,9 +9,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Sa\Classes\MimeTypeMap.cs" Link="AsLink\MimeTypeMap.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Sa.Data.S3\Sa.Data.S3.csproj" />
     <ProjectReference Include="..\Sa.HybridFileStorage.Domain\Sa.HybridFileStorage.Domain.csproj" />
-    <ProjectReference Include="..\Sa\Sa.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="AsLink\" />
   </ItemGroup>
 
 </Project>

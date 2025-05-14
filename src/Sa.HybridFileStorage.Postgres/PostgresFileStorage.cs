@@ -2,7 +2,6 @@ using Microsoft.IO;
 using Sa.Data.PostgreSql;
 using Sa.HybridFileStorage.Domain;
 using Sa.Partitional.PostgreSql;
-using Sa.Timing.Providers;
 
 namespace Sa.HybridFileStorage.Postgres;
 
@@ -11,7 +10,7 @@ internal class PostgresFileStorage(
     IPartitionManager partManager,
     RecyclableMemoryStreamManager streamManager,
     StorageOptions options,
-    ICurrentTimeProvider? currentTime = null) : IFileStorage
+    TimeProvider? timeProvider = null) : IFileStorage
 {
 
     private readonly string _qualifiedTableName = $"{options.SchemaName}.\"{options.TableName.Trim('"')}\"";
@@ -32,7 +31,7 @@ internal class PostgresFileStorage(
     {
         EnsureWritable();
 
-        var now = currentTime?.GetUtcNow() ?? DateTimeOffset.UtcNow;
+        var now = timeProvider?.GetUtcNow() ?? TimeProvider.System.GetUtcNow();
 
         await partManager.EnsureParts(_qualifiedTableName, now, [metadata.TenantId], cancellationToken);
 

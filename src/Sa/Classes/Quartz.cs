@@ -1,8 +1,8 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace Sa.Classes;
 
-public static partial class Quartz
+public static class Quartz
 {
     private static IEnumerable<TimeSpan> Empty() => [];
 

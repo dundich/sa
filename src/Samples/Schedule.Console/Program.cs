@@ -1,8 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Sa.Schedule;
-using Sa.Timing.Providers;
 using Schedule.Console;
 
 
@@ -77,7 +76,7 @@ Console.WriteLine("*** THE END ***");
 
 namespace Schedule.Console
 {
-    public class SomeJob(ICurrentTimeProvider currentTime) : IJob
+    public class SomeJob(TimeProvider currentTime) : IJob
     {
         public async Task Execute(IJobContext context, CancellationToken cancellationToken)
         {

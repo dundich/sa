@@ -1,9 +1,8 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Partitional.ConsoleApp;
 using Sa.Data.PostgreSql;
-using Sa.Extensions;
 using Sa.Partitional.PostgreSql;
 
 
@@ -73,7 +72,7 @@ namespace Partitional.ConsoleApp
             await partition.Migrate();
             var parts = await repository.GetPartsToDate("customer", DateTime.Now.AddDays(3));
 
-            logger.LogInformation($"list of parts:{Environment.NewLine}{parts.Select(c => c.Id).JoinByString(Environment.NewLine)}");
+            logger.LogInformation($"list of parts:{Environment.NewLine}{string.Join(Environment.NewLine, parts.Select(c => c.Id))}");
         }
     }
 }

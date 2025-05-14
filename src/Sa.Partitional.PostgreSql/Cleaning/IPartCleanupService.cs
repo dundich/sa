@@ -1,4 +1,3 @@
-﻿
 namespace Sa.Partitional.PostgreSql;
 
 /// <summary>

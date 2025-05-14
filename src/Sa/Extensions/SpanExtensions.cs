@@ -1,8 +1,8 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace Sa.Extensions;
 
-public static class SpanExtensions
+internal static class SpanExtensions
 {
     [DebuggerStepThrough]
     public static IEnumerable<Memory<T>> GetChunks<T>(this Memory<T> arr, int chunkSize)

@@ -1,8 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Schedule.Engine;
 using Sa.Schedule.Settings;
-using Sa.Timing.Providers;
 
 namespace Sa.Schedule;
 
@@ -19,7 +18,7 @@ public static class Setup
     /// <returns>The service collection with the scheduling system added.</returns>
     public static IServiceCollection AddSchedule(this IServiceCollection services, Action<IScheduleBuilder> configure)
     {
-        services.TryAddSingleton<ICurrentTimeProvider, CurrentTimeProvider>();
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddSingleton<IScheduler, Scheduler>();
         services.TryAddSingleton<IJobFactory, JobFactory>();
         services.TryAddSingleton<IJobRunner, JobRunner>();

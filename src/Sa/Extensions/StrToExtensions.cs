@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Sa.Extensions;
 
-public static class StrToExtensions
+internal static class StrToExtensions
 {
 
     [DebuggerStepThrough]

@@ -1,9 +1,9 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using System.Diagnostics;
 
 namespace Sa.Extensions;
 
-public static class StringExtensions
+internal static class StringExtensions
 {
     [DebuggerStepThrough]
     public static string? NullIfEmpty(this string? str) => string.IsNullOrWhiteSpace(str) ? default : str;

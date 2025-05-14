@@ -1,10 +1,9 @@
 using Sa.HybridFileStorage.Domain;
-using Sa.Timing.Providers;
 using System.Collections.Concurrent;
 
 namespace Sa.HybridFileStorage;
 
-public class InMemoryFileStorage(ICurrentTimeProvider? currentTimeProvider = null, bool isReadOnly = false) : IFileStorage
+public class InMemoryFileStorage(TimeProvider? currentTimeProvider = null, bool isReadOnly = false) : IFileStorage
 {
     public const string DefaultStorageType = "mem";
 
@@ -35,7 +34,7 @@ public class InMemoryFileStorage(ICurrentTimeProvider? currentTimeProvider = nul
 
         _storage[fileId] = fileData;
 
-        var now = currentTimeProvider?.GetUtcNow() ?? DateTimeOffset.UtcNow;
+        var now = currentTimeProvider?.GetUtcNow() ?? TimeProvider.System.GetUtcNow();
 
         return new StorageResult(fileId, fileId, StorageType, now);
     }

@@ -1,12 +1,10 @@
-﻿using Sa.Timing.Providers;
-
 namespace Sa.Partitional.PostgreSql.Cleaning;
 
 internal class PartCleanupService(
     IPartRepository repository
     , PartCleanupScheduleSettings settings
-    , ICurrentTimeProvider timeProvider
     , ISqlBuilder sqlBuilder
+    , TimeProvider? timeProvider = null
 ) : IPartCleanupService
 {
     public async Task<int> Clean(DateTimeOffset toDate, CancellationToken cancellationToken)
@@ -21,7 +19,8 @@ internal class PartCleanupService(
 
     public Task<int> Clean(CancellationToken cancellationToken)
     {
-        DateTimeOffset toDate = timeProvider.GetUtcNow().Add(-settings.DropPartsAfterRetention);
+        var tp = timeProvider ?? TimeProvider.System;
+        DateTimeOffset toDate = tp.GetUtcNow().Add(-settings.DropPartsAfterRetention);
         return Clean(toDate, cancellationToken);
     }
 }

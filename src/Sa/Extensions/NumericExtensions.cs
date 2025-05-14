@@ -1,8 +1,8 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace Sa.Extensions;
 
-public static class NumericExtensions
+internal static class NumericExtensions
 {
     private static readonly DateTime UnixEpoch = DateTime.UnixEpoch;
     private static readonly double MaxUnixSeconds = (DateTime.MaxValue - UnixEpoch).TotalSeconds;

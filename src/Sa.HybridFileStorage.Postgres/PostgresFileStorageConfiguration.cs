@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IO;
 using Sa.Data.PostgreSql;
 using Sa.HybridFileStorage.Domain;
 using Sa.Partitional.PostgreSql;
-using Sa.Timing.Providers;
 
 namespace Sa.HybridFileStorage.Postgres;
 
@@ -15,6 +15,8 @@ internal class PostgresFileStorageConfiguration : IPostgresFileStorageConfigurat
 
     public PostgresFileStorageConfiguration(IServiceCollection services)
     {
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
+        services.TryAddSingleton<RecyclableMemoryStreamManager>();
 
         _partConfiguration = services.AddPartitional((sp, builder) =>
         {
@@ -52,7 +54,7 @@ internal class PostgresFileStorageConfiguration : IPostgresFileStorageConfigurat
 
             var pm = sp.GetRequiredService<IPartitionManager>();
             var dataSource = sp.GetRequiredService<IPgDataSource>();
-            var time = sp.GetRequiredService<ICurrentTimeProvider>();
+            var time = sp.GetService<TimeProvider>();
             var sm = sp.GetRequiredService<RecyclableMemoryStreamManager>();
 
             var storage = new PostgresFileStorage(dataSource, pm, sm, _options.StorageOptions, time);

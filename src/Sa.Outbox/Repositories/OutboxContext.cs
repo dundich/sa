@@ -1,5 +1,4 @@
-﻿using Sa.Outbox.Exceptions;
-using Sa.Timing.Providers;
+using Sa.Outbox.Exceptions;
 
 
 namespace Sa.Outbox.Repository;
@@ -7,7 +6,7 @@ namespace Sa.Outbox.Repository;
 /// <summary>
 /// OutboxMessage
 /// </summary>
-internal class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, ICurrentTimeProvider timeProvider) : IOutboxContext<TMessage>
+internal class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider) : IOutboxContext<TMessage>
 {
     public string OutboxId { get; } = delivery.OutboxId;
     public OutboxPartInfo PartInfo { get; } = delivery.PartInfo;

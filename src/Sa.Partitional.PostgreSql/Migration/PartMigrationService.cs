@@ -1,11 +1,10 @@
-﻿using Sa.Extensions;
-using Sa.Timing.Providers;
+using Sa.Extensions;
 
 namespace Sa.Partitional.PostgreSql.Migration;
 
 internal sealed class PartMigrationService(
     IPartRepository repository
-    , ICurrentTimeProvider timeProvider
+    , TimeProvider timeProvider
     , PartMigrationScheduleSettings settings
 )
     : IPartMigrationService, IDisposable

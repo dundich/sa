@@ -12,7 +12,10 @@ $projects = @(
 	# "Sa.Data.PostgreSql",
 
 	# "Sa.Configuration",
-    "Sa.Configuration.PostgreSql"
+    # "Sa.Configuration.PostgreSql",
+	
+	# "Sa.Schedule"
+	"Sa.Partitional.PostgreSql"
 )
 
 # msbuild.exe https://msdn.microsoft.com/pl-pl/library/ms164311(v=vs.80).aspx

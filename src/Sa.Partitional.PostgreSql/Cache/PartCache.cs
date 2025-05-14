@@ -1,6 +1,5 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Extensions;
-using Sa.Timing.Providers;
 using System.Collections.Concurrent;
 
 namespace Sa.Partitional.PostgreSql.Cache;
@@ -8,8 +7,8 @@ namespace Sa.Partitional.PostgreSql.Cache;
 internal class PartCache(
     IPartRepository repository
     , ISqlBuilder sqlBuilder
-    , ICurrentTimeProvider timeProvider
     , PartCacheSettings settings
+    , TimeProvider? timeProvider = null
 ) : IPartCache
 {
 
@@ -34,7 +33,9 @@ internal class PartCache(
     {
         try
         {
-            DateTimeOffset from = (timeProvider.GetUtcNow() - settings.CachedFromDate).StartOfDay();
+            var tp = timeProvider ?? TimeProvider.System;
+
+            DateTimeOffset from = (tp.GetUtcNow() - settings.CachedFromDate).StartOfDay();
             List<PartByRangeInfo> list = await repository.GetPartsFromDate(tableName, from, cancellationToken);
             return list;
         }

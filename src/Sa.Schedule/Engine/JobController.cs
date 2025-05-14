@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sa.Schedule.Settings;
-using Sa.Timing.Providers;
 
 namespace Sa.Schedule.Engine;
 
@@ -9,7 +8,7 @@ namespace Sa.Schedule.Engine;
 /// <summary>
 /// job lifecycly controller with context
 /// </summary>
-internal partial class JobController(IJobSettings settings, IInterceptorSettings interceptorSettings, IServiceScopeFactory scopeFactory) : IJobController
+internal partial class JobController(IJobSettings settings, IInterceptorSettings interceptorSettings, IServiceScopeFactory scopeFactory, TimeProvider timeProvider) : IJobController
 {
     private readonly JobContext context = new(settings);
 
@@ -17,8 +16,7 @@ internal partial class JobController(IJobSettings settings, IInterceptorSettings
 
     public IJobContext Context => context;
 
-    public DateTimeOffset UtcNow => context.JobServices.GetService<ICurrentTimeProvider>()?.GetUtcNow()
-        ?? DateTimeOffset.UtcNow;
+    public DateTimeOffset UtcNow => timeProvider.GetUtcNow();
 
     public async ValueTask WaitToRun(CancellationToken cancellationToken)
     {

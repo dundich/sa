@@ -3,7 +3,7 @@ using Sa.Extensions;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Repository;
-using Sa.Timing.Providers;
+
 
 namespace Sa.Outbox.Delivery;
 
@@ -11,7 +11,7 @@ internal sealed class DeliveryRelay(
     IDeliveryRepository repository
     , IArrayPool arrayPool
     , IPartitionalSupportCache partCache
-    , ICurrentTimeProvider timeProvider
+    , TimeProvider timeProvider
     , IDeliveryCourier deliveryCourier
     , PartitionalSettings? partitionalSettings = null
     ) : IDeliveryRelay
@@ -78,7 +78,9 @@ internal sealed class DeliveryRelay(
     private OutboxMessageFilter CreateFilter<TMessage>(OutboxDeliverySettings settings, int tenantId)
     {
         OutboxMessageTypeInfo ti = OutboxMessageTypeHelper.GetOutboxMessageTypeInfo<TMessage>();
-        DateTimeOffset fromDate = timeProvider.GetUtcNow().StartOfDay() - settings.ExtractSettings.LookbackInterval;
+        DateTimeOffset now = timeProvider.GetUtcNow();
+
+        DateTimeOffset fromDate = now.StartOfDay() - settings.ExtractSettings.LookbackInterval;
 
         return new OutboxMessageFilter(
             GenTransactId()
@@ -86,7 +88,7 @@ internal sealed class DeliveryRelay(
             , tenantId
             , ti.PartName
             , fromDate
-            , timeProvider.GetUtcNow()
+            , now
         );
     }
 

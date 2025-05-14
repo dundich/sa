@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace Sa.Extensions;
 
-public static class DateTimeExtensions
+internal static class DateTimeExtensions
 {
     /// <summary>
     /// Unix timestamp

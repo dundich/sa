@@ -18,9 +18,10 @@ public static class Setup
             Region = options.Region ?? "eu-central-1",
         };
 
-        services
-            .AddSaInfrastructure()
-            .AddS3BucketClientAsSingleton(settings);
+
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
+        
+        services.AddS3BucketClientAsSingleton(settings);
 
 
         services.TryAddSingleton(options);

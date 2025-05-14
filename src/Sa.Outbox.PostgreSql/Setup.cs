@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.PostgreSql.Commands;
 using Sa.Outbox.PostgreSql.Configuration;
@@ -14,9 +14,7 @@ public static class Setup
 {
     public static IServiceCollection AddOutboxUsingPostgreSql(this IServiceCollection services, Action<IPgOutboxConfiguration>? configure = null)
     {
-        services
-            .AddSaInfrastructure();
-
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddSingleton<SqlOutboxTemplate>();
 
         services

@@ -1,9 +1,9 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text;
 
 namespace Sa.Extensions;
 
-public static class ExceptionExtensions
+internal static class ExceptionExtensions
 {
     [DebuggerStepThrough]
     public static bool IsCritical(this Exception ex)

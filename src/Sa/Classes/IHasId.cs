@@ -1,4 +1,4 @@
-﻿namespace Sa.Infrastructure;
+namespace Sa.Classes;
 
 
 public interface IHasId

@@ -9,6 +9,7 @@ internal static class Setup
 {
     public static IServiceCollection AddOutboxDelivery(this IServiceCollection services, Action<IDeliveryBuilder> configure)
     {
+
         // looper - job processor
         services.TryAddSingleton<IDeliveryProcessor, DeliveryProcessor>();
         // iteration - extract from repository & batch & send to courier

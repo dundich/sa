@@ -30,7 +30,7 @@ internal class HybridStorageBuilder(IServiceCollection services) : IHybridFileSt
 
     public void Build()
     {
-        services.AddSaInfrastructure();
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
 
         services.TryAddSingleton<IHybridFileStorage>(sp =>
         {

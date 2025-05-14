@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Sa.HybridFileStorage.Domain\Sa.HybridFileStorage.Domain.csproj" />
     <ProjectReference Include="..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
   </ItemGroup>

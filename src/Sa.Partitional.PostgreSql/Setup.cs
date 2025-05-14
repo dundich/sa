@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Partitional.PostgreSql.Configuration;
 
@@ -8,7 +8,7 @@ public static class Setup
 {
     public static IPartConfiguration AddPartitional(this IServiceCollection services, Action<IServiceProvider, ISettingsBuilder> configure, bool? asJob = null)
     {
-        services.AddSaInfrastructure();
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddSingleton<IPartitionManager, PartitionManager>();
 
         return new PartConfiguration(services)

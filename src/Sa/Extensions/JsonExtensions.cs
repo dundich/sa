@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
@@ -22,4 +22,11 @@ public static class JsonExtensions
     {
         return JsonSerializer.Deserialize<T>(value, options);
     }
+}
+
+
+public static class JsonHttpResultTrimmerWarning
+{
+    public const string SerializationUnreferencedCodeMessage = "JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext.";
+    public const string SerializationRequiresDynamicCodeMessage = "JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation. Use the overload that takes a JsonTypeInfo or JsonSerializerContext.";
 }

@@ -1,11 +1,10 @@
 using Sa.Classes;
 using Sa.Outbox.Support;
-using Sa.Timing.Providers;
 
 namespace Sa.Outbox.Publication;
 
 internal class OutboxMessagePublisher(
-    ICurrentTimeProvider timeProvider,
+    TimeProvider timeProvider,
     IArrayPool arrayPool,
     IOutboxRepository outboxRepository,
     OutboxPublishSettings publishSettings

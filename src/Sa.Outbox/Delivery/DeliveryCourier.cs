@@ -1,4 +1,4 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 using Sa.Outbox.Exceptions;
 
 namespace Sa.Outbox.Delivery;

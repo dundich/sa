@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Outbox.Partitional;
 using Sa.Partitional.PostgreSql;
 
