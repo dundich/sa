@@ -4,6 +4,7 @@
   
   <PropertyGroup>
     <Version>0.0.2</Version>
+    <Description>add a PostgreSQL-based configuration source to IConfiguration</Description>
   </PropertyGroup>
 
   <ItemGroup>

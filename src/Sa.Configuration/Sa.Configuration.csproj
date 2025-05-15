@@ -4,6 +4,7 @@
 
   <PropertyGroup>
     <Version>0.0.2</Version>
+    <Description>extensions for Configuration</Description>
   </PropertyGroup>
 
   <ItemGroup>

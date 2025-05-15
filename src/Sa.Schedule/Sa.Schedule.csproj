@@ -4,6 +4,7 @@
 
   <PropertyGroup>
     <Version>0.0.2</Version>
+    <Description>Execute jobs on a schedule</Description>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
