@@ -8,6 +8,10 @@ Designed for implementing the Outbox pattern using PostgreSQL, which is used to 
 - Flexibility: Supports various types of messages and their handlers.
 - Tenant support: Allows for even distribution of load.
 
+## Attention!
+- **Message delivery more than once:** Messages can be delivered more than once. This can occur due to network issues or repeated delivery attempts. Therefore, it is crucial to ensure idempotency in message processing.
+- **Unordered processing:** The order in which messages are processed may differ from the order in which they were sent.
+
 ## Examples
 
 ### Configuration
