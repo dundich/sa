@@ -3,7 +3,7 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.0.1</Version>
+    <Version>0.0.2</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -13,18 +13,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <NoWarn>1701;1702;CS8602;</NoWarn>
   </PropertyGroup>
-
-
-  <ItemGroup Condition="'$(Configuration)' != 'Release'">
+  
+  <ItemGroup>
     <ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(Configuration)' != 'Release'">
     <ProjectReference Include="..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
   </ItemGroup>
-  <ItemGroup Condition="'$(Configuration)' == 'Release'">
-    <PackageReference Include="Sa.Data.PostgreSql" Version="0.0.1" />
-  </ItemGroup>
+  
   <ItemGroup>
     <Compile Include="..\Sa\Classes\Enumeration.cs" Link="AsLink\Enumeration.cs" />
     <Compile Include="..\Sa\Classes\IHasId.cs" Link="AsLink\IHasId.cs" />

@@ -1,11 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="../Common.NuGet.Properties.xml" />
+
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsAotCompatible>true</IsAotCompatible>
-    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <Version>0.0.2</Version>
+    <Description>File storage management in Pg</Description>
   </PropertyGroup>
 
   <ItemGroup>

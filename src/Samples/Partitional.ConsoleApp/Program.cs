@@ -8,7 +8,7 @@ using Sa.Partitional.PostgreSql;
 
 Console.WriteLine("Hello, Partitional.PostgreSql!");
 
-var connectionString = "Host=localhost;Username=;Password=;Database=test_1";
+var connectionString = "Host=localhost;Username=service_user;Password=service_user;Database=test_1";
 
 
 var hostBuilder = Host.CreateApplicationBuilder(args);
