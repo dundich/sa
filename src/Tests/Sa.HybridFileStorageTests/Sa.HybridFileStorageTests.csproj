@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Sa.HybridFileStorage.FileSystem\Sa.HybridFileStorage.FileSystem.csproj" />
+    <ProjectReference Include="..\..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
     <ProjectReference Include="..\Fixtures\Sa.Fixture\Sa.Fixture.csproj" />
   </ItemGroup>
 

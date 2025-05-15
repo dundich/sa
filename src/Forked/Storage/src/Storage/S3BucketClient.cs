@@ -1,6 +1,6 @@
-using Sa.Storage.Utils;
+using Sa.Data.S3;
 
-namespace Sa.Storage;
+namespace Sa.Data;
 
 /// <summary>
 /// Клиент для загрузки данных в S3 и их получения

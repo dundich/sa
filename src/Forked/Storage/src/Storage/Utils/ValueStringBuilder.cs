@@ -1,4 +1,4 @@
-namespace Sa.Storage.Utils;
+namespace Sa.Data.S3;
 
 [DebuggerDisplay("{ToString()}")]
 internal ref struct ValueStringBuilder(Span<char> initialBuffer)

@@ -28,7 +28,6 @@
   <ItemGroup>
     <Compile Include="..\Sa\Classes\Enumeration.cs" Link="AsLink\Enumeration.cs" />
     <Compile Include="..\Sa\Classes\IHasId.cs" Link="AsLink\IHasId.cs" />
-    <Compile Include="..\Sa\Classes\Quartz.cs" Link="AsLink\Quartz.cs" />
     <Compile Include="..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
     <Compile Include="..\Sa\Classes\Section.cs" Link="AsLink\Section.cs" />
     <Compile Include="..\Sa\Classes\StrOrNum.cs" Link="AsLink\StrOrNum.cs" />

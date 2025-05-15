@@ -38,7 +38,15 @@
 	  </ItemGroup>
 
 	  <ItemGroup>
-	    <ProjectReference Include="..\Forked\Storage\src\Storage\Sa.Storage.csproj" />
+	    <Compile Update="S3BucketClient.Buckets.cs">
+	      <DependentUpon>S3BucketClient.cs</DependentUpon>
+	    </Compile>
+	    <Compile Update="S3BucketClient.Multipart.cs">
+	      <DependentUpon>S3BucketClient.cs</DependentUpon>
+	    </Compile>
+	    <Compile Update="S3BucketClient.Transport.cs">
+	      <DependentUpon>S3BucketClient.cs</DependentUpon>
+	    </Compile>
 	  </ItemGroup>
 
 </Project>

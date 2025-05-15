@@ -1,4 +1,4 @@
-namespace Sa.Storage;
+namespace Sa.Data;
 
 public interface IS3BucketClient: IBucketOperations, IFileOperations
 {

@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Sa.HybridFileStorage.Domain\Sa.HybridFileStorage.Domain.csproj" />
+    <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
     <ProjectReference Include="..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
   </ItemGroup>
 

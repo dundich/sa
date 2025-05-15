@@ -1,4 +1,4 @@
-namespace Sa.Storage;
+namespace Sa.Data;
 
 /// <summary>
 /// Represents the settings required to configure an S3 bucket connection.

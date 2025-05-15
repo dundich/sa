@@ -1,5 +1,5 @@
-using Sa.Storage;
-using Sa.Storage.Utils;
+using Sa.Data.S3;
+using Sa.Data.S3.Utils;
 
 namespace Sa.Data.S3Tests.Utils;
 

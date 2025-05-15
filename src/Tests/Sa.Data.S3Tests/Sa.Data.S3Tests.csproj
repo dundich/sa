@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Forked\Storage\src\Storage\Sa.Storage.csproj" />
     <ProjectReference Include="..\..\Sa.Data.S3\Sa.Data.S3.csproj" />
     <ProjectReference Include="..\Fixtures\Sa.Data.S3.Fixture\Sa.Data.S3.Fixture.csproj" />
   </ItemGroup>

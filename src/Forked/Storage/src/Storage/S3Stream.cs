@@ -1,4 +1,4 @@
-namespace Sa.Storage;
+namespace Sa.Data;
 
 internal sealed class S3Stream(HttpResponseMessage response, Stream stream) : Stream
 {

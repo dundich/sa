@@ -1,4 +1,4 @@
-namespace Sa.Storage;
+namespace Sa.Data;
 
 /// <summary>
 /// Обёртка над <see cref="HttpResponseMessage"/>, позволяющая удобно работать с загруженным файлом

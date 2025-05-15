@@ -1,8 +1,8 @@
-using Sa.Storage.Utils;
+using Sa.Data.S3;
 using System.Text;
-using static Sa.Storage.Utils.HashHelper;
+using static Sa.Data.S3.HashHelper;
 
-namespace Sa.Storage;
+namespace Sa.Data;
 
 /// <summary>
 /// Функции управления multipart-загрузкой

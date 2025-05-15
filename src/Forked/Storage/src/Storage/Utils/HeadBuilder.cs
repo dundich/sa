@@ -1,4 +1,4 @@
-namespace Sa.Storage.Utils;
+namespace Sa.Data.S3;
 
 internal sealed class HeadBuilder(string accessKey, string region, string service)
 {

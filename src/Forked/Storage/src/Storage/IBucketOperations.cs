@@ -1,5 +1,5 @@
 
-namespace Sa.Storage;
+namespace Sa.Data;
 
 public interface IBucketOperations
 {

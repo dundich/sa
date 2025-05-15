@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Sa.Storage.Utils;
+namespace Sa.Data.S3;
 
 internal static class StringUtils
 {

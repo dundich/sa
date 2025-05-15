@@ -1,4 +1,4 @@
-namespace Sa.Storage;
+namespace Sa.Data;
 
 /// <summary>
 /// Интерфейс класса, который берёт массивы из пула и возвращает их в пул.

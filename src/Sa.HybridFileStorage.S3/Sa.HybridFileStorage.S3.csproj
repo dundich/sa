@@ -14,7 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sa.Data.S3\Sa.Data.S3.csproj" />
-    <ProjectReference Include="..\Sa.HybridFileStorage.Domain\Sa.HybridFileStorage.Domain.csproj" />
+    <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

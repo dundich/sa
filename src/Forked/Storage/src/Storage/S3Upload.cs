@@ -1,6 +1,6 @@
-using Sa.Storage.Utils;
+using Sa.Data.S3;
 
-namespace Sa.Storage;
+namespace Sa.Data;
 
 /// <summary>
 /// Структура управления Multipart-загрузкой
