@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Common.NuGet.Properties.xml" />
+
+  <PropertyGroup>
+    <Version>0.0.2</Version>
+    <Description>Simple Outbox for Pg (publishing and using messages)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Sa\Classes\MurmurHash3.cs" Link="AsLink\MurmurHash3.cs" />
+    <Compile Include="..\Sa\Classes\ResetLazy.cs" Link="AsLink\ResetLazy.cs" />
+    <Compile Include="..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\NumericExtensions.cs" Link="AsLink\NumericExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\SpanExtensions.cs" Link="AsLink\SpanExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\StringExtensions.cs" Link="AsLink\StringExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\StrToExtensions.cs" Link="AsLink\StrToExtensions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+    <PackageReference Include="Ulid" Version="1.3.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sa.Outbox\Sa.Outbox.csproj" />
+    <ProjectReference Include="..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="AsLink\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Product>Sa</Product>
+    <Company>dundich</Company>
+    <Authors>dundich</Authors>
+    <Copyright>Copyright © 2025 dundich</Copyright>
+    <PackageReleaseNotes>See https://github.com/dundich/Sa/releases</PackageReleaseNotes>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/dundich/Sa</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/dundich/Sa</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <IncludeSymbols>true</IncludeSymbols>
+  </PropertyGroup>
+  <ItemGroup/>
+  <ItemDefinitionGroup/>
+  <ProjectExtensions/>
+  <ImportGroup/>
+</Project>

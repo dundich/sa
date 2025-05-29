@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Common.NuGet.Properties.xml" />
+
+  <PropertyGroup>
+    <Version>0.0.2</Version>
+    <Description>For managing table partitioning in PostgreSQL</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <NoWarn>1701;1702;CS8602;</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <NoWarn>1701;1702;CS8602;</NoWarn>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
+    <ProjectReference Include="..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <Compile Include="..\Sa\Classes\Enumeration.cs" Link="AsLink\Enumeration.cs" />
+    <Compile Include="..\Sa\Classes\IHasId.cs" Link="AsLink\IHasId.cs" />
+    <Compile Include="..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
+    <Compile Include="..\Sa\Classes\Section.cs" Link="AsLink\Section.cs" />
+    <Compile Include="..\Sa\Classes\StrOrNum.cs" Link="AsLink\StrOrNum.cs" />
+    <Compile Include="..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\EnumerableExtensions.cs" Link="AsLink\EnumerableExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\NumericExtensions.cs" Link="AsLink\NumericExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\StrToExtensions.cs" Link="AsLink\StrToExtensions.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="AsLink\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Common.NuGet.Properties.xml" />
+
+  <PropertyGroup>
+    <Version>0.0.2</Version>
+    <Description>Simple client for Npqsql</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="9.0.3" />
+  </ItemGroup>
+
+</Project>

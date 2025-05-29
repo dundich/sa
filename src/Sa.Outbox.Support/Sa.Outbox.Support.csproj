@@ -1,0 +1,10 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Common.NuGet.Properties.xml" />
+
+  <PropertyGroup>
+    <Version>0.0.2</Version>
+    <Description>Intrfaces for publishing and using messages in the Outbox</Description>
+  </PropertyGroup>
+
+</Project>

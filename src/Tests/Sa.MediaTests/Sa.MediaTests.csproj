@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Host.Test.Properties.xml" />
+  
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Update="xunit.runner.visualstudio" Version="3.1.0" />
+    <PackageReference Update="xunit.v3" Version="2.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="data\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Sa.Media\Sa.Media.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="data\12345.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

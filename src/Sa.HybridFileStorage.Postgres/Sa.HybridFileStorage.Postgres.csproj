@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Common.NuGet.Properties.xml" />
+
+  <PropertyGroup>
+    <Version>0.0.2</Version>
+    <Description>File storage management in Pg</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
+    <ProjectReference Include="..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
+  </ItemGroup>
+
+</Project>

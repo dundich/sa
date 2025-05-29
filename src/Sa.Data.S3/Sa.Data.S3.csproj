@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Common.NuGet.Properties.xml" />
+
+  <PropertyGroup>
+    <Version>0.0.2</Version>
+    <Title>Sa.Data.S3</Title>
+    <Description>Simple client for S3 (Sa.Data.S3)</Description>
+    <PackageTags>s3</PackageTags>
+  </PropertyGroup>
+
+
+	  <ItemGroup>
+		    <InternalsVisibleTo Include="Sa.Data.S3Tests" />
+	  </ItemGroup>
+
+	  <ItemGroup>
+	    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.5" />
+	    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.5.0" />
+	  </ItemGroup>
+
+	  <ItemGroup>
+	    <Compile Update="S3BucketClient.Buckets.cs">
+	      <DependentUpon>S3BucketClient.cs</DependentUpon>
+	    </Compile>
+	    <Compile Update="S3BucketClient.Multipart.cs">
+	      <DependentUpon>S3BucketClient.cs</DependentUpon>
+	    </Compile>
+	    <Compile Update="S3BucketClient.Transport.cs">
+	      <DependentUpon>S3BucketClient.cs</DependentUpon>
+	    </Compile>
+	  </ItemGroup>
+
+</Project>
