@@ -11,10 +11,9 @@ public class AsyncWavReaderTests
     [Fact()]
     public async Task ReadHeaderFromPipeAsync_ValidWavFile_ReturnsCorrectHeader()
     {
-        using var stream = OpenSharedWavFile();
-        var pipeReader = PipeReader.Create(stream);
+        var pipeReader = OpenSharedWavFile();
 
-        var header = await AsyncWavReader.ReadHeaderAsync(pipeReader, TestContext.Current.CancellationToken);
+        var header = await WavHeaderReader.ReadHeaderAsync(pipeReader, TestContext.Current.CancellationToken);
 
         Assert.NotNull(header);
     }
@@ -23,8 +22,8 @@ public class AsyncWavReaderTests
     [Fact]
     public async Task ReadHeaderAsync_ValidWavFile_ReturnsValidHeader()
     {
-        using var stream = OpenSharedWavFile();
-        var reader = new AsyncWavReader(stream);
+        var pipe = OpenSharedWavFile();
+        var reader = new AsyncWavReader(pipe);
 
         var header = await reader.GetHeaderAsync();
 
@@ -37,8 +36,8 @@ public class AsyncWavReaderTests
     [Fact]
     public async Task GetLengthSecondsAsync_ValidWav_ReturnsCorrectDuration()
     {
-        using var stream = OpenSharedWavFile();
-        var reader = new AsyncWavReader(stream);
+        var pipe = OpenSharedWavFile();
+        var reader = new AsyncWavReader(pipe);
 
         double lengthInSeconds = (await reader.GetHeaderAsync()).GetDurationInSeconds();
 
@@ -49,8 +48,8 @@ public class AsyncWavReaderTests
     [Fact]
     public async Task ReadRawChannelSamplesAsync_ValidWavFile_YieldsNonEmptyData()
     {
-        using var stream = OpenSharedWavFile();
-        var reader = new AsyncWavReader(stream);
+        var pipe = OpenSharedWavFile();
+        var reader = new AsyncWavReader(pipe);
 
         await foreach (var (_, sample, _) in reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
         {
@@ -63,8 +62,8 @@ public class AsyncWavReaderTests
     [Fact]
     public async Task ReadNormalizedDoubleSamplesAsync_ValidWavFile_YieldsInRangeValues()
     {
-        using var stream = OpenSharedWavFile();
-        var reader = new AsyncWavReader(stream);
+        var pipe = OpenSharedWavFile();
+        var reader = new AsyncWavReader(pipe);
 
         await foreach (var (_, sample, _) in reader.ReadNormalizedDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
         {
@@ -76,10 +75,10 @@ public class AsyncWavReaderTests
     [Fact]
     public async Task ReadStreamableChunksAsync_ValidWavFile_YieldsChunks()
     {
-        using var stream = OpenSharedWavFile();
-        var reader = new AsyncWavReader(stream);
+        var pipe = OpenSharedWavFile();
+        var reader = new AsyncWavReader(pipe);
 
-        await foreach (var (_, samples, _) in reader.ReadPcm16BitStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, samples, _) in reader.ReadStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.True(samples.Length > 0);
             return;
@@ -103,8 +102,8 @@ public class AsyncWavReaderTests
     [Fact]
     public async Task ReadHeader_ValidMockWav_ReturnsCorrectHeader()
     {
-        using var mockStream = MockWavGenerator.CreateTestPcm16Wav();
-        using var reader = new AsyncWavReader(mockStream);
+        var mockStream = MockWavGenerator.CreateTestPcm16Wav();
+        var reader = new AsyncWavReader(mockStream);
 
         var header = await reader.GetHeaderAsync();
 
@@ -119,24 +118,24 @@ public class AsyncWavReaderTests
     [Fact]
     public async Task ReadNormalizedDoubleSamples_ValidMockWav_YieldsInRangeValues()
     {
-        using var mockStream = MockWavGenerator.CreateTestPcm16Wav(seconds: 1);
-        using var reader = new AsyncWavReader(mockStream);
+        var mockStream = MockWavGenerator.CreateTestPcm16Wav(seconds: 1);
+        var reader = new AsyncWavReader(mockStream);
 
         await foreach (var (_, samples, _) in reader.ReadNormalizedDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.InRange(samples, -1.0, 1.0);
-            return;
+            //return;
         }
     }
 
     [Fact]
     public async Task ReadStreamableChunks_ValidMockWav_YieldsChunks()
     {
-        using var mockStream = MockWavGenerator.CreateTestPcm16Wav(seconds: 1);
-        using var reader = new AsyncWavReader(mockStream);
+        var mockStream = MockWavGenerator.CreateTestPcm16Wav(seconds: 1);
+        var reader = new AsyncWavReader(mockStream);
 
         int chunks = 0;
-        await foreach (var (_, samples, _) in reader.ReadPcm16BitStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, samples, _) in reader.ReadStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.True(samples.Length > 0);
             chunks++;
@@ -149,11 +148,11 @@ public class AsyncWavReaderTests
     [Fact]
     public async Task ReadStreamableChunksAsync_ValidWav_YieldsChunks()
     {
-        using var stream = MockWavGenerator.CreateTestPcm16Wav(seconds: 2);
-        var reader = new AsyncWavReader(stream);
+        var pipe = MockWavGenerator.CreateTestPcm16Wav(seconds: 2);
+        var reader = new AsyncWavReader(pipe);
 
         int chunksCount = 0;
-        await foreach (var (channelId, samples, _) in reader.ReadPcm16BitStreamableChunksAsync(512, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (channelId, samples, _) in reader.ReadStreamableChunksAsync(bufferSize: 512, cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.InRange(channelId, 0, 1);
             Assert.True(samples.Length > 0);
@@ -166,8 +165,8 @@ public class AsyncWavReaderTests
     [Fact]
     public async Task ReadRawChannelSamplesAsync_ValidStereo_ReturnsTwoChannels()
     {
-        await using var stream = MockWavGenerator.CreateTestPcm16Wav(numChannels: 2);
-        var reader = new AsyncWavReader(stream);
+        var pipe = MockWavGenerator.CreateTestPcm16Wav(numChannels: 2);
+        var reader = new AsyncWavReader(pipe);
 
         List<int> channelIds = [];
 
@@ -184,28 +183,59 @@ public class AsyncWavReaderTests
     public async Task ReadNormalizedDoubleSamplesAsync_WithCut_ReturnsTrimmedData()
     {
         const int seconds = 5;
-        await using var stream = MockWavGenerator.CreateTestPcm16Wav(seconds: seconds);
-        var reader = new AsyncWavReader(stream);
+        var pipe = MockWavGenerator.CreateTestPcm16Wav(seconds: seconds);
+        var reader = new AsyncWavReader(pipe);
 
         float cutFrom = 1.0f;
         float cutTo = 4.0f;
 
         int count = 0;
-        await foreach (var (_, _, _) in reader.ReadNormalizedDoubleSamplesAsync(cutFrom, cutTo, cancellationToken: TestContext.Current.CancellationToken))
+        bool eof = false;
+
+        await foreach (var (_, _, isEof) in reader.ReadNormalizedDoubleSamplesAsync(cutFrom, cutTo, cancellationToken: TestContext.Current.CancellationToken))
         {
             count++;
+            eof = isEof;
         }
 
         Assert.InRange(count, 44100 * 2, 44100 * 3); // ~ от 1 до 4 секунды
+        Assert.True(eof);
     }
 
 
-    private static FileStream OpenSharedWavFile(string filePath = FILE) => new(
+    [Fact]
+    public async Task ReadRawChannelSamplesAsync_ShouldSetIsEofAtEndOfFile()
+    {
+        var reader = new AsyncWavReader(OpenSharedWavFile());
+
+        bool eof = false;
+        await foreach (var (_, _, isEof) in reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        {
+            eof = isEof;
+        }
+
+        Assert.True(eof);
+    }
+
+
+    [Fact]
+    public async Task ConvertNormalizedDoubleAsync_ShouldConvertBackToPCM16()
+    {
+        var reader = new AsyncWavReader(OpenSharedWavFile());
+
+        await foreach (var (_, sample, _) in reader.ConvertNormalizedDoubleAsync(AudioEncoding.Pcm16BitSigned, cancellationToken: TestContext.Current.CancellationToken))
+        {
+            Assert.Equal(2, sample.Length); // 16-bit PCM
+        }
+    }
+
+
+    private static PipeReader OpenSharedWavFile(string filePath = FILE) => PipeReader.Create(new FileStream(
             filePath,
             FileMode.Open,
             FileAccess.Read,
             FileShare.ReadWrite
-        );
+    ));
 }
 
 
@@ -215,7 +245,7 @@ public static class MockWavGenerator
     /// <summary>
     /// Генерирует PCM WAV в памяти (16 бит, 44100 Гц)
     /// </summary>
-    public static Stream CreateTestPcm16Wav(int sampleRate = 44100, int numChannels = 1, int seconds = 1)
+    public static PipeReader CreateTestPcm16Wav(int sampleRate = 44100, int numChannels = 1, int seconds = 1)
     {
         int bitsPerSample = 16;
         int bytesPerSample = bitsPerSample / 8;
@@ -255,6 +285,6 @@ public static class MockWavGenerator
 
         ms.Position = 0;
 
-        return ms;
+        return PipeReader.Create(ms);
     }
 }
