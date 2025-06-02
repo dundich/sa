@@ -15,34 +15,55 @@ This library provides an asynchronous and memory-optimized way to read and proce
 
 ```csharp
 using var stream = File.OpenRead("test.wav");
-var wavReader = new AsyncWavReader(stream);
+var reader = new AsyncWavReader(stream);
 
-var header = await wavReader.GetHeaderAsync();
+var header = await reader.GetHeaderAsync();
 Console.WriteLine($"Sample Rate: {header.SampleRate}, Channels: {header.NumChannels}");
 ```
 
-## Read WAV Data
+## Read Data
 
 ```csharp
 
-// Read Normalized Double Samples ([-1.0, 1.0])
-await foreach (var (channelId, samples, isEof) in wavReader.ReadNormalizedDoubleSamplesAsync())
-{
-    Console.WriteLine($"Channel {channelId}, {samples.Length} samples");
-}
+    [Fact]
+    public async Task ReadRawChannelSamplesAsync_ValidWavFile_YieldsNonEmptyData()
+    {
+        var pipe = OpenSharedWavFile();
+        var reader = new AsyncWavReader(pipe);
 
-// Read PCM 16-bit Samples
-await foreach (var (channelId, sample, isEof) in wavReader.ReadPcm16BitSamplesAsync())
-{
-    Console.WriteLine($"Channel {channelId}, {sample.Length} bytes");
-}
+        await foreach (var (_, sample, _) in reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        {
+            Assert.True(sample.Length > 0);
+            return;
+        }
+    }
 
-// Read Streamable Chunks
-await foreach (var chunk in wavReader.ReadStreamableChunksAsync(chunkSizeInSamples: 1024))
-{
-    Console.WriteLine($"Channel {chunk.ChannelId}, {chunk.Data.Length} bytes");
-    // Send to audio driver or network
-}
+
+    [Fact]
+    public async Task ReadNormalizedDoubleSamplesAsync_ValidWavFile_YieldsInRangeValues()
+    {
+        var pipe = OpenSharedWavFile();
+        var reader = new AsyncWavReader(pipe);
+
+        await foreach (var (_, sample, _) in reader.ReadNormalizedDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        {
+            Assert.InRange(sample, -1.0, 1.0);
+            return;
+        }
+    }
+
+    [Fact]
+    public async Task ReadStreamableChunksAsync_ValidWavFile_YieldsChunks()
+    {
+        var pipe = OpenSharedWavFile();
+        var reader = new AsyncWavReader(pipe);
+
+        await foreach (var (_, samples, _) in reader.ReadStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
+        {
+            Assert.True(samples.Length > 0);
+            return;
+        }
+    }
 ```
 
 ## Supported Formats

@@ -2,7 +2,7 @@
 
 namespace Sa.Media;
 
-internal class BinaryPinpeReader(PipeReader reader)
+internal class BinaryPipeReader(PipeReader reader)
 {
     public long Position { get; private set; }
 

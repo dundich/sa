@@ -16,7 +16,7 @@ public static class WavHeaderReader
 
     public static async Task<WavHeader> ReadHeaderAsync(PipeReader pipe, CancellationToken cancellationToken = default)
     {
-        BinaryPinpeReader reader = new(pipe);
+        BinaryPipeReader reader = new(pipe);
         uint chunkId = await reader.ReadUInt32Async(cancellationToken);
         uint chunkSize = await reader.ReadUInt32Async(cancellationToken);
         uint format = await reader.ReadUInt32Async(cancellationToken);

@@ -34,9 +34,6 @@ public class AsyncWavReader(PipeReader reader)
 
         long offsetToData = cutFromOffset - dataOffset;
 
-        if (offsetToData < 0)
-            throw new ArgumentOutOfRangeException(nameof(cutFromSeconds), "Cannot cut before start of data");
-
         if (offsetToData > 0)
             await reader.SkipAsync(offsetToData, cancellationToken);
 

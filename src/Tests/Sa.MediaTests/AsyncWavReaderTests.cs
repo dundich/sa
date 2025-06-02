@@ -124,7 +124,6 @@ public class AsyncWavReaderTests
         await foreach (var (_, samples, _) in reader.ReadNormalizedDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.InRange(samples, -1.0, 1.0);
-            //return;
         }
     }
 
