@@ -1,4 +1,4 @@
-using Sa.Configuration.SecretStore.Engine;
+﻿using Sa.Configuration.SecretStore.Engine;
 
 namespace Sa.Configuration.SecretStore;
 
@@ -9,7 +9,7 @@ public class Secrets(params IReadOnlyCollection<ISecretStore> stores) : ISecretS
 {
     private readonly ChainedSecrets _chainedSecrets = new(stores);
 
-    public string? PopulateSecrets(string? inputString) => _chainedSecrets.PopulateSecrets(inputString);
+    public string? PopulateSecrets(string? inputString, bool returnNullIfSecretNotFound = false) => _chainedSecrets.PopulateSecrets(inputString, returnNullIfSecretNotFound);
 
     private static readonly Lazy<Secrets> s_secrets = new(CreateDefaultSecrets);
 

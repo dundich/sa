@@ -1,4 +1,5 @@
-using Sa.Configuration.SecretStore;
+﻿using Sa.Configuration.SecretStore;
+using Sa.Configuration.SecretStore.Engine;
 
 namespace Sa.ConfigurationTests;
 
@@ -41,7 +42,7 @@ public class SecretServiceTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() => Sub.PopulateSecrets(input));
-        Assert.Equal("The secret name 'missing_key' was not present in vault. Ensure that you have a local `secrets.production.txt` file in the src folder.", exception.Message);
+        Assert.Equal("The secret name 'missing_key' was not present in vault. Ensure that you have a local `secrets.txt` file in the src folder.", exception.Message);
     }
 
     [Fact]
@@ -115,5 +116,117 @@ public class SecretServiceTests
         // Assert 4
         var result4 = secrets.GetSecret("AnotherKey");
         Assert.Empty(result4!);
+    }
+
+
+    [Fact]
+    public void PopulateSecrets_WithMissingSecret_ReturnsNullWhenFlagIsTrue()
+    {
+        // Arrange
+        var secrets = new Dictionary<string, string?>
+        {
+            { "API_KEY", "12345" }
+        };
+        var secretStore = new InMemorySecretStore(secrets);
+        var secretService = new SecretService(secretStore);
+
+        string input = "The API key is {{API_KEY}} and the DB password is {{DB_PASSWORD}}.";
+
+        // Act
+        var result = secretService.PopulateSecrets(input, returnNullIfSecretNotFound: true);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void PopulateSecrets_WithNullInput_ReturnsNull()
+    {
+        // Arrange
+        var secretStore = new InMemorySecretStore([]);
+        var secretService = new SecretService(secretStore);
+
+        // Act
+        var result = secretService.PopulateSecrets(null);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+
+    [Fact]
+    public void PopulateSecrets_OptionalSecretMissing_ReturnsNullWhenFlagIsFalse()
+    {
+        // Arrange
+        var secrets = new Dictionary<string, string?>
+        {
+            { "API_KEY", "12345" }
+        };
+        var secretStore = new InMemorySecretStore(secrets);
+        var secretService = new SecretService(secretStore);
+
+        string input = "API: {{API_KEY}}, Optional password: {{?DB_PASSWORD}}";
+
+        // Act
+        var result = secretService.PopulateSecrets(input);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void PopulateSecrets_OptionalSecretMissing_ReturnsNull()
+    {
+        var secretStore = new InMemorySecretStore([]);
+        var secretService = new SecretService(secretStore);
+
+        string input = "{{?DB_PASSWORD}}";
+
+        // Act
+        var result = secretService.PopulateSecrets(input);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void PopulateSecrets_OptionalSecretMissing_ReturnsNullWhenFlagIsTrue()
+    {
+        // Arrange
+        var secrets = new Dictionary<string, string?>
+        {
+            { "API_KEY", "12345" }
+        };
+        var secretStore = new InMemorySecretStore(secrets);
+        var secretService = new SecretService(secretStore);
+
+        string input = "API: {{API_KEY}}, Optional password: {{?DB_PASSWORD}}";
+
+        // Act
+        var result = secretService.PopulateSecrets(input, returnNullIfSecretNotFound: true);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void PopulateSecrets_OptionalSecretPresent_ReplacesPlaceholder()
+    {
+        // Arrange
+        var secrets = new Dictionary<string, string?>
+        {
+            { "API_KEY", "12345" },
+            { "DB_PASSWORD", "secret!" }
+        };
+        var secretStore = new InMemorySecretStore(secrets);
+        var secretService = new SecretService(secretStore);
+
+        string input = "API: {{API_KEY}}, Optional password: {{?DB_PASSWORD}}";
+
+        // Act
+        var result = secretService.PopulateSecrets(input);
+
+        // Assert
+        Assert.Equal("API: 12345, Optional password: secret!", result);
     }
 }

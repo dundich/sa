@@ -1,4 +1,4 @@
-namespace Sa.Configuration.SecretStore.Engine;
+﻿namespace Sa.Configuration.SecretStore.Engine;
 
 internal class ChainedSecrets : ISecretService, ISecretStore
 {
@@ -15,5 +15,6 @@ internal class ChainedSecrets : ISecretService, ISecretStore
 
     public string? GetSecret(string key) => _store.GetSecret(key);
 
-    public string? PopulateSecrets(string? inputString) => _service.PopulateSecrets(inputString);
+    public string? PopulateSecrets(string? inputString, bool returnNullIfSecretNotFound = false) 
+        => _service.PopulateSecrets(inputString, returnNullIfSecretNotFound);
 }
