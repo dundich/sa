@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../Common.NuGet.Properties.xml" />
+
+  <ItemGroup>
+    <None Remove="runtimes\linux-x64\ffmpeg.zip" />
+    <None Remove="runtimes\win-x64\ffmpeg.zip" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Sa\Classes\IProcessExecutor.cs" Link="IProcessExecutor.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sa.Media.FFmpegTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="runtimes\linux-x64\ffmpeg.zip" />
+    <EmbeddedResource Include="runtimes\win-x64\ffmpeg.zip" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Properties\" />
+  </ItemGroup>
+
+</Project>
