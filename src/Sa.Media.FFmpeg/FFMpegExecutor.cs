@@ -247,7 +247,7 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
         {
             // Не можем писать — пропускаем
             // Логируем ошибку
-            Console.WriteLine($"Write test failed for {dir}: {ex.Message}");
+            Debug.WriteLine($"Write test failed for {dir}: {ex.Message}");
         }
 
         return false;
