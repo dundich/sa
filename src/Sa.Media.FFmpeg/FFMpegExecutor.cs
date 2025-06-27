@@ -174,11 +174,14 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
 
         var ffmpegBinaryPath = Path.Combine(storagePath, executableName);
 
-        // Удаляем старый файл, если он был
         if (File.Exists(ffmpegBinaryPath))
         {
             return ffmpegBinaryPath;
         }
+
+        Directory.CreateDirectory(storagePath);
+        var destinationPath = Path.GetFullPath(ffmpegBinaryPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
 
         var respath = Path.ChangeExtension(relativePath, "zip")
             .Replace('\\', '.')
@@ -193,24 +196,8 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
             ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
 
         using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+        archive.Entries[0].ExtractToFile(destinationPath, overwrite: true);
 
-
-        // Создаем директорию, если не существует
-        Directory.CreateDirectory(storagePath);
-
-        // Извлекаем все файлы
-        foreach (var entry in archive.Entries)
-        {
-            var destinationPath = Path.GetFullPath(ffmpegBinaryPath);
-
-            // Создаем поддиректории, если нужно
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-
-            // Извлекаем файл
-            entry.ExtractToFile(destinationPath, overwrite: true);
-        }
-
-        // Делаем исполняемым на Linux/macOS
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             MakeFileExecutable(ffmpegBinaryPath);
