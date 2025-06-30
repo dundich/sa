@@ -18,7 +18,7 @@ public sealed class FFMpegProcessorTests
     }
 
     [Fact]
-    public async Task GetVersion_ShouldGetVersion()
+    public async Task GetVersion_ShouldNotEmptyGetVersion()
     {
         // Act
         var processor = FFMpegExecutor.Create();

@@ -179,9 +179,8 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
             return ffmpegBinaryPath;
         }
 
-        Directory.CreateDirectory(storagePath);
-        var destinationPath = Path.GetFullPath(ffmpegBinaryPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        var destDir = Path.GetDirectoryName(Path.GetFullPath(ffmpegBinaryPath))!;
+        Directory.CreateDirectory(destDir);
 
         var respath = Path.ChangeExtension(relativePath, "zip")
             .Replace('\\', '.')
@@ -196,11 +195,16 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
             ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
 
         using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
-        archive.Entries[0].ExtractToFile(destinationPath, overwrite: true);
+
+        foreach (var entry in archive.Entries)
+        {
+            entry.ExtractToFile(Path.Combine(destDir, entry.Name), overwrite: true);
+        }
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            MakeFileExecutable(ffmpegBinaryPath);
+            MakeFileExecutable(Path.Combine(destDir, "ffmpeg"));
+            MakeFileExecutable(Path.Combine(destDir, "ffprobe"));
         }
 
         return ffmpegBinaryPath;

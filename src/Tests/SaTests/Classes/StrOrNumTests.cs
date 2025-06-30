@@ -97,5 +97,4 @@ public class StrOrNumTests
         string input = "";
         Assert.Equal("", StrOrNum.FromFmtStr(input));
     }
-
 }
