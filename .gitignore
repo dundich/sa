@@ -797,3 +797,4 @@ FodyWeavers.xsd
 *.sln.iml
 src/.vscode/
 /build/do_push_prod-ex.ps1
+/src/Sa.Media.FFmpeg/runtimes/build/ffmpeg-7.1.tar.gz

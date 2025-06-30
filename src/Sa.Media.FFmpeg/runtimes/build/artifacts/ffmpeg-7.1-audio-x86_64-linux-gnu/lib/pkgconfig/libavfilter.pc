@@ -1,0 +1,14 @@
+prefix=/mnt/c/src/github/dundich/sa/src/Sa.Media.FFmpeg/runtimes/build/artifacts/ffmpeg-7.1-audio-x86_64-linux-gnu
+exec_prefix=${prefix}
+libdir=/mnt/c/src/github/dundich/sa/src/Sa.Media.FFmpeg/runtimes/build/artifacts/ffmpeg-7.1-audio-x86_64-linux-gnu/lib
+includedir=/mnt/c/src/github/dundich/sa/src/Sa.Media.FFmpeg/runtimes/build/artifacts/ffmpeg-7.1-audio-x86_64-linux-gnu/include
+
+Name: libavfilter
+Description: FFmpeg audio/video filtering library
+Version: 10.4.100
+Requires: libavutil >= 59.39.100
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavfilter -pthread -lm -latomic
+Libs.private: 
+Cflags: -I${includedir}
