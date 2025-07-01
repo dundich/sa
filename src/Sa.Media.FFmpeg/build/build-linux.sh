@@ -5,14 +5,22 @@ set -eu
 cd $(dirname $0)
 BASE_DIR=$(pwd)
 
-source common.sh
+echo "starting in $BASE_DIR"
+
+source common.sh || { echo "common.sh не найден или поврежден"; exit 1; }
+
+
+# # Установка зависимостей (только для Ubuntu/Debian)
+# sudo apt update
+# sudo apt install -y build-essential yasm nasm git pkg-config libmp3lame-dev libopus-dev
 
 if [ ! -e $FFMPEG_TARBALL ]
 then
+    echo "Downloading FFmpeg $FFMPEG_TARBALL_URL"
 	curl -s -L -O $FFMPEG_TARBALL_URL
 fi
 
-: ${ARCH?}
+: ${ARCH:=x86_64}  # Если ARCH не задан, используем x86_64
 
 OUTPUT_DIR=artifacts/ffmpeg-$FFMPEG_VERSION-audio-$ARCH-linux-gnu
 
@@ -68,17 +76,57 @@ case $ARCH in
         ;;
 esac
 
+
+
+FFMPEG_CONFIGURE_FLAGS+=(
+
+    # --extra-cflags="-I/usr/local/include"
+    # --extra-ldflags="-L/usr/lib/x86_64-linux-gnu"
+    # --extra-libs="-logg -lm"
+
+    --enable-libmp3lame
+    --enable-libvorbis
+    --enable-libopus
+
+    --enable-encoder=libmp3lame
+    --enable-encoder=libopus
+
+    --enable-parser=vorbis
+
+    --enable-encoder=vorbis
+    --enable-decoder=vorbis
+    --enable-encoder=libvorbis
+    --enable-decoder=libvorbis
+
+    --enable-muxer=ogg
+    --enable-demuxer=ogg
+)
+
+
+# Убедиться, что pkg-config найдет нужные .pc файлы
+export PKG_CONFIG_PATH="/usr/lib/pkgconfig"
+echo "[+] PKG_CONFIG_PATH = $PKG_CONFIG_PATH"
+
+
 BUILD_DIR=$(mktemp -d -p $(pwd) build.XXXXXXXX)
-trap 'rm -rf $BUILD_DIR' EXIT
+# trap 'rm -rf $BUILD_DIR' EXIT
 
 cd $BUILD_DIR
+echo "Extracting FFmpeg... $BUILD_DIR"
 tar --strip-components=1 -xf $BASE_DIR/$FFMPEG_TARBALL
 
 FFMPEG_CONFIGURE_FLAGS+=(--prefix=$BASE_DIR/$OUTPUT_DIR)
 
+echo "Configuring FFmpeg with flags:"
+printf '%s\n' "${FFMPEG_CONFIGURE_FLAGS[@]}"
+
 ./configure "${FFMPEG_CONFIGURE_FLAGS[@]}" || (cat ffbuild/config.log && exit 1)
 
+echo "Building FFmpeg..."
 make
+
+echo "Installing FFmpeg..."
 make install
 
 chown $(stat -c '%u:%g' $BASE_DIR) -R $BASE_DIR/$OUTPUT_DIR
+echo "Build completed successfully!"

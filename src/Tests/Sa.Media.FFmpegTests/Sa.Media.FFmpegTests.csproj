@@ -10,4 +10,13 @@
     <ProjectReference Include="..\..\Sa.Media.FFmpeg\Sa.Media.FFmpeg.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="data\input.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="data\input.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

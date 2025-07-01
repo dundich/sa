@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 
+# apt-get install -y build-essential autoconf automake libtool pkg-config libopus-dev libasound2-dev libvorbis-dev libogg-dev libmp3lame-dev libflac-dev libsoxr-dev wget
+
+
 FFMPEG_VERSION=7.1
 FFMPEG_TARBALL=ffmpeg-$FFMPEG_VERSION.tar.gz
 FFMPEG_TARBALL_URL=http://ffmpeg.org/releases/$FFMPEG_TARBALL
 
 FFMPEG_CONFIGURE_FLAGS=(
+ 
     --disable-shared
     --enable-static
     --enable-pic
@@ -12,11 +16,14 @@ FFMPEG_CONFIGURE_FLAGS=(
     --disable-x86asm
     --disable-doc
     --disable-debug
+
+
     --disable-avdevice
     --disable-swscale
     --disable-programs
     --enable-ffmpeg
     --enable-ffprobe
+
     --disable-network
     --disable-muxers
     --disable-demuxers
@@ -26,18 +33,25 @@ FFMPEG_CONFIGURE_FLAGS=(
     --disable-iconv
     --disable-libxcb
     --disable-bsfs
-    --disable-filters
-    --disable-parsers
+
+
     --disable-indevs
     --disable-outdevs
-    --disable-encoders
-    --disable-decoders
     --disable-hwaccels
     --disable-nvenc
     --disable-videotoolbox
     --disable-audiotoolbox
 
+
+    --enable-gpl
+    --enable-nonfree
+    --enable-version3
+
     --disable-filters
+
+    # --disable-filters
+    --enable-filter=aresample 
+    --enable-filter=copy
     --enable-filter=aformat
     --enable-filter=anull
     --enable-filter=atrim
@@ -45,19 +59,18 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-filter=null
     --enable-filter=setpts
     --enable-filter=trim
-	--enable-swresample
+    --enable-swresample
 
     --disable-protocols
     --enable-protocol=file
     --enable-protocol=pipe
 
-    --enable-demuxer=image2
+    --disable-muxers
+    --enable-muxer=mp3,mp4,ac3,flac,wav,ogg
+
+    --disable-demuxers
     --enable-demuxer=aac
     --enable-demuxer=ac3
-    --enable-demuxer=aiff
-    --enable-demuxer=ape
-    --enable-demuxer=asf
-    --enable-demuxer=au
     --enable-demuxer=avi
     --enable-demuxer=flac
     --enable-demuxer=flv
@@ -88,27 +101,17 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-demuxer=pcm_u16be
     --enable-demuxer=pcm_u16le
     --enable-demuxer=pcm_u8
-    --enable-demuxer=rm
-    --enable-demuxer=shorten
-    --enable-demuxer=tak
-    --enable-demuxer=tta
+
     --enable-demuxer=wav
     --enable-demuxer=wv
     --enable-demuxer=xwma
-    --enable-demuxer=dsf
 
+    --disable-decoders
     --enable-decoder=aac
     --enable-decoder=aac_latm
     --enable-decoder=ac3
-    --enable-decoder=alac
-    --enable-decoder=als
-    --enable-decoder=ape
-    --enable-decoder=atrac1
-    --enable-decoder=atrac3
-    --enable-decoder=eac3
     --enable-decoder=flac
-    --enable-decoder=gsm
-    --enable-decoder=gsm_ms
+
     --enable-decoder=mp1
     --enable-decoder=mp1float
     --enable-decoder=mp2
@@ -121,14 +124,9 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-decoder=mp3on4float
     --enable-decoder=mpc7
     --enable-decoder=mpc8
-    --enable-decoder=opus
-    --enable-decoder=ra_144
-    --enable-decoder=ra_288
-    --enable-decoder=ralf
-    --enable-decoder=shorten
-    --enable-decoder=tak
-    --enable-decoder=tta
     --enable-decoder=vorbis
+    --enable-decoder=opus
+
     --enable-decoder=wavpack
     --enable-decoder=wmalossless
     --enable-decoder=wmapro
@@ -165,20 +163,11 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-decoder=pcm_u24le
     --enable-decoder=pcm_u32be
     --enable-decoder=pcm_u32le
-    --enable-decoder=pcm_zork
-    --enable-decoder=dsd_lsbf
-    --enable-decoder=dsd_msbf
-    --enable-decoder=dsd_lsbf_planar
-    --enable-decoder=dsd_msbf_planar
-
+    
+    --disable-parsers
     --enable-parser=aac
-    --enable-parser=aac_latm
     --enable-parser=ac3
-    --enable-parser=cook
-    --enable-parser=dca
+    --enable-parser=aac_latm
     --enable-parser=flac
-    --enable-parser=gsm
     --enable-parser=mpegaudio
-    --enable-parser=tak
-    --enable-parser=vorbis
 )

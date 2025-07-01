@@ -799,3 +799,4 @@ src/.vscode/
 /build/do_push_prod-ex.ps1
 /src/Sa.Media.FFmpeg/build/*.tar.gz
 /src/Sa.Media.FFmpeg/build/artifacts/
+/src/Sa.Media.FFmpeg/build/build.*/

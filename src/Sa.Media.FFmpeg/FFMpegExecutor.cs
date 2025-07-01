@@ -8,22 +8,61 @@ namespace Sa.Media.FFmpeg;
 
 internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string executablePath) : IFFmpegExecutor
 {
-    public static TimeSpan DefaultTimeout { get; set; } = TimeSpan.FromSeconds(5 * 60);
 
-    public string ExecutablePath { get; } = executablePath;
+    static class Constants
+    {
+        public const string FFmpegFileNameWin = "ffmpeg.exe";
+        public const string FFmpegFileNameLinux = "ffmpeg";
+        public const string FFprobeFileNameWin = "ffprobe.exe";
+        public const string FFprobeFileNameLinux = "ffprobe";
+        public static TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(5 * 60);
 
-    public Task<ProcessExecutionResult> ExecuteAsync(
+        public static bool IsOsWindows { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        public static bool IsOsLinux { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+
+        public static string FFmpegExecutableFileName { get; } = IsOsWindows
+            ? FFmpegFileNameWin
+            : FFmpegFileNameLinux;
+
+        public static string FFprobeExecutableFileName { get; } = IsOsWindows
+            ? FFprobeFileNameWin
+            : FFprobeFileNameLinux;
+    }
+
+
+    public static TimeSpan DefaultTimeout { get; set; } = Constants.Timeout;
+
+    public string FFmpegExecutablePath => executablePath;
+
+    public string FFprobeExecutablePath { get; }
+        = Path.Combine(Path.GetDirectoryName(executablePath)!, Constants.FFprobeExecutableFileName);
+
+    public Task<ProcessExecutionResult> ExecuteFFmpegAsync(
         string commandArguments,
-        bool captureErrorOutput = true,
+        bool captureErrorOutput = false,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         return processExecutor.ExecuteWithResultAsync(
-            GetStartInfo(ExecutablePath, commandArguments)
+            GetStartInfo(FFmpegExecutablePath, commandArguments)
             , captureErrorOutput
             , timeout
             , cancellationToken);
     }
+
+    public Task<ProcessExecutionResult> ExecuteFFprobeAsync(
+        string commandArguments,
+        bool captureErrorOutput = false,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        return processExecutor.ExecuteWithResultAsync(
+            GetStartInfo(FFprobeExecutablePath, commandArguments)
+            , captureErrorOutput
+            , timeout
+            , cancellationToken);
+    }
+
 
     private static ProcessStartInfo GetStartInfo(string path, string arguments)
     {
@@ -57,12 +96,69 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
 
     public async Task<string> GetVersion(CancellationToken cancellationToken = default)
     {
-        var result = await processExecutor.ExecuteWithResultAsync(
-            GetStartInfo(ExecutablePath, "-version"),
-            captureErrorOutput: false,
+        var result = await ExecuteFFmpegAsync("-version", cancellationToken: cancellationToken);
+        return result.StandardOutput;
+    }
+
+    public async Task<string> GetFormats(CancellationToken cancellationToken = default)
+    {
+        var result = await ExecuteFFmpegAsync("-formats", cancellationToken: cancellationToken);
+        return result.StandardOutput;
+    }
+
+    public async Task<string> GetCodecs(CancellationToken cancellationToken = default)
+    {
+        var result = await ExecuteFFmpegAsync("-codecs", cancellationToken: cancellationToken);
+        return result.StandardOutput;
+    }
+
+    public async Task<string> ConvertToPcmS16Le(string inputFileName, string outputFileName, int? targetSampleRate = null, bool isOverwrite = false, CancellationToken cancellationToken = default)
+    {
+        var sampleRate = targetSampleRate != null ? $"-ar {targetSampleRate}" : string.Empty;
+
+        var result = await ExecuteFFmpegAsync($"{(isOverwrite ? "-y" : string.Empty)} -i \"{inputFileName}\" -acodec pcm_s16le {sampleRate} -f wav \"{outputFileName}\"", cancellationToken: cancellationToken);
+        return result.StandardError;
+    }
+
+    public async Task<string> ConvertToMp3(string inputFileName, string outputFileName, bool isOverwrite = false, CancellationToken cancellationToken = default)
+    {
+        var isOver = isOverwrite ? "-y" : string.Empty;
+        var cmd = Constants.IsOsLinux
+            ? $"{isOver} - i \"{inputFileName}\" -f mp3 -c:a libmp3lame \"{outputFileName}\""
+            : $"{isOver} -i \"{inputFileName}\" -f mp3 \"{outputFileName}\"";
+
+        // ffmpeg - i input.wav -c:a libmp3lame output.mp3
+        var result = await ExecuteFFmpegAsync(cmd, cancellationToken: cancellationToken);
+        return result.StandardError;
+    }
+
+    public async Task<string> ConvertToOgg(string inputFileName, string outputFileName, bool isLibopus = false, bool isOverwrite = false, CancellationToken cancellationToken = default)
+    {
+        var isOver = isOverwrite ? "-y" : string.Empty;
+        var cmd = Constants.IsOsLinux
+            ? $"{isOver} - i \"{inputFileName}\" -f ogg -c:a {GetCodec(isLibopus)} \"{outputFileName}\""
+            : $"{isOver} -i \"{inputFileName}\" -f ogg \"{outputFileName}\"";
+
+        var result = await ExecuteFFmpegAsync(cmd, cancellationToken: cancellationToken);
+        return result.StandardError;
+
+        static string GetCodec(bool isLibopus)
+        {
+            return (isLibopus ? "libopus" : "libvorbis");
+        }
+    }
+
+    public async Task<int> GetAudioChannelCount(string filePath, CancellationToken cancellationToken = default)
+    {
+        var result = await ExecuteFFprobeAsync($"-v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 \"{filePath}\"",
             cancellationToken: cancellationToken);
 
-        return result.StandardOutput;
+        if (int.TryParse(result.StandardOutput.Trim(), out int channels))
+        {
+            return channels;
+        }
+
+        throw new InvalidDataException("Failed to determine the number of audio channels.");
     }
 
     public static FFMpegExecutor Default => s_default.Value;
@@ -74,9 +170,7 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
     {
         var appDir = AppContext.BaseDirectory;
 
-        string executableName = GetExecutableName();
-
-        var fullPath = Path.Combine(appDir, executableName);
+        var fullPath = Path.Combine(appDir, ExecutableName);
 
         // 0. Проверяем, существует ли файл в текущей директории
         if (File.Exists(fullPath))
@@ -85,7 +179,7 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
         }
 
         // 1. Проверяем платформозависимый путь
-        string platformPath = GetPlatformFolderPath(executableName);
+        string platformPath = GetPlatformFolderPath(ExecutableName);
 
         fullPath = Path.Combine(appDir, platformPath);
         if (File.Exists(fullPath))
@@ -98,7 +192,7 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
         {
             try
             {
-                var candidate = Path.Combine(dir, executableName);
+                var candidate = Path.Combine(dir, ExecutableName);
                 if (File.Exists(candidate))
                 {
                     return candidate;
@@ -114,14 +208,15 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
         return ExtractFFmpegFromResources(platformPath, writableDirectory ?? FindWritableDirectory());
     }
 
+
     private static string GetPlatformFolderPath(string executableName)
     {
         string platformPath;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (Constants.IsOsWindows)
         {
             platformPath = Path.Combine("runtimes", "win-x64", executableName);
         }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        else if (Constants.IsOsLinux)
         {
             platformPath = Path.Combine("runtimes", "linux-x64", executableName);
         }
@@ -134,13 +229,8 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
         return platformPath;
     }
 
-    private static string GetExecutableName()
-    {
-        // Проверяем стандартные пути установки
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? "ffmpeg.exe"
-            : "ffmpeg";
-    }
+
+    private static string ExecutableName => Constants.FFmpegExecutableFileName;
 
     private static IEnumerable<string> GetCommonSearchPaths()
     {
@@ -152,7 +242,7 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
             paths.AddRange(pathEnv.Split(Path.PathSeparator));
         }
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (Constants.IsOsWindows)
         {
             paths.AddRange(
             [
@@ -170,9 +260,7 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
 
     private static string ExtractFFmpegFromResources(string relativePath, string storagePath)
     {
-        var executableName = GetExecutableName();
-
-        var ffmpegBinaryPath = Path.Combine(storagePath, executableName);
+        var ffmpegBinaryPath = Path.Combine(storagePath, ExecutableName);
 
         if (File.Exists(ffmpegBinaryPath))
         {
@@ -203,8 +291,8 @@ internal sealed class FFMpegExecutor(IProcessExecutor processExecutor, string ex
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            MakeFileExecutable(Path.Combine(destDir, "ffmpeg"));
-            MakeFileExecutable(Path.Combine(destDir, "ffprobe"));
+            MakeFileExecutable(Path.Combine(destDir, Constants.FFmpegFileNameLinux));
+            MakeFileExecutable(Path.Combine(destDir, Constants.FFprobeFileNameLinux));
         }
 
         return ffmpegBinaryPath;

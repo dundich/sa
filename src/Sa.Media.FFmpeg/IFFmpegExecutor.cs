@@ -4,14 +4,20 @@ namespace Sa.Media.FFmpeg;
 
 public interface IFFmpegExecutor
 {
-    string ExecutablePath { get; }
+    string FFmpegExecutablePath { get; }
 
     Task<string> GetVersion(CancellationToken cancellationToken = default);
     
-    Task<ProcessExecutionResult> ExecuteAsync(
+    Task<ProcessExecutionResult> ExecuteFFmpegAsync(
         string commandArguments, 
-        bool captureErrorOutput = true, 
+        bool captureErrorOutput = false, 
         TimeSpan? timeout = null, 
+        CancellationToken cancellationToken = default);
+
+    Task<ProcessExecutionResult> ExecuteFFprobeAsync(
+        string commandArguments,
+        bool captureErrorOutput = false,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
     static IFFmpegExecutor Default { get; } = FFMpegExecutor.Default;
