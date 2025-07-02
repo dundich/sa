@@ -6,6 +6,9 @@
     <Version>0.0.1</Version>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SaTests" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />

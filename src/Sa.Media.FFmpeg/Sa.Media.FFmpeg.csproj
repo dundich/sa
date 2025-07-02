@@ -2,13 +2,19 @@
 
   <Import Project="../Common.NuGet.Properties.xml" />
 
+  <PropertyGroup>
+    <Version>0.0.3</Version>
+    <Description>FFmpeg wrapper</Description>
+  </PropertyGroup>
+  
   <ItemGroup>
     <None Remove="runtimes\linux-x64\ffmpeg.zip" />
     <None Remove="runtimes\win-x64\ffmpeg.zip" />
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\Sa\Classes\IProcessExecutor.cs" Link="IProcessExecutor.cs" />
+    <Compile Include="..\Sa\Classes\IProcessExecutor.cs" Link="AsLink\IProcessExecutor.cs" />
+    <Compile Include="..\Sa\Extensions\StrToExtensions.cs" Link="AsLink\StrToExtensions.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="AsLink\" />
     <Folder Include="Properties\" />
   </ItemGroup>
 

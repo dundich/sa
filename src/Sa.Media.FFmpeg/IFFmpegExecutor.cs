@@ -1,24 +1,32 @@
-﻿using Sa.Classes;
+﻿using Sa.Media.FFmpeg.Services;
 
 namespace Sa.Media.FFmpeg;
 
-public interface IFFmpegExecutor
+public interface IFFMpegExecutor
 {
-    string FFmpegExecutablePath { get; }
-
     Task<string> GetVersion(CancellationToken cancellationToken = default);
-    
-    Task<ProcessExecutionResult> ExecuteFFmpegAsync(
-        string commandArguments, 
-        bool captureErrorOutput = false, 
-        TimeSpan? timeout = null, 
+    Task<string> GetFormats(CancellationToken cancellationToken = default);
+    Task<string> GetCodecs(CancellationToken cancellationToken = default);
+
+    Task<string> ConvertToPcmS16Le(
+        string inputFileName,
+        string outputFileName,
+        int? targetSampleRate = null,
+        bool isOverwrite = false,
         CancellationToken cancellationToken = default);
 
-    Task<ProcessExecutionResult> ExecuteFFprobeAsync(
-        string commandArguments,
-        bool captureErrorOutput = false,
-        TimeSpan? timeout = null,
+    Task<string> ConvertToMp3(
+        string inputFileName,
+        string outputFileName,
+        bool isOverwrite = false,
         CancellationToken cancellationToken = default);
 
-    static IFFmpegExecutor Default { get; } = FFMpegExecutor.Default;
+    Task<string> ConvertToOgg(
+        string inputFileName,
+        string outputFileName,
+        bool isLibopus = false,
+        bool isOverwrite = false,
+        CancellationToken cancellationToken = default);
+
+    public static IFFMpegExecutor Default { get; } = new FFMpegExecutorFactory().CreateFFMpegExecutor();
 }

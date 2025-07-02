@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Sa.Classes;
 
-public interface IProcessExecutor
+internal interface IProcessExecutor
 {
     /// <summary>
     /// Executes a process with real-time output handling

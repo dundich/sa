@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 
@@ -44,6 +44,12 @@ internal static class StrToExtensions
 
     [DebuggerStepThrough]
     public static ulong? StrToULong(this ReadOnlySpan<char> str) => ulong.TryParse(str, CultureInfo.InvariantCulture, out ulong result) ? result : null;
+
+    [DebuggerStepThrough]
+    public static double? StrToDouble(this string? str) => double.TryParse(str, CultureInfo.InvariantCulture, out double result) ? result : null;
+
+    [DebuggerStepThrough]
+    public static double? StrToDouble(this ReadOnlySpan<char> str) => double.TryParse(str, CultureInfo.InvariantCulture, out double result) ? result : null;
 
 
     [DebuggerStepThrough]

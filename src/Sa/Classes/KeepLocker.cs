@@ -1,6 +1,6 @@
 ﻿namespace Sa.Classes;
 
-public static class KeepLocker
+internal static class KeepLocker
 {
     public static IDisposable KeepLocked(TimeSpan lockExpiration, Func<CancellationToken, Task> extendLocked, bool blockImmediately = false, CancellationToken cancellationToken = default)
     {
