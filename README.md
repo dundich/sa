@@ -2,6 +2,7 @@
 
 dot net experimental
 
+
 ## [Sa.Outbox.PostgreSql](src/Sa.Outbox.PostgreSql)
 
 Designed for implementing the Outbox pattern using PostgreSQL, which is used to ensure reliable message delivery in distributed systems. It helps prevent message loss and guarantees that messages will be processed even in the event of failures.
