@@ -1,7 +1,9 @@
 ﻿namespace Sa.Media.FFmpeg.Services;
 
-internal sealed class FFMpegExecutor(IFFMpegProcessExteсutor exteсutor) : IFFMpegExecutor
+internal sealed class FFMpegExecutor(IFFProcessExteсutor exteсutor) : IFFMpegExecutor
 {
+    public IFFProcessExteсutor Exteсutor => exteсutor;
+
     public async Task<string> GetVersion(CancellationToken cancellationToken = default)
     {
         var result = await exteсutor.ExecuteAsync("-version", cancellationToken: cancellationToken);

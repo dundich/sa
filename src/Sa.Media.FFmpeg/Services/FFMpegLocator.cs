@@ -14,19 +14,19 @@ internal class FFMpegLocator : IFFMpegLocator
         var executableName = Constants.FFmpegExecutableFileName;
 
         var appDir = AppContext.BaseDirectory;
+
+        // 1. current dir
         var fullPath = Path.Combine(appDir, executableName);
-
-        // 1. Проверяем текущую директорию
         if (File.Exists(fullPath))
             return fullPath;
 
-        // 2. Ищем в платформозависимой подпапке (runtimes/win-x64/ffmpeg.exe)
-        string platformPath = GetPlatformFolderPath(executableName);
-        fullPath = Path.Combine(appDir, platformPath);
+        // 2. (runtimes/win-x64)
+        string platformPath = GetPlatformFolder();
+        fullPath = Path.Combine(appDir, platformPath, executableName);
         if (File.Exists(fullPath))
             return fullPath;
 
-        // 3. Ищем в системных PATH
+        // 3. in system PATH
         foreach (var dir in GetCommonSearchPaths())
         {
             try
@@ -37,12 +37,11 @@ internal class FFMpegLocator : IFFMpegLocator
             }
             catch
             {
-                // Пропускаем ошибки доступа
+                // ignore error
             }
         }
 
-        // 4. Извлекаем из ресурсов
-
+        // 4. from resx
         writableDirectory ??= FindWritableDirectory();
         return ExtractFFmpegFromResources(platformPath, writableDirectory);
     }
@@ -52,28 +51,20 @@ internal class FFMpegLocator : IFFMpegLocator
     /// <summary>
     /// Извлекает ffmpeg из встроенных ресурсов ассембли.
     /// </summary>
-    private static string ExtractFFmpegFromResources(string relativePath, string storagePath)
+    private static string ExtractFFmpegFromResources(string relativePath, string destDir)
     {
-        var ffmpegBinaryPath = Path.Combine(storagePath, Constants.FFmpegExecutableFileName);
-
-        if (File.Exists(ffmpegBinaryPath))
-            return ffmpegBinaryPath;
-
-        var destDir = Path.GetDirectoryName(Path.GetFullPath(ffmpegBinaryPath))
-            ?? throw new ArgumentException("Invalid path");
-
-        Directory.CreateDirectory(destDir);
-
-        var respath = Path.ChangeExtension(relativePath, "zip")
+        var resourcePath = Path.ChangeExtension(Path.Combine(relativePath, Constants.FFmpegExecutableFileName), "zip")
             .Replace('\\', '.')
             .Replace('/', '.')
             .Replace('-', '_');
 
         var assembly = typeof(FFMpegLocator).Assembly;
-        var resourceName = $"{assembly.GetName().Name}.{respath}";
+        var resourceName = $"{assembly.GetName().Name}.{resourcePath}";
 
         using var zipStream = assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
+
+        Directory.CreateDirectory(destDir);
 
         using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
         foreach (var entry in archive.Entries)
@@ -87,7 +78,7 @@ internal class FFMpegLocator : IFFMpegLocator
             MakeFileExecutable(Path.Combine(destDir, Constants.FFprobeFileNameLinux));
         }
 
-        return ffmpegBinaryPath;
+        return Path.Combine(destDir, Constants.FFmpegExecutableFileName);
     }
 
     /// <summary>
@@ -113,35 +104,25 @@ internal class FFMpegLocator : IFFMpegLocator
     }
 
     /// <summary>
-    /// Находит подходящую директорию для записи временных файлов.
+    /// Find a Suitable Directory for Temporary Files
     /// </summary>
     private static string FindWritableDirectory()
     {
         string[] candidates =
         [
-            Path.Combine(Directory.GetCurrentDirectory(), "data"),
-                Path.GetTempPath()
+            Path.Combine(AppContext.BaseDirectory, GetPlatformFolder())
+            , Path.GetTempPath()
         ];
 
         return Array.Find(candidates, CanWriteToDirectory)
             ?? throw new IOException("No writable directory found.");
     }
 
-    private static string GetPlatformFolderPath(string executableName)
+    private static string GetPlatformFolder()
     {
-        if (Constants.IsOsWindows)
-        {
-            return Path.Combine("runtimes", "win-x64", executableName);
-        }
-        else if (Constants.IsOsLinux)
-        {
-            return Path.Combine("runtimes", "linux-x64", executableName);
-        }
-        else
-        {
-            throw new PlatformNotSupportedException(
-                $"Platform '{RuntimeInformation.OSDescription}' is not supported.");
-        }
+        return Constants.IsOsLinux
+            ? Path.Combine("runtimes", "linux-x64")
+            : Path.Combine("runtimes", "win-x64");
     }
 
     private static IEnumerable<string> GetCommonSearchPaths()

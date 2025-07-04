@@ -1,8 +1,8 @@
 ﻿using Sa.Classes;
 
-namespace Sa.Media.FFmpeg.Services;
+namespace Sa.Media.FFmpeg;
 
-internal interface IFFMpegProcessExteсutor
+public interface IFFProcessExteсutor
 {
     string ExecutablePath { get; }
     TimeSpan DefaultTimeout { get; }

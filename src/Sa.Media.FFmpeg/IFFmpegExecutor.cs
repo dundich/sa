@@ -4,6 +4,7 @@ namespace Sa.Media.FFmpeg;
 
 public interface IFFMpegExecutor
 {
+    IFFProcessExteсutor Exteсutor { get; }
     Task<string> GetVersion(CancellationToken cancellationToken = default);
     Task<string> GetFormats(CancellationToken cancellationToken = default);
     Task<string> GetCodecs(CancellationToken cancellationToken = default);

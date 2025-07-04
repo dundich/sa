@@ -3,8 +3,10 @@ using System.Text.Json;
 
 namespace Sa.Media.FFmpeg.Services;
 
-internal class FFProbeExecutor(IFFMpegProcessExteсutor exteсutor) : IFFProbeExecutor
+internal class FFProbeExecutor(IFFProcessExteсutor exteсutor) : IFFProbeExecutor
 {
+    public IFFProcessExteсutor Exteсutor => exteсutor;
+
     public async Task<int> GetAudioChannelCount(string filePath, CancellationToken cancellationToken = default)
     {
         var result = await exteсutor.ExecuteAsync(
