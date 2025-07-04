@@ -8,12 +8,16 @@ public sealed class FFProbeProcessorTests
 
     static IFFProbeExecutor Processor => IFFProbeExecutor.Default;
 
-    [Fact]
-    public async Task GetAudioChannelCount_ShouldBeWork()
+    [Theory]
+    [InlineData(@".\data\input.mp3")]
+    [InlineData(@".\data\input.wav")]
+    [InlineData(@".\data\input.ogg")]
+    public async Task GetAudioChannelCount_ShouldBeWork(string testFilePath)
     {
         // Act
-        var r = await Processor.GetAudioChannelCount(@".\data\input.mp3", cancellationToken: CancellationToken);
-        Assert.Equal(2, r);
+        var (channels, sampleRate) = await Processor.GetChannelsAndSampleRate(testFilePath, cancellationToken: CancellationToken);
+        Assert.Equal(2, channels);
+        Assert.True(sampleRate > 0);
     }
 
     [Theory]

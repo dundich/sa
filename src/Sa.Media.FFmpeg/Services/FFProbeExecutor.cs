@@ -7,18 +7,15 @@ internal class FFProbeExecutor(IFFProcessExteсutor exteсutor) : IFFProbeExecut
 {
     public IFFProcessExteсutor Exteсutor => exteсutor;
 
-    public async Task<int> GetAudioChannelCount(string filePath, CancellationToken cancellationToken = default)
+    public async Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRate(string filePath, CancellationToken cancellationToken = default)
     {
         var result = await exteсutor.ExecuteAsync(
-            $"-v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 \"{filePath}\"",
+            $"-v error -show_entries stream=channels,sample_rate -of default=nw=1 \"{filePath}\"",
             cancellationToken: cancellationToken);
 
-        if (int.TryParse(result.StandardOutput.Trim(), out var channels))
-        {
-            return channels;
-        }
+        string output = result.StandardOutput;
 
-        throw new InvalidDataException("Failed to determine the number of audio channels.");
+        return FFOutputParser.ParseChannelsAndSampleRate(output);
     }
 
     public async Task<MediaMetadata> GetMetaInfo(string filePath, CancellationToken cancellationToken = default)

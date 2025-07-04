@@ -6,7 +6,7 @@ public interface IFFProbeExecutor
 {
     public IFFProcessExteсutor Exteсutor { get; }
 
-    Task<int> GetAudioChannelCount(string filePath, CancellationToken cancellationToken = default);
+    Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRate(string filePath, CancellationToken cancellationToken = default);
     Task<MediaMetadata> GetMetaInfo(string filePath, CancellationToken cancellationToken = default);
 
     public static IFFProbeExecutor Default { get; } = new FFMpegExecutorFactory().CreateFFProbeExecutor();
