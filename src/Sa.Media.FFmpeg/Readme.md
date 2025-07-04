@@ -5,7 +5,8 @@
 A cross-platform .NET wrapper for FFmpeg (Windows x64 and Linux), designed to simplify audio and video processing in .NET applications. The library provides a bundled static FFmpeg build when it is not installed system-wide, ensuring smooth operation without external dependencies.
 
 - Extract metadata from media files (duration, channels, sample rate, etc.)
-- Convert audio to: wav, mp3, mp4, ogg, acc3 ..
+- Convert audio to: wav, mp3, mp4, ogg, ac3, mov ..
+- Splits input audio file by channels
 - Built-in FFmpeg binaries for Windows x64 and Linux
 - Supports Dependency Injection (DI) via standard IServiceCollection integration
 
@@ -32,4 +33,25 @@ using var host = Host.CreateDefaultBuilder()
 var ffmpeg = host.Services.GetRequiredService<IFFMpegExecutor>();
 
 await ffmpeg.ConvertToMp3("input.wav", "output.mp3");
+```
+
+
+Splits input audio file by channels
+
+```csharp
+var splitter = new PcmS16LeChannelSplitter(ffmpegExecutor, ffprobeExecutor);
+
+var resultFiles = await splitter.SplitAsync(
+    inputFileName: "input.mp3",
+    outputFileName: "output.wav",
+    sampleRate: 16000,
+    isOverwrite: true
+);
+```
+
+This will produce:
+
+```
+output_channel_0.wav
+output_channel_1.wav
 ```

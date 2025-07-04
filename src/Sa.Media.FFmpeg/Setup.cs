@@ -14,6 +14,7 @@ public static class Setup
         services.TryAddTransient<IFFMpegExecutorFactory, FFMpegExecutorFactory>();
         services.TryAddSingleton<IFFMpegExecutor>(sp => sp.GetRequiredService<IFFMpegExecutorFactory>().CreateFFMpegExecutor(options));
         services.TryAddSingleton<IFFProbeExecutor>(sp => sp.GetRequiredService<IFFMpegExecutorFactory>().CreateFFProbeExecutor(options));
+        services.TryAddSingleton<IPcmS16LeChannelSplitter, PcmS16LeChannelSplitter>();
 
         return services;
     }

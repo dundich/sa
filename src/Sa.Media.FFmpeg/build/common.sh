@@ -3,7 +3,7 @@
 # apt-get install -y build-essential autoconf automake libtool pkg-config libopus-dev libasound2-dev libvorbis-dev libogg-dev libmp3lame-dev libflac-dev libsoxr-dev wget
 
 
-FFMPEG_VERSION=7.1
+FFMPEG_VERSION=7.1.1
 FFMPEG_TARBALL=ffmpeg-$FFMPEG_VERSION.tar.gz
 FFMPEG_TARBALL_URL=http://ffmpeg.org/releases/$FFMPEG_TARBALL
 
@@ -49,8 +49,8 @@ FFMPEG_CONFIGURE_FLAGS=(
 
     --disable-filters
 
-    # --disable-filters
-    --enable-filter=aresample 
+    --enable-filter=aresample
+    --enable-filter=channelsplit 
     --enable-filter=copy
     --enable-filter=aformat
     --enable-filter=anull
@@ -59,6 +59,9 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-filter=null
     --enable-filter=setpts
     --enable-filter=trim
+    --enable-filter=pan 
+    --enable-filter=showinfo
+    
     --enable-swresample
 
     --disable-protocols

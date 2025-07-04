@@ -32,12 +32,11 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
     {
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
         var channelCount = outputChannelCount.HasValue ? "-ac 1" : string.Empty;
-        var overwrite = isOverwrite ? "-y" : string.Empty;
-        
+
         var result = await exteсutor.ExecuteAsync(
-            $"{overwrite} -i \"{inputFileName}\" -acodec pcm_s16le {channelCount} {sampleRate} -f wav \"{outputFileName}\"",
+            $"{OverArg(isOverwrite)} -i {QuotePath(inputFileName)} -acodec pcm_s16le {channelCount} {sampleRate} -f wav {QuotePath(outputFileName)}",
             cancellationToken: cancellationToken);
-        
+
         return result.StandardError;
     }
 
@@ -47,11 +46,7 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
         bool isOverwrite = false,
         CancellationToken cancellationToken = default)
     {
-        var isOver = isOverwrite ? "-y" : string.Empty;
-        var cmd = Constants.IsOsLinux
-            ? $"{isOver} -i \"{inputFileName}\" -f mp3 -c:a libmp3lame \"{outputFileName}\""
-            : $"{isOver} -i \"{inputFileName}\" -f mp3 \"{outputFileName}\"";
-
+        var cmd = $"{OverArg(isOverwrite)} -i {QuotePath(inputFileName)} -f mp3 {Libmp3lameArg()} {QuotePath(outputFileName)}";
         var result = await exteсutor.ExecuteAsync(cmd, cancellationToken: cancellationToken);
         return result.StandardError;
     }
@@ -63,13 +58,20 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
         bool isOverwrite = false,
         CancellationToken cancellationToken = default)
     {
-        var isOver = isOverwrite ? "-y" : string.Empty;
-        var codec = isLibopus ? "libopus" : "libvorbis";
-        var cmd = Constants.IsOsLinux
-            ? $"{isOver} -i \"{inputFileName}\" -f ogg -c:a {codec} \"{outputFileName}\""
-            : $"{isOver} -i \"{inputFileName}\" -f ogg \"{outputFileName}\"";
-
+        var cmd = $"{OverArg(isOverwrite)} -i {QuotePath(inputFileName)} -f ogg {LibopuArg(isLibopus)} {QuotePath(outputFileName)}";
         var result = await exteсutor.ExecuteAsync(cmd, cancellationToken: cancellationToken);
         return result.StandardError;
     }
+
+    private static string Libmp3lameArg() => Constants.IsOsLinux ? "-c:a libmp3lame" : string.Empty;
+
+    private static string OverArg(bool isOverwrite) => isOverwrite ? "-y" : string.Empty;
+
+    private static string LibopuArg(bool isLibopus)
+    {
+        if (!Constants.IsOsLinux) return string.Empty;
+        return isLibopus ? "-c:a libopus" : "-c:a libvorbis";
+    }
+
+    private static string QuotePath(string path) => $"\"{path}\"";
 }

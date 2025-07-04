@@ -7,4 +7,7 @@ public interface IFFRawExteсutor
     string ExecutablePath { get; }
     TimeSpan DefaultTimeout { get; }
     Task<ProcessExecutionResult> ExecuteAsync(string commandArguments, bool captureErrorOutput = false, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+
+    Task<ProcessExecutionResult> ExecuteAsync(IEnumerable<string> commandArguments, bool captureErrorOutput = false, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        => ExecuteAsync(string.Join(" ", commandArguments), captureErrorOutput, timeout, cancellationToken);
 }
