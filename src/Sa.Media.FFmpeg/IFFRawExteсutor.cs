@@ -2,7 +2,7 @@
 
 namespace Sa.Media.FFmpeg;
 
-public interface IFFProcessExteсutor
+public interface IFFRawExteсutor
 {
     string ExecutablePath { get; }
     TimeSpan DefaultTimeout { get; }

@@ -4,7 +4,7 @@ namespace Sa.Media.FFmpeg;
 
 public interface IFFMpegExecutor
 {
-    IFFProcessExteсutor Exteсutor { get; }
+    IFFRawExteсutor Exteсutor { get; }
     Task<string> GetVersion(CancellationToken cancellationToken = default);
     Task<string> GetFormats(CancellationToken cancellationToken = default);
     Task<string> GetCodecs(CancellationToken cancellationToken = default);
@@ -12,7 +12,8 @@ public interface IFFMpegExecutor
     Task<string> ConvertToPcmS16Le(
         string inputFileName,
         string outputFileName,
-        int? targetSampleRate = null,
+        int? outputSampleRate = null,
+        int? outputChannelCount = null,
         bool isOverwrite = false,
         CancellationToken cancellationToken = default);
 

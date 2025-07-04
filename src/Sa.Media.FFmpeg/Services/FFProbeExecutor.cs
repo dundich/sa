@@ -3,9 +3,9 @@ using System.Text.Json;
 
 namespace Sa.Media.FFmpeg.Services;
 
-internal class FFProbeExecutor(IFFProcessExteсutor exteсutor) : IFFProbeExecutor
+internal class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExecutor
 {
-    public IFFProcessExteсutor Exteсutor => exteсutor;
+    public IFFRawExteсutor Exteсutor => exteсutor;
 
     public async Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRate(string filePath, CancellationToken cancellationToken = default)
     {

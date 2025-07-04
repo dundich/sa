@@ -63,4 +63,41 @@ public sealed class FFMpegProcessorTests
             testFilePath, @".\data\output.ogg_", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.NotEmpty(r);
     }
+
+
+    [Theory]
+    [InlineData(@".\data\input.ogg")]
+    [InlineData(@".\data\input.wav")]
+    [InlineData(@".\data\input.mp3")]
+    public async Task ConvertToMono_ShouldProduceValidMonoFile(string inputPath)
+    {
+        // Arrange
+        string outputPath = Path.ChangeExtension(inputPath, ".pcm");
+
+        if (File.Exists(outputPath))
+            File.Delete(outputPath);
+
+
+        _ = await Processor.ConvertToPcmS16Le(
+            inputFileName: inputPath,
+            outputFileName: outputPath,
+            isOverwrite: true,
+            outputChannelCount: 1,
+            outputSampleRate: 8000,
+            cancellationToken: CancellationToken
+        );
+
+        Assert.True(File.Exists(outputPath));
+
+        var ffprobe = CreateFFProbeExecutor(); 
+        var (channels, sampleRate) = await ffprobe.GetChannelsAndSampleRate(outputPath, cancellationToken:CancellationToken);
+
+        Assert.Equal(1, channels);
+        Assert.Equal(8000, sampleRate);
+    }
+
+    private static IFFProbeExecutor CreateFFProbeExecutor()
+    {
+        return IFFProbeExecutor.Default;
+    }
 }

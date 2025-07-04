@@ -4,10 +4,10 @@ using System.Text;
 
 namespace Sa.Media.FFmpeg.Services;
 
-internal class FFProcessExteсutor(
+internal class FFRawExteсutor(
     IProcessExecutor executor
     , string executablePath
-    , TimeSpan timeout) : IFFProcessExteсutor
+    , TimeSpan timeout) : IFFRawExteсutor
 {
     public string ExecutablePath => executablePath;
 

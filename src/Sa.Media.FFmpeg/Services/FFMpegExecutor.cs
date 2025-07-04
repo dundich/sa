@@ -1,8 +1,8 @@
 ﻿namespace Sa.Media.FFmpeg.Services;
 
-internal sealed class FFMpegExecutor(IFFProcessExteсutor exteсutor) : IFFMpegExecutor
+internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecutor
 {
-    public IFFProcessExteсutor Exteсutor => exteсutor;
+    public IFFRawExteсutor Exteсutor => exteсutor;
 
     public async Task<string> GetVersion(CancellationToken cancellationToken = default)
     {
@@ -25,15 +25,19 @@ internal sealed class FFMpegExecutor(IFFProcessExteсutor exteсutor) : IFFMpegE
     public async Task<string> ConvertToPcmS16Le(
         string inputFileName,
         string outputFileName,
-        int? targetSampleRate = null,
+        int? outputSampleRate = null,
+        int? outputChannelCount = null,
         bool isOverwrite = false,
         CancellationToken cancellationToken = default)
     {
-        var sampleRate = targetSampleRate.HasValue ? $"-ar {targetSampleRate}" : string.Empty;
+        var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
+        var channelCount = outputChannelCount.HasValue ? "-ac 1" : string.Empty;
         var overwrite = isOverwrite ? "-y" : string.Empty;
+        
         var result = await exteсutor.ExecuteAsync(
-            $"{overwrite} -i \"{inputFileName}\" -acodec pcm_s16le {sampleRate} -f wav \"{outputFileName}\"",
+            $"{overwrite} -i \"{inputFileName}\" -acodec pcm_s16le {channelCount} {sampleRate} -f wav \"{outputFileName}\"",
             cancellationToken: cancellationToken);
+        
         return result.StandardError;
     }
 

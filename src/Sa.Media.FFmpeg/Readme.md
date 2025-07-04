@@ -5,7 +5,7 @@
 A cross-platform .NET wrapper for FFmpeg (Windows x64 and Linux), designed to simplify audio and video processing in .NET applications. The library provides a bundled static FFmpeg build when it is not installed system-wide, ensuring smooth operation without external dependencies.
 
 - Extract metadata from media files (duration, channels, sample rate, etc.)
-- Convert audio to: WAV, MP3, OGG ..
+- Convert audio to: wav, mp3, mp4, ogg, acc3 ..
 - Built-in FFmpeg binaries for Windows x64 and Linux
 - Supports Dependency Injection (DI) via standard IServiceCollection integration
 

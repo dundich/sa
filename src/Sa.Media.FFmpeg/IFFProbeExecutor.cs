@@ -4,7 +4,7 @@ namespace Sa.Media.FFmpeg;
 
 public interface IFFProbeExecutor
 {
-    public IFFProcessExteсutor Exteсutor { get; }
+    public IFFRawExteсutor Exteсutor { get; }
 
     Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRate(string filePath, CancellationToken cancellationToken = default);
     Task<MediaMetadata> GetMetaInfo(string filePath, CancellationToken cancellationToken = default);
