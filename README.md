@@ -54,3 +54,13 @@ A library designed for managing table partitioning in PostgreSQL with the aim of
 ## [Sa.Media](src/Sa.Media)
 
 - `AsyncWavReader` async and memory-efficient WAV file reader for .NET
+
+
+## [Sa.Media.FFmpeg](src/Sa.Media.FFmpeg)
+
+FFmpeg .NET Wrapper - ready to use out of the box with minimal setup
+
+- Extract metadata from media files (duration, channels, sample rate, etc.)
+- Convert audio to: WAV, MP3, OGG ..
+- Built-in FFmpeg binaries for Windows x64 and Linux
+- Supports Dependency Injection (DI) via standard IServiceCollection integration
