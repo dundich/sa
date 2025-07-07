@@ -6,7 +6,7 @@ A cross-platform .NET wrapper for FFmpeg (Windows x64 and Linux), designed to si
 
 - Extract metadata from media files (duration, channels, sample rate, etc.)
 - Convert audio to: wav, mp3, mp4, ogg, ac3, mov ..
-- Splits input audio file by channels
+- Splits/Join audio file by channels
 - Built-in FFmpeg binaries for Windows x64 and Linux
 - Supports Dependency Injection (DI) via standard IServiceCollection integration
 
@@ -39,7 +39,7 @@ await ffmpeg.ConvertToMp3("input.wav", "output.mp3");
 Splits input audio file by channels
 
 ```csharp
-var splitter = new PcmS16LeChannelSplitter(ffmpegExecutor, ffprobeExecutor);
+var splitter = new PcmS16LeChannelManipulator();
 
 var resultFiles = await splitter.SplitAsync(
     inputFileName: "input.mp3",

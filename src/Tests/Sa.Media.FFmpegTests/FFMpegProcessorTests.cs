@@ -38,37 +38,37 @@ public sealed class FFMpegProcessorTests
     {
         // Act
         var r = await Processor.ConvertToPcmS16Le(
-            @".\data\input.mp3", @".\data\output.wav_", isOverwrite: true, cancellationToken: CancellationToken);
+            "./data/input.mp3", "./data/output.wav_", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.NotEmpty(r);
     }
 
     [Theory]
-    [InlineData(@".\data\input.ogg")]
-    [InlineData(@".\data\input.wav")]
+    [InlineData("./data/input.ogg")]
+    [InlineData("./data/input.wav")]
     public async Task ConvertToMp3_ShouldBeWork(string testFilePath)
     {
         // Act
         var r = await Processor.ConvertToMp3(
-            testFilePath, @".\data\output.mp3_", isOverwrite: true, cancellationToken: CancellationToken);
+            testFilePath, "./data/output.mp3_", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.NotEmpty(r);
     }
 
     [Theory]
-    [InlineData(@".\data\input.mp3")]
-    [InlineData(@".\data\input.wav")]
+    [InlineData("./data/input.mp3")]
+    [InlineData("./data/input.wav")]
     public async Task ConvertToOgg_ShouldBeWork(string testFilePath)
     {
         // Act
         var r = await Processor.ConvertToOgg(
-            testFilePath, @".\data\output.ogg_", isOverwrite: true, cancellationToken: CancellationToken);
+            testFilePath, "./data/output.ogg_", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.NotEmpty(r);
     }
 
 
     [Theory]
-    [InlineData(@".\data\input.ogg")]
-    [InlineData(@".\data\input.wav")]
-    [InlineData(@".\data\input.mp3")]
+    [InlineData("./data/input.ogg")]
+    [InlineData("./data/input.wav")]
+    [InlineData("./data/input.mp3")]
     public async Task ConvertToMono_ShouldProduceValidMonoFile(string inputPath)
     {
         // Arrange

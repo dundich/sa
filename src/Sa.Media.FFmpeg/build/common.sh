@@ -61,6 +61,9 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-filter=trim
     --enable-filter=pan 
     --enable-filter=showinfo
+    --enable-filter=concat
+    --enable-filter=amerge
+    --enable-filter=join
     
     --enable-swresample
 

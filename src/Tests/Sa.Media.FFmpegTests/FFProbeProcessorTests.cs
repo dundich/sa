@@ -9,9 +9,9 @@ public sealed class FFProbeProcessorTests
     static IFFProbeExecutor Processor => IFFProbeExecutor.Default;
 
     [Theory]
-    [InlineData(@".\data\input.mp3")]
-    [InlineData(@".\data\input.wav")]
-    [InlineData(@".\data\input.ogg")]
+    [InlineData("./data/input.mp3")]
+    [InlineData("./data/input.wav")]
+    [InlineData("./data/input.ogg")]
     public async Task GetAudioChannelCount_ShouldBeWork(string testFilePath)
     {
         // Act
@@ -21,9 +21,9 @@ public sealed class FFProbeProcessorTests
     }
 
     [Theory]
-    [InlineData(@".\data\input.mp3")]
-    [InlineData(@".\data\input.wav")]
-    [InlineData(@".\data\input.ogg")]
+    [InlineData("./data/input.mp3")]
+    [InlineData("./data/input.wav")]
+    [InlineData("./data/input.ogg")]
     public async Task GetMetaInfo_CorrectlyReadsRealFile(string testFilePath)
     {
         // Act
