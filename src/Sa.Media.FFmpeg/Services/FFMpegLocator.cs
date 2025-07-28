@@ -47,6 +47,8 @@ internal class FFMpegLocator : IFFMpegLocator
     }
 
 
+    static readonly Lock s_lock = new();
+
 
     /// <summary>
     /// Извлекает ffmpeg из встроенных ресурсов ассембли.
@@ -66,19 +68,26 @@ internal class FFMpegLocator : IFFMpegLocator
 
         Directory.CreateDirectory(destDir);
 
-        using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
-        foreach (var entry in archive.Entries)
+        string executableFile = Path.Combine(destDir, Constants.FFmpegExecutableFileName);
+
+        lock (s_lock)
         {
-            entry.ExtractToFile(Path.Combine(destDir, entry.Name), overwrite: true);
+            if (File.Exists(executableFile)) return executableFile;
+
+            using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+            foreach (var entry in archive.Entries)
+            {
+                entry.ExtractToFile(Path.Combine(destDir, entry.Name), overwrite: true);
+            }
+
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                MakeFileExecutable(Path.Combine(destDir, Constants.FFmpegFileNameLinux));
+                MakeFileExecutable(Path.Combine(destDir, Constants.FFprobeFileNameLinux));
+            }
         }
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            MakeFileExecutable(Path.Combine(destDir, Constants.FFmpegFileNameLinux));
-            MakeFileExecutable(Path.Combine(destDir, Constants.FFprobeFileNameLinux));
-        }
-
-        return Path.Combine(destDir, Constants.FFmpegExecutableFileName);
+        return executableFile;
     }
 
     /// <summary>

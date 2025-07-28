@@ -49,7 +49,7 @@ public sealed class FFMpegProcessorTests
     {
         // Act
         var r = await Processor.ConvertToMp3(
-            testFilePath, "./data/output.mp3_", isOverwrite: true, cancellationToken: CancellationToken);
+            testFilePath, "./data/output.mp3", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.NotEmpty(r);
     }
 

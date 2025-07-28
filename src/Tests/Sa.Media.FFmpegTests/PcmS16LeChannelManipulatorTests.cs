@@ -29,8 +29,8 @@ public sealed class PcmS16LeChannelManipulatorTests
 
         // Assert
         Assert.Equal(2, result.Count);
-        Assert.Contains("./data/output_channel_0.wav_", result);
-        Assert.Contains("./data/output_channel_1.wav_", result);
+        Assert.EndsWith("output_channel_0.wav_", result[0]);
+        Assert.EndsWith("output_channel_1.wav_", result[1]);
 
         (int? channels, int? sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRate(result[0], CancellationToken);
 
