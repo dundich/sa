@@ -1,4 +1,4 @@
-using Sa.Extensions;
+﻿using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -42,9 +42,9 @@ public abstract record StrOrNum
     public static implicit operator StrOrNum(short item) => new ChoiceNum(item);
 
     public static explicit operator string(StrOrNum choice) => choice.Match(c1 => c1, c2 => c2.ToString());
-    public static explicit operator long(StrOrNum choice) => choice.Match(c1 => c1.StrToLong() ?? 0, c2 => c2);
-    public static explicit operator int(StrOrNum choice) => choice.Match(c1 => c1.StrToInt() ?? 0, c2 => (int)c2);
-    public static explicit operator short(StrOrNum choice) => choice.Match(c1 => c1.StrToShort() ?? 0, c2 => (short)c2);
+    public static explicit operator long(StrOrNum choice) => choice.Match(c1 => StrToLong(c1) ?? 0, c2 => c2);
+    public static explicit operator int(StrOrNum choice) => choice.Match(c1 => StrToInt(c1) ?? 0, c2 => (int)c2);
+    public static explicit operator short(StrOrNum choice) => choice.Match(c1 => StrToShort(c1) ?? 0, c2 => (short)c2);
 
     private static U Match<U>(Func<string, U> onChoiceStr, Func<long, U> onChoiceNum, StrOrNum choice)
     {
@@ -72,7 +72,7 @@ public abstract record StrOrNum
         }
         else if (fmtInput.StartsWith("n:", StringComparison.Ordinal))
         {
-            return new ChoiceNum(fmtInput[2..].StrToLong() ?? 0);
+            return new ChoiceNum(StrToLong(fmtInput.AsSpan()[2..]) ?? 0);
         }
         else
         {
@@ -81,6 +81,10 @@ public abstract record StrOrNum
     }
 
     private StrOrNum() { }
+
+    static int? StrToInt(ReadOnlySpan<char> str) => int.TryParse(str, CultureInfo.InvariantCulture, out int result) ? result : null;
+    static short? StrToShort(ReadOnlySpan<char> str) => short.TryParse(str, CultureInfo.InvariantCulture, out short result) ? result : null;
+    public static long? StrToLong(ReadOnlySpan<char> str) => long.TryParse(str, CultureInfo.InvariantCulture, out long result) ? result : null;
 }
 
 
