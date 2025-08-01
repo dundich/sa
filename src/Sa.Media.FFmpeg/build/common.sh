@@ -140,6 +140,9 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-decoder=wmav2
     --enable-decoder=wmavoice
 
+	--enable-decoder=gsm
+	--enable-decoder=gsm_ms
+
     --enable-decoder=pcm_alaw
     --enable-decoder=pcm_bluray
     --enable-decoder=pcm_dvd

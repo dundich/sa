@@ -19,10 +19,11 @@ public class AsyncWavReaderTests
     }
 
 
-    [Fact]
-    public async Task ReadHeaderAsync_ValidWavFile_ReturnsValidHeader()
+    [Theory]
+    [InlineData("./data/12345.wav")]
+    public async Task ReadHeaderAsync_ValidWavFile_ReturnsValidHeader(string filePath)
     {
-        var pipe = OpenSharedWavFile();
+        var pipe = OpenSharedWavFile(filePath);
         var reader = new AsyncWavReader(pipe);
 
         var header = await reader.GetHeaderAsync();

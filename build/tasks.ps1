@@ -1,4 +1,4 @@
-
+﻿
 $root = [System.IO.Path]::GetFullPath("$PSScriptRoot\..")
 
 $sln_file = "$root\src\Sa.sln"
@@ -8,7 +8,9 @@ $dist_folder = "$root\dist"
 $msbuild_verbosity = "n"
 		
 $projects = @(
-	"Sa.Media"
+	# "Sa.Media",
+	"Sa.Media.FFmpeg"
+
 	# "Sa.Data.PostgreSql",
 	# "Sa.Data.S3",
 

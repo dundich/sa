@@ -1,5 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <Import Project="../../Host.Test.Properties.xml" />
+  <PropertyGroup>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.6.0" />
   </ItemGroup>

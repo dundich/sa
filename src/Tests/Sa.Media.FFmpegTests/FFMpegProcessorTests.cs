@@ -33,12 +33,14 @@ public sealed class FFMpegProcessorTests
         Assert.NotEmpty(r);
     }
 
-    [Fact]
-    public async Task ConvertToPcm16Wav_CallsFFmpegWithCorrectArguments()
+    [Theory]
+    [InlineData("./data/input.mp3")]
+    [InlineData("./data/gsm.wav")]
+    public async Task ConvertToPcm16Wav_CallsFFmpegWithCorrectArguments(string testFilePath)
     {
         // Act
         var r = await Processor.ConvertToPcmS16Le(
-            "./data/input.mp3", "./data/output.wav_", isOverwrite: true, cancellationToken: CancellationToken);
+            testFilePath, "./data/output.wav_", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.NotEmpty(r);
     }
 
@@ -49,7 +51,7 @@ public sealed class FFMpegProcessorTests
     {
         // Act
         var r = await Processor.ConvertToMp3(
-            testFilePath, "./data/output.mp3", isOverwrite: true, cancellationToken: CancellationToken);
+            testFilePath, "./data/output.mp3_", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.NotEmpty(r);
     }
 
@@ -89,8 +91,8 @@ public sealed class FFMpegProcessorTests
 
         Assert.True(File.Exists(outputPath));
 
-        var ffprobe = CreateFFProbeExecutor(); 
-        var (channels, sampleRate) = await ffprobe.GetChannelsAndSampleRate(outputPath, cancellationToken:CancellationToken);
+        var ffprobe = CreateFFProbeExecutor();
+        var (channels, sampleRate) = await ffprobe.GetChannelsAndSampleRate(outputPath, cancellationToken: CancellationToken);
 
         Assert.Equal(1, channels);
         Assert.Equal(8000, sampleRate);
