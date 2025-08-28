@@ -11,6 +11,9 @@ public class WavHeader
     // === RIFF Chunk ===
 
     public uint ChunkId { get; set; }
+    /// <summary>
+    /// общий размер данных RIFF (всего файла - 8)
+    /// </summary>
     public uint ChunkSize { get; set; }
     public uint Format { get; set; }
 
@@ -19,7 +22,13 @@ public class WavHeader
     public uint Subchunk1Id { get; set; }
     public uint Subchunk1Size { get; set; }
     public WaveFormatType AudioFormat { get; set; }
+    /// <summary>
+    /// количество каналов (1 = моно, 2 = стерео)
+    /// </summary>
     public ushort NumChannels { get; set; }
+    /// <summary>
+    /// частота дискретизации (например, 16000 Гц)
+    /// </summary>
     public uint SampleRate { get; set; }
     public uint ByteRate { get; set; }
     /// <summary>
@@ -37,9 +46,14 @@ public class WavHeader
 
     // === data Subchunk ===
 
-    public uint Subchunk2Id { get; set; }
-    public uint Subchunk2Size { get; set; }
-    public long DataOffset { get; set; }
+    /// <summary>
+    /// смещение до начала аудиоданных
+    /// </summary>
+    public uint DataOffset { get; set; }
+    /// <summary>
+    /// Размер данных (для неопределленых (потоковых) => uint.MaxValue)
+    /// </summary>
+    public uint DataSize { get; set; }
 
     public void Validate()
     {
@@ -57,19 +71,18 @@ public class WavHeader
 
         if (SampleRate == 0)
             throw new InvalidDataException("Sample rate is zero");
-
-        if (Subchunk2Size == 0)
-            throw new InvalidDataException("No data found in the file");
     }
 
-    public double GetDurationInSeconds()
+    public double GetDurationInSeconds(long? fileSize = default)
     {
-        if (BitsPerSample == 0 || NumChannels == 0)
+        if (BitsPerSample == 0 || NumChannels == 0 || SampleRate == 0)
             return 0;
 
-        long bytesPerChannel = (long)Subchunk2Size / NumChannels;
+        long dataSize = (fileSize >= DataOffset && !HasDataSize) ? fileSize.Value - DataOffset : DataSize;
+
+        long bytesPerChannel = dataSize / NumChannels;
         long samplesPerChannel = bytesPerChannel / (BitsPerSample / 8);
-        return SampleRate != 0 ? samplesPerChannel / (double)SampleRate : 0;
+        return samplesPerChannel / (double)SampleRate;
     }
 
     public TimeSpan GetDuration() => TimeSpan.FromSeconds(GetDurationInSeconds());
@@ -87,6 +100,11 @@ public class WavHeader
 
     public int SampleSize => BlockAlign / NumChannels;
 
+    /// <summary>
+    /// Для потоковых данных может иметь максимальный размер
+    /// </summary>
+    public bool HasDataSize => DataSize != uint.MaxValue;
+
     public override string ToString()
     {
         return $"""
@@ -98,11 +116,10 @@ Sample Rate:    {SampleRate} Hz
 Bit Depth:      {BitsPerSample}-bit
 Duration:       {GetDuration():g}
 File Size:      {ChunkSize + 8} bytes
-Data Size:      {Subchunk2Size} bytes
+Data Size:      {DataSize} bytes
 """;
 
         string isFloat() => (IsIeeeFloat ? "FLOAT" : AudioFormat.ToString());
         string isStereo() => (IsStereo ? "Stereo" : String.Empty);
-
     }
 }

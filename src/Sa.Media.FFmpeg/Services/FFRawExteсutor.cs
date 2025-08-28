@@ -32,12 +32,29 @@ internal class FFRawExteсutor(
         string commandArguments,
         bool captureErrorOutput = false,
         TimeSpan? timeout = null,
+        Action<ProcessStartInfo>? configure = null,
         CancellationToken cancellationToken = default)
     {
+        var psi = GetStartInfo(ExecutablePath, commandArguments);
+        configure?.Invoke(psi);
+
         return executor.ExecuteWithResultAsync(
-            GetStartInfo(ExecutablePath, commandArguments),
+            psi,
             captureErrorOutput,
             timeout ?? DefaultTimeout,
             cancellationToken);
+    }
+
+
+    public Stream ExecuteStream(
+        string commandArguments,
+        Stream inputStream,
+        TimeSpan? timeout = null,
+        Action<ProcessStartInfo>? configure = null)
+    {
+        var psi = GetStartInfo(ExecutablePath, commandArguments);
+        configure?.Invoke(psi);
+
+        return executor.ExecuteStream(psi, inputStream);
     }
 }

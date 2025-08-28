@@ -1,4 +1,5 @@
 ﻿using Sa.Classes;
+using System.Diagnostics;
 
 namespace Sa.Media.FFmpeg;
 
@@ -29,7 +30,9 @@ public interface IFFRawExteсutor
         string commandArguments,
         bool captureErrorOutput = false,
         TimeSpan? timeout = null,
+        Action<ProcessStartInfo>? configure = null,
         CancellationToken cancellationToken = default);
+
 
     /// <summary>
     /// Executes a command with the specified sequence of arguments asynchronously.
@@ -44,6 +47,14 @@ public interface IFFRawExteсutor
         IEnumerable<string> commandArguments,
         bool captureErrorOutput = false,
         TimeSpan? timeout = null,
+        Action<ProcessStartInfo>? configure = null,
         CancellationToken cancellationToken = default)
-        => ExecuteAsync(string.Join(" ", commandArguments), captureErrorOutput, timeout, cancellationToken);
+        => ExecuteAsync(string.Join(" ", commandArguments), captureErrorOutput, timeout, configure, cancellationToken);
+
+
+    Stream ExecuteStream(
+       string commandArguments,
+       Stream inputStream,
+       TimeSpan? timeout = null,
+       Action<ProcessStartInfo>? configure = null);
 }

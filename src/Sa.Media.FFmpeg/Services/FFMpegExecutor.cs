@@ -4,6 +4,8 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
 {
     public IFFRawExteсutor Exteсutor => exteсutor;
 
+    private const string CleanWavOutputFlags = "-f wav -map_metadata -1 -write_bext 0 -bitexact -fflags +bitexact";
+
     public async Task<string> GetVersion(CancellationToken cancellationToken = default)
     {
         var result = await exteсutor.ExecuteAsync("-version", cancellationToken: cancellationToken);
@@ -25,19 +27,31 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
     public async Task<string> ConvertToPcmS16Le(
         string inputFileName,
         string outputFileName,
-        int? outputSampleRate = null,
-        int? outputChannelCount = null,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null,
         bool isOverwrite = false,
         CancellationToken cancellationToken = default)
     {
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
-        var channelCount = outputChannelCount.HasValue ? "-ac 1" : string.Empty;
+        var channelCount = outputChannelCount.HasValue ? $"-ac {outputChannelCount}" : string.Empty;
+        var cmd = $"{OverArg(isOverwrite)} -i {QuotePath(inputFileName)} -acodec pcm_s16le {channelCount} {sampleRate} {CleanWavOutputFlags} {QuotePath(outputFileName)}";
 
-        var result = await exteсutor.ExecuteAsync(
-            $"{OverArg(isOverwrite)} -i {QuotePath(inputFileName)} -acodec pcm_s16le {channelCount} {sampleRate} -f wav {QuotePath(outputFileName)}",
-            cancellationToken: cancellationToken);
+        var result = await exteсutor.ExecuteAsync(cmd, cancellationToken: cancellationToken);
 
         return result.StandardError;
+    }
+
+    public Stream ConvertToPcmS16Le(
+        Stream inputStream,
+        string inputFormat,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null)
+    {
+        var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
+        var channelCount = outputChannelCount.HasValue ? $"-ac {outputChannelCount}" : string.Empty;
+        var cmd = $"-f {inputFormat} -i pipe:0 -acodec pcm_s16le {channelCount} {sampleRate} {CleanWavOutputFlags} pipe:1";
+
+        return exteсutor.ExecuteStream(cmd, inputStream);
     }
 
     public async Task<string> ConvertToMp3(

@@ -22,7 +22,7 @@ public class AsyncWavReader(PipeReader reader)
         var header = await GetHeaderAsync();
 
         long dataOffset = header.DataOffset;
-        long dataEndOffset = dataOffset + header.Subchunk2Size;
+        long dataEndOffset = dataOffset + header.DataSize;
 
         long cutFromOffset = cutFromSeconds.HasValue
             ? dataOffset + (long)(cutFromSeconds.Value * header.SampleRate * header.BlockAlign)
@@ -40,7 +40,6 @@ public class AsyncWavReader(PipeReader reader)
         int channels = header.NumChannels;
         int blockAlign = header.BlockAlign;
         int sampleSize = header.SampleSize;
-
 
         var sampleBuffer = new byte[sampleSize];
 

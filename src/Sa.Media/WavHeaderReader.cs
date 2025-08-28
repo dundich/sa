@@ -8,8 +8,6 @@ public static class WavHeaderReader
     {
         public const uint Subchunk1IdJunk = 0x4B4E554A; // "JUNK"
         public const uint DataSubchunkId = 0x61746164; // "data"
-        public const uint ListSubchunkId = 0x5453494c; // "LIST"
-        public const uint FllrSubchunkId = 0x524c4c46; // "FLLR"
         public const uint СhunkRiff = 0x46464952; // RIFF
         public const uint FormatWave = 0x45564157; //WAVE
     }
@@ -48,37 +46,9 @@ public static class WavHeaderReader
         ushort blockAlign = await reader.ReadUInt16Async(cancellationToken);
         ushort bitsPerSample = await reader.ReadUInt16Async(cancellationToken);
 
+
         // Skip extra fmt data (e.g., for WAVE_FORMAT_EXTENSIBLE)
-        if (subchunk1Size > 16)
-        {
-            ushort fmtExtraSize = await reader.ReadUInt16Async(cancellationToken);
-            await reader.SkeepBytesAsync(fmtExtraSize, cancellationToken);
-        }
-
-        // Find "data" subchunk
-        uint subchunk2Id;
-        uint subchunk2Size;
-        while (true)
-        {
-            subchunk2Id = await reader.ReadUInt32Async(cancellationToken);
-            subchunk2Size = await reader.ReadUInt32Async(cancellationToken);
-
-            if (subchunk2Id == Constants.ListSubchunkId ||
-                subchunk2Id == Constants.FllrSubchunkId)
-            {
-                await reader.SkeepBytesAsync(subchunk2Size, cancellationToken);
-                continue;
-            }
-
-            if (subchunk2Id != Constants.DataSubchunkId)
-            {
-                throw new NotSupportedException($"Unsupported subchunk type: 0x{subchunk2Id:x8}");
-            }
-
-            break;
-        }
-
-        long dataOffset = reader.Position;
+        var (dataOffset, dataSize) = await FindDataChunkAsync(reader, cancellationToken);
 
         var header = new WavHeader
         {
@@ -93,12 +63,33 @@ public static class WavHeaderReader
             ByteRate = byteRate,
             BlockAlign = blockAlign,
             BitsPerSample = bitsPerSample,
-            Subchunk2Id = subchunk2Id,
-            Subchunk2Size = subchunk2Size,
-            DataOffset = dataOffset
+            // calculated
+            DataOffset = (uint)dataOffset,
+            DataSize = dataSize,
         };
 
         header.Validate();
         return header;
+    }
+
+
+    private static async Task<(long, uint dataSize)> FindDataChunkAsync(BinaryPipeReader reader, CancellationToken cancellationToken = default)
+    {
+        while (reader.Position < 4096)
+        {
+            var chunkId = await reader.ReadUInt32Async(cancellationToken);
+            var chunkSize = await reader.ReadUInt32Async(cancellationToken);
+
+            if (chunkId == Constants.DataSubchunkId) // "data"
+            {
+                return (reader.Position, chunkSize); // возвращаем смещение и размер данных
+            }
+
+            // Пропускаем чанк (с выравниванием)
+            long paddedSize = (chunkSize % 2 == 0) ? chunkSize : chunkSize + 1;
+            await reader.SkeepBytesAsync(paddedSize, cancellationToken);
+        }
+
+        throw new InvalidDataException("WAV file does not contain a 'data' chunk.");
     }
 }

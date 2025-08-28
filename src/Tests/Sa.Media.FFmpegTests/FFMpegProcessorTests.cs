@@ -40,9 +40,49 @@ public sealed class FFMpegProcessorTests
     {
         // Act
         var r = await Processor.ConvertToPcmS16Le(
-            testFilePath, "./data/output.wav_", isOverwrite: true, cancellationToken: CancellationToken);
+            testFilePath, "./data/output.wav", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.NotEmpty(r);
     }
+
+    [Theory]
+    [InlineData("./data/input.mp3")]
+    [InlineData("./data/gsm.wav")]
+    public async Task ConvertToPcm16Wav_CallsFFmpegAsStream(string testFilePath)
+    {
+        var fn = "./data/output.wav";
+
+        var ext = Path.GetExtension(testFilePath).TrimStart('.');
+
+        using var inputStream = File.OpenRead(testFilePath);
+        //  Cannot mix synchronous and asynchronous operation on process stream.
+        // Act
+        Stream outStream = Processor.ConvertToPcmS16Le(inputStream, ext);
+        try
+        {
+
+            Assert.NotNull(outStream);
+
+            // Открываем файл для записи
+            await using var fileStream = new FileStream(
+                fn,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                useAsync: true);
+
+            await outStream.CopyToAsync(fileStream, CancellationToken);
+            await fileStream.FlushAsync(CancellationToken);
+        }
+        finally
+        {
+            await outStream.DisposeAsync();
+        }
+
+        Assert.True(File.Exists(fn));
+        File.Delete(fn);
+    }
+
 
     [Theory]
     [InlineData("./data/input.ogg")]
@@ -51,7 +91,7 @@ public sealed class FFMpegProcessorTests
     {
         // Act
         var r = await Processor.ConvertToMp3(
-            testFilePath, "./data/output.mp3_", isOverwrite: true, cancellationToken: CancellationToken);
+            testFilePath, "./data/output.mp3", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.NotEmpty(r);
     }
 
@@ -80,7 +120,7 @@ public sealed class FFMpegProcessorTests
             File.Delete(outputPath);
 
 
-        _ = await Processor.ConvertToPcmS16Le(
+        var s = await Processor.ConvertToPcmS16Le(
             inputFileName: inputPath,
             outputFileName: outputPath,
             isOverwrite: true,
@@ -88,6 +128,8 @@ public sealed class FFMpegProcessorTests
             outputSampleRate: 8000,
             cancellationToken: CancellationToken
         );
+
+        Assert.NotEmpty(s);
 
         Assert.True(File.Exists(outputPath));
 

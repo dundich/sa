@@ -21,8 +21,6 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
         ArgumentNullException.ThrowIfNullOrWhiteSpace(inputFileName);
         ArgumentNullException.ThrowIfNullOrWhiteSpace(outputFileName);
 
-
-
         // Получаем количество каналов из метаданных
         var (channels, _) = await _ffprobe.GetChannelsAndSampleRate(inputFileName, cancellationToken);
 
@@ -33,7 +31,6 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
         {
             throw new NotSupportedException("Only mono (1 channel) and stereo (2 channels) audio formats are supported.");
         }
-
 
         var outFileExtension = Path.GetExtension(outputFileName) ?? ".wav";
 

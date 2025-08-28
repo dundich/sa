@@ -9,6 +9,7 @@ public sealed class FFProbeProcessorTests
     static IFFProbeExecutor Processor => IFFProbeExecutor.Default;
 
     [Theory]
+    [InlineData("./data/ffout.wav")]
     [InlineData("./data/input.mp3")]
     [InlineData("./data/input.wav")]
     [InlineData("./data/input.ogg")]
@@ -16,11 +17,12 @@ public sealed class FFProbeProcessorTests
     {
         // Act
         var (channels, sampleRate) = await Processor.GetChannelsAndSampleRate(testFilePath, cancellationToken: CancellationToken);
-        Assert.Equal(2, channels);
-        Assert.True(sampleRate > 0);
+        Assert.InRange(channels!.Value, 1, 2);
+        Assert.True(sampleRate > 8000);
     }
 
     [Theory]
+    [InlineData("./data/ffout.wav")]
     [InlineData("./data/input.mp3")]
     [InlineData("./data/input.wav")]
     [InlineData("./data/input.ogg")]

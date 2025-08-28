@@ -46,10 +46,20 @@ public interface IFFMpegExecutor
     Task<string> ConvertToPcmS16Le(
         string inputFileName,
         string outputFileName,
-        int? outputSampleRate = null,
-        int? outputChannelCount = null,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null,
         bool isOverwrite = false,
         CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    /// Converts an audio file to PCM S16 LE format (16-bit signed integer, little-endian).
+    /// </summary>
+    Stream ConvertToPcmS16Le(
+        Stream inputStream,
+        string inputFormat,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null);
 
     /// <summary>
     /// Converts an audio file to MP3 format.
