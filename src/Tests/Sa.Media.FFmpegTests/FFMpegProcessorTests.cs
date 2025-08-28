@@ -54,7 +54,7 @@ public sealed class FFMpegProcessorTests
         var ext = Path.GetExtension(testFilePath).TrimStart('.');
 
         using var inputStream = File.OpenRead(testFilePath);
-        //  Cannot mix synchronous and asynchronous operation on process stream.
+
         // Act
         Stream outStream = Processor.ConvertToPcmS16Le(inputStream, ext);
         try
@@ -62,7 +62,6 @@ public sealed class FFMpegProcessorTests
 
             Assert.NotNull(outStream);
 
-            // Открываем файл для записи
             await using var fileStream = new FileStream(
                 fn,
                 FileMode.Create,

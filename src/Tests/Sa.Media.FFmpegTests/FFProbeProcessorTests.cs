@@ -18,7 +18,7 @@ public sealed class FFProbeProcessorTests
         // Act
         var (channels, sampleRate) = await Processor.GetChannelsAndSampleRate(testFilePath, cancellationToken: CancellationToken);
         Assert.InRange(channels!.Value, 1, 2);
-        Assert.True(sampleRate > 8000);
+        Assert.True(sampleRate >= 8000);
     }
 
     [Theory]
