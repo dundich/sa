@@ -56,27 +56,13 @@ public sealed class FFMpegProcessorTests
         using var inputStream = File.OpenRead(testFilePath);
 
         // Act
-        Stream outStream = Processor.ConvertToPcmS16Le(inputStream, ext);
-        try
+        await Processor.ConvertToPcmS16Le(inputStream, ext, async outStream =>
         {
-
-            Assert.NotNull(outStream);
-
-            await using var fileStream = new FileStream(
-                fn,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 4096,
-                useAsync: true);
+            using var fileStream = new FileStream(fn, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
 
             await outStream.CopyToAsync(fileStream, CancellationToken);
             await fileStream.FlushAsync(CancellationToken);
-        }
-        finally
-        {
-            await outStream.DisposeAsync();
-        }
+        }, cancellationToken: CancellationToken);
 
         Assert.True(File.Exists(fn));
         File.Delete(fn);

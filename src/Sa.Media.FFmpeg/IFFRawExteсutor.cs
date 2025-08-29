@@ -52,9 +52,14 @@ public interface IFFRawExteсutor
         => ExecuteAsync(string.Join(" ", commandArguments), captureErrorOutput, timeout, configure, cancellationToken);
 
 
-    Stream ExecuteStream(
-       string commandArguments,
-       Stream inputStream,
-       TimeSpan? timeout = null,
-       Action<ProcessStartInfo>? configure = null);
+    /// <summary>
+    /// Executes stdout as a stream.
+    /// Stderr is captured and checked on completion
+    /// </summary>
+    Task ExecuteStdOutAsync(
+        string commandArguments, 
+        Stream inputStream, 
+        Func<Stream, Task> onOutput, 
+        Action<ProcessStartInfo>? configure = null, 
+        CancellationToken cancellationToken = default);
 }

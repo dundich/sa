@@ -41,17 +41,19 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
         return result.StandardError;
     }
 
-    public Stream ConvertToPcmS16Le(
+    public async Task ConvertToPcmS16Le(
         Stream inputStream,
         string inputFormat,
+        Func<Stream, Task> onOutput,
         int? outputSampleRate = 16000,
-        ushort? outputChannelCount = null)
+        ushort? outputChannelCount = null,
+        CancellationToken cancellationToken = default)
     {
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
         var channelCount = outputChannelCount.HasValue ? $"-ac {outputChannelCount}" : string.Empty;
         var cmd = $"-f {inputFormat} -i pipe:0 -acodec pcm_s16le {channelCount} {sampleRate} {CleanWavOutputFlags} pipe:1";
 
-        return exteсutor.ExecuteStream(cmd, inputStream);
+        await exteсutor.ExecuteStdOutAsync(cmd, inputStream, onOutput, cancellationToken: cancellationToken);
     }
 
     public async Task<string> ConvertToMp3(

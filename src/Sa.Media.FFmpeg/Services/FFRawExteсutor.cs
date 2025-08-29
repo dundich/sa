@@ -45,16 +45,10 @@ internal class FFRawExteсutor(
             cancellationToken);
     }
 
-
-    public Stream ExecuteStream(
-        string commandArguments,
-        Stream inputStream,
-        TimeSpan? timeout = null,
-        Action<ProcessStartInfo>? configure = null)
+    public Task ExecuteStdOutAsync(string commandArguments, Stream inputStream, Func<Stream, Task> onOutput, Action<ProcessStartInfo>? configure = null, CancellationToken cancellationToken = default)
     {
         var psi = GetStartInfo(ExecutablePath, commandArguments);
         configure?.Invoke(psi);
-
-        return executor.ExecuteStream(psi, inputStream);
+        return executor.ExecuteStdOutAsync(psi, inputStream, onOutput, cancellationToken);
     }
 }

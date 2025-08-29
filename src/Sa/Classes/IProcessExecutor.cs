@@ -47,11 +47,14 @@ internal interface IProcessExecutor
     }
 
     /// <summary>
-    /// Executes a process and returns stdout as a stream.
-    /// Stderr is captured and checked on completion.
-    /// The process is terminated if the stream is disposed before natural exit.
+    /// Executes stdout as a stream.
+    /// Stderr is captured and checked on completion
     /// </summary>
-    Stream ExecuteStream(ProcessStartInfo startInfo, Stream inputStream);
+    Task ExecuteStdOutAsync(
+        ProcessStartInfo startInfo
+        , Stream inputStream
+        , Func<Stream, Task> onOutput
+        , CancellationToken cancellationToken = default);
 
 
     static IProcessExecutor Default { get; } = new ProcessExecutor();
@@ -148,22 +151,32 @@ internal sealed class ProcessExecutor : IProcessExecutor
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            TerminateProcess(process);
             throw new ProcessTimeoutException("Process execution timed out");
         }
         catch (Exception ex)
         {
-            TerminateProcess(process);
             throw new ProcessExecutionException(process.ExitCode, "Process execution failed", ex);
+        }
+        finally
+        {
+            SafeDisposeProcess(process);
         }
     }
 
     /// <summary>
-    /// Запускает процесс и возвращает поток stdout. 
-    /// Поток stderr собирается автоматически. 
-    /// При завершении чтения или Dispose — проверяется результат.
+    /// Запускает процесс, и передаёт поток stdout в callback.
+    /// Поток stderr собирается автоматически.
+    /// При завершении — проверяется код возврата.
     /// </summary>
-    public Stream ExecuteStream(ProcessStartInfo startInfo, Stream inputStream)
+    /// <param name="startInfo">Настройки процесса.</param>
+    /// <param name="inputStream">Поток для stdin</param>
+    /// <param name="onOutput">Callback, получающий stdout. Должен быть асинхронным.</param>
+    /// <returns>Задача, завершающаяся после обработки потока и проверки результата.</returns>
+    public async Task ExecuteStdOutAsync(
+        ProcessStartInfo startInfo,
+        Stream inputStream,
+        Func<Stream, Task> onOutput,
+        CancellationToken cancellationToken = default)
     {
         // Настройка
         startInfo.RedirectStandardInput = true;
@@ -175,59 +188,52 @@ internal sealed class ProcessExecutor : IProcessExecutor
         try
         {
             if (!process.Start())
-                throw new ProcessStartException($"Failed to start process: '{startInfo.FileName}' with arguments '{startInfo.Arguments}'");
+            {
+                throw new ProcessStartException(
+                    $"Failed to start process: '{startInfo.FileName}' with arguments '{startInfo.Arguments}'");
+            }
 
             StringBuilder stderrBuilder = new();
-            List<Task> tasks = [
-                WriteToStdInAsync(process, inputStream), // write stdin
-                ReadStandardErrorToBuilderAsync(process, stderrBuilder) // read stderr
+
+            List<Task> backgroundTasks = [
+                WriteToStdInAsync(process, inputStream, cancellationToken), // write stdin
+                ReadStandardErrorToBuilderAsync(process, stderrBuilder, cancellationToken) // read stderr
             ];
 
-            // process.BeginOutputReadLine();
-            // process.BeginErrorReadLine();
+            Exception? lastError = null;
 
-            // wrap stream
-            return new ProcessOutputStream(
-                baseStream: process.StandardOutput.BaseStream,
-                onDisposeAsync: async () =>
-                {
-                    try
-                    {
-                        // Дожидаемся завершения фоновых задач
-                        await Task.WhenAll(tasks).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        // suppress
-                    }
+            // Получаем stdout как Stream
+            Stream stdoutStream = process.StandardOutput.BaseStream;
 
-                    try
-                    {
-                        var exitCode = process.ExitCode;
+            // Передаём поток в callback
+            try
+            {
+                await onOutput(stdoutStream).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+            }
 
-                        if (exitCode != 0)
-                        {
-                            TerminateProcess(process);
-                            throw new ProcessExecutionException(exitCode, stderrBuilder.ToString());
-                        }
-                    }
-                    finally
-                    {
-                        process.Dispose();
-                    }
-                });
+            // Дожидаемся завершения ввода и чтения stderr
+            await Task.WhenAll(backgroundTasks).ConfigureAwait(false);
+
+            // Дожидаемся завершения процесса
+            await process.WaitForExitAsync(cancellationToken);
+
+            int exitCode = process.ExitCode;
+            if (exitCode != 0)
+            {
+                throw new ProcessExecutionException(exitCode, stderrBuilder.ToString(), lastError);
+            }
         }
-        catch (Exception)
+        finally
         {
-            process.Dispose();
-            throw;
+            SafeDisposeProcess(process);
         }
     }
 
 
-    // <summary>
-    /// Асинхронно читает stderr процесса и добавляет в StringBuilder.
-    /// </summary>
     private static async Task ReadStandardErrorToBuilderAsync(
         Process process,
         StringBuilder errorBuilder,
@@ -243,7 +249,6 @@ internal sealed class ProcessExecutor : IProcessExecutor
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Допустимо при отмене
             if (errorBuilder.Length == 0)
                 errorBuilder.Append("stderr: read interrupted (cancellation).");
         }
@@ -292,17 +297,29 @@ internal sealed class ProcessExecutor : IProcessExecutor
         }
     }
 
-    private static void TerminateProcess(Process process)
+    private static void SafeDisposeProcess(Process process)
     {
         try
         {
             if (!process.HasExited)
+            {
                 process.Kill(entireProcessTree: true);
-            process.WaitForExit(500);
+            }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Process termination failed: {ex.Message}");
+            Console.WriteLine($"Process termination failed: {ex.Message}");
+        }
+
+        process.WaitForExit(2000);
+
+        try
+        {
+            process.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to dispose process: {ex.Message}");
         }
     }
 }
@@ -327,135 +344,4 @@ public class ProcessStartException(string message) : IOException(message)
 
 public class ProcessTimeoutException(string message) : TimeoutException(message)
 {
-}
-
-
-/// <summary>
-/// Обёртка над stdout процесса. При Dispose завершает процесс и проверяет ошибки.
-/// </summary>
-internal sealed class ProcessOutputStream(
-    Stream baseStream,
-    Func<Task> onDisposeAsync
-) : Stream
-{
-    private bool _disposed;
-
-    // Проброс всех методов Stream
-    public override bool CanRead => baseStream.CanRead;
-    public override bool CanSeek => baseStream.CanSeek;
-    public override bool CanWrite => baseStream.CanWrite;
-    public override long Length => baseStream.Length;
-    public override long Position
-    {
-        get => baseStream.Position;
-        set => baseStream.Position = value;
-    }
-
-    public override int Read(byte[] buffer, int offset, int count) =>
-        baseStream.Read(buffer, offset, count);
-
-    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await baseStream.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            // Если ошибка при чтении — всё равно попробуем получить результат
-            await DisposeAsync().ConfigureAwait(false);
-            throw;
-        }
-    }
-
-    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            return await baseStream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            // Если ошибка при чтении — всё равно попробуем получить результат
-            await DisposeAsync().ConfigureAwait(false);
-            throw;
-        }
-    }
-
-    public override void Flush() => baseStream.Flush();
-    public override async Task FlushAsync(CancellationToken cancellationToken) =>
-        await baseStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-    public override long Seek(long offset, SeekOrigin origin) =>
-        baseStream.Seek(offset, origin);
-
-    public override void SetLength(long value) => baseStream.SetLength(value);
-
-    public override void Write(byte[] buffer, int offset, int count) =>
-        throw new NotSupportedException();
-
-    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
-
-    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
-    {
-        throw new NotSupportedException();
-    }
-
-    // Основная логика: при Dispose — завершаем процесс и проверяем ошибки
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed) return;
-        _disposed = true;
-
-        if (disposing)
-        {
-            try
-            {
-                baseStream?.Dispose();
-            }
-            catch
-            {
-                // suppress
-            }
-
-            try
-            {
-                onDisposeAsync().GetAwaiter().GetResult(); // Синхронное ожидание dispose
-            }
-            catch (Exception e)
-            {
-                Debug.WriteLine(e);
-                // suppress
-            }
-        }
-
-        base.Dispose(disposing);
-    }
-
-    public override async ValueTask DisposeAsync()
-    {
-        if (_disposed) return;
-        _disposed = true;
-
-        try
-        {
-            await baseStream.DisposeAsync();
-        }
-        catch
-        {
-            // suppress
-        }
-
-        try
-        {
-            await onDisposeAsync().ConfigureAwait(false);
-        }
-        catch
-        {
-            // suppress
-        }
-
-        await base.DisposeAsync().ConfigureAwait(false);
-    }
 }
