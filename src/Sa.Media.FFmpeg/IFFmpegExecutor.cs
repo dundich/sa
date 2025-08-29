@@ -67,7 +67,7 @@ public interface IFFMpegExecutor
     Task ConvertToPcmS16Le(
             Stream inputStream,
             string inputFormat,
-            Func<Stream, Task> onOutput,
+            Func<Stream, CancellationToken, Task> onOutput,
             int? outputSampleRate = 16000,
             ushort? outputChannelCount = null,
             CancellationToken cancellationToken = default);

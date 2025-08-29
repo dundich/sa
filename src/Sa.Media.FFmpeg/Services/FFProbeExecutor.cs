@@ -42,4 +42,38 @@ internal class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExecutor
             return MediaMetadata.Empty;
         }
     }
+
+
+    public async Task<MediaMetadata> GetMetaInfo(Stream audioStream, string inputFormat, CancellationToken cancellationToken = default)
+    {
+        MediaMetadata metadata = MediaMetadata.Empty;
+
+        await exteсutor.ExecuteStdOutAsync(
+            $"-v quiet -print_format json -show_streams -show_format -f {inputFormat} -i pipe:0",
+            audioStream,
+            async (onOutput, ct) =>
+            {
+                try
+                {
+                    var metaDataInfo = await JsonSerializer.DeserializeAsync<FFProbeMetaDataInfo>(
+                        onOutput,
+                        FFmpegJsonSerializerContext.Default.FFProbeMetaDataInfo,
+                        cancellationToken: ct);
+
+                    metadata = new MediaMetadata(
+                        Duration: metaDataInfo?.Format?.Duration?.StrToDouble(),
+                        FormatName: metaDataInfo?.Format?.FormatName,
+                        BitRate: metaDataInfo?.Format?.BitRate.StrToInt(),
+                        Size: metaDataInfo?.Format?.Size.StrToInt()
+                    );
+                }
+                catch
+                {
+                    metadata = MediaMetadata.Empty;
+                }
+            },
+            cancellationToken: cancellationToken);
+
+        return metadata;
+    }
 }

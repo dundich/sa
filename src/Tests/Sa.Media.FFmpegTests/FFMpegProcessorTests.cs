@@ -1,4 +1,5 @@
-﻿using Sa.Media.FFmpeg;
+﻿using Sa.Classes;
+using Sa.Media.FFmpeg;
 
 namespace Sa.Media.FFmpegTests;
 
@@ -39,9 +40,9 @@ public sealed class FFMpegProcessorTests
     public async Task ConvertToPcm16Wav_CallsFFmpegWithCorrectArguments(string testFilePath)
     {
         // Act
-        var r = await Processor.ConvertToPcmS16Le(
+        await Processor.ConvertToPcmS16Le(
             testFilePath, "./data/output.wav", isOverwrite: true, cancellationToken: CancellationToken);
-        Assert.NotEmpty(r);
+        Assert.True(File.Exists("./data/output.wav"));
     }
 
     [Theory]
@@ -49,23 +50,135 @@ public sealed class FFMpegProcessorTests
     [InlineData("./data/gsm.wav")]
     public async Task ConvertToPcm16Wav_CallsFFmpegAsStream(string testFilePath)
     {
-        var fn = "./data/output.wav";
+        var ext = Path.GetExtension(testFilePath).TrimStart('.');
 
+        using var inputStream = File.OpenRead(testFilePath);
+
+        using var fileStream = new MemoryStream();
+        // new FileStream("./data/output.wav", FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+
+        // Act
+        await Processor.ConvertToPcmS16Le(inputStream, ext, async (outStream, _) =>
+        {
+            await outStream.CopyToAsync(fileStream, CancellationToken);
+            await fileStream.FlushAsync(CancellationToken);
+        }, cancellationToken: CancellationToken);
+
+        Assert.True(fileStream.Length > 0);
+
+        fileStream.Position = 0;
+        var info = await IFFProbeExecutor.Default.GetMetaInfo(fileStream, "wav", CancellationToken);
+        Assert.Equal("wav", info.FormatName);
+    }
+
+    [Theory]
+    [InlineData("./data/input.mp3")]
+    public async Task ConvertToPcmS16Le_WhenFfmpegFails_ThrowsException(string testFilePath)
+    {
         var ext = Path.GetExtension(testFilePath).TrimStart('.');
 
         using var inputStream = File.OpenRead(testFilePath);
 
         // Act
-        await Processor.ConvertToPcmS16Le(inputStream, ext, async outStream =>
+        var ex = await Assert.ThrowsAsync<ProcessExecutionException>(async () =>
         {
-            using var fileStream = new FileStream(fn, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+            await Processor.ConvertToPcmS16Le(inputStream, ext,
+                (_, __) => Task.CompletedTask,
+                cancellationToken: CancellationToken);
+        });
 
-            await outStream.CopyToAsync(fileStream, CancellationToken);
-            await fileStream.FlushAsync(CancellationToken);
-        }, cancellationToken: CancellationToken);
+        Assert.NotNull(ex);
+    }
 
-        Assert.True(File.Exists(fn));
-        File.Delete(fn);
+
+    [Theory]
+    [InlineData("./data/input.mp3")]
+    public async Task ConvertToPcmS16Le_WhenOutputCallbackThrows_ExceptionIsPropagated(string testFilePath)
+    {
+        var ext = Path.GetExtension(testFilePath).TrimStart('.');
+
+        using var inputStream = File.OpenRead(testFilePath);
+
+        var ex = await Assert.ThrowsAsync<Exception>(async () =>
+        {
+            await Processor.ConvertToPcmS16Le(inputStream, ext,
+                (_, __) => throw new Exception("test"),
+                cancellationToken: CancellationToken);
+        });
+
+        Assert.Equal("test", ex.Message);
+    }
+
+
+    [Fact]
+    public async Task ConvertToPcmS16Le_WhenFmtInvalid_ExceptionIsPropagated()
+    {
+        await Assert.ThrowsAsync<ProcessExecutionException>(async () =>
+        {
+            await Processor.ConvertToPcmS16Le(new MemoryStream(),
+                "wav",
+                (_, __) => Task.CompletedTask,
+                cancellationToken: CancellationToken);
+        });
+    }
+
+
+    [Fact]
+    public async Task ConvertToPcmS16Le_WhenCancelled_ThrowsOperationCanceledException()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var inputStream = new MemoryStream(new byte[1024]); // небольшой валидный поток (или имитация)
+        await cts.CancelAsync(); // сразу отменяем — чтобы проверить реакцию
+
+        // Act & Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            await Processor.ConvertToPcmS16Le(
+                inputStream: inputStream,
+                inputFormat: "mp3",
+                onOutput: (_, __) => Task.CompletedTask,
+                cancellationToken: cts.Token);
+        });
+    }
+
+
+    [Theory]
+    [InlineData("./data/input.mp3")]
+    public async Task ConvertToPcmS16Le_WhenCancelledDuringExecution_ThrowsOperationCanceledException(string testFilePath)
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        using var inputStream = File.OpenRead(testFilePath);
+
+        var task = Processor.ConvertToPcmS16Le(
+            inputStream: inputStream,
+            inputFormat: "mp3",
+            onOutput: async (output, ct) =>
+            {
+                var buffer = new byte[4096];
+                try
+                {
+                    while (true)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        var read = await output.ReadAsync(buffer, ct);
+                        if (read == 0) break;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+            },
+            cancellationToken: cts.Token);
+
+        // Отменяем через 100 мс
+        await Task.Delay(100, CancellationToken);
+        await cts.CancelAsync();
+
+        // Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(() => task);
     }
 
 
@@ -74,10 +187,11 @@ public sealed class FFMpegProcessorTests
     [InlineData("./data/input.wav")]
     public async Task ConvertToMp3_ShouldBeWork(string testFilePath)
     {
+        var fn = "./data/output.mp3";
         // Act
-        var r = await Processor.ConvertToMp3(
-            testFilePath, "./data/output.mp3", isOverwrite: true, cancellationToken: CancellationToken);
-        Assert.NotEmpty(r);
+        await Processor.ConvertToMp3(
+            testFilePath, fn, isOverwrite: true, cancellationToken: CancellationToken);
+        Assert.True(File.Exists(fn));
     }
 
     [Theory]
@@ -85,10 +199,11 @@ public sealed class FFMpegProcessorTests
     [InlineData("./data/input.wav")]
     public async Task ConvertToOgg_ShouldBeWork(string testFilePath)
     {
+        var fn = "./data/output.ogg_";
         // Act
-        var r = await Processor.ConvertToOgg(
-            testFilePath, "./data/output.ogg_", isOverwrite: true, cancellationToken: CancellationToken);
-        Assert.NotEmpty(r);
+        await Processor.ConvertToOgg(
+            testFilePath, fn, isOverwrite: true, cancellationToken: CancellationToken);
+        Assert.True(File.Exists(fn));
     }
 
 
@@ -104,8 +219,7 @@ public sealed class FFMpegProcessorTests
         if (File.Exists(outputPath))
             File.Delete(outputPath);
 
-
-        var s = await Processor.ConvertToPcmS16Le(
+        await Processor.ConvertToPcmS16Le(
             inputFileName: inputPath,
             outputFileName: outputPath,
             isOverwrite: true,
@@ -113,8 +227,6 @@ public sealed class FFMpegProcessorTests
             outputSampleRate: 8000,
             cancellationToken: CancellationToken
         );
-
-        Assert.NotEmpty(s);
 
         Assert.True(File.Exists(outputPath));
 
