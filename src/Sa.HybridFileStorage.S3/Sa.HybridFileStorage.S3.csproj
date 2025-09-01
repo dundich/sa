@@ -3,7 +3,7 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.0.3</Version>
+    <Version>0.1.0</Version>
     <Description>File storage management in S3</Description>
   </PropertyGroup>
 

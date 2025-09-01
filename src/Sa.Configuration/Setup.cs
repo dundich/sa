@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Sa.Configuration.SecretStore;
 
 namespace Sa.Configuration;
@@ -23,6 +23,6 @@ public static class Setup
         return builder;
     }
 
-    public static string? PopulateSecrets(this IConfiguration configuration, string key)
-        => Secrets.Service.PopulateSecrets(configuration[key]);
+    public static string? PopulateSecrets(this IConfiguration configuration, string key, bool returnNullIfSecretNotFound = false)
+        => Secrets.Service.PopulateSecrets(configuration[key], returnNullIfSecretNotFound);
 }

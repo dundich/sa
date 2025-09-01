@@ -8,27 +8,27 @@ $dist_folder = "$root\dist"
 $msbuild_verbosity = "n"
 		
 $projects = @(
-	# "Sa.Media",
+	"Sa.Media",
 	"Sa.Media.FFmpeg"
 
-	# "Sa.Data.PostgreSql",
-	# "Sa.Data.S3",
+	"Sa.Data.PostgreSql",
+	"Sa.Data.S3",
 
-	# "Sa.Configuration",
-    # "Sa.Configuration.PostgreSql",
+	"Sa.Configuration",
+    "Sa.Configuration.PostgreSql",
 	
-	# "Sa.Schedule",
+	"Sa.Schedule",
 
-	# "Sa.Partitional.PostgreSql",
+	"Sa.Partitional.PostgreSql",
 
-    # "Sa.Outbox.Support",
-	# "Sa.Outbox",
-	# "Sa.Outbox.PostgreSql",
+    "Sa.Outbox.Support",
+	"Sa.Outbox",
+	"Sa.Outbox.PostgreSql",
 
-	# "Sa.HybridFileStorage",
-	# "Sa.HybridFileStorage.FileSystem",
-	# "Sa.HybridFileStorage.Postgres",
-	# "Sa.HybridFileStorage.S3"
+	"Sa.HybridFileStorage",
+	"Sa.HybridFileStorage.FileSystem",
+	"Sa.HybridFileStorage.Postgres",
+	"Sa.HybridFileStorage.S3"
 )
 
 # msbuild.exe https://msdn.microsoft.com/pl-pl/library/ms164311(v=vs.80).aspx
