@@ -46,10 +46,33 @@ public interface IFFMpegExecutor
     Task<string> ConvertToPcmS16Le(
         string inputFileName,
         string outputFileName,
-        int? outputSampleRate = null,
-        int? outputChannelCount = null,
-        bool isOverwrite = false,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    /// Converts the input audio stream to PCM S16 LE (16-bit signed integer, little-endian) 
+    /// </summary>
+    /// <param name="inputStream">Input audio stream (must be readable).</param>
+    /// <param name="inputFormat">Input format (e.g. "mp3", "wav", "flac").</param>
+    /// <param name="onOutput">A callback that receives the resulting audio stream in WAV format with PCM S16 LE data.</param>
+    /// <param name="outputSampleRate">Target sample rate (default: 16000 Hz). Use null to preserve original.</param>
+    /// <param name="outputChannelCount">Number of output channels (e.g. 1 for mono). Use null to preserve original layout.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous conversion operation.</returns>
+    /// <exception cref="ProcessStartException">Thrown when FFmpeg process fails to start.</exception>
+    /// <exception cref="ProcessExecutionException">Thrown when FFmpeg returns a non-zero exit code (e.g. unsupported format, decoding error).</exception>
+    /// <exception cref="ArgumentException">Thrown if required parameters are invalid (e.g. null stream, empty format).</exception>
+    Task ConvertToPcmS16Le(
+            Stream inputStream,
+            string inputFormat,
+            Func<Stream, CancellationToken, Task> onOutput,
+            int? outputSampleRate = 16000,
+            ushort? outputChannelCount = null,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Converts an audio file to MP3 format.
@@ -62,7 +85,8 @@ public interface IFFMpegExecutor
     Task<string> ConvertToMp3(
         string inputFileName,
         string outputFileName,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -78,7 +102,8 @@ public interface IFFMpegExecutor
         string inputFileName,
         string outputFileName,
         bool isLibopus = false,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
     public static IFFMpegExecutor Default { get; } = new FFMpegExecutorFactory().CreateFFMpegExecutor();

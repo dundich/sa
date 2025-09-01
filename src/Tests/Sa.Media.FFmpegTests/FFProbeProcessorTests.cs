@@ -9,6 +9,7 @@ public sealed class FFProbeProcessorTests
     static IFFProbeExecutor Processor => IFFProbeExecutor.Default;
 
     [Theory]
+    [InlineData("./data/ffout.wav")]
     [InlineData("./data/input.mp3")]
     [InlineData("./data/input.wav")]
     [InlineData("./data/input.ogg")]
@@ -16,11 +17,12 @@ public sealed class FFProbeProcessorTests
     {
         // Act
         var (channels, sampleRate) = await Processor.GetChannelsAndSampleRate(testFilePath, cancellationToken: CancellationToken);
-        Assert.Equal(2, channels);
-        Assert.True(sampleRate > 0);
+        Assert.InRange(channels!.Value, 1, 2);
+        Assert.True(sampleRate >= 8000);
     }
 
     [Theory]
+    [InlineData("./data/ffout.wav")]
     [InlineData("./data/input.mp3")]
     [InlineData("./data/input.wav")]
     [InlineData("./data/input.ogg")]
@@ -34,5 +36,21 @@ public sealed class FFProbeProcessorTests
         Assert.True(result.Duration > 0);
         Assert.False(string.IsNullOrWhiteSpace(result.FormatName));
         Assert.True(result.BitRate > 0);
+    }
+
+
+    [Theory]
+    [InlineData("./data/ffout.wav")]
+    [InlineData("./data/input.mp3")]
+    [InlineData("./data/input.wav")]
+    [InlineData("./data/input.ogg")]
+    public async Task GetMetaInfo_CorrectlyReadsAsStream(string testFilePath)
+    {
+        var ext = Path.GetExtension(testFilePath).TrimStart('.');
+        using var stream = File.OpenRead(testFilePath);
+        // Act
+        var result = await Processor.GetMetaInfo(stream, ext, CancellationToken);
+
+        Assert.Equal(ext, result.FormatName);
     }
 }

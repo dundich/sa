@@ -14,14 +14,12 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
         string outputFileName,
         int? outputSampleRate = null,
         string channelSuffix = "_channel_",
-        bool isOverwrite = false,
+        bool isOverwrite = true,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(inputFileName);
         ArgumentNullException.ThrowIfNullOrWhiteSpace(outputFileName);
-
-
 
         // Получаем количество каналов из метаданных
         var (channels, _) = await _ffprobe.GetChannelsAndSampleRate(inputFileName, cancellationToken);
@@ -34,7 +32,6 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
             throw new NotSupportedException("Only mono (1 channel) and stereo (2 channels) audio formats are supported.");
         }
 
-
         var outFileExtension = Path.GetExtension(outputFileName) ?? ".wav";
 
         string outFilePrefix = Path.Combine(
@@ -46,7 +43,15 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
 
         if (channels == 1)
         {
-            await _ffmpeg.ConvertToPcmS16Le(inputFileName, file0, outputSampleRate, 1, isOverwrite, cancellationToken);
+            await _ffmpeg.ConvertToPcmS16Le(
+                inputFileName,
+                file0,
+                outputSampleRate,
+                1,
+                isOverwrite,
+                timeout,
+                cancellationToken);
+
             return [file0];
         }
 
@@ -58,7 +63,7 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
         string over = isOverwrite ? "-y" : string.Empty;
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
 
-        string cmd = $"{over} -i \"{inputFileName}\" -filter_complex \"[0:a]channelsplit=channel_layout=stereo[left][right]\" -map \"[left]\" -acodec pcm_s16le {sampleRate} -f wav \"{files[0]}\" -map \"[right]\"  -acodec pcm_s16le -f wav \"{files[1]}\"";
+        string cmd = $"{over} {Constants.CleanBannerFlags} -i \"{inputFileName}\" -filter_complex \"[0:a]channelsplit=channel_layout=stereo[left][right]\" -map \"[left]\" -acodec pcm_s16le {sampleRate} -f wav \"{files[0]}\" -map \"[right]\"  -acodec pcm_s16le -f wav \"{files[1]}\"";
 
         _ = await _ffmpeg.Exteсutor.ExecuteAsync(
             cmd,
@@ -75,7 +80,7 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
         string rightFileName,
         string outputFileName,
         int? outputSampleRate = null,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
@@ -86,7 +91,7 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
         string over = isOverwrite ? "-y" : string.Empty;
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
 
-        string cmd = $"{over} -i \"{leftFileName}\" -i \"{rightFileName}\" -filter_complex \"[0:a][1:a]amerge=inputs=2[a]\" -map \"[a]\" -ac 2 -acodec pcm_s16le {sampleRate} -f wav \"{outputFileName}\"";
+        string cmd = $"{over} {Constants.CleanBannerFlags} -i \"{leftFileName}\" -i \"{rightFileName}\" -filter_complex \"[0:a][1:a]amerge=inputs=2[a]\" -map \"[a]\" -ac 2 -acodec pcm_s16le {sampleRate} -f wav {Constants.CleanWavOutputFlags} \"{outputFileName}\"";
 
         _ = await _ffmpeg.Exteсutor.ExecuteAsync(
             cmd,

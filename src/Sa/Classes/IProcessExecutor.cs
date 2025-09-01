@@ -34,7 +34,7 @@ internal interface IProcessExecutor
             , e => error.AppendLine(e)
             , timeout
             , cancellationToken
-        );
+        ).ConfigureAwait(false);
 
         var result = new ProcessExecutionResult(
             exitcode,
@@ -45,6 +45,18 @@ internal interface IProcessExecutor
 
         throw new ProcessExecutionResultException(result);
     }
+
+    /// <summary>
+    /// Executes stdout as a stream.
+    /// Stderr is captured and checked on completion
+    /// </summary>
+    Task ExecuteStdOutAsync(
+        ProcessStartInfo startInfo
+        , Stream inputStream
+        , Func<Stream, CancellationToken, Task> onOutput
+        , TimeSpan? timeout = null
+        , CancellationToken cancellationToken = default);
+
 
     static IProcessExecutor Default { get; } = new ProcessExecutor();
 }
@@ -70,10 +82,9 @@ public record ProcessExecutionResult(
     string StandardError);
 
 
-internal class ProcessExecutor : IProcessExecutor
-{
-    internal TimeSpan DefaultExecutionTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
+internal sealed class ProcessExecutor : IProcessExecutor
+{
     public async Task<int> ExecuteAsync(
         ProcessStartInfo startInfo
         , Action<string>? outputDataReceived = null
@@ -81,39 +92,43 @@ internal class ProcessExecutor : IProcessExecutor
         , TimeSpan? timeout = null
         , CancellationToken cancellationToken = default)
     {
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         startInfo.RedirectStandardOutput = outputDataReceived != null;
         startInfo.RedirectStandardError = errorDataReceived != null;
 
         using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
 
-        var outputCompletion = new TaskCompletionSource<bool>();
-        var errorCompletion = new TaskCompletionSource<bool>();
-
-        if (outputDataReceived != null)
+        if (!process.Start())
         {
-            process.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data != null) outputDataReceived(e.Data);
-                else outputCompletion.TrySetResult(true);
-            };
+            process.Dispose();
+            throw new ProcessStartException($"Failed to start process: '{startInfo.FileName}' with arguments '{startInfo.Arguments}'");
         }
 
-        if (errorDataReceived != null)
-        {
-            process.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data != null) errorDataReceived(e.Data);
-                else errorCompletion.TrySetResult(true);
-            };
-        }
+        var outputCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var errorCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        int exitCode;
 
         try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (!process.Start())
+            if (outputDataReceived != null)
             {
-                throw new ProcessStartException($"Failed to start process: {startInfo.FileName}");
+                process.OutputDataReceived += (_, e) =>
+                {
+                    if (e.Data != null) outputDataReceived(e.Data);
+                    else outputCompletion.TrySetResult(true);
+                };
+            }
+
+            if (errorDataReceived != null)
+            {
+                process.ErrorDataReceived += (_, e) =>
+                {
+                    if (e.Data != null) errorDataReceived(e.Data);
+                    else errorCompletion.TrySetResult(true);
+                };
             }
 
             if (startInfo.RedirectStandardOutput)
@@ -122,60 +137,256 @@ internal class ProcessExecutor : IProcessExecutor
             if (startInfo.RedirectStandardError)
                 process.BeginErrorReadLine();
 
-            using var timeoutCts = new CancellationTokenSource(timeout ?? DefaultExecutionTimeout);
+            using var timeoutCts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, 
+                timeoutCts?.Token ?? CancellationToken.None);
 
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
-            var processTask = process.WaitForExitAsync(linkedCts.Token);
+            var waitTask = process.WaitForExitAsync(linkedCts.Token);
 
             // Wait for all streams to finish reading
-            List<Task> outputTasks = [];
+            List<Task> outputTasks = [waitTask];
 
-            if (outputDataReceived != null)
-                outputTasks.Add(outputCompletion.Task);
+            if (outputDataReceived != null) outputTasks.Add(outputCompletion.Task);
+            if (errorDataReceived != null) outputTasks.Add(errorCompletion.Task);
 
-            if (errorDataReceived != null)
-                outputTasks.Add(errorCompletion.Task);
-
-            await Task.WhenAll(processTask, Task.WhenAll(outputTasks))
-                .ConfigureAwait(false);
-
-            return process.ExitCode;
+            await Task.WhenAll(outputTasks).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            TerminateProcess(process);
             throw new ProcessTimeoutException("Process execution timed out");
         }
         catch (Exception ex)
         {
-            TerminateProcess(process);
-            throw new ProcessExecutionException($"Process execution failed", ex);
+            throw new ProcessExecutionException(process.ExitCode, "Process execution failed", ex);
+        }
+        finally
+        {
+            exitCode = SafeDisposeProcess(process);
+        }
+
+        return exitCode;
+    }
+
+    /// <summary>
+    /// Запускает процесс, и передаёт поток stdout в callback.
+    /// Поток stderr собирается автоматически.
+    /// При завершении — проверяется код возврата.
+    /// </summary>
+    /// <param name="startInfo">Настройки процесса.</param>
+    /// <param name="inputStream">Поток для stdin</param>
+    /// <param name="onOutput">Callback, получающий stdout. Должен быть асинхронным.</param>
+    /// <returns>Задача, завершающаяся после обработки потока и проверки результата.</returns>
+    public async Task ExecuteStdOutAsync(
+        ProcessStartInfo startInfo,
+        Stream inputStream,
+        Func<Stream, CancellationToken, Task> onOutput,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Настройка
+        startInfo.RedirectStandardInput = true;
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+
+
+        var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+
+
+        if (!process.Start())
+        {
+            process.Dispose();
+            throw new ProcessStartException(
+                $"Failed to start process: '{startInfo.FileName}' with arguments '{startInfo.Arguments}'");
+        }
+
+        StringBuilder stderrBuilder = new();
+        int exitCode;
+        try
+        {
+            // Создаём токен с таймаутом
+            using var timeoutCts = timeout.HasValue
+                ? new CancellationTokenSource(timeout.Value)
+                : null;
+
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                timeoutCts?.Token ?? CancellationToken.None);
+
+
+            List<Task> backgroundTasks = [
+                WriteToStdInAsync(process, inputStream, linkedCts.Token), // write stdin
+                ReadStandardErrorToBuilderAsync(process, stderrBuilder, linkedCts.Token), // read stderr
+            ];
+
+            Stream stdoutStream = process.StandardOutput.BaseStream;
+            await onOutput(stdoutStream, linkedCts.Token).ConfigureAwait(false);
+            await stdoutStream.DisposeAsync();
+
+            await Task.WhenAll(backgroundTasks).ConfigureAwait(false);
+        }
+        finally
+        {
+            exitCode = SafeDisposeProcess(process);
+        }
+
+        if (exitCode != 0)
+        {
+            throw new ProcessExecutionException(exitCode, $"Process failed (exit={exitCode}): {stderrBuilder}");
         }
     }
 
-    private static void TerminateProcess(Process process)
+
+    private static async Task ReadStandardErrorToBuilderAsync(
+        Process process,
+        StringBuilder errorBuilder,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            if (!process.HasExited)
-                process.Kill();
+            string error = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                errorBuilder.Append(error);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            if (errorBuilder.Length == 0)
+                errorBuilder.Append("stderr: read interrupted (cancellation).");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Process termination failed: {ex.Message}");
+            errorBuilder.Append($"stderr: read failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Асинхронно записывает входной поток в stdin процесса.
+    /// Автоматически закрывает stdin после завершения.
+    /// </summary>
+    private static async Task WriteToStdInAsync(
+        Process process,
+        Stream inputStream,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // input to stdin
+            await using (inputStream.ConfigureAwait(false))
+            {
+                await inputStream.CopyToAsync(process.StandardInput.BaseStream, cancellationToken)
+                                 .ConfigureAwait(false);
+            }
+
+            // Завершаем запись
+            await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            process.StandardInput.Close();
+        }
+        catch (Exception ex)
+        {
+            process.StandardInput.Close();
+            throw new IOException("Failed to write input stream to process stdin.", ex);
+        }
+    }
+
+    private static int SafeDisposeProcess(Process process)
+    {
+        int exitCode = -1;
+
+        try
+        {
+            if (process.HasExited)
+            {
+                exitCode = process.ExitCode;
+                return exitCode;
+            }
+
+            process.StandardInput?.Close();
+            process.StandardOutput?.Close();
+
+            // graceful shutdown
+            if (process.WaitForExit(500))
+            {
+                exitCode = process.ExitCode;
+                return exitCode;
+            }
+
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                if (process.HasExited)
+                {
+                    exitCode = process.ExitCode;
+                    return exitCode;
+                }
+                throw;
+            }
+            catch (NotSupportedException)
+            {
+                process.Kill();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return exitCode;
+            }
+
+            if (process.WaitForExit(2000))
+            {
+                exitCode = process.ExitCode;
+            }
+            else
+            {
+                Console.WriteLine("Process did not terminate after Kill()");
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            Console.WriteLine("Process is invalid or already disposed.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Unexpected error during process termination: {ex.Message}");
+        }
+        finally
+        {
+            try
+            {
+                process.Dispose();
+            }
+            catch
+            {
+                // skeep
+            }
+        }
+
+        return exitCode;
     }
 }
 
 
 // Custom exceptions
-public class ProcessExecutionException(string message, Exception inner) : Exception(message, inner)
+public class ProcessExecutionException(int exitCode, string message, Exception? inner = null)
+    : Exception(message, inner)
 {
+    public int Exitcode => exitCode;
 }
 
 public class ProcessExecutionResultException(ProcessExecutionResult result)
-    : Exception($"Process execution failed with exit code {result.ExitCode}. Error output: {result.StandardError}")
+    : Exception($"Process failed (exit={result.ExitCode}): {result.StandardError}")
 {
     public ProcessExecutionResult Result { get; } = result;
 }

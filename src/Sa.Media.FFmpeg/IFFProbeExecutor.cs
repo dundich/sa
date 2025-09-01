@@ -31,6 +31,11 @@ public interface IFFProbeExecutor
     Task<MediaMetadata> GetMetaInfo(string filePath, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Retrieves detailed metadata information about the media file.
+    /// </summary>
+    Task<MediaMetadata> GetMetaInfo(Stream audioStream, string inputFormat, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets the default implementation of the <see cref="IFFProbeExecutor"/> interface.
     /// </summary>
     public static IFFProbeExecutor Default { get; } = new FFMpegExecutorFactory().CreateFFProbeExecutor();

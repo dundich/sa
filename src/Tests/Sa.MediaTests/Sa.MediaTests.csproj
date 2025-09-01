@@ -7,15 +7,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="data\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\Sa.Media\Sa.Media.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="data\12345.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="data\ffout.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="data\psmS16Le.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
