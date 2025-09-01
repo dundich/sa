@@ -48,7 +48,8 @@ public interface IFFMpegExecutor
         string outputFileName,
         int? outputSampleRate = 16000,
         ushort? outputChannelCount = null,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
 
@@ -70,6 +71,7 @@ public interface IFFMpegExecutor
             Func<Stream, CancellationToken, Task> onOutput,
             int? outputSampleRate = 16000,
             ushort? outputChannelCount = null,
+            TimeSpan? timeout = null,
             CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -83,7 +85,8 @@ public interface IFFMpegExecutor
     Task<string> ConvertToMp3(
         string inputFileName,
         string outputFileName,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -99,7 +102,8 @@ public interface IFFMpegExecutor
         string inputFileName,
         string outputFileName,
         bool isLibopus = false,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
     public static IFFMpegExecutor Default { get; } = new FFMpegExecutorFactory().CreateFFMpegExecutor();
