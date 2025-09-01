@@ -85,8 +85,6 @@ public record ProcessExecutionResult(
 
 internal sealed class ProcessExecutor : IProcessExecutor
 {
-    internal TimeSpan DefaultExecutionTimeout { get; set; } = TimeSpan.FromSeconds(30);
-
     public async Task<int> ExecuteAsync(
         ProcessStartInfo startInfo
         , Action<string>? outputDataReceived = null
@@ -139,8 +137,10 @@ internal sealed class ProcessExecutor : IProcessExecutor
             if (startInfo.RedirectStandardError)
                 process.BeginErrorReadLine();
 
-            using var timeoutCts = new CancellationTokenSource(timeout ?? DefaultExecutionTimeout);
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+            using var timeoutCts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, 
+                timeoutCts?.Token ?? CancellationToken.None);
 
             var waitTask = process.WaitForExitAsync(linkedCts.Token);
 

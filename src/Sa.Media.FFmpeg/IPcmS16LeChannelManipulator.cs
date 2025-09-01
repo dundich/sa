@@ -21,7 +21,7 @@ public interface IPcmS16LeChannelManipulator
         string outputFileName,
         int? outputSampleRate = null,
         string channelSuffix = "_channel_",
-        bool isOverwrite = false,
+        bool isOverwrite = true,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
@@ -42,7 +42,7 @@ public interface IPcmS16LeChannelManipulator
         string rightFileName,
         string outputFileName,
         int? outputSampleRate = null,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 }

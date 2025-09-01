@@ -4,10 +4,6 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
 {
     public IFFRawExteсutor Exteсutor => exteсutor;
 
-    private const string CleanWavOutputFlags = "-f wav -map_metadata -1 -write_bext 0 -bitexact -fflags +bitexact";
-
-    private const string CleanBannerFlags = "-hide_banner -loglevel error";
-
     public async Task<string> GetVersion(CancellationToken cancellationToken = default)
     {
         var result = await exteсutor.ExecuteAsync("-version", cancellationToken: cancellationToken);
@@ -31,14 +27,15 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
         string outputFileName,
         int? outputSampleRate = 16000,
         ushort? outputChannelCount = null,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
         var channelCount = outputChannelCount.HasValue ? $"-ac {outputChannelCount}" : string.Empty;
-        var cmd = $"{OverArg(isOverwrite)} {CleanBannerFlags} -i {QuotePath(inputFileName)} -acodec pcm_s16le {channelCount} {sampleRate} {CleanWavOutputFlags} {QuotePath(outputFileName)}";
+        var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} -acodec pcm_s16le {channelCount} {sampleRate} -f wav {Constants.CleanWavOutputFlags} {QuotePath(outputFileName)}";
 
-        var result = await exteсutor.ExecuteAsync(cmd, cancellationToken: cancellationToken);
+        var result = await exteсutor.ExecuteAsync(cmd, timeout: timeout, cancellationToken: cancellationToken);
 
         return result.StandardError;
     }
@@ -49,23 +46,25 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
         Func<Stream, CancellationToken, Task> onOutput,
         int? outputSampleRate = 16000,
         ushort? outputChannelCount = null,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
         var channelCount = outputChannelCount.HasValue ? $"-ac {outputChannelCount}" : string.Empty;
-        var cmd = $"{CleanBannerFlags} -f {inputFormat} -i pipe:0 -acodec pcm_s16le {channelCount} {sampleRate} {CleanWavOutputFlags} pipe:1";
+        var cmd = $"{Constants.CleanBannerFlags} -f {inputFormat} -i pipe:0 -acodec pcm_s16le {channelCount} {sampleRate} -f wav {Constants.CleanWavOutputFlags} pipe:1";
 
-        await exteсutor.ExecuteStdOutAsync(cmd, inputStream, onOutput, cancellationToken: cancellationToken);
+        await exteсutor.ExecuteStdOutAsync(cmd, inputStream, onOutput, timeout: timeout, cancellationToken: cancellationToken);
     }
 
     public async Task<string> ConvertToMp3(
         string inputFileName,
         string outputFileName,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        var cmd = $"{OverArg(isOverwrite)} {CleanBannerFlags} -i {QuotePath(inputFileName)} -f mp3 {Libmp3lameArg()} {QuotePath(outputFileName)}";
-        var result = await exteсutor.ExecuteAsync(cmd, cancellationToken: cancellationToken);
+        var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} -f mp3 {Libmp3lameArg()} {QuotePath(outputFileName)}";
+        var result = await exteсutor.ExecuteAsync(cmd, timeout:timeout, cancellationToken: cancellationToken);
         return result.StandardError;
     }
 
@@ -73,11 +72,12 @@ internal sealed class FFMpegExecutor(IFFRawExteсutor exteсutor) : IFFMpegExecu
         string inputFileName,
         string outputFileName,
         bool isLibopus = false,
-        bool isOverwrite = false,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        var cmd = $"{OverArg(isOverwrite)} {CleanBannerFlags} -i {QuotePath(inputFileName)} -f ogg {LibopuArg(isLibopus)} {QuotePath(outputFileName)}";
-        var result = await exteсutor.ExecuteAsync(cmd, cancellationToken: cancellationToken);
+        var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} -f ogg {LibopuArg(isLibopus)} {QuotePath(outputFileName)}";
+        var result = await exteсutor.ExecuteAsync(cmd, timeout: timeout, cancellationToken: cancellationToken);
         return result.StandardError;
     }
 
