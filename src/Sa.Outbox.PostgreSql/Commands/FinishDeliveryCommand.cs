@@ -20,7 +20,7 @@ internal class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate
         int total = 0;
 
         int startIndex = 0;
-        foreach ((string sql, int length) in sqlCache.GetSql(outboxMessages.Length, FinishDeliveryParamNames.MaxIndex))
+        foreach ((string sql, int length) in sqlCache.GetSql(outboxMessages.Length, CachedSqlParamNames.MaxIndex))
         {
             var slice = new ArraySegment<IOutboxContext<TMessage>>(outboxMessages, startIndex, length);
             startIndex += length;
@@ -62,13 +62,13 @@ internal class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate
             }
 
             cmd
-                .AddParameter<FinishDeliveryParamNames>("@id_", i, id)
-                .AddParameter<FinishDeliveryParamNames>("@oid_", i, context.OutboxId)
-                .AddParameter<FinishDeliveryParamNames>("@err_", i, errorId ?? string.Empty)
-                .AddParameter<FinishDeliveryParamNames>("@st_", i, statusCode)
-                .AddParameter<FinishDeliveryParamNames>("@msg_", i, msg ?? string.Empty)
-                .AddParameter<FinishDeliveryParamNames>("@exp_", i, lockExpiresOn)
-                .AddParameter<FinishDeliveryParamNames>("@cr_", i, createdAt.ToUnixTimeSeconds())
+                .AddParameter<CachedSqlParamNames>("@id_", i, id)
+                .AddParameter<CachedSqlParamNames>("@oid_", i, context.OutboxId)
+                .AddParameter<CachedSqlParamNames>("@err_", i, errorId ?? string.Empty)
+                .AddParameter<CachedSqlParamNames>("@st_", i, statusCode)
+                .AddParameter<CachedSqlParamNames>("@msg_", i, msg ?? string.Empty)
+                .AddParameter<CachedSqlParamNames>("@exp_", i, lockExpiresOn)
+                .AddParameter<CachedSqlParamNames>("@cr_", i, createdAt.ToUnixTimeSeconds())
                 ;
         }
 

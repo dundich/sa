@@ -244,7 +244,7 @@ ON CONFLICT DO NOTHING
         List<string> values = [];
         for (int i = 0; i < count; i++)
         {
-            values.Add($"   (@id_{i},@type_{i},@message_{i},@created_at_{i})");
+            values.Add($"   (@id_{i},@st_{i},@msg_{i},@cr_{i})");
         }
         return string.Join(",\r\n", values);
     }
@@ -264,7 +264,7 @@ ON CONFLICT DO NOTHING
 
 
 
-internal sealed class FinishDeliveryParamNames : INamePrefixProvider
+internal sealed class CachedSqlParamNames : INamePrefixProvider
 {
     public static int MaxIndex => 512;
 

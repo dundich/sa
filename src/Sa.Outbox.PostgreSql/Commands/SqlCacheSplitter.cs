@@ -46,4 +46,3 @@ internal class SqlCacheSplitter(Func<int, string> genSql)
         return (sql, len);
     }
 }
-
