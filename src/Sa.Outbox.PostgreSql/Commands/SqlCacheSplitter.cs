@@ -4,7 +4,7 @@ internal class SqlCacheSplitter(Func<int, string> genSql)
 {
     private readonly Dictionary<int, string> _sqlCache = [];
 
-    public IEnumerable<(string sql, int len)> GetSql(int len, int maxLen = 4096)
+    public IEnumerable<(string sql, int length)> GetSql(int len, int maxLen = 512)
     {
         if (len <= 0)
         {

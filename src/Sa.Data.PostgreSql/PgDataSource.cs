@@ -1,4 +1,4 @@
-using Npgsql;
+﻿using Npgsql;
 
 namespace Sa.Data.PostgreSql;
 
@@ -36,29 +36,29 @@ public sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSource,
         return result;
     }
 
-    public async Task<int> ExecuteNonQuery(string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
+    public async Task<int> ExecuteNonQuery(string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
     {
         using NpgsqlConnection connection = await OpenDbConnection(cancellationToken);
         using NpgsqlCommand cmd = new(sql, connection);
-        AddParameters(cmd, parameters);
+        initCommand?.Invoke(cmd);
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<object?> ExecuteScalar(string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
+    public async Task<object?> ExecuteScalar(string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
     {
         using NpgsqlConnection connection = await OpenDbConnection(cancellationToken);
         using NpgsqlCommand cmd = new(sql, connection);
-        AddParameters(cmd, parameters);
+        initCommand?.Invoke(cmd);
         return await cmd.ExecuteScalarAsync(cancellationToken);
     }
 
-    public async Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
+    public async Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
     {
         int rowCount = 0;
 
         using NpgsqlConnection connection = await OpenDbConnection(cancellationToken);
         using NpgsqlCommand cmd = new(sql, connection);
-        AddParameters(cmd, parameters);
+        initCommand?.Invoke(cmd);
         using NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken) && !cancellationToken.IsCancellationRequested)
         {
@@ -66,15 +66,5 @@ public sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSource,
             rowCount++;
         }
         return rowCount;
-    }
-
-
-    static void AddParameters(NpgsqlCommand cmd, IReadOnlyCollection<NpgsqlParameter> parameters)
-    {
-        if (parameters?.Count > 0)
-        {
-            foreach (var parameter in parameters)
-                cmd.Parameters.Add(parameter);
-        }
     }
 }
