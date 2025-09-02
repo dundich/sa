@@ -14,5 +14,10 @@ public interface IOutboxPayloadMessage
     /// <summary>
     /// Gets the identifier for the tenant associated with the payload.
     /// </summary>
-    public int TenantId { get; }
+    int TenantId { get; }
+
+    /// <summary>
+    /// Gets the part identifier associated with the Outbox message.
+    /// </summary>
+    static abstract string PartName { get; }
 }

@@ -3,7 +3,7 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.1.2</Version>
+    <Version>0.2.0</Version>
     <Description>Simple client for Npqsql</Description>
   </PropertyGroup>
 

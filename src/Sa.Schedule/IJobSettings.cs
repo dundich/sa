@@ -1,6 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
-
-namespace Sa.Schedule;
+﻿namespace Sa.Schedule;
 
 /// <summary>
 /// Defines the settings for a job.

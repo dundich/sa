@@ -1,5 +1,6 @@
-using Sa.Extensions;
+﻿using Sa.Extensions;
 using Sa.Outbox.Exceptions;
+using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
@@ -9,7 +10,8 @@ internal class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliveryCourie
     public async ValueTask<int> Deliver<TMessage>(
         IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages,
         int maxDeliveryAttempts,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) 
+        where TMessage : IOutboxPayloadMessage
     {
         try
         {

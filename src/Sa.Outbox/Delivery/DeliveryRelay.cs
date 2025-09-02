@@ -1,8 +1,9 @@
-using Sa.Classes;
+﻿using Sa.Classes;
 using Sa.Extensions;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Repository;
+using Sa.Outbox.Support;
 
 
 namespace Sa.Outbox.Delivery;
@@ -20,6 +21,7 @@ internal sealed class DeliveryRelay(
     private readonly bool _globalForEachTenant = partitionalSettings?.ForEachTenant ?? false;
 
     public async Task<int> StartDelivery<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)
+        where TMessage : IOutboxPayloadMessage
     {
         int batchSize = settings.ExtractSettings.MaxBatchSize;
 
@@ -40,6 +42,7 @@ internal sealed class DeliveryRelay(
     }
 
     private async Task<int> ProcessMultipleTenants<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> slice, OutboxDeliverySettings settings, CancellationToken cancellationToken)
+        where TMessage : IOutboxPayloadMessage
     {
         int count = 0;
         int[] tenantIds = await partCache.GetTenantIds(cancellationToken);
@@ -53,6 +56,7 @@ internal sealed class DeliveryRelay(
     }
 
     private async Task<int> FillBuffer<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> buffer, OutboxDeliverySettings settings, int tenantId, CancellationToken cancellationToken)
+        where TMessage : IOutboxPayloadMessage
     {
         OutboxMessageFilter filter = CreateFilter<TMessage>(settings, tenantId);
 
@@ -76,6 +80,7 @@ internal sealed class DeliveryRelay(
     }
 
     private OutboxMessageFilter CreateFilter<TMessage>(OutboxDeliverySettings settings, int tenantId)
+        where TMessage : IOutboxPayloadMessage
     {
         OutboxMessageTypeInfo ti = OutboxMessageTypeHelper.GetOutboxMessageTypeInfo<TMessage>();
         DateTimeOffset now = timeProvider.GetUtcNow();
@@ -107,6 +112,7 @@ internal sealed class DeliveryRelay(
     private static string GenTransactId() => $"{Environment.MachineName}-{Guid.NewGuid():N}";
 
     private async Task<int> DeliverBatches<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> deliveryMessages, OutboxDeliverySettings settings, OutboxMessageFilter filter, CancellationToken cancellationToken)
+        where TMessage : IOutboxPayloadMessage
     {
         int successfulDeliveries = 0;
 
@@ -125,6 +131,7 @@ internal sealed class DeliveryRelay(
     }
 
     private async Task<int> DeliveryCourier<TMessage>(OutboxDeliverySettings settings, OutboxMessageFilter filter, IOutboxContext<TMessage>[] outboxMessages, CancellationToken cancellationToken)
+        where TMessage : IOutboxPayloadMessage
     {
         int successfulDeliveries = await deliveryCourier.Deliver(outboxMessages, settings.ConsumeSettings.MaxDeliveryAttempts, cancellationToken);
 

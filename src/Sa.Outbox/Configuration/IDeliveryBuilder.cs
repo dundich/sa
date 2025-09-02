@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using Sa.Outbox.Support;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox;
 
@@ -17,5 +18,6 @@ public interface IDeliveryBuilder
     /// <param name="instanceCount">The number of instances to create for the delivery.</param>
     /// <returns>The delivery builder instance.</returns>
     IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(Action<IServiceProvider, OutboxDeliverySettings>? configure = null, int instanceCount = 1)
-        where TConsumer : class, IConsumer<TMessage>;
+        where TConsumer : class, IConsumer<TMessage>
+        where TMessage: IOutboxPayloadMessage;
 }
