@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PgOutbox.ConsoleApp;
 using Sa.Outbox;
@@ -48,6 +48,7 @@ builder.UseConsoleLifetime();
 var host = builder.Build();
 
 
+
 // -- code
 
 var publisher = host.Services.GetRequiredService<IOutboxMessagePublisher>();
@@ -60,21 +61,21 @@ var messages = new SomeMessage[]
     new() { Message = "Hi 4" }
 };
 
-var id = await publisher.Publish(messages);
-
-Console.WriteLine("sent: {0}", id);
+var sent = await publisher.Publish(messages);
+Console.WriteLine("sent msgs with rnd TenantId: {0}", sent);
 
 await host.RunAsync();
 
-Console.WriteLine("recived: {0}", SomeMessageConsumer.Counter);
+
+Console.WriteLine("The end. Recived: {0}", SomeMessageConsumer.Counter);
 
 
 namespace PgOutbox.ConsoleApp
 {
-
-    [OutboxMessage(part: "some")]
     public class SomeMessage : IOutboxPayloadMessage
     {
+        public static string PartName => "some";
+
         public string PayloadId { get; set; } = Guid.NewGuid().ToString();
         public int TenantId { get; set; } = Random.Shared.Next(1, 3);
         public string Message { get; set; } = string.Empty;
