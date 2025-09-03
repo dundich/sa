@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.8" />
-    <PackageReference Include="Sa.Schedule" Version="0.0.3" />
+    <PackageReference Include="Sa.Schedule" Version="0.1.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -9,12 +9,13 @@ namespace Sa.Outbox.PostgreSqlTests;
 
 public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTests.Fixture>
 {
-
-    [OutboxMessage(part: "some")]
     public class SomeMessage : IOutboxPayloadMessage
     {
+        public static string PartName => "some";
+
         public string PayloadId { get; set; } = default!;
         public int TenantId { get; set; }
+
     }
 
     public class SomeMessageConsumer : IConsumer<SomeMessage>

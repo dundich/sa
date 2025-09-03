@@ -20,16 +20,18 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     }
 
 
-    [OutboxMessage(part: "multi_1")]
     public class SomeMessage1 : IOutboxPayloadMessage
     {
+        public static string PartName => "multi_1";
+
         public string PayloadId { get; set; } = Guid.NewGuid().ToString();
         public int TenantId { get; set; } = Random.Shared.Next(1, 2);
     }
 
-    [OutboxMessage(part: "multi_2")]
     public class SomeMessage2 : IOutboxPayloadMessage
     {
+        public static string PartName => "multi_2";
+
         public string PayloadId { get; set; } = Guid.NewGuid().ToString();
         public int TenantId { get; set; } = Random.Shared.Next(1, 2);
     }

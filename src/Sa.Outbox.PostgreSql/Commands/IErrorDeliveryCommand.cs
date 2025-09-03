@@ -1,5 +1,4 @@
-﻿
-namespace Sa.Outbox.PostgreSql.Commands;
+﻿namespace Sa.Outbox.PostgreSql.Commands;
 
 
 public record struct ErrorInfo(long ErrorId, string TypeName, DateTimeOffset CreatedAt);

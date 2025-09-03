@@ -1,4 +1,4 @@
-namespace Sa.Configuration.PostgreSql;
+﻿namespace Sa.Configuration.PostgreSql;
 
 using Microsoft.Extensions.Configuration;
 using Sa.Data.PostgreSql;
@@ -26,7 +26,14 @@ public class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions option
                     Set(key.Trim(), val.Trim());
                 }
 
-            }, options.Parameters ?? [], CancellationToken.None);
+            }, cmd =>
+            {
+                if (options.Parameters?.Count > 0)
+                {
+                    foreach (var parameter in options.Parameters)
+                        cmd.Parameters.Add(parameter);
+                }
+            }, CancellationToken.None);
         }
         catch (Exception ex)
         {

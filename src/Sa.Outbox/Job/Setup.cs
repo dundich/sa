@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sa.Outbox.Support;
 using Sa.Schedule;
 using System.Diagnostics.CodeAnalysis;
 
@@ -9,6 +10,7 @@ internal static class Setup
 {
     public static IServiceCollection AddDeliveryJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(this IServiceCollection services, Action<IServiceProvider, OutboxDeliverySettings>? сonfigure, int intstanceCount)
          where TConsumer : class, IConsumer<TMessage>
+         where TMessage : IOutboxPayloadMessage
     {
         services.TryAddScoped<IConsumer<TMessage>, TConsumer>();
 
@@ -22,6 +24,7 @@ internal static class Setup
 
     private static void AddSchedule<TConsumer, TMessage>(IServiceCollection services, Action<IServiceProvider, OutboxDeliverySettings>? сonfigure, int intstanceCount)
         where TConsumer : class, IConsumer<TMessage>
+        where TMessage : IOutboxPayloadMessage
     {
         services.AddSchedule(builder =>
         {

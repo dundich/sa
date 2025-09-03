@@ -28,7 +28,7 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
             """, [
                   new("p1", "Tom"),
                   new("p2", 18)
-              ], TestContext.Current.CancellationToken);
+            ], TestContext.Current.CancellationToken);
         Assert.Equal(expected, actual);
     }
 

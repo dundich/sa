@@ -1,4 +1,4 @@
-using Sa.Outbox.Job;
+﻿using Sa.Outbox.Job;
 using Sa.Outbox.Publication;
 using Sa.Schedule;
 
@@ -50,15 +50,15 @@ internal class OutboxPartitionalSupport(IScheduleSettings scheduleSettings, Part
     }
 
 
-    private static Type? GetMessageTypeIfInheritsFromDeliveryJob(Type type, Type baseType)
+    private static Type? GetMessageTypeIfInheritsFromDeliveryJob(Type jobType, Type baseType)
     {
         if (!baseType.IsGenericTypeDefinition) return null;
 
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == baseType)
-            return type.GenericTypeArguments[0];
+        if (jobType.IsGenericType && jobType.GetGenericTypeDefinition() == baseType)
+            return jobType.GenericTypeArguments[0];
 
-        return type.BaseType != null
-            ? GetMessageTypeIfInheritsFromDeliveryJob(type.BaseType, baseType)
+        return jobType.BaseType != null
+            ? GetMessageTypeIfInheritsFromDeliveryJob(jobType.BaseType, baseType)
             : null;
     }
 }

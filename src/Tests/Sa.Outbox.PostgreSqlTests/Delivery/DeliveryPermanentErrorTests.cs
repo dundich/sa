@@ -3,7 +3,8 @@ using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fixture) : IClassFixture<DeliveryPermanentErrorTests.Fixture>
+public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fixture) 
+    : IClassFixture<DeliveryPermanentErrorTests.Fixture>
 {
 
     public class TestException(string message) : Exception(message)

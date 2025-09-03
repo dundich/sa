@@ -1,4 +1,6 @@
-﻿namespace Sa.Outbox.PostgreSql;
+﻿using Sa.Data.PostgreSql;
+
+namespace Sa.Outbox.PostgreSql;
 
 internal class SqlOutboxTemplate(PgOutboxTableSettings settings)
 {
@@ -170,7 +172,7 @@ FROM
 WHERE 
     outbox_tenant = @tnt 
     AND outbox_part = @prt 
-    AND outbox_created_at >= @from_date
+    AND outbox_created_at >= @from
     AND outbox_transact_id = @tid
     AND outbox_id = inserted_delivery.delivery_outbox_id
 ;
@@ -178,14 +180,15 @@ WHERE
 """;
     }
 
+
+
+
     private static string BuildDeliveryInsertValues(int count)
     {
         List<string> values = [];
-        int j = 0;
         for (int i = 0; i < count; i++)
         {
-            // @id_{i},@outbox_id_{i},@error_id_{i},@status_code_{i},@status_message_{i},@lock_expires_on_{i},@created_at_{i}
-            values.Add($"   (@p{j++},@p{j++},@p{j++},@p{j++},@p{j++},@p{j++},@tid,@tnt,@prt,@p{j++})");
+            values.Add($"   (@id_{i},@oid_{i},@err_{i},@st_{i},@msg_{i},@exp_{i},@tid,@tnt,@prt,@cr_{i})");
         }
         return string.Join(",\r\n", values);
     }
@@ -241,7 +244,7 @@ ON CONFLICT DO NOTHING
         List<string> values = [];
         for (int i = 0; i < count; i++)
         {
-            values.Add($"   (@id_{i},@type_{i},@message_{i},@created_at_{i})");
+            values.Add($"   (@id_{i},@st_{i},@msg_{i},@cr_{i})");
         }
         return string.Join(",\r\n", values);
     }
@@ -257,4 +260,22 @@ ON CONFLICT DO NOTHING
 """;
 
     public string SqlError(int count) => SqlError(settings, count);
+}
+
+
+
+internal sealed class CachedSqlParamNames : INamePrefixProvider
+{
+    public static int MaxIndex => 512;
+
+    public static string[] GetPrefixes() =>
+    [
+        "@id_",
+        "@oid_",
+        "@err_",
+        "@st_",
+        "@msg_",
+        "@exp_",
+        "@cr_"
+    ];
 }

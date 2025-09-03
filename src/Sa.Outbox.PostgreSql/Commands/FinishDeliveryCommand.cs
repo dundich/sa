@@ -4,16 +4,9 @@ using Sa.Outbox.PostgreSql.IdGen;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal class FinishDeliveryCommand(
-    IPgDataSource dataSource
-    , SqlOutboxTemplate sqlTemplate
-    , IIdGenerator idGenerator
-) : IFinishDeliveryCommand
+internal class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate, IIdGenerator idGenerator)
+    : IFinishDeliveryCommand
 {
-    const int IndexParamsCount = 7;
-    const int ConstParamsCount = 4;
-
-
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlFinishDelivery(len));
 
     public async Task<int> Execute<TMessage>(
@@ -27,60 +20,61 @@ internal class FinishDeliveryCommand(
         int total = 0;
 
         int startIndex = 0;
-        foreach ((string sql, int len) in sqlCache.GetSql(outboxMessages.Length))
+        foreach ((string sql, int length) in sqlCache.GetSql(outboxMessages.Length, CachedSqlParamNames.MaxIndex))
         {
-            var segment = new ArraySegment<IOutboxContext<TMessage>>(outboxMessages, startIndex, len);
-            startIndex += len;
+            var slice = new ArraySegment<IOutboxContext<TMessage>>(outboxMessages, startIndex, length);
+            startIndex += length;
 
-            NpgsqlParameter[] parameters = GetSqlParams(segment, errors, filter);
-            total += await dataSource.ExecuteNonQuery(sql, parameters, cancellationToken);
+            total += await dataSource.ExecuteNonQuery(
+                sql,
+                cmd => FllCmdParams(cmd, slice, errors, filter)
+                , cancellationToken);
         }
 
         return total;
     }
 
-    private NpgsqlParameter[] GetSqlParams<TMessage>(
-        ArraySegment<IOutboxContext<TMessage>> sliceContext,
+    private void FllCmdParams<TMessage>(
+        NpgsqlCommand cmd,
+        ArraySegment<IOutboxContext<TMessage>> contexts,
         IReadOnlyDictionary<Exception, ErrorInfo> errors,
         OutboxMessageFilter filter)
     {
-        NpgsqlParameter[] parameters = new NpgsqlParameter[sliceContext.Count * IndexParamsCount + ConstParamsCount];
-
-        int j = 0;
-        foreach (IOutboxContext<TMessage> context in sliceContext)
+        for (int i = 0; i < contexts.Count; i++)
         {
-            DateTimeOffset createdAt = context.DeliveryResult.CreatedAt;
-            string id = idGenerator.GenId(createdAt);
-            string msg = context.DeliveryResult.Message;
-            long lockExpiresOn = (createdAt + context.PostponeAt).ToUnixTimeSeconds();
+            var context = contexts[i];
+            var result = context.DeliveryResult;
+            var statusCode = result.Code;
+            var createdAt = result.CreatedAt;
+            var id = idGenerator.GenId(createdAt);
+            var msg = result.Message;
+            var lockExpiresOn = (createdAt + context.PostponeAt).ToUnixTimeSeconds();
 
-            string errorId = String.Empty;
-            Exception? error = context.Exception;
-            if (error != null)
+            string? errorId = null;
+            Exception? ex = context.Exception;
+            if (ex != null && errors.TryGetValue(ex, out var errorInfo))
             {
-                errorId = errors[error].ErrorId.ToString();
+                errorId = errorInfo.ErrorId.ToString();
                 if (string.IsNullOrEmpty(msg))
                 {
-                    msg = error.Message;
+                    msg = ex.Message;
                 }
             }
-            // (@id_{i},@outbox_id_{i},@error_id_{i},@status_code_{i},@status_message_{i},@lock_expires_on_{i},@created_at_{i}
-            parameters[j] = new($"@p{j}", id); j++;
-            parameters[j] = new($"@p{j}", context.OutboxId); j++;
-            parameters[j] = new($"@p{j}", errorId); j++;
-            parameters[j] = new($"@p{j}", context.DeliveryResult.Code); j++;
-            parameters[j] = new($"@p{j}", msg); j++;
-            parameters[j] = new($"@p{j}", lockExpiresOn); j++;
-            parameters[j] = new($"@p{j}", createdAt.ToUnixTimeSeconds()); j++;
+
+            cmd
+                .AddParameter<CachedSqlParamNames>("@id_", i, id)
+                .AddParameter<CachedSqlParamNames>("@oid_", i, context.OutboxId)
+                .AddParameter<CachedSqlParamNames>("@err_", i, errorId ?? string.Empty)
+                .AddParameter<CachedSqlParamNames>("@st_", i, statusCode)
+                .AddParameter<CachedSqlParamNames>("@msg_", i, msg ?? string.Empty)
+                .AddParameter<CachedSqlParamNames>("@exp_", i, lockExpiresOn)
+                .AddParameter<CachedSqlParamNames>("@cr_", i, createdAt.ToUnixTimeSeconds())
+                ;
         }
 
-        //@tenant AND @part AND @from_date AND @transact_id AND @created_at
-
-        parameters[j++] = new("tnt", filter.TenantId);
-        parameters[j++] = new("prt", filter.Part);
-        parameters[j++] = new("from_date", filter.FromDate.ToUnixTimeSeconds());
-        parameters[j] = new("tid", filter.TransactId);
-
-        return parameters;
+        cmd.Parameters.Add(new("@tnt", filter.TenantId));
+        cmd.Parameters.Add(new("@prt", filter.Part));
+        cmd.Parameters.Add(new("@from", filter.FromDate.ToUnixTimeSeconds()));
+        cmd.Parameters.Add(new("@tid", filter.TransactId));
     }
 }

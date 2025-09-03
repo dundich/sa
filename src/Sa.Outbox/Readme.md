@@ -1,4 +1,4 @@
-# Outbox
+﻿# Outbox
 
 The base logic and abstractions designed for implementing the Outbox pattern, with support for partitioning.
 
@@ -14,21 +14,22 @@ public interface IOutboxPayloadMessage
     /// Gets the unique identifier for the payload.
     /// </summary>
     string PayloadId { get; }
-
     /// <summary>
     /// Gets the identifier for the tenant associated with the payload.
     /// </summary>
-    public int TenantId { get; }
+    int TenantId { get; }
+    /// <summary>
+    /// Gets the part identifier associated with the Outbox message.
+    /// </summary>
+    static abstract string PartName { get; }
 }
 
 
 // example message
 
-[OutboxMessage(part:"some_part")]  // Specify partition
-public record SomeMessage(long Payload) : IOutboxPayloadMessage
+public record PingMessage(string PayloadId, int TenantId = 0) : IOutboxPayloadMessage
 {
-    public string PayloadId => String.Empty;
-    public int TenantId => 0;
+    public static string PartName => "root";
 }
 ```
 
@@ -197,10 +198,18 @@ public class Startup
 }
 ```
 
-### Example of Sending a Message
+### Example of Sending/Consuming a Message
 
 ```csharp
 
+// Some message
+public record MyMessage(string PayloadId, string Content) : IOutboxPayloadMessage
+{
+    public int TenantId { get; init; }
+    public static string PartName => "root";
+}
+
+// Sending
 public class MessageSender(IOutboxMessagePublisher publisher)
 {
     public async Task SendMessagesAsync(CancellationToken cancellationToken)
@@ -215,38 +224,21 @@ public class MessageSender(IOutboxMessagePublisher publisher)
         Console.WriteLine($"Sent {result} messages.");
     }
 }
-```
 
 
-### Example of Consuming Messages
-
-```csharp
-using Sa.Outbox;
-
-namespace MyNamespace
+// Consuming
+public class MyMessageConsumer : IConsumer<MyMessage>
 {
-
-    [OutboxMessage]
-    public record MyMessage(string PayloadId, string Content) : IOutboxPayloadMessage
+    public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<MyMessage>> outboxMessages, CancellationToken cancellationToken)
     {
-        public int TenantId { get; init; }
-    }
-
-    // Example consumer that will process MyMessage messages
-    public class MyMessageConsumer : IConsumer<MyMessage>
-    {
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<MyMessage>> outboxMessages, CancellationToken cancellationToken)
+        foreach (var messageContext in outboxMessages)
         {
-            foreach (var messageContext in outboxMessages)
-            {
-                // Logic for processing the message
-                Console.WriteLine($"Processing message with ID: {messageContext.Payload.PayloadId} and Content: {messageContext.Payload.Content}");
+            // Logic for processing the message
+            Console.WriteLine($"Processing message with ID: {messageContext.Payload.PayloadId} and Content: {messageContext.Payload.Content}");
 
-                // Successful message processing
-                messageContext.Ok("Message processed successfully.");
-            }
+            // Successful message processing
+            messageContext.Ok("Message processed successfully.");
         }
     }
 }
 ```
-
