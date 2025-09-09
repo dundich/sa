@@ -11,68 +11,26 @@ public enum TaskPriorityLevel
     Low = 2
 }
 
-
 public interface IPriorityTaskScheduler
 {
-    /// <summary>
-    /// Gets whether the scheduler is currently accepting new tasks.
-    /// </summary>
     bool IsEnabled { get; }
-
-    /// <summary>
-    /// Gets the number of currently executing tasks.
-    /// </summary>
     int ActiveTasks { get; }
-
-    /// <summary>
-    /// Gets the total number of queued (pending) tasks.
-    /// </summary>
     int QueuedTasks { get; }
-
-    /// <summary>
-    /// Gets or sets the maximum number of concurrently executing tasks.
-    /// Setting a higher value may trigger immediate processing of queued tasks.
-    /// </summary>
     int ConcurrencyLimit { get; set; }
 
-    /// <summary>
-    /// Raised when all tasks have completed and no more are queued.
-    /// </summary>
     event EventHandler? AllTasksCompleted;
-
-    /// <summary>
-    /// Raised when a task is cancelled.
-    /// </summary>
     event EventHandler<int>? TaskCancelled;
-
-    /// <summary>
-    /// Raised when a task completes with an unobserved exception.
-    /// </summary>
     event EventHandler<(Exception ex, int taskId)>? UnobservedException;
 
-    /// <summary>
-    /// Enqueues a task with optional priority and cancellation token.
-    /// Returns a unique ID that can be used to cancel the task later.
-    /// </summary>
     ValueTask<int> Enqueue(
         Func<CancellationToken, Task> taskFunc,
         TaskPriorityLevel priority = TaskPriorityLevel.Normal,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Attempts to cancel a specific task by ID.
-    /// </summary>
     ValueTask<bool> CancelTaskAsync(int taskId);
-
-    /// <summary>
-    /// Cancels all currently running and queued tasks.
-    /// </summary>
     Task CancelAllAsync();
-
-    /// <summary>
-    /// Stops accepting new tasks. Active tasks continue to run.
-    /// </summary>
     Task StopAsync();
+    Task WaitForCompletionAsync(CancellationToken ct = default);
 }
 
 /// <summary>
@@ -111,11 +69,8 @@ public sealed class PriorityTaskScheduler : IPriorityTaskScheduler, IDisposable,
     public event EventHandler<int>? TaskCancelled;
     public event EventHandler<(Exception ex, int taskId)>? UnobservedException;
 
-
     public bool IsEnabled => _isEnabled;
-
     public int ActiveTasks => _activeTasksCounter;
-
     public int QueuedTasks => _queues.Select(q => q.Reader.Count).Sum();
 
     public int ConcurrencyLimit
@@ -147,12 +102,12 @@ public sealed class PriorityTaskScheduler : IPriorityTaskScheduler, IDisposable,
             return -1;
         }
 
-
         var taskWrapper = CreateTaskWrapper(taskId, taskFunc, linkedCts.Token);
 
         var writer = _queues[(int)priority].Writer;
-        await writer.WriteAsync(taskWrapper, cancellationToken);
+        await writer.WriteAsync(taskWrapper, cancellationToken).ConfigureAwait(false);
 
+        // Запускаем обработку, если ещё не запущена
         _ = _processingTask.Value;
 
         return taskId;
@@ -164,26 +119,30 @@ public sealed class PriorityTaskScheduler : IPriorityTaskScheduler, IDisposable,
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (_taskCtsMap.TryRemove(taskId, out var cts))
-        {
-            await cts.CancelAsync().ConfigureAwait(false);
-            cts.Dispose();
-            OnTaskCancelled(taskId);
-            return true;
-        }
-        return false;
+        if (!_taskCtsMap.TryRemove(taskId, out var cts))
+            return false;
+
+        await cts.CancelAsync().ConfigureAwait(false);
+        cts.Dispose();
+
+        OnTaskCancelled(taskId);
+        return true;
     }
 
-    /// <summary>
-    /// Stops accepting new tasks. Active tasks will continue to run.
-    /// Can be followed by WaitForCompletionAsync to wait for running tasks.
-    /// </summary>
     public async Task StopAsync()
     {
         if (!_isEnabled || _disposed) return;
 
         _isEnabled = false;
         await _shutdownCts.CancelAsync().ConfigureAwait(false);
+    }
+
+    public async Task WaitForCompletionAsync(CancellationToken ct = default)
+    {
+        while (_activeTasksCounter > 0 || !GetQueuesEmpty())
+        {
+            await Task.Delay(10, ct).ConfigureAwait(false);
+        }
     }
 
     private Func<Task> CreateTaskWrapper(int taskId, Func<CancellationToken, Task> userTaskFunc, CancellationToken ct)
@@ -193,13 +152,18 @@ public sealed class PriorityTaskScheduler : IPriorityTaskScheduler, IDisposable,
             try
             {
                 ct.ThrowIfCancellationRequested();
+
+                // Проверяем, не была ли задача отменена до запуска
+                if (!_taskCtsMap.ContainsKey(taskId))
+                    return;
+
                 await userTaskFunc(ct).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            catch (OperationCanceledException cex) when (cex.CancellationToken == ct)
             {
                 OnTaskCancelled(taskId);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
                 OnUnobservedException(ex, taskId);
             }
@@ -211,43 +175,64 @@ public sealed class PriorityTaskScheduler : IPriorityTaskScheduler, IDisposable,
         };
     }
 
-    private Task ProcessQueue()
+    private async Task ProcessQueue()
     {
-        return Task.Run(async () =>
+        var ct = _shutdownCts.Token;
+        var waitTasks = _queues
+            .Select(q => ValueTask.ToTask(q.Reader.WaitToReadAsync(ct)))
+            .ToArray();
+
+        while (!ct.IsCancellationRequested)
         {
-            while (!_shutdownCts.IsCancellationRequested)
+            // Запускаем задачи, если есть место
+            while (_isEnabled && _activeTasksCounter < _maxConcurrency && TryDequeue(out var taskFunc))
             {
-                while (_isEnabled && _activeTasksCounter < _maxConcurrency && TryDequeue(out var taskFunc))
+                Interlocked.Increment(ref _activeTasksCounter);
+                _ = taskFunc().ContinueWith(
+                    _ => Interlocked.Decrement(ref _activeTasksCounter),
+                    ct,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default
+                );
+            }
+
+            // Если очереди пусты — ждём новую задачу
+            if (GetQueuesEmpty())
+            {
+                try
                 {
-                    Interlocked.Increment(ref _activeTasksCounter);
-                    var _ = taskFunc().ContinueWith(_ =>
-                    {
-                        Interlocked.Decrement(ref _activeTasksCounter);
-                    }, TaskScheduler.Default);
+                    await Task.WhenAny(waitTasks).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break;
                 }
 
-                if (GetQueuesEmpty())
+                // Пересоздаём завершённые WaitToReadAsync
+                for (int i = 0; i < waitTasks.Length; i++)
                 {
-                    await Task.Delay(1000, _shutdownCts.Token);
+                    if (waitTasks[i].IsCompleted)
+                    {
+                        waitTasks[i] = ValueTask.ToTask(_queues[i].Reader.WaitToReadAsync(ct));
+                    }
                 }
             }
-        });
+            else
+            {
+                // Есть задачи, но нет concurrency — небольшая пауза
+                await Task.Delay(10, ct).ConfigureAwait(false);
+            }
+        }
     }
 
     private bool TryDequeue(out Func<Task> taskFunc)
     {
         taskFunc = null!;
-
         for (int i = 0; i < _queues.Length; i++)
         {
-            var reader = _queues[i].Reader;
-            if (reader.TryRead(out var item))
-            {
-                taskFunc = item;
+            if (_queues[i].Reader.TryRead(out taskFunc!))
                 return true;
-            }
         }
-
         return false;
     }
 
@@ -261,8 +246,7 @@ public sealed class PriorityTaskScheduler : IPriorityTaskScheduler, IDisposable,
     {
         if (_disposed || !_isEnabled) return;
 
-        bool allQueuesEmpty = GetQueuesEmpty();
-        if (allQueuesEmpty)
+        if (GetQueuesEmpty() && _activeTasksCounter == 0)
         {
             AllTasksCompleted?.Invoke(this, EventArgs.Empty);
         }
@@ -274,7 +258,6 @@ public sealed class PriorityTaskScheduler : IPriorityTaskScheduler, IDisposable,
     }
 
     private void OnTaskCancelled(int taskId) => TaskCancelled?.Invoke(this, taskId);
-
     private void OnUnobservedException(Exception ex, int taskId) => UnobservedException?.Invoke(this, (ex, taskId));
 
     public void Dispose()
@@ -283,7 +266,9 @@ public sealed class PriorityTaskScheduler : IPriorityTaskScheduler, IDisposable,
 
         try
         {
-            DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+            // Запускаем асинхронную очистку в фоновом потоке
+            Task.Run(async () => await DisposeAsync().AsTask())
+                .Wait(TimeSpan.FromSeconds(5));
         }
         catch (Exception ex)
         {
@@ -304,38 +289,31 @@ public sealed class PriorityTaskScheduler : IPriorityTaskScheduler, IDisposable,
 
         if (_processingTask.IsValueCreated)
         {
-            var delayTask = Task.Delay(3000);
-            var completed = await Task.WhenAny(_processingTask.Value, delayTask).ConfigureAwait(false);
-
+            var completed = await Task.WhenAny(_processingTask.Value, Task.Delay(3000)).ConfigureAwait(false);
             if (completed != _processingTask.Value)
             {
                 _logger?.LogWarning("Processing task did not complete within timeout.");
             }
         }
 
+        // Отменяем и освобождаем все CTS
         foreach (var (_, cts) in _taskCtsMap)
         {
-            cts.Dispose();
+            cts?.Cancel();
+            cts?.Dispose();
         }
-
-
         _taskCtsMap.Clear();
-        _shutdownCts.Dispose();
 
+        _shutdownCts.Dispose();
         _disposed = true;
     }
 
-
     public async Task CancelAllAsync()
     {
-        foreach (var (_, cts) in _taskCtsMap)
-        {
-            if (cts != null)
-            {
-                await cts.CancelAsync();
-                //cts.Dispose();
-            }
-        }
-        //_taskCtsMap.Clear();
+        var cancellationTasks = _taskCtsMap.Values
+            .Select(cts => cts.CancelAsync())
+            .ToArray();
+
+        await Task.WhenAll(cancellationTasks).ConfigureAwait(false);
     }
 }
