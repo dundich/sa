@@ -1,4 +1,4 @@
-using Sa.Classes;
+﻿using Sa.Classes;
 
 namespace SaTests.Classes;
 
@@ -26,7 +26,7 @@ public class WorkQueueTests
     }
 
 
-    internal class SampleFailWork : IWorkWithHandleError<SampleModel>
+    internal class SampleFailWork : IWorkObserver<SampleModel>
     {
         public Task Execute(SampleModel model, CancellationToken cancellationToken)
         {
