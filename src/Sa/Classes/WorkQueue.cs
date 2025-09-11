@@ -1,5 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 
 namespace Sa.Classes;
 
@@ -9,30 +8,22 @@ public interface IWork<in TModel>
     Task Execute(TModel model, CancellationToken cancellationToken);
 }
 
-
-public interface IWorkObserver<in TModel> : IWork<TModel>
+public interface IWorkObserver<in TModel>
 {
     Task HandleChanges(TModel model, WorkInfo work, CancellationToken cancellationToken);
 }
 
-
-
-public enum WorkPriority
-{
-    High = 0,
-    Normal = 1,
-    Low = 2
-}
-
-public record WorkInfo(
+public record struct WorkInfo(
     long Id,
-    WorkPriority Priority,
     WorkStatus Status,
     DateTimeOffset EnqueuedTime,
     DateTimeOffset? StartedTime = null,
     DateTimeOffset? EndedTime = null,
     Exception? LastError = null
-);
+)
+{
+    public readonly bool IsEmpty => Id == 0;
+};
 
 public enum WorkStatus
 {
@@ -43,42 +34,35 @@ public enum WorkStatus
     Cancelled
 }
 
-public interface IWorkQueue<in TModel>
+public interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
 {
     bool IsEnabled { get; }
     int ActiveTasks { get; }
-    int QueuedTasks { get; }
+    bool IsIdle { get; }
     int ConcurrencyLimit { get; set; }
 
-    ValueTask Enqueue(
-        TModel model,
-        WorkPriority priority = WorkPriority.Normal,
-        CancellationToken cancellationToken = default);
+    ValueTask Enqueue(TModel model, CancellationToken cancellationToken = default);
 
+    Task WaitForIdleAsync(CancellationToken cancellationToken = default);
     Task ShutdownAsync();
 
     event EventHandler<WorkInfo>? StatusChanged;
 }
 
-
-
-/// <summary>
-/// A prioritized task scheduler with backpressure, dynamic queue sizing, and observability via <see cref="GetTaskStream"/>.
-/// Metrics can be derived externally from the task stream.
-/// </summary>
-public sealed class WorkQueue<TModel> : IWorkQueue<TModel>, IDisposable, IAsyncDisposable
+public sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 {
     private readonly Channel<WorkItemSnapshot> _queue;
+
     private readonly List<WorkItemSnapshot> _activeItems = [];
-    private readonly Lock _lock = new();
+    private readonly AsyncManualResetEvent _idleEvent = new(true);
+    private readonly Lock _rootSync = new();
 
     private int _maxConcurrency = Environment.ProcessorCount;
     private long _taskIdCounter = 0;
-    private int _activeTasksCounter = 0;
     private bool _isEnabled = true;
     private bool _disposed = false;
 
-    private readonly Lazy<Task> _processingTask;
+    private readonly Task _processingTask;
     private readonly TimeProvider _timeProvider;
 
     public readonly IWork<TModel> _processor;
@@ -90,26 +74,27 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>, IDisposable, IAsyncD
 
     public WorkQueue(
         IWork<TModel> processor,
+        IWorkObserver<TModel>? observer = null,
         TimeProvider? timeProvider = null)
     {
         _processor = processor;
-        _watcher = processor as IWorkObserver<TModel>;
+        _watcher = observer ?? processor as IWorkObserver<TModel>;
         _timeProvider = timeProvider ?? TimeProvider.System;
 
-        _queue = Channel.CreateUnboundedPrioritized(new UnboundedPrioritizedChannelOptions<WorkItemSnapshot>
+        _queue = Channel.CreateUnbounded<WorkItemSnapshot>(new UnboundedChannelOptions
         {
-            Comparer = new WorkSnapshotPriorityComparer(),
             AllowSynchronousContinuations = true,
             SingleReader = false,
             SingleWriter = false,
         });
 
-        _processingTask = new Lazy<Task>(Loop);
+        _processingTask = LoopAsync();
     }
 
     public bool IsEnabled => _isEnabled;
-    public int ActiveTasks => _activeTasksCounter;
+    public int ActiveTasks => _activeItems.Count;
     public int QueuedTasks => _queue.Reader.Count;
+    public bool IsIdle => ActiveTasks == 0 && IsQueueEmpty();
 
     public int ConcurrencyLimit
     {
@@ -122,29 +107,23 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>, IDisposable, IAsyncD
         }
     }
 
-    public async ValueTask Enqueue(
-        TModel model,
-        WorkPriority priority = WorkPriority.Normal,
-        CancellationToken cancellationToken = default)
+    public async ValueTask Enqueue(TModel model, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_isEnabled) throw new InvalidOperationException("Task scheduler has been stopped.");
 
-        var info = new WorkItemSnapshot(model)
+        var shapshot = new WorkItemSnapshot(model, cancellationToken)
         {
             Id = Interlocked.Increment(ref _taskIdCounter),
-            Priority = priority,
             Status = WorkStatus.Queued,
             EnqueuedTime = _timeProvider.GetUtcNow(),
         };
 
-        var writer = _queue.Writer;
+        _idleEvent.Reset();
 
-        await writer.WriteAsync(info, cancellationToken).ConfigureAwait(false);
+        await OnStatusChanged(shapshot);
 
-        await OnTaskUpdated(info).ConfigureAwait(false);
-
-        _ = _processingTask.Value;
+        await _queue.Writer.WriteAsync(shapshot, cancellationToken);
     }
 
     public async Task ShutdownAsync()
@@ -153,92 +132,97 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>, IDisposable, IAsyncD
 
         _isEnabled = false;
         await _shutdownCts.CancelAsync();
-
-        try
-        {
-            await _processingTask.Value.ConfigureAwait(false);
-        }
-        catch { /* ignore */ }
+        await _processingTask;
     }
 
-    public async Task WaitForCompletionAsync(CancellationToken ct = default)
+    public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
     {
-        while (_activeTasksCounter > 0 || !IsQueueEmpty())
-        {
-            await Task.Delay(10, ct).ConfigureAwait(false);
-        }
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await _idleEvent.WaitAsync(cancellationToken);
     }
 
-    private async Task Loop()
+    private async Task LoopAsync()
     {
         var ct = _shutdownCts.Token;
-
-        while (!ct.IsCancellationRequested && await _queue.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
+        try
         {
-            while (_isEnabled && _activeTasksCounter < _maxConcurrency && TryDequeue(out var task))
+            while (!ct.IsCancellationRequested && await _queue.Reader.WaitToReadAsync(ct))
             {
-                _ = Execute(task); // Не ждём, запускаем параллельно
+                while (_isEnabled && ActiveTasks < _maxConcurrency && _queue.Reader.TryRead(out var snapshot))
+                {
+                    _ = Execute(snapshot); // Не ждём, запускаем параллельно
+                }
             }
         }
+        catch (OperationCanceledException)
+        {
+            /* ignore */
+        }
     }
 
-    private async Task Execute(WorkItemSnapshot task)
+    private async Task Execute(WorkItemSnapshot snapshot)
     {
-        Interlocked.Increment(ref _activeTasksCounter);
+        ActivateSnapshot(snapshot);
 
-        lock (_lock)
-        {
-            _activeItems.Add(task);
-        }
-
-        task.StartedTime = _timeProvider.GetUtcNow();
-        task.Status = WorkStatus.Running;
-        await OnTaskUpdated(task).ConfigureAwait(false);
-
-        var ct = _shutdownCts.Token;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token, snapshot.CancellationToken);
+        var ct = cts.Token;
         try
         {
-            await _processor.Execute(task.Model, ct).ConfigureAwait(false);
-            task.Status = WorkStatus.Completed;
+            ct.ThrowIfCancellationRequested();
+
+            snapshot.StartedTime = _timeProvider.GetUtcNow();
+            snapshot.Status = WorkStatus.Running;
+            await OnStatusChanged(snapshot);
+
+            await _processor.Execute(snapshot.Model, ct);
+            snapshot.Status = WorkStatus.Completed;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            task.Status = WorkStatus.Cancelled;
+            snapshot.Status = WorkStatus.Cancelled;
         }
         catch (Exception ex)
         {
-            task.Status = WorkStatus.Faulted;
-            task.LastError = ex;
+            snapshot.Status = WorkStatus.Faulted;
+            snapshot.LastError = ex;
         }
         finally
         {
-            task.EndedTime = _timeProvider.GetUtcNow();
-            lock (_lock)
-            {
-                _activeItems.Remove(task);
-            }
+            snapshot.EndedTime = _timeProvider.GetUtcNow();
+            await OnStatusChanged(snapshot);
 
-            Interlocked.Decrement(ref _activeTasksCounter);
-            await OnTaskUpdated(task).ConfigureAwait(false);
+            DeactiveSnapshot(snapshot);
         }
     }
 
-    private bool TryDequeue([MaybeNullWhen(false)] out WorkItemSnapshot info)
+    private void DeactiveSnapshot(WorkItemSnapshot snapshot)
     {
-        return _queue.Reader.TryRead(out info);
+        lock (_rootSync)
+        {
+            _activeItems.Remove(snapshot);
+            if (IsIdle) _idleEvent.Set();
+        }
     }
 
-    private bool IsQueueEmpty() => !_queue.Reader.CanPeek;
-
-    private async Task OnTaskUpdated(WorkItemSnapshot task)
+    private void ActivateSnapshot(WorkItemSnapshot snapshot)
     {
-        var info = task.ToInfo();
+        lock (_rootSync)
+        {
+            _activeItems.Add(snapshot);
+        }
+    }
+
+    private bool IsQueueEmpty() => _queue.Reader.Count == 0;
+
+    private async Task OnStatusChanged(WorkItemSnapshot snapshot)
+    {
+        var info = snapshot.ToInfo();
 
         if (_watcher != null)
         {
             try
             {
-                await _watcher.HandleChanges(task.Model, info, _shutdownCts.Token).ConfigureAwait(false);
+                await _watcher.HandleChanges(snapshot.Model, info, _shutdownCts.Token);
             }
             catch { /* ignore */ }
         }
@@ -254,16 +238,14 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>, IDisposable, IAsyncD
     {
         if (_disposed) return;
 
-        try
-        {
-            Task.Run(async () => await DisposeAsync().AsTask())
-                .Wait(TimeSpan.FromSeconds(5));
-        }
-        catch { /* ignored */ }
-        finally
-        {
-            _disposed = true;
-        }
+        _disposed = true;
+        _isEnabled = false;
+        _queue.Writer.Complete();
+
+        _shutdownCts.Cancel();
+        _processingTask.Wait(5000);
+
+        _shutdownCts.Dispose();
     }
 
     public async ValueTask DisposeAsync()
@@ -275,49 +257,22 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>, IDisposable, IAsyncD
         _queue.Writer.Complete();
 
         await _shutdownCts.CancelAsync();
-
-        if (_processingTask.IsValueCreated)
-        {
-            try
-            {
-                await _processingTask.Value;
-            }
-            catch { /* ignore */ }
-        }
+        await _processingTask;
 
         _shutdownCts.Dispose();
     }
 
-
-    private sealed class WorkSnapshotPriorityComparer : IComparer<WorkItemSnapshot>
-    {
-        int IComparer<WorkItemSnapshot>.Compare(WorkItemSnapshot? x, WorkItemSnapshot? y)
-        {
-            if (x is null) return y is null ? 0 : 1;
-            if (y is null) return -1;
-
-            var priorityComparison = x.Priority.CompareTo(y.Priority);
-
-            if (priorityComparison != 0)
-                return priorityComparison;
-
-            return x.EnqueuedTime.CompareTo(y.EnqueuedTime);
-        }
-    }
-
-    private sealed class WorkItemSnapshot(TModel item)
+    private sealed class WorkItemSnapshot(TModel item, CancellationToken token)
     {
         public long Id { get; init; }
-
         public TModel Model => item;
-
-        public WorkPriority Priority { get; init; }
+        public CancellationToken CancellationToken => token;
         public WorkStatus Status { get; set; }
         public DateTimeOffset EnqueuedTime { get; init; }
         public DateTimeOffset? StartedTime { get; set; } = default;
         public DateTimeOffset? EndedTime { get; set; } = default;
         public Exception? LastError { get; set; } = null;
 
-        public WorkInfo ToInfo() => new(Id, Priority, Status, EnqueuedTime, StartedTime, EndedTime, LastError);
+        public WorkInfo ToInfo() => new(Id, Status, EnqueuedTime, StartedTime, EndedTime, LastError);
     }
 }
