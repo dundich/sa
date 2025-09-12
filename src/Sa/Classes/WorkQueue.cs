@@ -38,7 +38,7 @@ public interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
 {
     bool IsEnabled { get; }
     int ActiveTasks { get; }
-    bool IsIdle { get; }
+    bool IsIdle();
     int ConcurrencyLimit { get; set; }
 
     ValueTask Enqueue(TModel model, CancellationToken cancellationToken = default);
@@ -59,6 +59,7 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
     private int _maxConcurrency = Environment.ProcessorCount;
     private long _taskIdCounter = 0;
+    private int _activeItemsCount = 0;
     private bool _isEnabled = true;
     private bool _disposed = false;
 
@@ -92,9 +93,16 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>
     }
 
     public bool IsEnabled => _isEnabled;
-    public int ActiveTasks => _activeItems.Count;
+    public int ActiveTasks => _activeItemsCount;
     public int QueuedTasks => _queue.Reader.Count;
-    public bool IsIdle => ActiveTasks == 0 && IsQueueEmpty();
+
+    public bool IsIdle()
+    {
+        lock (_rootSync)
+        {
+            return _activeItemsCount == 0 && _queue.Reader.Count == 0;
+        }
+    }
 
     public int ConcurrencyLimit
     {
@@ -133,6 +141,7 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         _isEnabled = false;
         await _shutdownCts.CancelAsync();
         await _processingTask;
+
     }
 
     public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
@@ -148,9 +157,17 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         {
             while (!ct.IsCancellationRequested && await _queue.Reader.WaitToReadAsync(ct))
             {
-                while (_isEnabled && ActiveTasks < _maxConcurrency && _queue.Reader.TryRead(out var snapshot))
+                while (_isEnabled
+                    && ActiveTasks < _maxConcurrency
+                    && _queue.Reader.TryRead(out var snapshot))
                 {
-                    _ = Execute(snapshot); // Не ждём, запускаем параллельно
+                    _ = Execute(snapshot).ContinueWith(c =>
+                    {
+                        if (IsIdle())
+                        {
+                            _idleEvent.Set();
+                        }
+                    }); // Не ждём, запускаем параллельно
                 }
             }
         }
@@ -195,24 +212,25 @@ public sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         }
     }
 
-    private void DeactiveSnapshot(WorkItemSnapshot snapshot)
-    {
-        lock (_rootSync)
-        {
-            _activeItems.Remove(snapshot);
-            if (IsIdle) _idleEvent.Set();
-        }
-    }
-
     private void ActivateSnapshot(WorkItemSnapshot snapshot)
     {
         lock (_rootSync)
         {
+            _activeItemsCount++;
             _activeItems.Add(snapshot);
         }
     }
 
-    private bool IsQueueEmpty() => _queue.Reader.Count == 0;
+    private void DeactiveSnapshot(WorkItemSnapshot snapshot)
+    {
+        lock (_rootSync)
+        {
+            if (_activeItems.Remove(snapshot))
+            {
+                _activeItemsCount--;
+            }
+        }
+    }
 
     private async Task OnStatusChanged(WorkItemSnapshot snapshot)
     {

@@ -119,6 +119,9 @@ public class WorkQueueTests
         Assert.True(queue.ActiveTasks <= concurrencyLimit, "Concurrency limit violated");
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
+
+        Console.WriteLine(queue.ActiveTasks);
+
         Assert.Equal(0, queue.ActiveTasks);
         Assert.Equal(0, queue.QueuedTasks);
     }
@@ -189,7 +192,11 @@ public class WorkQueueTests
             await queue.Enqueue(new TestModel(), cancellationToken: CancellationToken.None);
         });
 
-        observer.Changes.GroupBy(c => c.Id).
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.Equal(0, queue.ActiveTasks);
+
+        var canceled = observer.Changes.Count(c => c.Status == WorkStatus.Cancelled);
+        Assert.Equal(5, canceled);
     }
 
     [Fact]
