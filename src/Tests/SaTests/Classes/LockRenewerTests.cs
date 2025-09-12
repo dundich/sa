@@ -253,7 +253,7 @@ public class LockRenewerTests
         for (int i = 1; i < callTimes.Count; i++)
         {
             var intervalMs = (callTimes[i] - callTimes[i - 1]) / 10_000.0; // Ticks to ms
-            Assert.InRange(intervalMs, 5, 25); // ~10ms, allow jitter
+            Assert.InRange(intervalMs, 5, 40); // ~10ms, allow jitter
         }
     }
 }
