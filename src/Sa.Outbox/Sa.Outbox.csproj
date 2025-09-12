@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <Compile Include="..\Sa\Classes\IArrayPool.cs" Link="AsLink\IArrayPool.cs" />
-    <Compile Include="..\Sa\Classes\KeepLocker.cs" Link="AsLink\KeepLocker.cs" />
+    <Compile Include="..\Sa\Classes\LockRenewer.cs" Link="AsLink\LockRenewer.cs" />
     <Compile Include="..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
     <Compile Include="..\Sa\Extensions\EnumerableExtensions.cs" Link="AsLink\EnumerableExtensions.cs" />
     <Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
