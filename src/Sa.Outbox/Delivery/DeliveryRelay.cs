@@ -60,12 +60,12 @@ internal sealed class DeliveryRelay(
     {
         OutboxMessageFilter filter = CreateFilter<TMessage>(settings, tenantId);
 
-        int locked = await repository.StartDelivery(buffer, settings.ExtractSettings.MaxBatchSize, settings.ExtractSettings.LockDuration, filter, cancellationToken);
+        int locked = await repository.StartDelivery(buffer, buffer.Length, settings.ExtractSettings.LockDuration, filter, cancellationToken);
         if (locked == 0) return locked;
 
         buffer = buffer[..locked];
 
-        using IDisposable locker = KeepLocker.KeepLocked(
+        using IDisposable locker = LockRenewer.KeepLocked(
             settings.ExtractSettings.LockRenewal
             , async t =>
             {

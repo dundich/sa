@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Media.FFmpeg;
 
 namespace Sa.Media.FFmpegTests;
@@ -173,8 +173,7 @@ public sealed class FFMpegProcessorTests
             },
             cancellationToken: cts.Token);
 
-        // Отменяем через 100 мс
-        await Task.Delay(100, CancellationToken);
+        await Task.Delay(10, CancellationToken);
         await cts.CancelAsync();
 
         // Assert
