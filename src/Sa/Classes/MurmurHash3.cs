@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 
 namespace Sa.Classes;
 
@@ -44,7 +44,7 @@ public static class MurmurHash3
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static uint RotateLeft(uint x, byte r)
     {
-        return x << (int)r | x >> 32 - (int)r;
+        return x << r | x >> 32 - r;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

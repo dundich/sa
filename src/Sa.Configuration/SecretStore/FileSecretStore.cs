@@ -1,6 +1,6 @@
 namespace Sa.Configuration.SecretStore;
 
-public class FileSecretStore : ISecretStore
+public sealed class FileSecretStore : ISecretStore
 {
     private readonly Dictionary<string, string?> _secrets;
 

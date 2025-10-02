@@ -1,11 +1,11 @@
-﻿using Sa.Configuration.SecretStore.Engine;
+using Sa.Configuration.SecretStore.Engine;
 
 namespace Sa.Configuration.SecretStore;
 
 /// <summary>
 /// </summary>
 /// <seealso href="https://github.com/zarusz/SlimMessageBus/tree/master/src/Tools/SecretStore"/>
-public class Secrets(params IReadOnlyCollection<ISecretStore> stores) : ISecretService
+public sealed class Secrets(params IReadOnlyCollection<ISecretStore> stores) : ISecretService
 {
     private readonly ChainedSecrets _chainedSecrets = new(stores);
 

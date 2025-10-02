@@ -1,6 +1,6 @@
-﻿namespace Sa.Outbox.Partitional;
+namespace Sa.Outbox.Partitional;
 
-internal class PartitionalSupportCache(PartitionalSettings? settings = null) : IPartitionalSupportCache
+internal sealed class PartitionalSupportCache(PartitionalSettings? settings = null) : IPartitionalSupportCache
 {
     private Lazy<Task<int[]>>? _cache;
 

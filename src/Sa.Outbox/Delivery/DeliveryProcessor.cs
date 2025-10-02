@@ -1,8 +1,8 @@
-﻿using Sa.Outbox.Support;
+using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
-internal class DeliveryProcessor(IDeliveryRelay relayService) : IDeliveryProcessor
+internal sealed class DeliveryProcessor(IDeliveryRelay relayService) : IDeliveryProcessor
 {
     public async Task<long> ProcessMessages<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage

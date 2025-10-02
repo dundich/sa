@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace Sa.Extensions;
 
-public static class JsonExtensions
+internal static class JsonExtensions
 {
     [DebuggerStepThrough]
     [RequiresDynamicCode(JsonHttpResultTrimmerWarning.SerializationRequiresDynamicCodeMessage)]

@@ -1,6 +1,6 @@
 namespace Sa.Configuration.SecretStore.Engine;
 
-internal class ChainedSecretStore(IReadOnlyCollection<ISecretStore> stores) : ISecretStore
+internal sealed class ChainedSecretStore(IReadOnlyCollection<ISecretStore> stores) : ISecretStore
 {
     private readonly Stack<ISecretStore> _stores = new(stores);
 

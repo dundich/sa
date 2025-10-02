@@ -5,7 +5,7 @@ using Sa.HybridFileStorage.Interceptors;
 
 namespace Sa.HybridFileStorage;
 
-internal class HybridStorageBuilder(IServiceCollection services) : IHybridFileStorageConfiguration
+internal sealed class HybridStorageBuilder(IServiceCollection services) : IHybridFileStorageConfiguration
 {
     private Action<IServiceProvider, IHybridFileStorageContainerConfiguration>? _configureStorage;
     private Action<IServiceProvider, IInterceptorContainer>? _configureInterceptors;

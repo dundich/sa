@@ -1,6 +1,6 @@
 namespace Sa.Configuration.SecretStore;
 
-public class EnvironmentVariableSecretStore : ISecretStore
+public sealed class EnvironmentVariableSecretStore : ISecretStore
 {
     public string? GetSecret(string key)
     {

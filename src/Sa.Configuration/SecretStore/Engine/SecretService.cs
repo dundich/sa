@@ -1,9 +1,9 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Sa.Configuration.SecretStore.Engine;
 
-internal partial class SecretService(ISecretStore secretStore) : ISecretService
+internal sealed partial class SecretService(ISecretStore secretStore) : ISecretService
 {
     private static readonly Regex s_placeholder = PlaceholderRegex();
 

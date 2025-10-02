@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Delivery;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
 using Sa.Schedule;
@@ -9,7 +9,7 @@ namespace Sa.Outbox.Job;
 public interface IDeliveryJob : IJob;
 
 
-internal class DeliveryJob<TMessage>(IDeliveryProcessor processor) : IDeliveryJob
+internal sealed class DeliveryJob<TMessage>(IDeliveryProcessor processor) : IDeliveryJob
     where TMessage : IOutboxPayloadMessage
 {
 

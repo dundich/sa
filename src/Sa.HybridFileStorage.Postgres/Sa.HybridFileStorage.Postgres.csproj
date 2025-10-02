@@ -12,6 +12,10 @@
   </ItemGroup>
 
   <ItemGroup>
+	<InternalsVisibleTo Include="Sa.HybridFileStorage.PostgresTests" />
+  </ItemGroup>	
+
+  <ItemGroup>
     <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
     <ProjectReference Include="..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
   </ItemGroup>

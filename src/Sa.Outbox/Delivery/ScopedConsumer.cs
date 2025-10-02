@@ -1,9 +1,9 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
-internal class ScopedConsumer(IServiceProvider serviceProvider) : IScopedConsumer
+internal sealed class ScopedConsumer(IServiceProvider serviceProvider) : IScopedConsumer
 {
     // Method to process messages using a consumer in scope
     public async Task MessageProcessingAsync<TMessage>(
@@ -11,8 +11,15 @@ internal class ScopedConsumer(IServiceProvider serviceProvider) : IScopedConsume
         CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
-        using IServiceScope scope = serviceProvider.CreateScope();
-        IConsumer<TMessage> consumer = scope.ServiceProvider.GetRequiredService<IConsumer<TMessage>>();
-        await consumer.Consume(outboxMessages, cancellationToken);
+        AsyncServiceScope scope = serviceProvider.CreateAsyncScope();
+        try
+        {
+            IConsumer<TMessage> consumer = scope.ServiceProvider.GetRequiredService<IConsumer<TMessage>>();
+            await consumer.Consume(outboxMessages, cancellationToken);
+        }
+        finally
+        {
+            await scope.DisposeAsync();
+        }
     }
 }

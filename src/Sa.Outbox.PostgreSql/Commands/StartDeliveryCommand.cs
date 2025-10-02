@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Serialization;
@@ -7,7 +7,7 @@ using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal class StartDeliveryCommand(
+internal sealed class StartDeliveryCommand(
     IPgDataSource dataSource
     , SqlOutboxTemplate sqlTemplate
     , IOutboxMessageSerializer serializer

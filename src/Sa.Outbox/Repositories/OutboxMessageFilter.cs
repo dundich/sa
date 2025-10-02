@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox;
+namespace Sa.Outbox;
 
 /// <summary>
 /// Represents a filter for querying Outbox messages based on specific criteria.

@@ -1,9 +1,9 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
-internal class OutboxRepository(IOutboxBulkCommand bulkCmd, IOutboxPartRepository partRepository)
+internal sealed class OutboxRepository(IOutboxBulkCommand bulkCmd, IOutboxPartRepository partRepository)
     : IOutboxRepository
 {
 

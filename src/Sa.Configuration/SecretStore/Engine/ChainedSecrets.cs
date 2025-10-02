@@ -1,6 +1,6 @@
-﻿namespace Sa.Configuration.SecretStore.Engine;
+namespace Sa.Configuration.SecretStore.Engine;
 
-internal class ChainedSecrets : ISecretService, ISecretStore
+internal sealed class ChainedSecrets : ISecretService, ISecretStore
 {
     private readonly ChainedSecretStore _store;
     private readonly SecretService _service;

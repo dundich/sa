@@ -1,6 +1,6 @@
 namespace Sa.Configuration.SecretStore;
 
-public class InMemorySecretStore(Dictionary<string, string?>? secrets = null) : ISecretStore
+public sealed class InMemorySecretStore(Dictionary<string, string?>? secrets = null) : ISecretStore
 {
     private readonly Dictionary<string, string?> _secrets = new(secrets ?? []);
 

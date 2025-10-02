@@ -6,7 +6,7 @@ namespace Sa.Outbox.Repository;
 /// <summary>
 /// OutboxMessage
 /// </summary>
-internal class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider) : IOutboxContext<TMessage>
+internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider) : IOutboxContext<TMessage>
 {
     public string OutboxId { get; } = delivery.OutboxId;
     public OutboxPartInfo PartInfo { get; } = delivery.PartInfo;

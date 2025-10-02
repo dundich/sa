@@ -5,7 +5,7 @@ using Sa.Partitional.PostgreSql;
 
 namespace Sa.HybridFileStorage.Postgres;
 
-internal class PostgresFileStorage(
+internal sealed class PostgresFileStorage(
     IPgDataSource dataSource,
     IPartitionManager partManager,
     RecyclableMemoryStreamManager streamManager,
@@ -36,8 +36,8 @@ internal class PostgresFileStorage(
         await partManager.EnsureParts(_qualifiedTableName, now, [metadata.TenantId], cancellationToken);
 
 
-        string fileId = Parser.FormatToFileId(StorageType, metadata.TenantId, now, metadata.FileName);
-        string fileExtension = Parser.GetFileExtension(metadata.FileName);
+        string fileId = FileIdParser.FormatToFileId(StorageType, metadata.TenantId, now, metadata.FileName);
+        string fileExtension = FileIdParser.GetFileExtension(metadata.FileName);
 
         long createdAt = now.ToUnixTimeSeconds();
 
@@ -89,7 +89,7 @@ ON CONFLICT DO NOTHING
     {
         EnsureWritable();
 
-        (int tenantId, long timestamp) = Parser.ParseFromFileId(fileId);
+        (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId);
         int rowsAffected = await dataSource.ExecuteNonQuery(
             $"""
             DELETE FROM {_qualifiedTableName} WHERE tenant_id = @tenant_id AND created_at >= @timestamp AND id = @id
@@ -101,7 +101,7 @@ ON CONFLICT DO NOTHING
 
     public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
     {
-        (int tenantId, long timestamp) = Parser.ParseFromFileId(fileId);
+        (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId);
 
         int rowsAffected = await dataSource.ExecuteReader(
             $"""

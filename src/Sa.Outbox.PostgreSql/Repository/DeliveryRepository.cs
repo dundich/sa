@@ -1,8 +1,8 @@
-﻿using Sa.Outbox.PostgreSql.Commands;
+using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
-internal class DeliveryRepository(
+internal sealed class DeliveryRepository(
     IStartDeliveryCommand startCmd
     , IErrorDeliveryCommand errorCmd
     , IFinishDeliveryCommand finishCmd

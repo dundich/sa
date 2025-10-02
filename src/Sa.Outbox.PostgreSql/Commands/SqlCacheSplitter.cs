@@ -1,6 +1,6 @@
-﻿namespace Sa.Outbox.PostgreSql.Commands;
+namespace Sa.Outbox.PostgreSql.Commands;
 
-internal class SqlCacheSplitter(Func<int, string> genSql)
+internal sealed class SqlCacheSplitter(Func<int, string> genSql)
 {
     private readonly Dictionary<int, string> _sqlCache = [];
 

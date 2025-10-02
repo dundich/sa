@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Support;
+namespace Sa.Outbox.Support;
 
 /// <summary>
 /// Represents a message payload in the Outbox system.

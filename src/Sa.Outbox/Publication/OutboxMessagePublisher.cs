@@ -1,9 +1,10 @@
 using Sa.Classes;
 using Sa.Outbox.Support;
+using System.Runtime.CompilerServices;
 
 namespace Sa.Outbox.Publication;
 
-internal class OutboxMessagePublisher(
+internal sealed class OutboxMessagePublisher(
     TimeProvider timeProvider,
     IArrayPool arrayPool,
     IOutboxRepository outboxRepository,
@@ -36,17 +37,13 @@ internal class OutboxMessagePublisher(
             OutboxMessage<TMessage>[] payloads = arrayPool.Rent<OutboxMessage<TMessage>>(len);
             try
             {
-                int i = 0;
-                while (i < len && enumerator.MoveNext())
+                int count = 0;
+                while (count < len && enumerator.MoveNext())
                 {
                     TMessage message = enumerator.Current;
 
-                    payloads[i] = new OutboxMessage<TMessage>(
-                        PayloadId: message.PayloadId ?? string.Empty,
-                        Payload: message,
-                        PartInfo: new OutboxPartInfo(TenantId: message.TenantId, typeInfo.PartName, now));
-
-                    i++;
+                    payloads[count] = CreateOutboxMessage(message, typeInfo, now);
+                    count++;
                 }
 
                 sent += await outboxRepository.Save<TMessage>(payloads.AsMemory()[..len], cancellationToken);
@@ -61,5 +58,19 @@ internal class OutboxMessagePublisher(
         while (start < messages.Count);
 
         return sent;
+    }
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static OutboxMessage<TMessage> CreateOutboxMessage<TMessage>(
+    TMessage message,
+    OutboxMessageTypeInfo typeInfo,
+    DateTimeOffset now)
+    where TMessage : IOutboxPayloadMessage
+    {
+        return new OutboxMessage<TMessage>(
+            PayloadId: message.PayloadId ?? string.Empty,
+            Payload: message,
+            PartInfo: new OutboxPartInfo(TenantId: message.TenantId, typeInfo.PartName, now));
     }
 }

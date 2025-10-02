@@ -11,7 +11,7 @@
 
 
 	  <ItemGroup>
-		    <InternalsVisibleTo Include="Sa.Data.S3Tests" />
+		<InternalsVisibleTo Include="Sa.Data.S3Tests" />
 	  </ItemGroup>
 
 	  <ItemGroup>

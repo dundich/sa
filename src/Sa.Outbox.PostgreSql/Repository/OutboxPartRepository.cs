@@ -1,11 +1,10 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 using Sa.Partitional.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
-internal class OutboxPartRepository(IPartitionManager partManager, PgOutboxTableSettings tableSettings): IOutboxPartRepository
+internal sealed class OutboxPartRepository(IPartitionManager partManager, PgOutboxTableSettings tableSettings): IOutboxPartRepository
 {
-
     public Task<int> EnsureDeliveryParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
         => EnsureParts(tableSettings.DatabaseDeliveryTableName, outboxParts, cancellationToken);
 

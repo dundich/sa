@@ -1,8 +1,8 @@
-﻿using Sa.Data.PostgreSql;
+using Sa.Data.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql;
 
-internal class SqlOutboxTemplate(PgOutboxTableSettings settings)
+internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
 {
     public string DatabaseSchemaName => settings.DatabaseSchemaName;
     public string DatabaseOutboxTableName => settings.DatabaseOutboxTableName;
@@ -83,7 +83,7 @@ COPY {settings.GetQualifiedOutboxTableName()} (
     ,outbox_payload
     ,outbox_payload_size
     ,outbox_created_at
-) 
+)
 FROM STDIN (FORMAT BINARY)
 ;
 """;

@@ -2,13 +2,13 @@ using Sa.HybridFileStorage.Postgres;
 
 namespace Sa.HybridFileStorage.PostgresTests;
 
-public class ParserTests
+public class FileIdParserTests
 {
     [Fact]
     public void ParseFromFileId_ValidFileId_ReturnsTenantIdAndTimestamp()
     {
         string fileId = "pg://123/2023/10/05/12/foo/some.txt";
-        var (tenantId, timestamp) = Parser.ParseFromFileId(fileId);
+        var (tenantId, timestamp) = FileIdParser.ParseFromFileId(fileId);
         Assert.Equal(123, tenantId);
         Assert.Equal(new DateTimeOffset(2023, 10, 5, 12, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds(), timestamp);
     }
@@ -17,7 +17,7 @@ public class ParserTests
     public void ParseFromFileId_InvalidFileId_ThrowsFormatException()
     {
         string fileId = "invalid_file_id";
-        Assert.Throws<FormatException>(() => Parser.ParseFromFileId(fileId));
+        Assert.Throws<FormatException>(() => FileIdParser.ParseFromFileId(fileId));
     }
 
     [Fact]
@@ -27,7 +27,7 @@ public class ParserTests
         int tenantId = 123;
         DateTimeOffset date = new(2023, 10, 5, 12, 0, 0, TimeSpan.Zero);
         string fileName = "example.txt";
-        string result = Parser.FormatToFileId(storageType, tenantId, date, fileName);
+        string result = FileIdParser.FormatToFileId(storageType, tenantId, date, fileName);
         Assert.Equal("pg://123/2023/10/05/12/example.txt", result);
     }
 
@@ -35,7 +35,7 @@ public class ParserTests
     public void NormalizeFileName_ValidFileName_ReturnsNormalizedFileName()
     {
         string fileName = "\\path\\to\\file.txt";
-        string result = Parser.NormalizeFileName(fileName);
+        string result = FileIdParser.NormalizeFileName(fileName);
         Assert.Equal("path/to/file.txt", result);
     }
 
@@ -43,7 +43,7 @@ public class ParserTests
     public void GetFileExtension_ValidFileName_ReturnsFileExtension()
     {
         string fileName = "example.txt";
-        string result = Parser.GetFileExtension(fileName);
+        string result = FileIdParser.GetFileExtension(fileName);
         Assert.Equal("txt", result);
     }
 }

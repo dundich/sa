@@ -39,7 +39,7 @@ public class PartCleanupServiceTests(PartCleanupServiceTests.Fixture fixture) : 
     private IPartCleanupService Sub => fixture.Sub;
 
     private Task<List<PartByRangeInfo>> GetParts()
-        => GetPartRep().GetPartsFromDate("test_70", DateTimeOffset.Now.StartOfDay());
+        => GetPartRep().GetPartsFromDate("test_70", DateTimeOffset.Now);
 
     private IPartRepository GetPartRep() => fixture.ServiceProvider.GetRequiredService<IPartRepository>();
 

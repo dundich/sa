@@ -1,10 +1,10 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 using Sa.Outbox.Exceptions;
 using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
-internal class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliveryCourier
+internal sealed class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliveryCourier
 {
     // Asynchronous method to deliver messages
     public async ValueTask<int> Deliver<TMessage>(

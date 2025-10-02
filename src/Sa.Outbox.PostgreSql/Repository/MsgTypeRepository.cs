@@ -1,10 +1,10 @@
-﻿using Sa.Data.PostgreSql;
+using Sa.Data.PostgreSql;
 using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
 
-internal class MsgTypeRepository(IPgDataSource dataSource, SqlOutboxTemplate template) : IMsgTypeRepository
+internal sealed class MsgTypeRepository(IPgDataSource dataSource, SqlOutboxTemplate template) : IMsgTypeRepository
 {
     public Task<int> Insert(long id, string typeName, CancellationToken cancellationToken)
     {

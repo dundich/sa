@@ -1,9 +1,9 @@
-﻿namespace Sa.Configuration.PostgreSql;
+namespace Sa.Configuration.PostgreSql;
 
 using Microsoft.Extensions.Configuration;
 using Sa.Data.PostgreSql;
 
-public class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions options) : ConfigurationProvider
+public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions options) : ConfigurationProvider
 {
     public override void Load()
     {

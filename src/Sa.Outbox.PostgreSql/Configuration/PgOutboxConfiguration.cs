@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
@@ -6,7 +6,7 @@ using System.Collections.Concurrent;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 
-internal class PgOutboxConfiguration(IServiceCollection services) : IPgOutboxConfiguration
+internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOutboxConfiguration
 {
     private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, PgOutboxSettings>>> s_invokers = [];
 
