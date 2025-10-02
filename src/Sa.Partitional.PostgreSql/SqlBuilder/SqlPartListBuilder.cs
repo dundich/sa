@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Extensions;
 
 namespace Sa.Partitional.PostgreSql.SqlBuilder;
@@ -6,7 +6,7 @@ namespace Sa.Partitional.PostgreSql.SqlBuilder;
 /// <summary>
 /// public."_outbox_root"
 /// </summary>
-internal class SqlPartListBuilder(ITableSettings settings)
+internal sealed class SqlPartListBuilder(ITableSettings settings)
 {
     public string CreateSql(StrOrNum[] partValues)
         => partValues.Length > 0

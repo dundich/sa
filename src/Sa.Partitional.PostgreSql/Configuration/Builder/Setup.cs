@@ -1,11 +1,10 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Collections.Concurrent;
 
 namespace Sa.Partitional.PostgreSql.Configuration.Builder;
 
-
-public static class Setup
+internal static class Setup
 {
     private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, ISettingsBuilder>>> s_invokers = [];
 

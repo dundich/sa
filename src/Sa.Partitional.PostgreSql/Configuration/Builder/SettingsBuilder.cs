@@ -1,9 +1,8 @@
-﻿using Sa.Partitional.PostgreSql.Settings;
+using Sa.Partitional.PostgreSql.Settings;
 
 namespace Sa.Partitional.PostgreSql.Configuration.Builder;
 
-
-internal class SettingsBuilder : ISettingsBuilder
+internal sealed class SettingsBuilder : ISettingsBuilder
 {
     private readonly Dictionary<string, ISchemaBuilder> _schemas = [];
 

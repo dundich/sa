@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 
 namespace Sa.Partitional.PostgreSql;
 

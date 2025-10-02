@@ -1,6 +1,6 @@
-﻿namespace Sa.Partitional.PostgreSql;
+namespace Sa.Partitional.PostgreSql;
 
-public class PartMigrationScheduleSettings
+public sealed class PartMigrationScheduleSettings
 {
     public int ForwardDays { get; set; } = 2;
 

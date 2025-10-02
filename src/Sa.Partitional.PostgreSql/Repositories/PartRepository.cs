@@ -7,7 +7,10 @@ using Sa.Partitional.PostgreSql.SqlBuilder;
 
 namespace Sa.Partitional.PostgreSql.Repositories;
 
-internal sealed partial class PartRepository(IPgDataSource dataSource, ISqlBuilder sqlBuilder, ILogger<PartRepository>? logger = null) : IPartRepository, IDisposable
+internal sealed partial class PartRepository(
+    IPgDataSource dataSource, 
+    ISqlBuilder sqlBuilder, 
+    ILogger<PartRepository>? logger = null) : IPartRepository, IDisposable
 {
 
     /// <summary>

@@ -1,8 +1,8 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 
 namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
-internal class SqlTableBuilder(ITableSettings settings) : ISqlTableBuilder
+internal sealed class SqlTableBuilder(ITableSettings settings) : ISqlTableBuilder
 {
     private readonly SqlRootBuilder rootBuilder = new(settings);
     private readonly SqlPartListBuilder partListBuilder = new(settings);
