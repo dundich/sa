@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 
@@ -7,7 +7,7 @@ namespace Sa.Media;
 /// <summary>
 /// <seealso href="https://stackoverflow.com/questions/8754111/how-to-read-the-data-in-a-wav-file-to-an-array/34667370#34667370"/>
 /// </summary>
-public class AsyncWavReader(PipeReader reader)
+public sealed class AsyncWavReader(PipeReader reader)
 {
 
     private readonly Lazy<Task<WavHeader>> _header = new(WavHeaderReader.ReadHeaderAsync(reader));
