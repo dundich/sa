@@ -13,6 +13,8 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>    
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <IncludeSource>true</IncludeSource>
   </PropertyGroup>
 
   <!-- Source Link - Finish -->
