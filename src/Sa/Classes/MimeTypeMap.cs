@@ -744,12 +744,9 @@ public static class MimeTypeMap
 
         var cache = mappings.ToList(); // need ToList() to avoid modifying while still enumerating
 
-        foreach (var mapping in cache)
+        foreach (var mapping in cache.Where(m => !mappings.ContainsKey(m.Value)))
         {
-            if (!mappings.ContainsKey(mapping.Value))
-            {
-                mappings.Add(mapping.Value, mapping.Key);
-            }
+            mappings.Add(mapping.Value, mapping.Key);
         }
 
         return mappings;

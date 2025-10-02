@@ -1,4 +1,4 @@
-﻿using System.Threading.Channels;
+using System.Threading.Channels;
 
 namespace Sa.Classes;
 
@@ -23,7 +23,7 @@ public record struct WorkInfo(
 )
 {
     public readonly bool IsEmpty => Id == 0;
-};
+}
 
 public enum WorkStatus
 {
