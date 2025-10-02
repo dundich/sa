@@ -1,8 +1,8 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 
 namespace Sa.Schedule.Settings;
 
-internal class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBuilder
+internal sealed class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBuilder
 {
     internal static class Default
     {
@@ -50,11 +50,9 @@ internal class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBuilder
         return this;
     }
 
-
     public IJobErrorHandlingBuilder DoSuppressError(Func<Exception, bool>? suppressError = null)
     {
         SuppressError = suppressError ?? Default.SuppressError;
         return this;
     }
-
 }

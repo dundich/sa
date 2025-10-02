@@ -1,4 +1,3 @@
-﻿
 namespace Sa.Schedule.Settings;
 
 internal interface IInterceptorSettings

@@ -1,6 +1,6 @@
-﻿namespace Sa.Schedule;
+namespace Sa.Schedule.Engine;
 
-public interface IJobRunner
+internal interface IJobRunner
 {
     Task Run(IJobController controller, CancellationToken cancellationToken);
 }

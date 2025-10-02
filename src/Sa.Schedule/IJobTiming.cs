@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule;
+namespace Sa.Schedule;
 
 /// <summary>
 /// Represents a job timing interface.

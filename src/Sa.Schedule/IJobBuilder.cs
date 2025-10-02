@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule;
+namespace Sa.Schedule;
 
 /// <summary>
 /// Defines a builder for creating and configuring jobs.

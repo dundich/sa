@@ -1,9 +1,9 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace Sa.Schedule.Engine;
 
 
-internal class JobRunner() : IJobRunner
+internal sealed class JobRunner() : IJobRunner
 {
     public async Task Run(IJobController controller, CancellationToken cancellationToken)
     {
@@ -41,4 +41,3 @@ internal class JobRunner() : IJobRunner
         }
     }
 }
-

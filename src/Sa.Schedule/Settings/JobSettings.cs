@@ -1,6 +1,6 @@
-﻿namespace Sa.Schedule.Settings;
+namespace Sa.Schedule.Settings;
 
-internal class JobSettings(Type jobType, Guid jobId) : IJobSettings
+internal sealed class JobSettings(Type jobType, Guid jobId) : IJobSettings
 {
     /// <summary>
     /// handler id
@@ -10,9 +10,11 @@ internal class JobSettings(Type jobType, Guid jobId) : IJobSettings
     public Type JobType => jobType;
 
     public JobProperies Properties { get; } = new();
+    
     public JobErrorHandling ErrorHandling { get; } = new();
 
     IJobProperties IJobSettings.Properties => Properties;
+
     IJobErrorHandling IJobSettings.ErrorHandling => ErrorHandling;
 
     internal JobSettings Merge(IJobSettings info)

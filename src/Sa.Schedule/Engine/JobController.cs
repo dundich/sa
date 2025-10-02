@@ -8,8 +8,13 @@ namespace Sa.Schedule.Engine;
 /// <summary>
 /// job lifecycly controller with context
 /// </summary>
-internal partial class JobController(IJobSettings settings, IInterceptorSettings interceptorSettings, IServiceScopeFactory scopeFactory, TimeProvider timeProvider) : IJobController
+internal sealed partial class JobController(
+    IJobSettings settings, 
+    IInterceptorSettings interceptorSettings, 
+    IServiceScopeFactory scopeFactory, 
+    TimeProvider timeProvider) : IJobController
 {
+
     private readonly JobContext context = new(settings);
 
     private JobPipeline? _job;

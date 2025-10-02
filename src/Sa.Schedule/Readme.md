@@ -5,7 +5,7 @@ The Sa.Schedule library provides a way to configure and execute scheduled tasks.
 
 ## Example Usage
 
-### Configuring Schedule
+### Configuring Schedule DI
 
 ```csharp
 Services.AddSchedule(b =>

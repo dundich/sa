@@ -1,7 +1,6 @@
-﻿namespace Sa.Schedule.Settings;
+namespace Sa.Schedule.Settings;
 
-
-internal class JobBuilder(JobSettings settings) : IJobBuilder
+internal sealed class JobBuilder(JobSettings settings) : IJobBuilder
 {
     public IJobBuilder ConfigureErrorHandling(Action<IJobErrorHandlingBuilder> configure)
     {
