@@ -9,7 +9,7 @@ namespace Sa.Data.PostgreSql;
 /// </summary>
 /// <seealso href="https://www.postgresql.org/docs/9.4/explicit-locking.html#ADVISORY-LOCKS"/>
 /// <seealso href="https://ankitvijay.net/2021/02/28/distributed-lock-using-postgresql/"/>
-internal partial class PgDistributedLock(PgDataSourceSettings settings, ILogger<PgDistributedLock>? logger = null) : IPgDistributedLock
+internal sealed partial class PgDistributedLock(PgDataSourceSettings settings, ILogger<PgDistributedLock>? logger = null) : IPgDistributedLock
 {
     private readonly ILogger<PgDistributedLock> _logger = logger ?? NullLogger<PgDistributedLock>.Instance;
 
