@@ -1,8 +1,8 @@
-﻿using System.IO.Pipelines;
+using System.IO.Pipelines;
 
 namespace Sa.Media;
 
-internal class BinaryPipeReader(PipeReader reader)
+internal sealed class BinaryPipeReader(PipeReader reader)
 {
     public long Position { get; private set; }
 

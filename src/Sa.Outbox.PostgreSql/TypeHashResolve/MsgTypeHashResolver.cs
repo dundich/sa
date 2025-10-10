@@ -1,10 +1,9 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Repository;
 
 namespace Sa.Outbox.PostgreSql.TypeHashResolve;
 
-
-internal class MsgTypeHashResolver(IMsgTypeCache cache, IMsgTypeRepository repository) : IMsgTypeHashResolver
+internal sealed class MsgTypeHashResolver(IMsgTypeCache cache, IMsgTypeRepository repository) : IMsgTypeHashResolver
 {
     private int _triggered = 0;
 

@@ -1,10 +1,10 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using System.Diagnostics;
 using System.Text;
 
 namespace Sa.Media.FFmpeg.Services;
 
-internal class FFRawExteсutor(
+internal sealed class FFRawExteсutor(
     IProcessExecutor executor
     , string executablePath
     , TimeSpan timeout) : IFFRawExteсutor

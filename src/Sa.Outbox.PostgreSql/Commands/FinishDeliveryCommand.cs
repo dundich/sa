@@ -1,10 +1,10 @@
-﻿using Npgsql;
+using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.IdGen;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate, IIdGenerator idGenerator)
+internal sealed class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate, IIdGenerator idGenerator)
     : IFinishDeliveryCommand
 {
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlFinishDelivery(len));

@@ -5,7 +5,7 @@ using System.Globalization;
 
 namespace Sa.HybridFileStorage.S3;
 
-internal class S3FileStorage(IS3BucketClient client, S3FileStorageOptions options, TimeProvider? timeProvider = null) : IFileStorage
+internal sealed class S3FileStorage(IS3BucketClient client, S3FileStorageOptions options, TimeProvider? timeProvider = null) : IFileStorage
 {
     private const string DateFormat = "yyyy/MM/dd/HH";
 

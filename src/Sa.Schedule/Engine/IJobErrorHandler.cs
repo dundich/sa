@@ -1,9 +1,9 @@
-﻿namespace Sa.Schedule;
+namespace Sa.Schedule.Engine;
 
 /// <summary>
 /// Defines the contract for handling job errors.
 /// </summary>
-public interface IJobErrorHandler
+internal interface IJobErrorHandler
 {
     /// <summary>
     /// Handles an error that occurred during job execution.

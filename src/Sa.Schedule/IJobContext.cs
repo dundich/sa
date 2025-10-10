@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace Sa.Schedule;
 
@@ -12,8 +12,7 @@ namespace Sa.Schedule;
 /// <seealso cref="JobStatus"/>
 public interface IJobContext
 {
-
-    Guid JobId { get; }
+    Guid JobId => Settings.JobId;
     string JobName { get; }
     JobStatus Status { get; }
     IJobSettings Settings { get; }

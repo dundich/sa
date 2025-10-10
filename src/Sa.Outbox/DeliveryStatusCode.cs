@@ -1,5 +1,4 @@
-﻿namespace Sa.Outbox;
-
+namespace Sa.Outbox;
 
 
 public static class DeliveryStatusCode

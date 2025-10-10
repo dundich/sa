@@ -1,4 +1,4 @@
-﻿namespace Sa.Media;
+namespace Sa.Media;
 
 /// <summary>
 /// Представляет заголовок WAV-файла и предоставляет информацию о его содержимом.
@@ -6,7 +6,7 @@
 /// </summary>
 /// <seealso href="https://audiocoding.cc/articles/2008-05-22-wav-file-structure/"/> 
 /// <seealso href="https://hasan-hasanov.com/post/2023/10/how_to_parse_wav_file/"/> 
-public class WavHeader
+public sealed class WavHeader
 {
     // === RIFF Chunk ===
 

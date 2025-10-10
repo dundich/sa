@@ -1,15 +1,13 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sa.Schedule.Settings;
 
 namespace Sa.Schedule.Engine;
 
-public class JobContext(IJobSettings settings) : IJobContext
+internal sealed class JobContext(IJobSettings settings) : IJobContext
 {
-    public Guid JobId => settings.JobId;
-
-    public string JobName => settings.Properties.JobName ?? $"{JobId}";
+    public string JobName => settings.Properties.JobName ?? $"{settings.JobId}";
 
     public JobStatus Status { get; set; }
 

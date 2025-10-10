@@ -1,11 +1,11 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Schedule.Engine;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Schedule.Settings;
 
-internal class ScheduleBuilder : IScheduleBuilder
+internal sealed class ScheduleBuilder : IScheduleBuilder
 {
     private readonly IServiceCollection _services;
 
@@ -64,10 +64,10 @@ internal class ScheduleBuilder : IScheduleBuilder
     {
         Guid id = GetId(jobId);
         _services
-            .RemoveAllKeyed<Job>(jobId)
-            .AddKeyedScoped(id, (_, __) => new Job(action));
+            .RemoveAllKeyed<FuncJob>(jobId)
+            .AddKeyedScoped(id, (_, __) => new FuncJob(action));
 
-        JobSettings jobSettings = JobSettings.Create<Job>(id);
+        JobSettings jobSettings = JobSettings.Create<FuncJob>(id);
         _services.AddSingleton<JobSettings>(jobSettings);
 
         return new JobBuilder(jobSettings);

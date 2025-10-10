@@ -1,6 +1,6 @@
-﻿namespace Sa.Partitional.PostgreSql.Configuration.Builder;
+namespace Sa.Partitional.PostgreSql.Configuration.Builder;
 
-internal class SchemaBuilder(string schemaName) : ISchemaBuilder
+internal sealed class SchemaBuilder(string schemaName) : ISchemaBuilder
 {
     public readonly Dictionary<string, TableBuilder> _tables = [];
 

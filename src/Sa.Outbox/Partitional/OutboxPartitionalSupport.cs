@@ -1,10 +1,10 @@
-﻿using Sa.Outbox.Job;
+using Sa.Outbox.Job;
 using Sa.Outbox.Publication;
 using Sa.Schedule;
 
 namespace Sa.Outbox.Partitional;
 
-internal class OutboxPartitionalSupport(IScheduleSettings scheduleSettings, PartitionalSettings partSettings) : IOutboxPartitionalSupport
+internal sealed class OutboxPartitionalSupport(IScheduleSettings scheduleSettings, PartitionalSettings partSettings) : IOutboxPartitionalSupport
 {
     private readonly Lazy<string[]> _lazyParts = new(() =>
     {

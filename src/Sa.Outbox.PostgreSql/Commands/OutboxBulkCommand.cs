@@ -1,4 +1,4 @@
-﻿using Microsoft.IO;
+using Microsoft.IO;
 using Npgsql;
 using NpgsqlTypes;
 using Sa.Data.PostgreSql;
@@ -9,7 +9,7 @@ using Sa.Outbox.PostgreSql.TypeHashResolve;
 namespace Sa.Outbox.PostgreSql.Commands;
 
 
-internal class OutboxBulkCommand(
+internal sealed class OutboxBulkCommand(
     IPgDataSource dataSource
     , SqlOutboxTemplate sqlTemplate
     , RecyclableMemoryStreamManager streamManager

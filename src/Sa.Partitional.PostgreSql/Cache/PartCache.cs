@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 
 namespace Sa.Partitional.PostgreSql.Cache;
 
-internal class PartCache(
+internal sealed class PartCache(
     IPartRepository repository
     , ISqlBuilder sqlBuilder
     , PartCacheSettings settings

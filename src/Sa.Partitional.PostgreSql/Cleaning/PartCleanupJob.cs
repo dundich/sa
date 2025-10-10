@@ -1,8 +1,8 @@
-﻿using Sa.Schedule;
+using Sa.Schedule;
 
 namespace Sa.Partitional.PostgreSql.Cleaning;
 
-internal class PartCleanupJob(IPartCleanupService cleaningService) : IJob
+internal sealed class PartCleanupJob(IPartCleanupService cleaningService) : IJob
 {
     public Task Execute(IJobContext context, CancellationToken cancellationToken)
     {

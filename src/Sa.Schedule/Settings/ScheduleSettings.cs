@@ -1,8 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
-
 namespace Sa.Schedule.Settings;
 
-internal class ScheduleSettings : IScheduleSettings
+internal sealed class ScheduleSettings : IScheduleSettings
 {
     private Dictionary<Guid, JobSettings> _storage = [];
 
@@ -10,7 +8,7 @@ internal class ScheduleSettings : IScheduleSettings
 
     public Func<IJobContext, Exception, bool>? HandleError { get; private set; }
 
-    public virtual IEnumerable<IJobSettings> GetJobSettings() => _storage.Values.Where(c => c.Properties.Disabled != true);
+    public IEnumerable<IJobSettings> GetJobSettings() => _storage.Values.Where(c => c.Properties.Disabled != true);
 
     public void UseHostedService() => IsHostedService = true;
 

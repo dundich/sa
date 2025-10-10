@@ -1,9 +1,9 @@
-﻿using Sa.Data.PostgreSql;
+using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.TypeHashResolve;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal class ExtendDeliveryCommand(
+internal sealed class ExtendDeliveryCommand(
     IPgDataSource dataSource
     , IMsgTypeHashResolver hashResolver
     , SqlOutboxTemplate sqlTemplate

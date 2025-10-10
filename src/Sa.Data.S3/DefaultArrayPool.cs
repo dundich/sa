@@ -2,7 +2,7 @@ using System.Buffers;
 
 namespace Sa.Data.S3;
 
-public sealed class DefaultArrayPool
+internal sealed class DefaultArrayPool
 {
 	class ArrayPool : IArrayPool
 	{

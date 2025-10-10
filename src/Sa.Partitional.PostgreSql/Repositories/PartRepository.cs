@@ -7,7 +7,10 @@ using Sa.Partitional.PostgreSql.SqlBuilder;
 
 namespace Sa.Partitional.PostgreSql.Repositories;
 
-internal sealed partial class PartRepository(IPgDataSource dataSource, ISqlBuilder sqlBuilder, ILogger<PartRepository>? logger = null) : IPartRepository, IDisposable
+internal sealed partial class PartRepository(
+    IPgDataSource dataSource, 
+    ISqlBuilder sqlBuilder, 
+    ILogger<PartRepository>? logger = null) : IPartRepository, IDisposable
 {
 
     /// <summary>
@@ -87,7 +90,7 @@ internal sealed partial class PartRepository(IPgDataSource dataSource, ISqlBuild
     public async Task<List<PartByRangeInfo>> GetPartsFromDate(string tableName, DateTimeOffset fromDate, CancellationToken cancellationToken = default)
     {
         string sql = sqlBuilder.SelectPartsFromDateSql(tableName);
-        long unixTime = fromDate.ToUnixTimeSeconds();
+        long unixTime = fromDate.ToUniversalTime().StartOfDay().ToUnixTimeSeconds();
 
         return await Retry.Jitter(
             async t =>

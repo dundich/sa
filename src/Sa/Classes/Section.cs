@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace Sa.Classes;
 
@@ -64,7 +64,7 @@ public static class RangeExtensions
         => range.Start.CompareTo(value) <= 0 && (range.HasEnd ? range.End.CompareTo(value) >= 0 : range.End.CompareTo(value) > 0);
 
     /// <summary>
-    /// >список пустых (незанятых) интервалов
+    /// список пустых (незанятых) интервалов
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="range">интервал</param>
@@ -200,13 +200,11 @@ public static class RangeExtensions
         List<Section<T>> splitIntervals = [];
 
         T prevPoint = self.Start;
-        foreach (T point in sortedPoints)
+        foreach (T point in sortedPoints
+            .Where(point => point.CompareTo(self.Start) > 0 && self.End.CompareTo(point) > 0))
         {
-            if (point.CompareTo(self.Start) > 0 && self.End.CompareTo(point) > 0)
-            {
-                splitIntervals.Add(prevPoint.RangeTo(point));
-                prevPoint = point;
-            }
+            splitIntervals.Add(prevPoint.RangeTo(point));
+            prevPoint = point;
         }
 
         splitIntervals.Add(prevPoint.RangeTo(self.End));

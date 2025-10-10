@@ -1,6 +1,6 @@
-﻿namespace Sa.Schedule.Settings;
+namespace Sa.Schedule.Settings;
 
-internal class InterceptorSettings : IInterceptorSettings
+internal sealed class InterceptorSettings : IInterceptorSettings
 {
     private readonly List<JobInterceptorSettings> _interceptors = [];
 
@@ -8,12 +8,9 @@ internal class InterceptorSettings : IInterceptorSettings
 
     public InterceptorSettings(IEnumerable<JobInterceptorSettings> items)
     {
-        foreach (JobInterceptorSettings item in items)
+        foreach (JobInterceptorSettings item in items.Where(c => !_interceptors.Contains(c)))
         {
-            if (!_interceptors.Contains(item))
-            {
-                _interceptors.Add(item);
-            }
+            _interceptors.Add(item);
         }
     }
 }

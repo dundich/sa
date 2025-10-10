@@ -1,6 +1,6 @@
-﻿namespace Sa.Schedule.Settings;
+namespace Sa.Schedule.Settings;
 
-internal class NullJobServices : IServiceProvider
+internal sealed class NullJobServices : IServiceProvider
 {
     public object? GetService(Type serviceType) => null;
 

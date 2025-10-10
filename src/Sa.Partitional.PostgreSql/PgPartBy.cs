@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace Sa.Partitional.PostgreSql;
 
-public record PgPartBy(
+public sealed record PgPartBy(
     PartByRange PartByRange
     , Func<DateTimeOffset, LimSection<DateTimeOffset>> GetRange
     , Func<DateTimeOffset, string> Fmt

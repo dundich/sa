@@ -4,7 +4,7 @@ using Sa.HybridFileStorage.Interceptors;
 namespace Sa.HybridFileStorage;
 
 
-internal class HybridFileStorage(IHybridFileStorageContainer container, InterceptorContainer interceptors) : IHybridFileStorage
+internal sealed class HybridFileStorage(IHybridFileStorageContainer container, InterceptorContainer interceptors) : IHybridFileStorage
 {
     public string StorageType => container.StorageType;
 

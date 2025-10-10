@@ -1,8 +1,8 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 
 namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
-internal class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
+internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
 {
     private readonly Dictionary<string, SqlTableBuilder> builders = storage
         .Tables

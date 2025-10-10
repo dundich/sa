@@ -4,7 +4,7 @@ using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage.Interceptors;
 
-internal partial class LoggingInterceptor(ILogger<LoggingInterceptor>? logger = null) 
+internal sealed partial class LoggingInterceptor(ILogger<LoggingInterceptor>? logger = null) 
     : IDeleteInterceptor, IDownloadInterceptor, IUploadInterceptor
 {
     private readonly ILogger _logger = logger ?? NullLogger<LoggingInterceptor>.Instance;

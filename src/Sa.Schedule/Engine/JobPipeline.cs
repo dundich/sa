@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Schedule.Settings;
 
 namespace Sa.Schedule.Engine;
@@ -20,7 +20,10 @@ internal sealed class JobPipeline : IJob, IDisposable
     private readonly IServiceScope _scope;
     private readonly IJob _job;
 
-    public JobPipeline(IJobSettings settings, IInterceptorSettings interceptorSettings, IServiceScopeFactory scopeFactory)
+    public JobPipeline(
+        IJobSettings settings,
+        IInterceptorSettings interceptorSettings,
+        IServiceScopeFactory scopeFactory)
     {
         _scope = scopeFactory.CreateScope();
         IJob originalJob = (IJob)_scope.ServiceProvider.GetRequiredKeyedService(settings.JobType, settings.JobId);

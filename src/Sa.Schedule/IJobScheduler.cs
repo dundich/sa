@@ -1,7 +1,6 @@
-﻿using Microsoft.Extensions.Primitives;
+using Microsoft.Extensions.Primitives;
 
 namespace Sa.Schedule;
-
 
 /// <summary>
 /// This individual task scheduler is responsible for managing specific tasks.
@@ -38,4 +37,3 @@ public interface IJobScheduler
     /// </summary>
     Task Stop();
 }
-

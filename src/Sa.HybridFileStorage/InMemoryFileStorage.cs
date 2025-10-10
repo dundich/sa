@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 
 namespace Sa.HybridFileStorage;
 
-public class InMemoryFileStorage(TimeProvider? currentTimeProvider = null, bool isReadOnly = false) : IFileStorage
+public sealed class InMemoryFileStorage(TimeProvider? currentTimeProvider = null, bool isReadOnly = false) : IFileStorage
 {
     public const string DefaultStorageType = "mem";
 

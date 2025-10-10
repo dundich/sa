@@ -7,7 +7,7 @@ using Sa.Partitional.PostgreSql;
 
 namespace Sa.HybridFileStorage.Postgres;
 
-internal class PostgresFileStorageConfiguration : IPostgresFileStorageConfiguration
+internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageConfiguration
 {
     private readonly PostgresFileStorageOptions _options = new();
     private readonly IPartConfiguration _partConfiguration;

@@ -1,6 +1,6 @@
-﻿namespace Sa.Schedule.Engine;
+namespace Sa.Schedule.Engine;
 
-public class JobTiming(Func<DateTimeOffset, IJobContext, DateTimeOffset?> nextTime, string name) : IJobTiming
+internal sealed class JobTiming(Func<DateTimeOffset, IJobContext, DateTimeOffset?> nextTime, string name) : IJobTiming
 {
     public string TimingName => name;
     public DateTimeOffset? GetNextOccurrence(DateTimeOffset dateTime, IJobContext context) => nextTime(dateTime, context);

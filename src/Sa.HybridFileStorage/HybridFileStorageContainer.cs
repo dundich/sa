@@ -2,7 +2,7 @@ using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage;
 
-internal class HybridFileStorageContainer(IEnumerable<IFileStorage> storages) : IHybridFileStorageContainer
+internal sealed class HybridFileStorageContainer(IEnumerable<IFileStorage> storages) : IHybridFileStorageContainer
 {
     private readonly List<IFileStorage> _storages = [.. storages];
 

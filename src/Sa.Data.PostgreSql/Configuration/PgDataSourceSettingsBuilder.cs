@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Sa.Data.PostgreSql.Configuration;
 
-internal class PgDataSourceSettingsBuilder(IServiceCollection services) : IPgDataSourceSettingsBuilder
+internal sealed class PgDataSourceSettingsBuilder(IServiceCollection services) : IPgDataSourceSettingsBuilder
 {
     public void WithConnectionString(string connectionString)
     {

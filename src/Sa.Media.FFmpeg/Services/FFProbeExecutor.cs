@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Sa.Media.FFmpeg.Services;
 
-internal class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExecutor
+internal sealed class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExecutor
 {
     public IFFRawExteсutor Exteсutor => exteсutor;
 

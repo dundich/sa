@@ -1,9 +1,9 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace Sa.Partitional.PostgreSql.Settings;
 
 [DebuggerDisplay("settings root = {DatabaseTableName}")]
-internal class TableSettings : ITableSettings
+internal sealed class TableSettings : ITableSettings
 {
     static class Default
     {

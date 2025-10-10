@@ -1,6 +1,6 @@
-﻿namespace Sa.Data.PostgreSql;
+namespace Sa.Data.PostgreSql;
 
-public class PgDataSourceSettings(string connectionString)
+public sealed class PgDataSourceSettings(string connectionString)
 {
     public string ConnectionString { get; } = connectionString;
 }

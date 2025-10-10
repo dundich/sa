@@ -7,7 +7,7 @@ using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.Configuration;
 
-internal class OutboxBuilder : IOutboxBuilder
+internal sealed class OutboxBuilder : IOutboxBuilder
 {
     private readonly IServiceCollection _services;
 

@@ -1,8 +1,8 @@
-﻿using Sa.Schedule.Engine;
+using Sa.Schedule.Engine;
 
 namespace Sa.Schedule.Settings;
 
-internal class JobProperies : IJobProperties
+internal sealed class JobProperies : IJobProperties
 {
     public string? JobName { get; private set; }
     public bool? Immediate { get; private set; }

@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule;
+namespace Sa.Schedule;
 
 public enum JobStatus
 {

@@ -1,6 +1,6 @@
-﻿namespace Sa.Schedule;
+namespace Sa.Schedule.Engine;
 
-public interface IJobFactory
+internal interface IJobFactory
 {
     IJobController CreateJobController(IJobSettings settings);
     IJobScheduler CreateJobSchedule(IJobSettings settings);

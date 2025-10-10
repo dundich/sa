@@ -1,6 +1,6 @@
-﻿namespace Sa.Partitional.PostgreSql;
+namespace Sa.Partitional.PostgreSql;
 
-public class PartCacheSettings
+public sealed class PartCacheSettings
 {
     public TimeSpan CachedFromDate { get; set; } = TimeSpan.FromDays(1);
 }

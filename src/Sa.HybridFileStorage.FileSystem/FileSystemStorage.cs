@@ -2,7 +2,7 @@ using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage.FileSystem;
 
-internal class FileSystemStorage(FileSystemStorageOptions options, TimeProvider? timeProvider = null) : IFileStorage
+internal sealed class FileSystemStorage(FileSystemStorageOptions options, TimeProvider? timeProvider = null) : IFileStorage
 {
     private readonly string _basePath = Path.TrimEndingDirectorySeparator(options.BasePath);
 

@@ -2,7 +2,8 @@ using System.Globalization;
 
 namespace Sa.HybridFileStorage.Postgres;
 
-public static class Parser
+internal static class FileIdParser
+
 {
     private const string DateFormat = "yyyy/MM/dd/HH";
 

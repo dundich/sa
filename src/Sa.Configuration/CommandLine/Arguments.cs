@@ -14,7 +14,7 @@ namespace Sa.Configuration.CommandLine;
 /// </code>
 /// <seealso href="https://www.codeproject.com/Articles/3111/C-NET-Command-Line-Arguments-Parser"/>
 /// </summary>
-public partial class Arguments
+public sealed partial class Arguments
 {
     private static readonly Regex s_ReSpliter = SpliterRegex();
     private static readonly Regex s_ReRemover = RemoverRegex();

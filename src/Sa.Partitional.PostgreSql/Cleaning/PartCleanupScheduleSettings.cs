@@ -1,10 +1,10 @@
-﻿namespace Sa.Partitional.PostgreSql;
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// Represents the settings for scheduling the cleanup of Outbox message parts.
 /// This class contains configuration options related to how and when parts should be cleaned up.
 /// </summary>
-public class PartCleanupScheduleSettings
+public sealed class PartCleanupScheduleSettings
 {
     /// <summary>
     /// Gets or sets a value indicating whether the cleanup should be executed as a background job.

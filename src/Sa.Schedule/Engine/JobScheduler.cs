@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Primitives;
+using Microsoft.Extensions.Primitives;
 
 namespace Sa.Schedule.Engine;
 
@@ -46,9 +46,9 @@ internal sealed class JobScheduler(IJobRunner runner, IJobController controller)
 
             _stoppingTask = new TaskCompletionSource();
 
-            Task task = runner.Run(controller, _stoppingToken.Token);
-
-            task.ContinueWith(Done, CancellationToken.None);
+            _ = runner
+                .Run(controller, _stoppingToken.Token)
+                .ContinueWith(Done, CancellationToken.None);
 
             return true;
         }

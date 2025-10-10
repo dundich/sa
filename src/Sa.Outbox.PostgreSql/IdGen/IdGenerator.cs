@@ -1,6 +1,6 @@
-﻿namespace Sa.Outbox.PostgreSql.IdGen;
+namespace Sa.Outbox.PostgreSql.IdGen;
 
-internal class IdGenerator : IIdGenerator
+internal sealed class IdGenerator : IIdGenerator
 {
     public string GenId(DateTimeOffset date) => Ulid.NewUlid(date).ToString();
 }

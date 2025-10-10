@@ -3,7 +3,7 @@ using Sa.HybridFileStorage.Domain;
 namespace Sa.HybridFileStorage.Interceptors;
 
 
-internal class InterceptorContainer : IInterceptorContainer
+internal sealed class InterceptorContainer : IInterceptorContainer
 {
     private readonly List<IUploadInterceptor> _uploadInterceptors = [];
     private readonly List<IDownloadInterceptor> _downloadInterceptors = [];

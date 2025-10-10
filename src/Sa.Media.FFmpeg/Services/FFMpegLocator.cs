@@ -1,10 +1,10 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 
 namespace Sa.Media.FFmpeg.Services;
 
-internal class FFMpegLocator : IFFMpegLocator
+internal sealed class FFMpegLocator : IFFMpegLocator
 {
     /// <summary>
     /// Находит путь к ffmpeg-исполняемому файлу.
