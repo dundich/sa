@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PgOutbox.ConsoleApp;
 using Sa.Outbox;
@@ -67,7 +67,8 @@ Console.WriteLine("sent msgs with rnd TenantId: {0}", sent);
 await host.RunAsync();
 
 
-Console.WriteLine("The end. Recived: {0}", SomeMessageConsumer.Counter);
+Console.WriteLine("The end. Recived: {0}, Successfully: {1}", SomeMessageConsumer.Counter, SomeMessageConsumer.Counter > 0);
+
 
 
 namespace PgOutbox.ConsoleApp

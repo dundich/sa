@@ -1,10 +1,10 @@
-﻿namespace Sa.Outbox;
+namespace Sa.Outbox;
 
 
 /// <summary>
 /// Settings for publishing messages from the Outbox.
 /// </summary>
-public class OutboxPublishSettings
+public sealed class OutboxPublishSettings
 {
     /// <summary>
     /// The maximum batch size of messages to be sent at once.
@@ -18,7 +18,7 @@ public class OutboxPublishSettings
 /// <summary>
 /// Indicates that this is a configuration for message delivery in the Outbox.
 /// </summary>
-public class OutboxDeliverySettings(Guid jobId, int instanceIndex = 0)
+public sealed class OutboxDeliverySettings(Guid jobId, int instanceIndex = 0)
 {
     /// <summary>
     ///  Gets the unique identifier for the delivery job
@@ -45,7 +45,7 @@ public class OutboxDeliverySettings(Guid jobId, int instanceIndex = 0)
 /// <summary>
 /// Represents the scheduling settings for the delivery job.
 /// </summary>
-public class ScheduleSettings
+public sealed class ScheduleSettings
 {
     public string? Name { get; set; }
     public TimeSpan ExecutionInterval { get; set; } = TimeSpan.FromMinutes(1);
@@ -61,7 +61,7 @@ public class ScheduleSettings
 /// <summary>
 /// Represents the extraction settings for retrieving messages from the Outbox.
 /// </summary>
-public class ExtractSettings
+public sealed class ExtractSettings
 {
     /// <summary>
     /// Gets or sets the maximum size of the Outbox message batch for each database poll.
@@ -95,7 +95,7 @@ public class ExtractSettings
 /// <summary>
 /// Represents the consumption settings for processing messages from the Outbox.
 /// </summary>
-public class ConsumeSettings
+public sealed class ConsumeSettings
 {
     /// <summary>
     /// The maximum number of delivery attempts before delivery will not be attempted again.

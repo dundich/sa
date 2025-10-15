@@ -73,6 +73,8 @@ namespace Partitional.ConsoleApp
             var parts = await repository.GetPartsToDate("customer", DateTime.Now.AddDays(3));
 
             logger.LogInformation($"list of parts:{Environment.NewLine}{string.Join(Environment.NewLine, parts.Select(c => c.Id))}");
+
+            logger.LogInformation("Successfully: {Ok}" , parts.Count > 0);
         }
     }
 }
