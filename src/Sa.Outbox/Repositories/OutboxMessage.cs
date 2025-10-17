@@ -1,11 +1,11 @@
-﻿namespace Sa.Outbox;
+namespace Sa.Outbox;
 
 
 /// <summary>
 /// Represents a message in the Outbox with its associated payload and part information.
 /// </summary>
 /// <typeparam name="TMessage">The type of the message payload.</typeparam>
-public record struct OutboxMessage<TMessage>(
+public readonly record struct OutboxMessage<TMessage>(
     /// <summary>
     /// Gets the unique identifier for the payload.
     /// </summary>
@@ -26,7 +26,7 @@ public record struct OutboxMessage<TMessage>(
 /// Represents a delivery message in the Outbox with its associated payload, part information, and delivery details.
 /// </summary>
 /// <typeparam name="TMessage">The type of the message payload.</typeparam>
-public record struct OutboxDeliveryMessage<TMessage>(
+public readonly record struct OutboxDeliveryMessage<TMessage>(
     /// <summary>
     /// Gets the unique identifier for the Outbox delivery.
     /// </summary>
@@ -56,7 +56,7 @@ public record struct OutboxDeliveryMessage<TMessage>(
 /// <summary>
 /// Represents information about a part of the Outbox message.
 /// </summary>
-public record struct OutboxPartInfo(
+public readonly record struct OutboxPartInfo(
     /// <summary>
     /// Gets the identifier for the tenant associated with the message.
     /// </summary>
@@ -81,7 +81,7 @@ public record struct OutboxPartInfo(
 /// <param name="LastErrorId">The identifier of the last error encountered during delivery.</param>
 /// <param name="Status">The current status of the delivery.</param>
 /// <param name="CreatedAt">The date and time when the delivery was created.</param>
-public record struct OutboxDeliveryInfo(
+public readonly record struct OutboxDeliveryInfo(
     string? DeliveryId,
     int Attempt,
     string LastErrorId,
@@ -95,7 +95,7 @@ public record struct OutboxDeliveryInfo(
 /// <param name="Code">The status code representing the result of the delivery.</param>
 /// <param name="Message">A message providing additional context about the delivery status.</param>
 /// <param name="CreatedAt">The date and time when the status was created.</param>
-public record struct DeliveryStatus(
+public readonly record struct DeliveryStatus(
     int Code,
     string Message,
     DateTimeOffset CreatedAt

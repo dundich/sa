@@ -3,7 +3,7 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.2.1</Version>
+    <Version>0.3.0</Version>
     <Title>Sa.Data.S3</Title>
     <Description>Simple client for S3 (Sa.Data.S3)</Description>
     <PackageTags>s3</PackageTags>
@@ -15,7 +15,7 @@
 	  </ItemGroup>
 
 	  <ItemGroup>
-	    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.9.0" />
+	    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.10.0" />
 	  </ItemGroup>
 
 	  <ItemGroup>

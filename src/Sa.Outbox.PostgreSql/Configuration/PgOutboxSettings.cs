@@ -1,10 +1,10 @@
-﻿namespace Sa.Outbox.PostgreSql;
+namespace Sa.Outbox.PostgreSql;
 
 /// <summary>
 /// Represents the settings for the PostgreSQL Outbox configuration.
 /// This class contains various settings related to table configuration, serialization, caching, migration, and cleanup.
 /// </summary>
-public class PgOutboxSettings
+public sealed class PgOutboxSettings
 {
     /// <summary>
     /// Gets the settings related to the Outbox table configuration.
@@ -31,7 +31,7 @@ public class PgOutboxSettings
 /// <summary>
 /// Represents the settings for configuring the Outbox tables in PostgreSQL.
 /// </summary>
-public class PgOutboxTableSettings
+public sealed class PgOutboxTableSettings
 {
     /// <summary>
     /// Gets or sets the name of the database schema.
@@ -92,7 +92,7 @@ public class PgOutboxTableSettings
 /// <summary>
 /// Represents the settings for caching message types in the Outbox.
 /// </summary>
-public class PgOutboxCacheSettings
+public sealed class PgOutboxCacheSettings
 {
     /// <summary>
     /// Gets or sets the duration for which message types are cached.
@@ -104,7 +104,7 @@ public class PgOutboxCacheSettings
 /// <summary>
 /// Represents the settings for migrating the Outbox schema in PostgreSQL.
 /// </summary>
-public class PgOutboxMigrationSettings
+public sealed class PgOutboxMigrationSettings
 {
     /// <summary>
     /// Gets or sets a value indicating whether the migration should be executed as a background job.
@@ -132,7 +132,7 @@ public class PgOutboxMigrationSettings
 /// Represents the settings for cleaning up old Outbox messages and parts in PostgreSQL.
 /// This class contains configuration options for how and when the cleanup should occur.
 /// </summary>
-public class PgOutboxCleanupSettings
+public sealed class PgOutboxCleanupSettings
 {
     /// <summary>
     /// Gets or sets a value indicating whether the cleanup should be executed as a background job.

@@ -1,10 +1,10 @@
-﻿namespace Sa.Outbox;
+namespace Sa.Outbox;
 
 /// <summary>
 /// Represents the settings for partitioning in the Outbox processing system.
 /// This class contains configuration options related to tenant handling and caching.
 /// </summary>
-public class PartitionalSettings
+public sealed class PartitionalSettings
 {
     /// <summary>
     /// Gets or sets a value indicating whether to process messages for each tenant individually.

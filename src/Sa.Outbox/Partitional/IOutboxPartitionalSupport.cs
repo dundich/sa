@@ -1,4 +1,4 @@
-﻿
+
 namespace Sa.Outbox.Partitional;
 
 /// <summary>
@@ -7,7 +7,7 @@ namespace Sa.Outbox.Partitional;
 /// </summary>
 /// <param name="TenantId">The unique identifier for the tenant.</param>
 /// <param name="Part">The part identifier associated with the tenant.</param>
-public record struct OutboxTenantPartPair(int TenantId, string Part);
+public readonly record struct OutboxTenantPartPair(int TenantId, string Part);
 
 /// <summary>
 /// Represents an interface for supporting partitioning in the Outbox processing system.
