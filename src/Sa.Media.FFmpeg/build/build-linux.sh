@@ -10,6 +10,16 @@ echo "starting in $BASE_DIR"
 source common.sh || { echo "common.sh не найден или поврежден"; exit 1; }
 
 
+
+# Проверка перед сборкой
+pkg-config --exists opus vorbis lame || {
+    echo "Missing dependencies. Install with:"
+    echo "sudo apt install libopus-dev libvorbis-dev libmp3lame-dev"
+    exit 1
+}
+
+
+
 # # Установка зависимостей (только для Ubuntu/Debian)
 # sudo apt update
 # sudo apt install -y build-essential yasm nasm git pkg-config libmp3lame-dev libopus-dev
@@ -95,6 +105,7 @@ FFMPEG_CONFIGURE_FLAGS+=(
 
     --enable-encoder=vorbis
     --enable-decoder=vorbis
+
     --enable-encoder=libvorbis
     --enable-decoder=libvorbis
 

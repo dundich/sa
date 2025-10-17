@@ -3,6 +3,7 @@
 
   <PropertyGroup>
     <IsTestProject>true</IsTestProject>
+    <SonarQubeExclude>True</SonarQubeExclude>
   </PropertyGroup>
   
   <ItemGroup>

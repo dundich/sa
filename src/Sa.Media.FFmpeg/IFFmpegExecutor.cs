@@ -10,7 +10,7 @@ public interface IFFMpegExecutor
     /// <summary>
     /// Gets the executor responsible for running FFmpeg commands in raw mode.
     /// </summary>
-    IFFRawExteсutor Exteсutor { get; }
+    IFFRawExtecutor Extecutor { get; }
 
     /// <summary>
     /// Gets the version of FFmpeg by executing the <c>ffmpeg -version</c> command.

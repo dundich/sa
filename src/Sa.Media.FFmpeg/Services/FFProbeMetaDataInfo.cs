@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace Sa.Media.FFmpeg.Services;
 
@@ -10,8 +10,8 @@ internal record FFProbeMetaDataInfo(
 );
 
 internal record FFProbeFormat(
-    [property: JsonPropertyName("duration")] string Duration,
-    [property: JsonPropertyName("format_name")] string FormatName,
-    [property: JsonPropertyName("bit_rate")] string BitRate,
-    [property: JsonPropertyName("size")] string Size
+    [property: JsonPropertyName("duration")] string? Duration,
+    [property: JsonPropertyName("format_name")] string? FormatName,
+    [property: JsonPropertyName("bit_rate")] string? BitRate,
+    [property: JsonPropertyName("size")] string? Size
 );

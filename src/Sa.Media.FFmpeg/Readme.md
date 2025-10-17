@@ -55,3 +55,25 @@ This will produce:
 output_channel_0.wav
 output_channel_1.wav
 ```
+
+
+## Check library dependencies
+To see all missing dependencies:
+
+```bash
+cd bin/Debug/net9.0/runtimes/linux-x64/
+ldd ffmpeg
+```
+
+On Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install libmp3lame0 libopus0 libvorbis0a libvorbisenc2
+```
+
+On Alpine Linux:
+
+```bash
+sudo apk add lame-libs opus libvorbis
+```

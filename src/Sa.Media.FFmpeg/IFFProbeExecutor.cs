@@ -10,7 +10,7 @@ public interface IFFProbeExecutor
     /// <summary>
     /// Gets the raw executor used to run FFprobe commands.
     /// </summary>
-    IFFRawExteсutor Exteсutor { get; }
+    IFFRawExtecutor Extecutor { get; }
 
     /// <summary>
     /// Retrieves the number of audio channels and sample rate from the specified media file.

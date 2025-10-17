@@ -20,7 +20,7 @@ FFMPEG_CONFIGURE_FLAGS=(
 
     --disable-avdevice
     --disable-swscale
-    --disable-programs
+    # --disable-programs
     --enable-ffmpeg
     --enable-ffprobe
 
@@ -72,7 +72,14 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-protocol=pipe
 
     --disable-muxers
-    --enable-muxer=mp3,mp4,ac3,flac,wav,ogg
+    # --enable-muxer=mp3,mp4,ac3,flac,wav,ogg
+    --enable-muxer=mp3
+    --enable-muxer=mp4  
+    --enable-muxer=ac3
+    --enable-muxer=flac
+    --enable-muxer=wav
+    --enable-muxer=ogg
+
 
     --disable-demuxers
     --enable-demuxer=aac

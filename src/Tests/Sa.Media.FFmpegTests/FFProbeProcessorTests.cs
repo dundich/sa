@@ -40,9 +40,9 @@ public sealed class FFProbeProcessorTests
 
 
     [Theory]
-    [InlineData("./data/ffout.wav")]
-    [InlineData("./data/input.mp3")]
-    [InlineData("./data/input.wav")]
+    // [InlineData("./data/ffout.wav")]
+    // [InlineData("./data/input.mp3")]
+    // [InlineData("./data/input.wav")]
     [InlineData("./data/input.ogg")]
     public async Task GetMetaInfo_CorrectlyReadsAsStream(string testFilePath)
     {

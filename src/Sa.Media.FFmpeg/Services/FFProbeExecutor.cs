@@ -1,14 +1,18 @@
+using System.Diagnostics;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Sa.Media.FFmpeg.Services;
 
-internal sealed class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExecutor
+internal sealed class FFProbeExecutor(
+    IFFRawExtecutor extecutor,
+    ILogger<FFProbeExecutor>? logger = null) : IFFProbeExecutor
 {
-    public IFFRawExteсutor Exteсutor => exteсutor;
+    public IFFRawExtecutor Extecutor => extecutor;
 
     public async Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRate(string filePath, CancellationToken cancellationToken = default)
     {
-        var result = await exteсutor.ExecuteAsync(
+        var result = await extecutor.ExecuteAsync(
             $"-v error -show_entries stream=channels,sample_rate -of default=nw=1 \"{filePath}\"",
             cancellationToken: cancellationToken);
 
@@ -19,7 +23,7 @@ internal sealed class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExe
 
     public async Task<MediaMetadata> GetMetaInfo(string filePath, CancellationToken cancellationToken = default)
     {
-        var output = await exteсutor.ExecuteAsync(
+        var output = await extecutor.ExecuteAsync(
             $"-v quiet -print_format json -show_streams -show_format \"{filePath}\"",
             cancellationToken: cancellationToken);
 
@@ -47,27 +51,39 @@ internal sealed class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExe
     {
         MediaMetadata metadata = MediaMetadata.Empty;
 
-        await exteсutor.ExecuteStdOutAsync(
+        await extecutor.ExecuteStdOutAsync(
             $"-v quiet -print_format json -show_streams -show_format -f {inputFormat} -i pipe:0",
             audioStream,
             async (onOutput, ct) =>
             {
                 try
                 {
-                    var metaDataInfo = await JsonSerializer.DeserializeAsync<FFProbeMetaDataInfo>(
-                        onOutput,
-                        FFmpegJsonSerializerContext.Default.FFProbeMetaDataInfo,
-                        cancellationToken: ct);
+                    //using var streamReader = new StreamReader(onOutput);
+                    //string content = streamReader.ReadToEnd();
+                    //Debug.WriteLine(content);
+                    try
+                    {
+                        var metaDataInfo = await JsonSerializer.DeserializeAsync<FFProbeMetaDataInfo>(
+                            onOutput,
+                            FFmpegJsonSerializerContext.Default.FFProbeMetaDataInfo,
+                            cancellationToken: ct);
 
-                    metadata = new MediaMetadata(
-                        Duration: metaDataInfo?.Format?.Duration?.StrToDouble(),
-                        FormatName: metaDataInfo?.Format?.FormatName,
-                        BitRate: metaDataInfo?.Format?.BitRate.StrToInt(),
-                        Size: metaDataInfo?.Format?.Size.StrToInt()
-                    );
+                        metadata = new MediaMetadata(
+                            Duration: metaDataInfo?.Format?.Duration?.StrToDouble(),
+                            FormatName: metaDataInfo?.Format?.FormatName,
+                            BitRate: metaDataInfo?.Format?.BitRate.StrToInt(),
+                            Size: metaDataInfo?.Format?.Size.StrToInt()
+                        );
+                    }
+                    catch (JsonException jsonEx)
+                    {
+                        logger?.LogError(jsonEx, "Failed to deserialize FFprobe JSON output");
+                        metadata = MediaMetadata.Empty;
+                    }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    logger?.LogError(ex, "Error processing FFprobe metadata");
                     metadata = MediaMetadata.Empty;
                 }
             },

@@ -6,7 +6,7 @@ namespace Sa.Media.FFmpeg;
 /// <summary>
 /// Interface for executing raw FFmpeg or FFprobe commands.
 /// </summary>
-public interface IFFRawExteсutor
+public interface IFFRawExtecutor
 {
     /// <summary>
     /// Gets the full path to the FFmpeg/FFprobe executable used by this executor.
