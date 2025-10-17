@@ -7,7 +7,7 @@ using Schedule.Console;
 
 Console.Write("Hello, Schedule! As host service (Y/n): ");
 
-bool isHostService = Console.ReadKey().Key == ConsoleKey.Y;
+bool isHostService = Console.ReadLine()?.ToLower() == "y";
 
 Console.WriteLine();
 
