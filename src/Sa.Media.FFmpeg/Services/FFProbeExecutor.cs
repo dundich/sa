@@ -1,6 +1,5 @@
-using System.Diagnostics;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Sa.Media.FFmpeg.Services;
 
@@ -58,32 +57,21 @@ internal sealed class FFProbeExecutor(
             {
                 try
                 {
-                    //using var streamReader = new StreamReader(onOutput);
-                    //string content = streamReader.ReadToEnd();
-                    //Debug.WriteLine(content);
-                    try
-                    {
-                        var metaDataInfo = await JsonSerializer.DeserializeAsync<FFProbeMetaDataInfo>(
-                            onOutput,
-                            FFmpegJsonSerializerContext.Default.FFProbeMetaDataInfo,
-                            cancellationToken: ct);
+                    var metaDataInfo = await JsonSerializer.DeserializeAsync<FFProbeMetaDataInfo>(
+                        onOutput,
+                        FFmpegJsonSerializerContext.Default.FFProbeMetaDataInfo,
+                        cancellationToken: ct);
 
-                        metadata = new MediaMetadata(
-                            Duration: metaDataInfo?.Format?.Duration?.StrToDouble(),
-                            FormatName: metaDataInfo?.Format?.FormatName,
-                            BitRate: metaDataInfo?.Format?.BitRate.StrToInt(),
-                            Size: metaDataInfo?.Format?.Size.StrToInt()
-                        );
-                    }
-                    catch (JsonException jsonEx)
-                    {
-                        logger?.LogError(jsonEx, "Failed to deserialize FFprobe JSON output");
-                        metadata = MediaMetadata.Empty;
-                    }
+                    metadata = new MediaMetadata(
+                        Duration: metaDataInfo?.Format?.Duration?.StrToDouble(),
+                        FormatName: metaDataInfo?.Format?.FormatName,
+                        BitRate: metaDataInfo?.Format?.BitRate.StrToInt(),
+                        Size: metaDataInfo?.Format?.Size.StrToInt()
+                    );
                 }
-                catch (Exception ex)
+                catch (JsonException jsonEx)
                 {
-                    logger?.LogError(ex, "Error processing FFprobe metadata");
+                    logger?.LogError(jsonEx, "Failed to deserialize FFprobe JSON output");
                     metadata = MediaMetadata.Empty;
                 }
             },

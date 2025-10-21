@@ -1,4 +1,4 @@
-# ffmpeg-7.1.1
+# ffmpeg-7.1.2
 
 ## Ubuntu/Debian:
 
@@ -15,7 +15,7 @@ sudo apt install -y \
     libopus-dev
 ```
 
-## Run build build/artifacts/ffmpeg-7.1.1-audio-x86_64-linux-gnu/bin
+## Run build build/artifacts/ffmpeg-7.1.2-audio-x86_64-linux-gnu/bin
 ```
 chmod +x build-linux.sh
 ./build-linux.sh

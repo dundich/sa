@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -eu
 
 cd $(dirname $0)
@@ -10,25 +9,33 @@ echo "starting in $BASE_DIR"
 source common.sh || { echo "common.sh не найден или поврежден"; exit 1; }
 
 
-
-# Проверка перед сборкой
-pkg-config --exists opus vorbis lame || {
-    echo "Missing dependencies. Install with:"
-    echo "sudo apt install libopus-dev libvorbis-dev libmp3lame-dev"
-    exit 1
-}
-
-
-
 # # Установка зависимостей (только для Ubuntu/Debian)
 # sudo apt update
 # sudo apt install -y build-essential yasm nasm git pkg-config libmp3lame-dev libopus-dev
 
-if [ ! -e $FFMPEG_TARBALL ]
+# Проверяем наличие архива FFmpeg
+if [ ! -f "$FFMPEG_TARBALL" ]
 then
     echo "Downloading FFmpeg $FFMPEG_TARBALL_URL"
-	curl -s -L -O $FFMPEG_TARBALL_URL
+    curl -s -L -O "$FFMPEG_TARBALL_URL"
+    
+    # Проверяем что файл скачался корректно
+    if [ ! -f "$FFMPEG_TARBALL" ]; then
+        echo "ERROR: Failed to download $FFMPEG_TARBALL"
+        exit 1
+    fi
+    echo "Download completed: $FFMPEG_TARBALL"
+else
+    echo "FFmpeg archive already exists: $FFMPEG_TARBALL"
+    echo "Skipping download..."
 fi
+
+
+# if [ ! -e $FFMPEG_TARBALL ]
+# then
+#     echo "Downloading FFmpeg $FFMPEG_TARBALL_URL"
+# 	curl -s -L -O $FFMPEG_TARBALL_URL
+# fi
 
 : ${ARCH:=x86_64}  # Если ARCH не задан, используем x86_64
 
