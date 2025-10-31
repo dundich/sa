@@ -9,7 +9,7 @@ $msbuild_verbosity = "n"
 		
 $projects = @(
 	"Sa.Media",
-	"Sa.Media.FFmpeg"
+	"Sa.Media.FFmpeg",
 
 	"Sa.Data.PostgreSql",
 	"Sa.Data.S3",
