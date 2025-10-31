@@ -1,6 +1,7 @@
 namespace Sa.Media.FFmpeg.Services;
 
-public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbeExecutor? ffprobe = null) : IPcmS16LeChannelManipulator
+internal sealed class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbeExecutor? ffprobe = null) 
+    : IPcmS16LeChannelManipulator
 {
 
     private readonly IFFMpegExecutor _ffmpeg = ffmpeg ?? IFFMpegExecutor.Default;

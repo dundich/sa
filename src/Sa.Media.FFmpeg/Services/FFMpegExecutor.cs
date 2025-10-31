@@ -1,24 +1,24 @@
 namespace Sa.Media.FFmpeg.Services;
 
-internal sealed class FFMpegExecutor(IFFRawExecutor extecutor) : IFFMpegExecutor
+internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
 {
-    public IFFRawExecutor Executor => extecutor;
+    public IFFRawExecutor Executor => executor;
 
     public async Task<string> GetVersion(CancellationToken cancellationToken = default)
     {
-        var result = await extecutor.ExecuteAsync("-version", cancellationToken: cancellationToken);
+        var result = await executor.ExecuteAsync("-version", cancellationToken: cancellationToken);
         return result.StandardOutput;
     }
 
     public async Task<string> GetFormats(CancellationToken cancellationToken = default)
     {
-        var result = await extecutor.ExecuteAsync("-formats", cancellationToken: cancellationToken);
+        var result = await executor.ExecuteAsync("-formats", cancellationToken: cancellationToken);
         return result.StandardOutput;
     }
 
     public async Task<string> GetCodecs(CancellationToken cancellationToken = default)
     {
-        var result = await extecutor.ExecuteAsync("-codecs", cancellationToken: cancellationToken);
+        var result = await executor.ExecuteAsync("-codecs", cancellationToken: cancellationToken);
         return result.StandardOutput;
     }
 
@@ -35,7 +35,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor extecutor) : IFFMpegExecutor
         var channelCount = outputChannelCount.HasValue ? $"-ac {outputChannelCount}" : string.Empty;
         var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} -acodec pcm_s16le {channelCount} {sampleRate} -f wav {Constants.CleanWavOutputFlags} {QuotePath(outputFileName)}";
 
-        var result = await extecutor.ExecuteAsync(cmd, timeout: timeout, cancellationToken: cancellationToken);
+        var result = await executor.ExecuteAsync(cmd, timeout: timeout, cancellationToken: cancellationToken);
 
         return result.StandardError;
     }
@@ -53,7 +53,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor extecutor) : IFFMpegExecutor
         var channelCount = outputChannelCount.HasValue ? $"-ac {outputChannelCount}" : string.Empty;
         var cmd = $"{Constants.CleanBannerFlags} -f {inputFormat} -i pipe:0 -acodec pcm_s16le {channelCount} {sampleRate} -f wav {Constants.CleanWavOutputFlags} pipe:1";
 
-        await extecutor.ExecuteStdOutAsync(cmd, inputStream, onOutput, timeout: timeout, cancellationToken: cancellationToken);
+        await executor.ExecuteStdOutAsync(cmd, inputStream, onOutput, timeout: timeout, cancellationToken: cancellationToken);
     }
 
     public async Task<string> ConvertToMp3(
@@ -64,7 +64,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor extecutor) : IFFMpegExecutor
         CancellationToken cancellationToken = default)
     {
         var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} -f mp3 {Libmp3lameArg()} -ar 16000 -b:a 128k {QuotePath(outputFileName)}";
-        var result = await extecutor.ExecuteAsync(cmd, timeout:timeout, cancellationToken: cancellationToken);
+        var result = await executor.ExecuteAsync(cmd, timeout:timeout, cancellationToken: cancellationToken);
         return result.StandardError;
     }
 
@@ -77,7 +77,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor extecutor) : IFFMpegExecutor
         CancellationToken cancellationToken = default)
     {
         var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} -f ogg {LibopuArg(isLibopus)} {QuotePath(outputFileName)}";
-        var result = await extecutor.ExecuteAsync(cmd, timeout: timeout, cancellationToken: cancellationToken);
+        var result = await executor.ExecuteAsync(cmd, timeout: timeout, cancellationToken: cancellationToken);
         return result.StandardError;
     }
 
