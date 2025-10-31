@@ -1,6 +1,6 @@
 namespace Sa.Media.FFmpeg;
 
-public record MediaMetadata(
+public sealed record MediaMetadata(
     double? Duration = null,
     string? FormatName = null,
     int? BitRate = null,

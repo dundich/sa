@@ -1,14 +1,17 @@
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace Sa.Media.FFmpeg.Services;
 
-internal sealed class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExecutor
+internal sealed class FFProbeExecutor(
+    IFFRawExecutor executor,
+    ILogger<FFProbeExecutor>? logger = null) : IFFProbeExecutor
 {
-    public IFFRawExteсutor Exteсutor => exteсutor;
+    public IFFRawExecutor Executor => executor;
 
     public async Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRate(string filePath, CancellationToken cancellationToken = default)
     {
-        var result = await exteсutor.ExecuteAsync(
+        var result = await executor.ExecuteAsync(
             $"-v error -show_entries stream=channels,sample_rate -of default=nw=1 \"{filePath}\"",
             cancellationToken: cancellationToken);
 
@@ -19,7 +22,7 @@ internal sealed class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExe
 
     public async Task<MediaMetadata> GetMetaInfo(string filePath, CancellationToken cancellationToken = default)
     {
-        var output = await exteсutor.ExecuteAsync(
+        var output = await executor.ExecuteAsync(
             $"-v quiet -print_format json -show_streams -show_format \"{filePath}\"",
             cancellationToken: cancellationToken);
 
@@ -47,7 +50,7 @@ internal sealed class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExe
     {
         MediaMetadata metadata = MediaMetadata.Empty;
 
-        await exteсutor.ExecuteStdOutAsync(
+        await executor.ExecuteStdOutAsync(
             $"-v quiet -print_format json -show_streams -show_format -f {inputFormat} -i pipe:0",
             audioStream,
             async (onOutput, ct) =>
@@ -66,8 +69,9 @@ internal sealed class FFProbeExecutor(IFFRawExteсutor exteсutor) : IFFProbeExe
                         Size: metaDataInfo?.Format?.Size.StrToInt()
                     );
                 }
-                catch
+                catch (JsonException jsonEx)
                 {
+                    logger?.LogError(jsonEx, "Failed to deserialize FFprobe JSON output");
                     metadata = MediaMetadata.Empty;
                 }
             },

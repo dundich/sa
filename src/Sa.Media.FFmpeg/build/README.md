@@ -1,118 +1,83 @@
-# build 01-08-25
+# ffmpeg-7.1.2
+
+## Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install -y \
+    build-essential \
+    curl \
+    tar \
+    nasm \
+    pkg-config \
+    libmp3lame-dev \
+    libvorbis-dev \
+    libopus-dev
+```
+
+## Run build build/artifacts/ffmpeg-7.1.2-audio-x86_64-linux-gnu/bin
+```
+chmod +x build-linux.sh
+./build-linux.sh
+```
+
+
+# output 25-10-17
 
 ```
 External libraries:
-mediafoundation         schannel
+libmp3lame              libopus                 libvorbis
 
 External libraries providing hardware acceleration:
-d3d11va                 dxva2
+v4l2_m2m
 
 Libraries:
-avcodec                 avformat                postproc
-avfilter                avutil                  swresample
+avcodec                 avfilter                avformat                avutil                  postproc                swresample
 
 Programs:
 ffmpeg                  ffprobe
 
 Enabled decoders:
-aac                     mp3on4                  pcm_s16be               pcm_u16le
-aac_latm                mp3on4float             pcm_s16be_planar        pcm_u24be
-ac3                     mpc7                    pcm_s16le               pcm_u24le
-flac                    mpc8                    pcm_s16le_planar        pcm_u32be
-gsm                     opus                    pcm_s24be               pcm_u32le
-gsm_ms                  pcm_alaw                pcm_s24daud             pcm_u8
-mp1                     pcm_bluray              pcm_s24le               vorbis
-mp1float                pcm_dvd                 pcm_s24le_planar        wavpack
-mp2                     pcm_f32be               pcm_s32be               wmalossless
-mp2float                pcm_f32le               pcm_s32le               wmapro
-mp3                     pcm_f64be               pcm_s32le_planar        wmav1
-mp3adu                  pcm_f64le               pcm_s8                  wmav2
-mp3adufloat             pcm_lxf                 pcm_s8_planar           wmavoice
-mp3float                pcm_mulaw               pcm_u16be
+aac                     mp2float                pcm_alaw                pcm_s16be_planar        pcm_s8                  wavpack
+aac_latm                mp3                     pcm_bluray              pcm_s16le               pcm_s8_planar           wmalossless
+ac3                     mp3adu                  pcm_dvd                 pcm_s16le_planar        pcm_u16be               wmapro
+flac                    mp3adufloat             pcm_f32be               pcm_s24be               pcm_u16le               wmav1
+gsm                     mp3float                pcm_f32le               pcm_s24daud             pcm_u24be               wmav2
+gsm_ms                  mp3on4                  pcm_f64be               pcm_s24le               pcm_u24le               wmavoice
+libvorbis               mp3on4float             pcm_f64le               pcm_s24le_planar        pcm_u32be
+mp1                     mpc7                    pcm_lxf                 pcm_s32be               pcm_u32le
+mp1float                mpc8                    pcm_mulaw               pcm_s32le               pcm_u8
+mp2                     opus                    pcm_s16be               pcm_s32le_planar        vorbis
 
 Enabled encoders:
-a64multi                dvdsub                  pcm_f64be               rv10
-a64multi5               dvvideo                 pcm_f64le               rv20
-aac                     dxv                     pcm_mulaw               s302m
-aac_mf                  eac3                    pcm_s16be               sbc
-ac3                     ffv1                    pcm_s16be_planar        sgi
-ac3_fixed               ffvhuff                 pcm_s16le               smc
-ac3_mf                  fits                    pcm_s16le_planar        snow
-adpcm_adx               flac                    pcm_s24be               sonic
-adpcm_argo              flv                     pcm_s24daud             sonic_ls
-adpcm_g722              g723_1                  pcm_s24le               speedhq
-adpcm_g726              gif                     pcm_s24le_planar        srt
-adpcm_g726le            h261                    pcm_s32be               ssa
-adpcm_ima_alp           h263                    pcm_s32le               subrip
-adpcm_ima_amv           h263p                   pcm_s32le_planar        sunrast
-adpcm_ima_apm           h264_mf                 pcm_s64be               svq1
-adpcm_ima_qt            hdr                     pcm_s64le               targa
-adpcm_ima_ssi           hevc_mf                 pcm_s8                  text
-adpcm_ima_wav           huffyuv                 pcm_s8_planar           tiff
-adpcm_ima_ws            jpeg2000                pcm_u16be               truehd
-adpcm_ms                jpegls                  pcm_u16le               tta
-adpcm_swf               ljpeg                   pcm_u24be               ttml
-adpcm_yamaha            magicyuv                pcm_u24le               utvideo
-alac                    mjpeg                   pcm_u32be               v210
-alias_pix               mlp                     pcm_u32le               v308
-amv                     movtext                 pcm_u8                  v408
-anull                   mp2                     pcm_vidc                v410
-aptx                    mp2fixed                pcx                     vbn
-aptx_hd                 mp3_mf                  pfm                     vc2
-ass                     mpeg1video              pgm                     vnull
-asv1                    mpeg2video              pgmyuv                  vorbis
-asv2                    mpeg4                   phm                     wavpack
-avrp                    msmpeg4v2               ppm                     wbmp
-avui                    msmpeg4v3               prores                  webvtt
-bitpacked               msrle                   prores_aw               wmav1
-bmp                     msvideo1                prores_ks               wmav2
-cfhd                    nellymoser              qoi                     wmv1
-cinepak                 opus                    qtrle                   wmv2
-cljr                    pam                     r10k                    wrapped_avframe
-comfortnoise            pbm                     r210                    xbm
-dca                     pcm_alaw                ra_144                  xface
-dfpwm                   pcm_bluray              rawvideo                xsub
-dnxhd                   pcm_dvd                 roq                     xwd
-dpx                     pcm_f32be               roq_dpcm                y41p
-dvbsub                  pcm_f32le               rpza                    yuv4
-
-Enabled hwaccels:
-
-Enabled parsers:
-aac                     ac3                     mpegaudio
-aac_latm                flac
-
-Enabled demuxers:
-aac                     mpc                     pcm_s16be               pcm_u24be
-ac3                     mpc8                    pcm_s16le               pcm_u24le
-avi                     ogg                     pcm_s24be               pcm_u32be
-flac                    pcm_alaw                pcm_s24le               pcm_u32le
-flv                     pcm_f32be               pcm_s32be               pcm_u8
-m4v                     pcm_f32le               pcm_s32le               wav
-matroska                pcm_f64be               pcm_s8                  wv
-mov                     pcm_f64le               pcm_u16be               xwma
-mp3                     pcm_mulaw               pcm_u16le
-
-Enabled muxers:
-ac3                     mov                     mp4                     wav
-flac                    mp3                     ogg
-
-Enabled protocols:
-file                    pipe
-
-Enabled filters:
-aformat                 channelsplit            hflip                   setpts
-amerge                  concat                  join                    showinfo
-anull                   copy                    null                    transpose
-aresample               crop                    pan                     trim
-atrim                   format                  rotate                  vflip
-
-Enabled bsfs:
-aac_adtstoasc           vp9_superframe
-
-Enabled indevs:
-
-Enabled outdevs:
-
-License: nonfree and unredistributable
+a64multi                avui                    huffyuv                 pcm_f64be               phm                     text
+a64multi5               bitpacked               jpeg2000                pcm_f64le               ppm                     tiff
+aac                     bmp                     jpegls                  pcm_mulaw               prores                  truehd
+ac3                     cfhd                    libmp3lame              pcm_s16be               prores_aw               tta
+ac3_fixed               cinepak                 libopus                 pcm_s16be_planar        prores_ks               ttml
+adpcm_adx               cljr                    libvorbis               pcm_s16le               qoi                     utvideo
+adpcm_argo              comfortnoise            ljpeg                   pcm_s16le_planar        qtrle                   v210
+adpcm_g722              dca                     magicyuv                pcm_s24be               r10k                    v308
+adpcm_g726              dfpwm                   mjpeg                   pcm_s24daud             r210                    v408
+adpcm_g726le            dnxhd                   mlp                     pcm_s24le               ra_144                  v410
+adpcm_ima_alp           dpx                     movtext                 pcm_s24le_planar        rawvideo                vbn
+adpcm_ima_amv           dvbsub                  mp2                     pcm_s32be               roq                     vc2
+adpcm_ima_apm           dvdsub                  mp2fixed                pcm_s32le               roq_dpcm                vnull
+adpcm_ima_qt            dvvideo                 mpeg1video              pcm_s32le_planar        rpza                    vorbis
+adpcm_ima_ssi           dxv                     mpeg2video              pcm_s64be               rv10                    vp8_v4l2m2m
+adpcm_ima_wav           eac3                    mpeg4                   pcm_s64le               rv20                    wavpack
+adpcm_ima_ws            ffv1                    mpeg4_v4l2m2m           pcm_s8                  s302m                   wbmp
+adpcm_ms                ffvhuff                 msmpeg4v2               pcm_s8_planar           sbc                     webvtt
+adpcm_swf               fits                    msmpeg4v3               pcm_u16be               sgi                     wmav1
+adpcm_yamaha            flac                    msrle                   pcm_u16le               smc                     wmav2
+alac                    flv                     msvideo1                pcm_u24be               snow                    wmv1
+alias_pix               g723_1                  nellymoser              pcm_u24le               sonic                   wmv2
+amv                     gif                     opus                    pcm_u32be               sonic_ls                wrapped_avframe
+anull                   h261                    pam                     pcm_u32le               speedhq                 xbm
+aptx                    h263                    pbm                     pcm_u8                  srt                     xface
+aptx_hd                 h263_v4l2m2m            pcm_alaw                pcm_vidc                ssa                     xsub
+ass                     h263p                   pcm_bluray              pcx                     subrip                  xwd
+asv1                    h264_v4l2m2m            pcm_dvd                 pfm                     sunrast                 y41p
+asv2                    hdr                     pcm_f32be               pgm                     svq1                    yuv4
+avrp                    hevc_v4l2m2m            pcm_f32le               pgmyuv                  targa
 ```

@@ -1,4 +1,4 @@
-﻿using Sa.Media.FFmpeg.Services;
+using Sa.Media.FFmpeg.Services;
 
 namespace Sa.Media.FFmpeg;
 
@@ -10,7 +10,7 @@ public interface IFFProbeExecutor
     /// <summary>
     /// Gets the raw executor used to run FFprobe commands.
     /// </summary>
-    IFFRawExteсutor Exteсutor { get; }
+    IFFRawExecutor Executor { get; }
 
     /// <summary>
     /// Retrieves the number of audio channels and sample rate from the specified media file.

@@ -222,9 +222,14 @@ internal sealed class ProcessExecutor : IProcessExecutor
             ];
 
             Stream stdoutStream = process.StandardOutput.BaseStream;
-            await onOutput(stdoutStream, linkedCts.Token).ConfigureAwait(false);
-            await stdoutStream.DisposeAsync();
-
+            try
+            {
+                await onOutput(stdoutStream, linkedCts.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                await stdoutStream.DisposeAsync();
+            }
             await Task.WhenAll(backgroundTasks).ConfigureAwait(false);
         }
         finally
