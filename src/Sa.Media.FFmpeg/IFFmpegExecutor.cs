@@ -1,4 +1,4 @@
-﻿using Sa.Media.FFmpeg.Services;
+using Sa.Media.FFmpeg.Services;
 
 namespace Sa.Media.FFmpeg;
 
@@ -10,7 +10,7 @@ public interface IFFMpegExecutor
     /// <summary>
     /// Gets the executor responsible for running FFmpeg commands in raw mode.
     /// </summary>
-    IFFRawExtecutor Extecutor { get; }
+    IFFRawExecutor Executor { get; }
 
     /// <summary>
     /// Gets the version of FFmpeg by executing the <c>ffmpeg -version</c> command.

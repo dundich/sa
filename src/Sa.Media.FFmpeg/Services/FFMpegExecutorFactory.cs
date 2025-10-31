@@ -9,7 +9,7 @@ internal sealed class FFMpegExecutorFactory(
     public IFFMpegExecutor CreateFFMpegExecutor(FFMpegOptions? options = null)
     {
         var executablePath = GetExecutablePath(options);
-        var executor = new FFRawExtecutor(
+        var executor = new FFRawExecutor(
             processExecutor ?? IProcessExecutor.Default
             , executablePath
             , options?.Timeout ?? Constants.DefaultTimeout);
@@ -25,7 +25,7 @@ internal sealed class FFMpegExecutorFactory(
 
         var ffprobePath = Path.Combine(directory, Constants.FFprobeExecutableFileName);
 
-        var executor = new FFRawExtecutor(
+        var executor = new FFRawExecutor(
             processExecutor ?? IProcessExecutor.Default
             , ffprobePath
             , options?.Timeout ?? Constants.DefaultTimeout);

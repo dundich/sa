@@ -1,8 +1,8 @@
 namespace Sa.Media.FFmpeg.Services;
 
-internal sealed class FFMpegExecutor(IFFRawExtecutor extecutor) : IFFMpegExecutor
+internal sealed class FFMpegExecutor(IFFRawExecutor extecutor) : IFFMpegExecutor
 {
-    public IFFRawExtecutor Extecutor => extecutor;
+    public IFFRawExecutor Executor => extecutor;
 
     public async Task<string> GetVersion(CancellationToken cancellationToken = default)
     {

@@ -1,4 +1,4 @@
-﻿#  Sa.Media.FFmpeg
+#  Sa.Media.FFmpeg
 
 ## FFmpeg .NET Wrapper - ready to use out of the box with minimal setup
 

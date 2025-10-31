@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using System.Diagnostics;
 
 namespace Sa.Media.FFmpeg;
@@ -6,7 +6,7 @@ namespace Sa.Media.FFmpeg;
 /// <summary>
 /// Interface for executing raw FFmpeg or FFprobe commands.
 /// </summary>
-public interface IFFRawExtecutor
+public interface IFFRawExecutor
 {
     /// <summary>
     /// Gets the full path to the FFmpeg/FFprobe executable used by this executor.

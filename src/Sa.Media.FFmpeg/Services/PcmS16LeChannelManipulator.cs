@@ -1,4 +1,4 @@
-﻿namespace Sa.Media.FFmpeg.Services;
+namespace Sa.Media.FFmpeg.Services;
 
 public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbeExecutor? ffprobe = null) : IPcmS16LeChannelManipulator
 {
@@ -65,7 +65,7 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
 
         string cmd = $"{over} {Constants.CleanBannerFlags} -i \"{inputFileName}\" -filter_complex \"[0:a]channelsplit=channel_layout=stereo[left][right]\" -map \"[left]\" -acodec pcm_s16le {sampleRate} -f wav \"{files[0]}\" -map \"[right]\"  -acodec pcm_s16le -f wav \"{files[1]}\"";
 
-        _ = await _ffmpeg.Extecutor.ExecuteAsync(
+        _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
             captureErrorOutput: false,
             timeout: timeout,
@@ -93,7 +93,7 @@ public class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbe
 
         string cmd = $"{over} {Constants.CleanBannerFlags} -i \"{leftFileName}\" -i \"{rightFileName}\" -filter_complex \"[0:a][1:a]amerge=inputs=2[a]\" -map \"[a]\" -ac 2 -acodec pcm_s16le {sampleRate} -f wav {Constants.CleanWavOutputFlags} \"{outputFileName}\"";
 
-        _ = await _ffmpeg.Extecutor.ExecuteAsync(
+        _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
             captureErrorOutput: false,
             timeout: timeout,

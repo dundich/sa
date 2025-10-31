@@ -4,14 +4,14 @@ using System.Text.Json;
 namespace Sa.Media.FFmpeg.Services;
 
 internal sealed class FFProbeExecutor(
-    IFFRawExtecutor extecutor,
+    IFFRawExecutor executor,
     ILogger<FFProbeExecutor>? logger = null) : IFFProbeExecutor
 {
-    public IFFRawExtecutor Extecutor => extecutor;
+    public IFFRawExecutor Executor => executor;
 
     public async Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRate(string filePath, CancellationToken cancellationToken = default)
     {
-        var result = await extecutor.ExecuteAsync(
+        var result = await executor.ExecuteAsync(
             $"-v error -show_entries stream=channels,sample_rate -of default=nw=1 \"{filePath}\"",
             cancellationToken: cancellationToken);
 
@@ -22,7 +22,7 @@ internal sealed class FFProbeExecutor(
 
     public async Task<MediaMetadata> GetMetaInfo(string filePath, CancellationToken cancellationToken = default)
     {
-        var output = await extecutor.ExecuteAsync(
+        var output = await executor.ExecuteAsync(
             $"-v quiet -print_format json -show_streams -show_format \"{filePath}\"",
             cancellationToken: cancellationToken);
 
@@ -50,7 +50,7 @@ internal sealed class FFProbeExecutor(
     {
         MediaMetadata metadata = MediaMetadata.Empty;
 
-        await extecutor.ExecuteStdOutAsync(
+        await executor.ExecuteStdOutAsync(
             $"-v quiet -print_format json -show_streams -show_format -f {inputFormat} -i pipe:0",
             audioStream,
             async (onOutput, ct) =>
