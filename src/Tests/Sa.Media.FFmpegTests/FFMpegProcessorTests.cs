@@ -191,6 +191,9 @@ public sealed class FFMpegProcessorTests
         await Processor.ConvertToMp3(
             testFilePath, fn, isOverwrite: true, cancellationToken: CancellationToken);
         Assert.True(File.Exists(fn));
+
+        FileInfo fileInfo = new(fn);
+        Assert.True(fileInfo.Length > 5000);
     }
 
     [Theory]

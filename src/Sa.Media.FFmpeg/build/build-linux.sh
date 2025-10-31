@@ -31,12 +31,6 @@ else
 fi
 
 
-# if [ ! -e $FFMPEG_TARBALL ]
-# then
-#     echo "Downloading FFmpeg $FFMPEG_TARBALL_URL"
-# 	curl -s -L -O $FFMPEG_TARBALL_URL
-# fi
-
 : ${ARCH:=x86_64}  # Если ARCH не задан, используем x86_64
 
 OUTPUT_DIR=artifacts/ffmpeg-$FFMPEG_VERSION-audio-$ARCH-linux-gnu

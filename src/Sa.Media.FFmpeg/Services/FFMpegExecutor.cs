@@ -1,4 +1,4 @@
-﻿namespace Sa.Media.FFmpeg.Services;
+namespace Sa.Media.FFmpeg.Services;
 
 internal sealed class FFMpegExecutor(IFFRawExtecutor extecutor) : IFFMpegExecutor
 {
@@ -63,7 +63,7 @@ internal sealed class FFMpegExecutor(IFFRawExtecutor extecutor) : IFFMpegExecuto
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} -f mp3 {Libmp3lameArg()} {QuotePath(outputFileName)}";
+        var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} -f mp3 {Libmp3lameArg()} -ar 16000 -b:a 128k {QuotePath(outputFileName)}";
         var result = await extecutor.ExecuteAsync(cmd, timeout:timeout, cancellationToken: cancellationToken);
         return result.StandardError;
     }
