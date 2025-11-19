@@ -1,4 +1,4 @@
-﻿using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.Domain;
 using System.Text;
 
 namespace Sa.HybridFileStorage.PostgresTests;
@@ -31,6 +31,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         // Assert
         Assert.NotNull(result);
         Assert.NotEmpty(result.FileId);
+        Assert.StartsWith("pg://files/1/", result.FileId);
 
         object? v = await fixture.DataSource.ExecuteScalar("SELECT COUNT(*) FROM public.files WHERE id = @id", cmd => cmd.Parameters.Add(new("id", result.FileId)), fixture.CancellationToken);
         var count = (long)v!;

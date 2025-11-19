@@ -3,11 +3,10 @@ using System.Globalization;
 namespace Sa.HybridFileStorage.Postgres;
 
 internal static class FileIdParser
-
 {
     private const string DateFormat = "yyyy/MM/dd/HH";
 
-    public static (int tenantId, long timestamp) ParseFromFileId(string fileId)
+    public static (int tenantId, long timestamp) ParseFromFileId(string fileId, string tableName)
     {
         if (string.IsNullOrWhiteSpace(fileId))
         {
@@ -16,13 +15,15 @@ internal static class FileIdParser
 
         ReadOnlySpan<char> span = fileId.AsSpan();
 
-        int separatorIndex = span.IndexOf("://");
+        string seporator = $"://{tableName}/";
+
+        int separatorIndex = span.IndexOf(seporator);
         if (separatorIndex == -1)
         {
             throw new FormatException("Invalid file ID format.");
         }
 
-        ReadOnlySpan<char> subParts = span[(separatorIndex + 3)..]; // +3 for skip "://"
+        ReadOnlySpan<char> subParts = span[(separatorIndex + seporator.Length)..]; // +3 for skip "://files/"
 
         int firstSlashIndex = subParts.IndexOf('/');
         if (firstSlashIndex == -1)
@@ -48,8 +49,8 @@ internal static class FileIdParser
     }
 
 
-    public static string FormatToFileId(string storageType, int tenantId, DateTimeOffset date, string fileName)
-        => $"{storageType}://{tenantId}/{date.ToString(DateFormat, CultureInfo.InvariantCulture)}/{NormalizeFileName(fileName)}";
+    public static string FormatToFileId(string storageType, string tableName, int tenantId, DateTimeOffset date, string fileName)
+        => $"{storageType}://{tableName}/{tenantId}/{date.ToString(DateFormat, CultureInfo.InvariantCulture)}/{NormalizeFileName(fileName)}";
 
     public static string NormalizeFileName(string fileName) => fileName.TrimStart('\\', '/').Replace('\\', '/');
 

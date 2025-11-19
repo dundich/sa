@@ -2,7 +2,7 @@ using Sa.Partitional.PostgreSql;
 
 namespace Sa.HybridFileStorage.Postgres;
 
-public class StorageOptions
+public record StorageOptions
 {
     public string SchemaName { get; set; } = "public";
     public string TableName { get; set; } = "files";

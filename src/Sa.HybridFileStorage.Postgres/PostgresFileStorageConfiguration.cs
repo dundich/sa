@@ -57,7 +57,12 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
             var time = sp.GetService<TimeProvider>();
             var sm = sp.GetRequiredService<RecyclableMemoryStreamManager>();
 
-            var storage = new PostgresFileStorage(dataSource, pm, sm, _options.StorageOptions, time);
+            StorageOptions options = _options.StorageOptions with
+            {
+                TableName = _options.StorageOptions.TableName.Trim('"')
+            };
+
+            var storage = new PostgresFileStorage(dataSource, pm, sm, options, time);
             return storage;
         });
     }
