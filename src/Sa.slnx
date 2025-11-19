@@ -1,0 +1,68 @@
+<Solution>
+  <Folder Name="/Configuration/">
+    <Project Path="Sa.Configuration.PostgreSql/Sa.Configuration.PostgreSql.csproj" />
+    <Project Path="Sa.Configuration/Sa.Configuration.csproj" />
+  </Folder>
+  <Folder Name="/Data/" />
+  <Folder Name="/Data/PostgreSql/">
+    <Project Path="Sa.Data.PostgreSql/Sa.Data.PostgreSql.csproj" />
+  </Folder>
+  <Folder Name="/Data/S3/">
+    <Project Path="Sa.Data.S3/Sa.Data.S3.csproj" />
+  </Folder>
+  <Folder Name="/HybridFileStorage/">
+    <Project Path="Sa.HybridFileStorage.FileSystem/Sa.HybridFileStorage.FileSystem.csproj" />
+    <Project Path="Sa.HybridFileStorage.Postgres/Sa.HybridFileStorage.Postgres.csproj" />
+    <Project Path="Sa.HybridFileStorage.S3/Sa.HybridFileStorage.S3.csproj" />
+    <Project Path="Sa.HybridFileStorage/Sa.HybridFileStorage.csproj" />
+  </Folder>
+  <Folder Name="/Media/">
+    <Project Path="Sa.Media.FFmpeg/Sa.Media.FFmpeg.csproj" />
+    <Project Path="Sa.Media/Sa.Media.csproj" />
+  </Folder>
+  <Folder Name="/Outbox/">
+    <Project Path="Sa.Outbox.PostgreSql/Sa.Outbox.PostgreSql.csproj" />
+    <Project Path="Sa.Outbox.Support/Sa.Outbox.Support.csproj" />
+    <Project Path="Sa.Outbox/Sa.Outbox.csproj" />
+  </Folder>
+  <Folder Name="/Partitional/">
+    <Project Path="Sa.Partitional.PostgreSql/Sa.Partitional.PostgreSql.csproj" />
+  </Folder>
+  <Folder Name="/Samples/">
+    <Project Path="Samples/HybridFileStorage.Console/HybridFileStorage.Console.csproj" />
+    <Project Path="Samples/Partitional.ConsoleApp/Partitional.ConsoleApp.csproj" />
+    <Project Path="Samples/PgOutbox.ConsoleApp/PgOutbox.ConsoleApp.csproj" />
+    <Project Path="Samples/Schedule.Console/Schedule.Console.csproj" />
+  </Folder>
+  <Folder Name="/Schedule/">
+    <Project Path="Sa.Schedule/Sa.Schedule.csproj" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="Common.NuGet.Properties.xml" />
+    <File Path="Common.Properties.xml" />
+    <File Path="Tests/Host.Test.Properties.xml" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <File Path="Tests/Host.Test.Properties.xml" />
+    <Project Path="Tests/Sa.Configuration.PostgreSqlTests/Sa.Configuration.PostgreSqlTests.csproj" />
+    <Project Path="Tests/Sa.ConfigurationTests/Sa.ConfigurationTests.csproj" />
+    <Project Path="Tests/Sa.Data.PostgreSqlTests/Sa.Data.PostgreSqlTests.csproj" />
+    <Project Path="Tests/Sa.Data.S3Tests/Sa.Data.S3Tests.csproj" />
+    <Project Path="Tests/Sa.HybridFileStorage.FileSystemTests/Sa.HybridFileStorage.FileSystemTests.csproj" />
+    <Project Path="Tests/Sa.HybridFileStorage.PostgresTests/Sa.HybridFileStorage.PostgresTests.csproj" />
+    <Project Path="Tests/Sa.HybridFileStorage.S3Tests/Sa.HybridFileStorage.S3Tests.csproj" />
+    <Project Path="Tests/Sa.HybridFileStorageTests/Sa.HybridFileStorageTests.csproj" />
+    <Project Path="Tests/Sa.Media.FFmpegTests/Sa.Media.FFmpegTests.csproj" />
+    <Project Path="Tests/Sa.MediaTests/Sa.MediaTests.csproj" />
+    <Project Path="Tests/Sa.Outbox.PostgreSqlTests/Sa.Outbox.PostgreSqlTests.csproj" />
+    <Project Path="Tests/Sa.Partitional.PostgreSqlTests/Sa.Partitional.PostgreSqlTests.csproj" />
+    <Project Path="Tests/Sa.ScheduleTests/Sa.ScheduleTests.csproj" />
+    <Project Path="Tests/SaTests/SaTests.csproj" />
+  </Folder>
+  <Folder Name="/Tests/Fixtures/">
+    <Project Path="Tests/Fixtures/Sa.Data.PostgreSql.Fixture/Sa.Data.PostgreSql.Fixture.csproj" />
+    <Project Path="Tests/Fixtures/Sa.Data.S3.Fixture/Sa.Data.S3.Fixture.csproj" />
+    <Project Path="Tests/Fixtures/Sa.Fixture/Sa.Fixture.csproj" />
+  </Folder>
+  <Project Path="Sa/Sa.csproj" />
+</Solution>

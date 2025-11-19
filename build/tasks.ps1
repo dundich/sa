@@ -1,13 +1,13 @@
 ﻿
 $root = [System.IO.Path]::GetFullPath("$PSScriptRoot\..")
 
-$sln_file = "$root\src\Sa.sln"
+$sln_file = "$root\src\Sa.slnx"
 $sln_platform = "Any CPU"
 $config = "Release"
 $dist_folder = "$root\dist"
 $msbuild_verbosity = "n"
 		
-$projects = @(
+$projects = @(	
 	"Sa.Media",
 	"Sa.Media.FFmpeg",
 
