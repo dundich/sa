@@ -7,8 +7,8 @@ public class FileIdParserTests
     [Fact]
     public void ParseFromFileId_ValidFileId_ReturnsTenantIdAndTimestamp()
     {
-        string fileId = "pg://123/2023/10/05/12/foo/some.txt";
-        var (tenantId, timestamp) = FileIdParser.ParseFromFileId(fileId);
+        string fileId = "pg://files/123/2023/10/05/12/foo/some.txt";
+        var (tenantId, timestamp) = FileIdParser.ParseFromFileId(fileId, "files");
         Assert.Equal(123, tenantId);
         Assert.Equal(new DateTimeOffset(2023, 10, 5, 12, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds(), timestamp);
     }
@@ -17,7 +17,7 @@ public class FileIdParserTests
     public void ParseFromFileId_InvalidFileId_ThrowsFormatException()
     {
         string fileId = "invalid_file_id";
-        Assert.Throws<FormatException>(() => FileIdParser.ParseFromFileId(fileId));
+        Assert.Throws<FormatException>(() => FileIdParser.ParseFromFileId(fileId, "files"));
     }
 
     [Fact]
@@ -27,8 +27,8 @@ public class FileIdParserTests
         int tenantId = 123;
         DateTimeOffset date = new(2023, 10, 5, 12, 0, 0, TimeSpan.Zero);
         string fileName = "example.txt";
-        string result = FileIdParser.FormatToFileId(storageType, tenantId, date, fileName);
-        Assert.Equal("pg://123/2023/10/05/12/example.txt", result);
+        string result = FileIdParser.FormatToFileId(storageType, "files", tenantId, date, fileName);
+        Assert.Equal("pg://files/123/2023/10/05/12/example.txt", result);
     }
 
     [Fact]

@@ -12,8 +12,7 @@ internal sealed class PostgresFileStorage(
     StorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
-
-    private readonly string _qualifiedTableName = $"{options.SchemaName}.\"{options.TableName.Trim('"')}\"";
+    private readonly string _qualifiedTableName = $"{options.SchemaName}.\"{options.TableName}\"";
 
     public string StorageType { get; } = options.StorageType;
 
@@ -36,7 +35,7 @@ internal sealed class PostgresFileStorage(
         await partManager.EnsureParts(_qualifiedTableName, now, [metadata.TenantId], cancellationToken);
 
 
-        string fileId = FileIdParser.FormatToFileId(StorageType, metadata.TenantId, now, metadata.FileName);
+        string fileId = FileIdParser.FormatToFileId(StorageType, options.TableName, metadata.TenantId, now, metadata.FileName);
         string fileExtension = FileIdParser.GetFileExtension(metadata.FileName);
 
         long createdAt = now.ToUnixTimeSeconds();
@@ -83,13 +82,13 @@ ON CONFLICT DO NOTHING
         return new StorageResult(fileId, fileId, StorageType, now);
     }
 
-    public bool CanProcess(string fileId) => fileId.StartsWith($"{StorageType}:://");
+    public bool CanProcess(string fileId) => fileId.StartsWith($"{StorageType}://{options.TableName}/");
 
     public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
 
-        (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId);
+        (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId, options.TableName);
         int rowsAffected = await dataSource.ExecuteNonQuery(
             $"""
             DELETE FROM {_qualifiedTableName} WHERE tenant_id = @tenant_id AND created_at >= @timestamp AND id = @id
@@ -101,7 +100,7 @@ ON CONFLICT DO NOTHING
 
     public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
     {
-        (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId);
+        (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId, options.TableName);
 
         int rowsAffected = await dataSource.ExecuteReader(
             $"""
