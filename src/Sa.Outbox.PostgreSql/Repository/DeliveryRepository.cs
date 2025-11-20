@@ -16,7 +16,7 @@ internal sealed class DeliveryRepository(
         return startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
     }
 
-    public async Task<int> FinishDelivery<TMessage>(IOutboxContext<TMessage>[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public async Task<int> FinishDelivery(IOutboxContext[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<Exception, ErrorInfo> errors = await GetErrors(outboxMessages, cancellationToken);
 

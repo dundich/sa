@@ -48,6 +48,7 @@ public sealed class OutboxDeliverySettings(Guid jobId, int instanceIndex = 0)
 public sealed class ScheduleSettings
 {
     public string? Name { get; set; }
+
     public TimeSpan ExecutionInterval { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>

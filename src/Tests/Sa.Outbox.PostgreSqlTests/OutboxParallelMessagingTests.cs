@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Support;
@@ -50,7 +50,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     public class SomeMessageConsumer1 : IConsumer<SomeMessage1>
     {
-        public ValueTask Consume(IReadOnlyCollection<IOutboxContext<SomeMessage1>> outboxMessages, CancellationToken cancellationToken)
+        public ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<SomeMessage1>> outboxMessages, CancellationToken cancellationToken)
         {
             CommonCounter.Add(outboxMessages.Count);
             return ValueTask.CompletedTask;
@@ -60,7 +60,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     public class SomeMessageConsumer2 : IConsumer<SomeMessage2>
     {
-        public ValueTask Consume(IReadOnlyCollection<IOutboxContext<SomeMessage2>> outboxMessages, CancellationToken cancellationToken)
+        public ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<SomeMessage2>> outboxMessages, CancellationToken cancellationToken)
         {
             CommonCounter.Add(outboxMessages.Count);
             return ValueTask.CompletedTask;

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
@@ -7,7 +7,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
 {
     public class TestMessageConsumer : IConsumer<TestMessage>
     {
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             Console.WriteLine(outboxMessages.Count);
             await Task.Delay(1000, cancellationToken);

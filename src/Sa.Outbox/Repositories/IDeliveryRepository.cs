@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox;
+namespace Sa.Outbox;
 
 
 /// <summary>
@@ -13,7 +13,7 @@ public interface IDeliveryRepository
     /// <summary>
     /// Complete the delivery
     /// </summary>
-    Task<int> FinishDelivery<TMessage>(IOutboxContext<TMessage>[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken);
+    Task<int> FinishDelivery(IOutboxContext[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken);
 
     /// <summary>
     /// Extend the delivery (retain the lock for the client)

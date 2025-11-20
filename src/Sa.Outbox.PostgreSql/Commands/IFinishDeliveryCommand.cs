@@ -1,6 +1,6 @@
-﻿namespace Sa.Outbox.PostgreSql.Commands;
+namespace Sa.Outbox.PostgreSql.Commands;
 
 internal interface IFinishDeliveryCommand
 {
-    Task<int> Execute<TMessage>(IOutboxContext<TMessage>[] outboxMessages, IReadOnlyDictionary<Exception, ErrorInfo> errors, OutboxMessageFilter filter, CancellationToken cancellationToken);
+    Task<int> Execute(IOutboxContext[] outboxMessages, IReadOnlyDictionary<Exception, ErrorInfo> errors, OutboxMessageFilter filter, CancellationToken cancellationToken);
 }

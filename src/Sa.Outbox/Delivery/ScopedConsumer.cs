@@ -3,13 +3,15 @@ using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
+/// <summary>
+/// Processes messages using a consumer in scope
+/// </summary>
 internal sealed class ScopedConsumer(IServiceProvider serviceProvider) : IScopedConsumer
 {
     // Method to process messages using a consumer in scope
     public async Task MessageProcessingAsync<TMessage>(
-        IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages,
-        CancellationToken cancellationToken)
-        where TMessage : IOutboxPayloadMessage
+        IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages,
+        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
         AsyncServiceScope scope = serviceProvider.CreateAsyncScope();
         try

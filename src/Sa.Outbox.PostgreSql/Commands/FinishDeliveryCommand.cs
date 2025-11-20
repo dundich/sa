@@ -9,8 +9,8 @@ internal sealed class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxT
 {
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlFinishDelivery(len));
 
-    public async Task<int> Execute<TMessage>(
-        IOutboxContext<TMessage>[] outboxMessages,
+    public async Task<int> Execute(
+        IOutboxContext[] outboxMessages,
         IReadOnlyDictionary<Exception, ErrorInfo> errors,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
@@ -22,7 +22,7 @@ internal sealed class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxT
         int startIndex = 0;
         foreach ((string sql, int length) in sqlCache.GetSql(outboxMessages.Length, CachedSqlParamNames.MaxIndex))
         {
-            var slice = new ArraySegment<IOutboxContext<TMessage>>(outboxMessages, startIndex, length);
+            var slice = new ArraySegment<IOutboxContext>(outboxMessages, startIndex, length);
             startIndex += length;
 
             total += await dataSource.ExecuteNonQuery(
@@ -34,9 +34,9 @@ internal sealed class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxT
         return total;
     }
 
-    private void FllCmdParams<TMessage>(
+    private void FllCmdParams(
         NpgsqlCommand cmd,
-        ArraySegment<IOutboxContext<TMessage>> contexts,
+        ArraySegment<IOutboxContext> contexts,
         IReadOnlyDictionary<Exception, ErrorInfo> errors,
         OutboxMessageFilter filter)
     {

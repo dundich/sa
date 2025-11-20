@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Support;
@@ -22,7 +22,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
     {
         static int s_Counter = 0;
 
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             Interlocked.Add(ref s_Counter, outboxMessages.Count);
             await Task.Delay(100, cancellationToken);

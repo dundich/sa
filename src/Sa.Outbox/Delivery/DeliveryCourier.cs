@@ -1,18 +1,33 @@
 using Sa.Extensions;
 using Sa.Outbox.Exceptions;
 using Sa.Outbox.Support;
+using System.Runtime.CompilerServices;
 
 namespace Sa.Outbox.Delivery;
 
+/// <summary>
+/// Delivers a batch of messages with error handling and retry mechanisms
+/// </summary>
+/// <typeparam name="TMessage">Type of message payload</typeparam>
+/// <param name="outboxMessages">Collection of messages to deliver</param>
+/// <param name="maxDeliveryAttempts">Maximum number of delivery attempts</param>
+/// <param name="cancellationToken">Operation cancellation token</param>
+/// <returns>Number of successfully delivered messages</returns>
+/// <exception cref="OperationCanceledException">When operation is cancelled via cancellationToken</exception>
 internal sealed class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliveryCourier
 {
-    // Asynchronous method to deliver messages
+    /// <summary>
+    /// Asynchronous method to deliver messages
+    /// </summary>
     public async ValueTask<int> Deliver<TMessage>(
-        IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages,
+        IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages,
         int maxDeliveryAttempts,
-        CancellationToken cancellationToken) 
+        CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
+        if (outboxMessages.Count == 0)
+            return 0;
+
         try
         {
             await scopedConsumer.MessageProcessingAsync(outboxMessages, cancellationToken);
@@ -26,26 +41,28 @@ internal sealed class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliver
     }
 
 
-
-
     // Method to handle errors during message delivery
-    private static void HandleError<TMessage>(Exception error, IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages)
+    private static void HandleError<TMessage>(Exception error, IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages)
     {
         foreach (var item in outboxMessages)
         {
             if (item.DeliveryResult.Code == 0) // If no previous delivery errors
             {
-                item.Error(error ?? new DeliveryException("Unknown delivery error."), postpone: GenTimeSpan.Next());
+                item.Error(error
+                    ?? new DeliveryException("Unknown delivery error."), postpone: RetryStrategy.CalculateBackoff());
             }
         }
     }
 
-    // Method to post-handle the delivery results of messages
-    private static int PostHandle<TMessage>(IReadOnlyCollection<IOutboxContext<TMessage>> messages, int maxDeliveryAttempts)
+
+    /// <summary>
+    /// Method to post-handle the delivery results of messages
+    /// </summary>
+    private static int PostHandle<TMessage>(IReadOnlyCollection<IOutboxContextOperations<TMessage>> messages, int maxDeliveryAttempts)
     {
         int successfulDeliveries = 0; // Counter for successfully delivered messages
 
-        foreach (IOutboxContext message in messages)
+        foreach (var message in messages)
         {
             if (IsPermanentError(message, maxDeliveryAttempts))
             {
@@ -61,7 +78,10 @@ internal sealed class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliver
         return successfulDeliveries; // Return the count of successfully delivered messages
     }
 
-    // Check if the message should be marked as a permanent error
+    /// <summary>
+    /// Check if the message should be marked as a permanent error
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsPermanentError(IOutboxContext message, int maxDeliveryAttempts)
     {
         return message.DeliveryResult.Code >= 400 &&
@@ -69,21 +89,28 @@ internal sealed class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliver
                message.DeliveryInfo.Attempt + 1 > maxDeliveryAttempts;
     }
 
+
+    private readonly static DeliveryPermanentException s_DeliveryPermanentException = new("Maximum delivery attempts exceeded", statusCode: 501);
+
     // Mark the message as a permanent error
-    private static void MarkAsPermanentError(IOutboxContext message)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void MarkAsPermanentError<TMessage>(IOutboxContextOperations<TMessage> message)
     {
-        Exception exception = message.Exception ?? new DeliveryPermanentException("Maximum delivery attempts exceeded", statusCode: 501);
+        Exception exception = message.Exception ?? s_DeliveryPermanentException;
         message.PermanentError(exception, statusCode: 501);
     }
 
 
-    // Static class to generate random time spans for retry delays
-    static class GenTimeSpan
+    /// <summary>
+    /// todos: customization
+    /// Static class to generate random time spans for retry delays
+    /// </summary>
+    static class RetryStrategy
     {
-        // Method to generate a random TimeSpan between 10 and 45 minutes
-        public static TimeSpan Next()
-        {
-            return TimeSpan.FromSeconds(Random.Shared.Next(60 * 10, 60 * 45));
-        }
+        /// <summary>
+        /// Method to generate a random TimeSpan between 10 and 45 minutes
+        /// </summary>
+        public static TimeSpan CalculateBackoff()
+            => TimeSpan.FromSeconds(Random.Shared.Next(60 * 10, 60 * 45));
     }
 }

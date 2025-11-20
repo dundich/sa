@@ -2,6 +2,10 @@ using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
+/// <summary>
+/// Processes outbox messages in batches until all pending messages are delivered or cancellation is requested.
+/// Implements a continuous polling pattern to ensure reliable message delivery.
+/// </summary>
 internal sealed class DeliveryProcessor(IDeliveryRelay relayService) : IDeliveryProcessor
 {
     public async Task<long> ProcessMessages<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)

@@ -6,58 +6,50 @@ namespace Sa.Outbox.Repository;
 /// <summary>
 /// OutboxMessage
 /// </summary>
-internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider) : IOutboxContext<TMessage>
+internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider)
+    : IOutboxContextOperations<TMessage>
 {
-    public string OutboxId { get; } = delivery.OutboxId;
-    public OutboxDeliveryMessage<TMessage> DeliveryMessage => delivery;
-
+    public string OutboxId => delivery.OutboxId;
     public string PayloadId => delivery.Message.PayloadId;
     public TMessage Payload => delivery.Message.Payload;
+    public OutboxPartInfo PartInfo => delivery.Message.PartInfo;
+    public OutboxDeliveryInfo DeliveryInfo => delivery.DeliveryInfo;
+
 
     public DeliveryStatus DeliveryResult { get; private set; }
     public TimeSpan PostponeAt { get; private set; }
     public Exception? Exception { get; private set; }
 
-    public OutboxPartInfo PartInfo => delivery.Message.PartInfo;
+    public void PermanentError(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.PermanentError)
+        => Error(exception, message, statusCode);
 
-    public OutboxDeliveryInfo DeliveryInfo => delivery.DeliveryInfo;
-
-    public IOutboxContext PermanentError(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.PermanentError)
-    {
-        return Error(exception, message, statusCode);
-    }
-
-    public IOutboxContext Error(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.Error, TimeSpan? postpone = null)
+    public void Error(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.Error, TimeSpan? postpone = null)
     {
         DeliveryException? deliveryException = exception as DeliveryException;
 
         DeliveryResult = new DeliveryStatus(deliveryException?.StatusCode ?? statusCode, message ?? exception.Message, timeProvider.GetUtcNow());
         Exception = exception;
         PostponeAt = postpone ?? deliveryException?.PostponeAt ?? TimeSpan.Zero;
-        return this;
     }
 
-    public IOutboxContext Ok(string? message = null)
+    public void Ok(string? message = null)
     {
         DeliveryResult = new DeliveryStatus(DeliveryStatusCode.Ok, message ?? string.Empty, timeProvider.GetUtcNow());
         Exception = null;
         PostponeAt = TimeSpan.Zero;
-        return this;
     }
 
-    public IOutboxContext Postpone(TimeSpan postpone, string? message = null)
+    public void Postpone(TimeSpan postpone, string? message = null)
     {
         DeliveryResult = new DeliveryStatus(DeliveryStatusCode.Postpone, message ?? string.Empty, timeProvider.GetUtcNow());
         Exception = null;
         PostponeAt = postpone;
-        return this;
     }
 
-    public IOutboxContext Aborted(string? message = null)
+    public void Aborted(string? message = null)
     {
         DeliveryResult = new DeliveryStatus(DeliveryStatusCode.Aborted, message ?? string.Empty, timeProvider.GetUtcNow());
         Exception = null;
         PostponeAt = TimeSpan.Zero;
-        return this;
     }
 }
