@@ -9,19 +9,18 @@ namespace Sa.Outbox.Repository;
 internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider) : IOutboxContext<TMessage>
 {
     public string OutboxId { get; } = delivery.OutboxId;
-    public OutboxPartInfo PartInfo { get; } = delivery.PartInfo;
+    public OutboxDeliveryMessage<TMessage> DeliveryMessage => delivery;
 
-
-    public string PayloadId { get; } = delivery.PayloadId;
-    public TMessage Payload { get; } = delivery.Payload;
-
-
-    public OutboxDeliveryInfo DeliveryInfo { get; } = delivery.DeliveryInfo;
-
+    public string PayloadId => delivery.Message.PayloadId;
+    public TMessage Payload => delivery.Message.Payload;
 
     public DeliveryStatus DeliveryResult { get; private set; }
     public TimeSpan PostponeAt { get; private set; }
     public Exception? Exception { get; private set; }
+
+    public OutboxPartInfo PartInfo => delivery.Message.PartInfo;
+
+    public OutboxDeliveryInfo DeliveryInfo => delivery.DeliveryInfo;
 
     public IOutboxContext PermanentError(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.PermanentError)
     {

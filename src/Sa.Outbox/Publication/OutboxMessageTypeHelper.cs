@@ -1,9 +1,9 @@
-﻿using Sa.Outbox.Support;
+using Sa.Outbox.Support;
 using System.Collections.Concurrent;
 
 namespace Sa.Outbox.Publication;
 
-internal record OutboxMessageTypeInfo(string PartName);
+internal sealed record OutboxMessageTypeInfo(string PartName);
 
 internal static class OutboxMessageTypeHelper
 {

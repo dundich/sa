@@ -1,8 +1,8 @@
-﻿using Sa.Outbox.Support;
+using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
-public interface IScopedConsumer
+internal interface IScopedConsumer
 {
     Task MessageProcessingAsync<TMessage>(
         IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages, 

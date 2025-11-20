@@ -4,7 +4,7 @@ namespace Sa.Outbox;
 /// Represents a filter for querying Outbox messages based on specific criteria.
 /// This record is used to define the parameters for filtering messages in the Outbox.
 /// </summary>
-public record OutboxMessageFilter(
+public sealed record OutboxMessageFilter(
     /// <summary>
     /// Gets the transaction identifier associated with the Outbox message.
     /// </summary>

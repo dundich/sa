@@ -1,8 +1,8 @@
-﻿using Sa.Outbox.Support;
+using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
-public interface IDeliveryRelay
+internal interface IDeliveryRelay
 {
     Task<int> StartDelivery<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage;

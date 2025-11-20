@@ -1,8 +1,8 @@
-﻿using Sa.Outbox.Support;
+using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
-public interface IDeliveryCourier
+internal interface IDeliveryCourier
 {
     ValueTask<int> Deliver<TMessage>(
         IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages, 

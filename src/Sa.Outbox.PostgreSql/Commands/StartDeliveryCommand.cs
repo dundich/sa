@@ -51,7 +51,9 @@ internal sealed class StartDeliveryCommand(
             OutboxPartInfo outboxPart = ReadOutboxPart(reader);
             OutboxDeliveryInfo deliveryInfo = ReadDeliveryInfo(reader);
 
-            return new OutboxDeliveryMessage<TMessage>(outboxId, payloadId, payload, outboxPart, deliveryInfo);
+            OutboxMessage<TMessage> msg = new(payloadId, payload, outboxPart);
+
+            return new OutboxDeliveryMessage<TMessage>(outboxId, msg, deliveryInfo);
         }
 
 
@@ -71,7 +73,6 @@ internal sealed class StartDeliveryCommand(
                 , reader.GetInt32("outbox_delivery_attempt")
                 , reader.GetString("outbox_delivery_error_id")
                 , ReadStatus(reader)
-                , reader.GetInt64("outbox_delivery_created_at").ToDateTimeOffsetFromUnixTimestamp()
             );
         }
 
