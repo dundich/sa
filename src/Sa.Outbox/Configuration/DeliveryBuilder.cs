@@ -7,7 +7,9 @@ namespace Sa.Outbox.Configuration;
 
 internal sealed class DeliveryBuilder(IServiceCollection services) : IDeliveryBuilder
 {
-    public IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(Action<IServiceProvider, OutboxDeliverySettings>? configure = null, int instanceCount = 1)
+    public IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+            Action<IServiceProvider, OutboxDeliverySettings>? configure = null, 
+            int instanceCount = 1)
         where TConsumer : class, IConsumer<TMessage>
         where TMessage : IOutboxPayloadMessage
     {

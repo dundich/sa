@@ -10,6 +10,8 @@ internal static class Setup
     public static IServiceCollection AddOutboxDelivery(this IServiceCollection services, Action<IDeliveryBuilder> configure)
     {
 
+        services.TryAddSingleton<IDeliveryBatcher, DeliveryBatcher>();
+
         // looper - job processor
         services.TryAddSingleton<IDeliveryProcessor, DeliveryProcessor>();
         // iteration - extract from repository & batch & send to courier
@@ -18,6 +20,8 @@ internal static class Setup
         services.TryAddSingleton<IDeliveryCourier, DeliveryCourier>();
         // support - messaging to each tenant
         services.TryAddSingleton<IPartitionalSupportCache, PartitionalSupportCache>();
+        
+        services.TryAddSingleton<ITenantMessageProcessor, TenantMessageProcessor>();
 
         services.TryAddSingleton<IScopedConsumer, ScopedConsumer>();
 

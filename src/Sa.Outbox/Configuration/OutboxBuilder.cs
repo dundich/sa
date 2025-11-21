@@ -4,6 +4,7 @@ using Sa.Classes;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.Configuration;
 
@@ -30,6 +31,16 @@ internal sealed class OutboxBuilder : IOutboxBuilder
     public IOutboxBuilder WithPartitioningSupport(Action<IServiceProvider, PartitionalSettings> configure)
     {
         _services.AddPartitioningSupport(configure);
+        return this;
+    }
+
+    public IOutboxBuilder WithDeliveryBatcher<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
+         where TImplementation : class, IDeliveryBatcher
+    {
+        _services
+            .RemoveAll<IDeliveryBatcher>()
+            .AddSingleton<IDeliveryBatcher, TImplementation>();
+
         return this;
     }
 }
