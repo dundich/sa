@@ -9,6 +9,9 @@ internal static class SqlTemplate
 
     private const char NumOrStrSplitter = ',';
 
+    /// <summary>
+    /// public.customer
+    /// </summary>
     public static string CreateRootSql(this ITableSettings settings)
     {
         string pkList = settings.PartByListFieldNames.Contains(settings.IdFieldName)
@@ -33,6 +36,9 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTableName()} (
 """;
     }
 
+    /// <summary>
+    ///  public."customer_FR_Bordeaux" 
+    /// </summary>
     public static string CreateNestedSql(this ITableSettings settings, StrOrNum[] values) =>
 $"""
 
@@ -46,6 +52,18 @@ FOR VALUES IN ({values[^1].Match(s => $"'{s}'", n => n.ToString())})
 ;
 """;
 
+
+    // Вспомогательный метод
+    private static string GetFillFactorClause(this ITableSettings settings)
+    {
+        return settings.FillFactor.HasValue
+            ? $" WITH (fillfactor = {settings.FillFactor.Value})"
+            : "";
+    }
+
+    /// <summary>
+    /// public."customer_FR_Bordeaux_y2025m01d08"
+    /// </summary>
     public static string CreatePartByRangeSql(this ITableSettings settings, DateTimeOffset date, StrOrNum[] values)
     {
         string timeRangeTablename = settings.GetQualifiedTableName(date, values);
@@ -60,7 +78,8 @@ $"""
 
 CREATE TABLE IF NOT EXISTS {timeRangeTablename}
 PARTITION OF {settings.GetQualifiedTableName(values)}
-FOR VALUES FROM ({range.Start.ToUnixTimeSeconds()}) TO ({range.End.ToUnixTimeSeconds()}) 
+FOR VALUES FROM ({range.Start.ToUnixTimeSeconds()}) TO ({range.End.ToUnixTimeSeconds()})
+{settings.GetFillFactorClause()}
 ;
 
 -- cache

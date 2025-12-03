@@ -1,4 +1,3 @@
-
 namespace Sa.Outbox.Partitional;
 
 /// <summary>

@@ -55,10 +55,10 @@ var publisher = host.Services.GetRequiredService<IOutboxMessagePublisher>();
 
 var messages = new SomeMessage[]
 {
-    new() { Message = "Hi 1" },
-    new() { Message = "Hi 2" },
-    new() { Message = "Hi 3" },
-    new() { Message = "Hi 4" }
+    new("Hi 1"),
+    new("Hi 2"),
+    new("Hi 3"),
+    new("Hi 4" )
 };
 
 var sent = await publisher.Publish(messages);
@@ -73,14 +73,13 @@ Console.WriteLine("The end. Recived: {0}, Successfully: {1}", SomeMessageConsume
 
 namespace PgOutbox.ConsoleApp
 {
-    public class SomeMessage : IOutboxPayloadMessage
+    public sealed record SomeMessage(string Message) : IOutboxPayloadMessage
     {
         public static string PartName => "some";
 
-        public string PayloadId { get; set; } = Guid.NewGuid().ToString();
-        public int TenantId { get; set; } = Random.Shared.Next(1, 3);
-        public string Message { get; set; } = string.Empty;
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string PayloadId { get; init; } = Guid.NewGuid().ToString();
+        public int TenantId { get; init; } = Random.Shared.Next(1, 3);
+        public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     }
 
 
@@ -94,22 +93,23 @@ namespace PgOutbox.ConsoleApp
     {
         private static int s_Counter = 0;
 
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             Interlocked.Add(ref s_Counter, outboxMessages.Count);
 
             foreach (var outboxMessage in outboxMessages)
             {
-                Console.WriteLine("Consume [#{0}, tenant:{1}] {2}", outboxMessage.OutboxId, outboxMessage.PartInfo.TenantId, outboxMessage.Payload.Message);
+                Console.WriteLine("Consume [#{0}, tenant:{1}] {2}", outboxMessage.OutboxId, outboxMessage.PartInfo.TenantId, outboxMessage.Payload);
             }
 
             await Task.Delay(100, cancellationToken);
         }
 
+
         public static int Counter => s_Counter;
     }
 
-    // for AOT
+    #region forAOT
     public class OutboxMessageSerializer : IOutboxMessageSerializer
     {
         public T? Deserialize<T>(Stream stream)
@@ -131,4 +131,5 @@ namespace PgOutbox.ConsoleApp
             }
         }
     }
+    #endregion
 }

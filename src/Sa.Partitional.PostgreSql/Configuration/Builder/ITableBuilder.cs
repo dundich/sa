@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 
 namespace Sa.Partitional.PostgreSql;
 
@@ -9,7 +9,9 @@ public interface ITableBuilder
     ITableBuilder PartByRange(PgPartBy partBy, string? timestampFieldName = null);
 
     ITableBuilder TimestampAs(string timestampFieldName);
+
     ITableBuilder WithPartSeparator(string partSeparator);
+    ITableBuilder WithFillFactor(int fillFactor);
 
     ITableBuilder AddPostSql(Func<string> postSql);
     ITableBuilder AddConstraintPkSql(Func<string> pkSql);

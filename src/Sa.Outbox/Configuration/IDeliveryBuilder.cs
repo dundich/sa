@@ -1,3 +1,4 @@
+using Sa.Outbox.Delivery;
 using Sa.Outbox.Support;
 using System.Diagnostics.CodeAnalysis;
 
@@ -22,4 +23,11 @@ public interface IDeliveryBuilder
         int instanceCount = 1)
             where TConsumer : class, IConsumer<TMessage>
             where TMessage: IOutboxPayloadMessage;
+
+
+    /// <summary>
+    /// Added provider functionality to dynamically calculate batch sizes for delivery
+    /// </summary>
+    IDeliveryBuilder AddDeliveryBatching<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
+            where TImplementation : class, IDeliveryBatcher;
 }

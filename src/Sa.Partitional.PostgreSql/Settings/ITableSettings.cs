@@ -1,4 +1,4 @@
-﻿namespace Sa.Partitional.PostgreSql;
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// for managing database table configurations
@@ -65,4 +65,8 @@ public interface ITableSettings
     /// Gets a function that returns SQL for defining primary key constraints.
     /// </summary>
     Func<string>? ConstraintPkSql { get; }
+    /// <summary>
+    /// WITH (fillfactor = ?);
+    /// </summary>
+    int? FillFactor { get; }
 }
