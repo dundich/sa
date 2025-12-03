@@ -12,6 +12,7 @@ namespace Sa.Outbox.Delivery;
 internal static class FilterFactory
 {
     public static OutboxMessageFilter CreateFilter<TMessage>(
+        string consumerGroupId,
         DateTimeOffset now,
         TimeSpan lookbackInterval,
         int tenantId) where TMessage : IOutboxPayloadMessage
@@ -19,8 +20,9 @@ internal static class FilterFactory
         OutboxMessageTypeInfo ti = OutboxMessageTypeHelper.GetOutboxMessageTypeInfo<TMessage>();
         DateTimeOffset fromDate = now.StartOfDay() - lookbackInterval;
 
-        return new OutboxMessageFilter(
+        return new OutboxMessageFilter(            
             TransactId: GenerateTransactId(),
+            ConsumerGroupId: consumerGroupId,
             PayloadType: typeof(TMessage).Name,
             tenantId,
             ti.PartName,

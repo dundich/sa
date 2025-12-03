@@ -27,7 +27,7 @@ builder.ConfigureServices(services => services
             {
                 settings.ScheduleSettings.ExecutionInterval = TimeSpan.FromMilliseconds(100);
                 settings.ScheduleSettings.InitialDelay = TimeSpan.Zero;
-                settings.ExtractSettings.MaxBatchSize = 1;
+                settings.ConsumeSettings.MaxBatchSize = 1;
             })
         )
     )

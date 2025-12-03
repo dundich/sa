@@ -7,6 +7,7 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 internal interface IDeliveryRelay
 {
-    Task<int> StartDelivery<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)
+    Task<int> StartDelivery<TMessage>(ConsumeSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage;
 }
+ 

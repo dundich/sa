@@ -17,20 +17,24 @@ internal sealed class TenantMessageProcessor(
 {
     public async Task<int> ProcessTenantMessages<TMessage>(
         Memory<OutboxDeliveryMessage<TMessage>> buffer,
-        OutboxDeliverySettings settings,
+        ConsumeSettings settings,
         int tenantId,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
-        var extractSettings = settings.ExtractSettings;
-        var filter = FilterFactory.CreateFilter<TMessage>(timeProvider.GetUtcNow(), extractSettings.LookbackInterval, tenantId);
+        
+        var filter = FilterFactory.CreateFilter<TMessage>(
+            settings.ConsumerGroupId, 
+            timeProvider.GetUtcNow(),
+            settings.LookbackInterval, 
+            tenantId);
 
-        var batchSize = await batcher.CalculateBatchSize(extractSettings.MaxBatchSize, filter, cancellationToken);
+        var batchSize = await batcher.CalculateBatchSize(settings.MaxBatchSize, filter, cancellationToken);
         if (batchSize == 0) return 0;
 
         int locked = await repository.StartDelivery(
             buffer,
-            batchSize: batchSize,
-            lockDuration: extractSettings.LockDuration,
+            batchSize: Math.Min(settings.MaxBatchSize, batchSize),
+            lockDuration: settings.LockDuration,
             filter: filter,
             cancellationToken: cancellationToken);
 
@@ -39,15 +43,15 @@ internal sealed class TenantMessageProcessor(
         var messages = buffer[..locked];
 
         using IDisposable locker = LockRenewer.KeepLocked(
-            extractSettings.LockRenewal,
+            settings.LockRenewal,
             async t =>
             {
                 var renewedFilter = filter with { NowDate = timeProvider.GetUtcNow() };
-                await repository.ExtendDelivery(extractSettings.LockDuration, renewedFilter, t);
+                await repository.ExtendDelivery(settings.LockDuration, renewedFilter, t);
             },
             cancellationToken: cancellationToken);
 
-        return await DeliverMessages(messages, settings.ConsumeSettings, filter, cancellationToken);
+        return await DeliverMessages(messages, settings, filter, cancellationToken);
     }
 
     private async Task<int> DeliverMessages<TMessage>(

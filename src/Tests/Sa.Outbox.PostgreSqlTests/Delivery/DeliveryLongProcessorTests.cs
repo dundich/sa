@@ -52,14 +52,12 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
         var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        var settings = new OutboxDeliverySettings(Guid.NewGuid())
+
+        var settings = new ConsumeSettings()
         {
-            ExtractSettings =
-            {
-                LockDuration = TimeSpan.FromMilliseconds(300),
-                LockRenewal = TimeSpan.FromMilliseconds(100),
-                ForEachTenant = true,
-            }
+            LockDuration = TimeSpan.FromMilliseconds(300),
+            LockRenewal = TimeSpan.FromMilliseconds(100),
+            ForEachTenant = true,
         };
 
         var result = await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);

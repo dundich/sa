@@ -3,7 +3,7 @@ using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fixture) 
+public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fixture)
     : IClassFixture<DeliveryPermanentErrorTests.Fixture>
 {
 
@@ -15,7 +15,6 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     public class TestMessageConsumer : IConsumer<TestMessage>
     {
         private static readonly TestException s_err = new("test permanent error");
-
         public async ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
@@ -63,12 +62,9 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        var settings = new OutboxDeliverySettings(Guid.NewGuid())
+        var settings = new ConsumeSettings()
         {
-            ExtractSettings =
-            {
-                ForEachTenant = true,
-            }
+            ForEachTenant = true
         };
 
         var result = await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);

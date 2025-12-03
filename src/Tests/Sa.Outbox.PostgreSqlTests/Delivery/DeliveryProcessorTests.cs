@@ -51,12 +51,9 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IC
         var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        var settings = new OutboxDeliverySettings(Guid.NewGuid())
+        var settings = new ConsumeSettings
         {
-            ExtractSettings =
-            {
-                ForEachTenant = true,
-            }
+            ForEachTenant = true
         };
 
         var result = await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);

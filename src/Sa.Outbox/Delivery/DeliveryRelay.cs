@@ -18,10 +18,10 @@ internal sealed class DeliveryRelay(
 {
     private readonly bool _globalForEachTenant = partitionalSettings?.ForEachTenant ?? false;
 
-    public async Task<int> StartDelivery<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)
+    public async Task<int> StartDelivery<TMessage>(ConsumeSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
-        int batchSize = settings.ExtractSettings.MaxBatchSize;
+        int batchSize = settings.MaxBatchSize;
 
         if (batchSize == 0) return 0;
 
@@ -30,7 +30,7 @@ internal sealed class DeliveryRelay(
         {
             Memory<OutboxDeliveryMessage<TMessage>> slice = buffer.AsMemory(0, batchSize);
 
-            return _globalForEachTenant || settings.ExtractSettings.ForEachTenant
+            return _globalForEachTenant || settings.ForEachTenant
               ? await ProcessMultipleTenants(slice, settings, cancellationToken)
               : await messageProcessor.ProcessTenantMessages(slice, settings, 0, cancellationToken);
         }
@@ -42,7 +42,7 @@ internal sealed class DeliveryRelay(
 
     private async Task<int> ProcessMultipleTenants<TMessage>(
         Memory<OutboxDeliveryMessage<TMessage>> slice,
-        OutboxDeliverySettings settings,
+        ConsumeSettings settings,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
         int count = 0;

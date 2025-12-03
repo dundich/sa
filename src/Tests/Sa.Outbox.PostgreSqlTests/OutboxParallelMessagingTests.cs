@@ -85,13 +85,13 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                         {
                             settings.ScheduleSettings.ExecutionInterval = TimeSpan.FromMilliseconds(500);
                             settings.ScheduleSettings.InitialDelay = TimeSpan.Zero;
-                            settings.ExtractSettings.MaxBatchSize = 1024;
+                            settings.ConsumeSettings.MaxBatchSize = 1024;
                         })
                         .AddDelivery<SomeMessageConsumer2, SomeMessage2>((_, settings) =>
                         {
                             settings.ScheduleSettings.ExecutionInterval = TimeSpan.FromMilliseconds(500);
                             settings.ScheduleSettings.InitialDelay = TimeSpan.Zero;
-                            settings.ExtractSettings.MaxBatchSize = 1024;
+                            settings.ConsumeSettings.MaxBatchSize = 1024;
                         })
                     );
                     builder.PublishSettings.MaxBatchSize = 1024;

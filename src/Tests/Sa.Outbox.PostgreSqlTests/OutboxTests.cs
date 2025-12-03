@@ -47,7 +47,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                         {
                             settings.ScheduleSettings.ExecutionInterval = TimeSpan.FromMilliseconds(100);
                             settings.ScheduleSettings.InitialDelay = TimeSpan.Zero;
-                            settings.ExtractSettings.MaxBatchSize = 1;
+                            settings.ConsumeSettings.MaxBatchSize = 1;
                         })
                     )
                 )

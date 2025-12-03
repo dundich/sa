@@ -60,19 +60,14 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
 
         const int MaxDeliveryAttempts = 2;
 
-        var settings = new OutboxDeliverySettings(Guid.NewGuid())
+        ConsumeSettings settings = new()
         {
-            ExtractSettings =
-            {
-                ForEachTenant = true,
-                LockDuration = TimeSpan.FromMilliseconds(0),
-                LockRenewal = TimeSpan.FromMinutes(10)
-            },
-            ConsumeSettings =
-            {
-                MaxDeliveryAttempts = MaxDeliveryAttempts
-            }
+            ForEachTenant = true,
+            LockDuration = TimeSpan.FromMilliseconds(0),
+            LockRenewal = TimeSpan.FromMinutes(10),
+            MaxDeliveryAttempts = MaxDeliveryAttempts
         };
+
 
         cnt = 0;
         while (cnt < MaxDeliveryAttempts)

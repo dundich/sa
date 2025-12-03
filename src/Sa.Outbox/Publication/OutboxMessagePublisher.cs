@@ -1,6 +1,5 @@
 using Sa.Classes;
 using Sa.Outbox.Support;
-using System.Runtime.CompilerServices;
 
 namespace Sa.Outbox.Publication;
 
@@ -44,7 +43,11 @@ internal sealed class OutboxMessagePublisher(
                 {
                     TMessage message = enumerator.Current;
 
-                    payloadsSpan[count] = CreateOutboxMessage(message, typeInfo, now);
+                    payloadsSpan[count] = new OutboxMessage<TMessage>(
+                        PayloadId: message.PayloadId ?? string.Empty,
+                        Payload: message,
+                        PartInfo: new OutboxPartInfo(TenantId: message.TenantId, typeInfo.PartName, now));
+
                     count++;
                 }
 
@@ -60,19 +63,5 @@ internal sealed class OutboxMessagePublisher(
         while (start < messages.Count);
 
         return sent;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static OutboxMessage<TMessage> CreateOutboxMessage<TMessage>(
-        TMessage message,
-        OutboxMessageTypeInfo typeInfo,
-        DateTimeOffset createdAt
-    ) where TMessage : IOutboxPayloadMessage
-    {
-        return new OutboxMessage<TMessage>(
-            PayloadId: message.PayloadId ?? string.Empty,
-            Payload: message,
-            PartInfo: new OutboxPartInfo(TenantId: message.TenantId, typeInfo.PartName, createdAt));
     }
 }

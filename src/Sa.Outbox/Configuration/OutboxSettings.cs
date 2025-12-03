@@ -21,7 +21,7 @@ public sealed class OutboxPublishSettings
 public sealed class OutboxDeliverySettings(Guid jobId, int instanceIndex = 0)
 {
     /// <summary>
-    ///  Gets the unique identifier for the delivery job
+    /// Gets the unique identifier for the delivery job
     /// </summary>
     public Guid JobId => jobId;
     /// <summary>
@@ -32,10 +32,6 @@ public sealed class OutboxDeliverySettings(Guid jobId, int instanceIndex = 0)
     /// Gets the scheduling settings for the delivery job.
     /// </summary>
     public ScheduleSettings ScheduleSettings { get; } = new();
-    /// <summary>
-    /// Gets the extraction settings for retrieving messages from the Outbox.
-    /// </summary>
-    public ExtractSettings ExtractSettings { get; } = new();
     /// <summary>
     /// Gets the consumption settings for processing messages.
     /// </summary>
@@ -60,10 +56,15 @@ public sealed class ScheduleSettings
 }
 
 /// <summary>
-/// Represents the extraction settings for retrieving messages from the Outbox.
+/// Represents the consumption settings for retrieving & processing messages from the Outbox
 /// </summary>
-public sealed class ExtractSettings
+public sealed class ConsumeSettings
 {
+    /// <summary>
+    /// Group identity for consuming
+    /// </summary>
+    public string ConsumerGroupId { get; set; } = string.Empty;
+
     /// <summary>
     /// Gets or sets the maximum size of the Outbox message batch for each database poll.
     /// for array pool size: 16, 32, 64, 128, 256, 512, 1024 ...
@@ -91,20 +92,15 @@ public sealed class ExtractSettings
     /// select outbox messages for processing for the period
     /// </summary>
     public TimeSpan LookbackInterval { get; set; } = TimeSpan.FromDays(7);
-}
 
-/// <summary>
-/// Represents the consumption settings for processing messages from the Outbox.
-/// </summary>
-public sealed class ConsumeSettings
-{
+
     /// <summary>
     /// The maximum number of delivery attempts before delivery will not be attempted again.
     /// </summary>
     public int MaxDeliveryAttempts { get; set; } = 3;
     /// <summary>
     /// The maximum number of messages that can take in part
-    /// <seealso cref="ExtractSettings.MaxBatchSize">default value</seealso>
+    /// <seealso cref="ConsumeSettings.MaxBatchSize">default value</seealso>
     /// </summary>
     public int? ConsumeBatchSize { get; set; }
 }
