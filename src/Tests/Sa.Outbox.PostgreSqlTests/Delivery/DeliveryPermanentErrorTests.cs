@@ -15,7 +15,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     public class TestMessageConsumer : IConsumer<TestMessage>
     {
         private static readonly TestException s_err = new("test permanent error");
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
             foreach (var msg in outboxMessages)
@@ -36,13 +36,20 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
                         => sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
                 )
                 .WithDeliveries(builder
-                    => builder.AddDelivery<TestMessageConsumer, TestMessage>()
+                    => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
+                    {
+                        s.ConsumeSettings.WithForEachTenant();
+                        ConsumeSettings = s.ConsumeSettings;
+                    })
                 )
             );
         }
 
+        public ConsumeSettings ConsumeSettings = default!;
+
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }
+
 
 
     private IDeliveryProcessor Sub => fixture.Sub;
@@ -62,12 +69,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        var settings = new ConsumeSettings()
-        {
-            ForEachTenant = true
-        };
-
-        var result = await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);
+        var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
 
         Assert.Equal(0, result);
 

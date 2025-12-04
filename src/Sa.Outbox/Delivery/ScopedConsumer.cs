@@ -10,14 +10,15 @@ internal sealed class ScopedConsumer(IServiceProvider serviceProvider) : IScoped
 {
     // Method to process messages using a consumer in scope
     public async Task MessageProcessingAsync<TMessage>(
+        ConsumeSettings settings,
         IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
         AsyncServiceScope scope = serviceProvider.CreateAsyncScope();
         try
         {
-            IConsumer<TMessage> consumer = scope.ServiceProvider.GetRequiredService<IConsumer<TMessage>>();
-            await consumer.Consume(outboxMessages, cancellationToken);
+            IConsumer<TMessage> consumer = scope.ServiceProvider.GetRequiredKeyedService<IConsumer<TMessage>>(settings);
+            await consumer.Consume(settings, outboxMessages, cancellationToken);
         }
         finally
         {

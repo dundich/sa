@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Support;
 using Sa.Schedule;
 using System.Diagnostics.CodeAnalysis;
@@ -8,53 +7,44 @@ namespace Sa.Outbox.Job;
 
 internal static class Setup
 {
-    public static IServiceCollection AddDeliveryJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(this IServiceCollection services, Action<IServiceProvider, OutboxDeliverySettings>? сonfigure, int intstanceCount)
-         where TConsumer : class, IConsumer<TMessage>
-         where TMessage : IOutboxPayloadMessage
+    public static IServiceCollection AddDeliveryJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+        this IServiceCollection services,
+        string consumerGroupId,
+        Action<IServiceProvider, OutboxDeliverySettings>? сonfigure = null)
+            where TConsumer : class, IConsumer<TMessage>
+            where TMessage : IOutboxPayloadMessage
     {
-        services.TryAddScoped<IConsumer<TMessage>, TConsumer>();
 
-        if (intstanceCount > 0)
-        {
-            AddSchedule<TConsumer, TMessage>(services, сonfigure, intstanceCount);
-        }
+        var settings = new OutboxDeliverySettings(consumerGroupId);
 
-        return services;
-    }
+        services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(settings.ConsumeSettings);
 
-    private static void AddSchedule<TConsumer, TMessage>(IServiceCollection services, Action<IServiceProvider, OutboxDeliverySettings>? сonfigure, int intstanceCount)
-        where TConsumer : class, IConsumer<TMessage>
-        where TMessage : IOutboxPayloadMessage
-    {
         services.AddSchedule(builder =>
         {
             builder.UseHostedService();
 
-            for (int i = 0; i < intstanceCount; i++)
+            builder.AddJob<DeliveryJob<TMessage>>((sp, jobBuilder) =>
             {
-                Guid jobId = Guid.NewGuid();
+                сonfigure?.Invoke(sp, settings);
 
-                builder.AddJob<DeliveryJob<TMessage>>((sp, jobBuilder) =>
-                {
-                    var settings = new OutboxDeliverySettings(jobId, i);
-                    сonfigure?.Invoke(sp, settings);
+                ScheduleSettings scheduleSettings = settings.ScheduleSettings;
 
-                    ScheduleSettings scheduleSettings = settings.ScheduleSettings;
+                jobBuilder
+                    .EveryTime(scheduleSettings.ExecutionInterval)
+                    .WithInitialDelay(scheduleSettings.InitialDelay)
+                    .WithTag(settings)
+                    .WithName(scheduleSettings.Name ?? typeof(TConsumer).Name)
+                    .ConfigureErrorHandling(c => c
+                        .IfErrorRetry(scheduleSettings.RetryCountOnError)
+                        .ThenCloseApplication())
+                    ;
 
-                    jobBuilder
-                        .EveryTime(scheduleSettings.ExecutionInterval)
-                        .WithInitialDelay(scheduleSettings.InitialDelay)
-                        .WithTag(settings)
-                        .WithName(scheduleSettings.Name ?? typeof(TConsumer).Name)
-                        .ConfigureErrorHandling(c => c
-                            .IfErrorRetry(scheduleSettings.RetryCountOnError)
-                            .ThenCloseApplication())
-                        ;
+            }, settings.ScheduleSettings.JobId);
 
-                }, jobId);
-            }
 
             builder.AddInterceptor<OutboxJobInterceptor>();
         });
+
+        return services;
     }
 }

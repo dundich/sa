@@ -8,6 +8,7 @@ namespace Sa.Outbox.Delivery;
 internal interface IScopedConsumer
 {
     Task MessageProcessingAsync<TMessage>(
+        ConsumeSettings settings,
         IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages, 
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
 }

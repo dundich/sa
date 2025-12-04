@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSqlTests.Publisher;
+namespace Sa.Outbox.PostgreSqlTests.Publisher;
 
 
 public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture) : IClassFixture<OutboxPublisherTests.Fixture>

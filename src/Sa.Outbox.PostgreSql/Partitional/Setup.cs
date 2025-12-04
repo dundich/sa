@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Partitional.PostgreSql;
 
@@ -42,6 +42,15 @@ internal static class Setup
                 }
 
                 errorTableBuilder.AddMigration();
+
+
+                //var settings = sp.GetRequiredService<IScheduleSettings>()
+                //    .GetJobSettings()
+                //    .Select(c => c.Properties.Tag as OutboxDeliverySettings)
+                //    .Where(c => c != null)
+                //    .
+
+
             })
             ;
         })

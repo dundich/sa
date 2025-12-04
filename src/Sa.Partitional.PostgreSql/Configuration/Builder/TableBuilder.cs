@@ -3,7 +3,7 @@ using Sa.Partitional.PostgreSql.Settings;
 
 namespace Sa.Partitional.PostgreSql.Configuration.Builder;
 
-internal class TableBuilder(string schemaName, string tableName) : ITableBuilder
+internal sealed class TableBuilder(string schemaName, string tableName) : ITableBuilder
 {
     static class Default
     {

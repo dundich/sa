@@ -181,8 +181,6 @@ WHERE
     }
 
 
-
-
     private static string BuildDeliveryInsertValues(int count)
     {
         List<string> values = [];
@@ -200,7 +198,9 @@ UPDATE {settings.GetQualifiedOutboxTableName()}
 SET 
     outbox_lock_expires_on = @lock_expires_on
 WHERE
-    outbox_tenant = @tenant AND outbox_part = @part AND outbox_created_at >= @from_date
+    outbox_tenant = @tenant 
+    AND outbox_part = @part 
+    AND outbox_created_at >= @from_date
     AND outbox_payload_type = @payload_type
     AND {s_InProcessing}
     AND outbox_transact_id = @transact_id

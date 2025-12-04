@@ -32,7 +32,7 @@ internal sealed class DeliveryRelay(
 
             return _globalForEachTenant || settings.ForEachTenant
               ? await ProcessMultipleTenants(slice, settings, cancellationToken)
-              : await messageProcessor.ProcessTenantMessages(slice, settings, 0, cancellationToken);
+              : await messageProcessor.ProcessTenantMessages(settings, slice, 0, cancellationToken);
         }
         finally
         {
@@ -50,7 +50,7 @@ internal sealed class DeliveryRelay(
 
         foreach (int tenantId in tenantIds)
         {
-            count += await messageProcessor.ProcessTenantMessages(slice, settings, tenantId, cancellationToken);
+            count += await messageProcessor.ProcessTenantMessages(settings, slice, tenantId, cancellationToken);
         }
 
         return count;

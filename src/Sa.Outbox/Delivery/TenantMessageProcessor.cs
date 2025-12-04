@@ -16,16 +16,16 @@ internal sealed class TenantMessageProcessor(
     IDeliveryBatcher batcher) : ITenantMessageProcessor
 {
     public async Task<int> ProcessTenantMessages<TMessage>(
-        Memory<OutboxDeliveryMessage<TMessage>> buffer,
         ConsumeSettings settings,
+        Memory<OutboxDeliveryMessage<TMessage>> buffer,
         int tenantId,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
-        
+
         var filter = FilterFactory.CreateFilter<TMessage>(
-            settings.ConsumerGroupId, 
+            settings.ConsumerGroupId,
             timeProvider.GetUtcNow(),
-            settings.LookbackInterval, 
+            settings.LookbackInterval,
             tenantId);
 
         var batchSize = await batcher.CalculateBatchSize(settings.MaxBatchSize, filter, cancellationToken);
@@ -70,8 +70,8 @@ internal sealed class TenantMessageProcessor(
             if (cancellationToken.IsCancellationRequested) break;
 
             successfulDeliveries += await deliveryCourier.Deliver(
+                settings,
                 outboxMessages,
-                settings.MaxDeliveryAttempts,
                 cancellationToken);
 
             await repository.FinishDelivery(outboxMessages, filter, cancellationToken);

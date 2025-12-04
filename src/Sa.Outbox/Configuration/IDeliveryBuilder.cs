@@ -15,15 +15,15 @@ public interface IDeliveryBuilder
     /// </summary>
     /// <typeparam name="TConsumer">The type of consumer.</typeparam>
     /// <typeparam name="TMessage">The type of message.</typeparam>
+    /// <param name="consumerGroupId">Group identity for consuming.</param>
     /// <param name="configure">An optional action to configure the delivery settings.</param>
-    /// <param name="instanceCount">The number of instances to create for the delivery.</param>
     /// <returns>The delivery builder instance.</returns>
     IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
-        Action<IServiceProvider, OutboxDeliverySettings>? configure = null, 
-        int instanceCount = 1)
-            where TConsumer : class, IConsumer<TMessage>
-            where TMessage: IOutboxPayloadMessage;
-
+        string consumerGroupId,
+        Action<IServiceProvider, OutboxDeliverySettings>? configure = null
+    )
+    where TConsumer : class, IConsumer<TMessage>
+    where TMessage : IOutboxPayloadMessage;
 
     /// <summary>
     /// Added provider functionality to dynamically calculate batch sizes for delivery

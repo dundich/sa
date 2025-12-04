@@ -86,6 +86,10 @@ public sealed class PgOutboxTableSettings
     /// </summary>
     /// <returns>The qualified name of the error table.</returns>
     public string GetQualifiedErrorTableName() => $@"{DatabaseSchemaName}.""{DatabaseErrorTableName}""";
+
+    
+    public string GetQualifiedConsumeTableName(string consumeGroupId) 
+        => $@"{DatabaseSchemaName}.""{DatabaseOutboxTableName}_{consumeGroupId}__$""";
 }
 
 

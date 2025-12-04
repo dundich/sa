@@ -7,7 +7,7 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IC
 {
     public class TestMessageConsumer : IConsumer<TestMessage>
     {
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             Console.WriteLine(outboxMessages.Count);
             await Task.Delay(100, cancellationToken);
@@ -25,10 +25,20 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IC
                         => ps.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
                 )
                 .WithDeliveries(builder
-                    => builder.AddDelivery<TestMessageConsumer, TestMessage>(null, instanceCount: 0)
+                    => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
+                    {
+                        s
+                            .ConsumeSettings
+                            .WithForEachTenant();
+
+                        ConsumeSettings = s.ConsumeSettings;
+                    })
                 )
             );
         }
+
+        public ConsumeSettings ConsumeSettings { get; set; } = default!;
+
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }
@@ -51,12 +61,8 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IC
         var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        var settings = new ConsumeSettings
-        {
-            ForEachTenant = true
-        };
 
-        var result = await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);
+        var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
         Assert.True(result > 0);
     }
 }

@@ -50,7 +50,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     public class SomeMessageConsumer1 : IConsumer<SomeMessage1>
     {
-        public ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<SomeMessage1>> outboxMessages, CancellationToken cancellationToken)
+        public ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage1>> outboxMessages, CancellationToken cancellationToken)
         {
             CommonCounter.Add(outboxMessages.Count);
             return ValueTask.CompletedTask;
@@ -60,7 +60,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     public class SomeMessageConsumer2 : IConsumer<SomeMessage2>
     {
-        public ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<SomeMessage2>> outboxMessages, CancellationToken cancellationToken)
+        public ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage2>> outboxMessages, CancellationToken cancellationToken)
         {
             CommonCounter.Add(outboxMessages.Count);
             return ValueTask.CompletedTask;
@@ -81,17 +81,21 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                         sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2]);
                     })
                     .WithDeliveries(builder => builder
-                        .AddDelivery<SomeMessageConsumer1, SomeMessage1>((_, settings) =>
+                        .AddDelivery<SomeMessageConsumer1, SomeMessage1>(string.Empty, (_, settings) =>
                         {
-                            settings.ScheduleSettings.ExecutionInterval = TimeSpan.FromMilliseconds(500);
-                            settings.ScheduleSettings.InitialDelay = TimeSpan.Zero;
-                            settings.ConsumeSettings.MaxBatchSize = 1024;
+                            settings.ScheduleSettings
+                                .WithExecutionInterval(TimeSpan.FromMilliseconds(500))
+                                .WithInitialDelay(TimeSpan.Zero);
+
+                            settings.ConsumeSettings.WithMaxBatchSize(1024);
                         })
-                        .AddDelivery<SomeMessageConsumer2, SomeMessage2>((_, settings) =>
+                        .AddDelivery<SomeMessageConsumer2, SomeMessage2>(string.Empty, (_, settings) =>
                         {
-                            settings.ScheduleSettings.ExecutionInterval = TimeSpan.FromMilliseconds(500);
-                            settings.ScheduleSettings.InitialDelay = TimeSpan.Zero;
-                            settings.ConsumeSettings.MaxBatchSize = 1024;
+                            settings.ScheduleSettings
+                                .WithExecutionInterval(TimeSpan.FromMilliseconds(500))
+                                .WithInitialDelay(TimeSpan.Zero);
+
+                            settings.ConsumeSettings.WithMaxBatchSize(1024);
                         })
                     );
                     builder.PublishSettings.MaxBatchSize = 1024;

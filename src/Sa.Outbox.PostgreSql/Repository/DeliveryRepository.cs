@@ -12,7 +12,14 @@ internal sealed class DeliveryRepository(
 {
     public Task<int> StartDelivery<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> writeBuffer, int batchSize, TimeSpan lockDuration, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested) return Task.FromResult(0);
+        if (cancellationToken.IsCancellationRequested || batchSize < 1) return Task.FromResult(0);
+
+        // consume foreach group
+
+        //1) check consume table;
+        //2) check part;
+
+
         return startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
     }
 

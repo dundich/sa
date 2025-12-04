@@ -7,7 +7,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
 {
     public class TestMessageConsumer : IConsumer<TestMessage>
     {
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             Console.WriteLine(outboxMessages.Count);
             await Task.Delay(1000, cancellationToken);
@@ -17,6 +17,8 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
 
     public class Fixture : OutboxPostgreSqlFixture<IDeliveryProcessor>
     {
+        public ConsumeSettings ConsumeSettings = default!;
+
         public Fixture() : base()
         {
             Services.AddOutbox(builder
@@ -25,7 +27,15 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
                         => sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
                     )
                     .WithDeliveries(builder
-                        => builder.AddDelivery<TestMessageConsumer, TestMessage>()
+                        => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
+                        {
+                            s.ConsumeSettings
+                                .WithLockDuration(TimeSpan.FromMilliseconds(300))
+                                .WithLockRenewal(TimeSpan.FromMilliseconds(100))
+                                .WithForEachTenant();
+
+                            ConsumeSettings = s.ConsumeSettings;
+                        })
                     )
             )
             ;
@@ -53,14 +63,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
         Assert.True(cnt > 0);
 
 
-        var settings = new ConsumeSettings()
-        {
-            LockDuration = TimeSpan.FromMilliseconds(300),
-            LockRenewal = TimeSpan.FromMilliseconds(100),
-            ForEachTenant = true,
-        };
-
-        var result = await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);
+        var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
         Assert.True(result > 0);
     }
 }

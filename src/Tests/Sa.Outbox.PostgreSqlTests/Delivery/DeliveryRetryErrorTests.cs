@@ -15,7 +15,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
     {
         private static readonly TestException s_err = new("test same error");
 
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
             foreach (var msg in outboxMessages)
@@ -36,13 +36,27 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
                         => sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
                     )
                     .WithDeliveries(builder
-                        => builder.AddDelivery<TestMessageConsumer, TestMessage>()
+                        => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
+                        {
+                            s.ConsumeSettings
+                                .WithForEachTenant()
+                                .WithLockDuration(TimeSpan.FromMilliseconds(0))
+                                .WithLockRenewal(TimeSpan.FromMinutes(10))
+                                .WithMaxDeliveryAttempts(MaxDeliveryAttempts);
+
+                            ConsumeSettings = s.ConsumeSettings;
+                        })
                     )
                 );
         }
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
+
+        public const int MaxDeliveryAttempts = 2;
+
+        public ConsumeSettings ConsumeSettings { get; private set; } = default!;
     }
+
 
 
     private IDeliveryProcessor Sub => fixture.Sub;
@@ -58,25 +72,15 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
         ulong cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        const int MaxDeliveryAttempts = 2;
-
-        ConsumeSettings settings = new()
-        {
-            ForEachTenant = true,
-            LockDuration = TimeSpan.FromMilliseconds(0),
-            LockRenewal = TimeSpan.FromMinutes(10),
-            MaxDeliveryAttempts = MaxDeliveryAttempts
-        };
-
 
         cnt = 0;
-        while (cnt < MaxDeliveryAttempts)
+        while (cnt < Fixture.MaxDeliveryAttempts)
         {
             await Task.Delay(300, TestContext.Current.CancellationToken);
 
-            await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);
+            await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
             int attempt = await GetDeliveries();
-            if (attempt > MaxDeliveryAttempts)
+            if (attempt > Fixture.MaxDeliveryAttempts)
             {
                 cnt++;
             }

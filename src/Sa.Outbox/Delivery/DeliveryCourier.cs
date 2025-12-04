@@ -10,7 +10,6 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 /// <typeparam name="TMessage">Type of message payload</typeparam>
 /// <param name="outboxMessages">Collection of messages to deliver</param>
-/// <param name="maxDeliveryAttempts">Maximum number of delivery attempts</param>
 /// <param name="cancellationToken">Operation cancellation token</param>
 /// <returns>Number of successfully delivered messages</returns>
 /// <exception cref="OperationCanceledException">When operation is cancelled via cancellationToken</exception>
@@ -20,8 +19,8 @@ internal sealed class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliver
     /// Asynchronous method to deliver messages
     /// </summary>
     public async ValueTask<int> Deliver<TMessage>(
+        ConsumeSettings settings,
         IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages,
-        int maxDeliveryAttempts,
         CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
@@ -30,14 +29,14 @@ internal sealed class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliver
 
         try
         {
-            await scopedConsumer.MessageProcessingAsync(outboxMessages, cancellationToken);
+            await scopedConsumer.MessageProcessingAsync(settings, outboxMessages, cancellationToken);
         }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {
             HandleError(ex, outboxMessages);
         }
 
-        return PostHandle(outboxMessages, maxDeliveryAttempts);
+        return PostHandle(outboxMessages, settings.MaxDeliveryAttempts);
     }
 
 

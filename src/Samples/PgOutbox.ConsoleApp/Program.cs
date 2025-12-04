@@ -23,11 +23,13 @@ builder.ConfigureServices(services => services
             sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2]);
         })
         .WithDeliveries(builder => builder
-            .AddDelivery<SomeMessageConsumer, SomeMessage>((_, settings) =>
+            .AddDelivery<SomeMessageConsumer, SomeMessage>(string.Empty, (_, settings) =>
             {
-                settings.ScheduleSettings.ExecutionInterval = TimeSpan.FromMilliseconds(100);
-                settings.ScheduleSettings.InitialDelay = TimeSpan.Zero;
-                settings.ConsumeSettings.MaxBatchSize = 1;
+                settings.ScheduleSettings
+                    .WithExecutionInterval(TimeSpan.FromMilliseconds(100))
+                    .WithInitialDelay(TimeSpan.Zero);
+
+                settings.ConsumeSettings.WithMaxBatchSize(1);
             })
         )
     )
@@ -93,7 +95,7 @@ namespace PgOutbox.ConsoleApp
     {
         private static int s_Counter = 0;
 
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             Interlocked.Add(ref s_Counter, outboxMessages.Count);
 
