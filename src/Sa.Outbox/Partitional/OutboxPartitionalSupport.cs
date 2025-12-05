@@ -1,64 +1,38 @@
-using Sa.Outbox.Job;
-using Sa.Outbox.Publication;
-using Sa.Schedule;
+using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.Partitional;
 
-internal sealed class OutboxPartitionalSupport(IScheduleSettings scheduleSettings, PartitionalSettings partSettings) : IOutboxPartitionalSupport
+
+internal sealed class OutboxPartitionalSupport(
+    IDelivaryConfiguration configuration,
+    PartitionalSettings? partSettings) : IOutboxPartitionalSupport
 {
-    private readonly Lazy<string[]> _lazyParts = new(() =>
+    public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetOutboxParts(CancellationToken cancellationToken)
     {
-        Type baseType = typeof(DeliveryJob<>);
+        return await GetPairs(configuration.Parts, cancellationToken);
+    }
 
-        IEnumerable<IJobSettings> jobSettings = scheduleSettings.GetJobSettings();
-
-        string[] parts = [.. jobSettings
-            .Select(c => GetMessageTypeIfInheritsFromDeliveryJob(c.JobType, baseType))
-            .Where(mt => mt != null)
-            .Cast<Type>()
-            .Select(mt => OutboxMessageTypeHelper.GetOutboxMessageTypeInfo(mt).PartName)
-            .Distinct()];
-
-        return parts;
-    });
-
-    public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPartValues(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetOutboxGroups(CancellationToken cancellationToken)
     {
-        string[] parts = _lazyParts.Value;
-
-        if (parts.Length == 0 || partSettings?.GetTenantIds == null) return [];
+        return await GetPairs(configuration.GetConsumeGroupIds(), cancellationToken);
+    }
+    private async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPairs(IEnumerable<string> parts, CancellationToken cancellationToken)
+    {
+        if (partSettings?.GetTenantIds == null) return [];
 
         int[] tenantIds = await partSettings.GetTenantIds(cancellationToken);
         if (tenantIds.Length == 0) return [];
 
-        return GenerateOutboxTenantPartPairs(tenantIds, parts);
-    }
-
-    private static List<OutboxTenantPartPair> GenerateOutboxTenantPartPairs(int[] tenantIds, string[] parts)
-    {
-        var result = new List<OutboxTenantPartPair>();
+        List<OutboxTenantPartPair> result = [];
 
         foreach (int tenantId in tenantIds)
         {
             foreach (string part in parts)
             {
-                result.Add(new OutboxTenantPartPair(tenantId, part));
+                result.Add(new(tenantId, part));
             }
         }
 
         return result;
-    }
-
-
-    private static Type? GetMessageTypeIfInheritsFromDeliveryJob(Type jobType, Type baseType)
-    {
-        if (!baseType.IsGenericTypeDefinition) return null;
-
-        if (jobType.IsGenericType && jobType.GetGenericTypeDefinition() == baseType)
-            return jobType.GenericTypeArguments[0];
-
-        return jobType.BaseType != null
-            ? GetMessageTypeIfInheritsFromDeliveryJob(jobType.BaseType, baseType)
-            : null;
     }
 }

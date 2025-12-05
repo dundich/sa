@@ -8,6 +8,7 @@ namespace Sa.Outbox.Partitional;
 /// <param name="Part">The part identifier associated with the tenant.</param>
 public readonly record struct OutboxTenantPartPair(int TenantId, string Part);
 
+
 /// <summary>
 /// Represents an interface for supporting partitioning in the Outbox processing system.
 /// This interface defines a method for retrieving tenant-part pairs.
@@ -20,5 +21,7 @@ public interface IOutboxPartitionalSupport
     /// </summary>
     /// <param name="cancellationToken">A cancellation token to signal the operation's cancellation.</param>
     /// <returns>A task representing the asynchronous operation, containing a read-only collection of <see cref="OutboxTenantPartPair"/>.</returns>
-    Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPartValues(CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<OutboxTenantPartPair>> GetOutboxParts(CancellationToken cancellationToken);
+
+    Task<IReadOnlyCollection<OutboxTenantPartPair>> GetOutboxGroups(CancellationToken cancellationToken);
 }

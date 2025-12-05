@@ -4,8 +4,10 @@ using Sa.Outbox.PostgreSql.IdGen;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate, IIdGenerator idGenerator)
-    : IFinishDeliveryCommand
+internal sealed class FinishDeliveryCommand(
+    IPgDataSource dataSource,
+    SqlOutboxTemplate sqlTemplate,
+    IIdGenerator idGenerator) : IFinishDeliveryCommand
 {
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlFinishDelivery(len));
 
@@ -63,7 +65,7 @@ internal sealed class FinishDeliveryCommand(IPgDataSource dataSource, SqlOutboxT
 
             cmd
                 .AddParameter<CachedSqlParamNames>("@id_", i, id)
-                .AddParameter<CachedSqlParamNames>("@oid_", i, context.OutboxId)
+                .AddParameter<CachedSqlParamNames>("@msgid_", i, context.OutboxId)
                 .AddParameter<CachedSqlParamNames>("@err_", i, errorId ?? string.Empty)
                 .AddParameter<CachedSqlParamNames>("@st_", i, statusCode)
                 .AddParameter<CachedSqlParamNames>("@msg_", i, msg ?? string.Empty)

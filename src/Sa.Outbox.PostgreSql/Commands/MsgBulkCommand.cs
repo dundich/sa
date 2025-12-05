@@ -9,21 +9,21 @@ using Sa.Outbox.PostgreSql.TypeHashResolve;
 namespace Sa.Outbox.PostgreSql.Commands;
 
 
-internal sealed class OutboxBulkCommand(
+internal sealed class MsgBulkCommand(
     IPgDataSource dataSource
     , SqlOutboxTemplate sqlTemplate
     , RecyclableMemoryStreamManager streamManager
     , IOutboxMessageSerializer serializer
     , IIdGenerator idGenerator
     , IMsgTypeHashResolver hashResolver
-) : IOutboxBulkCommand
+) : IMsgBulkCommand
 {
 
     public async ValueTask<ulong> BulkWrite<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken)
     {
         long typeCode = await hashResolver.GetCode(typeof(TMessage).Name, cancellationToken);
 
-        ulong result = await dataSource.BeginBinaryImport(sqlTemplate.SqlBulkOutboxCopy, async (writer, t) =>
+        ulong result = await dataSource.BeginBinaryImport(sqlTemplate.SqlBulkMsgCopy, async (writer, t) =>
         {
             WriteRows(writer, typeCode, messages);
 

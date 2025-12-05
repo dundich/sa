@@ -4,13 +4,13 @@ using Sa.Partitional.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Partitional;
 
-internal sealed class OutboxMigrationSupport(IOutboxPartitionalSupport? partitionalSupport = null) : IPartTableMigrationSupport
+internal sealed class TaskMigrationSupport(IOutboxPartitionalSupport? partitionalSupport = null) : IPartTableMigrationSupport
 {
     public async Task<StrOrNum[][]> GetParts(CancellationToken cancellationToken)
     {
         if (partitionalSupport == null) return [];
 
-        IReadOnlyCollection<OutboxTenantPartPair> parts = await partitionalSupport.GetOutboxParts(cancellationToken);
+        IReadOnlyCollection<OutboxTenantPartPair> parts = await partitionalSupport.GetOutboxGroups(cancellationToken);
 
         return [.. parts.Select(c => new StrOrNum[] { c.TenantId, c.Part })];
     }

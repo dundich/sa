@@ -1,6 +1,8 @@
 using Sa.Outbox.PostgreSql.Commands;
+using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Repository;
+
 
 internal sealed class DeliveryRepository(
     IStartDeliveryCommand startCmd
@@ -8,11 +10,20 @@ internal sealed class DeliveryRepository(
     , IFinishDeliveryCommand finishCmd
     , IExtendDeliveryCommand extendCmd
     , IOutboxPartRepository partRepository
+    , IOffsetCoordinator coordinator
 ) : IDeliveryRepository
 {
-    public Task<int> StartDelivery<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> writeBuffer, int batchSize, TimeSpan lockDuration, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public async Task<int> StartDelivery<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> writeBuffer, int batchSize, TimeSpan lockDuration, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested || batchSize < 1) return Task.FromResult(0);
+        if (cancellationToken.IsCancellationRequested || batchSize < 1) return 0;
+
+
+        var newOffset = await coordinator.GetNextOffsetAndProcess(
+            filter.ConsumerGroupId,
+            (offset, ct) => Task.FromResult(offset),
+            cancellationToken);
+
+        if (newOffset == GroupOffsetId.Empty) return 0;
 
         // consume foreach group
 
@@ -20,7 +31,7 @@ internal sealed class DeliveryRepository(
         //2) check part;
 
 
-        return startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
+        return await startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
     }
 
     public async Task<int> FinishDelivery(IOutboxContext[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken)

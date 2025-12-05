@@ -56,7 +56,6 @@ internal sealed class StartDeliveryCommand(
             return new OutboxDeliveryMessage<TMessage>(outboxId, msg, deliveryInfo);
         }
 
-
         private static OutboxPartInfo ReadOutboxPart(NpgsqlDataReader reader)
         {
             return new OutboxPartInfo(
@@ -76,14 +75,12 @@ internal sealed class StartDeliveryCommand(
             );
         }
 
-
         private static TMessage ReadPayload(NpgsqlDataReader reader, IOutboxMessageSerializer serializer)
         {
             using Stream stream = reader.GetStream("outbox_payload");
             TMessage payload = serializer.Deserialize<TMessage>(stream)!;
             return payload;
         }
-
 
         private static DeliveryStatus ReadStatus(NpgsqlDataReader reader)
         {

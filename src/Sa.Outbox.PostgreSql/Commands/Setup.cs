@@ -9,7 +9,7 @@ internal static class Setup
     public static IServiceCollection AddOutboxCommands(this IServiceCollection services)
     {
         services.TryAddSingleton<RecyclableMemoryStreamManager>();
-        services.TryAddSingleton<IOutboxBulkCommand, OutboxBulkCommand>();
+        services.TryAddSingleton<IMsgBulkCommand, MsgBulkCommand>();
         services.TryAddSingleton<IStartDeliveryCommand, StartDeliveryCommand>();
         services.TryAddSingleton<IErrorDeliveryCommand, ErrorDeliveryCommand>();
         services.TryAddSingleton<IFinishDeliveryCommand, FinishDeliveryCommand>();

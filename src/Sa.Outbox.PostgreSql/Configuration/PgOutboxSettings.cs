@@ -40,10 +40,10 @@ public sealed class PgOutboxTableSettings
     public string DatabaseSchemaName { get; set; } = "public";
 
     /// <summary>
-    /// Gets or sets the name of the Outbox table.
-    /// Default is set to "outbox".
+    /// Gets or sets the name of the Outbox Messages table.
+    /// Default is set to "outbox__$msg".
     /// </summary>
-    public string DatabaseOutboxTableName { get; set; } = "outbox";
+    public string DatabaseMsgTableName { get; set; } = "outbox__$msg";
 
     /// <summary>
     /// Gets or sets the name of the delivery table.
@@ -58,6 +58,17 @@ public sealed class PgOutboxTableSettings
     public string DatabaseTypeTableName { get; set; } = "outbox__$type";
 
     /// <summary>
+    /// Gets or sets the offset for receiving group messages.
+    /// Default is set to "outbox__$group".
+    /// </summary>
+    public string DatabaseGroupTableName { get; set; } = "outbox__$group";
+
+    /// <summary>
+    /// Default is set to "outbox__$task".
+    /// </summary>
+    public string DatabaseTaskTableName { get; set; } = "outbox__$task";
+
+    /// <summary>
     /// Gets or sets the name of the error table.
     /// Default is set to "outbox__$error".
     /// </summary>
@@ -67,7 +78,7 @@ public sealed class PgOutboxTableSettings
     /// Gets the fully qualified name of the Outbox table, including the schema.
     /// </summary>
     /// <returns>The qualified name of the Outbox table.</returns>
-    public string GetQualifiedOutboxTableName() => $@"{DatabaseSchemaName}.""{DatabaseOutboxTableName}""";
+    public string GetQualifiedMsgTableName() => $@"{DatabaseSchemaName}.""{DatabaseMsgTableName}""";
 
     /// <summary>
     /// Gets the fully qualified name of the delivery table, including the schema.
@@ -82,14 +93,18 @@ public sealed class PgOutboxTableSettings
     public string GetQualifiedTypeTableName() => $@"{DatabaseSchemaName}.""{DatabaseTypeTableName}""";
 
     /// <summary>
+    /// Gets the fully qualified name of the offset table, including the schema.
+    /// </summary>
+    /// <returns>The qualified name of the offset table.</returns>
+    public string GetQualifiedOffsetTableName() => $@"{DatabaseSchemaName}.""{DatabaseGroupTableName}""";
+
+    /// <summary>
     /// Gets the fully qualified name of the error table, including the schema.
     /// </summary>
     /// <returns>The qualified name of the error table.</returns>
     public string GetQualifiedErrorTableName() => $@"{DatabaseSchemaName}.""{DatabaseErrorTableName}""";
 
-    
-    public string GetQualifiedConsumeTableName(string consumeGroupId) 
-        => $@"{DatabaseSchemaName}.""{DatabaseOutboxTableName}_{consumeGroupId}__$""";
+    public string GetQualifiedTaskTableName() => $@"{DatabaseSchemaName}.""{DatabaseTaskTableName}""";
 }
 
 
@@ -142,7 +157,7 @@ public sealed class PgOutboxCleanupSettings
     /// Gets or sets a value indicating whether the cleanup should be executed as a background job.
     /// Default is set to false, meaning the cleanup will not run as a job.
     /// </summary>
-    public bool AsJob { get; set; } = false;
+    public bool AsJob { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the duration after which old parts will be dropped.

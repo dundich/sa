@@ -69,7 +69,7 @@ internal sealed partial class PartRepository(
 
                 if (supMigration != null)
                 {
-                    return await supMigration.GetPartValues(cancellationToken);
+                    return await supMigration.GetParts(cancellationToken);
                 }
                 else
                 {

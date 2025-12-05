@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Sa.Outbox.PostgreSql.Repository;
@@ -11,6 +11,7 @@ internal static class Setup
         services.TryAddSingleton<IOutboxRepository, OutboxRepository>();
         services.TryAddSingleton<IDeliveryRepository, DeliveryRepository>();
         services.TryAddSingleton<IMsgTypeRepository, MsgTypeRepository>();
+        services.TryAddSingleton<IOffsetCoordinator, OffsetCoordinator>();
         return services;
     }
 }

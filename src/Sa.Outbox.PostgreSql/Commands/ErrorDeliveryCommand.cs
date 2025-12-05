@@ -4,7 +4,7 @@ using Sa.Extensions;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class ErrorDeliveryCommand( IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate) 
+internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate)
     : IErrorDeliveryCommand
 {
 
@@ -35,9 +35,9 @@ internal sealed class ErrorDeliveryCommand( IPgDataSource dataSource, SqlOutboxT
     }
 
     private static void Fill(
-        NpgsqlCommand command, 
-        KeyValuePair<Exception, ErrorInfo>[] errorArray, 
-        int start, 
+        NpgsqlCommand command,
+        KeyValuePair<Exception, ErrorInfo>[] errorArray,
+        int start,
         int count)
     {
         int i = 0;

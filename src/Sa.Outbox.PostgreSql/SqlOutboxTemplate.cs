@@ -5,52 +5,90 @@ namespace Sa.Outbox.PostgreSql;
 internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
 {
     public string DatabaseSchemaName => settings.DatabaseSchemaName;
-    public string DatabaseOutboxTableName => settings.DatabaseOutboxTableName;
+    public string DatabaseOutboxTableName => settings.DatabaseMsgTableName;
     public string DatabaseDeliveryTableName => settings.DatabaseDeliveryTableName;
     public string DatabaseErrorTableName => settings.DatabaseErrorTableName;
+    public string DatabaseGroupTableName => settings.DatabaseGroupTableName;
+
+    public string DatabaseTaskTableName => settings.DatabaseTaskTableName;
 
 
     public readonly static string[] OutboxFields =
     [
         // ulid
-        "outbox_id CHAR(26) NOT NULL",
+        "msg_id CHAR(26) NOT NULL",
 
-        // -- parts + outbox_created_at
-        "outbox_tenant INT NOT NULL DEFAULT 0",
-        "outbox_part TEXT NOT NULL",
+        "msg_tenant INT NOT NULL DEFAULT 0",
+        "msg_part TEXT NOT NULL",
 
-        "outbox_payload_id TEXT NOT NULL",
-        "outbox_payload_type BIGINT NOT NULL",
-        "outbox_payload BYTEA NOT NULL",
-        "outbox_payload_size INT NOT NULL",
+        "msg_payload_id TEXT NOT NULL",
+        "msg_payload_type BIGINT NOT NULL",
+        "msg_payload BYTEA NOT NULL",
+        "msg_payload_size INT NOT NULL",
         
-        // -- rw
-        "outbox_transact_id TEXT NOT NULL DEFAULT ''",
-        "outbox_lock_expires_on BIGINT NOT NULL DEFAULT 0",
+        //// -- rw
+        //"outbox_transact_id TEXT NOT NULL DEFAULT ''",
+        // "msg_lock_expires_on BIGINT NOT NULL DEFAULT 0",
 
+        //// -- delivery
+        //"outbox_delivery_attempt int NOT NULL DEFAULT 0",
+        //// --- copy last
+        //"outbox_delivery_id CHAR(26) NOT NULL DEFAULT ''",
+        //"outbox_delivery_error_id TEXT NOT NULL DEFAULT ''",
+        //"outbox_delivery_status_code INT NOT NULL DEFAULT 0",
+        //"outbox_delivery_status_message TEXT NOT NULL DEFAULT ''",
+        //"outbox_delivery_created_at BIGINT NOT NULL DEFAULT 0"
+    ];
+
+
+    public readonly static string[] TaskFields =
+    [
+        "task_id BIGSERIAL PRIMARY KEY",
+        "task_group_id TEXT NOT NULL",
+
+        // msg
+        "msg_id CHAR(26) NOT NULL",
+        "msg_part TEXT NOT NULL",
+        "msg_tenant INT NOT NULL DEFAULT 0",
+        "msg_payload_id TEXT NOT NULL",
+        "msg_created_at  BIGINT NOT NULL DEFAULT 0",
+        
         // -- delivery
-        "outbox_delivery_attempt int NOT NULL DEFAULT 0",
+        "delivery_attempt int NOT NULL DEFAULT 0",
+
         // --- copy last
-        "outbox_delivery_id CHAR(26) NOT NULL DEFAULT ''",
-        "outbox_delivery_error_id TEXT NOT NULL DEFAULT ''",
-        "outbox_delivery_status_code INT NOT NULL DEFAULT 0",
-        "outbox_delivery_status_message TEXT NOT NULL DEFAULT ''",
-        "outbox_delivery_created_at BIGINT NOT NULL DEFAULT 0"
+        "delivery_id CHAR(26) NOT NULL DEFAULT ''",
+
+        "delivery_transact_id TEXT NOT NULL DEFAULT ''",
+        "delivery_lock_expires_on BIGINT NOT NULL DEFAULT 0",
+
+        "delivery_status_code INT NOT NULL DEFAULT 0",
+        "delivery_status_message TEXT NOT NULL DEFAULT ''",
+        "delivery_created_at BIGINT NOT NULL DEFAULT 0",
+
+        // -- ref to error
+        "error_id TEXT NOT NULL DEFAULT ''",
     ];
 
 
     public readonly static string[] DeliveryFields =
     [
+
         "delivery_id CHAR(26) NOT NULL",
-        "delivery_outbox_id CHAR(26) NOT NULL",
-        "delivery_error_id TEXT NOT NULL DEFAULT ''",
         "delivery_status_code INT NOT NULL DEFAULT 0",
         "delivery_status_message TEXT NOT NULL DEFAULT ''",
-        "delivery_transact_id TEXT NOT NULL DEFAULT ''",
-        "delivery_lock_expires_on BIGINT NOT NULL DEFAULT 0",
-        // - parts
-        "delivery_tenant INT NOT NULL DEFAULT 0",
-        "delivery_part TEXT NOT NULL",
+        
+        // copy
+        "msg_id CHAR(26) NOT NULL",
+        "msg_tenant INT NOT NULL DEFAULT 0",
+        "msg_part TEXT NOT NULL",
+
+        // copy
+        "task_group_id TEXT NOT NULL",
+        "task_transact_id TEXT NOT NULL DEFAULT ''",
+        "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
+
+        "error_id TEXT NOT NULL DEFAULT ''",
     ];
 
     // Delivery errors
@@ -72,63 +110,71 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
     //""";
 
 
-    public string SqlBulkOutboxCopy =
+    public string SqlBulkMsgCopy =
 $"""
-COPY {settings.GetQualifiedOutboxTableName()} (
-    outbox_id
-    ,outbox_tenant
-    ,outbox_part
-    ,outbox_payload_id
-    ,outbox_payload_type
-    ,outbox_payload
-    ,outbox_payload_size
-    ,outbox_created_at
+COPY {settings.GetQualifiedMsgTableName()} (
+    msg_id
+    ,msg_tenant
+    ,msg_part
+    ,msg_payload_id
+    ,msg_payload_type
+    ,msg_payload
+    ,msg_payload_size
+    ,msg_created_at
 )
 FROM STDIN (FORMAT BINARY)
 ;
 """;
 
 
-    static readonly string s_InProcessing = $"(outbox_delivery_status_code < {DeliveryStatusCode.Ok} OR outbox_delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.Status499})";
+    static readonly string s_InTaskProcessing = @$"
+(delivery_status_code < {DeliveryStatusCode.Ok} 
+ OR delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.Status499})";
 
 
     public string SqlLockAndSelect =
 $"""
 WITH next_task AS (
-    SELECT outbox_id FROM {settings.GetQualifiedOutboxTableName()}
+    SELECT msg_id FROM {settings.GetQualifiedTaskTableName()}
     WHERE
-        outbox_tenant = @tenant AND outbox_part = @part AND outbox_created_at >= @from_date
-        AND outbox_payload_type = @payload_type
-        AND {s_InProcessing}
-        AND outbox_lock_expires_on < @now
+        msg_tenant = @tenant
+        AND msg_part = @part
+        AND msg_payload_type = @payload_type
+        
+        AND msg_created_at >= @from_date
+        AND {s_InTaskProcessing}
+        AND task_lock_expires_on < @now
     LIMIT @limit
     FOR UPDATE SKIP LOCKED
 )
-UPDATE {settings.GetQualifiedOutboxTableName()}
+UPDATE {settings.GetQualifiedTaskTableName()}
 SET
-    outbox_delivery_status_code = CASE 
-        WHEN outbox_delivery_status_code = 0 THEN {DeliveryStatusCode.Processing}
-        ELSE outbox_delivery_status_code
+    delivery_status_code = CASE 
+        WHEN delivery_status_code = 0 THEN {DeliveryStatusCode.Processing}
+        ELSE delivery_status_code
     END
-    ,outbox_transact_id = @transact_id
-    ,outbox_lock_expires_on = @lock_expires_on
+    ,task_transact_id = @transact_id
+    ,task_lock_expires_on = @lock_expires_on
 FROM 
     next_task
 WHERE 
-    {settings.GetQualifiedOutboxTableName()}.outbox_id = next_task.outbox_id
+    {settings.GetQualifiedTaskTableName()}.msg_id = next_task.msg_id
 RETURNING 
-    {settings.GetQualifiedOutboxTableName()}.outbox_id
-    ,outbox_tenant
-    ,outbox_part
-    ,outbox_payload
-    ,outbox_payload_id
-    ,outbox_delivery_id
-    ,outbox_delivery_attempt
-    ,outbox_delivery_error_id
-    ,outbox_delivery_status_code
-    ,outbox_delivery_status_message
-    ,outbox_delivery_created_at
-    ,outbox_created_at
+    {settings.GetQualifiedTaskTableName()}.msg_id
+    ,msg_tenant
+    ,msg_part
+    ,msg_payload
+    ,msg_payload_id
+
+    ,delivery_id
+    ,delivery_attempt
+    ,delivery_status_code
+    ,delivery_status_message
+    ,delivery_created_at
+
+    ,error_id
+
+    ,task_created_at
 ;
 """;
 
@@ -140,41 +186,47 @@ $"""
 WITH inserted_delivery AS (
     INSERT INTO {settings.GetQualifiedDeliveryTableName()} (
         delivery_id
-        , delivery_outbox_id
-        , delivery_error_id
         , delivery_status_code
         , delivery_status_message
         , delivery_lock_expires_on
         , delivery_transact_id
-        , delivery_tenant
-        , delivery_part
         , delivery_created_at
+
+        , msg_id
+        , msg_tenant
+        , msg_part
+
+        , error_id
     )
     VALUES
 {BuildDeliveryInsertValues(count)}
     ON CONFLICT DO NOTHING
     RETURNING *
 )
-UPDATE {settings.GetQualifiedOutboxTableName()} 
-SET 
-    outbox_delivery_id = inserted_delivery.delivery_id
-    , outbox_delivery_attempt = outbox_delivery_attempt + CASE 
-        WHEN inserted_delivery.delivery_status_code <> {DeliveryStatusCode.Postpone} THEN 1 
-        ELSE 0 
-      END
-    , outbox_delivery_error_id = inserted_delivery.delivery_error_id
-    , outbox_delivery_status_code = inserted_delivery.delivery_status_code
-    , outbox_delivery_status_message = inserted_delivery.delivery_status_message
-    , outbox_lock_expires_on = inserted_delivery.delivery_lock_expires_on
-    , outbox_delivery_created_at = inserted_delivery.delivery_created_at
+UPDATE {settings.GetQualifiedTaskTableName()} task
+SET
+    delivery_id = inserted_delivery.delivery_id
+    , task.delivery_attempt = delivery_attempt + CASE
+        WHEN inserted_delivery.delivery_status_code <> {DeliveryStatusCode.Postpone} 
+            THEN 1
+            ELSE 0
+        END
+    , task.error_id = inserted_delivery.derror_id
+
+    , task.delivery_status_code = inserted_delivery.delivery_status_code
+    , task.delivery_status_message = inserted_delivery.delivery_status_message
+    , task.delivery_created_at = inserted_delivery.delivery_created_at
+
+    , task.task_lock_expires_on = inserted_delivery.delivery_lock_expires_on
 FROM 
     inserted_delivery
 WHERE 
-    outbox_tenant = @tnt 
-    AND outbox_part = @prt 
-    AND outbox_created_at >= @from
-    AND outbox_transact_id = @tid
-    AND outbox_id = inserted_delivery.delivery_outbox_id
+    msg_tenant = @tnt
+    AND msg_part = @prt
+    AND msg_id = inserted_delivery.delivery_msg_id
+
+    AND task_created_at >= @from
+    AND task_transact_id = @tid
 ;
 
 """;
@@ -186,7 +238,7 @@ WHERE
         List<string> values = [];
         for (int i = 0; i < count; i++)
         {
-            values.Add($"   (@id_{i},@oid_{i},@err_{i},@st_{i},@msg_{i},@exp_{i},@tid,@tnt,@prt,@cr_{i})");
+            values.Add($"   (@id_{i},@st_{i},@msg_{i},@exp_{i},@tid,@cr_{i},@msgid_{i},@tnt,@prt,@err_{i})");
         }
         return string.Join(",\r\n", values);
     }
@@ -194,17 +246,19 @@ WHERE
 
     public string SqlExtendDelivery =
 $"""
-UPDATE {settings.GetQualifiedOutboxTableName()}
+UPDATE {settings.GetQualifiedTaskTableName()}
 SET 
-    outbox_lock_expires_on = @lock_expires_on
+    task_lock_expires_on = @lock_expires_on
 WHERE
-    outbox_tenant = @tenant 
-    AND outbox_part = @part 
-    AND outbox_created_at >= @from_date
-    AND outbox_payload_type = @payload_type
-    AND {s_InProcessing}
-    AND outbox_transact_id = @transact_id
-    AND outbox_lock_expires_on > @now
+    msg_tenant = @tenant 
+    AND msg_part = @part 
+    AND msg_payload_type = @payload_type
+    AND msg_created_at >= @from_date
+
+    AND {s_InTaskProcessing}
+    AND task_transact_id = @transact_id
+    AND task_lock_expires_on > @now
+
 FOR UPDATE SKIP LOCKED
 ;
 """;
@@ -260,9 +314,30 @@ ON CONFLICT DO NOTHING
 """;
 
     public string SqlError(int count) => SqlError(settings, count);
+
+
+    public string SqlCreateOffsetTable =
+$"""
+CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
+(
+    group_id TEXT PRIMARY KEY,
+    group_offset CHAR(26) NOT NULL,
+    group_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    CONSTRAINT "pk_{settings.DatabaseGroupTableName}" PRIMARY KEY (group_id)
+)
+;
+""";
+
+    public string SqlInsertOffset =
+$"""
+INSERT INTO {settings.GetQualifiedOffsetTableName} 
+    (group_id, group_offset)
+VALUES 
+    (@group_id, 0)
+ON CONFLICT (group_id) DO NOTHING;
+;
+""";
 }
-
-
 
 internal sealed class CachedSqlParamNames : INamePrefixProvider
 {

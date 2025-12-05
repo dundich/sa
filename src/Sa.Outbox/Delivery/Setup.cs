@@ -20,12 +20,14 @@ internal static class Setup
         services.TryAddSingleton<IDeliveryCourier, DeliveryCourier>();
         // support - messaging to each tenant
         services.TryAddSingleton<IPartitionalSupportCache, PartitionalSupportCache>();
-        
+
         services.TryAddSingleton<ITenantMessageProcessor, TenantMessageProcessor>();
 
         services.TryAddSingleton<IScopedConsumer, ScopedConsumer>();
 
         configure.Invoke(new DeliveryBuilder(services));
+
+        services.TryAddSingleton<IDelivaryConfiguration, DelivarySnapshot>();
 
         return services;
     }

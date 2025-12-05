@@ -8,12 +8,13 @@ internal static class Setup
 {
     public static IServiceCollection AddOutboxPartitional(this IServiceCollection services)
     {
-        services.TryAddSingleton<IPartTableMigrationSupport, OutboxMigrationSupport>();
+        services.TryAddTransient<OutboxMigrationSupport>();
+        services.TryAddTransient<TaskMigrationSupport>();
 
         services.AddPartitional((sp, builder) =>
         {
             SqlOutboxTemplate sql = sp.GetRequiredService<SqlOutboxTemplate>();
-            IPartTableMigrationSupport? migrationSupport = sp.GetService<IPartTableMigrationSupport>();
+
 
             builder.AddSchema(sql.DatabaseSchemaName, schema =>
             {
@@ -22,6 +23,13 @@ internal static class Setup
                     .PartByList("outbox_tenant", "outbox_part")
                     .TimestampAs("outbox_created_at")
                     .AddPostSql(() => sql.SqlCreateTypeTable)
+                ;
+
+                ITableBuilder taskTableBuilder = schema
+                    .AddTable(sql.DatabaseTaskTableName, SqlOutboxTemplate.TaskFields)
+                    .PartByList("outbox_tenant", "outbox_group_id")
+                    .TimestampAs("task_created_at")
+                    .AddPostSql(() => sql.SqlCreateOffsetTable)
                 ;
 
                 ITableBuilder deliveryTableBuilder = schema
@@ -35,22 +43,11 @@ internal static class Setup
                     .TimestampAs("error_created_at")
                 ;
 
-                if (migrationSupport != null)
-                {
-                    outboxTableBuilder.AddMigration(migrationSupport);
-                    deliveryTableBuilder.AddMigration(migrationSupport);
-                }
 
+                outboxTableBuilder.AddMigration(sp.GetRequiredService<OutboxMigrationSupport>());
+                taskTableBuilder.AddMigration(sp.GetRequiredService<TaskMigrationSupport>());
+                deliveryTableBuilder.AddMigration(sp.GetRequiredService<TaskMigrationSupport>());
                 errorTableBuilder.AddMigration();
-
-
-                //var settings = sp.GetRequiredService<IScheduleSettings>()
-                //    .GetJobSettings()
-                //    .Select(c => c.Properties.Tag as OutboxDeliverySettings)
-                //    .Where(c => c != null)
-                //    .
-
-
             })
             ;
         })

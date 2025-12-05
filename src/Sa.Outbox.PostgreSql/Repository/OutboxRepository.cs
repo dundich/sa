@@ -3,7 +3,7 @@ using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
-internal sealed class OutboxRepository(IOutboxBulkCommand bulkCmd, IOutboxPartRepository partRepository)
+internal sealed class OutboxRepository(IMsgBulkCommand bulkCmd, IOutboxPartRepository partRepository)
     : IOutboxRepository
 {
 

@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 
@@ -35,7 +35,7 @@ public interface INamePrefixProvider
 
 
 
-class CachedParamNames<T>(int maxIndex) where T : INamePrefixProvider
+sealed class CachedParamNames<T>(int maxIndex) where T : INamePrefixProvider
 {
     private static readonly ReadOnlyDictionary<string, int> PrefixToIndex =
         new(new Dictionary<string, int>(
