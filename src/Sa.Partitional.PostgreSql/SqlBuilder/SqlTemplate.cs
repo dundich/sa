@@ -5,7 +5,7 @@ namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
 internal static class SqlTemplate
 {
-    const string CacheByRangeTableNamePostfix = "$part";
+    const string CacheByRangeTableNamePostfix = "part$";
 
     private const char NumOrStrSplitter = ',';
 
@@ -56,8 +56,8 @@ FOR VALUES IN ({values[^1].Match(s => $"'{s}'", n => n.ToString())})
     // Вспомогательный метод
     private static string GetFillFactorClause(this ITableSettings settings)
     {
-        return settings.FillFactor.HasValue
-            ? $" WITH (fillfactor = {settings.FillFactor.Value})"
+        return settings.FillFactor.GetValueOrDefault() > 0
+            ? $" WITH (fillfactor = {settings.FillFactor.GetValueOrDefault()})"
             : "";
     }
 
@@ -161,7 +161,8 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id='{qualifiedTableName}
         : settings.GetQualifiedTableName(values);
 
 
-    private static string GetCacheByRangeTableName(this ITableSettings settings) => settings.GetQualifiedTableName(CacheByRangeTableNamePostfix);
+    private static string GetCacheByRangeTableName(this ITableSettings settings) 
+        => settings.GetQualifiedTableName(CacheByRangeTableNamePostfix);
 
 
     static string GetQualifiedTableName(this ITableSettings settings, params StrOrNum[] values)
@@ -176,7 +177,8 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id='{qualifiedTableName}
             : $"PARTITION BY RANGE ({settings.PartByRangeFieldName})"
             ;
 
-    static string Pk(this ITableSettings settings) => settings.ConstraintPkSql?.Invoke() ?? $"pk_{settings.DatabaseTableName}";
+    static string Pk(this ITableSettings settings) 
+        => settings.ConstraintPkSql?.Invoke() ?? $"pk_{settings.DatabaseTableName}";
 
 
     internal static StrOrNum[] ParseStrOrNums(string fmtInput) => [.. fmtInput

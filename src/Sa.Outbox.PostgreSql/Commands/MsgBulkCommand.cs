@@ -34,6 +34,28 @@ internal sealed class MsgBulkCommand(
         return result;
     }
 
+    /// <summary>
+    /// <code>
+    ///    
+    /// COPY
+    /// 
+    /// msg_id
+    /// ,msg_tenant
+    /// ,msg_part
+    /// ,msg_payload_id
+    /// ,msg_payload_type
+    /// ,msg_payload
+    /// ,msg_payload_size
+    /// ,msg_created_at
+    ///)
+    /// </code>
+    /// <see cref="Sa.Outbox.PostgreSq.SqlBulkMsgCopy"/>
+    /// </summary>
+    /// 
+    /// <typeparam name="TMessage"></typeparam>
+    /// <param name="writer"></param>
+    /// <param name="payloadTypeCode"></param>
+    /// <param name="messages"></param>
     private void WriteRows<TMessage>(NpgsqlBinaryImporter writer, long payloadTypeCode, ReadOnlyMemory<OutboxMessage<TMessage>> messages)
     {
         foreach (OutboxMessage<TMessage> row in messages.Span)
@@ -42,15 +64,12 @@ internal sealed class MsgBulkCommand(
 
             writer.StartRow();
 
-
             // id
             writer.Write(id, NpgsqlDbType.Char);
             // tenant
             writer.Write(row.PartInfo.TenantId, NpgsqlDbType.Integer);
             // part
             writer.Write(row.PartInfo.Part, NpgsqlDbType.Text);
-
-
             // payload_id
             writer.Write(row.PayloadId, NpgsqlDbType.Text);
             // payload_type
@@ -59,8 +78,6 @@ internal sealed class MsgBulkCommand(
             int streamLength = WritePayload(writer, row.Payload);
             // payload_size
             writer.Write(streamLength, NpgsqlDbType.Integer);
-
-
             // created_at
             writer.Write(row.PartInfo.CreatedAt.ToUnixTimeSeconds(), NpgsqlDbType.Bigint);
         }

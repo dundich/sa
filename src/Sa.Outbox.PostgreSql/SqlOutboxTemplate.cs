@@ -54,10 +54,8 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         "msg_created_at  BIGINT NOT NULL DEFAULT 0",
         
         // -- delivery
-        "delivery_attempt int NOT NULL DEFAULT 0",
-
-        // --- copy last
         "delivery_id CHAR(26) NOT NULL DEFAULT ''",
+        "delivery_attempt int NOT NULL DEFAULT 0",
 
         "delivery_transact_id TEXT NOT NULL DEFAULT ''",
         "delivery_lock_expires_on BIGINT NOT NULL DEFAULT 0",
@@ -77,7 +75,8 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         "delivery_id CHAR(26) NOT NULL",
         "delivery_status_code INT NOT NULL DEFAULT 0",
         "delivery_status_message TEXT NOT NULL DEFAULT ''",
-        
+        "delivery_lock_expires_on BIGINT NOT NULL DEFAULT 0",
+
         // copy
         "msg_id CHAR(26) NOT NULL",
         "msg_tenant INT NOT NULL DEFAULT 0",
@@ -86,7 +85,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         // copy
         "task_group_id TEXT NOT NULL",
         "task_transact_id TEXT NOT NULL DEFAULT ''",
-        "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
+        
 
         "error_id TEXT NOT NULL DEFAULT ''",
     ];

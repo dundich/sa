@@ -20,27 +20,31 @@ internal static class Setup
             {
                 ITableBuilder outboxTableBuilder = schema
                     .AddTable(sql.DatabaseOutboxTableName, SqlOutboxTemplate.OutboxFields)
-                    .PartByList("outbox_tenant", "outbox_part")
-                    .TimestampAs("outbox_created_at")
+                    .PartByList("msg_tenant", "msg_part")
+                    .TimestampAs("msg_created_at")
+                    .WithFillFactor(100) // insert only
                     .AddPostSql(() => sql.SqlCreateTypeTable)
                 ;
 
                 ITableBuilder taskTableBuilder = schema
                     .AddTable(sql.DatabaseTaskTableName, SqlOutboxTemplate.TaskFields)
-                    .PartByList("outbox_tenant", "outbox_group_id")
+                    .PartByList("msg_tenant", "task_group_id")
                     .TimestampAs("task_created_at")
+                    .WithFillFactor(60)
                     .AddPostSql(() => sql.SqlCreateOffsetTable)
                 ;
 
                 ITableBuilder deliveryTableBuilder = schema
                     .AddTable(sql.DatabaseDeliveryTableName, SqlOutboxTemplate.DeliveryFields)
-                    .PartByList("delivery_tenant", "delivery_part")
+                    .PartByList("msg_tenant", "task_group_id")
                     .TimestampAs("delivery_created_at")
+                    .WithFillFactor(60)
                 ;
 
                 ITableBuilder errorTableBuilder = schema
                     .AddTable(sql.DatabaseErrorTableName, SqlOutboxTemplate.ErrorFields)
                     .TimestampAs("error_created_at")
+                    .WithFillFactor(100)
                 ;
 
 

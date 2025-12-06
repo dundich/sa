@@ -43,36 +43,36 @@ public sealed class PgOutboxTableSettings
     /// Gets or sets the name of the Outbox Messages table.
     /// Default is set to "outbox__$msg".
     /// </summary>
-    public string DatabaseMsgTableName { get; set; } = "outbox__$msg";
+    public string DatabaseMsgTableName { get; set; } = "outbox__msg$";
 
     /// <summary>
     /// Gets or sets the name of the delivery table.
     /// Default is set to "outbox__$delivery".
     /// </summary>
-    public string DatabaseDeliveryTableName { get; set; } = "outbox__$delivery";
+    public string DatabaseDeliveryTableName { get; set; } = "outbox__delivery$";
 
     /// <summary>
     /// Gets or sets the name of the type table.
     /// Default is set to "outbox__$type".
     /// </summary>
-    public string DatabaseTypeTableName { get; set; } = "outbox__$type";
+    public string DatabaseTypeTableName { get; set; } = "outbox__type$";
 
     /// <summary>
     /// Gets or sets the offset for receiving group messages.
     /// Default is set to "outbox__$group".
     /// </summary>
-    public string DatabaseGroupTableName { get; set; } = "outbox__$group";
+    public string DatabaseGroupTableName { get; set; } = "outbox__group$";
 
     /// <summary>
     /// Default is set to "outbox__$task".
     /// </summary>
-    public string DatabaseTaskTableName { get; set; } = "outbox__$task";
+    public string DatabaseTaskTableName { get; set; } = "outbox__task$";
 
     /// <summary>
     /// Gets or sets the name of the error table.
     /// Default is set to "outbox__$error".
     /// </summary>
-    public string DatabaseErrorTableName { get; set; } = "outbox__$error";
+    public string DatabaseErrorTableName { get; set; } = "outbox__error$";
 
     /// <summary>
     /// Gets the fully qualified name of the Outbox table, including the schema.

@@ -10,7 +10,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         public readonly static PgPartBy DefaultPartBy = PgPartBy.Day;
         public const string PartByRangeFieldName = "created_at";
         public const string SqlPartSeparator = "__";
-        public const int FillFactor = 70;
+        public const int FillFactor = 0;
     }
 
 
@@ -67,7 +67,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
     public ITableBuilder WithFillFactor(int fillFactor)
     {
-        _fillFactor = fillFactor;
+        _fillFactor = Math.Max(100, fillFactor);
         return this;
     }
 
