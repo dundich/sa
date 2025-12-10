@@ -2,10 +2,10 @@ using Sa.Data.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class FillTasksCommand(
-    IPgDataSource dataSource,
-    SqlOutboxTemplate sql
-)
-{
-    //
-}
+//internal sealed class FillTasksCommand(
+//    IPgDataSource dataSource,
+//    SqlOutboxTemplate sql
+//)
+//{
+//    //
+//}

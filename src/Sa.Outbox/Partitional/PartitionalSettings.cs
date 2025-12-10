@@ -6,15 +6,25 @@ namespace Sa.Outbox;
 /// </summary>
 public sealed class PartitionalSettings
 {
-    /// <summary>
-    /// Gets or sets a value indicating whether to process messages for each tenant individually.
-    /// Default is set to true, meaning messages will be processed for each tenant.
-    /// </summary>
-    public bool ForEachTenant { get; set; } = true;
+    internal static readonly int[] s_DefaultTenantIds = [0];
 
     /// <summary>
     /// Gets or sets a function that retrieves tenant IDs asynchronously.
     /// This function takes a <see cref="CancellationToken"/> as a parameter and returns an array of tenant IDs.
     /// </summary>
-    public Func<CancellationToken, Task<int[]>>? GetTenantIds { get; set; }
+    public Func<CancellationToken, ValueTask<int[]>> GetTenantIds { get; private set; } = 
+        _ => ValueTask.FromResult(s_DefaultTenantIds);
+
+
+    public PartitionalSettings WithGetTenantIds(Func<CancellationToken, ValueTask<int[]>> getTenantIds)
+    {
+        GetTenantIds = getTenantIds;
+        return this;
+    }
+
+    public PartitionalSettings WithTenantIds(params int[] tenantIds)
+    {
+        GetTenantIds = (ct) => ValueTask.FromResult(tenantIds);
+        return this;
+    }
 }

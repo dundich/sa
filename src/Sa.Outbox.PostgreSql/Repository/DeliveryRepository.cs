@@ -13,17 +13,27 @@ internal sealed class DeliveryRepository(
     , IOffsetCoordinator coordinator
 ) : IDeliveryRepository
 {
-    public async Task<int> StartDelivery<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> writeBuffer, int batchSize, TimeSpan lockDuration, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public async Task<int> StartDelivery<TMessage>(
+        Memory<OutboxDeliveryMessage<TMessage>> writeBuffer,
+        int batchSize,
+        TimeSpan lockDuration,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken)
     {
         if (cancellationToken.IsCancellationRequested || batchSize < 1) return 0;
 
 
-        var newOffset = await coordinator.GetNextOffsetAndProcess(
+        GroupOffsetId newOffset = await coordinator.GetNextOffsetAndProcess(
             filter.ConsumerGroupId,
+            filter.TenantId,
             (offset, ct) => Task.FromResult(offset),
             cancellationToken);
 
         if (newOffset == GroupOffsetId.Empty) return 0;
+
+
+        // await partRepository.EnsureDeliveryParts(parts, cancellationToken);
+
 
         // consume foreach group
 

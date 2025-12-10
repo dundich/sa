@@ -3,15 +3,12 @@ using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : IClassFixture<DeliveryRetryErrorTests.Fixture>
+public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
+    : IClassFixture<DeliveryRetryErrorTests.Fixture>
 {
+    public class TestException(string message) : Exception(message) { }
 
-    public class TestException(string message) : Exception(message)
-    {
-    }
-
-
-    public class TestMessageConsumer : IConsumer<TestMessage>
+    class TestMessageConsumer : IConsumer<TestMessage>
     {
         private static readonly TestException s_err = new("test same error");
 
@@ -33,7 +30,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
             Services
                 .AddOutbox(builder => builder
                     .WithPartitioningSupport((_, sp)
-                        => sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
+                        => sp.WithTenantIds(1, 2)
                     )
                     .WithDeliveries(builder
                         => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>

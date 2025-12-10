@@ -32,7 +32,7 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
     /// Repeat extract for each tenant
     /// <seealso cref="IOutboxBuilder.WithPartitioningSupport"/>
     /// </summary>
-    public bool ForEachTenant { get; private set; }
+    public bool ForEachTenant { get; private set; } = true;
 
     /// <summary>
     /// Select outbox messages for processing for the period

@@ -34,8 +34,8 @@ internal sealed class StartDeliveryCommand(
             , new("payload_type", typeCode)
             , new("transact_id", filter.TransactId)
             , new("limit", batchSize)
-            , new("lock_expires_on", (filter.NowDate + lockDuration).ToUnixTimeSeconds())
-            , new("now", filter.NowDate.ToUnixTimeSeconds())
+            , new("lock_expires_on", (filter.ToDate + lockDuration).ToUnixTimeSeconds())
+            , new("now", filter.ToDate.ToUnixTimeSeconds())
         ]
         , cancellationToken);
     }
@@ -44,8 +44,8 @@ internal sealed class StartDeliveryCommand(
     {
         public static OutboxDeliveryMessage<TMessage> Read(NpgsqlDataReader reader, IOutboxMessageSerializer serializer)
         {
-            string outboxId = reader.GetString("outbox_id");
-            string payloadId = reader.GetString("outbox_payload_id");
+            string outboxId = reader.GetString("msg_id");
+            string payloadId = reader.GetString("msg_payload_id");
 
             TMessage payload = ReadPayload(reader, serializer);
             OutboxPartInfo outboxPart = ReadOutboxPart(reader);
@@ -59,25 +59,25 @@ internal sealed class StartDeliveryCommand(
         private static OutboxPartInfo ReadOutboxPart(NpgsqlDataReader reader)
         {
             return new OutboxPartInfo(
-                reader.GetInt32("outbox_tenant")
-                , reader.GetString("outbox_part")
-                , reader.GetInt64("outbox_created_at").ToDateTimeOffsetFromUnixTimestamp()
+                reader.GetInt32("msg_tenant")
+                , reader.GetString("msg_part")
+                , reader.GetInt64("msg_created_at").ToDateTimeOffsetFromUnixTimestamp()
             );
         }
 
         private static OutboxDeliveryInfo ReadDeliveryInfo(NpgsqlDataReader reader)
         {
             return new OutboxDeliveryInfo(
-                reader.GetString("outbox_delivery_id")
-                , reader.GetInt32("outbox_delivery_attempt")
-                , reader.GetString("outbox_delivery_error_id")
+                reader.GetString("delivery_id")
+                , reader.GetInt32("delivery_attempt")
+                , reader.GetString("error_id")
                 , ReadStatus(reader)
             );
         }
 
         private static TMessage ReadPayload(NpgsqlDataReader reader, IOutboxMessageSerializer serializer)
         {
-            using Stream stream = reader.GetStream("outbox_payload");
+            using Stream stream = reader.GetStream("msg_payload");
             TMessage payload = serializer.Deserialize<TMessage>(stream)!;
             return payload;
         }

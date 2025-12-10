@@ -12,12 +12,9 @@ namespace Sa.Outbox.Delivery;
 internal sealed class DeliveryRelay(
     ITenantMessageProcessor messageProcessor,
     IPartitionalSupportCache partCache,
-    IArrayPool arrayPool,
-    PartitionalSettings? partitionalSettings = null
+    IArrayPool arrayPool
     ) : IDeliveryRelay
 {
-    private readonly bool _globalForEachTenant = partitionalSettings?.ForEachTenant ?? false;
-
     public async Task<int> StartDelivery<TMessage>(ConsumeSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
@@ -30,7 +27,7 @@ internal sealed class DeliveryRelay(
         {
             Memory<OutboxDeliveryMessage<TMessage>> slice = buffer.AsMemory(0, batchSize);
 
-            return _globalForEachTenant || settings.ForEachTenant
+            return settings.ForEachTenant
               ? await ProcessMultipleTenants(slice, settings, cancellationToken)
               : await messageProcessor.ProcessTenantMessages(settings, slice, 0, cancellationToken);
         }

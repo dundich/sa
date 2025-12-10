@@ -7,7 +7,8 @@ using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSqlTests;
 
-public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture fixture) : IClassFixture<OutboxParallelMessagingTests.Fixture>
+public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture fixture) 
+    : IClassFixture<OutboxParallelMessagingTests.Fixture>
 {
     static class GenMessageRange
     {
@@ -20,7 +21,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     }
 
 
-    public class SomeMessage1 : IOutboxPayloadMessage
+    class SomeMessage1 : IOutboxPayloadMessage
     {
         public static string PartName => "multi_1";
 
@@ -28,7 +29,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         public int TenantId { get; set; } = Random.Shared.Next(1, 2);
     }
 
-    public class SomeMessage2 : IOutboxPayloadMessage
+    class SomeMessage2 : IOutboxPayloadMessage
     {
         public static string PartName => "multi_2";
 
@@ -37,7 +38,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     }
 
 
-    public static class CommonCounter
+    static class CommonCounter
     {
         static int s_counter = 0;
 
@@ -48,7 +49,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         public static int Counter => s_counter;
     }
 
-    public class SomeMessageConsumer1 : IConsumer<SomeMessage1>
+    class SomeMessageConsumer1 : IConsumer<SomeMessage1>
     {
         public ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage1>> outboxMessages, CancellationToken cancellationToken)
         {
@@ -58,7 +59,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     }
 
 
-    public class SomeMessageConsumer2 : IConsumer<SomeMessage2>
+    class SomeMessageConsumer2 : IConsumer<SomeMessage2>
     {
         public ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage2>> outboxMessages, CancellationToken cancellationToken)
         {
@@ -75,11 +76,8 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 .AddOutbox(builder =>
                 {
                     builder
-                    .WithPartitioningSupport((_, sp) =>
-                    {
-                        sp.ForEachTenant = true;
-                        sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2]);
-                    })
+                    .WithPartitioningSupport((_, sp) 
+                        => sp.WithTenantIds(1,2))
                     .WithDeliveries(builder => builder
                         .AddDelivery<SomeMessageConsumer1, SomeMessage1>(string.Empty, (_, settings) =>
                         {

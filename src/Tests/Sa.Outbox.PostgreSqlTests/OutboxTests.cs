@@ -9,7 +9,7 @@ namespace Sa.Outbox.PostgreSqlTests;
 
 public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTests.Fixture>
 {
-    public class SomeMessage : IOutboxPayloadMessage
+    class SomeMessage : IOutboxPayloadMessage
     {
         public static string PartName => "some";
 
@@ -18,7 +18,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 
     }
 
-    public class SomeMessageConsumer : IConsumer<SomeMessage>
+    class SomeMessageConsumer : IConsumer<SomeMessage>
     {
         static int s_Counter = 0;
 
@@ -37,11 +37,9 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithPartitioningSupport((_, sp) =>
-                    {
-                        sp.ForEachTenant = true;
-                        sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2]);
-                    })
+                    .WithPartitioningSupport((_, sp)
+                        => sp.WithTenantIds(1, 2)
+                    )
                     .WithDeliveries(builder => builder
                         .AddDelivery<SomeMessageConsumer, SomeMessage>(string.Empty, (_, settings) =>
                         {

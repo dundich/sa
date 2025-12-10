@@ -7,11 +7,14 @@ namespace Sa.Outbox.PostgreSql.Repository;
 
 internal sealed class OffsetCoordinator(
     IPgDataSource pg,
-    PgOutboxTableSettings tableSettings,
+    SqlOutboxTemplate sql,
     ILogger? logger = null) : IOffsetCoordinator
 {
+    private bool _isInit = false;
+
     public async Task<GroupOffsetId> GetNextOffsetAndProcess(
         string groupId,
+        int tenantId,
         Func<GroupOffsetId, CancellationToken, Task<GroupOffsetId>> process,
         CancellationToken cancellationToken = default)
     {
@@ -19,47 +22,46 @@ internal sealed class OffsetCoordinator(
         int lockKey = HashText(groupId);
 
         await using var conn = await pg.OpenDbConnection(cancellationToken);
-        await conn.OpenAsync(cancellationToken);
-
         try
         {
             await using var tx = await conn.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
             // Получаем advisory lock — будет ждать, пока предыдущий не завершит
-            await using var lockCmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@key);", conn, tx);
+            await using var lockCmd = new NpgsqlCommand(sql.SqlLockOffset, conn, tx);
             lockCmd.Parameters.AddWithValue("@key", lockKey);
             await lockCmd.ExecuteNonQueryAsync(cancellationToken);
 
-            // Теперь мы — единственный, кто работает в этой группе
+            if (!_isInit)
+            {
+                await CreateOffsetTableIfNotExists(conn, cancellationToken);
+                _isInit = true;
+            }
 
             // Читаем текущее смещение
-            await using var selectCmd = new NpgsqlCommand($"""
-SELECT group_offset FROM {tableSettings.GetQualifiedOffsetTableName} 
-WHERE group_id = @group_id FOR UPDATE;
-""", conn, tx);
+            await using var selectCmd = new NpgsqlCommand(sql.SqlSelectOffset, conn, tx);
 
             selectCmd.Parameters.AddWithValue("@group_id", groupId);
+            selectCmd.Parameters.AddWithValue("@tenant_id", tenantId);
 
-            var currentOffsetObj = await selectCmd.ExecuteScalarAsync(cancellationToken);
+            object? currentOffsetObj = await selectCmd.ExecuteScalarAsync(cancellationToken);
 
             GroupOffsetId currentOffset = (currentOffsetObj == null)
-                ? await InitializeOffset(conn, tx, groupId, cancellationToken)
+                ? await InitializeOffset(conn, tx, groupId, tenantId, cancellationToken)
                 : new GroupOffsetId((string)currentOffsetObj);
 
 
             // Выполняем бизнес-логику (например, обработку сообщения)
             var newOffset = await process(currentOffset, cancellationToken);
 
-            // Обновляем смещение
-            await using var updateCmd = new NpgsqlCommand(@$"
-UPDATE {tableSettings.GetQualifiedOffsetTableName}  
-SET group_offset = @group_offset, group_updated_at = NOW() 
-WHERE group_id = @group_id;", conn, tx);
 
-            updateCmd.Parameters.AddWithValue("@group_id", groupId);
-            updateCmd.Parameters.AddWithValue("@group_offset", newOffset.OffsetId);
-
-            await updateCmd.ExecuteNonQueryAsync(cancellationToken);
+            if (newOffset.OffsetId != currentOffset.OffsetId)
+            {
+                await using var updateCmd = new NpgsqlCommand(sql.SqlUpdateOffset, conn, tx);
+                updateCmd.Parameters.AddWithValue("@group_id", groupId);
+                updateCmd.Parameters.AddWithValue("@tenant_id", tenantId);
+                updateCmd.Parameters.AddWithValue("@group_offset", newOffset.OffsetId);
+                await updateCmd.ExecuteNonQueryAsync(cancellationToken);
+            }
 
             // COMMIT — unlock advisory lock!
             await tx.CommitAsync(cancellationToken);
@@ -77,17 +79,26 @@ WHERE group_id = @group_id;", conn, tx);
         }
     }
 
-    private async Task<GroupOffsetId> InitializeOffset(NpgsqlConnection conn, NpgsqlTransaction tx, string groupId, CancellationToken ct)
+    private async Task CreateOffsetTableIfNotExists(NpgsqlConnection conn, CancellationToken cancellationToken)
     {
-        await using var initCmd = new NpgsqlCommand(@$"
-            INSERT INTO {tableSettings.GetQualifiedOffsetTableName} (group_id, group_offset)
-            VALUES (@group_id, '01KBQ8DYRBSQ11R20ZKRBYD2G9')
-            ON CONFLICT (group_id) DO NOTHING;", conn, tx);
+        await using var cmd = new NpgsqlCommand(sql.SqlCreateOffsetTable, conn);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private async Task<GroupOffsetId> InitializeOffset(
+        NpgsqlConnection conn,
+        NpgsqlTransaction tx,
+        string groupId,
+        int tenantId,
+        CancellationToken cancellationToken)
+    {
+        await using var initCmd = new NpgsqlCommand(sql.SqlInitOffset, conn, tx);
 
         initCmd.Parameters.AddWithValue("@group_id", groupId);
-        await initCmd.ExecuteNonQueryAsync(ct);
+        initCmd.Parameters.AddWithValue("@tenant_id", tenantId);
+        await initCmd.ExecuteNonQueryAsync(cancellationToken);
 
-        return new GroupOffsetId("01KBQ8DYRBSQ11R20ZKRBYD2G9");
+        return GroupOffsetId.Empty;
     }
 
 

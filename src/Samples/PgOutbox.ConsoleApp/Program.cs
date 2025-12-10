@@ -17,11 +17,8 @@ IHostBuilder builder = Host.CreateDefaultBuilder();
 
 builder.ConfigureServices(services => services
     .AddOutbox(builder => builder
-        .WithPartitioningSupport((_, sp) =>
-        {
-            sp.ForEachTenant = true;
-            sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2]);
-        })
+        .WithPartitioningSupport((_, sp)
+            => sp.WithTenantIds(1, 2))
         .WithDeliveries(builder => builder
             .AddDelivery<SomeMessageConsumer, SomeMessage>(string.Empty, (_, settings) =>
             {

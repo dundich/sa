@@ -8,7 +8,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
     public string DatabaseOutboxTableName => settings.DatabaseMsgTableName;
     public string DatabaseDeliveryTableName => settings.DatabaseDeliveryTableName;
     public string DatabaseErrorTableName => settings.DatabaseErrorTableName;
-    public string DatabaseGroupTableName => settings.DatabaseGroupTableName;
+    public string DatabaseGroupTableName => settings.DatabaseOffsetTableName;
 
     public string DatabaseTaskTableName => settings.DatabaseTaskTableName;
 
@@ -45,6 +45,8 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
     [
         "task_id BIGSERIAL PRIMARY KEY",
         "task_group_id TEXT NOT NULL",
+        // rw
+        "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
 
         // msg
         "msg_id CHAR(26) NOT NULL",
@@ -58,7 +60,6 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         "delivery_attempt int NOT NULL DEFAULT 0",
 
         "delivery_transact_id TEXT NOT NULL DEFAULT ''",
-        "delivery_lock_expires_on BIGINT NOT NULL DEFAULT 0",
 
         "delivery_status_code INT NOT NULL DEFAULT 0",
         "delivery_status_message TEXT NOT NULL DEFAULT ''",
@@ -75,7 +76,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         "delivery_id CHAR(26) NOT NULL",
         "delivery_status_code INT NOT NULL DEFAULT 0",
         "delivery_status_message TEXT NOT NULL DEFAULT ''",
-        "delivery_lock_expires_on BIGINT NOT NULL DEFAULT 0",
+        
 
         // copy
         "msg_id CHAR(26) NOT NULL",
@@ -85,8 +86,9 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         // copy
         "task_group_id TEXT NOT NULL",
         "task_transact_id TEXT NOT NULL DEFAULT ''",
-        
+        "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
 
+        // ref
         "error_id TEXT NOT NULL DEFAULT ''",
     ];
 
@@ -149,7 +151,8 @@ WITH next_task AS (
 UPDATE {settings.GetQualifiedTaskTableName()}
 SET
     delivery_status_code = CASE 
-        WHEN delivery_status_code = 0 THEN {DeliveryStatusCode.Processing}
+        WHEN delivery_status_code = 0 
+            THEN {DeliveryStatusCode.Processing}
         ELSE delivery_status_code
     END
     ,task_transact_id = @transact_id
@@ -186,14 +189,15 @@ WITH inserted_delivery AS (
     INSERT INTO {settings.GetQualifiedDeliveryTableName()} (
         delivery_id
         , delivery_status_code
-        , delivery_status_message
-        , delivery_lock_expires_on
+        , delivery_status_message        
         , delivery_transact_id
         , delivery_created_at
 
         , msg_id
         , msg_tenant
         , msg_part
+
+        , task_lock_expires_on
 
         , error_id
     )
@@ -205,18 +209,19 @@ WITH inserted_delivery AS (
 UPDATE {settings.GetQualifiedTaskTableName()} task
 SET
     delivery_id = inserted_delivery.delivery_id
-    , task.delivery_attempt = delivery_attempt + CASE
-        WHEN inserted_delivery.delivery_status_code <> {DeliveryStatusCode.Postpone} 
-            THEN 1
-            ELSE 0
-        END
+    , task.delivery_attempt = delivery_attempt 
+        + CASE 
+            WHEN inserted_delivery.delivery_status_code <> {DeliveryStatusCode.Postpone} 
+                THEN 1
+                ELSE 0
+          END
     , task.error_id = inserted_delivery.derror_id
 
     , task.delivery_status_code = inserted_delivery.delivery_status_code
     , task.delivery_status_message = inserted_delivery.delivery_status_message
     , task.delivery_created_at = inserted_delivery.delivery_created_at
 
-    , task.task_lock_expires_on = inserted_delivery.delivery_lock_expires_on
+    , task.task_lock_expires_on = inserted_delivery.task_lock_expires_on
 FROM 
     inserted_delivery
 WHERE 
@@ -237,7 +242,7 @@ WHERE
         List<string> values = [];
         for (int i = 0; i < count; i++)
         {
-            values.Add($"   (@id_{i},@st_{i},@msg_{i},@exp_{i},@tid,@cr_{i},@msgid_{i},@tnt,@prt,@err_{i})");
+            values.Add($"   (@id_{i},@st_{i},@msg_{i},@tid,@cr_{i},@msgid_{i},@tnt,@prt,@exp_{i},@err_{i})");
         }
         return string.Join(",\r\n", values);
     }
@@ -317,26 +322,64 @@ ON CONFLICT DO NOTHING
 
     public string SqlCreateOffsetTable =
 $"""
-CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
+CREATE TABLE IF NOT EXISTS {settings.GetQualifiedGroupTableName()}
 (
-    group_id TEXT PRIMARY KEY,
+    group_id TEXT,
+    tenant_id INT NOT NULL DEFAULT 0,
     group_offset CHAR(26) NOT NULL,
-    group_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    CONSTRAINT "pk_{settings.DatabaseGroupTableName}" PRIMARY KEY (group_id)
+    group_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT "pk_{settings.DatabaseOffsetTableName}" PRIMARY KEY (group_id, tenant_id)
 )
 ;
 """;
 
     public string SqlInsertOffset =
 $"""
-INSERT INTO {settings.GetQualifiedOffsetTableName} 
-    (group_id, group_offset)
+INSERT INTO {settings.GetQualifiedGroupTableName()} 
+    (group_id, tenant_id, group_offset)
 VALUES 
-    (@group_id, 0)
-ON CONFLICT (group_id) DO NOTHING;
+    (@group_id, @tenant_id, @group_offset)
+ON CONFLICT (group_id, tenant_id) DO NOTHING;
 ;
 """;
+
+
+    public string SqlSelectOffset =
+$"""
+SELECT group_offset 
+FROM {settings.GetQualifiedGroupTableName()} 
+WHERE 
+    group_id = @group_id 
+    AND tenant_id = @tenant_id
+;
+""";
+
+
+    public string SqlUpdateOffset = $"""
+UPDATE {settings.GetQualifiedGroupTableName()}
+SET 
+    group_offset = @group_offset, 
+    group_updated_at = NOW()
+WHERE 
+    group_id = @group_id
+    AND tenant_id = @tenant_id
+;
+""";
+
+
+    public string SqlInitOffset = $"""
+INSERT INTO {settings.GetQualifiedGroupTableName()} 
+    (group_id, tenant_id, group_offset)
+VALUES 
+    (@group_id,@tenant_id,'01KBQ8DYRBSQ11R20ZKRBYD2G9')
+ON CONFLICT (group_id, tenant_id) DO NOTHING
+;
+""";
+
+
+    public string SqlLockOffset = "SELECT pg_advisory_xact_lock(@key);";
 }
+
 
 internal sealed class CachedSqlParamNames : INamePrefixProvider
 {
@@ -345,7 +388,7 @@ internal sealed class CachedSqlParamNames : INamePrefixProvider
     public static string[] GetPrefixes() =>
     [
         "@id_",
-        "@oid_",
+        "@msgid_",
         "@err_",
         "@st_",
         "@msg_",

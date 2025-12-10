@@ -46,7 +46,7 @@ internal sealed class TenantMessageProcessor(
             settings.LockRenewal,
             async t =>
             {
-                var renewedFilter = filter with { NowDate = timeProvider.GetUtcNow() };
+                var renewedFilter = filter with { ToDate = timeProvider.GetUtcNow() };
                 await repository.ExtendDelivery(settings.LockDuration, renewedFilter, t);
             },
             cancellationToken: cancellationToken);

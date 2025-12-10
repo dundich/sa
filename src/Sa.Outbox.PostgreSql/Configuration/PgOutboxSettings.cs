@@ -59,9 +59,9 @@ public sealed class PgOutboxTableSettings
 
     /// <summary>
     /// Gets or sets the offset for receiving group messages.
-    /// Default is set to "outbox__$group".
+    /// Default is set to "outbox__offset$".
     /// </summary>
-    public string DatabaseGroupTableName { get; set; } = "outbox__group$";
+    public string DatabaseOffsetTableName { get; set; } = "outbox__offset$";
 
     /// <summary>
     /// Default is set to "outbox__$task".
@@ -96,7 +96,7 @@ public sealed class PgOutboxTableSettings
     /// Gets the fully qualified name of the offset table, including the schema.
     /// </summary>
     /// <returns>The qualified name of the offset table.</returns>
-    public string GetQualifiedOffsetTableName() => $@"{DatabaseSchemaName}.""{DatabaseGroupTableName}""";
+    public string GetQualifiedGroupTableName() => $@"{DatabaseSchemaName}.""{DatabaseOffsetTableName}""";
 
     /// <summary>
     /// Gets the fully qualified name of the error table, including the schema.

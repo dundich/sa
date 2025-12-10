@@ -12,7 +12,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     }
 
 
-    public class TestMessageConsumer : IConsumer<TestMessage>
+    class TestMessageConsumer : IConsumer<TestMessage>
     {
         private static readonly TestException s_err = new("test permanent error");
         public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
@@ -33,7 +33,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
             Services
                 .AddOutbox(builder
                     => builder.WithPartitioningSupport((_, sp)
-                        => sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
+                        => sp.WithTenantIds(1, 2)
                 )
                 .WithDeliveries(builder
                     => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>

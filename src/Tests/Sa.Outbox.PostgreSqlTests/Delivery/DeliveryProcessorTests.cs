@@ -3,9 +3,10 @@ using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IClassFixture<DeliveryProcessorTests.Fixture>
+public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
+    : IClassFixture<DeliveryProcessorTests.Fixture>
 {
-    public class TestMessageConsumer : IConsumer<TestMessage>
+    class TestMessageConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
@@ -22,15 +23,11 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IC
             Services
                 .AddOutbox(builder
                     => builder.WithPartitioningSupport((_, ps)
-                        => ps.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
+                        => ps.WithTenantIds(1, 2)
                 )
                 .WithDeliveries(builder
-                    => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
+                    => builder.AddDelivery<TestMessageConsumer, TestMessage>("proc_test", (_, s) =>
                     {
-                        s
-                            .ConsumeSettings
-                            .WithForEachTenant();
-
                         ConsumeSettings = s.ConsumeSettings;
                     })
                 )
@@ -38,7 +35,6 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IC
         }
 
         public ConsumeSettings ConsumeSettings { get; set; } = default!;
-
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }

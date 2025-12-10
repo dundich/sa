@@ -10,7 +10,7 @@ namespace Sa.Outbox;
 /// <param name="TenantId">Gets the identifier for the tenant associated with the Outbox message.</param>
 /// <param name="Part">Gets the part identifier for the Outbox message.</param>
 /// <param name="FromDate">Gets the starting date and time for filtering messages.Only messages created on or after this date will be included.</param>
-/// <param name="NowDate">Gets the current date and time for filtering messages.</param>
+/// <param name="ToDate">Gets the current date and time for filtering messages.</param>
 public sealed record OutboxMessageFilter(
     string TransactId,
     string ConsumerGroupId,
@@ -18,5 +18,5 @@ public sealed record OutboxMessageFilter(
     int TenantId,
     string Part,
     DateTimeOffset FromDate,
-    DateTimeOffset NowDate
+    DateTimeOffset ToDate
 );

@@ -13,8 +13,8 @@ internal sealed class ExtendDeliveryCommand(
     {
 
         long typeCode = await hashResolver.GetCode(filter.PayloadType, cancellationToken);
-        long now = filter.NowDate.ToUnixTimeSeconds();
-        long lockExpiresOn = (filter.NowDate + lockExpiration).ToUnixTimeSeconds();
+        long now = filter.ToDate.ToUnixTimeSeconds();
+        long lockExpiresOn = (filter.ToDate + lockExpiration).ToUnixTimeSeconds();
         long fromDate = filter.FromDate.ToUnixTimeSeconds();
 
         return await dataSource.ExecuteNonQuery(sqlTemplate.SqlExtendDelivery,

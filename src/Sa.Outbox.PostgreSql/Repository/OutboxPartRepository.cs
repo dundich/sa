@@ -3,13 +3,18 @@ using Sa.Partitional.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
-internal sealed class OutboxPartRepository(IPartitionManager partManager, PgOutboxTableSettings tableSettings): IOutboxPartRepository
+internal sealed class OutboxPartRepository(IPartitionManager partManager, PgOutboxTableSettings tableSettings)
+    : IOutboxPartRepository
 {
+    public Task<int> EnsureMsgParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
+        => EnsureParts(tableSettings.DatabaseMsgTableName, outboxParts, cancellationToken);
+
+    public Task<int> EnsureTaskParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
+        => EnsureParts(tableSettings.DatabaseTaskTableName, outboxParts, cancellationToken);
+
     public Task<int> EnsureDeliveryParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
         => EnsureParts(tableSettings.DatabaseDeliveryTableName, outboxParts, cancellationToken);
 
-    public Task<int> EnsureOutboxParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
-        => EnsureParts(tableSettings.DatabaseMsgTableName, outboxParts, cancellationToken);
 
     public async Task<int> EnsureErrorParts(IEnumerable<DateTimeOffset> dates, CancellationToken cancellationToken)
     {

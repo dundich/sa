@@ -5,7 +5,7 @@ namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
 public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixture) : IClassFixture<DeliveryLongProcessorTests.Fixture>
 {
-    public class TestMessageConsumer : IConsumer<TestMessage>
+    class TestMessageConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
@@ -24,7 +24,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
             Services.AddOutbox(builder
                 => builder
                     .WithPartitioningSupport((_, sp)
-                        => sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
+                        => sp.WithTenantIds(1, 2)
                     )
                     .WithDeliveries(builder
                         => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
