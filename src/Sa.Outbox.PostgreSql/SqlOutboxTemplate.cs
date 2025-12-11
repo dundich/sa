@@ -43,11 +43,10 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
 
     public readonly static string[] TaskQueueFields =
     [
-        "task_id BIGSERIAL PRIMARY KEY",
+        "task_id BIGSERIAL",
         "consumer_group TEXT NOT NULL",
         // rw
         "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
-        "task_created_at BIGINT NOT NULL DEFAULT 0",
 
         // msg
         "msg_id CHAR(26) NOT NULL",
@@ -85,7 +84,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         "msg_part TEXT NOT NULL",
 
         // copy
-        "queue_group_id TEXT NOT NULL",
+        "consumer_group TEXT NOT NULL",
         "task_transact_id TEXT NOT NULL DEFAULT ''",
         "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
 
@@ -130,8 +129,7 @@ FROM STDIN (FORMAT BINARY)
 
 
     static readonly string s_InTaskProcessing = $"""
- (delivery_status_code < {DeliveryStatusCode.Ok}        
- OR delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.Status499})
+ (delivery_status_code < {DeliveryStatusCode.Ok} OR delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.Status499})
 """;
 
 
@@ -328,7 +326,7 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
 (
     consumer_group TEXT,
     tenant_id INT NOT NULL DEFAULT 0,
-    group_offset CHAR(26) NOT NULL,
+    group_offset CHAR(26) NOT NULL DEFAULT '{CachedSqlParamNames.EmptyOffset}',
     group_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT "pk_{settings.DatabaseOffsetTableName}" PRIMARY KEY (consumer_group, tenant_id)
 )
@@ -386,7 +384,7 @@ ON CONFLICT (consumer_group, tenant_id) DO NOTHING
 WITH inserted_rows AS(
     INSERT INTO {settings.GetQualifiedTaskTableName()}
         (consumer_group,task_created_at,msg_id,msg_part,tenant_id,msg_payload_id,msg_created_at)
-    SELECT (
+    SELECT
         {CachedSqlParamNames.ConsumerGroupId}
         ,{CachedSqlParamNames.NowDate}
         ,msg_id
@@ -394,19 +392,19 @@ WITH inserted_rows AS(
         ,{CachedSqlParamNames.TenantId}
         ,msg_payload_id
         ,msg_created_at
-    )
     FROM {settings.GetQualifiedMsgTableName()}
     WHERE
         msg_part = {CachedSqlParamNames.MsgPart}
         AND tenant_id = {CachedSqlParamNames.TenantId}
+        AND msg_created_at >= {CachedSqlParamNames.FromDate}
         AND msg_id > {CachedSqlParamNames.GroupOffset}
-    OREDR BY msg_id
+    ORDER BY msg_id
     LIMIT {CachedSqlParamNames.Limit}
-    RETURNING id
+    RETURNING msg_id
 )
 SELECT
     COUNT(*) as copied_rows,
-    MAX(id) as max_id
+    MAX(msg_id) as max_id
 FROM inserted_rows
 ;
 """;

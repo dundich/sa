@@ -1,6 +1,7 @@
 using System.Data;
 using Npgsql;
 using Sa.Data.PostgreSql;
+using Sa.Partitional.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
@@ -8,35 +9,36 @@ namespace Sa.Outbox.PostgreSql.Repository;
 internal sealed class ConsumeLoader(
     IPgDataSource pg,
     SqlOutboxTemplate sql,
+    IPartitionManager partitionManager,
     TimeProvider timeProvider) : IConsumeLoader
 {
-    private bool _isInit = false;
 
-    public async Task<LoadGroupResult> LoadConsumerGroup(
+    public async Task<LoadGroupResult> LoadGroup(
         OutboxMessageFilter filter,
         int batchSize,
         CancellationToken cancellationToken = default)
     {
         if (batchSize < 1) return LoadGroupResult.Empty;
 
-        ConsumeTenantGroup pair = new(filter.ConsumerGroupId, filter.TenantId);
 
-        await using var conn = await pg.OpenDbConnection(cancellationToken);
         try
         {
+            var now = timeProvider.GetUtcNow();
+
+            await partitionManager.EnsureParts(sql.DatabaseTaskTableName, now, [filter.TenantId, filter.ConsumerGroupId], cancellationToken);
+
+            ConsumeTenantGroup pair = new(filter.ConsumerGroupId, filter.TenantId);
+
+            await using var conn = await pg.OpenDbConnection(cancellationToken);
+
             await using var tx = await conn.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
             await LockOffset(pair, conn, tx, cancellationToken);
 
-            if (!_isInit)
-            {
-                await CreateOffsetTableIfNotExists(conn, cancellationToken);
-                _isInit = true;
-            }
 
             GroupOffset currentOffset = await GetOffset(pair, conn, tx, cancellationToken);
 
-            var loadResult = await LoadGroupByOffset(currentOffset, filter, batchSize, conn, tx, cancellationToken);
+            var loadResult = await LoadGroupByOffset(currentOffset, filter, batchSize, now, conn, tx, cancellationToken);
 
             if (loadResult.GroupOffset.OffsetId != currentOffset.OffsetId)
             {
@@ -58,13 +60,11 @@ internal sealed class ConsumeLoader(
         GroupOffset currentOffset,
         OutboxMessageFilter filter,
         int batchSize,
+        DateTimeOffset now,
         NpgsqlConnection conn,
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
     {
-
-        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-
         await using var command = new NpgsqlCommand(sql.SqlLoadConsumerGroup, conn, tx);
 
         command.Parameters.AddWithValue(CachedSqlParamNames.TenantId, filter.TenantId);
@@ -72,7 +72,8 @@ internal sealed class ConsumeLoader(
         command.Parameters.AddWithValue(CachedSqlParamNames.ConsumerGroupId, filter.ConsumerGroupId);
         command.Parameters.AddWithValue(CachedSqlParamNames.GroupOffset, currentOffset.OffsetId);
         command.Parameters.AddWithValue(CachedSqlParamNames.Limit, batchSize);
-        command.Parameters.AddWithValue(CachedSqlParamNames.NowDate, now);
+        command.Parameters.AddWithValue(CachedSqlParamNames.NowDate, now.ToUnixTimeSeconds());
+        command.Parameters.AddWithValue(CachedSqlParamNames.FromDate, filter.FromDate.ToUnixTimeSeconds());
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
@@ -133,12 +134,6 @@ internal sealed class ConsumeLoader(
         return currentOffset;
     }
 
-    private async Task CreateOffsetTableIfNotExists(NpgsqlConnection conn, CancellationToken cancellationToken)
-    {
-        await using var cmd = new NpgsqlCommand(sql.SqlCreateOffsetTable, conn);
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
-    }
-
     private async Task<GroupOffset> InitializeOffset(
         ConsumeTenantGroup pair,
         NpgsqlConnection conn,
@@ -155,7 +150,7 @@ internal sealed class ConsumeLoader(
     }
 
 
-    private static int HashText(ConsumeTenantGroup pair)
+    public static int HashText(ConsumeTenantGroup pair)
     {
         uint hash = 0xffffffff;
         foreach (char c in pair.ToString())

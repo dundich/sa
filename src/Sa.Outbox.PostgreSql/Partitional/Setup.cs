@@ -20,7 +20,7 @@ internal static class Setup
             {
                 ITableBuilder outboxTableBuilder = schema
                     .AddTable(sql.DatabaseMsgTableName, SqlOutboxTemplate.MsgFields)
-                    .PartByList("msg_tenant", "msg_part")
+                    .PartByList("tenant_id", "msg_part")
                     .TimestampAs("msg_created_at")
                     .WithFillFactor(100) // insert only
                     .AddPostSql(() => sql.SqlCreateTypeTable)
@@ -28,7 +28,7 @@ internal static class Setup
 
                 ITableBuilder queueTableBuilder = schema
                     .AddTable(sql.DatabaseTaskTableName, SqlOutboxTemplate.TaskQueueFields)
-                    .PartByList("msg_tenant", "queue_group_id")
+                    .PartByList("tenant_id", "consumer_group")
                     .TimestampAs("task_created_at")
                     .WithFillFactor(60)
                     .AddPostSql(() => sql.SqlCreateOffsetTable)
@@ -36,7 +36,7 @@ internal static class Setup
 
                 ITableBuilder deliveryTableBuilder = schema
                     .AddTable(sql.DatabaseDeliveryTableName, SqlOutboxTemplate.DeliveryFields)
-                    .PartByList("msg_tenant", "queue_group_id")
+                    .PartByList("tenant_id", "consumer_group")
                     .TimestampAs("delivery_created_at")
                     .WithFillFactor(60)
                 ;

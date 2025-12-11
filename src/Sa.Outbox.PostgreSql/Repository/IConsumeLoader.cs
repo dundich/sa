@@ -17,5 +17,5 @@ public sealed record LoadGroupResult(int CopiedRows, GroupOffset GroupOffset)
 
 internal interface IConsumeLoader
 {
-    Task<LoadGroupResult> LoadConsumerGroup(OutboxMessageFilter filter, int batchSize, CancellationToken cancellationToken = default);
+    Task<LoadGroupResult> LoadGroup(OutboxMessageFilter filter, int batchSize, CancellationToken cancellationToken = default);
 }

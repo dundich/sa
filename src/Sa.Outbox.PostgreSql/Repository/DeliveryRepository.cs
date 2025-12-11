@@ -22,18 +22,9 @@ internal sealed class DeliveryRepository(
     {
         if (cancellationToken.IsCancellationRequested || batchSize < 1) return 0;
 
-        var loadResult = await loader.LoadConsumerGroup(filter, batchSize, cancellationToken);
+        var loadResult = await loader.LoadGroup(filter, batchSize, cancellationToken);
 
         if (loadResult == LoadGroupResult.Empty) return 0;
-
-
-        // await partRepository.EnsureDeliveryParts(parts, cancellationToken);
-
-
-        // consume foreach group
-
-        //1) check consume table;
-        //2) check part;
 
 
         return await startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
