@@ -10,7 +10,7 @@ internal sealed class TaskMigrationSupport(IOutboxPartitionalSupport? partitiona
     {
         if (partitionalSupport == null) return [];
 
-        IReadOnlyCollection<OutboxTenantPartPair> parts = await partitionalSupport.GetOutboxGroups(cancellationToken);
+        IReadOnlyCollection<OutboxTenantPartPair> parts = await partitionalSupport.GetTaskParts(cancellationToken);
 
         return [.. parts.Select(c => new StrOrNum[] { c.TenantId, c.Part })];
     }

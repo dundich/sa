@@ -5,20 +5,20 @@ namespace Sa.Outbox.PostgreSql;
 internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
 {
     public string DatabaseSchemaName => settings.DatabaseSchemaName;
-    public string DatabaseOutboxTableName => settings.DatabaseMsgTableName;
+    public string DatabaseMsgTableName => settings.DatabaseMsgTableName;
     public string DatabaseDeliveryTableName => settings.DatabaseDeliveryTableName;
     public string DatabaseErrorTableName => settings.DatabaseErrorTableName;
-    public string DatabaseGroupTableName => settings.DatabaseOffsetTableName;
+    public string DatabaseOffsetTableName => settings.DatabaseOffsetTableName;
 
     public string DatabaseTaskTableName => settings.DatabaseTaskTableName;
 
 
-    public readonly static string[] OutboxFields =
+    public readonly static string[] MsgFields =
     [
         // ulid
         "msg_id CHAR(26) NOT NULL",
 
-        "msg_tenant INT NOT NULL DEFAULT 0",
+        "tenant_id INT NOT NULL DEFAULT 0",
         "msg_part TEXT NOT NULL",
 
         "msg_payload_id TEXT NOT NULL",
@@ -41,22 +41,23 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
     ];
 
 
-    public readonly static string[] TaskFields =
+    public readonly static string[] TaskQueueFields =
     [
         "task_id BIGSERIAL PRIMARY KEY",
-        "task_group_id TEXT NOT NULL",
+        "consumer_group TEXT NOT NULL",
         // rw
         "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
+        "task_created_at BIGINT NOT NULL DEFAULT 0",
 
         // msg
         "msg_id CHAR(26) NOT NULL",
         "msg_part TEXT NOT NULL",
-        "msg_tenant INT NOT NULL DEFAULT 0",
+        "tenant_id INT NOT NULL DEFAULT 0",
         "msg_payload_id TEXT NOT NULL",
         "msg_created_at  BIGINT NOT NULL DEFAULT 0",
         
         // -- delivery
-        "delivery_id CHAR(26) NOT NULL DEFAULT ''",
+        $"delivery_id CHAR(26) NOT NULL DEFAULT '{CachedSqlParamNames.EmptyOffset}'",
         "delivery_attempt int NOT NULL DEFAULT 0",
 
         "delivery_transact_id TEXT NOT NULL DEFAULT ''",
@@ -80,11 +81,11 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
 
         // copy
         "msg_id CHAR(26) NOT NULL",
-        "msg_tenant INT NOT NULL DEFAULT 0",
+        "tenant_id INT NOT NULL DEFAULT 0",
         "msg_part TEXT NOT NULL",
 
         // copy
-        "task_group_id TEXT NOT NULL",
+        "queue_group_id TEXT NOT NULL",
         "task_transact_id TEXT NOT NULL DEFAULT ''",
         "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
 
@@ -115,7 +116,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
 $"""
 COPY {settings.GetQualifiedMsgTableName()} (
     msg_id
-    ,msg_tenant
+    ,tenant_id
     ,msg_part
     ,msg_payload_id
     ,msg_payload_type
@@ -128,9 +129,10 @@ FROM STDIN (FORMAT BINARY)
 """;
 
 
-    static readonly string s_InTaskProcessing = @$"
-(delivery_status_code < {DeliveryStatusCode.Ok} 
- OR delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.Status499})";
+    static readonly string s_InTaskProcessing = $"""
+ (delivery_status_code < {DeliveryStatusCode.Ok}        
+ OR delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.Status499})
+""";
 
 
     public string SqlLockAndSelect =
@@ -138,14 +140,14 @@ $"""
 WITH next_task AS (
     SELECT msg_id FROM {settings.GetQualifiedTaskTableName()}
     WHERE
-        msg_tenant = @tenant
-        AND msg_part = @part
-        AND msg_payload_type = @payload_type
+        tenant_id = {CachedSqlParamNames.TenantId}
+        AND msg_part = {CachedSqlParamNames.MsgPart}
+        AND msg_payload_type = {CachedSqlParamNames.MsgPayloadType}
         
-        AND msg_created_at >= @from_date
+        AND msg_created_at >= {CachedSqlParamNames.FromDate}
         AND {s_InTaskProcessing}
-        AND task_lock_expires_on < @now
-    LIMIT @limit
+        AND task_lock_expires_on < {CachedSqlParamNames.NowDate}
+    LIMIT {CachedSqlParamNames.Limit}
     FOR UPDATE SKIP LOCKED
 )
 UPDATE {settings.GetQualifiedTaskTableName()}
@@ -155,15 +157,15 @@ SET
             THEN {DeliveryStatusCode.Processing}
         ELSE delivery_status_code
     END
-    ,task_transact_id = @transact_id
-    ,task_lock_expires_on = @lock_expires_on
+    ,task_transact_id = {CachedSqlParamNames.DeliveryTransactId}
+    ,task_lock_expires_on = {CachedSqlParamNames.LockExpiresOn}
 FROM 
     next_task
 WHERE 
     {settings.GetQualifiedTaskTableName()}.msg_id = next_task.msg_id
 RETURNING 
     {settings.GetQualifiedTaskTableName()}.msg_id
-    ,msg_tenant
+    ,tenant_id
     ,msg_part
     ,msg_payload
     ,msg_payload_id
@@ -194,7 +196,7 @@ WITH inserted_delivery AS (
         , delivery_created_at
 
         , msg_id
-        , msg_tenant
+        , tenant_id
         , msg_part
 
         , task_lock_expires_on
@@ -225,12 +227,12 @@ SET
 FROM 
     inserted_delivery
 WHERE 
-    msg_tenant = @tnt
-    AND msg_part = @prt
+    tenant_id = {CachedSqlParamNames.TenantId}
+    AND msg_part = {CachedSqlParamNames.MsgPart}
     AND msg_id = inserted_delivery.delivery_msg_id
 
-    AND task_created_at >= @from
-    AND task_transact_id = @tid
+    AND task_created_at >= {CachedSqlParamNames.FromDate}
+    AND delivery_transact_id = {CachedSqlParamNames.DeliveryTransactId}
 ;
 
 """;
@@ -252,16 +254,16 @@ WHERE
 $"""
 UPDATE {settings.GetQualifiedTaskTableName()}
 SET 
-    task_lock_expires_on = @lock_expires_on
+    task_lock_expires_on = {CachedSqlParamNames.LockExpiresOn}
 WHERE
-    msg_tenant = @tenant 
-    AND msg_part = @part 
-    AND msg_payload_type = @payload_type
-    AND msg_created_at >= @from_date
+    tenant_id = {CachedSqlParamNames.TenantId} 
+    AND msg_part = {CachedSqlParamNames.MsgPart}
+    AND msg_payload_type = {CachedSqlParamNames.MsgPayloadType}
+    AND msg_created_at >= {CachedSqlParamNames.FromDate}
 
     AND {s_InTaskProcessing}
-    AND task_transact_id = @transact_id
-    AND task_lock_expires_on > @now
+    AND delivery_transact_id = {CachedSqlParamNames.DeliveryTransactId}
+    AND task_lock_expires_on > {CachedSqlParamNames.NowDate}
 
 FOR UPDATE SKIP LOCKED
 ;
@@ -291,7 +293,7 @@ $"""
 INSERT INTO {settings.GetQualifiedTypeTableName()} 
     (type_id, type_name)
 VALUES
-    (@type_id,@type_name)
+    ({CachedSqlParamNames.TypeId},{CachedSqlParamNames.TypeName})
 ON CONFLICT DO NOTHING
 ;
 """;
@@ -322,67 +324,114 @@ ON CONFLICT DO NOTHING
 
     public string SqlCreateOffsetTable =
 $"""
-CREATE TABLE IF NOT EXISTS {settings.GetQualifiedGroupTableName()}
+CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
 (
-    group_id TEXT,
+    consumer_group TEXT,
     tenant_id INT NOT NULL DEFAULT 0,
     group_offset CHAR(26) NOT NULL,
     group_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT "pk_{settings.DatabaseOffsetTableName}" PRIMARY KEY (group_id, tenant_id)
+    CONSTRAINT "pk_{settings.DatabaseOffsetTableName}" PRIMARY KEY (consumer_group, tenant_id)
 )
 ;
 """;
 
     public string SqlInsertOffset =
 $"""
-INSERT INTO {settings.GetQualifiedGroupTableName()} 
-    (group_id, tenant_id, group_offset)
+INSERT INTO {settings.GetQualifiedOffsetTableName()} 
+    (consumer_group, tenant_id, group_offset)
 VALUES 
-    (@group_id, @tenant_id, @group_offset)
-ON CONFLICT (group_id, tenant_id) DO NOTHING;
+    ({CachedSqlParamNames.ConsumerGroupId},{CachedSqlParamNames.TenantId},{CachedSqlParamNames.GroupOffset})
+ON CONFLICT (consumer_group, tenant_id) DO NOTHING;
 ;
 """;
 
 
     public string SqlSelectOffset =
 $"""
-SELECT group_offset 
-FROM {settings.GetQualifiedGroupTableName()} 
+SELECT consumer_group 
+FROM {settings.GetQualifiedOffsetTableName()} 
 WHERE 
-    group_id = @group_id 
-    AND tenant_id = @tenant_id
+    consumer_group = {CachedSqlParamNames.ConsumerGroupId} 
+    AND tenant_id = {CachedSqlParamNames.TenantId}
 ;
 """;
 
 
     public string SqlUpdateOffset = $"""
-UPDATE {settings.GetQualifiedGroupTableName()}
+UPDATE {settings.GetQualifiedOffsetTableName()}
 SET 
-    group_offset = @group_offset, 
+    group_offset = {CachedSqlParamNames.GroupOffset}, 
     group_updated_at = NOW()
 WHERE 
-    group_id = @group_id
-    AND tenant_id = @tenant_id
+    consumer_group = {CachedSqlParamNames.ConsumerGroupId}
+    AND tenant_id = {CachedSqlParamNames.TenantId}
 ;
 """;
 
 
     public string SqlInitOffset = $"""
-INSERT INTO {settings.GetQualifiedGroupTableName()} 
-    (group_id, tenant_id, group_offset)
+INSERT INTO {settings.GetQualifiedOffsetTableName()} 
+    (consumer_group, tenant_id, group_offset)
 VALUES 
-    (@group_id,@tenant_id,'01KBQ8DYRBSQ11R20ZKRBYD2G9')
-ON CONFLICT (group_id, tenant_id) DO NOTHING
+    ({CachedSqlParamNames.ConsumerGroupId},{CachedSqlParamNames.TenantId},'{CachedSqlParamNames.EmptyOffset}')
+ON CONFLICT (consumer_group, tenant_id) DO NOTHING
 ;
 """;
 
 
-    public string SqlLockOffset = "SELECT pg_advisory_xact_lock(@key);";
+    public string SqlLockOffset = $"SELECT pg_advisory_xact_lock({CachedSqlParamNames.OffsetKey});";
+
+
+    public string SqlLoadConsumerGroup = $"""
+WITH inserted_rows AS(
+    INSERT INTO {settings.GetQualifiedTaskTableName()}
+        (consumer_group,task_created_at,msg_id,msg_part,tenant_id,msg_payload_id,msg_created_at)
+    SELECT (
+        {CachedSqlParamNames.ConsumerGroupId}
+        ,{CachedSqlParamNames.NowDate}
+        ,msg_id
+        ,{CachedSqlParamNames.MsgPart}
+        ,{CachedSqlParamNames.TenantId}
+        ,msg_payload_id
+        ,msg_created_at
+    )
+    FROM {settings.GetQualifiedMsgTableName()}
+    WHERE
+        msg_part = {CachedSqlParamNames.MsgPart}
+        AND tenant_id = {CachedSqlParamNames.TenantId}
+        AND msg_id > {CachedSqlParamNames.GroupOffset}
+    OREDR BY msg_id
+    LIMIT {CachedSqlParamNames.Limit}
+    RETURNING id
+)
+SELECT
+    COUNT(*) as copied_rows,
+    MAX(id) as max_id
+FROM inserted_rows
+;
+""";
 }
 
 
 internal sealed class CachedSqlParamNames : INamePrefixProvider
 {
+
+    public const string EmptyOffset = "01KBQ8DYRBSQ11R20ZKRBYD2G9";
+
+    public const string TenantId = "@tenant";
+    public const string GroupOffset = "@group_offset";
+    public const string ConsumerGroupId = "@consumer_group";
+    public const string MsgPart = "@part";
+    public const string TypeId = "@type_id";
+    public const string TypeName = "@type_name";
+    public const string MsgPayloadType = "@payload_type";
+    public const string FromDate = "@from_date";
+    public const string DeliveryTransactId = "@transact_id";
+    public const string NowDate = "@now";
+    public const string OffsetKey = "@key";
+    public const string Limit = "@limit";
+    public const string LockExpiresOn = "@lock_expires_on";
+
     public static int MaxIndex => 512;
 
     public static string[] GetPrefixes() =>

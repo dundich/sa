@@ -38,7 +38,6 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
                 .WithDeliveries(builder
                     => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
                     {
-                        s.ConsumeSettings.WithForEachTenant();
                         ConsumeSettings = s.ConsumeSettings;
                     })
                 )

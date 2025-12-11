@@ -40,7 +40,7 @@ internal sealed class MsgBulkCommand(
     /// COPY
     /// 
     /// msg_id
-    /// ,msg_tenant
+    /// ,tenant_id
     /// ,msg_part
     /// ,msg_payload_id
     /// ,msg_payload_type

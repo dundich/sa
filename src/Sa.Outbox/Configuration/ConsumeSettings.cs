@@ -29,12 +29,6 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
     public TimeSpan LockRenewal { get; private set; } = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// Repeat extract for each tenant
-    /// <seealso cref="IOutboxBuilder.WithPartitioningSupport"/>
-    /// </summary>
-    public bool ForEachTenant { get; private set; } = true;
-
-    /// <summary>
     /// Select outbox messages for processing for the period
     /// </summary>
     public TimeSpan LookbackInterval { get; private set; } = TimeSpan.FromDays(7);
@@ -67,12 +61,6 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
     public ConsumeSettings WithLockRenewal(TimeSpan renewal)
     {
         LockRenewal = renewal;
-        return this;
-    }
-
-    public ConsumeSettings WithForEachTenant(bool forEachTenant = true)
-    {
-        ForEachTenant = forEachTenant;
         return this;
     }
 

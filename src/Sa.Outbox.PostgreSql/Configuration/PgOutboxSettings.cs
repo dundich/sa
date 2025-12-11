@@ -64,7 +64,7 @@ public sealed class PgOutboxTableSettings
     public string DatabaseOffsetTableName { get; set; } = "outbox__offset$";
 
     /// <summary>
-    /// Default is set to "outbox__$task".
+    /// Default is set to "outbox__task$".
     /// </summary>
     public string DatabaseTaskTableName { get; set; } = "outbox__task$";
 
@@ -96,7 +96,7 @@ public sealed class PgOutboxTableSettings
     /// Gets the fully qualified name of the offset table, including the schema.
     /// </summary>
     /// <returns>The qualified name of the offset table.</returns>
-    public string GetQualifiedGroupTableName() => $@"{DatabaseSchemaName}.""{DatabaseOffsetTableName}""";
+    public string GetQualifiedOffsetTableName() => $@"{DatabaseSchemaName}.""{DatabaseOffsetTableName}""";
 
     /// <summary>
     /// Gets the fully qualified name of the error table, including the schema.

@@ -31,8 +31,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
                         {
                             s.ConsumeSettings
                                 .WithLockDuration(TimeSpan.FromMilliseconds(300))
-                                .WithLockRenewal(TimeSpan.FromMilliseconds(100))
-                                .WithForEachTenant();
+                                .WithLockRenewal(TimeSpan.FromMilliseconds(100));
 
                             ConsumeSettings = s.ConsumeSettings;
                         })

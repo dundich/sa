@@ -1,5 +1,5 @@
-using Sa.Data.PostgreSql;
 using System.Data;
+using Sa.Data.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 

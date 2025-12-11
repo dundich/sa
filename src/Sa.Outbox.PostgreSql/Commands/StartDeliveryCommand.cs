@@ -1,9 +1,9 @@
+using System.Data;
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.PostgreSql.TypeHashResolve;
-using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
@@ -28,14 +28,14 @@ internal sealed class StartDeliveryCommand(
             writeBuffer.Span[i] = deliveryMessage;
         },
         [
-            new("tenant", filter.TenantId)
-            , new("part", filter.Part)
-            , new("from_date", filter.FromDate.ToUnixTimeSeconds())
-            , new("payload_type", typeCode)
-            , new("transact_id", filter.TransactId)
-            , new("limit", batchSize)
-            , new("lock_expires_on", (filter.ToDate + lockDuration).ToUnixTimeSeconds())
-            , new("now", filter.ToDate.ToUnixTimeSeconds())
+            new(CachedSqlParamNames.TenantId, filter.TenantId)
+            , new(CachedSqlParamNames.MsgPart, filter.Part)
+            , new(CachedSqlParamNames.FromDate, filter.FromDate.ToUnixTimeSeconds())
+            , new(CachedSqlParamNames.MsgPayloadType, typeCode)
+            , new(CachedSqlParamNames.DeliveryTransactId, filter.TransactId)
+            , new(CachedSqlParamNames.Limit, batchSize)
+            , new(CachedSqlParamNames.LockExpiresOn, (filter.ToDate + lockDuration).ToUnixTimeSeconds())
+            , new(CachedSqlParamNames.NowDate, filter.ToDate.ToUnixTimeSeconds())
         ]
         , cancellationToken);
     }
@@ -84,9 +84,9 @@ internal sealed class StartDeliveryCommand(
 
         private static DeliveryStatus ReadStatus(NpgsqlDataReader reader)
         {
-            int code = reader.GetInt32("outbox_delivery_status_code");
-            string message = reader.GetString("outbox_delivery_status_message");
-            DateTimeOffset createAt = reader.GetInt64("outbox_delivery_created_at").ToDateTimeOffsetFromUnixTimestamp();
+            int code = reader.GetInt32("delivery_status_code");
+            string message = reader.GetString("delivery_status_message");
+            DateTimeOffset createAt = reader.GetInt64("delivery_created_at").ToDateTimeOffsetFromUnixTimestamp();
             return new DeliveryStatus(code, message, createAt);
         }
     }

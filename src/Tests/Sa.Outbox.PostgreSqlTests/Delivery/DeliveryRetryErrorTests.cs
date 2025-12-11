@@ -36,7 +36,6 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
                         => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
                         {
                             s.ConsumeSettings
-                                .WithForEachTenant()
                                 .WithLockDuration(TimeSpan.FromMilliseconds(0))
                                 .WithLockRenewal(TimeSpan.FromMinutes(10))
                                 .WithMaxDeliveryAttempts(MaxDeliveryAttempts);

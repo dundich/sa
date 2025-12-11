@@ -74,9 +74,9 @@ internal sealed class FinishDeliveryCommand(
                 ;
         }
 
-        cmd.Parameters.Add(new("@tnt", filter.TenantId));
-        cmd.Parameters.Add(new("@prt", filter.Part));
-        cmd.Parameters.Add(new("@from", filter.FromDate.ToUnixTimeSeconds()));
-        cmd.Parameters.Add(new("@tid", filter.TransactId));
+        cmd.Parameters.Add(new(CachedSqlParamNames.TenantId, filter.TenantId));
+        cmd.Parameters.Add(new(CachedSqlParamNames.MsgPart, filter.Part));
+        cmd.Parameters.Add(new(CachedSqlParamNames.FromDate, filter.FromDate.ToUnixTimeSeconds()));
+        cmd.Parameters.Add(new(CachedSqlParamNames.DeliveryTransactId, filter.TransactId));
     }
 }

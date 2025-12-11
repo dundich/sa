@@ -27,9 +27,8 @@ internal sealed class DeliveryRelay(
         {
             Memory<OutboxDeliveryMessage<TMessage>> slice = buffer.AsMemory(0, batchSize);
 
-            return settings.ForEachTenant
-              ? await ProcessMultipleTenants(slice, settings, cancellationToken)
-              : await messageProcessor.ProcessTenantMessages(settings, slice, 0, cancellationToken);
+            return await ProcessMultipleTenants(slice, settings, cancellationToken);
+
         }
         finally
         {
@@ -44,6 +43,11 @@ internal sealed class DeliveryRelay(
     {
         int count = 0;
         int[] tenantIds = await partCache.GetTenantIds(cancellationToken);
+
+        if (tenantIds.Length == 0)
+        {
+            return await messageProcessor.ProcessTenantMessages(settings, slice, 0, cancellationToken);
+        }
 
         foreach (int tenantId in tenantIds)
         {

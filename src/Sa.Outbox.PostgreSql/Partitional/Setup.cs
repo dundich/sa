@@ -8,10 +8,10 @@ internal static class Setup
 {
     public static IServiceCollection AddOutboxPartitional(this IServiceCollection services)
     {
-        services.TryAddTransient<OutboxMigrationSupport>();
+        services.TryAddTransient<MsgMigrationSupport>();
         services.TryAddTransient<TaskMigrationSupport>();
 
-        services.AddPartitional((sp, builder) =>
+        _ = services.AddPartitional((sp, builder) =>
         {
             SqlOutboxTemplate sql = sp.GetRequiredService<SqlOutboxTemplate>();
 
@@ -19,16 +19,16 @@ internal static class Setup
             builder.AddSchema(sql.DatabaseSchemaName, schema =>
             {
                 ITableBuilder outboxTableBuilder = schema
-                    .AddTable(sql.DatabaseOutboxTableName, SqlOutboxTemplate.OutboxFields)
+                    .AddTable(sql.DatabaseMsgTableName, SqlOutboxTemplate.MsgFields)
                     .PartByList("msg_tenant", "msg_part")
                     .TimestampAs("msg_created_at")
                     .WithFillFactor(100) // insert only
                     .AddPostSql(() => sql.SqlCreateTypeTable)
                 ;
 
-                ITableBuilder taskTableBuilder = schema
-                    .AddTable(sql.DatabaseTaskTableName, SqlOutboxTemplate.TaskFields)
-                    .PartByList("msg_tenant", "task_group_id")
+                ITableBuilder queueTableBuilder = schema
+                    .AddTable(sql.DatabaseTaskTableName, SqlOutboxTemplate.TaskQueueFields)
+                    .PartByList("msg_tenant", "queue_group_id")
                     .TimestampAs("task_created_at")
                     .WithFillFactor(60)
                     .AddPostSql(() => sql.SqlCreateOffsetTable)
@@ -36,7 +36,7 @@ internal static class Setup
 
                 ITableBuilder deliveryTableBuilder = schema
                     .AddTable(sql.DatabaseDeliveryTableName, SqlOutboxTemplate.DeliveryFields)
-                    .PartByList("msg_tenant", "task_group_id")
+                    .PartByList("msg_tenant", "queue_group_id")
                     .TimestampAs("delivery_created_at")
                     .WithFillFactor(60)
                 ;
@@ -48,8 +48,8 @@ internal static class Setup
                 ;
 
 
-                outboxTableBuilder.AddMigration(sp.GetRequiredService<OutboxMigrationSupport>());
-                taskTableBuilder.AddMigration(sp.GetRequiredService<TaskMigrationSupport>());
+                outboxTableBuilder.AddMigration(sp.GetRequiredService<MsgMigrationSupport>());
+                queueTableBuilder.AddMigration(sp.GetRequiredService<TaskMigrationSupport>());
                 deliveryTableBuilder.AddMigration(sp.GetRequiredService<TaskMigrationSupport>());
                 errorTableBuilder.AddMigration();
             })

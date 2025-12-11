@@ -1,5 +1,5 @@
-using Sa.Outbox.PostgreSql.Commands;
 using System.Data;
+using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
@@ -10,7 +10,7 @@ internal sealed class DeliveryRepository(
     , IFinishDeliveryCommand finishCmd
     , IExtendDeliveryCommand extendCmd
     , IOutboxPartRepository partRepository
-    , IOffsetCoordinator coordinator
+    , IConsumeLoader loader
 ) : IDeliveryRepository
 {
     public async Task<int> StartDelivery<TMessage>(
@@ -22,14 +22,9 @@ internal sealed class DeliveryRepository(
     {
         if (cancellationToken.IsCancellationRequested || batchSize < 1) return 0;
 
+        var loadResult = await loader.LoadConsumerGroup(filter, batchSize, cancellationToken);
 
-        GroupOffsetId newOffset = await coordinator.GetNextOffsetAndProcess(
-            filter.ConsumerGroupId,
-            filter.TenantId,
-            (offset, ct) => Task.FromResult(offset),
-            cancellationToken);
-
-        if (newOffset == GroupOffsetId.Empty) return 0;
+        if (loadResult == LoadGroupResult.Empty) return 0;
 
 
         // await partRepository.EnsureDeliveryParts(parts, cancellationToken);

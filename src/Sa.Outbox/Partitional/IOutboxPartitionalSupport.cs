@@ -21,7 +21,7 @@ public interface IOutboxPartitionalSupport
     /// </summary>
     /// <param name="cancellationToken">A cancellation token to signal the operation's cancellation.</param>
     /// <returns>A task representing the asynchronous operation, containing a read-only collection of <see cref="OutboxTenantPartPair"/>.</returns>
-    Task<IReadOnlyCollection<OutboxTenantPartPair>> GetOutboxParts(CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<OutboxTenantPartPair>> GetMsgParts(CancellationToken cancellationToken);
 
-    Task<IReadOnlyCollection<OutboxTenantPartPair>> GetOutboxGroups(CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<OutboxTenantPartPair>> GetTaskParts(CancellationToken cancellationToken);
 }

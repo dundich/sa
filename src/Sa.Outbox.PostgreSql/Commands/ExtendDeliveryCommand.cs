@@ -19,13 +19,13 @@ internal sealed class ExtendDeliveryCommand(
 
         return await dataSource.ExecuteNonQuery(sqlTemplate.SqlExtendDelivery,
         [
-            new("tenant", filter.TenantId)
-            , new("part", filter.Part)
-            , new("from_date", fromDate)
-            , new("transact_id", filter.TransactId)
-            , new("payload_type", typeCode)
-            , new("lock_expires_on", lockExpiresOn)
-            , new("now", now)
+            new(CachedSqlParamNames.TenantId, filter.TenantId)
+            , new(CachedSqlParamNames.MsgPart, filter.Part)
+            , new(CachedSqlParamNames.FromDate, fromDate)
+            , new(CachedSqlParamNames.DeliveryTransactId, filter.TransactId)
+            , new(CachedSqlParamNames.TypeName, typeCode)
+            , new(CachedSqlParamNames.LockExpiresOn, lockExpiresOn)
+            , new(CachedSqlParamNames.NowDate, now)
         ]
         , cancellationToken);
     }
