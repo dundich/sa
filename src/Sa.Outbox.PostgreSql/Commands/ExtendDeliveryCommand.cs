@@ -25,7 +25,7 @@ internal sealed class ExtendDeliveryCommand(
             , new(SqlParam.TransactId, filter.TransactId)
             , new(SqlParam.TypeName, typeCode)
             , new(SqlParam.LockExpiresOn, lockExpiresOn)
-            , new(SqlParam.NowDate, now)
+            , new(SqlParam.ToDate, now)
         ]
         , cancellationToken);
     }

@@ -18,5 +18,6 @@ public sealed record OutboxMessageFilter(
     int TenantId,
     string Part,
     DateTimeOffset FromDate,
-    DateTimeOffset ToDate
+    DateTimeOffset ToDate,
+    DateTimeOffset NowDate
 );

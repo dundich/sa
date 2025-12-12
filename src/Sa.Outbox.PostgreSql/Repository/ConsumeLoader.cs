@@ -9,8 +9,7 @@ namespace Sa.Outbox.PostgreSql.Repository;
 internal sealed class ConsumeLoader(
     IPgDataSource pg,
     SqlOutboxTemplate sql,
-    IPartitionManager partitionManager,
-    TimeProvider timeProvider) : IConsumeLoader
+    IPartitionManager partitionManager) : IConsumeLoader
 {
 
     public async Task<LoadGroupResult> LoadGroup(
@@ -23,9 +22,8 @@ internal sealed class ConsumeLoader(
 
         try
         {
-            var now = timeProvider.GetUtcNow();
 
-            await partitionManager.EnsureParts(sql.DatabaseTaskTableName, now, [filter.TenantId, filter.ConsumerGroupId], cancellationToken);
+            await partitionManager.EnsureParts(sql.DatabaseTaskTableName, filter.NowDate, [filter.TenantId, filter.ConsumerGroupId], cancellationToken);
 
             ConsumeTenantGroup pair = new(filter.ConsumerGroupId, filter.TenantId);
 
@@ -38,7 +36,7 @@ internal sealed class ConsumeLoader(
 
             GroupOffset currentOffset = await GetOffset(pair, conn, tx, cancellationToken);
 
-            var loadResult = await LoadGroupByOffset(currentOffset, filter, batchSize, now, conn, tx, cancellationToken);
+            var loadResult = await LoadGroupByOffset(currentOffset, filter, batchSize, conn, tx, cancellationToken);
 
             if (loadResult.GroupOffset.OffsetId != currentOffset.OffsetId)
             {
@@ -60,7 +58,6 @@ internal sealed class ConsumeLoader(
         GroupOffset currentOffset,
         OutboxMessageFilter filter,
         int batchSize,
-        DateTimeOffset now,
         NpgsqlConnection conn,
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
@@ -72,8 +69,10 @@ internal sealed class ConsumeLoader(
         command.Parameters.AddWithValue(SqlParam.ConsumerGroupId, filter.ConsumerGroupId);
         command.Parameters.AddWithValue(SqlParam.GroupOffset, currentOffset.OffsetId);
         command.Parameters.AddWithValue(SqlParam.Limit, batchSize);
-        command.Parameters.AddWithValue(SqlParam.NowDate, now.ToUnixTimeSeconds());
+        command.Parameters.AddWithValue(SqlParam.NowDate, filter.NowDate.ToUnixTimeSeconds());
+
         command.Parameters.AddWithValue(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds());
+        command.Parameters.AddWithValue(SqlParam.ToDate, filter.ToDate.ToUnixTimeSeconds());
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 

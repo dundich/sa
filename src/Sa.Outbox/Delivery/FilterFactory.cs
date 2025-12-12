@@ -27,6 +27,7 @@ internal static class FilterFactory
             tenantId,
             ti.PartName,
             fromDate,
+            now,
             now
         );
     }

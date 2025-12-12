@@ -8,12 +8,7 @@ namespace Sa.Outbox.Delivery;
 /// <summary>
 /// Delivers a batch of messages with error handling and retry mechanisms
 /// </summary>
-/// <typeparam name="TMessage">Type of message payload</typeparam>
-/// <param name="outboxMessages">Collection of messages to deliver</param>
-/// <param name="cancellationToken">Operation cancellation token</param>
-/// <returns>Number of successfully delivered messages</returns>
-/// <exception cref="OperationCanceledException">When operation is cancelled via cancellationToken</exception>
-internal sealed class DeliveryCourier(IDeliveryScoped scopedConsumer) : IDeliveryCourier
+internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCourier
 {
     /// <summary>
     /// Asynchronous method to deliver messages
@@ -29,7 +24,7 @@ internal sealed class DeliveryCourier(IDeliveryScoped scopedConsumer) : IDeliver
 
         try
         {
-            await scopedConsumer.Consume(settings, outboxMessages, cancellationToken);
+            await processor.ConsumeInScope(settings, outboxMessages, cancellationToken);
         }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {

@@ -28,7 +28,10 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
                 .WithDeliveries(builder
                     => builder.AddDelivery<TestMessageConsumer, TestMessage>("proc_test", (_, s) =>
                     {
-                        ConsumeSettings = s.ConsumeSettings;
+                        ConsumeSettings = s
+                            .ConsumeSettings
+                            .WithProcessingDelay(TimeSpan.FromMinutes(3))
+                            ;
                     })
                 )
             );
@@ -59,6 +62,12 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
 
 
         var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
+        Assert.Equal(0, result);
+
+
+        fixture.ConsumeSettings.WithNoProcessingDelay();
+
+        result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
         Assert.True(result > 0);
     }
 }

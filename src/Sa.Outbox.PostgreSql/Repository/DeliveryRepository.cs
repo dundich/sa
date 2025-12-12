@@ -13,7 +13,7 @@ internal sealed class DeliveryRepository(
     , IConsumeLoader loader
 ) : IDeliveryRepository
 {
-    public async Task<int> StartDelivery<TMessage>(
+    public async Task<int> RentDelivery<TMessage>(
         Memory<OutboxDeliveryMessage<TMessage>> writeBuffer,
         int batchSize,
         TimeSpan lockDuration,
@@ -29,7 +29,7 @@ internal sealed class DeliveryRepository(
         return await startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
     }
 
-    public async Task<int> FinishDelivery(IOutboxContext[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public async Task<int> ReturnDelivery(IOutboxContext[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<Exception, ErrorInfo> errors = await GetErrors(outboxMessages, cancellationToken);
 

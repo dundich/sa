@@ -36,12 +36,7 @@ internal sealed class DeliveryTenant(
         {
             Memory<OutboxDeliveryMessage<TMessage>> slice = buffer.AsMemory(0, batchSize);
 
-            int locked = await repository.StartDelivery(
-                slice,
-                batchSize: Math.Min(settings.MaxBatchSize, batchSize),
-                lockDuration: settings.LockDuration,
-                filter: filter,
-                cancellationToken: cancellationToken);
+            int locked = await SelectAndLock(settings, filter, batchSize, slice, cancellationToken);
 
             if (locked == 0) return 0;
 
@@ -49,7 +44,7 @@ internal sealed class DeliveryTenant(
 
             using IDisposable locker = RenewerLocker(settings, filter, cancellationToken);
 
-            return await DeliverMessages(messages, settings, filter, cancellationToken);
+            return await DeliverBy—ourier(messages, settings, filter, cancellationToken);
         }
         finally
         {
@@ -57,15 +52,33 @@ internal sealed class DeliveryTenant(
         }
     }
 
+    private async Task<int> SelectAndLock<TMessage>(ConsumeSettings settings, OutboxMessageFilter filter, int batchSize, Memory<OutboxDeliveryMessage<TMessage>> slice, CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
+    {
+        filter = filter with { ToDate = filter.ToDate - settings.ProcessingDelay };
+
+        return await repository.RentDelivery(
+            slice,
+            batchSize: Math.Min(settings.MaxBatchSize, batchSize),
+            lockDuration: settings.LockDuration,
+            filter: filter,
+            cancellationToken: cancellationToken);
+    }
 
     private IDisposable RenewerLocker(ConsumeSettings settings, OutboxMessageFilter filter, CancellationToken cancellationToken)
         => LockRenewer.KeepLocked(
             settings.LockRenewal,
-            t => repository.ExtendDelivery(settings.LockDuration, filter with { ToDate = timeProvider.GetUtcNow() }, t),
+            t => repository.ExtendDelivery(
+                settings.LockDuration,
+                filter with
+                {
+                    ToDate = timeProvider.GetUtcNow(),
+                    NowDate = timeProvider.GetUtcNow()
+                }
+            , t),
             cancellationToken: cancellationToken);
 
 
-    private async Task<int> DeliverMessages<TMessage>(
+    private async Task<int> DeliverBy—ourier<TMessage>(
         Memory<OutboxDeliveryMessage<TMessage>> deliveryMessages,
         ConsumeSettings settings,
         OutboxMessageFilter filter,
@@ -85,7 +98,7 @@ internal sealed class DeliveryTenant(
                 outboxMessages,
                 cancellationToken);
 
-            await repository.FinishDelivery(outboxMessages, filter, cancellationToken);
+            await repository.ReturnDelivery(outboxMessages, filter with { NowDate = timeProvider.GetUtcNow() }, cancellationToken);
         }
 
         return successfulDeliveries;

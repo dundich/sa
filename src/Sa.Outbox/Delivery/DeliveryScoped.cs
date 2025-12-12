@@ -9,7 +9,7 @@ namespace Sa.Outbox.Delivery;
 internal sealed class DeliveryScoped(IServiceProvider serviceProvider) : IDeliveryScoped
 {
     // Method to process messages using a consumer in scope
-    public async Task Consume<TMessage>(
+    public async Task ConsumeInScope<TMessage>(
         ConsumeSettings settings,
         IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage

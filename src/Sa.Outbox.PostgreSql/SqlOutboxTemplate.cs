@@ -142,7 +142,7 @@ WITH next_task AS (
         AND task.consumer_group = {SqlParam.ConsumerGroupId}
         AND task.task_created_at >= {SqlParam.FromDate}
         AND {s_InTaskProcessing}
-        AND task.task_lock_expires_on < {SqlParam.NowDate}
+        AND task.task_lock_expires_on < {SqlParam.ToDate}
         AND msg.msg_part = {SqlParam.MsgPart}
         AND msg.tenant_id = {SqlParam.TenantId}
         AND msg.msg_created_at >= {SqlParam.FromDate}
@@ -160,7 +160,7 @@ updated_tasks AS (
     FROM next_task nt
     WHERE 
         t.task_id = nt.task_id 
-        AND t.tenant_id = {SqlParam.TenantId} 
+        AND t.tenant_id = {SqlParam.TenantId}
         AND t.consumer_group = {SqlParam.ConsumerGroupId} 
     RETURNING t.*
 )
@@ -202,7 +202,7 @@ WHERE
 
     AND {s_InTaskProcessing}
     AND task_transact_id = {SqlParam.TransactId}
-    AND task_lock_expires_on > {SqlParam.NowDate}
+    AND task_lock_expires_on > {SqlParam.ToDate}
 ;
 """;
 
@@ -259,7 +259,7 @@ ON CONFLICT (consumer_group, tenant_id) DO NOTHING;
 
     public string SqlSelectOffset =
 $"""
-SELECT consumer_group 
+SELECT group_offset 
 FROM {settings.GetQualifiedOffsetTableName()} 
 WHERE 
     consumer_group = {SqlParam.ConsumerGroupId} 
@@ -310,6 +310,7 @@ WITH inserted_rows AS(
         msg_part = {SqlParam.MsgPart}
         AND tenant_id = {SqlParam.TenantId}
         AND msg_created_at >= {SqlParam.FromDate}
+        AND msg_created_at < {SqlParam.ToDate}
         AND msg_id > {SqlParam.GroupOffset}
     ORDER BY msg_id
     LIMIT {SqlParam.Limit}
@@ -465,8 +466,9 @@ internal static class SqlParam
     public const string TypeName = "@type_name";
     public const string MsgPayloadType = "@p_type";
     public const string FromDate = "@from_date";
-    public const string TransactId = "@trn";
+    public const string ToDate = "@to_date";
     public const string NowDate = "@now";
+    public const string TransactId = "@trn";
     public const string OffsetKey = "@key";
     public const string Limit = "@limit";
     public const string LockExpiresOn = "@lock";

@@ -7,7 +7,7 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 internal interface IDeliveryScoped
 {
-    Task Consume<TMessage>(
+    Task ConsumeInScope<TMessage>(
         ConsumeSettings settings,
         IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages, 
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;

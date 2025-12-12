@@ -36,7 +36,8 @@ internal sealed class StartDeliveryCommand(
             , new(SqlParam.TransactId, filter.TransactId)
             , new(SqlParam.Limit, batchSize)
             , new(SqlParam.LockExpiresOn, (filter.ToDate + lockDuration).ToUnixTimeSeconds())
-            , new(SqlParam.NowDate, filter.ToDate.ToUnixTimeSeconds())
+            , new(SqlParam.ToDate, filter.ToDate.ToUnixTimeSeconds())
+            , new(SqlParam.NowDate, filter.NowDate.ToUnixTimeSeconds())
         ]
         , cancellationToken);
     }

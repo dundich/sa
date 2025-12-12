@@ -64,6 +64,12 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
         return this;
     }
 
+    public ConsumeSettings WithNoLockDuration()
+    {
+        LockDuration = TimeSpan.Zero;
+        return this;
+    }
+
     public ConsumeSettings WithLockRenewal(TimeSpan renewal)
     {
         LockRenewal = renewal;
@@ -79,6 +85,12 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
     public ConsumeSettings WithProcessingDelay(TimeSpan interval)
     {
         ProcessingDelay = interval;
+        return this;
+    }
+
+    public ConsumeSettings WithNoProcessingDelay()
+    {
+        ProcessingDelay = TimeSpan.Zero;
         return this;
     }
 
