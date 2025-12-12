@@ -310,7 +310,7 @@ WITH inserted_rows AS(
         msg_part = {SqlParam.MsgPart}
         AND tenant_id = {SqlParam.TenantId}
         AND msg_created_at >= {SqlParam.FromDate}
-        AND msg_created_at < {SqlParam.ToDate}
+        AND msg_created_at <= {SqlParam.ToDate}
         AND msg_id > {SqlParam.GroupOffset}
     ORDER BY msg_id
     LIMIT {SqlParam.Limit}
