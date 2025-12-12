@@ -11,21 +11,21 @@ internal sealed class ExtendDeliveryCommand(
 {
     public async Task<int> Execute(TimeSpan lockExpiration, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
-
         long typeCode = await hashResolver.GetCode(filter.PayloadType, cancellationToken);
-        long now = filter.ToDate.ToUnixTimeSeconds();
+
         long lockExpiresOn = (filter.ToDate + lockExpiration).ToUnixTimeSeconds();
         long fromDate = filter.FromDate.ToUnixTimeSeconds();
+        long now = filter.ToDate.ToUnixTimeSeconds();
 
         return await dataSource.ExecuteNonQuery(sqlTemplate.SqlExtendDelivery,
         [
-            new(CachedSqlParamNames.TenantId, filter.TenantId)
-            , new(CachedSqlParamNames.MsgPart, filter.Part)
-            , new(CachedSqlParamNames.FromDate, fromDate)
-            , new(CachedSqlParamNames.DeliveryTransactId, filter.TransactId)
-            , new(CachedSqlParamNames.TypeName, typeCode)
-            , new(CachedSqlParamNames.LockExpiresOn, lockExpiresOn)
-            , new(CachedSqlParamNames.NowDate, now)
+            new(SqlParam.TenantId, filter.TenantId)
+            , new(SqlParam.ConsumerGroupId, filter.ConsumerGroupId)
+            , new(SqlParam.FromDate, fromDate)
+            , new(SqlParam.TransactId, filter.TransactId)
+            , new(SqlParam.TypeName, typeCode)
+            , new(SqlParam.LockExpiresOn, lockExpiresOn)
+            , new(SqlParam.NowDate, now)
         ]
         , cancellationToken);
     }

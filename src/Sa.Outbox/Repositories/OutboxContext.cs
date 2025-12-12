@@ -13,7 +13,7 @@ internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> de
     public string PayloadId => delivery.Message.PayloadId;
     public TMessage Payload => delivery.Message.Payload;
     public OutboxPartInfo PartInfo => delivery.Message.PartInfo;
-    public OutboxDeliveryInfo DeliveryInfo => delivery.DeliveryInfo;
+    public OutboxTaskDeliveryInfo DeliveryInfo => delivery.DeliveryInfo;
 
 
     public DeliveryStatus DeliveryResult { get; private set; }

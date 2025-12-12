@@ -46,10 +46,10 @@ internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTe
         {
             (long ErrorId, string TypeName, DateTimeOffset CreatedAt) = Value;
 
-            command.AddParameter<CachedSqlParamNames>("@id_", i, ErrorId);
-            command.AddParameter<CachedSqlParamNames>("@st_", i, TypeName);
-            command.AddParameter<CachedSqlParamNames>("@msg_", i, Key.ToString());
-            command.AddParameter<CachedSqlParamNames>("@cr_", i, CreatedAt.ToUnixTimeSeconds());
+            command.AddParameter<SqlParamNames>(SqlParam.ErrorId, i, ErrorId);
+            command.AddParameter<SqlParamNames>(SqlParam.TypeName, i, TypeName);
+            command.AddParameter<SqlParamNames>(SqlParam.StatusMessage, i, Key.ToString());
+            command.AddParameter<SqlParamNames>(SqlParam.CreatedAt, i, CreatedAt.ToUnixTimeSeconds());
             i++;
         }
     }
@@ -61,5 +61,19 @@ internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTe
               .GroupBy(m => m.Exception!)
               .Select(m => (err: m.Key, createdAt: m.First().DeliveryResult.CreatedAt.StartOfDay()))
               .ToDictionary(e => e.err, e => new ErrorInfo(e.err.ToString().GetMurmurHash3(), e.err.GetType().Name, e.createdAt));
+    }
+
+
+    sealed class SqlParamNames : INamePrefixProvider
+    {
+        public static int MaxIndex => 512;
+
+        public static string[] GetPrefixes() =>
+        [
+            SqlParam.ErrorId
+            , SqlParam.TypeName
+            , SqlParam.StatusMessage
+            , SqlParam.CreatedAt
+        ];
     }
 }

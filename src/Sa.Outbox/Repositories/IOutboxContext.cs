@@ -13,6 +13,11 @@ public interface IOutboxContext
     string OutboxId { get; }
 
     /// <summary>
+    /// Gets the unique identifier for the payload.
+    /// </summary>
+    string PayloadId { get; }
+
+    /// <summary>
     /// Gets information about the part of the Outbox message being processed.
     /// </summary>
     OutboxPartInfo PartInfo { get; }
@@ -20,7 +25,7 @@ public interface IOutboxContext
     /// <summary>
     /// Gets information about the delivery of the Outbox message.
     /// </summary>
-    OutboxDeliveryInfo DeliveryInfo { get; }
+    OutboxTaskDeliveryInfo DeliveryInfo { get; }
 
     /// <summary>
     /// Gets the result of the delivery attempt.

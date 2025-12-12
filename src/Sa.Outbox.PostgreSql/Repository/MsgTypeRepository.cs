@@ -10,7 +10,7 @@ internal sealed class MsgTypeRepository(IPgDataSource dataSource, SqlOutboxTempl
     {
         return dataSource.ExecuteNonQuery(
             template.SqlInsertType
-            , [new ("type_id", id), new ("type_name", typeName)]
+            , [new (SqlParam.TypeId, id), new (SqlParam.TypeName, typeName)]
             , cancellationToken);
     }
 

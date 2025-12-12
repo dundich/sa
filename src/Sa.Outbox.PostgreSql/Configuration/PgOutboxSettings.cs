@@ -47,13 +47,13 @@ public sealed class PgOutboxTableSettings
 
     /// <summary>
     /// Gets or sets the name of the delivery table.
-    /// Default is set to "outbox__$delivery".
+    /// Default is set to "outbox__log$".
     /// </summary>
-    public string DatabaseDeliveryTableName { get; set; } = "outbox__delivery$";
+    public string DatabaseDeliveryTableName { get; set; } = "outbox__log$";
 
     /// <summary>
     /// Gets or sets the name of the type table.
-    /// Default is set to "outbox__$type".
+    /// Default is set to "outbox__type$".
     /// </summary>
     public string DatabaseTypeTableName { get; set; } = "outbox__type$";
 
@@ -70,7 +70,7 @@ public sealed class PgOutboxTableSettings
 
     /// <summary>
     /// Gets or sets the name of the error table.
-    /// Default is set to "outbox__$error".
+    /// Default is set to "outbox__error$".
     /// </summary>
     public string DatabaseErrorTableName { get; set; } = "outbox__error$";
 

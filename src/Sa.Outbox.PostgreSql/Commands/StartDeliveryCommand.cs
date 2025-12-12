@@ -28,14 +28,15 @@ internal sealed class StartDeliveryCommand(
             writeBuffer.Span[i] = deliveryMessage;
         },
         [
-            new(CachedSqlParamNames.TenantId, filter.TenantId)
-            , new(CachedSqlParamNames.MsgPart, filter.Part)
-            , new(CachedSqlParamNames.FromDate, filter.FromDate.ToUnixTimeSeconds())
-            , new(CachedSqlParamNames.MsgPayloadType, typeCode)
-            , new(CachedSqlParamNames.DeliveryTransactId, filter.TransactId)
-            , new(CachedSqlParamNames.Limit, batchSize)
-            , new(CachedSqlParamNames.LockExpiresOn, (filter.ToDate + lockDuration).ToUnixTimeSeconds())
-            , new(CachedSqlParamNames.NowDate, filter.ToDate.ToUnixTimeSeconds())
+            new(SqlParam.TenantId, filter.TenantId)
+            , new(SqlParam.MsgPart, filter.Part)
+            , new(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds())
+            , new(SqlParam.ConsumerGroupId, filter.ConsumerGroupId)
+            , new(SqlParam.MsgPayloadType, typeCode)
+            , new(SqlParam.TransactId, filter.TransactId)
+            , new(SqlParam.Limit, batchSize)
+            , new(SqlParam.LockExpiresOn, (filter.ToDate + lockDuration).ToUnixTimeSeconds())
+            , new(SqlParam.NowDate, filter.ToDate.ToUnixTimeSeconds())
         ]
         , cancellationToken);
     }
@@ -44,34 +45,46 @@ internal sealed class StartDeliveryCommand(
     {
         public static OutboxDeliveryMessage<TMessage> Read(NpgsqlDataReader reader, IOutboxMessageSerializer serializer)
         {
-            string outboxId = reader.GetString("msg_id");
+            string msgId = reader.GetString("msg_id");
             string payloadId = reader.GetString("msg_payload_id");
+            int tenantId = reader.GetInt32("tenant_id");
 
             TMessage payload = ReadPayload(reader, serializer);
-            OutboxPartInfo outboxPart = ReadOutboxPart(reader);
-            OutboxDeliveryInfo deliveryInfo = ReadDeliveryInfo(reader);
+            OutboxPartInfo outboxPart = ReadOutboxMsgPart(reader, tenantId);
+            OutboxTaskDeliveryInfo deliveryInfo = ReadDeliveryInfo(reader, tenantId);
 
             OutboxMessage<TMessage> msg = new(payloadId, payload, outboxPart);
 
-            return new OutboxDeliveryMessage<TMessage>(outboxId, msg, deliveryInfo);
+            return new OutboxDeliveryMessage<TMessage>(msgId, msg, deliveryInfo);
         }
 
-        private static OutboxPartInfo ReadOutboxPart(NpgsqlDataReader reader)
+        private static OutboxPartInfo ReadOutboxMsgPart(NpgsqlDataReader reader, int tenantId)
         {
             return new OutboxPartInfo(
-                reader.GetInt32("msg_tenant")
+                tenantId
                 , reader.GetString("msg_part")
                 , reader.GetInt64("msg_created_at").ToDateTimeOffsetFromUnixTimestamp()
             );
         }
 
-        private static OutboxDeliveryInfo ReadDeliveryInfo(NpgsqlDataReader reader)
+        private static OutboxTaskDeliveryInfo ReadDeliveryInfo(NpgsqlDataReader reader, int tenantId)
         {
-            return new OutboxDeliveryInfo(
-                reader.GetString("delivery_id")
+            return new OutboxTaskDeliveryInfo(
+                reader.GetInt64("task_id")
+                , reader.GetInt64("delivery_id")
                 , reader.GetInt32("delivery_attempt")
                 , reader.GetString("error_id")
                 , ReadStatus(reader)
+                , ReadTaskPart(reader, tenantId)
+            );
+        }
+
+        private static OutboxPartInfo ReadTaskPart(NpgsqlDataReader reader, int tenantId)
+        {
+            return new OutboxPartInfo(
+                tenantId
+                , reader.GetString("consumer_group")
+                , reader.GetInt64("task_created_at").ToDateTimeOffsetFromUnixTimestamp()
             );
         }
 

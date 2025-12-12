@@ -44,6 +44,12 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
     /// </summary>
     public int? ConsumeBatchSize { get; private set; }
 
+    /// <summary>
+    /// Delay to wait for "full set of messages"
+    /// </summary>
+    public TimeSpan ProcessingDelay { get; private set; } = TimeSpan.FromSeconds(3);
+
+
     // Fluent 
 
     public ConsumeSettings WithMaxBatchSize(int size)
@@ -67,6 +73,12 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
     public ConsumeSettings WithLookbackInterval(TimeSpan interval)
     {
         LookbackInterval = interval;
+        return this;
+    }
+
+    public ConsumeSettings WithProcessingDelay(TimeSpan interval)
+    {
+        ProcessingDelay = interval;
         return this;
     }
 

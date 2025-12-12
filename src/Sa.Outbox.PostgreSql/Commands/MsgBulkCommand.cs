@@ -34,28 +34,6 @@ internal sealed class MsgBulkCommand(
         return result;
     }
 
-    /// <summary>
-    /// <code>
-    ///    
-    /// COPY
-    /// 
-    /// msg_id
-    /// ,tenant_id
-    /// ,msg_part
-    /// ,msg_payload_id
-    /// ,msg_payload_type
-    /// ,msg_payload
-    /// ,msg_payload_size
-    /// ,msg_created_at
-    ///)
-    /// </code>
-    /// <see cref="Sa.Outbox.PostgreSq.SqlBulkMsgCopy"/>
-    /// </summary>
-    /// 
-    /// <typeparam name="TMessage"></typeparam>
-    /// <param name="writer"></param>
-    /// <param name="payloadTypeCode"></param>
-    /// <param name="messages"></param>
     private void WriteRows<TMessage>(NpgsqlBinaryImporter writer, long payloadTypeCode, ReadOnlyMemory<OutboxMessage<TMessage>> messages)
     {
         foreach (OutboxMessage<TMessage> row in messages.Span)

@@ -4,17 +4,17 @@ namespace Sa.Outbox.Partitional;
 
 
 internal sealed class OutboxPartitionalSupport(
-    IDelivaryConfiguration configuration,
+    IDelivarySnapshot snapshot,
     PartitionalSettings? partSettings) : IOutboxPartitionalSupport
 {
     public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetMsgParts(CancellationToken cancellationToken)
     {
-        return await GetPairs(configuration.Parts, cancellationToken);
+        return await GetPairs(snapshot.Parts, cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetTaskParts(CancellationToken cancellationToken)
     {
-        return await GetPairs(configuration.GetConsumeGroupIds(), cancellationToken);
+        return await GetPairs(snapshot.GetConsumeGroupIds(), cancellationToken);
     }
 
     private async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPairs(IEnumerable<string> parts, CancellationToken cancellationToken)

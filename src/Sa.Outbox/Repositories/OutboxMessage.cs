@@ -4,9 +4,9 @@ namespace Sa.Outbox;
 /// <summary>
 /// Represents a message in the Outbox with its associated payload and part information.
 /// </summary>
-/// <param name="PartInfo">Gets the unique identifier for the payload.</param>
+/// <param name="PayloadId">Gets the unique identifier for the payload.</param>
 /// <param name="Payload">Gets the actual message payload.</param>
-/// <param name="PayloadId">Gets information about the part of the Outbox message.</param>
+/// <param name="PartInfo">Gets information about the part of the Outbox message.</param>
 /// <typeparam name="TMessage">The type of the message payload.</typeparam>
 public sealed record OutboxMessage<TMessage>(
     string PayloadId,
@@ -24,7 +24,7 @@ public sealed record OutboxMessage<TMessage>(
 public sealed record OutboxDeliveryMessage<TMessage>(
     string OutboxId,
     OutboxMessage<TMessage> Message,
-    OutboxDeliveryInfo DeliveryInfo
+    OutboxTaskDeliveryInfo DeliveryInfo
 );
 
 /// <summary>
@@ -42,16 +42,24 @@ public sealed record OutboxPartInfo(
 /// <summary>
 /// Represents information about the delivery of an Outbox message.
 /// </summary>
-/// <param name="DeliveryId">The unique identifier for the delivery.</param>
-/// <param name="Attempt">The number of delivery attempts made.</param>
-/// <param name="LastErrorId">The identifier of the last error encountered during delivery.</param>
+/// <param name="TaskId">The unique identifier of the processing task associated with the Outbox message.
+/// Each message processing creates a separate task that can be retried in case of delivery failures.</param>
+/// <param name="DeliveryId">The identifier of the latest delivery attempt.
+/// Multiple delivery attempts can be made for the same task, each with its own DeliveryId.
+/// 0 if no delivery attempts have been made yet.</param>
+/// <param name="Attempt">The number of delivery attempts made for this task.
+/// Incremented with each retry attempt.</param>
+/// <param name="LastErrorId">The identifier of the last error encountered during delivery.
+/// Used for error tracking and monitoring.</param>
 /// <param name="Status">The current status of the delivery.</param>
-/// <param name="CreatedAt">The date and time when the delivery was created.</param>
-public sealed record OutboxDeliveryInfo(
-    string? DeliveryId,
+/// <param name="PartInfo">Information about the partition/segment of the Outbox.</param>
+public sealed record OutboxTaskDeliveryInfo(
+    long TaskId,
+    long DeliveryId,
     int Attempt,
     string LastErrorId,
-    DeliveryStatus Status
+    DeliveryStatus Status,
+    OutboxPartInfo PartInfo
 );
 
 /// <summary>

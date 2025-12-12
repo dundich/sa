@@ -21,9 +21,9 @@ internal static class LockRenewer
                     await extendLocked(cancellationToken).ConfigureAwait(false);
                 }
             }
-            catch
+            catch (Exception e)
             {
-                // ignore
+                Debug.WriteLine(e);
             }
         }, cancellationToken);
 

@@ -6,7 +6,7 @@ namespace Sa.Outbox.Support;
 /// Represents a message payload in the Outbox system.
 /// This interface defines the properties that any Outbox payload message must implement.
 /// </summary>
-public interface IOutboxPayloadMessage: IOutboxHasPart
+public interface IOutboxPayloadMessage : IOutboxHasPart
 {
     /// <summary>
     /// Gets the unique identifier for the payload.

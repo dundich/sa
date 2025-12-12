@@ -24,8 +24,7 @@ internal sealed class DeliveryRepository(
 
         var loadResult = await loader.LoadGroup(filter, batchSize, cancellationToken);
 
-        if (loadResult == LoadGroupResult.Empty) return 0;
-
+        if (loadResult.IsEmpty()) return 0;
 
         return await startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
     }
@@ -35,7 +34,7 @@ internal sealed class DeliveryRepository(
         IReadOnlyDictionary<Exception, ErrorInfo> errors = await GetErrors(outboxMessages, cancellationToken);
 
         IEnumerable<OutboxPartInfo> parts = outboxMessages
-            .Select(c => new OutboxPartInfo(c.PartInfo.TenantId, c.PartInfo.Part, c.DeliveryResult.CreatedAt));
+            .Select(c => c.DeliveryInfo.PartInfo with { CreatedAt = c.DeliveryResult.CreatedAt });
 
         await partRepository.EnsureDeliveryParts(parts, cancellationToken);
 

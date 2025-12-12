@@ -1,13 +1,11 @@
 using Npgsql;
 using Sa.Data.PostgreSql;
-using Sa.Outbox.PostgreSql.IdGen;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
 internal sealed class FinishDeliveryCommand(
     IPgDataSource dataSource,
-    SqlOutboxTemplate sqlTemplate,
-    IIdGenerator idGenerator) : IFinishDeliveryCommand
+    SqlOutboxTemplate sqlTemplate) : IFinishDeliveryCommand
 {
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlFinishDelivery(len));
 
@@ -22,21 +20,21 @@ internal sealed class FinishDeliveryCommand(
         int total = 0;
 
         int startIndex = 0;
-        foreach ((string sql, int length) in sqlCache.GetSql(outboxMessages.Length, CachedSqlParamNames.MaxIndex))
+        foreach ((string sql, int length) in sqlCache.GetSql(outboxMessages.Length, SqlParamNames.MaxIndex))
         {
             var slice = new ArraySegment<IOutboxContext>(outboxMessages, startIndex, length);
             startIndex += length;
 
             total += await dataSource.ExecuteNonQuery(
                 sql,
-                cmd => FllCmdParams(cmd, slice, errors, filter)
-                , cancellationToken);
+                cmd => FllCmdParams(cmd, slice, errors, filter),
+                cancellationToken);
         }
 
         return total;
     }
 
-    private void FllCmdParams(
+    private static void FllCmdParams(
         NpgsqlCommand cmd,
         ArraySegment<IOutboxContext> contexts,
         IReadOnlyDictionary<Exception, ErrorInfo> errors,
@@ -48,7 +46,7 @@ internal sealed class FinishDeliveryCommand(
             var result = context.DeliveryResult;
             var statusCode = result.Code;
             var createdAt = result.CreatedAt;
-            var id = idGenerator.GenId(createdAt);
+
             var msg = result.Message;
             var lockExpiresOn = (createdAt + context.PostponeAt).ToUnixTimeSeconds();
 
@@ -64,19 +62,44 @@ internal sealed class FinishDeliveryCommand(
             }
 
             cmd
-                .AddParameter<CachedSqlParamNames>("@id_", i, id)
-                .AddParameter<CachedSqlParamNames>("@msgid_", i, context.OutboxId)
-                .AddParameter<CachedSqlParamNames>("@err_", i, errorId ?? string.Empty)
-                .AddParameter<CachedSqlParamNames>("@st_", i, statusCode)
-                .AddParameter<CachedSqlParamNames>("@msg_", i, msg ?? string.Empty)
-                .AddParameter<CachedSqlParamNames>("@exp_", i, lockExpiresOn)
-                .AddParameter<CachedSqlParamNames>("@cr_", i, createdAt.ToUnixTimeSeconds())
+
+                .AddParameter<SqlParamNames>(SqlParam.StatusCode, i, statusCode)
+                .AddParameter<SqlParamNames>(SqlParam.StatusMessage, i, msg ?? string.Empty)
+                .AddParameter<SqlParamNames>(SqlParam.CreatedAt, i, createdAt.ToUnixTimeSeconds())
+
+                .AddParameter<SqlParamNames>(SqlParam.PayloadId, i, context.PayloadId)
+
+                .AddParameter<SqlParamNames>(SqlParam.TaskId, i, context.DeliveryInfo.TaskId)
+
+                .AddParameter<SqlParamNames>(SqlParam.LockExpiresOn, i, lockExpiresOn)
+                .AddParameter<SqlParamNames>(SqlParam.TaskCreatedAt, i, context.DeliveryInfo.TaskId)
+
+                .AddParameter<SqlParamNames>(SqlParam.ErrorId, i, errorId ?? string.Empty)
+
                 ;
         }
 
-        cmd.Parameters.Add(new(CachedSqlParamNames.TenantId, filter.TenantId));
-        cmd.Parameters.Add(new(CachedSqlParamNames.MsgPart, filter.Part));
-        cmd.Parameters.Add(new(CachedSqlParamNames.FromDate, filter.FromDate.ToUnixTimeSeconds()));
-        cmd.Parameters.Add(new(CachedSqlParamNames.DeliveryTransactId, filter.TransactId));
+        cmd.Parameters.Add(new(SqlParam.TenantId, filter.TenantId));
+        cmd.Parameters.Add(new(SqlParam.ConsumerGroupId, filter.ConsumerGroupId));
+        cmd.Parameters.Add(new(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds()));
+        cmd.Parameters.Add(new(SqlParam.TransactId, filter.TransactId));
+    }
+
+
+    sealed class SqlParamNames : INamePrefixProvider
+    {
+        public static int MaxIndex => 512;
+
+        public static string[] GetPrefixes() =>
+        [
+            SqlParam.StatusCode
+            , SqlParam.StatusMessage
+            , SqlParam.CreatedAt
+            , SqlParam.PayloadId
+            , SqlParam.TaskId
+            , SqlParam.LockExpiresOn
+            , SqlParam.TaskCreatedAt
+            , SqlParam.ErrorId
+        ];
     }
 }

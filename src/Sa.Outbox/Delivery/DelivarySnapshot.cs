@@ -4,7 +4,7 @@ using Sa.Schedule;
 
 namespace Sa.Outbox.Delivery;
 
-internal sealed class DelivarySnapshot(IScheduleSettings scheduleSettings) : IDelivaryConfiguration
+internal sealed class DelivarySnapshot(IScheduleSettings scheduleSettings) : IDelivarySnapshot
 {
 
     private readonly Lazy<IJobSettings[]> _lazyJobs = new(() => [.. scheduleSettings.GetJobSettings()]);

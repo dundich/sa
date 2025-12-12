@@ -2,7 +2,7 @@ using Sa.Schedule;
 
 namespace Sa.Outbox.Delivery;
 
-public interface IDelivaryConfiguration
+public interface IDelivarySnapshot
 {
     IJobSettings[] JobSettings { get; }
     OutboxDeliverySettings[] DeliverySettings { get; }

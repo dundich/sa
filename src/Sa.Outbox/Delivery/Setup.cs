@@ -14,20 +14,18 @@ internal static class Setup
 
         // looper - job processor
         services.TryAddSingleton<IDeliveryProcessor, DeliveryProcessor>();
-        // iteration - extract from repository & batch & send to courier
-        services.TryAddSingleton<IDeliveryRelay, DeliveryRelay>();
         // sender - sending to scope consumer
         services.TryAddSingleton<IDeliveryCourier, DeliveryCourier>();
         // support - messaging to each tenant
         services.TryAddSingleton<IPartitionalSupportCache, PartitionalSupportCache>();
 
-        services.TryAddSingleton<ITenantMessageProcessor, TenantMessageProcessor>();
+        services.TryAddSingleton<IDeliveryTenant, DeliveryTenant>();
 
-        services.TryAddSingleton<IScopedConsumer, ScopedConsumer>();
+        services.TryAddSingleton<IDeliveryScoped, DeliveryScoped>();
 
         configure.Invoke(new DeliveryBuilder(services));
 
-        services.TryAddSingleton<IDelivaryConfiguration, DelivarySnapshot>();
+        services.TryAddSingleton<IDelivarySnapshot, DelivarySnapshot>();
 
         return services;
     }

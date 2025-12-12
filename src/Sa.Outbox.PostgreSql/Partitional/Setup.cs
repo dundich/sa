@@ -38,7 +38,7 @@ internal static class Setup
                     .AddTable(sql.DatabaseDeliveryTableName, SqlOutboxTemplate.DeliveryFields)
                     .PartByList("tenant_id", "consumer_group")
                     .TimestampAs("delivery_created_at")
-                    .WithFillFactor(60)
+                    .WithFillFactor(100)
                 ;
 
                 ITableBuilder errorTableBuilder = schema

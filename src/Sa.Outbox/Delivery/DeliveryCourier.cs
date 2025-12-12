@@ -1,7 +1,7 @@
+using System.Runtime.CompilerServices;
 using Sa.Extensions;
 using Sa.Outbox.Exceptions;
 using Sa.Outbox.Support;
-using System.Runtime.CompilerServices;
 
 namespace Sa.Outbox.Delivery;
 
@@ -13,7 +13,7 @@ namespace Sa.Outbox.Delivery;
 /// <param name="cancellationToken">Operation cancellation token</param>
 /// <returns>Number of successfully delivered messages</returns>
 /// <exception cref="OperationCanceledException">When operation is cancelled via cancellationToken</exception>
-internal sealed class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliveryCourier
+internal sealed class DeliveryCourier(IDeliveryScoped scopedConsumer) : IDeliveryCourier
 {
     /// <summary>
     /// Asynchronous method to deliver messages
@@ -29,7 +29,7 @@ internal sealed class DeliveryCourier(IScopedConsumer scopedConsumer) : IDeliver
 
         try
         {
-            await scopedConsumer.MessageProcessingAsync(settings, outboxMessages, cancellationToken);
+            await scopedConsumer.Consume(settings, outboxMessages, cancellationToken);
         }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {
