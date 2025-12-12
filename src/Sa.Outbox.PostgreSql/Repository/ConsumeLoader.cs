@@ -38,7 +38,7 @@ internal sealed class ConsumeLoader(
 
             var loadResult = await LoadGroupByOffset(currentOffset, filter, batchSize, conn, tx, cancellationToken);
 
-            if (loadResult.GroupOffset.OffsetId != currentOffset.OffsetId)
+            if (!loadResult.GroupOffset.IsEmpty() && loadResult.GroupOffset.OffsetId != currentOffset.OffsetId)
             {
                 await SaveOffset(pair, loadResult.GroupOffset, conn, tx, cancellationToken);
             }
@@ -79,12 +79,17 @@ internal sealed class ConsumeLoader(
         if (await reader.ReadAsync(cancellationToken))
         {
             int copiedRows = await reader.IsDBNullAsync(0, cancellationToken) ? 0 : reader.GetInt32(0);
+
+            if (copiedRows == 0) return LoadGroupResult.Empty;
+
             GroupOffset maxId = await reader.IsDBNullAsync(1, cancellationToken) ? GroupOffset.Empty : new(reader.GetString(1));
 
-            return new(copiedRows, maxId);
+            return new LoadGroupResult(copiedRows, maxId);
         }
-
-        return LoadGroupResult.Empty;
+        else
+        {
+            return LoadGroupResult.Empty;
+        }
     }
 
     private async Task LockOffset(

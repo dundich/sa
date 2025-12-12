@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.PostgreSql;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
@@ -36,9 +37,9 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
                         => sp.WithTenantIds(1, 2)
                 )
                 .WithDeliveries(builder
-                    => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
+                    => builder.AddDelivery<TestMessageConsumer, TestMessage>("test2", (_, s) =>
                     {
-                        ConsumeSettings = s.ConsumeSettings;
+                        ConsumeSettings = s.ConsumeSettings.WithNoProcessingDelay();
                     })
                 )
             );
@@ -49,7 +50,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }
 
-
+    private readonly PgOutboxTableSettings _tableSettings = new();
 
     private IDeliveryProcessor Sub => fixture.Sub;
 
@@ -73,7 +74,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         Assert.Equal(0, result);
 
 
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>("select count(error_id) from outbox__$error", TestContext.Current.CancellationToken);
+        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>($"select count(error_id) from {_tableSettings.DatabaseErrorTableName}", TestContext.Current.CancellationToken);
 
         Assert.Equal(1, errCount);
     }

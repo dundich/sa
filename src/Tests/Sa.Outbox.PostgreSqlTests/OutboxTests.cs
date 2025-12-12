@@ -41,13 +41,16 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                         => sp.WithTenantIds(1, 2)
                     )
                     .WithDeliveries(builder => builder
-                        .AddDelivery<SomeMessageConsumer, SomeMessage>(string.Empty, (_, settings) =>
+                        .AddDelivery<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
                         {
                             settings.ScheduleSettings
                                 .WithExecutionInterval(TimeSpan.FromMilliseconds(100))
-                                .WithInitialDelay(TimeSpan.Zero);
+                                .WithInitialDelay(TimeSpan.Zero)
+                                ;
 
-                            settings.ConsumeSettings.WithMaxBatchSize(1);
+                            settings.ConsumeSettings
+                                .WithMaxBatchSize(1)
+                                .WithNoProcessingDelay();
                         })
                     )
                 )

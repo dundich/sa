@@ -26,7 +26,7 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
                         => ps.WithTenantIds(1, 2)
                 )
                 .WithDeliveries(builder
-                    => builder.AddDelivery<TestMessageConsumer, TestMessage>("proc_test", (_, s) =>
+                    => builder.AddDelivery<TestMessageConsumer, TestMessage>("test3", (_, s) =>
                     {
                         ConsumeSettings = s
                             .ConsumeSettings

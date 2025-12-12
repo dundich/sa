@@ -27,11 +27,12 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
                         => sp.WithTenantIds(1, 2)
                     )
                     .WithDeliveries(builder
-                        => builder.AddDelivery<TestMessageConsumer, TestMessage>(string.Empty, (_, s) =>
+                        => builder.AddDelivery<TestMessageConsumer, TestMessage>("test1", (_, s) =>
                         {
                             s.ConsumeSettings
                                 .WithLockDuration(TimeSpan.FromMilliseconds(300))
-                                .WithLockRenewal(TimeSpan.FromMilliseconds(100));
+                                .WithLockRenewal(TimeSpan.FromMilliseconds(100))
+                                .WithNoProcessingDelay();
 
                             ConsumeSettings = s.ConsumeSettings;
                         })

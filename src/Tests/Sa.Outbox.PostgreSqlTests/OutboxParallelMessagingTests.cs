@@ -7,7 +7,7 @@ using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSqlTests;
 
-public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture fixture) 
+public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture fixture)
     : IClassFixture<OutboxParallelMessagingTests.Fixture>
 {
     static class GenMessageRange
@@ -76,10 +76,10 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 .AddOutbox(builder =>
                 {
                     builder
-                    .WithPartitioningSupport((_, sp) 
-                        => sp.WithTenantIds(1,2))
+                    .WithPartitioningSupport((_, sp)
+                        => sp.WithTenantIds(1, 2))
                     .WithDeliveries(builder => builder
-                        .AddDelivery<SomeMessageConsumer1, SomeMessage1>(string.Empty, (_, settings) =>
+                        .AddDelivery<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
                         {
                             settings.ScheduleSettings
                                 .WithExecutionInterval(TimeSpan.FromMilliseconds(500))
@@ -87,7 +87,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
                             settings.ConsumeSettings.WithMaxBatchSize(1024);
                         })
-                        .AddDelivery<SomeMessageConsumer2, SomeMessage2>(string.Empty, (_, settings) =>
+                        .AddDelivery<SomeMessageConsumer2, SomeMessage2>("test7_1", (_, settings) =>
                         {
                             settings.ScheduleSettings
                                 .WithExecutionInterval(TimeSpan.FromMilliseconds(500))
