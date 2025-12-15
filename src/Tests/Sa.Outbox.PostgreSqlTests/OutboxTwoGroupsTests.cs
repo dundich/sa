@@ -13,7 +13,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
     {
         public static string PartName => "some";
 
-        public string PayloadId { get; set; } = default!;
+        public string PayloadId { get; } = Guid.NewGuid().ToString();
         public int TenantId { get; set; }
     }
 
@@ -115,11 +115,12 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
         const int maxAttempts = 20;
         while ((SomeMessageConsumerGr1.Counter < (int)total || SomeMessageConsumerGr2.Counter < (int)total) && attempts++ < maxAttempts)
         {
-            await Task.Delay(300, TestContext.Current.CancellationToken);
+            await Task.Delay(400, TestContext.Current.CancellationToken);
         }
 
-        await scheduler.Stop();
+        await Task.Delay(200, TestContext.Current.CancellationToken);
 
+        await scheduler.Stop();
 
         Assert.Equal((int)total, SomeMessageConsumerGr1.Counter);
         Assert.Equal((int)total, SomeMessageConsumerGr2.Counter);
