@@ -37,9 +37,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithPartitioningSupport((_, sp)
-                        => sp.WithTenantIds(1, 2)
-                    )
+                    .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1))
                     .WithDeliveries(builder => builder
                         .AddDelivery<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
                         {
@@ -85,8 +83,9 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         // start delivery message
         var publisher = ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
 
-        ulong total = await publisher.Publish([
-            new SomeMessage { TenantId = 1 }
+        ulong total = await publisher.Publish(
+        [
+              new SomeMessage { TenantId = 1 }
             , new SomeMessage { TenantId = 1 }
             , new SomeMessage { TenantId = 1 }
             , new SomeMessage { TenantId = 1 }

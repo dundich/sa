@@ -161,15 +161,25 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id='{qualifiedTableName}
         : settings.GetQualifiedTableName(values);
 
 
-    private static string GetCacheByRangeTableName(this ITableSettings settings) 
+    private static string GetCacheByRangeTableName(this ITableSettings settings)
         => settings.GetQualifiedTableName(CacheByRangeTableNamePostfix);
 
 
-    static string GetQualifiedTableName(this ITableSettings settings, params StrOrNum[] values)
-        => values.Length > 0
-        ? $"{settings.DatabaseSchemaName}.\"{settings.DatabaseTableName}{settings.SqlPartSeparator}{values.JoinByString(settings.SqlPartSeparator)}\""
-        : $"{settings.DatabaseSchemaName}.\"{settings.DatabaseTableName}\""
+    static string GetPartTableName(this ITableSettings settings, params StrOrNum[] values)
+      => values.Length > 0
+        ? $"{settings.DatabaseTableName}{settings.SqlPartSeparator}{values.JoinByString(settings.SqlPartSeparator)}"
+        : $"{settings.DatabaseTableName}"
         ;
+
+    static string GetQualifiedTableName(this ITableSettings settings, params StrOrNum[] values)
+    {
+        string tableName = settings.GetPartTableName(values);
+        if (tableName.Length > 63)
+        {
+            throw new InvalidOperationException($"Table name '{tableName}' exceeds PostgreSQL's 63-byte limit for identifiers. ");
+        }
+        return $"{settings.DatabaseSchemaName}.\"{tableName}\"";
+    }
 
     static string GetPartitionalSql(this ITableSettings settings, int partIndex)
         => partIndex >= 0 && partIndex < settings.PartByListFieldNames.Length
@@ -177,7 +187,7 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id='{qualifiedTableName}
             : $"PARTITION BY RANGE ({settings.PartByRangeFieldName})"
             ;
 
-    static string Pk(this ITableSettings settings) 
+    static string Pk(this ITableSettings settings)
         => settings.ConstraintPkSql?.Invoke() ?? $"pk_{settings.DatabaseTableName}";
 
 
