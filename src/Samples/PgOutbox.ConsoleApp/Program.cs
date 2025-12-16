@@ -1,134 +1,130 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using PgOutbox.ConsoleApp;
+using Microsoft.Extensions.Logging;
+using PgOutbox;
 using Sa.Outbox;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.Support;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 Console.WriteLine("Hello, Pg Outbox!");
 
-var connectionString = "Host=localhost;Username=service_user;Password=service_user;Database=test_1";
+var connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=postgres";
 
 // default configure...
-IHostBuilder builder = Host.CreateDefaultBuilder();
-
-builder.ConfigureServices(services => services
-    .AddOutbox(builder => builder
-        .WithPartitioningSupport((_, sp)
-            => sp.WithTenantIds(1, 2))
-        .WithDeliveries(builder => builder
-            .AddDelivery<SomeMessageConsumer, SomeMessage>(string.Empty, (_, settings) =>
+IHost host = Host
+    .CreateDefaultBuilder()
+    .ConfigureServices(services => services
+        .AddOutbox(builder => builder
+            .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3))
+            .WithDeliveries(builder => builder
+                .AddDelivery<SomeConsumer, SomeMessage>("group1", (_, settings) => settings
+                    .ScheduleSettings
+                        .WithExecutionInterval(TimeSpan.FromMilliseconds(100))
+                        .WithNoInitialDelay()
+                )
+                .AddDelivery<OutherConsumer, SomeMessage>("group2", (_, settings) => settings
+                    .ScheduleSettings
+                        .WithExecutionInterval(TimeSpan.FromSeconds(1))
+                        .WithInitialDelay(TimeSpan.FromSeconds(3))
+                )
+            )
+        )
+        .AddOutboxUsingPostgreSql(cfg => cfg
+            .ConfigureDataSource(ds => ds.WithConnectionString(connectionString))
+            .ConfigureOutboxSettings((_, settings) =>
             {
-                settings.ScheduleSettings
-                    .WithExecutionInterval(TimeSpan.FromMilliseconds(100))
-                    .WithInitialDelay(TimeSpan.Zero);
-
-                settings.ConsumeSettings.WithMaxBatchSize(1);
+                settings.TableSettings.DatabaseSchemaName = "test";
+                settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
             })
+            .WithMessageSerializer(new OutboxMessageSerializer())
         )
     )
-    .AddOutboxUsingPostgreSql(cfg =>
-    {
-        cfg.ConfigureDataSource(c => c.WithConnectionString(_ => connectionString));
-        cfg.ConfigureOutboxSettings((_, settings) =>
-        {
-            settings.TableSettings.DatabaseSchemaName = "test";
-            settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
-        });
-        cfg.WithMessageSerializer(sp => new OutboxMessageSerializer());
-    })
-);
+    .UseConsoleLifetime()
+    .Build();
 
-builder.UseConsoleLifetime();
-
-var host = builder.Build();
-
-
-
-// -- code
+// -- code publish
 
 var publisher = host.Services.GetRequiredService<IOutboxMessagePublisher>();
 
-var messages = new SomeMessage[]
-{
-    new("Hi 1"),
-    new("Hi 2"),
-    new("Hi 3"),
-    new("Hi 4" )
-};
-
-var sent = await publisher.Publish(messages);
-Console.WriteLine("sent msgs with rnd TenantId: {0}", sent);
+await publisher.Publish([
+    new SomeMessage(Guid.NewGuid().ToString(), "Hi 1", Random.Shared.Next(1, 4)),
+    new SomeMessage(Guid.NewGuid().ToString(), "Hi 2", Random.Shared.Next(1, 4)),
+    new SomeMessage(Guid.NewGuid().ToString(), "Hi 3", Random.Shared.Next(1, 4)),
+    new SomeMessage(Guid.NewGuid().ToString(), "Hi 4", Random.Shared.Next(1, 4)),
+    new SomeMessage(Guid.NewGuid().ToString(), "Hi 5", 1),
+    new SomeMessage(Guid.NewGuid().ToString(), "Hi 6", 2),
+    new SomeMessage(Guid.NewGuid().ToString(), "Hi 7", 3)
+]);
 
 await host.RunAsync();
 
 
-Console.WriteLine("The end. Recived: {0}, Successfully: {1}", SomeMessageConsumer.Counter, SomeMessageConsumer.Counter > 0);
 
-
-
-namespace PgOutbox.ConsoleApp
+namespace PgOutbox
 {
-    public sealed record SomeMessage(string Message) : IOutboxPayloadMessage
+    public sealed record SomeMessage(string PayloadId, string Message, int TenantId) : IOutboxPayloadMessage
     {
-        public static string PartName => "some";
-
-        public string PayloadId { get; init; } = Guid.NewGuid().ToString();
-        public int TenantId { get; init; } = Random.Shared.Next(1, 3);
-        public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+        static string IOutboxHasPart.PartName => "some_msg";
     }
 
 
-    [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
-    [JsonSerializable(typeof(SomeMessage))]
-    public partial class SomeMessageJsonSerializerContext : JsonSerializerContext
+    public sealed class SomeConsumer(ILogger<SomeConsumer> logger) : IConsumer<SomeMessage>
     {
-    }
-
-    public class SomeMessageConsumer : IConsumer<SomeMessage>
-    {
-        private static int s_Counter = 0;
-
-        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(
+            ConsumeSettings settings,
+            IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            CancellationToken cancellationToken)
         {
-            Interlocked.Add(ref s_Counter, outboxMessages.Count);
+            logger.LogWarning("======= {TenantId} =======", outboxMessages.First().PartInfo.TenantId);
 
-            foreach (var outboxMessage in outboxMessages)
+            foreach (var msg in outboxMessages)
             {
-                Console.WriteLine("Consume [#{0}, tenant:{1}] {2}", outboxMessage.OutboxId, outboxMessage.PartInfo.TenantId, outboxMessage.Payload);
+                logger.LogInformation("{Payload}", msg.Payload);
             }
 
             await Task.Delay(100, cancellationToken);
         }
+    }
 
+    public sealed class OutherConsumer(ILogger<OutherConsumer> logger) : IConsumer<SomeMessage>
+    {
+        public async ValueTask Consume(
+            ConsumeSettings settings,
+            IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            CancellationToken cancellationToken)
+        {
+            logger.LogWarning("======= {TenantId} =======", outboxMessages.First().PartInfo.TenantId);
 
-        public static int Counter => s_Counter;
+            foreach (var msg in outboxMessages)
+            {
+                logger.LogInformation("{Payload}", msg.Payload);
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
     }
 
     #region forAOT
     public class OutboxMessageSerializer : IOutboxMessageSerializer
     {
-        public T? Deserialize<T>(Stream stream)
-        {
-            if (typeof(T) == typeof(SomeMessage))
-            {
-                SomeMessage? message = JsonSerializer.Deserialize<SomeMessage>(stream, SomeMessageJsonSerializerContext.Default.SomeMessage);
-                return (T?)(object?)message;
-            }
-
-            return default;
-        }
+        public T? Deserialize<T>(Stream stream) => (typeof(T) == typeof(SomeMessage))
+                ? (T?)(object?)JsonSerializer.Deserialize<SomeMessage>(stream, SomeMessageJsonSerializerContext.Default.SomeMessage)
+                : default;
 
         public void Serialize<T>(Stream stream, T value)
         {
             if (typeof(T) == typeof(SomeMessage))
-            {
                 JsonSerializer.Serialize(stream, value!, SomeMessageJsonSerializerContext.Default.SomeMessage);
-            }
         }
+    }
+
+    [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+    [JsonSerializable(typeof(SomeMessage))]
+    public partial class SomeMessageJsonSerializerContext : JsonSerializerContext
+    {
     }
     #endregion
 }

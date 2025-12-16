@@ -56,6 +56,12 @@ public sealed class ScheduleSettings
         return this;
     }
 
+    public ScheduleSettings WithNoInitialDelay()
+    {
+        InitialDelay = TimeSpan.Zero;
+        return this;
+    }
+
     /// <summary>
     /// Sets the number of retry attempts on error.
     /// </summary>

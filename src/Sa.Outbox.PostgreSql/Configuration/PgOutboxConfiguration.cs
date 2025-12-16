@@ -56,6 +56,13 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         return this;
     }
 
+    public IPgOutboxConfiguration WithMessageSerializer<TService>(TService instance)
+        where TService : class, IOutboxMessageSerializer
+    {
+        services.TryAddSingleton<IOutboxMessageSerializer>(instance);
+        return this;
+    }
+
     private void AddSettings()
     {
         services.TryAddSingleton<PgOutboxTableSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().TableSettings);
