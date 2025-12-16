@@ -28,16 +28,16 @@ internal sealed class StartDeliveryCommand(
             writeBuffer.Span[i] = deliveryMessage;
         },
         [
-            new(SqlParam.TenantId, filter.TenantId)
-            , new(SqlParam.MsgPart, filter.Part)
-            , new(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds())
-            , new(SqlParam.ConsumerGroupId, filter.ConsumerGroupId)
-            , new(SqlParam.MsgPayloadType, typeCode)
-            , new(SqlParam.TransactId, filter.TransactId)
-            , new(SqlParam.Limit, batchSize)
-            , new(SqlParam.LockExpiresOn, (filter.ToDate + lockDuration).ToUnixTimeSeconds())
-            , new(SqlParam.ToDate, filter.ToDate.ToUnixTimeSeconds())
-            , new(SqlParam.NowDate, filter.NowDate.ToUnixTimeSeconds())
+            new NpgsqlParameter<int>(SqlParam.TenantId, filter.TenantId)
+            , new NpgsqlParameter<string>(SqlParam.MsgPart, filter.Part)
+            , new NpgsqlParameter<long>(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds())
+            , new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, filter.ConsumerGroupId)
+            , new NpgsqlParameter<long>(SqlParam.MsgPayloadType, typeCode)
+            , new NpgsqlParameter<string>(SqlParam.TransactId, filter.TransactId)
+            , new NpgsqlParameter<int>(SqlParam.Limit, batchSize)
+            , new NpgsqlParameter<long>(SqlParam.LockExpiresOn, (filter.ToDate + lockDuration).ToUnixTimeSeconds())
+            , new NpgsqlParameter<long>(SqlParam.ToDate, filter.ToDate.ToUnixTimeSeconds())
+            , new NpgsqlParameter<long>(SqlParam.NowDate, filter.NowDate.ToUnixTimeSeconds())
         ]
         , cancellationToken);
     }

@@ -46,10 +46,10 @@ internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTe
         {
             (long ErrorId, string TypeName, DateTimeOffset CreatedAt) = Value;
 
-            command.AddParameter<SqlParamNames>(SqlParam.ErrorId, i, ErrorId);
-            command.AddParameter<SqlParamNames>(SqlParam.TypeName, i, TypeName);
-            command.AddParameter<SqlParamNames>(SqlParam.StatusMessage, i, Key.ToString());
-            command.AddParameter<SqlParamNames>(SqlParam.CreatedAt, i, CreatedAt.ToUnixTimeSeconds());
+            command.AddParam<SqlParamNames, long>(SqlParam.ErrorId, i, ErrorId);
+            command.AddParam<SqlParamNames, string>(SqlParam.TypeName, i, TypeName);
+            command.AddParam<SqlParamNames, string>(SqlParam.StatusMessage, i, Key.ToString());
+            command.AddParam<SqlParamNames, long>(SqlParam.CreatedAt, i, CreatedAt.ToUnixTimeSeconds());
             i++;
         }
     }

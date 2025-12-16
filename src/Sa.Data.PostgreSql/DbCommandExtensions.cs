@@ -1,6 +1,6 @@
-using Npgsql;
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
+using Npgsql;
 
 namespace Sa.Data.PostgreSql;
 
@@ -23,6 +23,20 @@ public static class DbCommandExtensions
         param.Value = value ?? DBNull.Value;
         command.Parameters.Add(param);
 
+        return command;
+    }
+
+
+    public static NpgsqlCommand AddParam<TProvider, T>(
+        this NpgsqlCommand command,
+        string prefix,
+        int index,
+        T value)
+        where TProvider : INamePrefixProvider
+    {
+        var paramName = CachedParamNames<TProvider>.Default.Get(prefix, index);
+        var param = new NpgsqlParameter<T>(paramName, value);
+        command.Parameters.Add(param);
         return command;
     }
 }

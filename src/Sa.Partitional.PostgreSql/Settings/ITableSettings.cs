@@ -65,8 +65,14 @@ public interface ITableSettings
     /// Gets a function that returns SQL for defining primary key constraints.
     /// </summary>
     Func<string>? ConstraintPkSql { get; }
+
     /// <summary>
     /// WITH (fillfactor = ?);
     /// </summary>
     int? FillFactor { get; }
+
+    /// <summary>
+    /// outbox__part$
+    /// </summary>
+    string PartTablePostfix { get; }
 }

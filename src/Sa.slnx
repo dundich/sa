@@ -40,6 +40,7 @@
   <Folder Name="/Solution Items/">
     <File Path="Common.NuGet.Properties.xml" />
     <File Path="Common.Properties.xml" />
+    <File Path="Directory.Packages.props" />
     <File Path="Tests/Host.Test.Properties.xml" />
   </Folder>
   <Folder Name="/Tests/">

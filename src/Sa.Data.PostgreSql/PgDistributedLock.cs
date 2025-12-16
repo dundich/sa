@@ -71,13 +71,13 @@ internal sealed partial class PgDistributedLock(PgDataSourceSettings settings, I
         Level = LogLevel.Trace,
         Message = "Trying to acquire session lock for Lock Id {LockId}")]
     static partial void LogTryingToAcquireLock(ILogger logger, long lockId);
-    
+
     [LoggerMessage(
         EventId = 1002,
         Level = LogLevel.Information,
         Message = "Lock {LockId} rejected")]
     static partial void LogLockRejected(ILogger logger, long lockId);
-    
+
     [LoggerMessage(
         EventId = 1003,
         Level = LogLevel.Information,

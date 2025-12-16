@@ -1,27 +1,27 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="Common.Properties.xml" />
+	<Import Project="Common.Properties.xml" />
 
-  <PropertyGroup>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageReadmeFile>NuGet.md</PackageReadmeFile>
-    <PackageIcon>icon.png</PackageIcon>
-  </PropertyGroup>
+	<PropertyGroup>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<PackageReadmeFile>NuGet.md</PackageReadmeFile>
+		<PackageIcon>icon.png</PackageIcon>
+	</PropertyGroup>
 
-  <!-- Source Link - Start -->
-  <PropertyGroup>
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>    
-    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>
-    <IncludeSymbols>true</IncludeSymbols>
-    <IncludeSource>true</IncludeSource>
-  </PropertyGroup>
+	<!-- Source Link - Start -->
+	<PropertyGroup>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludeSymbols>true</IncludeSymbols>
+		<IncludeSource>true</IncludeSource>
+	</PropertyGroup>
 
-  <!-- Source Link - Finish -->
+	<!-- Source Link - Finish -->
 
-  <ItemGroup>
-    <None Include="..\..\docs\NuGet.md" Pack="true" PackagePath="\"/>
-    <None Include="..\..\icon.png" Pack="true" PackagePath="\"/>
-  </ItemGroup>
+	<ItemGroup>
+		<None Include="..\..\docs\NuGet.md" Pack="true" PackagePath="\"/>
+		<None Include="..\..\icon.png" Pack="true" PackagePath="\"/>
+	</ItemGroup>
 
 </Project>

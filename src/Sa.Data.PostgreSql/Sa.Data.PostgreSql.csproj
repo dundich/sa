@@ -3,12 +3,12 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Description>Simple client for Npqsql</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Npgsql" Version="9.0.4" />
+    <PackageReference Include="Npgsql"/>
   </ItemGroup>
 
 </Project>

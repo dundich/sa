@@ -11,6 +11,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         public const string PartByRangeFieldName = "created_at";
         public const string SqlPartSeparator = "__";
         public const int FillFactor = 0;
+        public const string PartTablePostfix = "part$";
     }
 
 
@@ -24,6 +25,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     private string? _timestamp;
     private PgPartBy? _partBy;
     private string? _separator = null;
+    private string? _postfix = null;
     private int? _fillFactor = null;
 
     private Func<string>? _postSql = null;
@@ -83,6 +85,14 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         return this;
     }
 
+    public ITableBuilder WithPartTablePostfix(string postfix)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(nameof(postfix));
+
+        _postfix = postfix;
+        return this;
+    }
+
     public ITableSettings Build()
     {
         var databaseTableName = tableName.Trim('"');
@@ -111,7 +121,8 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
             PostRootSql: _postSql,
             ConstraintPkSql: _pkSql,
 
-            FillFactor: _fillFactor ?? Default.FillFactor
+            FillFactor: _fillFactor ?? Default.FillFactor,
+            PartTablePostfix: _postfix ?? Default.PartTablePostfix
         );
     }
 

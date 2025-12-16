@@ -13,6 +13,8 @@ public interface ITableBuilder
     ITableBuilder WithPartSeparator(string partSeparator);
     ITableBuilder WithFillFactor(int fillFactor);
 
+    ITableBuilder WithPartTablePostfix(string postfix);
+
     ITableBuilder AddPostSql(Func<string> postSql);
     ITableBuilder AddConstraintPkSql(Func<string> pkSql);
 

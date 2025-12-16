@@ -5,8 +5,6 @@ namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
 internal static class SqlTemplate
 {
-    const string CacheByRangeTableNamePostfix = "part$";
-
     private const char NumOrStrSplitter = ',';
 
     /// <summary>
@@ -162,7 +160,7 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id='{qualifiedTableName}
 
 
     private static string GetCacheByRangeTableName(this ITableSettings settings)
-        => settings.GetQualifiedTableName(CacheByRangeTableNamePostfix);
+        => settings.GetQualifiedTableName(settings.PartTablePostfix);
 
 
     static string GetPartTableName(this ITableSettings settings, params StrOrNum[] values)

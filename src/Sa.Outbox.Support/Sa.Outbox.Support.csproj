@@ -3,7 +3,7 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Description>Intrfaces for publishing and using messages in the Outbox</Description>
   </PropertyGroup>
 

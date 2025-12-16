@@ -63,26 +63,26 @@ internal sealed class FinishDeliveryCommand(
 
             cmd
 
-                .AddParameter<SqlParamNames>(SqlParam.StatusCode, i, statusCode)
-                .AddParameter<SqlParamNames>(SqlParam.StatusMessage, i, msg ?? string.Empty)
-                .AddParameter<SqlParamNames>(SqlParam.CreatedAt, i, createdAt.ToUnixTimeSeconds())
+                .AddParam<SqlParamNames, int>(SqlParam.StatusCode, i, statusCode)
+                .AddParam<SqlParamNames, string>(SqlParam.StatusMessage, i, msg ?? string.Empty)
+                .AddParam<SqlParamNames, long>(SqlParam.CreatedAt, i, createdAt.ToUnixTimeSeconds())
 
-                .AddParameter<SqlParamNames>(SqlParam.PayloadId, i, context.PayloadId)
+                .AddParam<SqlParamNames, string>(SqlParam.PayloadId, i, context.PayloadId)
 
-                .AddParameter<SqlParamNames>(SqlParam.TaskId, i, context.DeliveryInfo.TaskId)
+                .AddParam<SqlParamNames, long>(SqlParam.TaskId, i, context.DeliveryInfo.TaskId)
 
-                .AddParameter<SqlParamNames>(SqlParam.LockExpiresOn, i, lockExpiresOn)
-                .AddParameter<SqlParamNames>(SqlParam.TaskCreatedAt, i, context.DeliveryInfo.TaskId)
+                .AddParam<SqlParamNames, long>(SqlParam.LockExpiresOn, i, lockExpiresOn)
+                .AddParam<SqlParamNames, long>(SqlParam.TaskCreatedAt, i, context.DeliveryInfo.TaskId)
 
-                .AddParameter<SqlParamNames>(SqlParam.ErrorId, i, errorId ?? string.Empty)
+                .AddParam<SqlParamNames, string>(SqlParam.ErrorId, i, errorId ?? string.Empty)
 
                 ;
         }
 
-        cmd.Parameters.Add(new(SqlParam.TenantId, filter.TenantId));
-        cmd.Parameters.Add(new(SqlParam.ConsumerGroupId, filter.ConsumerGroupId));
-        cmd.Parameters.Add(new(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds()));
-        cmd.Parameters.Add(new(SqlParam.TransactId, filter.TransactId));
+        cmd.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, filter.TenantId));
+        cmd.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, filter.ConsumerGroupId));
+        cmd.Parameters.Add(new NpgsqlParameter<long>(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds()));
+        cmd.Parameters.Add(new NpgsqlParameter<string>(SqlParam.TransactId, filter.TransactId));
     }
 
 

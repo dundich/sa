@@ -17,11 +17,12 @@ internal sealed record TableSettings(
     string PartByRangeFieldName,
     string[] PartByListFieldNames,
     string PartitionByFieldName,
-    
+
     string SqlPartSeparator,
 
     Func<string>? PostRootSql,
     Func<string>? ConstraintPkSql,
-    int? FillFactor
+    int? FillFactor,
+    string PartTablePostfix
 )
 : ITableSettings;

@@ -4,7 +4,7 @@
     <IsTestProject>false</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Testcontainers.PostgreSql" Version="4.8.1" />
+    <PackageReference Include="Testcontainers.PostgreSql"/>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />

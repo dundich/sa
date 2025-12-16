@@ -1,3 +1,4 @@
+using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.TypeHashResolve;
 
@@ -19,13 +20,13 @@ internal sealed class ExtendDeliveryCommand(
 
         return await dataSource.ExecuteNonQuery(sqlTemplate.SqlExtendDelivery,
         [
-            new(SqlParam.TenantId, filter.TenantId)
-            , new(SqlParam.ConsumerGroupId, filter.ConsumerGroupId)
-            , new(SqlParam.FromDate, fromDate)
-            , new(SqlParam.TransactId, filter.TransactId)
-            , new(SqlParam.TypeName, typeCode)
-            , new(SqlParam.LockExpiresOn, lockExpiresOn)
-            , new(SqlParam.ToDate, now)
+            new NpgsqlParameter<int>(SqlParam.TenantId, filter.TenantId)
+            , new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, filter.ConsumerGroupId)
+            , new NpgsqlParameter<long>(SqlParam.FromDate, fromDate)
+            , new NpgsqlParameter<string>(SqlParam.TransactId, filter.TransactId)
+            , new NpgsqlParameter<long>(SqlParam.TypeName, typeCode)
+            , new NpgsqlParameter<long>(SqlParam.LockExpiresOn, lockExpiresOn)
+            , new NpgsqlParameter<long>(SqlParam.ToDate, now)
         ]
         , cancellationToken);
     }

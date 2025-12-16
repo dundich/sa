@@ -6,8 +6,8 @@ $sln_platform = "Any CPU"
 $config = "Release"
 $dist_folder = "$root\dist"
 $msbuild_verbosity = "n"
-		
-$projects = @(	
+
+$projects = @(
 	"Sa.Media",
 	"Sa.Media.FFmpeg",
 
@@ -16,7 +16,7 @@ $projects = @(
 
 	"Sa.Configuration",
     "Sa.Configuration.PostgreSql",
-	
+
 	"Sa.Schedule",
 
 	"Sa.Partitional.PostgreSql",
@@ -32,7 +32,7 @@ $projects = @(
 )
 
 # msbuild.exe https://msdn.microsoft.com/pl-pl/library/ms164311(v=vs.80).aspx
-	
+
 function _AssertExec() {
 	if ($LastExitCode -ne 0) { exit 1 }
 }
@@ -55,22 +55,22 @@ function _MsBuild($target) {
 }
 
 function Clean() {
-	
+
 	_Step "Clean folder $dist_folder"
 	# Ensure dist folder exists
 	New-Item -ErrorAction Ignore -ItemType directory -Path $dist_folder
 	Remove-Item $dist_folder\* -recurse
-	
+
 	_MsBuild "Clean"
 }
 
-function Build() { 
-	Clean	
+function Build() {
+	Clean
 	NuRestore
 	_MsBuild "Build"
 }
 
-function Test() { 
+function Test() {
 	_Step "Runnint tests"
 	& dotnet test $sln_file -v $msbuild_verbosity
 	_AssertExec
@@ -92,7 +92,7 @@ function NuPack() {
 
 function NuPush($nuget_source) {
 	# find both *.nupkg and *.snupkg files
-	foreach ($package in Get-ChildItem $dist_folder -filter "*.nupkg" -name) {		
+	foreach ($package in Get-ChildItem $dist_folder -filter "*.nupkg" -name) {
 		_Step "Push $package to $nuget_source"
 		& dotnet nuget push "$dist_folder\$package" --source $nuget_source
 		_AssertExec
@@ -102,7 +102,7 @@ function NuPush($nuget_source) {
 function NuPushEx($nuget_key) {
 	$nuget_source = "https://api.nuget.org/v3/index.json"
 	# find both *.nupkg and *.snupkg files
-	foreach ($package in Get-ChildItem $dist_folder -filter "*.nupkg" -name) {		
+	foreach ($package in Get-ChildItem $dist_folder -filter "*.nupkg" -name) {
 		_Step "dotnet nuget push $dist_folder\$package -k $nuget_key -s $nuget_source"
 		& dotnet nuget push "$dist_folder\$package" -k $nuget_key -s "$nuget_source"
 		_AssertExec
@@ -111,5 +111,5 @@ function NuPushEx($nuget_key) {
 
 function Package() {
 	Build
-	NuPack	
+	NuPack
 }

@@ -64,15 +64,15 @@ internal sealed class ConsumeLoader(
     {
         await using var command = new NpgsqlCommand(sql.SqlLoadConsumerGroup, conn, tx);
 
-        command.Parameters.AddWithValue(SqlParam.TenantId, filter.TenantId);
-        command.Parameters.AddWithValue(SqlParam.MsgPart, filter.Part);
-        command.Parameters.AddWithValue(SqlParam.ConsumerGroupId, filter.ConsumerGroupId);
-        command.Parameters.AddWithValue(SqlParam.GroupOffset, currentOffset.OffsetId);
-        command.Parameters.AddWithValue(SqlParam.Limit, batchSize);
-        command.Parameters.AddWithValue(SqlParam.NowDate, filter.NowDate.ToUnixTimeSeconds());
 
-        command.Parameters.AddWithValue(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds());
-        command.Parameters.AddWithValue(SqlParam.ToDate, filter.ToDate.ToUnixTimeSeconds());
+        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, filter.TenantId));
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.MsgPart, filter.Part));
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, filter.ConsumerGroupId));
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.GroupOffset, currentOffset.OffsetId));
+        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.Limit, batchSize));
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.NowDate, filter.NowDate.ToUnixTimeSeconds()));
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds()));
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.ToDate, filter.ToDate.ToUnixTimeSeconds()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
@@ -111,11 +111,13 @@ internal sealed class ConsumeLoader(
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
     {
-        using var updateCmd = new NpgsqlCommand(sql.SqlUpdateOffset, conn, tx);
-        updateCmd.Parameters.AddWithValue(SqlParam.ConsumerGroupId, pair.ConsumerGroupId);
-        updateCmd.Parameters.AddWithValue(SqlParam.TenantId, pair.TenantId);
-        updateCmd.Parameters.AddWithValue(SqlParam.GroupOffset, newOffset.OffsetId);
-        await updateCmd.ExecuteNonQueryAsync(cancellationToken);
+        using var command = new NpgsqlCommand(sql.SqlUpdateOffset, conn, tx);
+
+        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, pair.TenantId));
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, pair.ConsumerGroupId));
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.GroupOffset, newOffset.OffsetId));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private async Task<GroupOffset> GetOffset(
@@ -124,12 +126,12 @@ internal sealed class ConsumeLoader(
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
     {
-        await using var selectCmd = new NpgsqlCommand(sql.SqlSelectOffset, conn, tx);
+        await using var command = new NpgsqlCommand(sql.SqlSelectOffset, conn, tx);
 
-        selectCmd.Parameters.AddWithValue(SqlParam.ConsumerGroupId, pair.ConsumerGroupId);
-        selectCmd.Parameters.AddWithValue(SqlParam.TenantId, pair.TenantId);
+        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, pair.TenantId));
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, pair.ConsumerGroupId));
 
-        object? currentOffsetObj = await selectCmd.ExecuteScalarAsync(cancellationToken);
+        object? currentOffsetObj = await command.ExecuteScalarAsync(cancellationToken);
 
         GroupOffset currentOffset = (currentOffsetObj == null)
             ? await InitializeOffset(pair, conn, tx, cancellationToken)
@@ -144,11 +146,12 @@ internal sealed class ConsumeLoader(
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
     {
-        await using var initCmd = new NpgsqlCommand(sql.SqlInitOffset, conn, tx);
+        await using var command = new NpgsqlCommand(sql.SqlInitOffset, conn, tx);
 
-        initCmd.Parameters.AddWithValue(SqlParam.ConsumerGroupId, pair.ConsumerGroupId);
-        initCmd.Parameters.AddWithValue(SqlParam.TenantId, pair.TenantId);
-        await initCmd.ExecuteNonQueryAsync(cancellationToken);
+        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, pair.TenantId));
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, pair.ConsumerGroupId));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
 
         return GroupOffset.Empty;
     }

@@ -64,9 +64,9 @@ public sealed class PgOutboxTableSettings
     public string DatabaseOffsetTableName { get; set; } = "outbox__offset$";
 
     /// <summary>
-    /// Default is set to "outbox__task$".
+    /// Default is set to "outbox__$".
     /// </summary>
-    public string DatabaseTaskTableName { get; set; } = "outbox__task$";
+    public string DatabaseTaskTableName { get; set; } = "outbox__$";
 
     /// <summary>
     /// Gets or sets the name of the error table.
@@ -104,6 +104,9 @@ public sealed class PgOutboxTableSettings
     /// <returns>The qualified name of the error table.</returns>
     public string GetQualifiedErrorTableName() => $@"{DatabaseSchemaName}.""{DatabaseErrorTableName}""";
 
+    /// <summary>
+    /// public."outbox__$"
+    /// </summary>
     public string GetQualifiedTaskTableName() => $@"{DatabaseSchemaName}.""{DatabaseTaskTableName}""";
 }
 
