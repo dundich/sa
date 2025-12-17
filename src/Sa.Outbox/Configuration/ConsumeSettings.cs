@@ -11,8 +11,20 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
     public string ConsumerGroupId { get; } = consumerGroupId ?? string.Empty;
 
     /// <summary>
+    /// Maximum number of processing iterations when greedy mode is enabled.
+    /// -1 means unlimited iterations.
+    /// </summary>
+    public int MaxProcessingIterations { get; private set; } = 10;
+
+    /// <summary>
+    /// Delay between processing iterations when in greedy mode.
+    /// Helps prevent tight-looping when there are no messages.
+    /// </summary>
+    public TimeSpan IterationDelay { get; private set; } = TimeSpan.Zero;
+
+    /// <summary>
     /// Gets or sets the maximum size of the Outbox message batch for each database poll.
-    /// for array pool size: 16, 32, 64, 128, 256, 512, 1024 ...
+    /// Recommended values: 16, 32, 64, 128, 256, 512, 1024 ...
     /// </summary>
     public int MaxBatchSize { get; private set; } = 16;
 
@@ -45,9 +57,28 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
     public int? ConsumeBatchSize { get; private set; }
 
     /// <summary>
-    /// Delay to wait for "full set of messages"
+    /// Time window to accumulate messages before processing a batch.
+    /// Delay to wait for "full set of messages" from input messages
     /// </summary>
-    public TimeSpan ProcessingDelay { get; private set; } = TimeSpan.FromSeconds(3);
+    public TimeSpan BatchingWindow { get; private set; } = TimeSpan.FromSeconds(3);
+
+
+    /// <summary>
+    /// Maximum processing time allowed for each individual tenant.
+    /// If processing exceeds this timeout, it will be cancelled and tenant marked as failed.
+    /// </summary>
+    public TimeSpan PerTenantTimeout { get; private set; } = TimeSpan.Zero;
+
+
+    /// <summary>
+    /// Maximum number of tenants to process in parallel.
+    /// Values:
+    /// - 0 or 1: Sequential processing (default)
+    /// - > 1: Parallel processing with specified degree
+    /// - -1: Use Environment.ProcessorCount
+    /// </summary>
+    public int PerTenantMaxDegreeOfParallelism { get; private set; } = 1;
+
 
 
     // Fluent 
@@ -82,15 +113,15 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
         return this;
     }
 
-    public ConsumeSettings WithProcessingDelay(TimeSpan interval)
+    public ConsumeSettings WithBatchingWindow(TimeSpan interval)
     {
-        ProcessingDelay = interval;
+        BatchingWindow = interval;
         return this;
     }
 
-    public ConsumeSettings WithNoProcessingDelay()
+    public ConsumeSettings WithNoBatchingWindow()
     {
-        ProcessingDelay = TimeSpan.Zero;
+        BatchingWindow = TimeSpan.Zero;
         return this;
     }
 
@@ -103,6 +134,36 @@ public sealed class ConsumeSettings(string? consumerGroupId = null)
     public ConsumeSettings WithConsumeBatchSize(int? batchSize)
     {
         ConsumeBatchSize = batchSize;
+        return this;
+    }
+
+    public ConsumeSettings WithTenantTimeout(TimeSpan timeout)
+    {
+        PerTenantTimeout = timeout;
+        return this;
+    }
+
+    public ConsumeSettings WithMaxProcessingIterations(int iterations)
+    {
+        MaxProcessingIterations = Math.Max(-1, iterations);
+        return this;
+    }
+
+    public ConsumeSettings WithSingleIteration()
+    {
+        MaxProcessingIterations = 1;
+        return this;
+    }
+
+    public ConsumeSettings WithIterationDelay(TimeSpan delay)
+    {
+        IterationDelay = delay;
+        return this;
+    }
+
+    public ConsumeSettings WithPerTenanMaxDegreeOfParallelism(int degree)
+    {
+        PerTenantMaxDegreeOfParallelism = Math.Max(-1, degree);
         return this;
     }
 }

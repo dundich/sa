@@ -9,9 +9,9 @@ namespace Sa.Schedule.Engine;
 /// job lifecycly controller with context
 /// </summary>
 internal sealed partial class JobController(
-    IJobSettings settings, 
-    IInterceptorSettings interceptorSettings, 
-    IServiceScopeFactory scopeFactory, 
+    IJobSettings settings,
+    IInterceptorSettings interceptorSettings,
+    IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider) : IJobController
 {
 

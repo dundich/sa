@@ -51,20 +51,20 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
                         .AddDelivery<SomeMessageConsumerGr1, SomeMessage>("test_gr1", (_, settings) =>
                         {
                             settings.ScheduleSettings
-                                .WithExecutionInterval(TimeSpan.FromMilliseconds(100))
+                                .WithInterval(TimeSpan.FromMilliseconds(100))
                                 .WithInitialDelay(TimeSpan.Zero);
 
                             settings.ConsumeSettings
-                                .WithNoProcessingDelay();
+                                .WithNoBatchingWindow();
                         })
                         .AddDelivery<SomeMessageConsumerGr2, SomeMessage>("test_gr2", (_, settings) =>
                         {
                             settings.ScheduleSettings
-                                .WithExecutionInterval(TimeSpan.FromMilliseconds(100))
+                                .WithInterval(TimeSpan.FromMilliseconds(100))
                                 .WithInitialDelay(TimeSpan.Zero);
 
                             settings.ConsumeSettings
-                                .WithNoProcessingDelay();
+                                .WithNoBatchingWindow();
                         })
                     )
                 )

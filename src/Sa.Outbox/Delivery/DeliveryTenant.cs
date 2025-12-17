@@ -54,7 +54,7 @@ internal sealed class DeliveryTenant(
 
     private async Task<int> SelectAndLock<TMessage>(ConsumeSettings settings, OutboxMessageFilter filter, int batchSize, Memory<OutboxDeliveryMessage<TMessage>> slice, CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
-        filter = filter with { ToDate = filter.ToDate - settings.ProcessingDelay };
+        filter = filter with { ToDate = filter.ToDate - settings.BatchingWindow };
 
         return await repository.RentDelivery(
             slice,

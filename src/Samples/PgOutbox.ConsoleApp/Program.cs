@@ -26,14 +26,18 @@ IHost host = Host
             .WithDeliveries(builder => builder
                 .AddDelivery<SomeConsumer, SomeMessage>("group1", (_, settings) => settings
                     .ScheduleSettings
-                        .WithExecutionInterval(TimeSpan.FromMilliseconds(100))
+                        .WithInterval(TimeSpan.FromMilliseconds(100))
                         .WithImmediate()
                 )
-                .AddDelivery<OutherConsumer, SomeMessage>("group2", (_, settings) => settings
-                    .ScheduleSettings
-                        .WithExecutionInterval(TimeSpan.FromSeconds(10))
-                        .WithInitialDelay(TimeSpan.FromSeconds(3))
-                )
+                .AddDelivery<OutherConsumer, SomeMessage>("group2", (_, settings) =>
+                {
+                    settings.ScheduleSettings
+                        .WithInterval(TimeSpan.FromSeconds(10))
+                        .WithInitialDelay(TimeSpan.FromSeconds(3));
+
+                    settings.ConsumeSettings
+                        .WithSingleIteration();
+                })
             )
         )
         // outbox pg
@@ -88,7 +92,7 @@ namespace PgOutbox
 
             foreach (var msg in outboxMessages)
             {
-                logger.LogInformation("{Payload}", msg.Payload);
+                logger.LogInformation("#{TaskId}: {Payload}", msg.DeliveryInfo.TaskId, msg.Payload);
             }
 
             await Task.Delay(100, cancellationToken);
@@ -118,11 +122,18 @@ namespace PgOutbox
     {
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            for (int i = 0; i < 1000 && !stoppingToken.IsCancellationRequested; i++)
+            try
             {
-                var rnd = Random.Shared.Next(1, 4);
-                await Task.Delay(TimeSpan.FromSeconds(rnd), stoppingToken);
-                await publisher.Publish(new SomeMessage(i.ToString(), DateTime.Now.ToString(), rnd), stoppingToken);
+                for (int i = 0; i < 1000 && !stoppingToken.IsCancellationRequested; i++)
+                {
+                    var rnd = Random.Shared.Next(1, 4);
+                    await Task.Delay(TimeSpan.FromSeconds(rnd), stoppingToken);
+                    await publisher.Publish(new SomeMessage(i.ToString(), DateTime.Now.ToString(), rnd), stoppingToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // ignore
             }
         }
     }

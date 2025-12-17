@@ -30,7 +30,7 @@ internal static class Setup
                 ScheduleSettings scheduleSettings = settings.ScheduleSettings;
 
                 jobBuilder
-                    .EveryTime(scheduleSettings.ExecutionInterval)
+                    .EveryTime(scheduleSettings.Interval)
                     .WithInitialDelay(scheduleSettings.InitialDelay)
                     .WithTag(settings)
                     .WithName(scheduleSettings.Name ?? typeof(TConsumer).Name)

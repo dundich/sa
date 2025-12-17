@@ -39,7 +39,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
                 .WithDeliveries(builder
                     => builder.AddDelivery<TestMessageConsumer, TestMessage>("test2", (_, s) =>
                     {
-                        ConsumeSettings = s.ConsumeSettings.WithNoProcessingDelay();
+                        ConsumeSettings = s.ConsumeSettings.WithNoBatchingWindow();
                     })
                 )
             );

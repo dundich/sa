@@ -40,7 +40,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
                                 .WithNoLockDuration()
                                 .WithLockRenewal(TimeSpan.FromMinutes(10))
                                 .WithMaxDeliveryAttempts(MaxDeliveryAttempts)
-                                .WithNoProcessingDelay();
+                                .WithNoBatchingWindow();
 
                             ConsumeSettings = s.ConsumeSettings;
                         })

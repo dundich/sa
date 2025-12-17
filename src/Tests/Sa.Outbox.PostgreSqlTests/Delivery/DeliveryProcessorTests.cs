@@ -30,7 +30,7 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
                     {
                         ConsumeSettings = s
                             .ConsumeSettings
-                            .WithProcessingDelay(TimeSpan.FromMinutes(3))
+                            .WithBatchingWindow(TimeSpan.FromMinutes(3))
                             ;
                     })
                 )
@@ -65,7 +65,7 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
         Assert.Equal(0, result);
 
 
-        fixture.ConsumeSettings.WithNoProcessingDelay();
+        fixture.ConsumeSettings.WithNoBatchingWindow();
 
         result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
         Assert.True(result > 0);

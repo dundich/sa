@@ -12,7 +12,7 @@ public sealed class ScheduleSettings
 
     public string? Name { get; private set; }
 
-    public TimeSpan ExecutionInterval { get; private set; } = TimeSpan.FromMinutes(1);
+    public TimeSpan Interval { get; private set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
     /// Job schedule delay before start
@@ -39,9 +39,9 @@ public sealed class ScheduleSettings
     /// </summary>
     /// <param name="interval">The execution interval.</param>
     /// <returns>This instance for chaining.</returns>
-    public ScheduleSettings WithExecutionInterval(TimeSpan interval)
+    public ScheduleSettings WithInterval(TimeSpan interval)
     {
-        ExecutionInterval = interval;
+        Interval = interval;
         return this;
     }
 

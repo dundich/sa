@@ -42,13 +42,13 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                         .AddDelivery<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
                         {
                             settings.ScheduleSettings
-                                .WithExecutionInterval(TimeSpan.FromMilliseconds(100))
+                                .WithInterval(TimeSpan.FromMilliseconds(100))
                                 .WithInitialDelay(TimeSpan.Zero)
                                 ;
 
                             settings.ConsumeSettings
                                 .WithMaxBatchSize(1)
-                                .WithNoProcessingDelay();
+                                .WithNoBatchingWindow();
                         })
                     )
                 )

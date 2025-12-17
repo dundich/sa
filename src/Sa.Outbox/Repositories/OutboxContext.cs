@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using Sa.Outbox.Exceptions;
 
 
 namespace Sa.Outbox.Repository;
 
+
+[DebuggerDisplay("#{PayloadId}")]
 /// <summary>
 /// OutboxMessage
 /// </summary>

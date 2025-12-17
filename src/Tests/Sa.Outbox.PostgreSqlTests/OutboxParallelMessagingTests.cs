@@ -82,7 +82,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                         .AddDelivery<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
                         {
                             settings.ScheduleSettings
-                                .WithExecutionInterval(TimeSpan.FromMilliseconds(500))
+                                .WithInterval(TimeSpan.FromMilliseconds(500))
                                 .WithInitialDelay(TimeSpan.Zero);
 
                             settings.ConsumeSettings.WithMaxBatchSize(1024);
@@ -90,7 +90,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                         .AddDelivery<SomeMessageConsumer2, SomeMessage2>("test7_1", (_, settings) =>
                         {
                             settings.ScheduleSettings
-                                .WithExecutionInterval(TimeSpan.FromMilliseconds(500))
+                                .WithInterval(TimeSpan.FromMilliseconds(500))
                                 .WithInitialDelay(TimeSpan.Zero);
 
                             settings.ConsumeSettings.WithMaxBatchSize(1024);
