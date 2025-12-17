@@ -1,134 +1,162 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using PgOutbox.ConsoleApp;
+using Microsoft.Extensions.Logging;
+using PgOutbox;
 using Sa.Outbox;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.Support;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 Console.WriteLine("Hello, Pg Outbox!");
 
-var connectionString = "Host=localhost;Username=service_user;Password=service_user;Database=test_1";
+var connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=postgres";
 
 // default configure...
-IHostBuilder builder = Host.CreateDefaultBuilder();
+IHost host = Host
+    .CreateDefaultBuilder()
+    .ConfigureServices(services => services
+        // publicher
+        .AddHostedService<MessagePublisherService>()
 
-builder.ConfigureServices(services => services
-    .AddOutbox(builder => builder
-        .WithPartitioningSupport((_, sp) =>
-        {
-            sp.ForEachTenant = true;
-            sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2]);
-        })
-        .WithDeliveries(builder => builder
-            .AddDelivery<SomeMessageConsumer, SomeMessage>((_, settings) =>
+        // outbox
+        .AddOutbox(builder => builder
+            .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3))
+            .WithDeliveries(builder => builder
+                .AddDelivery<SomeConsumer, SomeMessage>("group1", (_, settings) => settings
+                    .ScheduleSettings
+                        .WithInterval(TimeSpan.FromMilliseconds(100))
+                        .WithImmediate()
+                )
+                .AddDelivery<OutherConsumer, SomeMessage>("group2", (_, settings) =>
+                {
+                    settings.ScheduleSettings
+                        .WithInterval(TimeSpan.FromSeconds(10))
+                        .WithInitialDelay(TimeSpan.FromSeconds(3));
+
+                    settings.ConsumeSettings
+                        .WithSingleIteration();
+                })
+            )
+        )
+        // outbox pg
+        .AddOutboxUsingPostgreSql(cfg => cfg
+            .ConfigureDataSource(ds => ds.WithConnectionString(connectionString))
+            .ConfigureOutboxSettings((_, settings) =>
             {
-                settings.ScheduleSettings.ExecutionInterval = TimeSpan.FromMilliseconds(100);
-                settings.ScheduleSettings.InitialDelay = TimeSpan.Zero;
-                settings.ExtractSettings.MaxBatchSize = 1;
+                settings.TableSettings.DatabaseSchemaName = "test";
+                settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
             })
+            .WithMessageSerializer(new OutboxMessageSerializer())
         )
     )
-    .AddOutboxUsingPostgreSql(cfg =>
-    {
-        cfg.ConfigureDataSource(c => c.WithConnectionString(_ => connectionString));
-        cfg.ConfigureOutboxSettings((_, settings) =>
-        {
-            settings.TableSettings.DatabaseSchemaName = "test";
-            settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
-        });
-        cfg.WithMessageSerializer(sp => new OutboxMessageSerializer());
-    })
-);
+    .UseConsoleLifetime()
+    .Build();
 
-builder.UseConsoleLifetime();
-
-var host = builder.Build();
-
-
-
-// -- code
+// -- code publish
 
 var publisher = host.Services.GetRequiredService<IOutboxMessagePublisher>();
 
-var messages = new SomeMessage[]
-{
-    new() { Message = "Hi 1" },
-    new() { Message = "Hi 2" },
-    new() { Message = "Hi 3" },
-    new() { Message = "Hi 4" }
-};
+await publisher.Publish([
+    new SomeMessage("01", "Hi 1", Random.Shared.Next(1, 4)),
+    new SomeMessage("02", "Hi 2", Random.Shared.Next(1, 4)),
+    new SomeMessage("03", "Hi 3", Random.Shared.Next(1, 4)),
 
-var sent = await publisher.Publish(messages);
-Console.WriteLine("sent msgs with rnd TenantId: {0}", sent);
+    new SomeMessage("04", "Hi 4", 1),
+    new SomeMessage("05", "Hi 5", 2),
+    new SomeMessage("06", "Hi 6", 3)
+]);
+
 
 await host.RunAsync();
 
 
-Console.WriteLine("The end. Recived: {0}, Successfully: {1}", SomeMessageConsumer.Counter, SomeMessageConsumer.Counter > 0);
 
-
-
-namespace PgOutbox.ConsoleApp
+namespace PgOutbox
 {
-    public class SomeMessage : IOutboxPayloadMessage
+    public sealed record SomeMessage(string PayloadId, string Message, int TenantId) : IOutboxPayloadMessage
     {
-        public static string PartName => "some";
-
-        public string PayloadId { get; set; } = Guid.NewGuid().ToString();
-        public int TenantId { get; set; } = Random.Shared.Next(1, 3);
-        public string Message { get; set; } = string.Empty;
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        static string IOutboxHasPart.PartName => "some_msg";
     }
 
+
+    public sealed class SomeConsumer(ILogger<SomeConsumer> logger) : IConsumer<SomeMessage>
+    {
+        public async ValueTask Consume(
+            ConsumeSettings settings,
+            IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            CancellationToken cancellationToken)
+        {
+            logger.LogWarning("======= {Group} =======", settings.ConsumerGroupId);
+
+            foreach (var msg in outboxMessages)
+            {
+                logger.LogInformation("#{TaskId}: {Payload}", msg.DeliveryInfo.TaskId, msg.Payload);
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+    }
+
+    public sealed class OutherConsumer(ILogger<OutherConsumer> logger) : IConsumer<SomeMessage>
+    {
+        public async ValueTask Consume(
+            ConsumeSettings settings,
+            IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            CancellationToken cancellationToken)
+        {
+            logger.LogWarning("======= {Group} =======", settings.ConsumerGroupId);
+
+            foreach (var msg in outboxMessages)
+            {
+                logger.LogInformation("{Payload}", msg.Payload);
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+    }
+
+
+    public class MessagePublisherService(IOutboxMessagePublisher publisher) : BackgroundService
+    {
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            try
+            {
+                for (int i = 0; i < 1000 && !stoppingToken.IsCancellationRequested; i++)
+                {
+                    var rnd = Random.Shared.Next(1, 4);
+                    await Task.Delay(TimeSpan.FromSeconds(rnd), stoppingToken);
+                    await publisher.Publish(new SomeMessage(i.ToString(), DateTime.Now.ToString(), rnd), stoppingToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // ignore
+            }
+        }
+    }
+
+
+    #region forAOT
+    public class OutboxMessageSerializer : IOutboxMessageSerializer
+    {
+        public T? Deserialize<T>(Stream stream) => (typeof(T) == typeof(SomeMessage))
+                ? (T?)(object?)JsonSerializer.Deserialize<SomeMessage>(stream, SomeMessageJsonSerializerContext.Default.SomeMessage)
+                : default;
+
+        public void Serialize<T>(Stream stream, T value)
+        {
+            if (typeof(T) == typeof(SomeMessage))
+                JsonSerializer.Serialize(stream, value!, SomeMessageJsonSerializerContext.Default.SomeMessage);
+        }
+    }
 
     [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
     [JsonSerializable(typeof(SomeMessage))]
     public partial class SomeMessageJsonSerializerContext : JsonSerializerContext
     {
     }
-
-    public class SomeMessageConsumer : IConsumer<SomeMessage>
-    {
-        private static int s_Counter = 0;
-
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
-        {
-            Interlocked.Add(ref s_Counter, outboxMessages.Count);
-
-            foreach (var outboxMessage in outboxMessages)
-            {
-                Console.WriteLine("Consume [#{0}, tenant:{1}] {2}", outboxMessage.OutboxId, outboxMessage.PartInfo.TenantId, outboxMessage.Payload.Message);
-            }
-
-            await Task.Delay(100, cancellationToken);
-        }
-
-        public static int Counter => s_Counter;
-    }
-
-    // for AOT
-    public class OutboxMessageSerializer : IOutboxMessageSerializer
-    {
-        public T? Deserialize<T>(Stream stream)
-        {
-            if (typeof(T) == typeof(SomeMessage))
-            {
-                SomeMessage? message = JsonSerializer.Deserialize<SomeMessage>(stream, SomeMessageJsonSerializerContext.Default.SomeMessage);
-                return (T?)(object?)message;
-            }
-
-            return default;
-        }
-
-        public void Serialize<T>(Stream stream, T value)
-        {
-            if (typeof(T) == typeof(SomeMessage))
-            {
-                JsonSerializer.Serialize(stream, value!, SomeMessageJsonSerializerContext.Default.SomeMessage);
-            }
-        }
-    }
+    #endregion
 }

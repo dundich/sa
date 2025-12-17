@@ -1,10 +1,10 @@
-using Sa.Extensions;
 using System.Diagnostics;
+using Sa.Extensions;
 
 namespace Sa.Classes;
 
 
-public static class Retry
+internal static class Retry
 {
     /// <summary>
     /// For example: 500ms, 500ms, 500ms ...

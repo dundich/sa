@@ -1,6 +1,8 @@
+using System.Data;
 using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
+
 
 internal sealed class DeliveryRepository(
     IStartDeliveryCommand startCmd
@@ -8,20 +10,29 @@ internal sealed class DeliveryRepository(
     , IFinishDeliveryCommand finishCmd
     , IExtendDeliveryCommand extendCmd
     , IOutboxPartRepository partRepository
+    , IConsumeLoader loader
 ) : IDeliveryRepository
 {
-    public Task<int> StartDelivery<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> writeBuffer, int batchSize, TimeSpan lockDuration, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public async Task<int> RentDelivery<TMessage>(
+        Memory<OutboxDeliveryMessage<TMessage>> writeBuffer,
+        int batchSize,
+        TimeSpan lockDuration,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested) return Task.FromResult(0);
-        return startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
+        if (cancellationToken.IsCancellationRequested || batchSize < 1) return 0;
+
+        var _ = await loader.LoadGroup(filter, batchSize, cancellationToken);
+
+        return await startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
     }
 
-    public async Task<int> FinishDelivery<TMessage>(IOutboxContext<TMessage>[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public async Task<int> ReturnDelivery(IOutboxContext[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<Exception, ErrorInfo> errors = await GetErrors(outboxMessages, cancellationToken);
 
         IEnumerable<OutboxPartInfo> parts = outboxMessages
-            .Select(c => new OutboxPartInfo(c.PartInfo.TenantId, c.PartInfo.Part, c.DeliveryResult.CreatedAt));
+            .Select(c => c.DeliveryInfo.PartInfo with { CreatedAt = c.DeliveryResult.CreatedAt });
 
         await partRepository.EnsureDeliveryParts(parts, cancellationToken);
 

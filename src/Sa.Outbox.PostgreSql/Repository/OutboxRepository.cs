@@ -1,9 +1,10 @@
+using Sa.Classes;
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
-internal sealed class OutboxRepository(IOutboxBulkCommand bulkCmd, IOutboxPartRepository partRepository)
+internal sealed class OutboxRepository(IMsgBulkCommand bulkCmd, IOutboxPartRepository partRepository)
     : IOutboxRepository
 {
 
@@ -12,7 +13,7 @@ internal sealed class OutboxRepository(IOutboxBulkCommand bulkCmd, IOutboxPartRe
         if (messages.Length == 0) return 0;
 
         OutboxPartInfo[] parts = messages.Span.SelectWhere(c => c.PartInfo);
-        await partRepository.EnsureOutboxParts(parts, cancellationToken);
+        await partRepository.EnsureMsgParts(parts, cancellationToken);
 
         return await bulkCmd.BulkWrite(messages, cancellationToken);
     }

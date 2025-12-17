@@ -4,7 +4,7 @@ using Sa.Extensions;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class ErrorDeliveryCommand( IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate) 
+internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate)
     : IErrorDeliveryCommand
 {
 
@@ -35,9 +35,9 @@ internal sealed class ErrorDeliveryCommand( IPgDataSource dataSource, SqlOutboxT
     }
 
     private static void Fill(
-        NpgsqlCommand command, 
-        KeyValuePair<Exception, ErrorInfo>[] errorArray, 
-        int start, 
+        NpgsqlCommand command,
+        KeyValuePair<Exception, ErrorInfo>[] errorArray,
+        int start,
         int count)
     {
         int i = 0;
@@ -46,10 +46,10 @@ internal sealed class ErrorDeliveryCommand( IPgDataSource dataSource, SqlOutboxT
         {
             (long ErrorId, string TypeName, DateTimeOffset CreatedAt) = Value;
 
-            command.AddParameter<CachedSqlParamNames>("@id_", i, ErrorId);
-            command.AddParameter<CachedSqlParamNames>("@st_", i, TypeName);
-            command.AddParameter<CachedSqlParamNames>("@msg_", i, Key.ToString());
-            command.AddParameter<CachedSqlParamNames>("@cr_", i, CreatedAt.ToUnixTimeSeconds());
+            command.AddParam<SqlParamNames, long>(SqlParam.ErrorId, i, ErrorId);
+            command.AddParam<SqlParamNames, string>(SqlParam.TypeName, i, TypeName);
+            command.AddParam<SqlParamNames, string>(SqlParam.StatusMessage, i, Key.ToString());
+            command.AddParam<SqlParamNames, long>(SqlParam.CreatedAt, i, CreatedAt.ToUnixTimeSeconds());
             i++;
         }
     }
@@ -61,5 +61,19 @@ internal sealed class ErrorDeliveryCommand( IPgDataSource dataSource, SqlOutboxT
               .GroupBy(m => m.Exception!)
               .Select(m => (err: m.Key, createdAt: m.First().DeliveryResult.CreatedAt.StartOfDay()))
               .ToDictionary(e => e.err, e => new ErrorInfo(e.err.ToString().GetMurmurHash3(), e.err.GetType().Name, e.createdAt));
+    }
+
+
+    sealed class SqlParamNames : INamePrefixProvider
+    {
+        public static int MaxIndex => 512;
+
+        public static string[] GetPrefixes() =>
+        [
+            SqlParam.ErrorId
+            , SqlParam.TypeName
+            , SqlParam.StatusMessage
+            , SqlParam.CreatedAt
+        ];
     }
 }

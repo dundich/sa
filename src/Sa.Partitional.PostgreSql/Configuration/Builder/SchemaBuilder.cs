@@ -12,8 +12,8 @@ internal sealed class SchemaBuilder(string schemaName) : ISchemaBuilder
         return builder;
     }
 
-    public ITableBuilder AddTable(string tableName, params string[] sqlFields) 
+    public ITableBuilder AddTable(string tableName, params string[] sqlFields)
         => CreateTable(tableName).AddFields(sqlFields);
-   
+
     public ITableSettings[] Build() => [.. _tables.Values.Select(c => c.Build())];
 }

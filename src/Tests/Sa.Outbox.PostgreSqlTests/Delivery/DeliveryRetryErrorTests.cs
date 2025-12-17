@@ -1,24 +1,22 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.PostgreSql;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : IClassFixture<DeliveryRetryErrorTests.Fixture>
+public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
+    : IClassFixture<DeliveryRetryErrorTests.Fixture>
 {
+    public class TestException(string message) : Exception(message) { }
 
-    public class TestException(string message) : Exception(message)
-    {
-    }
-
-
-    public class TestMessageConsumer : IConsumer<TestMessage>
+    class TestMessageConsumer : IConsumer<TestMessage>
     {
         private static readonly TestException s_err = new("test same error");
 
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
-            foreach (IOutboxContext<TestMessage> msg in outboxMessages)
+            foreach (var msg in outboxMessages)
             {
                 msg.Error(s_err, "test");
             }
@@ -33,19 +31,35 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
             Services
                 .AddOutbox(builder => builder
                     .WithPartitioningSupport((_, sp)
-                        => sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
+                        => sp.WithTenantIds(1)
                     )
                     .WithDeliveries(builder
-                        => builder.AddDelivery<TestMessageConsumer, TestMessage>()
+                        => builder.AddDelivery<TestMessageConsumer, TestMessage>("test4", (_, s) =>
+                        {
+                            s.ConsumeSettings
+                                .WithNoLockDuration()
+                                .WithLockRenewal(TimeSpan.FromMinutes(10))
+                                .WithMaxDeliveryAttempts(MaxDeliveryAttempts)
+                                .WithNoBatchingWindow();
+
+                            ConsumeSettings = s.ConsumeSettings;
+                        })
                     )
                 );
         }
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
+
+        public const int MaxDeliveryAttempts = 2;
+
+        public ConsumeSettings ConsumeSettings { get; private set; } = default!;
     }
 
 
+
     private IDeliveryProcessor Sub => fixture.Sub;
+
+    private readonly PgOutboxTableSettings _tableSettings = new();
 
 
     [Fact]
@@ -53,49 +67,34 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture) : 
     {
         Console.Write(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
-        List<TestMessage> messages = [new TestMessage { PayloadId = "11", Content = "Message 1", TenantId = 1 }];
+        List<TestMessage> messages = [new TestMessage { PayloadId = "1", Content = "Message 1", TenantId = 1 }];
 
         ulong cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        const int MaxDeliveryAttempts = 2;
-
-        var settings = new OutboxDeliverySettings(Guid.NewGuid())
-        {
-            ExtractSettings =
-            {
-                ForEachTenant = true,
-                LockDuration = TimeSpan.FromMilliseconds(0),
-                LockRenewal = TimeSpan.FromMinutes(10)
-            },
-            ConsumeSettings =
-            {
-                MaxDeliveryAttempts = MaxDeliveryAttempts
-            }
-        };
 
         cnt = 0;
-        while (cnt < MaxDeliveryAttempts)
+        while (cnt < Fixture.MaxDeliveryAttempts)
         {
             await Task.Delay(300, TestContext.Current.CancellationToken);
 
-            await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);
+            await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
             int attempt = await GetDeliveries();
-            if (attempt > MaxDeliveryAttempts)
+            if (attempt > Fixture.MaxDeliveryAttempts)
             {
                 cnt++;
             }
         }
 
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>("select count(error_id) from outbox__$error", TestContext.Current.CancellationToken);
+        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>($"select count(error_id) from {_tableSettings.DatabaseErrorTableName}", TestContext.Current.CancellationToken);
         Assert.Equal(1, errCount);
 
-        string delivery_id = await fixture.DataSource.ExecuteReaderFirst<string>("select delivery_id from outbox__$delivery where delivery_status_code = 501", TestContext.Current.CancellationToken);
-        Assert.NotEmpty(delivery_id);
+        var delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"select delivery_id from {_tableSettings.DatabaseDeliveryTableName} where delivery_status_code = 501", TestContext.Current.CancellationToken);
+        Assert.NotEqual(0, delivery_id);
 
-        string outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<string>("SELECT outbox_delivery_id FROM public.outbox WHERE outbox_delivery_status_code = 501", TestContext.Current.CancellationToken);
+        var outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"SELECT delivery_id FROM  {_tableSettings.DatabaseTaskTableName} WHERE delivery_status_code = 501", TestContext.Current.CancellationToken);
         Assert.Equal(delivery_id, outbox_delivery_id);
     }
 
-    private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>("select count(delivery_id) from outbox__$delivery", TestContext.Current.CancellationToken);
+    private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>($"select count(delivery_id) from {_tableSettings.DatabaseDeliveryTableName}", TestContext.Current.CancellationToken);
 }

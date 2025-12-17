@@ -1,13 +1,14 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IClassFixture<DeliveryProcessorTests.Fixture>
+public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
+    : IClassFixture<DeliveryProcessorTests.Fixture>
 {
-    public class TestMessageConsumer : IConsumer<TestMessage>
+    class TestMessageConsumer : IConsumer<TestMessage>
     {
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             Console.WriteLine(outboxMessages.Count);
             await Task.Delay(100, cancellationToken);
@@ -22,13 +23,21 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IC
             Services
                 .AddOutbox(builder
                     => builder.WithPartitioningSupport((_, ps)
-                        => ps.GetTenantIds = t => Task.FromResult<int[]>([1, 2])
+                        => ps.WithTenantIds(1, 2)
                 )
                 .WithDeliveries(builder
-                    => builder.AddDelivery<TestMessageConsumer, TestMessage>(null, instanceCount: 0)
+                    => builder.AddDelivery<TestMessageConsumer, TestMessage>("test3", (_, s) =>
+                    {
+                        ConsumeSettings = s
+                            .ConsumeSettings
+                            .WithBatchingWindow(TimeSpan.FromMinutes(3))
+                            ;
+                    })
                 )
             );
         }
+
+        public ConsumeSettings ConsumeSettings { get; set; } = default!;
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }
@@ -51,15 +60,14 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture) : IC
         var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        var settings = new OutboxDeliverySettings(Guid.NewGuid())
-        {
-            ExtractSettings =
-            {
-                ForEachTenant = true,
-            }
-        };
 
-        var result = await Sub.ProcessMessages<TestMessage>(settings, CancellationToken.None);
+        var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
+        Assert.Equal(0, result);
+
+
+        fixture.ConsumeSettings.WithNoBatchingWindow();
+
+        result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
         Assert.True(result > 0);
     }
 }

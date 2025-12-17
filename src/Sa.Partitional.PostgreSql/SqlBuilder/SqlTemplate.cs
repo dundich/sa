@@ -5,10 +5,11 @@ namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
 internal static class SqlTemplate
 {
-    const string CacheByRangeTableNamePostfix = "$part";
-
     private const char NumOrStrSplitter = ',';
 
+    /// <summary>
+    /// public.customer
+    /// </summary>
     public static string CreateRootSql(this ITableSettings settings)
     {
         string pkList = settings.PartByListFieldNames.Contains(settings.IdFieldName)
@@ -33,6 +34,9 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTableName()} (
 """;
     }
 
+    /// <summary>
+    ///  public."customer_FR_Bordeaux" 
+    /// </summary>
     public static string CreateNestedSql(this ITableSettings settings, StrOrNum[] values) =>
 $"""
 
@@ -46,6 +50,18 @@ FOR VALUES IN ({values[^1].Match(s => $"'{s}'", n => n.ToString())})
 ;
 """;
 
+
+    // Вспомогательный метод
+    private static string GetFillFactorClause(this ITableSettings settings)
+    {
+        return settings.FillFactor.GetValueOrDefault() > 0
+            ? $" WITH (fillfactor = {settings.FillFactor.GetValueOrDefault()})"
+            : "";
+    }
+
+    /// <summary>
+    /// public."customer_FR_Bordeaux_y2025m01d08"
+    /// </summary>
     public static string CreatePartByRangeSql(this ITableSettings settings, DateTimeOffset date, StrOrNum[] values)
     {
         string timeRangeTablename = settings.GetQualifiedTableName(date, values);
@@ -60,7 +76,8 @@ $"""
 
 CREATE TABLE IF NOT EXISTS {timeRangeTablename}
 PARTITION OF {settings.GetQualifiedTableName(values)}
-FOR VALUES FROM ({range.Start.ToUnixTimeSeconds()}) TO ({range.End.ToUnixTimeSeconds()}) 
+FOR VALUES FROM ({range.Start.ToUnixTimeSeconds()}) TO ({range.End.ToUnixTimeSeconds()})
+{settings.GetFillFactorClause()}
 ;
 
 -- cache
@@ -142,14 +159,25 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id='{qualifiedTableName}
         : settings.GetQualifiedTableName(values);
 
 
-    private static string GetCacheByRangeTableName(this ITableSettings settings) => settings.GetQualifiedTableName(CacheByRangeTableNamePostfix);
+    private static string GetCacheByRangeTableName(this ITableSettings settings)
+        => settings.GetQualifiedTableName(settings.PartTablePostfix);
 
+
+    static string GetPartTableName(this ITableSettings settings, params StrOrNum[] values)
+      => values.Length > 0
+        ? $"{settings.DatabaseTableName}{settings.SqlPartSeparator}{values.JoinByString(settings.SqlPartSeparator)}"
+        : $"{settings.DatabaseTableName}"
+        ;
 
     static string GetQualifiedTableName(this ITableSettings settings, params StrOrNum[] values)
-        => values.Length > 0
-        ? $"{settings.DatabaseSchemaName}.\"{settings.DatabaseTableName}{settings.SqlPartSeparator}{values.JoinByString(settings.SqlPartSeparator)}\""
-        : $"{settings.DatabaseSchemaName}.\"{settings.DatabaseTableName}\""
-        ;
+    {
+        string tableName = settings.GetPartTableName(values);
+        if (tableName.Length > 63)
+        {
+            throw new InvalidOperationException($"Table name '{tableName}' exceeds PostgreSQL's 63-byte limit for identifiers. ");
+        }
+        return $"{settings.DatabaseSchemaName}.\"{tableName}\"";
+    }
 
     static string GetPartitionalSql(this ITableSettings settings, int partIndex)
         => partIndex >= 0 && partIndex < settings.PartByListFieldNames.Length
@@ -157,7 +185,8 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id='{qualifiedTableName}
             : $"PARTITION BY RANGE ({settings.PartByRangeFieldName})"
             ;
 
-    static string Pk(this ITableSettings settings) => settings.ConstraintPkSql?.Invoke() ?? $"pk_{settings.DatabaseTableName}";
+    static string Pk(this ITableSettings settings)
+        => settings.ConstraintPkSql?.Invoke() ?? $"pk_{settings.DatabaseTableName}";
 
 
     internal static StrOrNum[] ParseStrOrNums(string fmtInput) => [.. fmtInput

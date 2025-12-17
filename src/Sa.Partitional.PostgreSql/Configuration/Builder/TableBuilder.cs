@@ -1,10 +1,20 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Partitional.PostgreSql.Settings;
 
 namespace Sa.Partitional.PostgreSql.Configuration.Builder;
 
-internal class TableBuilder(string schemaName, string tableName) : ITableBuilder
+internal sealed class TableBuilder(string schemaName, string tableName) : ITableBuilder
 {
+    static class Default
+    {
+        public readonly static PgPartBy DefaultPartBy = PgPartBy.Day;
+        public const string PartByRangeFieldName = "created_at";
+        public const string SqlPartSeparator = "__";
+        public const int FillFactor = 0;
+        public const string PartTablePostfix = "part$";
+    }
+
+
     private readonly List<string> _fields = [];
     private readonly List<string> _parts = [];
 
@@ -15,6 +25,8 @@ internal class TableBuilder(string schemaName, string tableName) : ITableBuilder
     private string? _timestamp;
     private PgPartBy? _partBy;
     private string? _separator = null;
+    private string? _postfix = null;
+    private int? _fillFactor = null;
 
     private Func<string>? _postSql = null;
     private Func<string>? _pkSql = null;
@@ -55,6 +67,12 @@ internal class TableBuilder(string schemaName, string tableName) : ITableBuilder
         return this;
     }
 
+    public ITableBuilder WithFillFactor(int fillFactor)
+    {
+        _fillFactor = Math.Max(100, fillFactor);
+        return this;
+    }
+
     public ITableBuilder AddPostSql(Func<string> postSql)
     {
         _postSql = postSql ?? throw new ArgumentNullException(nameof(postSql));
@@ -67,18 +85,46 @@ internal class TableBuilder(string schemaName, string tableName) : ITableBuilder
         return this;
     }
 
-    public ITableSettings Build() => new TableSettings(
-        schemaName
-        , tableName
-        , [.. _fields]
-        , [.. _parts]
-        , new PartTableMigrationSupport(_migrationPartValues, _getPartValues, _migrationSupport)
-        , _partBy
-        , _postSql
-        , _pkSql
-        , _timestamp
-        , _separator
-    );
+    public ITableBuilder WithPartTablePostfix(string postfix)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(nameof(postfix));
+
+        _postfix = postfix;
+        return this;
+    }
+
+    public ITableSettings Build()
+    {
+        var databaseTableName = tableName.Trim('"');
+        var timestampField = _timestamp ?? Default.PartByRangeFieldName;
+        string[] partByListFieldNames = [.. _parts];
+
+        var firstIdSql = _fields.Find(c => !string.IsNullOrWhiteSpace(c));
+        var idFieldName = firstIdSql?.Trim().Split(' ')[0] ?? string.Empty;
+
+        return new TableSettings(
+            DatabaseSchemaName: schemaName,
+            DatabaseTableName: databaseTableName,
+            FullName: $@"{schemaName}.{databaseTableName}",
+
+            IdFieldName: idFieldName,
+            Fields: [.. _fields],
+
+            PartBy: _partBy ?? Default.DefaultPartBy,
+            Migration: new PartTableMigrationSupport(_migrationPartValues, _getPartValues, _migrationSupport),
+
+            PartByRangeFieldName: timestampField,
+            PartByListFieldNames: partByListFieldNames,
+            PartitionByFieldName: partByListFieldNames.Length == 0 ? timestampField : partByListFieldNames[0],
+
+            SqlPartSeparator: _separator ?? Default.SqlPartSeparator,
+            PostRootSql: _postSql,
+            ConstraintPkSql: _pkSql,
+
+            FillFactor: _fillFactor ?? Default.FillFactor,
+            PartTablePostfix: _postfix ?? Default.PartTablePostfix
+        );
+    }
 
     public ITableBuilder AddMigration(params StrOrNum[] partValues)
     {
@@ -100,7 +146,7 @@ internal class TableBuilder(string schemaName, string tableName) : ITableBuilder
 
     internal class PartTableMigrationSupport(IReadOnlyCollection<StrOrNum[]>? partValues, Func<CancellationToken, Task<StrOrNum[][]>>? getPartValues, IPartTableMigrationSupport? original) : IPartTableMigrationSupport
     {
-        public async Task<StrOrNum[][]> GetPartValues(CancellationToken cancellationToken)
+        public async Task<StrOrNum[][]> GetParts(CancellationToken cancellationToken)
         {
             List<StrOrNum[]> result = partValues != null ? [.. partValues] : [];
 
@@ -112,7 +158,7 @@ internal class TableBuilder(string schemaName, string tableName) : ITableBuilder
 
             if (original != null)
             {
-                StrOrNum[][] partItems = await original.GetPartValues(cancellationToken);
+                StrOrNum[][] partItems = await original.GetParts(cancellationToken);
                 result.AddRange(partItems);
             }
 

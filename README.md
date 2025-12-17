@@ -1,6 +1,6 @@
 # sa
 
-dot net experimental
+dot net experimental project
 
 
 ## [Sa.Outbox.PostgreSql](src/Sa.Outbox.PostgreSql)

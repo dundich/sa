@@ -4,36 +4,20 @@ namespace Sa.Outbox;
 /// Represents a filter for querying Outbox messages based on specific criteria.
 /// This record is used to define the parameters for filtering messages in the Outbox.
 /// </summary>
-public record OutboxMessageFilter(
-    /// <summary>
-    /// Gets the transaction identifier associated with the Outbox message.
-    /// </summary>
+/// <param name="TransactId">Gets the transaction identifier associated with the Outbox message.</param>
+/// <param name="ConsumerGroupId"></param>
+/// <param name="PayloadType">Gets the type of the payload contained in the Outbox message.</param>
+/// <param name="TenantId">Gets the identifier for the tenant associated with the Outbox message.</param>
+/// <param name="Part">Gets the part identifier for the Outbox message.</param>
+/// <param name="FromDate">Gets the starting date and time for filtering messages.Only messages created on or after this date will be included.</param>
+/// <param name="ToDate">Gets the current date and time for filtering messages.</param>
+public sealed record OutboxMessageFilter(
     string TransactId,
-
-    /// <summary>
-    /// Gets the type of the payload contained in the Outbox message.
-    /// </summary>
+    string ConsumerGroupId,
     string PayloadType,
-
-    /// <summary>
-    /// Gets the identifier for the tenant associated with the Outbox message.
-    /// </summary>
     int TenantId,
-
-    /// <summary>
-    /// Gets the part identifier for the Outbox message.
-    /// </summary>
     string Part,
-
-    /// <summary>
-    /// Gets the starting date and time for filtering messages.
-    /// Only messages created on or after this date will be included.
-    /// </summary>
     DateTimeOffset FromDate,
-
-    /// <summary>
-    /// Gets the current date and time for filtering messages.
-    /// Only messages created on or before this date will be included.
-    /// </summary>
+    DateTimeOffset ToDate,
     DateTimeOffset NowDate
 );

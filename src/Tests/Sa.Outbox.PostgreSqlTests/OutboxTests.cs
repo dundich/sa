@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Support;
@@ -9,7 +9,7 @@ namespace Sa.Outbox.PostgreSqlTests;
 
 public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTests.Fixture>
 {
-    public class SomeMessage : IOutboxPayloadMessage
+    class SomeMessage : IOutboxPayloadMessage
     {
         public static string PartName => "some";
 
@@ -18,11 +18,11 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 
     }
 
-    public class SomeMessageConsumer : IConsumer<SomeMessage>
+    class SomeMessageConsumer : IConsumer<SomeMessage>
     {
         static int s_Counter = 0;
 
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
         {
             Interlocked.Add(ref s_Counter, outboxMessages.Count);
             await Task.Delay(100, cancellationToken);
@@ -37,17 +37,18 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithPartitioningSupport((_, sp) =>
-                    {
-                        sp.ForEachTenant = true;
-                        sp.GetTenantIds = t => Task.FromResult<int[]>([1, 2]);
-                    })
+                    .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1))
                     .WithDeliveries(builder => builder
-                        .AddDelivery<SomeMessageConsumer, SomeMessage>((_, settings) =>
+                        .AddDelivery<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
                         {
-                            settings.ScheduleSettings.ExecutionInterval = TimeSpan.FromMilliseconds(100);
-                            settings.ScheduleSettings.InitialDelay = TimeSpan.Zero;
-                            settings.ExtractSettings.MaxBatchSize = 1;
+                            settings.ScheduleSettings
+                                .WithInterval(TimeSpan.FromMilliseconds(100))
+                                .WithInitialDelay(TimeSpan.Zero)
+                                ;
+
+                            settings.ConsumeSettings
+                                .WithMaxBatchSize(1)
+                                .WithNoBatchingWindow();
                         })
                     )
                 )
@@ -82,8 +83,9 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         // start delivery message
         var publisher = ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
 
-        ulong total = await publisher.Publish([
-            new SomeMessage { TenantId = 1 }
+        ulong total = await publisher.Publish(
+        [
+              new SomeMessage { TenantId = 1 }
             , new SomeMessage { TenantId = 1 }
             , new SomeMessage { TenantId = 1 }
             , new SomeMessage { TenantId = 1 }

@@ -1,6 +1,6 @@
+using System.Text.RegularExpressions;
 using Sa.Classes;
 using Sa.Extensions;
-using System.Text.RegularExpressions;
 
 namespace Sa.Partitional.PostgreSql;
 

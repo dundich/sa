@@ -1,6 +1,7 @@
 using Microsoft.IO;
 using Npgsql;
 using NpgsqlTypes;
+using Sa.Classes;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.IdGen;
 using Sa.Outbox.PostgreSql.Serialization;
@@ -9,29 +10,33 @@ using Sa.Outbox.PostgreSql.TypeHashResolve;
 namespace Sa.Outbox.PostgreSql.Commands;
 
 
-internal sealed class OutboxBulkCommand(
+internal sealed class MsgBulkCommand(
     IPgDataSource dataSource
     , SqlOutboxTemplate sqlTemplate
     , RecyclableMemoryStreamManager streamManager
     , IOutboxMessageSerializer serializer
     , IIdGenerator idGenerator
     , IMsgTypeHashResolver hashResolver
-) : IOutboxBulkCommand
+) : IMsgBulkCommand
 {
 
     public async ValueTask<ulong> BulkWrite<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken)
     {
         long typeCode = await hashResolver.GetCode(typeof(TMessage).Name, cancellationToken);
 
-        ulong result = await dataSource.BeginBinaryImport(sqlTemplate.SqlBulkOutboxCopy, async (writer, t) =>
-        {
-            WriteRows(writer, typeCode, messages);
+        return await Retry.Jitter(
+            async t =>
+            {
+                return await dataSource.BeginBinaryImport(sqlTemplate.SqlBulkMsgCopy, async (writer, t) =>
+                {
+                    WriteRows(writer, typeCode, messages);
 
-            return await writer.CompleteAsync(t);
+                    return await writer.CompleteAsync(t);
 
-        }, cancellationToken);
-
-        return result;
+                }, cancellationToken);
+            }
+            , next: (ex, i) => (ex is NpgsqlException exception) && exception.IsTransient
+            , cancellationToken: cancellationToken);
     }
 
     private void WriteRows<TMessage>(NpgsqlBinaryImporter writer, long payloadTypeCode, ReadOnlyMemory<OutboxMessage<TMessage>> messages)
@@ -42,15 +47,12 @@ internal sealed class OutboxBulkCommand(
 
             writer.StartRow();
 
-
             // id
             writer.Write(id, NpgsqlDbType.Char);
             // tenant
             writer.Write(row.PartInfo.TenantId, NpgsqlDbType.Integer);
             // part
             writer.Write(row.PartInfo.Part, NpgsqlDbType.Text);
-
-
             // payload_id
             writer.Write(row.PayloadId, NpgsqlDbType.Text);
             // payload_type
@@ -59,8 +61,6 @@ internal sealed class OutboxBulkCommand(
             int streamLength = WritePayload(writer, row.Payload);
             // payload_size
             writer.Write(streamLength, NpgsqlDbType.Integer);
-
-
             // created_at
             writer.Write(row.PartInfo.CreatedAt.ToUnixTimeSeconds(), NpgsqlDbType.Bigint);
         }

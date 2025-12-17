@@ -23,6 +23,6 @@ internal sealed class DeliveryJob<TMessage>(IDeliveryProcessor processor) : IDel
         OutboxDeliverySettings settings = context.Settings.Properties.Tag as OutboxDeliverySettings
             ?? throw new NotImplementedException("tag");
 
-        await processor.ProcessMessages<TMessage>(settings, cancellationToken);
+        await processor.ProcessMessages<TMessage>(settings.ConsumeSettings, cancellationToken);
     }
 }

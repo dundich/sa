@@ -1,6 +1,6 @@
-﻿using Npgsql;
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
+using Npgsql;
 
 namespace Sa.Data.PostgreSql;
 
@@ -25,6 +25,20 @@ public static class DbCommandExtensions
 
         return command;
     }
+
+
+    public static NpgsqlCommand AddParam<TProvider, T>(
+        this NpgsqlCommand command,
+        string prefix,
+        int index,
+        T value)
+        where TProvider : INamePrefixProvider
+    {
+        var paramName = CachedParamNames<TProvider>.Default.Get(prefix, index);
+        var param = new NpgsqlParameter<T>(paramName, value);
+        command.Parameters.Add(param);
+        return command;
+    }
 }
 
 public interface INamePrefixProvider
@@ -35,7 +49,7 @@ public interface INamePrefixProvider
 
 
 
-class CachedParamNames<T>(int maxIndex) where T : INamePrefixProvider
+sealed class CachedParamNames<T>(int maxIndex) where T : INamePrefixProvider
 {
     private static readonly ReadOnlyDictionary<string, int> PrefixToIndex =
         new(new Dictionary<string, int>(

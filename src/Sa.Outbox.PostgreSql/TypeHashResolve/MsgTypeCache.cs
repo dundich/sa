@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Outbox.PostgreSql.Repository;
 
 namespace Sa.Outbox.PostgreSql.TypeHashResolve;
@@ -20,7 +20,7 @@ internal sealed class MsgTypeCache : IMsgTypeCache
         private readonly Dictionary<long, string> _hashType = [];
         private readonly Dictionary<string, long> _typeHash = [];
 
-        internal Storage(List<(long id, string typeName)> hashCodes)
+        internal Storage(IReadOnlyCollection<(long id, string typeName)> hashCodes)
         {
             foreach (var (id, typeName) in hashCodes)
             {
@@ -60,7 +60,7 @@ internal sealed class MsgTypeCache : IMsgTypeCache
 
     private async Task<Storage> Load()
     {
-        List<(long id, string typeName)> hashCodes = await _repository.SelectAll(default);
+        var hashCodes = await _repository.SelectAll(default);
         return new Storage(hashCodes);
     }
 }

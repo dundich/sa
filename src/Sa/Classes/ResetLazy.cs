@@ -15,7 +15,7 @@ public interface IResetLazy
 /// </summary>
 /// <typeparam name="T">The type of object that is being lazily initialized.</typeparam>
 [DebuggerStepThrough]
-public sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode = LazyThreadSafetyMode.ExecutionAndPublication, Action<T>? valueReset = null) : IResetLazy
+internal sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode = LazyThreadSafetyMode.ExecutionAndPublication, Action<T>? valueReset = null) : IResetLazy
 {
     record Box(T Value);
 

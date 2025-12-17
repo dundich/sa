@@ -1,6 +1,5 @@
 using Sa.Classes;
 using Sa.Outbox.Support;
-using System.Runtime.CompilerServices;
 
 namespace Sa.Outbox.Publication;
 
@@ -24,7 +23,8 @@ internal sealed class OutboxMessagePublisher(
         OutboxMessageTypeInfo typeInfo = OutboxMessageTypeHelper.GetOutboxMessageTypeInfo<TMessage>();
         DateTimeOffset now = timeProvider.GetUtcNow();
         int maxBatchSize = publishSettings.MaxBatchSize;
-        IEnumerator<TMessage> enumerator = messages.GetEnumerator();
+
+        using IEnumerator<TMessage> enumerator = messages.GetEnumerator();
 
         ulong sent = 0;
         int start = 0;
@@ -35,6 +35,7 @@ internal sealed class OutboxMessagePublisher(
                 : messages.Count - start;
 
             OutboxMessage<TMessage>[] payloads = arrayPool.Rent<OutboxMessage<TMessage>>(len);
+            Span<OutboxMessage<TMessage>> payloadsSpan = payloads;
             try
             {
                 int count = 0;
@@ -42,7 +43,11 @@ internal sealed class OutboxMessagePublisher(
                 {
                     TMessage message = enumerator.Current;
 
-                    payloads[count] = CreateOutboxMessage(message, typeInfo, now);
+                    payloadsSpan[count] = new OutboxMessage<TMessage>(
+                        PayloadId: message.PayloadId ?? string.Empty,
+                        Payload: message,
+                        PartInfo: new OutboxPartInfo(TenantId: message.TenantId, typeInfo.PartName, now));
+
                     count++;
                 }
 
@@ -58,19 +63,5 @@ internal sealed class OutboxMessagePublisher(
         while (start < messages.Count);
 
         return sent;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static OutboxMessage<TMessage> CreateOutboxMessage<TMessage>(
-    TMessage message,
-    OutboxMessageTypeInfo typeInfo,
-    DateTimeOffset now)
-    where TMessage : IOutboxPayloadMessage
-    {
-        return new OutboxMessage<TMessage>(
-            PayloadId: message.PayloadId ?? string.Empty,
-            Payload: message,
-            PartInfo: new OutboxPartInfo(TenantId: message.TenantId, typeInfo.PartName, now));
     }
 }

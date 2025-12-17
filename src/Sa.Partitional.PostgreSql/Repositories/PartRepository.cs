@@ -8,8 +8,8 @@ using Sa.Partitional.PostgreSql.SqlBuilder;
 namespace Sa.Partitional.PostgreSql.Repositories;
 
 internal sealed partial class PartRepository(
-    IPgDataSource dataSource, 
-    ISqlBuilder sqlBuilder, 
+    IPgDataSource dataSource,
+    ISqlBuilder sqlBuilder,
     ILogger<PartRepository>? logger = null) : IPartRepository, IDisposable
 {
 
@@ -69,7 +69,7 @@ internal sealed partial class PartRepository(
 
                 if (supMigration != null)
                 {
-                    return await supMigration.GetPartValues(cancellationToken);
+                    return await supMigration.GetParts(cancellationToken);
                 }
                 else
                 {
@@ -97,7 +97,10 @@ internal sealed partial class PartRepository(
             {
                 try
                 {
-                    return await dataSource.ExecuteReaderList(sql, ReadPartInfo, [new("from_date", unixTime)], t);
+                    return await dataSource.ExecuteReaderList(
+                        sql,
+                        ReadPartInfo,
+                        [new NpgsqlParameter<long>("from_date", unixTime)], t);
                 }
                 catch (PostgresException ex) when (UndefinedTable(ex))
                 {
@@ -118,7 +121,7 @@ internal sealed partial class PartRepository(
             return await dataSource.ExecuteReaderList(
                 sql
                 , ReadPartInfo
-                , [new("to_date", toDate.ToUnixTimeSeconds())]
+                , [new NpgsqlParameter<long>("to_date", toDate.ToUnixTimeSeconds())]
                 , cancellationToken);
         }
         catch (PostgresException ex) when (UndefinedTable(ex))

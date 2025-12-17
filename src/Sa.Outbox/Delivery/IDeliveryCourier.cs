@@ -1,11 +1,14 @@
-﻿using Sa.Outbox.Support;
+using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
-public interface IDeliveryCourier
+/// <summary>
+/// Delivers a batch of messages with error handling and retry mechanisms
+/// </summary>
+internal interface IDeliveryCourier
 {
     ValueTask<int> Deliver<TMessage>(
-        IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages, 
-        int maxDeliveryAttempts, 
+        ConsumeSettings settings,
+        IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
 }

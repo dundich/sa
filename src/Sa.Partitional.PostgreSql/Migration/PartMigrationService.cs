@@ -46,7 +46,6 @@ internal sealed class PartMigrationService(
         {
             do
             {
-                Console.WriteLine("waiting");
                 await Task.Delay(settings.WaitMigrationTimeout, cancellationToken);
             }
             while (s_triggered != 0);

@@ -1,9 +1,9 @@
-﻿using Sa.Outbox.Support;
+using Sa.Outbox.Support;
 
 namespace Sa.Outbox.PostgreSqlTests;
 
 
-public class TestMessage : IOutboxPayloadMessage
+internal sealed class TestMessage : IOutboxPayloadMessage
 {
     public static string PartName => "root";
 

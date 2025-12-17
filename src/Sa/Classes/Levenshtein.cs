@@ -1,5 +1,5 @@
-using Sa.Extensions;
 using System.Runtime.CompilerServices;
+using Sa.Extensions;
 
 namespace Sa.Classes;
 
@@ -9,7 +9,7 @@ namespace Sa.Classes;
 /// Includes optimizations for performance and memory efficiency.
 /// https://programm.top/c-sharp/algorithm/damerau-levenshtein-distance/
 /// </summary>
-public static class Levenshtein
+internal static class Levenshtein
 {
     /// <summary>
     /// Compares the two values to find the minimum Damerau-Levenshtein distance. 

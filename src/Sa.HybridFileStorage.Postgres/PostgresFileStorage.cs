@@ -1,4 +1,5 @@
 using Microsoft.IO;
+using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.HybridFileStorage.Domain;
 using Sa.Partitional.PostgreSql;
@@ -61,13 +62,13 @@ ON CONFLICT DO NOTHING
 """
             ,
             [
-                  new("id", fileId)
-                , new("name", metadata.FileName)
-                , new("file_ext", fileExtension)
-                , new("data", fileStream)
-                , new("size", (int)memoryStream.Length)
-                , new("tenant_id", metadata.TenantId)
-                , new("created_at", createdAt)
+                  new NpgsqlParameter<string>("id", fileId)
+                , new NpgsqlParameter<string>("name", metadata.FileName)
+                , new NpgsqlParameter<string>("file_ext", fileExtension)
+                , new NpgsqlParameter("data", fileStream)
+                , new NpgsqlParameter<int>("size", (int)memoryStream.Length)
+                , new NpgsqlParameter<int>("tenant_id", metadata.TenantId)
+                , new NpgsqlParameter<long>("created_at", createdAt)
             ]
             , cancellationToken);
         }
@@ -93,7 +94,12 @@ ON CONFLICT DO NOTHING
             $"""
             DELETE FROM {_qualifiedTableName} WHERE tenant_id = @tenant_id AND created_at >= @timestamp AND id = @id
             """
-        , [new("tenant_id", tenantId), new("timestamp", timestamp), new("id", fileId)]
+        ,
+        [
+            new NpgsqlParameter<long>("tenant_id", tenantId),
+            new NpgsqlParameter<long>("timestamp", timestamp),
+            new NpgsqlParameter<string>("id", fileId)
+        ]
         , cancellationToken);
         return rowsAffected > 0;
     }
@@ -111,7 +117,12 @@ ON CONFLICT DO NOTHING
             using var fs = await reader.GetStreamAsync(0, cancellationToken);
             await loadStream(fs, cancellationToken);
         }
-        , [new("tenant_id", tenantId), new("timestamp", timestamp), new("id", fileId)]
+        , 
+        [
+            new NpgsqlParameter<long>("tenant_id", tenantId), 
+            new NpgsqlParameter<long>("timestamp", timestamp), 
+            new NpgsqlParameter<string>("id", fileId)
+        ]
         , cancellationToken);
 
 

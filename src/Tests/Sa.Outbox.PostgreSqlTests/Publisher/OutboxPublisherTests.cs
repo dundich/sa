@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSqlTests.Publisher;
+namespace Sa.Outbox.PostgreSqlTests.Publisher;
 
 
 public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture) : IClassFixture<OutboxPublisherTests.Fixture>
@@ -28,7 +28,7 @@ public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture) : IClass
         // Assert
         Assert.Equal(2, (int)result);
 
-        int count = await fixture.DataSource.ExecuteReaderFirst<int>("select count(*) from outbox", TestContext.Current.CancellationToken);
+        int count = await fixture.DataSource.ExecuteReaderFirst<int>("select count(*) from outbox__msg$", TestContext.Current.CancellationToken);
         Assert.Equal(2, count);
     }
 }

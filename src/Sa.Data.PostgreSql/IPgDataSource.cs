@@ -6,6 +6,7 @@ public interface IPgDataSource
 {
     public static IPgDataSource Create(string connectionString) => new PgDataSource(new PgDataSourceSettings(connectionString));
 
+    ValueTask<NpgsqlConnection> OpenDbConnection(CancellationToken cancellationToken);
 
     Task<int> ExecuteNonQuery(string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default);
 

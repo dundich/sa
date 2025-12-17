@@ -9,7 +9,7 @@ using Sa.Partitional.PostgreSql.SqlBuilder;
 
 namespace Sa.Partitional.PostgreSql.Configuration;
 
-internal class PartConfiguration(IServiceCollection services) : IPartConfiguration
+internal sealed class PartConfiguration(IServiceCollection services) : IPartConfiguration
 {
 
     public IPartConfiguration AddPartTables(Action<IServiceProvider, ISettingsBuilder> configure)
