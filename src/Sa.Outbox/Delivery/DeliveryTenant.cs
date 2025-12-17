@@ -44,7 +44,7 @@ internal sealed class DeliveryTenant(
 
             using IDisposable locker = RenewerLocker(settings, filter, cancellationToken);
 
-            return await DeliverBy—ourier(messages, settings, filter, cancellationToken);
+            return await DeliverByCourier(messages, settings, filter, cancellationToken);
         }
         finally
         {
@@ -78,7 +78,7 @@ internal sealed class DeliveryTenant(
             cancellationToken: cancellationToken);
 
 
-    private async Task<int> DeliverBy—ourier<TMessage>(
+    private async Task<int> DeliverByCourier<TMessage>(
         Memory<OutboxDeliveryMessage<TMessage>> deliveryMessages,
         ConsumeSettings settings,
         OutboxMessageFilter filter,

@@ -12,7 +12,7 @@ public sealed class PartitionalSettings
     /// Gets or sets a function that retrieves tenant IDs asynchronously.
     /// This function takes a <see cref="CancellationToken"/> as a parameter and returns an array of tenant IDs.
     /// </summary>
-    public Func<CancellationToken, ValueTask<int[]>> GetTenantIds { get; private set; } = 
+    public Func<CancellationToken, ValueTask<int[]>> GetTenantIds { get; private set; } =
         _ => ValueTask.FromResult(s_DefaultTenantIds);
 
 
