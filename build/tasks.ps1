@@ -15,13 +15,13 @@ $projects = @(
 	"Sa.Data.S3",
 
 	"Sa.Configuration",
-    "Sa.Configuration.PostgreSql",
+  "Sa.Configuration.PostgreSql",
 
 	"Sa.Schedule",
 
 	"Sa.Partitional.PostgreSql",
 
-    "Sa.Outbox.Support",
+  "Sa.Outbox.Support",
 	"Sa.Outbox",
 	"Sa.Outbox.PostgreSql",
 
