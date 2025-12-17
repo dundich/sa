@@ -29,6 +29,7 @@
     <Project Path="Sa.Partitional.PostgreSql/Sa.Partitional.PostgreSql.csproj" />
   </Folder>
   <Folder Name="/Samples/">
+    <File Path="Samples/docker-compose.yml" />
     <Project Path="Samples/HybridFileStorage.Console/HybridFileStorage.Console.csproj" />
     <Project Path="Samples/Partitional.ConsoleApp/Partitional.ConsoleApp.csproj" />
     <Project Path="Samples/PgOutbox.ConsoleApp/PgOutbox.ConsoleApp.csproj" />

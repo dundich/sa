@@ -11,7 +11,9 @@
     <Compile Include="..\Sa\Classes\LockRenewer.cs" Link="AsLink\LockRenewer.cs" />
     <Compile Include="..\Sa\Classes\MurmurHash3.cs" Link="AsLink\MurmurHash3.cs" />
     <Compile Include="..\Sa\Classes\ResetLazy.cs" Link="AsLink\ResetLazy.cs" />
+    <Compile Include="..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
     <Compile Include="..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
     <Compile Include="..\Sa\Extensions\NumericExtensions.cs" Link="AsLink\NumericExtensions.cs" />
     <Compile Include="..\Sa\Extensions\SpanExtensions.cs" Link="AsLink\SpanExtensions.cs" />
     <Compile Include="..\Sa\Extensions\StringExtensions.cs" Link="AsLink\StringExtensions.cs" />
@@ -19,8 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream"/>
-    <PackageReference Include="Ulid"/>
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
+    <PackageReference Include="Ulid" />
   </ItemGroup>
 
   <ItemGroup>

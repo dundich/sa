@@ -17,21 +17,26 @@ var connectionString = "Host=localhost;Username=postgres;Password=postgres;Datab
 IHost host = Host
     .CreateDefaultBuilder()
     .ConfigureServices(services => services
+        // publicher
+        .AddHostedService<MessagePublisherService>()
+
+        // outbox
         .AddOutbox(builder => builder
             .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3))
             .WithDeliveries(builder => builder
                 .AddDelivery<SomeConsumer, SomeMessage>("group1", (_, settings) => settings
                     .ScheduleSettings
                         .WithExecutionInterval(TimeSpan.FromMilliseconds(100))
-                        .WithNoInitialDelay()
+                        .WithImmediate()
                 )
                 .AddDelivery<OutherConsumer, SomeMessage>("group2", (_, settings) => settings
                     .ScheduleSettings
-                        .WithExecutionInterval(TimeSpan.FromSeconds(1))
+                        .WithExecutionInterval(TimeSpan.FromSeconds(10))
                         .WithInitialDelay(TimeSpan.FromSeconds(3))
                 )
             )
         )
+        // outbox pg
         .AddOutboxUsingPostgreSql(cfg => cfg
             .ConfigureDataSource(ds => ds.WithConnectionString(connectionString))
             .ConfigureOutboxSettings((_, settings) =>
@@ -50,14 +55,15 @@ IHost host = Host
 var publisher = host.Services.GetRequiredService<IOutboxMessagePublisher>();
 
 await publisher.Publish([
-    new SomeMessage(Guid.NewGuid().ToString(), "Hi 1", Random.Shared.Next(1, 4)),
-    new SomeMessage(Guid.NewGuid().ToString(), "Hi 2", Random.Shared.Next(1, 4)),
-    new SomeMessage(Guid.NewGuid().ToString(), "Hi 3", Random.Shared.Next(1, 4)),
-    new SomeMessage(Guid.NewGuid().ToString(), "Hi 4", Random.Shared.Next(1, 4)),
-    new SomeMessage(Guid.NewGuid().ToString(), "Hi 5", 1),
-    new SomeMessage(Guid.NewGuid().ToString(), "Hi 6", 2),
-    new SomeMessage(Guid.NewGuid().ToString(), "Hi 7", 3)
+    new SomeMessage("01", "Hi 1", Random.Shared.Next(1, 4)),
+    new SomeMessage("02", "Hi 2", Random.Shared.Next(1, 4)),
+    new SomeMessage("03", "Hi 3", Random.Shared.Next(1, 4)),
+
+    new SomeMessage("04", "Hi 4", 1),
+    new SomeMessage("05", "Hi 5", 2),
+    new SomeMessage("06", "Hi 6", 3)
 ]);
+
 
 await host.RunAsync();
 
@@ -78,7 +84,7 @@ namespace PgOutbox
             IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
-            logger.LogWarning("======= {TenantId} =======", outboxMessages.First().PartInfo.TenantId);
+            logger.LogWarning("======= {Group} =======", settings.ConsumerGroupId);
 
             foreach (var msg in outboxMessages)
             {
@@ -96,7 +102,7 @@ namespace PgOutbox
             IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
-            logger.LogWarning("======= {TenantId} =======", outboxMessages.First().PartInfo.TenantId);
+            logger.LogWarning("======= {Group} =======", settings.ConsumerGroupId);
 
             foreach (var msg in outboxMessages)
             {
@@ -106,6 +112,21 @@ namespace PgOutbox
             await Task.Delay(100, cancellationToken);
         }
     }
+
+
+    public class MessagePublisherService(IOutboxMessagePublisher publisher) : BackgroundService
+    {
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            for (int i = 0; i < 1000 && !stoppingToken.IsCancellationRequested; i++)
+            {
+                var rnd = Random.Shared.Next(1, 4);
+                await Task.Delay(TimeSpan.FromSeconds(rnd), stoppingToken);
+                await publisher.Publish(new SomeMessage(i.ToString(), DateTime.Now.ToString(), rnd), stoppingToken);
+            }
+        }
+    }
+
 
     #region forAOT
     public class OutboxMessageSerializer : IOutboxMessageSerializer

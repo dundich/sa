@@ -1,7 +1,7 @@
 ﻿namespace Sa.Classes;
 
 
-internal class AsyncManualResetEvent
+internal sealed class AsyncManualResetEvent
 {
     private readonly Lock _syncRoot = new ();
     private TaskCompletionSource _tcs = new (TaskCreationOptions.RunContinuationsAsynchronously);

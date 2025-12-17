@@ -1,6 +1,7 @@
 using Microsoft.IO;
 using Npgsql;
 using NpgsqlTypes;
+using Sa.Classes;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.IdGen;
 using Sa.Outbox.PostgreSql.Serialization;
@@ -23,15 +24,19 @@ internal sealed class MsgBulkCommand(
     {
         long typeCode = await hashResolver.GetCode(typeof(TMessage).Name, cancellationToken);
 
-        ulong result = await dataSource.BeginBinaryImport(sqlTemplate.SqlBulkMsgCopy, async (writer, t) =>
-        {
-            WriteRows(writer, typeCode, messages);
+        return await Retry.Jitter(
+            async t =>
+            {
+                return await dataSource.BeginBinaryImport(sqlTemplate.SqlBulkMsgCopy, async (writer, t) =>
+                {
+                    WriteRows(writer, typeCode, messages);
 
-            return await writer.CompleteAsync(t);
+                    return await writer.CompleteAsync(t);
 
-        }, cancellationToken);
-
-        return result;
+                }, cancellationToken);
+            }
+            , next: (ex, i) => (ex is NpgsqlException exception) && exception.IsTransient
+            , cancellationToken: cancellationToken);
     }
 
     private void WriteRows<TMessage>(NpgsqlBinaryImporter writer, long payloadTypeCode, ReadOnlyMemory<OutboxMessage<TMessage>> messages)

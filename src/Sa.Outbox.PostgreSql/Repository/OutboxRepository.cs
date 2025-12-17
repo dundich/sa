@@ -1,3 +1,4 @@
+using Sa.Classes;
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Commands;
 

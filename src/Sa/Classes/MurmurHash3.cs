@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Sa.Classes;
@@ -5,9 +6,9 @@ namespace Sa.Classes;
 /// <summary>
 /// https://github.com/odinmillion/MurmurHash.Net/blob/master/src/MurmurHash.Net/MurmurHash3.cs
 /// </summary>
-public static class MurmurHash3
+internal static class MurmurHash3
 {
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S907:\"goto\" statement should not be used", Justification = "<Pending>")]
+    [SuppressMessage("Major Code Smell", "S907:\"goto\" statement should not be used", Justification = "<Pending>")]
     public static uint Hash32(ReadOnlySpan<byte> bytes, uint seed)
     {
         var length = bytes.Length;

@@ -56,7 +56,7 @@ public sealed class ScheduleSettings
         return this;
     }
 
-    public ScheduleSettings WithNoInitialDelay()
+    public ScheduleSettings WithImmediate()
     {
         InitialDelay = TimeSpan.Zero;
         return this;
