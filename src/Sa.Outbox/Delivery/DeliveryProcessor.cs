@@ -136,7 +136,7 @@ internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalS
         {
             return await processor.Process<TMessage>(tenantId, settings, tenantCts.Token);
         }
-        catch (OperationCanceledException) when (tenantCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             // ignore
             return 0;
