@@ -23,10 +23,10 @@ internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> de
     public TimeSpan PostponeAt { get; private set; }
     public Exception? Exception { get; private set; }
 
-    public void PermanentError(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.PermanentError)
-        => Error(exception, message, statusCode);
+    public void Error(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.Error)
+        => Warn(exception, message, statusCode);
 
-    public void Error(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.Error, TimeSpan? postpone = null)
+    public void Warn(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.Warn, TimeSpan? postpone = null)
     {
         DeliveryException? deliveryException = exception as DeliveryException;
 

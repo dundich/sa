@@ -5,7 +5,6 @@ namespace Sa.Outbox.Publication;
 
 internal sealed class OutboxMessagePublisher(
     TimeProvider timeProvider,
-    IArrayPool arrayPool,
     IOutboxRepository outboxRepository,
     OutboxPublishSettings publishSettings
 ) : IOutboxMessagePublisher
@@ -34,7 +33,7 @@ internal sealed class OutboxMessagePublisher(
                 ? maxBatchSize
                 : messages.Count - start;
 
-            OutboxMessage<TMessage>[] payloads = arrayPool.Rent<OutboxMessage<TMessage>>(len);
+            OutboxMessage<TMessage>[] payloads = DefaultArrayPool.Shared.Rent<OutboxMessage<TMessage>>(len);
             Span<OutboxMessage<TMessage>> payloadsSpan = payloads;
             try
             {
@@ -55,7 +54,7 @@ internal sealed class OutboxMessagePublisher(
             }
             finally
             {
-                arrayPool.Return(payloads);
+                DefaultArrayPool.Shared.Return(payloads);
             }
 
             start += len;

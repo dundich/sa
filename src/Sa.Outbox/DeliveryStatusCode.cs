@@ -39,17 +39,17 @@ public static class DeliveryStatusCode
     /// Indicates that an error occurred during the processing of the message.
     /// This may include various types of recoverable errors.
     /// </summary>
-    public const int Error = 400;
+    public const int Warn = 400;
 
     /// <summary>
     /// Reserved for client-side errors that do not fall into other categories.
     /// </summary>
-    public const int Status499 = 499;
+    public const int WarnEof = 499;
 
     /// <summary>
     /// Indicates that a permanent error has occurred, and the message cannot be processed.
     /// </summary>
-    public const int PermanentError = 500;
+    public const int Error = 500;
 
     /// <summary>
     /// Indicates a permanent error has occurred 

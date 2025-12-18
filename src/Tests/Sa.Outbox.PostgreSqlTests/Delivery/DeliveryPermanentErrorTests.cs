@@ -21,7 +21,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
             await Task.Delay(100, cancellationToken);
             foreach (var msg in outboxMessages)
             {
-                msg.PermanentError(s_err, "test");
+                msg.Error(s_err, "test");
             }
         }
     }

@@ -19,8 +19,7 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
         CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
-        if (outboxMessages.Count == 0)
-            return 0;
+        if (outboxMessages.Count == 0) return 0;
 
         try
         {
@@ -38,13 +37,12 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
     // Method to handle errors during message delivery
     private static void HandleError<TMessage>(Exception error, IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages)
     {
-        foreach (var item in outboxMessages)
+        foreach (var item in outboxMessages
+            .Where(c => c.DeliveryResult.Code == DeliveryStatusCode.Pending))
         {
-            if (item.DeliveryResult.Code == 0) // If no previous delivery errors
-            {
-                item.Error(error
-                    ?? new DeliveryException("Unknown delivery error."), postpone: RetryStrategy.CalculateBackoff());
-            }
+            item.Warn(
+                error ?? new DeliveryException("Unknown delivery error."),
+                postpone: RetryStrategy.CalculateBackoff());
         }
     }
 
@@ -58,11 +56,11 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
 
         foreach (var message in messages)
         {
-            if (IsPermanentError(message, maxDeliveryAttempts))
+            if (IsAttemptsError(message, maxDeliveryAttempts))
             {
-                MarkAsPermanentError(message);
+                MarkAsMaximumAttemptsError(message);
             }
-            else if (message.DeliveryResult.Code == 0) // If delivery was successful
+            else if (message.DeliveryResult.Code == DeliveryStatusCode.Pending) // If delivery was successful
             {
                 message.Ok();
                 successfulDeliveries++; // Increment the success counter
@@ -76,22 +74,20 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
     /// Check if the message should be marked as a permanent error
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsPermanentError(IOutboxContext message, int maxDeliveryAttempts)
-    {
-        return message.DeliveryResult.Code >= 400 &&
-               message.DeliveryResult.Code < 500 &&
-               message.DeliveryInfo.Attempt + 1 > maxDeliveryAttempts;
-    }
+    private static bool IsAttemptsError(IOutboxContext message, int maxDeliveryAttempts)
+        => message.DeliveryResult.Code >= DeliveryStatusCode.Warn
+            && message.DeliveryResult.Code < DeliveryStatusCode.Error
+            && message.DeliveryInfo.Attempt + 1 > maxDeliveryAttempts;
 
 
     private readonly static DeliveryPermanentException s_DeliveryPermanentException = new("Maximum delivery attempts exceeded", statusCode: 501);
 
     // Mark the message as a permanent error
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void MarkAsPermanentError<TMessage>(IOutboxContextOperations<TMessage> message)
+    private static void MarkAsMaximumAttemptsError<TMessage>(IOutboxContextOperations<TMessage> message)
     {
         Exception exception = message.Exception ?? s_DeliveryPermanentException;
-        message.PermanentError(exception, statusCode: 501);
+        message.Error(exception, statusCode: DeliveryStatusCode.MaximumAttemptsError);
     }
 
 

@@ -10,28 +10,28 @@ public sealed class ScheduleSettings
     /// </summary>
     public Guid JobId { get; } = Guid.NewGuid();
 
-    public string? Name { get; private set; }
+    public string? Name { get; internal set; }
 
-    public TimeSpan Interval { get; private set; } = TimeSpan.FromMinutes(1);
+    public TimeSpan Interval { get; internal set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
     /// Job schedule delay before start
     /// </summary>
-    public TimeSpan InitialDelay { get; private set; } = TimeSpan.FromSeconds(10);
+    public TimeSpan InitialDelay { get; internal set; } = TimeSpan.FromSeconds(10);
 
-    public int RetryCountOnError { get; private set; } = 2;
+    public int RetryCountOnError { get; internal set; } = 2;
+}
 
-    // Fluent методы
 
+public static class ScheduleSettingsExtensions
+{
     /// <summary>
-    /// Sets the name of the job.
+    /// Sets the job name.
     /// </summary>
-    /// <param name="name">The job name.</param>
-    /// <returns>This instance for chaining.</returns>
-    public ScheduleSettings WithName(string? name)
+    public static ScheduleSettings WithName(this ScheduleSettings settings, string name)
     {
-        Name = name;
-        return this;
+        settings.Name = name;
+        return settings;
     }
 
     /// <summary>
@@ -39,10 +39,10 @@ public sealed class ScheduleSettings
     /// </summary>
     /// <param name="interval">The execution interval.</param>
     /// <returns>This instance for chaining.</returns>
-    public ScheduleSettings WithInterval(TimeSpan interval)
+    public static ScheduleSettings WithInterval(this ScheduleSettings settings, TimeSpan interval)
     {
-        Interval = interval;
-        return this;
+        settings.Interval = interval;
+        return settings;
     }
 
     /// <summary>
@@ -50,16 +50,16 @@ public sealed class ScheduleSettings
     /// </summary>
     /// <param name="delay">The initial delay.</param>
     /// <returns>This instance for chaining.</returns>
-    public ScheduleSettings WithInitialDelay(TimeSpan delay)
+    public static ScheduleSettings WithInitialDelay(this ScheduleSettings settings, TimeSpan delay)
     {
-        InitialDelay = delay;
-        return this;
+        settings.InitialDelay = delay;
+        return settings;
     }
 
-    public ScheduleSettings WithImmediate()
+    public static ScheduleSettings WithImmediate(this ScheduleSettings settings)
     {
-        InitialDelay = TimeSpan.Zero;
-        return this;
+        settings.InitialDelay = TimeSpan.Zero;
+        return settings;
     }
 
     /// <summary>
@@ -67,9 +67,52 @@ public sealed class ScheduleSettings
     /// </summary>
     /// <param name="retryCount">Number of retries.</param>
     /// <returns>This instance for chaining.</returns>
-    public ScheduleSettings WithRetryCountOnError(int retryCount)
+    public static ScheduleSettings WithRetryCountOnError(this ScheduleSettings settings, int retryCount)
     {
-        RetryCountOnError = retryCount;
-        return this;
+        settings.RetryCountOnError = retryCount;
+        return settings;
     }
+
+    /// <summary>
+    /// Configures the job with no retries on error.
+    /// </summary>
+    public static ScheduleSettings WithNoRetries(this ScheduleSettings settings)
+    {
+        return settings.WithRetryCountOnError(0);
+    }
+
+    /// <summary>
+    /// Configures the job with infinite retries on error.
+    /// </summary>
+    public static ScheduleSettings WithInfiniteRetries(this ScheduleSettings settings)
+    {
+        return settings.WithRetryCountOnError(int.MaxValue);
+    }
+
+    /// <summary>
+    /// Configures test settings.
+    /// </summary>
+    public static ScheduleSettings UseTestSettings(
+        this ScheduleSettings settings)
+    {
+        return settings
+            .WithName($"Test-DeliveryJob-{settings.JobId}")
+            .WithInterval(TimeSpan.FromMilliseconds(300))
+            .WithImmediate();
+    }
+
+    public static ScheduleSettings WithIntervalSeconds(this ScheduleSettings settings, int seconds)
+        => settings.WithInterval(TimeSpan.FromSeconds(seconds));
+
+    public static ScheduleSettings WithIntervalMilliseconds(this ScheduleSettings settings, int milliseconds)
+        => settings.WithInterval(TimeSpan.FromMilliseconds(milliseconds));
+
+    public static ScheduleSettings WithIntervalMinutes(this ScheduleSettings settings, int minutes)
+        => settings.WithInterval(TimeSpan.FromMinutes(minutes));
+
+    public static ScheduleSettings WithInitialDelaySeconds(this ScheduleSettings settings, int seconds)
+        => settings.WithInitialDelay(TimeSpan.FromSeconds(seconds));
+
+    public static ScheduleSettings WithInitialDelayMinutes(this ScheduleSettings settings, int minutes)
+        => settings.WithInitialDelay(TimeSpan.FromMinutes(minutes));
 }

@@ -18,7 +18,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
             await Task.Delay(100, cancellationToken);
             foreach (var msg in outboxMessages)
             {
-                msg.Error(s_err, "test");
+                msg.Warn(s_err, "test");
             }
         }
     }
@@ -92,7 +92,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         var delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"select delivery_id from {_tableSettings.DatabaseDeliveryTableName} where delivery_status_code = 501", TestContext.Current.CancellationToken);
         Assert.NotEqual(0, delivery_id);
 
-        var outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"SELECT delivery_id FROM  {_tableSettings.DatabaseTaskTableName} WHERE delivery_status_code = 501", TestContext.Current.CancellationToken);
+        var outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"SELECT delivery_id FROM  {_tableSettings.DatabaseTableName} WHERE delivery_status_code = 501", TestContext.Current.CancellationToken);
         Assert.Equal(delivery_id, outbox_delivery_id);
     }
 

@@ -1,10 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Sa.Classes;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.Configuration;
 
@@ -15,7 +14,6 @@ internal sealed class OutboxBuilder : IOutboxBuilder
     public OutboxBuilder(IServiceCollection services)
     {
         _services = services;
-        services.TryAddSingleton<IArrayPool>(DefaultArrayPool.Shared);
         services.AddMessagePublisher();
         services.TryAddSingleton<OutboxPublishSettings>(this.PublishSettings);
     }

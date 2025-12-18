@@ -14,50 +14,31 @@ Console.WriteLine("Hello, Pg Outbox!");
 var connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=postgres";
 
 // default configure...
-IHost host = Host
-    .CreateDefaultBuilder()
+IHost host = Host.CreateDefaultBuilder()
     .ConfigureServices(services => services
-
-        // publicher
-        .AddHostedService<MessagePublisherService>()
-
-        // outbox
         .AddOutbox(builder => builder
             .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3))
             .WithDeliveries(builder => builder
                 .AddDelivery<Group1Consumer, SomeMessage>("group1", (_, settings) => settings
                     .ScheduleSettings
-                        .WithInterval(TimeSpan.FromMilliseconds(100))
-                        .WithImmediate()
-                )
-                .AddDelivery<Group2Consumer, SomeMessage>("group2", (_, settings) =>
-                {
-                    settings.ScheduleSettings
-                        .WithInterval(TimeSpan.FromSeconds(10))
-                        .WithInitialDelay(TimeSpan.FromSeconds(3));
-
-                    settings.ConsumeSettings
-                        .WithSingleIteration();
-                })
+                        .WithIntervalMilliseconds(100).WithImmediate())
+                .AddDelivery<Group2Consumer, SomeMessage>("group2", (_, settings) => settings
+                    .ScheduleSettings
+                        .WithIntervalSeconds(10).WithInitialDelaySeconds(3)
+                 )
                 .AddDelivery<RndConsumer, SomeMessage>("rnd", (_, settings) => settings
                     .ConsumeSettings
-                        .WithSingleIteration()
-                        .WithMaxDeliveryAttempts(2)
-                )
+                        .WithSingleIteration().WithMaxDeliveryAttempts(2))
             )
         )
         // outbox pg
         .AddOutboxUsingPostgreSql(cfg => cfg
             .ConfigureDataSource(ds => ds.WithConnectionString(connectionString))
-            .ConfigureOutboxSettings((_, settings) =>
-            {
-                settings.TableSettings.DatabaseSchemaName = "test";
-                settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
-            })
+            .ConfigureOutboxSettings((_, settings) => settings.TableSettings.WithSchema("test"))
             .WithMessageSerializer(new OutboxMessageSerializer())
         )
+        .AddHostedService<MessagePublisherService>()
     )
-    .UseConsoleLifetime()
     .Build();
 
 // -- code publish
@@ -65,13 +46,9 @@ IHost host = Host
 var publisher = host.Services.GetRequiredService<IOutboxMessagePublisher>();
 
 await publisher.Publish([
-    new SomeMessage("01", "Hi 1", Random.Shared.Next(1, 4)),
-    new SomeMessage("02", "Hi 2", Random.Shared.Next(1, 4)),
-    new SomeMessage("03", "Hi 3", Random.Shared.Next(1, 4)),
-
-    new SomeMessage("04", "Hi 4", 1),
-    new SomeMessage("05", "Hi 5", 2),
-    new SomeMessage("06", "Hi 6", 3)
+    new SomeMessage("01", "Hi 1", 1),
+    new SomeMessage("02", "Hi 2", 2),
+    new SomeMessage("03", "Hi 3", 3)
 ]);
 
 
@@ -119,14 +96,14 @@ namespace PgOutbox
             IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
+            await Task.Delay(500, cancellationToken);
+
             if (Interlocked.Increment(ref s_counter) > 9)
             {
                 settings.WithMaxProcessingIterations(100);
             }
 
             bool isLogged = false;
-
-            await Task.Delay(500, cancellationToken);
 
             foreach (var msg in outboxMessages.Where(c => c.PartInfo.TenantId == 3))
             {
@@ -137,13 +114,13 @@ namespace PgOutbox
                         msg.Aborted("skip");
                         break;
                     case 1:
-                        msg.Error(new Exception("No permanent error"));
+                        msg.Warn(new Exception("No permanent error"));
                         break;
                     case 2:
                         msg.Postpone(TimeSpan.FromMinutes(1));
                         break;
                     case 3:
-                        msg.PermanentError(new Exception("Permanent error"));
+                        msg.Error(new Exception("Permanent error"));
                         break;
                     default:
                         msg.Ok();
@@ -164,10 +141,9 @@ namespace PgOutbox
             params IEnumerable<IOutboxContextOperations<SomeMessage>> outboxMessages)
         {
             logger.LogWarning("======= {Group} =======", settings.ConsumerGroupId);
-
             foreach (var msg in outboxMessages)
             {
-                logger.LogInformation("#{TaskId}: {Payload} [{Code}]", msg.DeliveryInfo.TaskId, msg.Payload, msg.DeliveryResult.Code);
+                logger.LogInformation("{Date}   #{TaskId}: {Payload} [{Code}]", DateTime.Now, msg.DeliveryInfo.TaskId, msg.Payload, msg.DeliveryResult.Code);
             }
         }
     }

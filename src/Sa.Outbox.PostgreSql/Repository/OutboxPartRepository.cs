@@ -10,7 +10,7 @@ internal sealed class OutboxPartRepository(IPartitionManager partManager, PgOutb
         => EnsureParts(tableSettings.DatabaseMsgTableName, outboxParts, cancellationToken);
 
     public Task<int> EnsureTaskParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
-        => EnsureParts(tableSettings.DatabaseTaskTableName, outboxParts, cancellationToken);
+        => EnsureParts(tableSettings.DatabaseTableName, outboxParts, cancellationToken);
 
     public Task<int> EnsureDeliveryParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
         => EnsureParts(tableSettings.DatabaseDeliveryTableName, outboxParts, cancellationToken);

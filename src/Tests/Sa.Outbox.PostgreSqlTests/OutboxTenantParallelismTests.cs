@@ -112,7 +112,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
 
                                 settings.ConsumeSettings
                                     .WithNoBatchingWindow()
-                                    .WithPerTenanMaxDegreeOfParallelism(3) // 3 тенанта параллельно
+                                    .WithTenantParallelProcessing(3) // 3 тенанта параллельно
                                     .WithTenantTimeout(TimeSpan.FromSeconds(10))
                                     .WithMaxBatchSize(10);
                             })

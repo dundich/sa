@@ -11,7 +11,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
     public string DatabaseErrorTableName => settings.DatabaseErrorTableName;
     public string DatabaseOffsetTableName => settings.DatabaseOffsetTableName;
 
-    public string DatabaseTaskTableName => settings.DatabaseTaskTableName;
+    public string DatabaseTaskTableName => settings.DatabaseTableName;
 
     // ro
     public readonly static string[] MsgFields =
@@ -46,10 +46,10 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         "msg_created_at BIGINT NOT NULL DEFAULT 0",
         
         // -- delivery
-        $"delivery_id BIGINT NOT NULL DEFAULT 0",
+        "delivery_id BIGINT NOT NULL DEFAULT 0",
         "delivery_attempt int NOT NULL DEFAULT 0",
 
-        "delivery_status_code INT NOT NULL DEFAULT 0",
+        $"delivery_status_code INT NOT NULL DEFAULT {DeliveryStatusCode.Pending}",
         "delivery_status_message TEXT NOT NULL DEFAULT ''",
         "delivery_created_at BIGINT NOT NULL DEFAULT 0",
 
@@ -61,7 +61,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
     public readonly static string[] DeliveryFields =
     [
         "delivery_id BIGSERIAL NOT NULL",
-        "delivery_status_code INT NOT NULL DEFAULT 0",
+        $"delivery_status_code INT NOT NULL DEFAULT {DeliveryStatusCode.Pending}",
         "delivery_status_message TEXT NOT NULL DEFAULT ''",
         
         // copy
@@ -111,7 +111,7 @@ FROM STDIN (FORMAT BINARY)
 """;
 
 
-    static readonly string s_InTaskProcessing = $"(delivery_status_code < {DeliveryStatusCode.Ok} OR delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.Status499})";
+    static readonly string s_InTaskProcessing = $"(delivery_status_code < {DeliveryStatusCode.Ok} OR delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.WarnEof})";
 
 
     public string SqlLockAndSelect =
