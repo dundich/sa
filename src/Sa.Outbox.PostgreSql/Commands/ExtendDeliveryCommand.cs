@@ -14,9 +14,9 @@ internal sealed class ExtendDeliveryCommand(
     {
         long typeCode = await hashResolver.GetCode(filter.PayloadType, cancellationToken);
 
-        long lockExpiresOn = (filter.ToDate + lockExpiration).ToUnixTimeSeconds();
+        long lockExpiresOn = (filter.NowDate + lockExpiration).ToUnixTimeSeconds();
         long fromDate = filter.FromDate.ToUnixTimeSeconds();
-        long now = filter.ToDate.ToUnixTimeSeconds();
+        long now = filter.NowDate.ToUnixTimeSeconds();
 
         return await dataSource.ExecuteNonQuery(sqlTemplate.SqlExtendDelivery,
         [
@@ -26,7 +26,7 @@ internal sealed class ExtendDeliveryCommand(
             , new NpgsqlParameter<string>(SqlParam.TransactId, filter.TransactId)
             , new NpgsqlParameter<long>(SqlParam.TypeName, typeCode)
             , new NpgsqlParameter<long>(SqlParam.LockExpiresOn, lockExpiresOn)
-            , new NpgsqlParameter<long>(SqlParam.ToDate, now)
+            , new NpgsqlParameter<long>(SqlParam.NowDate, now)
         ]
         , cancellationToken);
     }
