@@ -17,6 +17,7 @@ var connectionString = "Host=localhost;Username=postgres;Password=postgres;Datab
 IHost host = Host
     .CreateDefaultBuilder()
     .ConfigureServices(services => services
+
         // publicher
         .AddHostedService<MessagePublisherService>()
 
@@ -24,12 +25,12 @@ IHost host = Host
         .AddOutbox(builder => builder
             .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3))
             .WithDeliveries(builder => builder
-                .AddDelivery<SomeConsumer, SomeMessage>("group1", (_, settings) => settings
+                .AddDelivery<Group1Consumer, SomeMessage>("group1", (_, settings) => settings
                     .ScheduleSettings
                         .WithInterval(TimeSpan.FromMilliseconds(100))
                         .WithImmediate()
                 )
-                .AddDelivery<OutherConsumer, SomeMessage>("group2", (_, settings) =>
+                .AddDelivery<Group2Consumer, SomeMessage>("group2", (_, settings) =>
                 {
                     settings.ScheduleSettings
                         .WithInterval(TimeSpan.FromSeconds(10))
@@ -38,6 +39,11 @@ IHost host = Host
                     settings.ConsumeSettings
                         .WithSingleIteration();
                 })
+                .AddDelivery<RndConsumer, SomeMessage>("rnd", (_, settings) => settings
+                    .ConsumeSettings
+                        .WithSingleIteration()
+                        .WithMaxDeliveryAttempts(2)
+                )
             )
         )
         // outbox pg
@@ -72,7 +78,6 @@ await publisher.Publish([
 await host.RunAsync();
 
 
-
 namespace PgOutbox
 {
     public sealed record SomeMessage(string PayloadId, string Message, int TenantId) : IOutboxPayloadMessage
@@ -81,39 +86,89 @@ namespace PgOutbox
     }
 
 
-    public sealed class SomeConsumer(ILogger<SomeConsumer> logger) : IConsumer<SomeMessage>
+    public sealed class Group1Consumer(ILogger<Group1Consumer> logger) : IConsumer<SomeMessage>
     {
         public async ValueTask Consume(
             ConsumeSettings settings,
             IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
-            logger.LogWarning("======= {Group} =======", settings.ConsumerGroupId);
-
-            foreach (var msg in outboxMessages)
-            {
-                logger.LogInformation("#{TaskId}: {Payload}", msg.DeliveryInfo.TaskId, msg.Payload);
-            }
-
             await Task.Delay(100, cancellationToken);
+            Handler.Log(logger, settings, outboxMessages);
         }
     }
 
-    public sealed class OutherConsumer(ILogger<OutherConsumer> logger) : IConsumer<SomeMessage>
+    public sealed class Group2Consumer(ILogger<Group2Consumer> logger) : IConsumer<SomeMessage>
     {
         public async ValueTask Consume(
             ConsumeSettings settings,
             IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
+            await Task.Delay(5000, cancellationToken);
+            Handler.Log(logger, settings, outboxMessages);
+        }
+    }
+
+    public sealed class RndConsumer(ILogger<Group2Consumer> logger) : IConsumer<SomeMessage>
+    {
+        static int s_counter = 0;
+
+        public async ValueTask Consume(
+            ConsumeSettings settings,
+            IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref s_counter) > 9)
+            {
+                settings.WithMaxProcessingIterations(100);
+            }
+
+            bool isLogged = false;
+
+            await Task.Delay(500, cancellationToken);
+
+            foreach (var msg in outboxMessages.Where(c => c.PartInfo.TenantId == 3))
+            {
+                isLogged = true;
+                switch (Random.Shared.Next(0, 6))
+                {
+                    case 0:
+                        msg.Aborted("skip");
+                        break;
+                    case 1:
+                        msg.Error(new Exception("No permanent error"));
+                        break;
+                    case 2:
+                        msg.Postpone(TimeSpan.FromMinutes(1));
+                        break;
+                    case 3:
+                        msg.PermanentError(new Exception("Permanent error"));
+                        break;
+                    default:
+                        msg.Ok();
+                        break;
+                }
+            }
+
+            if (isLogged) Handler.Log(logger, settings, outboxMessages);
+        }
+    }
+
+
+    static class Handler
+    {
+        public static void Log(
+            ILogger logger,
+            ConsumeSettings settings,
+            params IEnumerable<IOutboxContextOperations<SomeMessage>> outboxMessages)
+        {
             logger.LogWarning("======= {Group} =======", settings.ConsumerGroupId);
 
             foreach (var msg in outboxMessages)
             {
-                logger.LogInformation("{Payload}", msg.Payload);
+                logger.LogInformation("#{TaskId}: {Payload} [{Code}]", msg.DeliveryInfo.TaskId, msg.Payload, msg.DeliveryResult.Code);
             }
-
-            await Task.Delay(100, cancellationToken);
         }
     }
 
@@ -124,7 +179,7 @@ namespace PgOutbox
         {
             try
             {
-                for (int i = 0; i < 1000 && !stoppingToken.IsCancellationRequested; i++)
+                for (int i = 0; i < 100 && !stoppingToken.IsCancellationRequested; i++)
                 {
                     var rnd = Random.Shared.Next(1, 4);
                     await Task.Delay(TimeSpan.FromSeconds(rnd), stoppingToken);

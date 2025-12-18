@@ -37,7 +37,6 @@ internal sealed class StartDeliveryCommand(
             , new NpgsqlParameter<int>(SqlParam.Limit, batchSize)
             , new NpgsqlParameter<long>(SqlParam.LockExpiresOn, (filter.ToDate + lockDuration).ToUnixTimeSeconds())
             , new NpgsqlParameter<long>(SqlParam.ToDate, filter.ToDate.ToUnixTimeSeconds())
-            , new NpgsqlParameter<long>(SqlParam.NowDate, filter.NowDate.ToUnixTimeSeconds())
         ]
         , cancellationToken);
     }

@@ -72,7 +72,7 @@ internal sealed class FinishDeliveryCommand(
                 .AddParam<SqlParamNames, long>(SqlParam.TaskId, i, context.DeliveryInfo.TaskId)
 
                 .AddParam<SqlParamNames, long>(SqlParam.LockExpiresOn, i, lockExpiresOn)
-                .AddParam<SqlParamNames, long>(SqlParam.TaskCreatedAt, i, context.DeliveryInfo.TaskId)
+                .AddParam<SqlParamNames, long>(SqlParam.TaskCreatedAt, i, context.DeliveryInfo.PartInfo.CreatedAt.ToUnixTimeSeconds())
 
                 .AddParam<SqlParamNames, string>(SqlParam.ErrorId, i, errorId ?? string.Empty)
 

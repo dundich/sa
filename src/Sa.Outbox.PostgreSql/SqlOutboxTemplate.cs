@@ -188,8 +188,6 @@ FROM next_task nt
 
 
 
-
-
     public string SqlExtendDelivery =
 $"""
 UPDATE {settings.GetQualifiedTaskTableName()}
@@ -199,10 +197,9 @@ WHERE
     tenant_id = {SqlParam.TenantId}
     AND consumer_group = {SqlParam.ConsumerGroupId}
     AND task_created_at >= {SqlParam.FromDate}
-
     AND {s_InTaskProcessing}
     AND task_transact_id = {SqlParam.TransactId}
-    AND task_lock_expires_on > {SqlParam.ToDate}
+    AND task_lock_expires_on > {SqlParam.NowDate} -- now
 ;
 """;
 
