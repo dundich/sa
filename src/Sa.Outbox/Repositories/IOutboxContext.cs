@@ -103,4 +103,6 @@ public interface IOutboxContextOperations<TMessage> : IOutboxContext<TMessage>
     /// <param name="message">An optional message providing additional context.</param>
     /// <returns>The current Outbox context.</returns>
     void Postpone(TimeSpan postpone, string? message = null);
+
+    DateTimeOffset GetUtcNow();
 }

@@ -52,8 +52,9 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     class SomeMessageConsumer1 : IConsumer<SomeMessage1>
     {
         public ValueTask Consume(
-            ConsumeSettings settings, 
-            ReadOnlyMemory<IOutboxContextOperations<SomeMessage1>> outboxMessages, 
+            ConsumeSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage1>> outboxMessages,
             CancellationToken cancellationToken)
         {
             CommonCounter.Add(outboxMessages.Length);
@@ -65,8 +66,9 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     class SomeMessageConsumer2 : IConsumer<SomeMessage2>
     {
         public ValueTask Consume(
-            ConsumeSettings settings, 
-            ReadOnlyMemory<IOutboxContextOperations<SomeMessage2>> outboxMessages, 
+            ConsumeSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage2>> outboxMessages,
             CancellationToken cancellationToken)
         {
             CommonCounter.Add(outboxMessages.Length);

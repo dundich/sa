@@ -14,8 +14,9 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         private static readonly TestException s_err = new("test same error");
 
         public async ValueTask Consume(
-            ConsumeSettings settings, 
-            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages, 
+            ConsumeSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);

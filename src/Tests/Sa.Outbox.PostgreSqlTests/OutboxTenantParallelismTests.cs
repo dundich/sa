@@ -27,7 +27,8 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         public static int TotalProcessed = 0;
 
         public async ValueTask Consume(
-            ConsumeSettings settings, 
+            ConsumeSettings settings,
+            OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {

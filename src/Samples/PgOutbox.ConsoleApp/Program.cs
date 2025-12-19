@@ -24,9 +24,11 @@ IHost host = Host.CreateDefaultBuilder()
                     settings.ScheduleSettings.WithIntervalSeconds(5).WithImmediate();
                     settings.ConsumeSettings.WithSingleIteration();
                 })
-                .AddDelivery<RndConsumer, SomeMessage>("rnd", (_, settings) => settings
-                    .ConsumeSettings
-                        .WithSingleIteration().WithMaxDeliveryAttempts(2))
+                .AddDelivery<RndConsumer, SomeMessage>("rnd", (_, settings) =>
+                {
+                    settings.ScheduleSettings.WithIntervalSeconds(25);
+                    settings.ConsumeSettings.WithSingleIteration().WithMaxDeliveryAttempts(2);
+                })
             )
         )
         // outbox pg
@@ -65,11 +67,12 @@ namespace PgOutbox
     {
         public async ValueTask Consume(
             ConsumeSettings settings,
+            OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
-            Handler.Log(logger, settings, outboxMessages.Span);
+            Handler.Log(logger, filter, outboxMessages.Span);
         }
     }
 
@@ -79,6 +82,7 @@ namespace PgOutbox
 
         public async ValueTask Consume(
             ConsumeSettings settings,
+            OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
@@ -89,11 +93,8 @@ namespace PgOutbox
                 settings.WithMaxProcessingIterations(100);
             }
 
-            bool isLogged = false;
-
             foreach (var msg in outboxMessages.Span)
             {
-                isLogged = true;
                 switch (Random.Shared.Next(0, 6))
                 {
                     case 0:
@@ -114,7 +115,7 @@ namespace PgOutbox
                 }
             }
 
-            if (isLogged) Handler.Log(logger, settings, outboxMessages.Span);
+            Handler.Log(logger, filter, outboxMessages.Span);
         }
     }
 
@@ -123,13 +124,17 @@ namespace PgOutbox
     {
         public static void Log(
             ILogger logger,
-            ConsumeSettings settings,
+            OutboxMessageFilter filter,
             ReadOnlySpan<IOutboxContextOperations<SomeMessage>> outboxMessages)
         {
-            logger.LogWarning("======= {Group} =======", settings.ConsumerGroupId);
+            logger.LogWarning("======= {Group} : {Tenant} =======", filter.ConsumerGroupId, filter.TenantId);
             foreach (var msg in outboxMessages)
             {
-                logger.LogInformation("{Date}   #{TaskId}: {Payload} [{Code}]", DateTime.Now, msg.DeliveryInfo.TaskId, msg.Payload, msg.DeliveryResult.Code);
+                logger.LogInformation("{Date}   #{TaskId}: {Payload} [{Code}]"
+                    , msg.GetUtcNow()
+                    , msg.DeliveryInfo.TaskId
+                    , msg.Payload
+                    , msg.DeliveryResult.Code);
             }
         }
     }

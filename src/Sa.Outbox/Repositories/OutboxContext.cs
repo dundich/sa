@@ -9,7 +9,7 @@ namespace Sa.Outbox.Repository;
 /// <summary>
 /// OutboxMessage
 /// </summary>
-public sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider)
+public sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider? timeProvider = null)
     : IOutboxContextOperations<TMessage>
 {
     public Guid OutboxId => delivery.OutboxId;
@@ -30,29 +30,47 @@ public sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> deli
     {
         DeliveryException? deliveryException = exception as DeliveryException;
 
-        DeliveryResult = new DeliveryStatus(deliveryException?.StatusCode ?? statusCode, message ?? exception.Message, timeProvider.GetUtcNow());
+        DeliveryResult = new DeliveryStatus(
+            deliveryException?.StatusCode ?? statusCode, 
+            message ?? exception.Message, 
+            GetUtcNow());
+
         Exception = exception;
         PostponeAt = postpone ?? deliveryException?.PostponeAt ?? TimeSpan.Zero;
     }
 
     public void Ok(string? message = null)
     {
-        DeliveryResult = new DeliveryStatus(DeliveryStatusCode.Ok, message ?? string.Empty, timeProvider.GetUtcNow());
+        DeliveryResult = new DeliveryStatus(
+            DeliveryStatusCode.Ok, 
+            message ?? string.Empty, 
+            GetUtcNow());
+
         Exception = null;
         PostponeAt = TimeSpan.Zero;
     }
 
     public void Postpone(TimeSpan postpone, string? message = null)
     {
-        DeliveryResult = new DeliveryStatus(DeliveryStatusCode.Postpone, message ?? string.Empty, timeProvider.GetUtcNow());
+        DeliveryResult = new DeliveryStatus(
+            DeliveryStatusCode.Postpone, 
+            message ?? string.Empty, 
+            GetUtcNow());
+        
         Exception = null;
         PostponeAt = postpone;
     }
 
     public void Aborted(string? message = null)
     {
-        DeliveryResult = new DeliveryStatus(DeliveryStatusCode.Aborted, message ?? string.Empty, timeProvider.GetUtcNow());
+        DeliveryResult = new DeliveryStatus(
+            DeliveryStatusCode.Aborted, 
+            message ?? string.Empty, 
+            GetUtcNow());
+
         Exception = null;
         PostponeAt = TimeSpan.Zero;
     }
+
+    public DateTimeOffset GetUtcNow() => (timeProvider ?? TimeProvider.System).GetUtcNow();
 }

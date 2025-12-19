@@ -18,6 +18,7 @@ public interface IConsumer<TMessage> : IConsumer
     /// <returns>A task representing the asynchronous operation.</returns>
     ValueTask Consume(
         ConsumeSettings settings,
+        OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken);
 }

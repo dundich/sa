@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Data;
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Commands;
@@ -43,22 +44,26 @@ internal sealed class DeliveryRepository(
         return await finishCmd.Execute(outboxMessages, errors, filter, cancellationToken);
     }
 
-    private async Task<IReadOnlyDictionary<Exception, ErrorInfo>> GetErrors<TMessage>(ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages, CancellationToken cancellationToken)
+    private async ValueTask<IReadOnlyDictionary<Exception, ErrorInfo>> GetErrors<TMessage>(ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages, CancellationToken cancellationToken)
     {
         IOutboxContextOperations<TMessage>[] errs = outboxMessages
             .Span
             .SelectWhere(m => m, m => m.Exception != null);
 
+        if (errs.Length > 0) 
+            return ReadOnlyDictionary<Exception, ErrorInfo>.Empty;
+
         var dates = errs.Select(c => c.DeliveryResult.CreatedAt);
 
         await partRepository.EnsureErrorParts(dates, cancellationToken);
 
-        IReadOnlyDictionary<Exception, ErrorInfo> errors = await errorCmd.Execute(errs, cancellationToken);
-        return errors;
+        return await errorCmd.Execute(errs, cancellationToken);
+        
     }
 
-    public async Task<int> ExtendDelivery(TimeSpan lockExpiration, OutboxMessageFilter filter, CancellationToken cancellationToken)
-    {
-        return await extendCmd.Execute(lockExpiration, filter, cancellationToken);
-    }
+    public Task<int> ExtendDelivery(
+        TimeSpan lockExpiration,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken) 
+        => extendCmd.Execute(lockExpiration, filter, cancellationToken);
 }

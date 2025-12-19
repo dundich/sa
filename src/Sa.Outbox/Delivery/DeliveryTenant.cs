@@ -24,6 +24,8 @@ internal sealed class DeliveryTenant(
             settings.LookbackInterval,
             tenantId);
 
+        filter = filter with { ToDate = filter.ToDate - settings.BatchingWindow };
+
         var batchSize = await batcher.CalculateBatchSize(settings.MaxBatchSize, filter, cancellationToken);
         batchSize = Math.Min(settings.MaxBatchSize, batchSize);
         if (batchSize == 0) return 0;
@@ -35,7 +37,7 @@ internal sealed class DeliveryTenant(
         var locked = await repository.RentDelivery(
             buffer,
             lockDuration: settings.LockDuration,
-            filter: filter with { ToDate = filter.ToDate - settings.BatchingWindow },
+            filter,
             cancellationToken: cancellationToken);
 
         if (locked == 0) return 0;
@@ -45,7 +47,7 @@ internal sealed class DeliveryTenant(
         using IDisposable locker = RenewerLocker(settings, filter, cancellationToken);
 
 
-        var successfulDeliveries = await deliveryCourier.Deliver(settings, messages, cancellationToken);
+        var successfulDeliveries = await deliveryCourier.Deliver(settings, filter, messages, cancellationToken);
 
         await repository.ReturnDelivery(
             messages,

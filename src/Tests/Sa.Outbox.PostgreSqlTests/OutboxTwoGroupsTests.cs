@@ -23,6 +23,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
 
         public async ValueTask Consume(
             ConsumeSettings settings,
+            OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
@@ -37,6 +38,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
 
         public async ValueTask Consume(
             ConsumeSettings settings,
+            OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {

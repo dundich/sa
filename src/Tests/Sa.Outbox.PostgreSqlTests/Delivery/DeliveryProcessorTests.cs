@@ -9,8 +9,9 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(
-            ConsumeSettings settings, 
-            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages, 
+            ConsumeSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
             Console.WriteLine(outboxMessages.Length);

@@ -9,6 +9,7 @@ internal interface IDeliveryScoped
 {
     Task ConsumeInScope<TMessage>(
         ConsumeSettings settings,
+        OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages, 
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
 }

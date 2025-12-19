@@ -17,8 +17,9 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     {
         private static readonly TestException s_err = new("test permanent error");
         public async ValueTask Consume(
-            ConsumeSettings settings, 
-            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages, 
+            ConsumeSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);

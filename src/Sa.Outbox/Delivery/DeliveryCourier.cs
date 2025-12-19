@@ -15,6 +15,7 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
     /// </summary>
     public async ValueTask<int> Deliver<TMessage>(
         ConsumeSettings settings,
+        OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
@@ -23,7 +24,7 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
 
         try
         {
-            await processor.ConsumeInScope(settings, outboxMessages, cancellationToken);
+            await processor.ConsumeInScope(settings, filter, outboxMessages, cancellationToken);
         }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {
