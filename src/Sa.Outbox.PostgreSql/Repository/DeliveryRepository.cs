@@ -30,7 +30,10 @@ internal sealed class DeliveryRepository(
         return await startCmd.FillContext(writeBuffer, lockDuration, filter, cancellationToken);
     }
 
-    public async Task<int> ReturnDelivery<TMessage>(ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public async Task<int> ReturnDelivery<TMessage>(
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<Exception, ErrorInfo> errors = await GetErrors(outboxMessages, cancellationToken);
 
@@ -44,13 +47,15 @@ internal sealed class DeliveryRepository(
         return await finishCmd.Execute(outboxMessages, errors, filter, cancellationToken);
     }
 
-    private async ValueTask<IReadOnlyDictionary<Exception, ErrorInfo>> GetErrors<TMessage>(ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages, CancellationToken cancellationToken)
+    private async ValueTask<IReadOnlyDictionary<Exception, ErrorInfo>> GetErrors<TMessage>(
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
+        CancellationToken cancellationToken)
     {
         IOutboxContextOperations<TMessage>[] errs = outboxMessages
             .Span
             .SelectWhere(m => m, m => m.Exception != null);
 
-        if (errs.Length > 0) 
+        if (errs.Length > 0)
             return ReadOnlyDictionary<Exception, ErrorInfo>.Empty;
 
         var dates = errs.Select(c => c.DeliveryResult.CreatedAt);
@@ -58,12 +63,12 @@ internal sealed class DeliveryRepository(
         await partRepository.EnsureErrorParts(dates, cancellationToken);
 
         return await errorCmd.Execute(errs, cancellationToken);
-        
+
     }
 
     public Task<int> ExtendDelivery(
         TimeSpan lockExpiration,
         OutboxMessageFilter filter,
-        CancellationToken cancellationToken) 
-        => extendCmd.Execute(lockExpiration, filter, cancellationToken);
+        CancellationToken cancellationToken)
+            => extendCmd.Execute(lockExpiration, filter, cancellationToken);
 }

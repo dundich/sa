@@ -25,6 +25,14 @@ public interface IDeliveryBuilder
     where TConsumer : class, IConsumer<TMessage>
     where TMessage : IOutboxPayloadMessage;
 
+
+    IDeliveryBuilder AddDeliverySingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+        string consumerGroupId,
+        Action<IServiceProvider, OutboxDeliverySettings>? configure = null
+    )
+    where TConsumer : class, IConsumer<TMessage>
+    where TMessage : IOutboxPayloadMessage;
+
     /// <summary>
     /// Added provider functionality to dynamically calculate batch sizes for delivery
     /// </summary>

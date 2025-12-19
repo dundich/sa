@@ -9,7 +9,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(
-            ConsumeSettings settings,
+            OutboxDeliverySettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages, 
             CancellationToken cancellationToken)
@@ -22,7 +22,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
 
     public class Fixture : OutboxPostgreSqlFixture<IDeliveryProcessor>
     {
-        public ConsumeSettings ConsumeSettings = default!;
+        public OutboxDeliverySettings OutboxSettings = default!;
 
         public Fixture() : base()
         {
@@ -39,7 +39,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
                                 .WithLockRenewal(TimeSpan.FromMilliseconds(100))
                                 .WithNoBatchingWindow();
 
-                            ConsumeSettings = s.ConsumeSettings;
+                            OutboxSettings = s;
                         })
                     )
             )
@@ -68,7 +68,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
         Assert.True(cnt > 0);
 
 
-        var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
+        var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
         Assert.True(result > 0);
     }
 }

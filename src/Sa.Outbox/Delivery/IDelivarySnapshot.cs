@@ -9,5 +9,5 @@ public interface IDelivarySnapshot
     string[] Parts { get; }
 
     IEnumerable<string> GetConsumeGroupIds()
-        => DeliverySettings.Select(c => c.ConsumeSettings.ConsumerGroupId).Distinct();
+        => DeliverySettings.Select(c => c.ConsumerGroupId).Distinct();
 }

@@ -14,7 +14,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         private static readonly TestException s_err = new("test same error");
 
         public async ValueTask Consume(
-            ConsumeSettings settings,
+            OutboxDeliverySettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
             CancellationToken cancellationToken)
@@ -46,7 +46,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
                                 .WithMaxDeliveryAttempts(MaxDeliveryAttempts)
                                 .WithNoBatchingWindow();
 
-                            ConsumeSettings = s.ConsumeSettings;
+                            OutboxSettings = s;
                         })
                     )
                 );
@@ -56,7 +56,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
 
         public const int MaxDeliveryAttempts = 2;
 
-        public ConsumeSettings ConsumeSettings { get; private set; } = default!;
+        public OutboxDeliverySettings OutboxSettings { get; private set; } = default!;
     }
 
 
@@ -82,7 +82,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         {
             await Task.Delay(300, TestContext.Current.CancellationToken);
 
-            await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
+            await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
             int attempt = await GetDeliveries();
             if (attempt > Fixture.MaxDeliveryAttempts)
             {

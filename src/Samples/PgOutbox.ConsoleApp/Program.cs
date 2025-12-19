@@ -66,7 +66,7 @@ namespace PgOutbox
     public sealed class Group1Consumer(ILogger<Group1Consumer> logger) : IConsumer<SomeMessage>
     {
         public async ValueTask Consume(
-            ConsumeSettings settings,
+            OutboxDeliverySettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
@@ -81,7 +81,7 @@ namespace PgOutbox
         static int s_counter = 0;
 
         public async ValueTask Consume(
-            ConsumeSettings settings,
+            OutboxDeliverySettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
@@ -90,7 +90,7 @@ namespace PgOutbox
 
             if (Interlocked.Increment(ref s_counter) > 2)
             {
-                settings.WithMaxProcessingIterations(100);
+                settings.ConsumeSettings.WithMaxProcessingIterations(100);
             }
 
             foreach (var msg in outboxMessages.Span)

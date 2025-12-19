@@ -9,7 +9,7 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(
-            ConsumeSettings settings,
+            OutboxDeliverySettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
             CancellationToken cancellationToken)
@@ -32,16 +32,14 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
                 .WithDeliveries(builder
                     => builder.AddDelivery<TestMessageConsumer, TestMessage>("test3", (_, s) =>
                     {
-                        ConsumeSettings = s
-                            .ConsumeSettings
-                            .WithBatchingWindow(TimeSpan.FromMinutes(3))
-                            ;
+                        s.ConsumeSettings.WithBatchingWindow(TimeSpan.FromMinutes(3));
+                        OutboxSettings = s;
                     })
                 )
             );
         }
 
-        public ConsumeSettings ConsumeSettings { get; set; } = default!;
+        public OutboxDeliverySettings OutboxSettings { get; set; } = default!;
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }
@@ -65,13 +63,13 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
         Assert.True(cnt > 0);
 
 
-        var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
+        var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
         Assert.Equal(0, result);
 
 
-        fixture.ConsumeSettings.WithNoBatchingWindow();
+        fixture.OutboxSettings.ConsumeSettings.WithNoBatchingWindow();
 
-        result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
+        result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
         Assert.True(result > 0);
     }
 }

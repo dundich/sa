@@ -8,8 +8,8 @@ namespace Sa.Outbox.Delivery;
 internal interface IDeliveryScoped
 {
     Task ConsumeInScope<TMessage>(
-        ConsumeSettings settings,
+        OutboxDeliverySettings settings,
         OutboxMessageFilter filter,
-        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages, 
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
 }

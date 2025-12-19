@@ -17,7 +17,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     {
         private static readonly TestException s_err = new("test permanent error");
         public async ValueTask Consume(
-            ConsumeSettings settings,
+            OutboxDeliverySettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
             CancellationToken cancellationToken)
@@ -43,13 +43,14 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
                 .WithDeliveries(builder
                     => builder.AddDelivery<TestMessageConsumer, TestMessage>("test2", (_, s) =>
                     {
-                        ConsumeSettings = s.ConsumeSettings.WithNoBatchingWindow();
+                        s.ConsumeSettings.WithNoBatchingWindow();
+                        OutboxSettings = s;
                     })
                 )
             );
         }
 
-        public ConsumeSettings ConsumeSettings = default!;
+        public OutboxDeliverySettings OutboxSettings = default!;
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }
@@ -73,7 +74,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
+        var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
 
         Assert.Equal(0, result);
 

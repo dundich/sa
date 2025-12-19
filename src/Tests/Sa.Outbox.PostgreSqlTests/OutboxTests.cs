@@ -23,7 +23,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         static int s_Counter = 0;
 
         public async ValueTask Consume(
-            ConsumeSettings settings,
+            OutboxDeliverySettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)

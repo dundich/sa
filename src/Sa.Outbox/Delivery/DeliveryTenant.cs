@@ -14,20 +14,22 @@ internal sealed class DeliveryTenant(
     IDeliveryCourier deliveryCourier,
     IDeliveryBatcher batcher) : IDeliveryTenant
 {
-    public async Task<int> ProcessInTenant<TMessage>(int tenantId, ConsumeSettings settings, CancellationToken cancellationToken)
+    public async Task<int> ProcessInTenant<TMessage>(int tenantId, OutboxDeliverySettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
 
+        ConsumeSettings consumeSettings = settings.ConsumeSettings;
+
+
         var filter = FilterFactory.CreateFilter<TMessage>(
+            tenantId,
             settings.ConsumerGroupId,
             timeProvider.GetUtcNow(),
-            settings.LookbackInterval,
-            tenantId);
+            consumeSettings.LookbackInterval,
+            consumeSettings.BatchingWindow);
 
-        filter = filter with { ToDate = filter.ToDate - settings.BatchingWindow };
-
-        var batchSize = await batcher.CalculateBatchSize(settings.MaxBatchSize, filter, cancellationToken);
-        batchSize = Math.Min(settings.MaxBatchSize, batchSize);
+        var batchSize = await batcher.CalculateBatchSize(consumeSettings.MaxBatchSize, filter, cancellationToken);
+        batchSize = Math.Min(consumeSettings.MaxBatchSize, batchSize);
         if (batchSize == 0) return 0;
 
         using var memoryOwner = MemoryPool<IOutboxContextOperations<TMessage>>.Shared.Rent(batchSize);
@@ -36,7 +38,7 @@ internal sealed class DeliveryTenant(
 
         var locked = await repository.RentDelivery(
             buffer,
-            lockDuration: settings.LockDuration,
+            lockDuration: consumeSettings.LockDuration,
             filter,
             cancellationToken: cancellationToken);
 
@@ -44,7 +46,7 @@ internal sealed class DeliveryTenant(
 
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages = buffer[..locked];
 
-        using IDisposable locker = RenewerLocker(settings, filter, cancellationToken);
+        using IDisposable locker = RenewerLocker(consumeSettings, filter, cancellationToken);
 
 
         var successfulDeliveries = await deliveryCourier.Deliver(settings, filter, messages, cancellationToken);

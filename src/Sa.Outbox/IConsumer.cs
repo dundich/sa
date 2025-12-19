@@ -17,7 +17,7 @@ public interface IConsumer<TMessage> : IConsumer
     /// <param name="cancellationToken">A cancellation token to signal the operation's cancellation.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     ValueTask Consume(
-        ConsumeSettings settings,
+        OutboxDeliverySettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken);

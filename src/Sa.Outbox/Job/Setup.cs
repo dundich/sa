@@ -10,14 +10,22 @@ internal static class Setup
     public static IServiceCollection AddDeliveryJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         this IServiceCollection services,
         string consumerGroupId,
+        bool isSingleton,
         Action<IServiceProvider, OutboxDeliverySettings>? сonfigure = null)
             where TConsumer : class, IConsumer<TMessage>
             where TMessage : IOutboxPayloadMessage
     {
 
-        var settings = new OutboxDeliverySettings(consumerGroupId);
+        OutboxDeliverySettings settings = new(consumerGroupId, isSingleton);
 
-        services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(settings.ConsumeSettings);
+        if (isSingleton)
+        {
+            services.AddKeyedSingleton<IConsumer<TMessage>, TConsumer>(settings);
+        }
+        else
+        {
+            services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(settings);
+        }
 
         services.AddSchedule(builder =>
         {

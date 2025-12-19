@@ -14,7 +14,7 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
     /// Asynchronous method to deliver messages
     /// </summary>
     public async ValueTask<int> Deliver<TMessage>(
-        ConsumeSettings settings,
+        OutboxDeliverySettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken)
@@ -31,7 +31,7 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
             HandleError(ex, outboxMessages.Span);
         }
 
-        return PostHandle(outboxMessages.Span, settings.MaxDeliveryAttempts);
+        return PostHandle(outboxMessages.Span, settings.ConsumeSettings.MaxDeliveryAttempts);
     }
 
 
@@ -83,7 +83,8 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
             && message.DeliveryInfo.Attempt + 1 > maxDeliveryAttempts;
 
 
-    private readonly static DeliveryPermanentException s_DeliveryPermanentException = new("Maximum delivery attempts exceeded", statusCode: 501);
+    private readonly static DeliveryPermanentException s_DeliveryPermanentException
+        = new("Maximum delivery attempts exceeded", statusCode: 501);
 
     // Mark the message as a permanent error
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

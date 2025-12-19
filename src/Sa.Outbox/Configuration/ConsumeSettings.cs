@@ -7,13 +7,13 @@ namespace Sa.Outbox;
 /// Initializes a new instance of the <see cref="ConsumeSettings"/> class.
 /// </remarks>
 /// <param name="consumerGroupId">Group identity for consuming. If null or empty, uses default.</param>
-public sealed class ConsumeSettings(string? consumerGroupId = null)
+public sealed class ConsumeSettings
 {
 
-    /// <summary>
-    /// Group identity for consuming
-    /// </summary>
-    public string ConsumerGroupId { get; } = consumerGroupId ?? string.Empty;
+    ///// <summary>
+    ///// Group identity for consuming
+    ///// </summary>
+    //public string ConsumerGroupId { get; } = consumerGroupId ?? string.Empty;
 
     /// <summary>
     /// Maximum number of processing iterations when greedy mode is enabled.

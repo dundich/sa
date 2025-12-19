@@ -17,7 +17,18 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
         where TConsumer : class, IConsumer<TMessage>
         where TMessage : IOutboxPayloadMessage
     {
-        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), configure);
+        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), false, configure);
+        return this;
+    }
+
+    public IDeliveryBuilder AddDeliverySingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+        string consumerGroupId,
+        Action<IServiceProvider, OutboxDeliverySettings>? configure = null
+    )
+        where TConsumer : class, IConsumer<TMessage>
+        where TMessage : IOutboxPayloadMessage
+    {
+        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), true, configure);
         return this;
     }
 

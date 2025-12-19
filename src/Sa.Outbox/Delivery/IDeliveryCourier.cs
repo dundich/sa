@@ -9,7 +9,7 @@ namespace Sa.Outbox.Delivery;
 internal interface IDeliveryCourier
 {
     ValueTask<int> Deliver<TMessage>(
-        ConsumeSettings settings,
+        OutboxDeliverySettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
