@@ -1,17 +1,20 @@
 using System.Data;
+using Microsoft.Extensions.Logging;
 using Npgsql;
+using Sa.Classes;
 using Sa.Data.PostgreSql;
-using Sa.Partitional.PostgreSql;
+using Sa.Extensions;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
 
 internal sealed record ConsumerGroupIdentifier(string ConsumerGroupId, int TenantId);
 
-internal sealed class OutboxTaskLoader(
+internal sealed partial class OutboxTaskLoader(
     IPgDataSource pg,
     SqlOutboxTemplate sql,
-    IPartitionManager partitionManager) : IOutboxTaskLoader
+    IOutboxPartRepository partitionManager,
+    ILogger<OutboxTaskLoader>? logger) : IOutboxTaskLoader
 {
 
     public async Task<LoadGroupResult> LoadGroupBatch(
@@ -24,19 +27,36 @@ internal sealed class OutboxTaskLoader(
 
         try
         {
-            await partitionManager.EnsureParts(sql.DatabaseTaskTableName, filter.NowDate, [filter.TenantId, filter.ConsumerGroupId], cancellationToken);
+            await partitionManager.EnsureTaskParts(
+                [new OutboxPartInfo(filter.TenantId, filter.ConsumerGroupId, filter.NowDate)],
+                cancellationToken);
 
-            LoadGroupResult loadResult = await LoadGroupAndShiftOffset(filter, batchSize, cancellationToken);
-
-            return loadResult;
+            return await LoadGroupAndShiftOffsetWithRetry(filter, batchSize, cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
+            LogCanceledLoad(ex, filter);
+            return LoadGroupResult.Empty;
+        }
+        catch (Exception ex) when (!ex.IsCritical())
+        {
+            LogErrorLoad(ex, filter);
             return LoadGroupResult.Empty;
         }
     }
 
-    private async Task<LoadGroupResult> LoadGroupAndShiftOffset(OutboxMessageFilter filter, int batchSize, CancellationToken cancellationToken)
+    private async Task<LoadGroupResult> LoadGroupAndShiftOffsetWithRetry(OutboxMessageFilter filter, int batchSize, CancellationToken cancellationToken)
+    {
+        return await Retry.Jitter(
+            async t => await LoadGroupAndShiftOffset(filter, batchSize, cancellationToken)
+            , next: (ex, i) => (ex is NpgsqlException exception) && exception.IsTransient
+            , cancellationToken: cancellationToken);
+    }
+
+    private async Task<LoadGroupResult> LoadGroupAndShiftOffset(
+        OutboxMessageFilter filter,
+        int batchSize,
+        CancellationToken cancellationToken)
     {
         await using var conn = await pg.OpenDbConnection(cancellationToken);
 
@@ -178,4 +198,19 @@ internal sealed class OutboxTaskLoader(
         }
         return (int)(hash ^ 0xffffffff);
     }
+
+
+    [LoggerMessage(
+        EventId = 3006,
+        Level = LogLevel.Warning,
+        Message = "Load consumer group cancelled for filter: {Filter}")]
+    partial void LogCanceledLoad(Exception exception, OutboxMessageFilter filter);
+
+
+    [LoggerMessage(
+        EventId = 3007,
+        Level = LogLevel.Error,
+        Message = "Error loading consumer group for filter: {Filter}")]
+    partial void LogErrorLoad(Exception exception, OutboxMessageFilter filter);
+
 }

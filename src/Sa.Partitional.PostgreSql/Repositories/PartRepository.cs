@@ -92,6 +92,11 @@ internal sealed partial class PartRepository(
         string sql = sqlBuilder.SelectPartsFromDateSql(tableName);
         long unixTime = fromDate.ToUniversalTime().StartOfDay().ToUnixTimeSeconds();
 
+        return await GetPartsFormDateWithRetry(sql, unixTime, cancellationToken);
+    }
+
+    private async Task<List<PartByRangeInfo>> GetPartsFormDateWithRetry(string sql, long unixTime, CancellationToken cancellationToken)
+    {
         return await Retry.Jitter(
             async t =>
             {
@@ -110,8 +115,6 @@ internal sealed partial class PartRepository(
             , next: HandleError
             , cancellationToken: cancellationToken);
     }
-
-
 
     public async Task<List<PartByRangeInfo>> GetPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
     {

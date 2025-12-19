@@ -24,6 +24,11 @@ internal sealed class MsgBulkCommand(
     {
         long typeCode = await hashResolver.GetCode(typeof(TMessage).Name, cancellationToken);
 
+        return await BulkWithRetry(messages, typeCode, cancellationToken);
+    }
+
+    private async Task<ulong> BulkWithRetry<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, long typeCode, CancellationToken cancellationToken)
+    {
         return await Retry.Jitter(
             async t =>
             {
