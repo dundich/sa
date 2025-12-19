@@ -10,7 +10,7 @@ internal sealed class DeliveryRepository(
     , IFinishDeliveryCommand finishCmd
     , IExtendDeliveryCommand extendCmd
     , IOutboxPartRepository partRepository
-    , IConsumeLoader loader
+    , IOutboxTaskLoader loader
 ) : IDeliveryRepository
 {
     public async Task<int> RentDelivery<TMessage>(
@@ -22,7 +22,7 @@ internal sealed class DeliveryRepository(
     {
         if (cancellationToken.IsCancellationRequested || batchSize < 1) return 0;
 
-        var _ = await loader.LoadGroup(filter, batchSize, cancellationToken);
+        var _ = await loader.LoadGroupBatch(filter, batchSize, cancellationToken);
 
         return await startCmd.Execute(writeBuffer, batchSize, lockDuration, filter, cancellationToken);
     }

@@ -119,14 +119,14 @@ internal sealed partial class JobController(
 
         if (errorHandling.HasSuppressError && errorHandling.SuppressError?.Invoke(exception) == true)
         {
-            LogJobWasSuppressed(context.Logger, context.JobName, exception.Message);
+            LogJobWasSuppressed(context.Logger, context.JobName, exception.GetType().Name, exception.Message);
             return;
         }
 
         if (context.FailedRetries < settings.ErrorHandling.RetryCount)
         {
             context.FailedRetries++;
-            LogFailedRetryAttempts(context.Logger, context.JobName, context.FailedRetries, errorHandling.RetryCount, exception.Message);
+            LogFailedRetryAttempts(context.Logger, context.JobName, context.FailedRetries, errorHandling.RetryCount, exception.GetType().Name, exception.Message);
             return;
         }
 
@@ -137,12 +137,12 @@ internal sealed partial class JobController(
     [LoggerMessage(
         EventId = 401,
         Level = LogLevel.Warning,
-        Message = "[{JobName}] the error: “{Error}” on job was suppressed to continue.")]
-    static partial void LogJobWasSuppressed(ILogger logger, string jobName, string error);
+        Message = "[{JobName}] the error: {Type} “{Error}” on job was suppressed to continue.")]
+    static partial void LogJobWasSuppressed(ILogger logger, string jobName, string type, string error);
 
     [LoggerMessage(
         EventId = 402,
         Level = LogLevel.Warning,
-        Message = "[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: “{Error}”")]
-    static partial void LogFailedRetryAttempts(ILogger logger, string jobName, int failedRetryAttempts, int retryCount, string error);
+        Message = "[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: {Type} “{Error}”")]
+    static partial void LogFailedRetryAttempts(ILogger logger, string jobName, int failedRetryAttempts, int retryCount, string type, string error);
 }

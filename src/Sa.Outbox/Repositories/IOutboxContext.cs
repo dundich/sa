@@ -10,7 +10,7 @@ public interface IOutboxContext
     /// <summary>
     /// Gets the unique identifier for the Outbox message.
     /// </summary>
-    string OutboxId { get; }
+    Guid OutboxId { get; }
 
     /// <summary>
     /// Gets the unique identifier for the payload.

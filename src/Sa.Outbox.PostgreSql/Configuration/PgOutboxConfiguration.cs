@@ -1,8 +1,8 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
-using System.Collections.Concurrent;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 

@@ -11,7 +11,7 @@ internal static class Setup
         services.TryAddSingleton<IOutboxRepository, OutboxRepository>();
         services.TryAddSingleton<IDeliveryRepository, DeliveryRepository>();
         services.TryAddSingleton<IMsgTypeRepository, MsgTypeRepository>();
-        services.TryAddSingleton<IConsumeLoader, ConsumeLoader>();
+        services.TryAddSingleton<IOutboxTaskLoader, OutboxTaskLoader>();
         return services;
     }
 }

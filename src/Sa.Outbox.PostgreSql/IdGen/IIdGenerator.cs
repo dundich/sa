@@ -2,5 +2,5 @@
 
 public interface IIdGenerator
 {
-    string GenId(DateTimeOffset date);
+    Guid GenId(DateTimeOffset timestamp);
 }

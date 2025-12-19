@@ -42,14 +42,16 @@ internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTe
     {
         int i = 0;
 
-        foreach ((Exception Key, ErrorInfo Value) in errorArray.AsSpan(start, count))
+        foreach ((Exception Ex, ErrorInfo Value) in errorArray.AsSpan(start, count))
         {
+
             (long ErrorId, string TypeName, DateTimeOffset CreatedAt) = Value;
 
-            command.AddParam<SqlParamNames, long>(SqlParam.ErrorId, i, ErrorId);
-            command.AddParam<SqlParamNames, string>(SqlParam.TypeName, i, TypeName);
-            command.AddParam<SqlParamNames, string>(SqlParam.StatusMessage, i, Key.ToString());
-            command.AddParam<SqlParamNames, long>(SqlParam.CreatedAt, i, CreatedAt.ToUnixTimeSeconds());
+            //(error_id, error_type, error_message, error_created_at)
+            command.AddParamErrorId(ErrorId, i);
+            command.AddParamTypeName(TypeName, i);
+            command.AddParamStatusMessage(Ex.ToString(), i);
+            command.AddParamCreatedAt(CreatedAt, i);
             i++;
         }
     }
@@ -61,19 +63,5 @@ internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTe
               .GroupBy(m => m.Exception!)
               .Select(m => (err: m.Key, createdAt: m.First().DeliveryResult.CreatedAt.StartOfDay()))
               .ToDictionary(e => e.err, e => new ErrorInfo(e.err.ToString().GetMurmurHash3(), e.err.GetType().Name, e.createdAt));
-    }
-
-
-    sealed class SqlParamNames : INamePrefixProvider
-    {
-        public static int MaxIndex => 512;
-
-        public static string[] GetPrefixes() =>
-        [
-            SqlParam.ErrorId
-            , SqlParam.TypeName
-            , SqlParam.StatusMessage
-            , SqlParam.CreatedAt
-        ];
     }
 }

@@ -22,7 +22,7 @@ public sealed record OutboxMessage<TMessage>(
 /// <param name="OutboxId">Gets information about the delivery of the Outbox message.</param>
 /// <typeparam name="TMessage">The type of the message payload.</typeparam>
 public sealed record OutboxDeliveryMessage<TMessage>(
-    string OutboxId,
+    Guid OutboxId,
     OutboxMessage<TMessage> Message,
     OutboxTaskDeliveryInfo DeliveryInfo
 );
@@ -57,7 +57,7 @@ public sealed record OutboxTaskDeliveryInfo(
     long TaskId,
     long DeliveryId,
     int Attempt,
-    string LastErrorId,
+    long LastErrorId,
     DeliveryStatus Status,
     OutboxPartInfo PartInfo
 );

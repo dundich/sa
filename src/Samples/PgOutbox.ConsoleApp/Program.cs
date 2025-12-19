@@ -19,13 +19,11 @@ IHost host = Host.CreateDefaultBuilder()
         .AddOutbox(builder => builder
             .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3))
             .WithDeliveries(builder => builder
-                .AddDelivery<Group1Consumer, SomeMessage>("group1", (_, settings) => settings
-                    .ScheduleSettings
-                        .WithIntervalMilliseconds(100).WithImmediate())
-                .AddDelivery<Group2Consumer, SomeMessage>("group2", (_, settings) => settings
-                    .ScheduleSettings
-                        .WithIntervalSeconds(10).WithInitialDelaySeconds(3)
-                 )
+                .AddDelivery<Group1Consumer, SomeMessage>("group1", (_, settings) =>
+                {
+                    settings.ScheduleSettings.WithIntervalSeconds(5).WithImmediate();
+                    settings.ConsumeSettings.WithSingleIteration();
+                })
                 .AddDelivery<RndConsumer, SomeMessage>("rnd", (_, settings) => settings
                     .ConsumeSettings
                         .WithSingleIteration().WithMaxDeliveryAttempts(2))
@@ -75,19 +73,7 @@ namespace PgOutbox
         }
     }
 
-    public sealed class Group2Consumer(ILogger<Group2Consumer> logger) : IConsumer<SomeMessage>
-    {
-        public async ValueTask Consume(
-            ConsumeSettings settings,
-            IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
-            CancellationToken cancellationToken)
-        {
-            await Task.Delay(5000, cancellationToken);
-            Handler.Log(logger, settings, outboxMessages);
-        }
-    }
-
-    public sealed class RndConsumer(ILogger<Group2Consumer> logger) : IConsumer<SomeMessage>
+    public sealed class RndConsumer(ILogger<RndConsumer> logger) : IConsumer<SomeMessage>
     {
         static int s_counter = 0;
 
@@ -98,7 +84,7 @@ namespace PgOutbox
         {
             await Task.Delay(500, cancellationToken);
 
-            if (Interlocked.Increment(ref s_counter) > 9)
+            if (Interlocked.Increment(ref s_counter) > 2)
             {
                 settings.WithMaxProcessingIterations(100);
             }

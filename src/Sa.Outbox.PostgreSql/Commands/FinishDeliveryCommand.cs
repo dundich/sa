@@ -7,7 +7,7 @@ internal sealed class FinishDeliveryCommand(
     IPgDataSource dataSource,
     SqlOutboxTemplate sqlTemplate) : IFinishDeliveryCommand
 {
-    private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlFinishDelivery(len));
+    private readonly SqlCacheSplitter _sqlCache = new(len => sqlTemplate.SqlFinishDelivery(len));
 
     public async Task<int> Execute(
         IOutboxContext[] outboxMessages,
@@ -20,21 +20,21 @@ internal sealed class FinishDeliveryCommand(
         int total = 0;
 
         int startIndex = 0;
-        foreach ((string sql, int length) in sqlCache.GetSql(outboxMessages.Length, SqlParamNames.MaxIndex))
+        foreach ((string sql, int length) in _sqlCache.GetSql(outboxMessages.Length))
         {
             var slice = new ArraySegment<IOutboxContext>(outboxMessages, startIndex, length);
             startIndex += length;
 
             total += await dataSource.ExecuteNonQuery(
                 sql,
-                cmd => FllCmdParams(cmd, slice, errors, filter),
+                cmd => FillCommandParameters(cmd, slice, errors, filter),
                 cancellationToken);
         }
 
         return total;
     }
 
-    private static void FllCmdParams(
+    private static void FillCommandParameters(
         NpgsqlCommand cmd,
         ArraySegment<IOutboxContext> contexts,
         IReadOnlyDictionary<Exception, ErrorInfo> errors,
@@ -42,64 +42,55 @@ internal sealed class FinishDeliveryCommand(
     {
         for (int i = 0; i < contexts.Count; i++)
         {
-            var context = contexts[i];
-            var result = context.DeliveryResult;
-            var statusCode = result.Code;
-            var createdAt = result.CreatedAt;
-
-            var msg = result.Message;
-            var lockExpiresOn = (createdAt + context.PostponeAt).ToUnixTimeSeconds();
-
-            string? errorId = null;
-            Exception? ex = context.Exception;
-            if (ex != null && errors.TryGetValue(ex, out var errorInfo))
-            {
-                errorId = errorInfo.ErrorId.ToString();
-                if (string.IsNullOrEmpty(msg))
-                {
-                    msg = ex.Message;
-                }
-            }
-
-            cmd
-
-                .AddParam<SqlParamNames, int>(SqlParam.StatusCode, i, statusCode)
-                .AddParam<SqlParamNames, string>(SqlParam.StatusMessage, i, msg ?? string.Empty)
-                .AddParam<SqlParamNames, long>(SqlParam.CreatedAt, i, createdAt.ToUnixTimeSeconds())
-
-                .AddParam<SqlParamNames, string>(SqlParam.PayloadId, i, context.PayloadId)
-
-                .AddParam<SqlParamNames, long>(SqlParam.TaskId, i, context.DeliveryInfo.TaskId)
-
-                .AddParam<SqlParamNames, long>(SqlParam.LockExpiresOn, i, lockExpiresOn)
-                .AddParam<SqlParamNames, long>(SqlParam.TaskCreatedAt, i, context.DeliveryInfo.PartInfo.CreatedAt.ToUnixTimeSeconds())
-
-                .AddParam<SqlParamNames, string>(SqlParam.ErrorId, i, errorId ?? string.Empty)
-
-                ;
+            AddContextParameters(cmd, contexts[i], errors, i);
         }
 
-        cmd.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, filter.TenantId));
-        cmd.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, filter.ConsumerGroupId));
-        cmd.Parameters.Add(new NpgsqlParameter<long>(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds()));
-        cmd.Parameters.Add(new NpgsqlParameter<string>(SqlParam.TransactId, filter.TransactId));
+        cmd
+            .AddParamTenantId(filter.TenantId)
+            .AddParamConsumerGroupId(filter.ConsumerGroupId)
+            .AddParamFromDate(filter.FromDate)
+            .AddParamTransactId(filter.TransactId)
+            ;
     }
 
 
-    sealed class SqlParamNames : INamePrefixProvider
+    private static void AddContextParameters(
+        NpgsqlCommand cmd,
+        IOutboxContext context,
+        IReadOnlyDictionary<Exception, ErrorInfo> errors,
+        int index)
     {
-        public static int MaxIndex => 512;
+        var result = context.DeliveryResult;
 
-        public static string[] GetPrefixes() =>
-        [
-            SqlParam.StatusCode
-            , SqlParam.StatusMessage
-            , SqlParam.CreatedAt
-            , SqlParam.PayloadId
-            , SqlParam.TaskId
-            , SqlParam.LockExpiresOn
-            , SqlParam.TaskCreatedAt
-            , SqlParam.ErrorId
-        ];
+        var message = GetErrorMessage(context.Exception, result.Message, errors);
+        var lockExpiresOn = (result.CreatedAt + context.PostponeAt).ToUnixTimeSeconds();
+        var errorId = GetErrorId(context.Exception, errors);
+
+        cmd
+            .AddParamStatusCode(result.Code, index)
+            .AddParamStatusMessage(message, index)
+            .AddParamCreatedAt(result.CreatedAt, index)
+            .AddParamTaskCreatedAt(context.DeliveryInfo.PartInfo.CreatedAt, index)
+            .AddParamPayloadId(context.PayloadId, index)
+            .AddParamTaskId(context.DeliveryInfo.TaskId, index)
+            .AddParamLockExpiresOn(lockExpiresOn, index)
+            .AddParamErrorId(errorId, index);
+    }
+
+    private static long? GetErrorId(Exception? exception, IReadOnlyDictionary<Exception, ErrorInfo> errors)
+        => exception != null && errors.TryGetValue(exception, out var errorInfo)
+            ? errorInfo.ErrorId
+            : null;
+
+    private static string? GetErrorMessage(
+        Exception? exception,
+        string? currentMessage,
+        IReadOnlyDictionary<Exception, ErrorInfo> errors)
+    {
+        if (!string.IsNullOrEmpty(currentMessage)) return currentMessage;
+
+        return exception != null && errors.TryGetValue(exception, out _)
+            ? exception.Message
+            : currentMessage;
     }
 }

@@ -7,7 +7,9 @@ internal static class Setup
 {
     public static IServiceCollection AddIdGen(this IServiceCollection services)
     {
-        services.TryAddSingleton<IIdGenerator, IdGenerator>();
+        services
+            .RemoveAll<IIdGenerator>()
+            .AddSingleton<IIdGenerator, IdGenerator>();
 
         return services;
     }

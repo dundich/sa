@@ -1,5 +1,8 @@
+using System.Data;
 using System.Text;
-using Sa.Outbox.PostgreSql.Repository;
+using Npgsql;
+using Sa.Data.PostgreSql;
+using Sa.Extensions;
 
 namespace Sa.Outbox.PostgreSql;
 
@@ -17,7 +20,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
     public readonly static string[] MsgFields =
     [
         // ulid
-        "msg_id CHAR(26) NOT NULL",
+        "msg_id UUID NOT NULL",
 
         "tenant_id INT NOT NULL DEFAULT 0",
         "msg_part TEXT NOT NULL",
@@ -39,7 +42,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         "task_transact_id TEXT NOT NULL DEFAULT ''",
 
         // msg
-        "msg_id CHAR(26) NOT NULL",
+        "msg_id UUID NOT NULL",
         "msg_part TEXT NOT NULL",
         "tenant_id INT NOT NULL DEFAULT 0",
         "msg_payload_id TEXT NOT NULL",
@@ -54,7 +57,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         "delivery_created_at BIGINT NOT NULL DEFAULT 0",
 
         // -- ref to error
-        "error_id TEXT NOT NULL DEFAULT ''",
+        "error_id BIGINT NOT NULL DEFAULT 0",
     ];
 
     // ro
@@ -77,7 +80,7 @@ internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
         "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
 
         // ref
-        "error_id TEXT NOT NULL DEFAULT ''",
+        "error_id BIGINT NOT NULL DEFAULT 0",
     ];
 
     // Delivery errors
@@ -146,7 +149,7 @@ WITH next_task AS (
         AND msg.msg_part = {SqlParam.MsgPart}
         AND msg.tenant_id = {SqlParam.TenantId}
         AND msg.msg_created_at >= {SqlParam.FromDate}
-        AND msg.msg_payload_type = {SqlParam.MsgPayloadType}
+        AND msg.msg_payload_type = {SqlParam.TypeId}
     ORDER BY task.task_id
     LIMIT {SqlParam.Limit}
     FOR UPDATE SKIP LOCKED
@@ -199,6 +202,7 @@ WHERE
     AND task_created_at >= {SqlParam.FromDate}
     AND {s_InTaskProcessing}
     AND task_transact_id = {SqlParam.TransactId}
+    AND msg_payload_type = {SqlParam.TypeId}
     AND task_lock_expires_on > {SqlParam.NowDate} -- now
 ;
 """;
@@ -236,7 +240,7 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
 (
     consumer_group TEXT,
     tenant_id INT NOT NULL DEFAULT 0,
-    group_offset CHAR(26) NOT NULL DEFAULT '{GroupOffset.Empty.OffsetId}',
+    group_offset UUID NOT NULL DEFAULT '{Guid.Empty}',
     group_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT "pk_{settings.DatabaseOffsetTableName}" PRIMARY KEY (consumer_group, tenant_id)
 )
@@ -248,7 +252,7 @@ $"""
 INSERT INTO {settings.GetQualifiedOffsetTableName()} 
     (consumer_group, tenant_id, group_offset)
 VALUES 
-    ({SqlParam.ConsumerGroupId},{SqlParam.TenantId},{SqlParam.GroupOffset})
+    ({SqlParam.ConsumerGroupId},{SqlParam.TenantId},{SqlParam.Offset})
 ON CONFLICT (consumer_group, tenant_id) DO NOTHING;
 ;
 """;
@@ -268,7 +272,7 @@ WHERE
     public string SqlUpdateOffset = $"""
 UPDATE {settings.GetQualifiedOffsetTableName()}
 SET 
-    group_offset = {SqlParam.GroupOffset}, 
+    group_offset = {SqlParam.Offset}, 
     group_updated_at = NOW()
 WHERE 
     consumer_group = {SqlParam.ConsumerGroupId}
@@ -279,9 +283,9 @@ WHERE
 
     public string SqlInitOffset = $"""
 INSERT INTO {settings.GetQualifiedOffsetTableName()} 
-    (consumer_group, tenant_id, group_offset)
+    (consumer_group, tenant_id)
 VALUES 
-    ({SqlParam.ConsumerGroupId},{SqlParam.TenantId},'{GroupOffset.Empty.OffsetId}')
+    ({SqlParam.ConsumerGroupId},{SqlParam.TenantId})
 ON CONFLICT (consumer_group, tenant_id) DO NOTHING
 ;
 """;
@@ -308,14 +312,14 @@ WITH inserted_rows AS(
         AND tenant_id = {SqlParam.TenantId}
         AND msg_created_at >= {SqlParam.FromDate}
         AND msg_created_at <= {SqlParam.ToDate}
-        AND msg_id > {SqlParam.GroupOffset}
+        AND msg_id > {SqlParam.Offset}
     ORDER BY msg_id
     LIMIT {SqlParam.Limit}
     RETURNING msg_id
 )
 SELECT
     COUNT(*) as copied_rows,
-    MAX(msg_id) as max_id
+    (SELECT msg_id FROM inserted_rows ORDER BY msg_id DESC LIMIT 1) as max_id
 FROM inserted_rows
 ;
 """;
@@ -453,28 +457,204 @@ WHERE
     }
 }
 
+internal static class NpgsqlDataReaderExtension
+{
+    public static Guid GetMgsId(this NpgsqlDataReader reader)
+        => reader.GetGuid("msg_id");
+
+    public static string GetMgsPayloadId(this NpgsqlDataReader reader)
+        => reader.GetString("msg_payload_id");
+
+    public static Stream GetMgsPayload(this NpgsqlDataReader reader)
+        => reader.GetStream("msg_payload");
+
+    public static int GetTenantId(this NpgsqlDataReader reader)
+        => reader.GetInt32("tenant_id");
+
+    public static string GetMsgPart(this NpgsqlDataReader reader)
+        => reader.GetString("msg_part");
+
+    public static DateTimeOffset GetMsgCreatedAt(this NpgsqlDataReader reader)
+        => reader.GetInt64("msg_created_at").ToDateTimeOffsetFromUnixTimestamp();
+
+    public static long GetTaskId(this NpgsqlDataReader reader)
+        => reader.GetInt64("task_id");
+
+    public static DateTimeOffset GetTaskCreatedAt(this NpgsqlDataReader reader)
+        => reader.GetInt64("task_created_at").ToDateTimeOffsetFromUnixTimestamp();
+
+    public static long GetDeliveryId(this NpgsqlDataReader reader)
+        => reader.GetInt64("delivery_id");
+
+    public static int GetDeliveryAttempt(this NpgsqlDataReader reader)
+        => reader.GetInt32("delivery_attempt");
+
+    public static long GetErrorId(this NpgsqlDataReader reader)
+        => reader.GetInt64("error_id");
+
+    public static string GetConsumerGroup(this NpgsqlDataReader reader)
+        => reader.GetString("consumer_group");
+
+    public static int GetDeliveryStatusCode(this NpgsqlDataReader reader)
+    => reader.GetInt32("delivery_status_code");
+
+    public static string GetDeliveryStatusMessage(this NpgsqlDataReader reader)
+        => reader.GetString("delivery_status_message");
+
+    public static long GetDeliveryCreatedAt(this NpgsqlDataReader reader)
+        => reader.GetInt64("delivery_created_at");
+
+    public static long GetTypeId(this NpgsqlDataReader reader)
+        => reader.GetInt64("type_id");
+
+    public static string GetTypeName(this NpgsqlDataReader reader)
+        => reader.GetString("type_name");
+
+}
+
 internal static class SqlParam
 {
     public const string TenantId = "@tnt";
-    public const string GroupOffset = "@offset";
+
     public const string ConsumerGroupId = "@gr";
-    public const string MsgPart = "@part";
-    public const string TypeId = "@type";
-    public const string TypeName = "@type_name";
-    public const string MsgPayloadType = "@p_type";
-    public const string FromDate = "@from_date";
-    public const string ToDate = "@to_date";
+    public const string MsgPart = "@prt";
+    public const string TypeId = "@typ_id";
+    public const string TypeName = "@typ_nm";
+
+    public const string FromDate = "@frm";
+    public const string ToDate = "@to";
     public const string NowDate = "@now";
     public const string TransactId = "@trn";
-    public const string OffsetKey = "@key";
-    public const string Limit = "@limit";
-    public const string LockExpiresOn = "@lock";
 
-    public const string PayloadId = "@p_id";
+    public const string OffsetKey = "@off_key";
+    public const string Offset = "@offset";
+
+    public const string Limit = "@limit";
+    public const string LockExpiresOn = "@lck";
+
+    public const string PayloadId = "@pl_id";
     public const string TaskId = "@tsk";
-    public const string StatusCode = "@code";
-    public const string StatusMessage = "@msg";
-    public const string CreatedAt = "@cr";
-    public const string TaskCreatedAt = "@tcr";
+    public const string StatusCode = "@st_cd";
+    public const string StatusMessage = "@st_msg";
+    public const string CreatedAt = "@cr_at";
+    public const string TaskCreatedAt = "@tsk_at";
     public const string ErrorId = "@err_id";
+}
+
+
+internal static class NpgsqlCommandExtension
+{
+    public static NpgsqlCommand AddParamTenantId(this NpgsqlCommand command, int value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, value));
+        return command;
+    }
+    public static NpgsqlCommand AddParamMsgPart(this NpgsqlCommand command, string value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.MsgPart, value));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamFromDate(this NpgsqlCommand command, DateTimeOffset value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.FromDate, value.ToUnixTimeSeconds()));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamToDate(this NpgsqlCommand command, DateTimeOffset value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.ToDate, value.ToUnixTimeSeconds()));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamNowDate(this NpgsqlCommand command, DateTimeOffset value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.NowDate, value.ToUnixTimeSeconds()));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamConsumerGroupId(this NpgsqlCommand command, string value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, value));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamTypeId(this NpgsqlCommand command, long value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.TypeId, value));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamTransactId(this NpgsqlCommand command, string value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.TransactId, value));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamLimit(this NpgsqlCommand command, int value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.Limit, value));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamLockExpiresOn(this NpgsqlCommand command, DateTimeOffset value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.LockExpiresOn, value.ToUnixTimeSeconds()));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamLockExpiresOn(this NpgsqlCommand command, long value, int index)
+        => command.AddParam<BatchParams, long>(SqlParam.LockExpiresOn, value, index);
+
+
+    public static NpgsqlCommand AddParamErrorId(this NpgsqlCommand command, long? value, int index)
+        => command.AddParam<BatchParams, long>(SqlParam.ErrorId, value ?? 0, index);
+
+
+    public static NpgsqlCommand AddParamTypeName(this NpgsqlCommand command, string value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.TypeName, value));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamTypeName(this NpgsqlCommand command, string? value, int index)
+        => command.AddParam<BatchParams, string>(SqlParam.TypeName, value ?? string.Empty, index);
+
+    public static NpgsqlCommand AddParamStatusCode(this NpgsqlCommand command, int value, int index)
+        => command.AddParam<BatchParams, int>(SqlParam.StatusCode, value, index);
+
+    public static NpgsqlCommand AddParamStatusMessage(this NpgsqlCommand command, string? value, int index)
+        => command.AddParam<BatchParams, string>(SqlParam.StatusMessage, value ?? string.Empty, index);
+
+    public static NpgsqlCommand AddParamCreatedAt(this NpgsqlCommand command, DateTimeOffset value, int index)
+        => command.AddParam<BatchParams, long>(SqlParam.CreatedAt, value.ToUnixTimeSeconds(), index);
+
+    public static NpgsqlCommand AddParamPayloadId(this NpgsqlCommand command, string value, int index)
+        => command.AddParam<BatchParams, string>(SqlParam.PayloadId, value, index);
+
+    public static NpgsqlCommand AddParamTaskId(this NpgsqlCommand command, long value, int index)
+        => command.AddParam<BatchParams, long>(SqlParam.TaskId, value, index);
+
+
+    public static NpgsqlCommand AddParamTaskCreatedAt(this NpgsqlCommand command, DateTimeOffset value, int index)
+        => command.AddParam<BatchParams, long>(SqlParam.TaskCreatedAt, value.ToUnixTimeSeconds(), index);
+
+
+    sealed class BatchParams : INamePrefixProvider
+    {
+        public static int MaxIndex => 512;
+
+        public static string[] GetPrefixes() =>
+        [
+            SqlParam.ErrorId
+            , SqlParam.TypeName
+            , SqlParam.StatusCode
+            , SqlParam.StatusMessage
+            , SqlParam.CreatedAt
+            , SqlParam.PayloadId
+            , SqlParam.TaskId
+            , SqlParam.LockExpiresOn
+            , SqlParam.TaskCreatedAt
+        ];
+    }
 }

@@ -39,16 +39,28 @@ internal sealed class MsgBulkCommand(
             , cancellationToken: cancellationToken);
     }
 
+    /// <summary>
+    ///     <code>
+    ///     msg_id
+    ///     ,tenant_id
+    ///     ,msg_part
+    ///     ,msg_payload_id
+    ///     ,msg_payload_type
+    ///     ,msg_payload
+    ///     ,msg_payload_size
+    ///     ,msg_created_at
+    ///     </code>
+    /// </summary>
     private void WriteRows<TMessage>(NpgsqlBinaryImporter writer, long payloadTypeCode, ReadOnlyMemory<OutboxMessage<TMessage>> messages)
     {
         foreach (OutboxMessage<TMessage> row in messages.Span)
         {
-            string id = idGenerator.GenId(row.PartInfo.CreatedAt);
+            Guid id = idGenerator.GenId(row.PartInfo.CreatedAt);
 
             writer.StartRow();
 
             // id
-            writer.Write(id, NpgsqlDbType.Char);
+            writer.Write(id, NpgsqlDbType.Uuid);
             // tenant
             writer.Write(row.PartInfo.TenantId, NpgsqlDbType.Integer);
             // part

@@ -1,0 +1,15 @@
+
+namespace Sa.Outbox.PostgreSql.Repository;
+
+
+public sealed record LoadGroupResult(int CopiedRows, Guid NewOffset)
+{
+    public static LoadGroupResult Empty { get; } = new(0, Guid.Empty);
+    public bool IsEmpty() => CopiedRows <= 0 || NewOffset == Guid.Empty;
+}
+
+
+internal interface IOutboxTaskLoader
+{
+    Task<LoadGroupResult> LoadGroupBatch(OutboxMessageFilter filter, int batchSize, CancellationToken cancellationToken = default);
+}
