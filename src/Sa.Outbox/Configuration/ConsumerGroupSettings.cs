@@ -4,7 +4,7 @@ namespace Sa.Outbox;
 /// <summary>
 /// Indicates that this is a configuration for message delivery in the Outbox.
 /// </summary>
-public sealed class OutboxDeliverySettings(string consumerGroupId, bool isSingleton)
+public sealed class ConsumerGroupSettings(string consumerGroupId, bool isSingleton)
 {
     /// <summary>
     /// Group identity for consuming
@@ -22,5 +22,4 @@ public sealed class OutboxDeliverySettings(string consumerGroupId, bool isSingle
     /// Gets the consumption settings for processing messages.
     /// </summary>
     public ConsumeSettings ConsumeSettings { get; } = new();
-
 }

@@ -66,7 +66,7 @@ namespace PgOutbox
     public sealed class Group1Consumer(ILogger<Group1Consumer> logger) : IConsumer<SomeMessage>
     {
         public async ValueTask Consume(
-            OutboxDeliverySettings settings,
+            ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
@@ -81,7 +81,7 @@ namespace PgOutbox
         static int s_counter = 0;
 
         public async ValueTask Consume(
-            OutboxDeliverySettings settings,
+            ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)

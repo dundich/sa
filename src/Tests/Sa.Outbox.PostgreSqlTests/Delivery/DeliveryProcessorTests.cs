@@ -9,7 +9,7 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(
-            OutboxDeliverySettings settings,
+            ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
             CancellationToken cancellationToken)
@@ -39,7 +39,7 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
             );
         }
 
-        public OutboxDeliverySettings OutboxSettings { get; set; } = default!;
+        public ConsumerGroupSettings OutboxSettings { get; set; } = default!;
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }

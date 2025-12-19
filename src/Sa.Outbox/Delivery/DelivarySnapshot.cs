@@ -23,12 +23,12 @@ internal sealed class DelivarySnapshot(IScheduleSettings scheduleSettings) : IDe
         return parts;
     });
 
-    private readonly Lazy<OutboxDeliverySettings[]> _lazyDeliveries = new(() =>
+    private readonly Lazy<ConsumerGroupSettings[]> _lazyDeliveries = new(() =>
     {
-        OutboxDeliverySettings[] settings = [.. scheduleSettings.GetJobSettings()
-            .Select(c => c.Properties.Tag as OutboxDeliverySettings)
+        ConsumerGroupSettings[] settings = [.. scheduleSettings.GetJobSettings()
+            .Select(c => c.Properties.Tag as ConsumerGroupSettings)
             .Where(mt => mt != null)
-            .Cast<OutboxDeliverySettings>()];
+            .Cast<ConsumerGroupSettings>()];
 
         return settings;
     });
@@ -49,5 +49,5 @@ internal sealed class DelivarySnapshot(IScheduleSettings scheduleSettings) : IDe
 
     public string[] Parts => _lazyParts.Value;
     public IJobSettings[] JobSettings => _lazyJobs.Value;
-    public OutboxDeliverySettings[] DeliverySettings => _lazyDeliveries.Value;
+    public ConsumerGroupSettings[] ConsumerSettings => _lazyDeliveries.Value;
 }

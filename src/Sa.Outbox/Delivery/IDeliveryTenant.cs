@@ -9,6 +9,6 @@ internal interface IDeliveryTenant
 {
     Task<int> ProcessInTenant<TMessage>(
             int tenantId,
-            OutboxDeliverySettings settings,
+            ConsumerGroupSettings settings,
             CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
 }

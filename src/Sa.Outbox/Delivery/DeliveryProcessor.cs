@@ -9,7 +9,7 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalSupportCache partCache) : IDeliveryProcessor
 {
-    public async Task<long> ProcessMessages<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)
+    public async Task<long> ProcessMessages<TMessage>(ConsumerGroupSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
         long totalProcessed = 0;
@@ -58,7 +58,7 @@ internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalS
         return true;
     }
 
-    public async Task<int> ProcessForEachTenant<TMessage>(OutboxDeliverySettings settings, CancellationToken cancellationToken)
+    public async Task<int> ProcessForEachTenant<TMessage>(ConsumerGroupSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
         int batchSize = settings.ConsumeSettings.MaxBatchSize;
@@ -81,7 +81,7 @@ internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalS
         return await ProcessTenantsParallel<TMessage>(tenantIds, settings, cancellationToken);
     }
 
-    private async Task<int> ProcessTenantsSequential<TMessage>(int[] tenantIds, OutboxDeliverySettings settings, CancellationToken cancellationToken)
+    private async Task<int> ProcessTenantsSequential<TMessage>(int[] tenantIds, ConsumerGroupSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
         int count = 0;
@@ -95,7 +95,7 @@ internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalS
 
     public async Task<int> ProcessTenantsParallel<TMessage>(
         int[] tenantIds,
-        OutboxDeliverySettings settings,
+        ConsumerGroupSettings settings,
         CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
@@ -126,7 +126,7 @@ internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalS
         return totalCount;
     }
 
-    private async Task<int> ProcessInTenant<TMessage>(int tenantId, OutboxDeliverySettings settings, CancellationToken cancellationToken)
+    private async Task<int> ProcessInTenant<TMessage>(int tenantId, ConsumerGroupSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
         using var tenantCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

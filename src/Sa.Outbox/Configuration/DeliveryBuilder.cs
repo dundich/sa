@@ -12,7 +12,7 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
 {
     public IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, OutboxDeliverySettings>? configure = null
+        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
         where TConsumer : class, IConsumer<TMessage>
         where TMessage : IOutboxPayloadMessage
@@ -23,7 +23,7 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
 
     public IDeliveryBuilder AddDeliverySingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, OutboxDeliverySettings>? configure = null
+        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
         where TConsumer : class, IConsumer<TMessage>
         where TMessage : IOutboxPayloadMessage

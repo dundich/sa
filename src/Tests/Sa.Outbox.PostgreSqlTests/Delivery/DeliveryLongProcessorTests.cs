@@ -9,7 +9,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(
-            OutboxDeliverySettings settings,
+            ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages, 
             CancellationToken cancellationToken)
@@ -22,7 +22,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
 
     public class Fixture : OutboxPostgreSqlFixture<IDeliveryProcessor>
     {
-        public OutboxDeliverySettings OutboxSettings = default!;
+        public ConsumerGroupSettings OutboxSettings = default!;
 
         public Fixture() : base()
         {

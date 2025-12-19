@@ -14,7 +14,7 @@ internal sealed class DeliveryTenant(
     IDeliveryCourier deliveryCourier,
     IDeliveryBatcher batcher) : IDeliveryTenant
 {
-    public async Task<int> ProcessInTenant<TMessage>(int tenantId, OutboxDeliverySettings settings, CancellationToken cancellationToken)
+    public async Task<int> ProcessInTenant<TMessage>(int tenantId, ConsumerGroupSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
 

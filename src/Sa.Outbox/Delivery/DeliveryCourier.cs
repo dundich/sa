@@ -14,7 +14,7 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
     /// Asynchronous method to deliver messages
     /// </summary>
     public async ValueTask<int> Deliver<TMessage>(
-        OutboxDeliverySettings settings,
+        ConsumerGroupSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken)

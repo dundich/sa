@@ -11,12 +11,12 @@ internal static class Setup
         this IServiceCollection services,
         string consumerGroupId,
         bool isSingleton,
-        Action<IServiceProvider, OutboxDeliverySettings>? сonfigure = null)
+        Action<IServiceProvider, ConsumerGroupSettings>? сonfigure = null)
             where TConsumer : class, IConsumer<TMessage>
             where TMessage : IOutboxPayloadMessage
     {
 
-        OutboxDeliverySettings settings = new(consumerGroupId, isSingleton);
+        ConsumerGroupSettings settings = new(consumerGroupId, isSingleton);
 
         if (isSingleton)
         {
