@@ -1,3 +1,4 @@
+using Sa.Outbox.Repository;
 using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
@@ -9,6 +10,6 @@ internal interface IDeliveryCourier
 {
     ValueTask<int> Deliver<TMessage>(
         ConsumeSettings settings,
-        IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
 }

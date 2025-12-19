@@ -9,7 +9,7 @@ namespace Sa.Outbox.Repository;
 /// <summary>
 /// OutboxMessage
 /// </summary>
-internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider)
+public sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider)
     : IOutboxContextOperations<TMessage>
 {
     public Guid OutboxId => delivery.OutboxId;

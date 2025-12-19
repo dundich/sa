@@ -65,11 +65,11 @@ namespace PgOutbox
     {
         public async ValueTask Consume(
             ConsumeSettings settings,
-            IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
-            Handler.Log(logger, settings, outboxMessages);
+            Handler.Log(logger, settings, outboxMessages.Span);
         }
     }
 
@@ -79,7 +79,7 @@ namespace PgOutbox
 
         public async ValueTask Consume(
             ConsumeSettings settings,
-            IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
             await Task.Delay(500, cancellationToken);
@@ -91,7 +91,7 @@ namespace PgOutbox
 
             bool isLogged = false;
 
-            foreach (var msg in outboxMessages.Where(c => c.PartInfo.TenantId == 3))
+            foreach (var msg in outboxMessages.Span)
             {
                 isLogged = true;
                 switch (Random.Shared.Next(0, 6))
@@ -114,7 +114,7 @@ namespace PgOutbox
                 }
             }
 
-            if (isLogged) Handler.Log(logger, settings, outboxMessages);
+            if (isLogged) Handler.Log(logger, settings, outboxMessages.Span);
         }
     }
 
@@ -124,7 +124,7 @@ namespace PgOutbox
         public static void Log(
             ILogger logger,
             ConsumeSettings settings,
-            params IEnumerable<IOutboxContextOperations<SomeMessage>> outboxMessages)
+            ReadOnlySpan<IOutboxContextOperations<SomeMessage>> outboxMessages)
         {
             logger.LogWarning("======= {Group} =======", settings.ConsumerGroupId);
             foreach (var msg in outboxMessages)

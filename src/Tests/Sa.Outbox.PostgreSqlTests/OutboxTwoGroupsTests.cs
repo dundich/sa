@@ -21,9 +21,12 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
     {
         public static int Counter;
 
-        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(
+            ConsumeSettings settings,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            CancellationToken cancellationToken)
         {
-            Interlocked.Add(ref Counter, outboxMessages.Count);
+            Interlocked.Add(ref Counter, outboxMessages.Length);
             await Task.Delay(100, cancellationToken);
         }
     }
@@ -32,9 +35,12 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
     {
         public static int Counter;
 
-        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(
+            ConsumeSettings settings,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            CancellationToken cancellationToken)
         {
-            Interlocked.Add(ref Counter, outboxMessages.Count);
+            Interlocked.Add(ref Counter, outboxMessages.Length);
             await Task.Delay(100, cancellationToken);
         }
     }

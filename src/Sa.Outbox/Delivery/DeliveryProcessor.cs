@@ -134,7 +134,7 @@ internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalS
 
         try
         {
-            return await processor.Process<TMessage>(tenantId, settings, tenantCts.Token);
+            return await processor.ProcessInTenant<TMessage>(tenantId, settings, tenantCts.Token);
         }
         catch (OperationCanceledException)
         {

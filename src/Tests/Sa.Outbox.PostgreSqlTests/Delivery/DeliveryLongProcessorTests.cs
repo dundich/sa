@@ -3,13 +3,17 @@ using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixture) : IClassFixture<DeliveryLongProcessorTests.Fixture>
+public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixture) 
+    : IClassFixture<DeliveryLongProcessorTests.Fixture>
 {
     class TestMessageConsumer : IConsumer<TestMessage>
     {
-        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(
+            ConsumeSettings settings, 
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages, 
+            CancellationToken cancellationToken)
         {
-            Console.WriteLine(outboxMessages.Count);
+            Console.WriteLine(outboxMessages.Length);
             await Task.Delay(1000, cancellationToken);
         }
     }

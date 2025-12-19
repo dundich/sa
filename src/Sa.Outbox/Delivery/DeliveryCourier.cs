@@ -15,11 +15,11 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
     /// </summary>
     public async ValueTask<int> Deliver<TMessage>(
         ConsumeSettings settings,
-        IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
-        if (outboxMessages.Count == 0) return 0;
+        if (outboxMessages.Length == 0) return 0;
 
         try
         {
@@ -27,22 +27,24 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
         }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {
-            HandleError(ex, outboxMessages);
+            HandleError(ex, outboxMessages.Span);
         }
 
-        return PostHandle(outboxMessages, settings.MaxDeliveryAttempts);
+        return PostHandle(outboxMessages.Span, settings.MaxDeliveryAttempts);
     }
 
 
     // Method to handle errors during message delivery
-    private static void HandleError<TMessage>(Exception error, IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages)
+    private static void HandleError<TMessage>(Exception error, ReadOnlySpan<IOutboxContextOperations<TMessage>> outboxMessages)
     {
-        foreach (var item in outboxMessages
-            .Where(c => c.DeliveryResult.Code == DeliveryStatusCode.Pending))
+        foreach (IOutboxContextOperations<TMessage> item in outboxMessages)
         {
-            item.Warn(
-                error ?? new DeliveryException("Unknown delivery error."),
-                postpone: RetryStrategy.CalculateBackoff());
+            if (item.DeliveryResult.Code == DeliveryStatusCode.Pending)
+            {
+                item.Warn(
+                    error ?? new DeliveryException("Unknown delivery error."),
+                    postpone: RetryStrategy.CalculateBackoff());
+            }
         }
     }
 
@@ -50,7 +52,7 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
     /// <summary>
     /// Method to post-handle the delivery results of messages
     /// </summary>
-    private static int PostHandle<TMessage>(IReadOnlyCollection<IOutboxContextOperations<TMessage>> messages, int maxDeliveryAttempts)
+    private static int PostHandle<TMessage>(ReadOnlySpan<IOutboxContextOperations<TMessage>> messages, int maxDeliveryAttempts)
     {
         int successfulDeliveries = 0; // Counter for successfully delivered messages
 

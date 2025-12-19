@@ -16,7 +16,10 @@ public interface IConsumer<TMessage> : IConsumer
     /// <param name="outboxMessages">A read-only collection of Outbox contexts containing messages to be consumed.</param>
     /// <param name="cancellationToken">A cancellation token to signal the operation's cancellation.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages, CancellationToken cancellationToken);
+    ValueTask Consume(
+        ConsumeSettings settings,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>

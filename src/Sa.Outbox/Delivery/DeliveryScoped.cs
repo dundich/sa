@@ -11,7 +11,7 @@ internal sealed class DeliveryScoped(IServiceProvider serviceProvider) : IDelive
     // Method to process messages using a consumer in scope
     public async Task ConsumeInScope<TMessage>(
         ConsumeSettings settings,
-        IReadOnlyCollection<IOutboxContextOperations<TMessage>> outboxMessages,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
         AsyncServiceScope scope = serviceProvider.CreateAsyncScope();

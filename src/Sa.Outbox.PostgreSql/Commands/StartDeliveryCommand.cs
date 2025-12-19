@@ -3,6 +3,7 @@ using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.PostgreSql.TypeHashResolve;
+using Sa.Outbox.Repository;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
@@ -11,12 +12,18 @@ internal sealed class StartDeliveryCommand(
     , SqlOutboxTemplate sqlTemplate
     , IOutboxMessageSerializer serializer
     , IMsgTypeHashResolver hashResolver
+    , TimeProvider timeProvider
 ) : IStartDeliveryCommand
 {
 
-    public async Task<int> Execute<TMessage>(Memory<OutboxDeliveryMessage<TMessage>> writeBuffer, int batchSize, TimeSpan lockDuration, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public async Task<int> FillContext<TMessage>(
+        Memory<IOutboxContextOperations<TMessage>> writeBuffer,
+        TimeSpan lockDuration,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken)
     {
 
+        int batchSize = writeBuffer.Length;
         long typeCode = await hashResolver.GetCode(filter.PayloadType, cancellationToken);
         var lockOn = filter.ToDate + lockDuration;
 
@@ -25,7 +32,7 @@ internal sealed class StartDeliveryCommand(
             , (reader, i) =>
             {
                 OutboxDeliveryMessage<TMessage> deliveryMessage = DeliveryReader<TMessage>.Read(reader, serializer);
-                writeBuffer.Span[i] = deliveryMessage;
+                writeBuffer.Span[i] = new OutboxContext<TMessage>(deliveryMessage, timeProvider);
             }
             , cmd => cmd
                 .AddParamTenantId(filter.TenantId)
@@ -37,7 +44,7 @@ internal sealed class StartDeliveryCommand(
                 .AddParamTransactId(filter.TransactId)
                 .AddParamLimit(batchSize)
                 .AddParamLockExpiresOn(lockOn)
-        
+
             , cancellationToken);
     }
 

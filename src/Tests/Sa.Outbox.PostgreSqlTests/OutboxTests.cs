@@ -22,9 +22,9 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
     {
         static int s_Counter = 0;
 
-        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(ConsumeSettings settings, ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
         {
-            Interlocked.Add(ref s_Counter, outboxMessages.Count);
+            Interlocked.Add(ref s_Counter, outboxMessages.Length);
             await Task.Delay(100, cancellationToken);
         }
 

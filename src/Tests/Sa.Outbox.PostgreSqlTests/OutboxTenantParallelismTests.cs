@@ -11,14 +11,14 @@ namespace Sa.Outbox.PostgreSqlTests;
 public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture fixture)
     : IClassFixture<OutboxTenantParallelismTests.Fixture>
 {
-    class ParallelTestMessage : IOutboxPayloadMessage
+    class TestMessage : IOutboxPayloadMessage
     {
         public static string PartName => "parallel_test";
         public string PayloadId { get; } = Guid.NewGuid().ToString();
         public int TenantId { get; set; }
     }
 
-    class ParallelTestConsumer : IConsumer<ParallelTestMessage>
+    class ParallelTestConsumer : IConsumer<TestMessage>
     {
         // Словарь для отслеживания времени обработки по тенантам
         private static readonly ConcurrentDictionary<int, List<(DateTime Start, DateTime End)>>
@@ -27,8 +27,8 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         public static int TotalProcessed = 0;
 
         public async ValueTask Consume(
-            ConsumeSettings settings,
-            IReadOnlyCollection<IOutboxContextOperations<ParallelTestMessage>> outboxMessages,
+            ConsumeSettings settings, 
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
             CancellationToken cancellationToken)
         {
             var startTime = DateTime.UtcNow;
@@ -38,7 +38,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
 
             var endTime = DateTime.UtcNow;
 
-            foreach (var message in outboxMessages)
+            foreach (var message in outboxMessages.Span)
             {
                 var tenantId = message.PartInfo.TenantId;
 
@@ -101,7 +101,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                 .AddOutbox(builder => builder
                     .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3, 4, 5))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
-                        .AddDelivery<ParallelTestConsumer, ParallelTestMessage>(
+                        .AddDelivery<ParallelTestConsumer, TestMessage>(
                             "parallel_test_group",
                             (_, settings) =>
                             {
@@ -147,11 +147,11 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         var publisher = ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
 
         // Создаем по 2 сообщения для каждого из 5 тенантов
-        var messages = new List<ParallelTestMessage>();
+        var messages = new List<TestMessage>();
         for (int tenantId = 1; tenantId <= 5; tenantId++)
         {
-            messages.Add(new ParallelTestMessage { TenantId = tenantId });
-            messages.Add(new ParallelTestMessage { TenantId = tenantId });
+            messages.Add(new TestMessage { TenantId = tenantId });
+            messages.Add(new TestMessage { TenantId = tenantId });
         }
 
         // Act

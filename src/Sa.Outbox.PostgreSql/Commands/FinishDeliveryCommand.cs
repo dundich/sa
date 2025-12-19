@@ -9,8 +9,8 @@ internal sealed class FinishDeliveryCommand(
 {
     private readonly SqlCacheSplitter _sqlCache = new(len => sqlTemplate.SqlFinishDelivery(len));
 
-    public async Task<int> Execute(
-        IOutboxContext[] outboxMessages,
+    public async Task<int> Execute<TMessage>(
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
         IReadOnlyDictionary<Exception, ErrorInfo> errors,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
@@ -22,27 +22,28 @@ internal sealed class FinishDeliveryCommand(
         int startIndex = 0;
         foreach ((string sql, int length) in _sqlCache.GetSql(outboxMessages.Length))
         {
-            var slice = new ArraySegment<IOutboxContext>(outboxMessages, startIndex, length);
+            var slice = outboxMessages.Slice(startIndex, length);
+
             startIndex += length;
 
             total += await dataSource.ExecuteNonQuery(
                 sql,
-                cmd => FillCommandParameters(cmd, slice, errors, filter),
+                cmd => FillCommandParameters(cmd, slice.Span, errors, filter),
                 cancellationToken);
         }
 
         return total;
     }
 
-    private static void FillCommandParameters(
+    private static void FillCommandParameters<TMessage>(
         NpgsqlCommand cmd,
-        ArraySegment<IOutboxContext> contexts,
+        ReadOnlySpan<IOutboxContextOperations<TMessage>> outboxMessages,
         IReadOnlyDictionary<Exception, ErrorInfo> errors,
         OutboxMessageFilter filter)
     {
-        for (int i = 0; i < contexts.Count; i++)
+        for (int i = 0; i < outboxMessages.Length; i++)
         {
-            AddContextParameters(cmd, contexts[i], errors, i);
+            AddContextParameters(cmd, outboxMessages[i], errors, i);
         }
 
         cmd
