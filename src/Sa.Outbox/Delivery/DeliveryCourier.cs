@@ -8,7 +8,7 @@ namespace Sa.Outbox.Delivery;
 /// <summary>
 /// Delivers a batch of messages with error handling and retry mechanisms
 /// </summary>
-internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCourier
+internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDeliveryCourier
 {
     /// <summary>
     /// Asynchronous method to deliver messages
@@ -16,22 +16,22 @@ internal sealed class DeliveryCourier(IDeliveryScoped processor) : IDeliveryCour
     public async ValueTask<int> Deliver<TMessage>(
         ConsumerGroupSettings settings,
         OutboxMessageFilter filter,
-        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
-        if (outboxMessages.Length == 0) return 0;
+        if (messages.IsEmpty) return 0;
 
         try
         {
-            await processor.ConsumeInScope(settings, filter, outboxMessages, cancellationToken);
+            await processor.ConsumeInScope(settings, filter, messages, cancellationToken);
         }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {
-            HandleError(ex, outboxMessages.Span);
+            HandleError(ex, messages.Span);
         }
 
-        return PostHandle(outboxMessages.Span, settings.ConsumeSettings.MaxDeliveryAttempts);
+        return PostHandle(messages.Span, settings.ConsumeSettings.MaxDeliveryAttempts);
     }
 
 

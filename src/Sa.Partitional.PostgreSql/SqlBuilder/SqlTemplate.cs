@@ -97,8 +97,7 @@ VALUES ('{timeRangeTablename}','{settings.FullName}','{StrOrNumsToFmtString(valu
 ON CONFLICT (id) DO NOTHING
 ;
 
-"""
-        ;
+""";
     }
 
     public static string SelectPartsFromDateSql(this ITableSettings settings)

@@ -1,6 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Support;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox;
 
@@ -11,14 +11,14 @@ namespace Sa.Outbox;
 public interface IDeliveryBuilder
 {
     /// <summary>
-    /// Adds a delivery for the specified consumer and message type.
+    /// Adds scoped delivery for the specified consumer and message type.
     /// </summary>
     /// <typeparam name="TConsumer">The type of consumer.</typeparam>
     /// <typeparam name="TMessage">The type of message.</typeparam>
     /// <param name="consumerGroupId">Group identity for consuming.</param>
     /// <param name="configure">An optional action to configure the delivery settings.</param>
     /// <returns>The delivery builder instance.</returns>
-    IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+    IDeliveryBuilder AddDeliveryScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
@@ -26,7 +26,10 @@ public interface IDeliveryBuilder
     where TMessage : IOutboxPayloadMessage;
 
 
-    IDeliveryBuilder AddDeliverySingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+    /// <summary>
+    /// Adds singleton delivery for the specified consumer and message type.
+    /// </summary>
+    IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )

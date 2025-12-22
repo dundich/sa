@@ -10,6 +10,18 @@ namespace Sa.Outbox.Configuration;
 
 internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDeliveryBuilder
 {
+    public IDeliveryBuilder AddDeliveryScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+        string consumerGroupId,
+        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
+    )
+        where TConsumer : class, IConsumer<TMessage>
+        where TMessage : IOutboxPayloadMessage
+    {
+        ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
+        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), false, configure);
+        return this;
+    }
+
     public IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
@@ -17,17 +29,7 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
         where TConsumer : class, IConsumer<TMessage>
         where TMessage : IOutboxPayloadMessage
     {
-        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), false, configure);
-        return this;
-    }
-
-    public IDeliveryBuilder AddDeliverySingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
-        string consumerGroupId,
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
-    )
-        where TConsumer : class, IConsumer<TMessage>
-        where TMessage : IOutboxPayloadMessage
-    {
+        ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
         services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), true, configure);
         return this;
     }

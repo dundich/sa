@@ -54,10 +54,10 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         public ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<SomeMessage1>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage1>> messages,
             CancellationToken cancellationToken)
         {
-            CommonCounter.Add(outboxMessages.Length);
+            CommonCounter.Add(messages.Length);
             return ValueTask.CompletedTask;
         }
     }
@@ -68,10 +68,10 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         public ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<SomeMessage2>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage2>> messages,
             CancellationToken cancellationToken)
         {
-            CommonCounter.Add(outboxMessages.Length);
+            CommonCounter.Add(messages.Length);
             return ValueTask.CompletedTask;
         }
     }
@@ -87,7 +87,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                     .WithPartitioningSupport((_, sp)
                         => sp.WithTenantIds(1, 2))
                     .WithDeliveries(builder => builder
-                        .AddDelivery<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
+                        .AddDeliveryScoped<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
                         {
                             settings.ScheduleSettings
                                 .WithInterval(TimeSpan.FromMilliseconds(500))
@@ -95,7 +95,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
                             settings.ConsumeSettings.WithMaxBatchSize(1024);
                         })
-                        .AddDelivery<SomeMessageConsumer2, SomeMessage2>("test7_1", (_, settings) =>
+                        .AddDeliveryScoped<SomeMessageConsumer2, SomeMessage2>("test7_1", (_, settings) =>
                         {
                             settings.ScheduleSettings
                                 .WithInterval(TimeSpan.FromMilliseconds(500))

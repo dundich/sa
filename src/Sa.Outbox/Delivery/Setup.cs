@@ -21,7 +21,7 @@ internal static class Setup
 
         services.TryAddSingleton<IDeliveryTenant, DeliveryTenant>();
 
-        services.TryAddSingleton<IDeliveryScoped, DeliveryScoped>();
+        services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
         configure.Invoke(new DeliveryBuilder(services));
 

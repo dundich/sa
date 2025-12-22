@@ -1,7 +1,7 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Schedule;
-using System.Collections.Concurrent;
 
 namespace Sa.Partitional.PostgreSql.Migration;
 

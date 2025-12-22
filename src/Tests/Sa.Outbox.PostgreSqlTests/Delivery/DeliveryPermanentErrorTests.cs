@@ -19,11 +19,11 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         public async ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
-            foreach (var msg in outboxMessages.Span)
+            foreach (var msg in messages.Span)
             {
                 msg.Error(s_err, "test");
             }
@@ -41,7 +41,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
                         => sp.WithTenantIds(1, 2)
                 )
                 .WithDeliveries(builder
-                    => builder.AddDelivery<TestMessageConsumer, TestMessage>("test2", (_, s) =>
+                    => builder.AddDeliveryScoped<TestMessageConsumer, TestMessage>("test2", (_, s) =>
                     {
                         s.ConsumeSettings.WithNoBatchingWindow();
                         OutboxSettings = s;

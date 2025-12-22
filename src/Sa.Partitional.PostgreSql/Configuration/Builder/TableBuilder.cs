@@ -144,7 +144,10 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         return this;
     }
 
-    internal class PartTableMigrationSupport(IReadOnlyCollection<StrOrNum[]>? partValues, Func<CancellationToken, Task<StrOrNum[][]>>? getPartValues, IPartTableMigrationSupport? original) : IPartTableMigrationSupport
+    internal class PartTableMigrationSupport(
+        IReadOnlyCollection<StrOrNum[]>? partValues, 
+        Func<CancellationToken, Task<StrOrNum[][]>>? getPartValues, 
+        IPartTableMigrationSupport? original) : IPartTableMigrationSupport
     {
         public async Task<StrOrNum[][]> GetParts(CancellationToken cancellationToken)
         {

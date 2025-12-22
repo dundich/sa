@@ -19,7 +19,7 @@ IHost host = Host.CreateDefaultBuilder()
         .AddOutbox(builder => builder
             .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3))
             .WithDeliveries(builder => builder
-                .AddDelivery<Group1Consumer, SomeMessage>("group1", (_, settings) =>
+                .AddDeliveryScoped<Group1Consumer, SomeMessage>("group1", (_, settings) =>
                 {
                     settings.ScheduleSettings.WithIntervalSeconds(5).WithImmediate();
                     settings.ConsumeSettings.WithSingleIteration();

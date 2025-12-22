@@ -16,11 +16,11 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         public async ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
-            foreach (var msg in outboxMessages.Span)
+            foreach (var msg in messages.Span)
             {
                 msg.Warn(s_err, "test");
             }
@@ -38,7 +38,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
                         => sp.WithTenantIds(1)
                     )
                     .WithDeliveries(builder
-                        => builder.AddDelivery<TestMessageConsumer, TestMessage>("test4", (_, s) =>
+                        => builder.AddDeliveryScoped<TestMessageConsumer, TestMessage>("test4", (_, s) =>
                         {
                             s.ConsumeSettings
                                 .WithNoLockDuration()

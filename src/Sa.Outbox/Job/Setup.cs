@@ -16,6 +16,8 @@ internal static class Setup
             where TMessage : IOutboxPayloadMessage
     {
 
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(consumerGroupId);
+
         ConsumerGroupSettings settings = new(consumerGroupId, isSingleton);
 
         if (isSingleton)

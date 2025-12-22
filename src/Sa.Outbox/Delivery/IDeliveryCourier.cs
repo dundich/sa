@@ -10,6 +10,6 @@ internal interface IDeliveryCourier
     ValueTask<int> Deliver<TMessage>(
         ConsumerGroupSettings settings,
         OutboxMessageFilter filter,
-        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
 }

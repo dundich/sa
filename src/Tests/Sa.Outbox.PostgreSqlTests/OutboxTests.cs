@@ -25,10 +25,10 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         public async ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
             CancellationToken cancellationToken)
         {
-            Interlocked.Add(ref s_Counter, outboxMessages.Length);
+            Interlocked.Add(ref s_Counter, messages.Length);
             await Task.Delay(100, cancellationToken);
         }
 
@@ -43,7 +43,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                 .AddOutbox(builder => builder
                     .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1))
                     .WithDeliveries(builder => builder
-                        .AddDelivery<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
+                        .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
                         {
                             settings.ScheduleSettings
                                 .WithInterval(TimeSpan.FromMilliseconds(100))

@@ -19,7 +19,7 @@ public interface IDeliveryRepository
     /// Complete the delivery
     /// </summary>
     Task<int> ReturnDelivery<TMessage>(
-        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken);
 

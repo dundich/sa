@@ -29,7 +29,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         public async ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
         {
             var startTime = DateTime.UtcNow;
@@ -39,7 +39,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
 
             var endTime = DateTime.UtcNow;
 
-            foreach (var message in outboxMessages.Span)
+            foreach (var message in messages.Span)
             {
                 var tenantId = message.PartInfo.TenantId;
 
@@ -102,7 +102,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                 .AddOutbox(builder => builder
                     .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3, 4, 5))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
-                        .AddDelivery<ParallelTestConsumer, TestMessage>(
+                        .AddDeliveryScoped<ParallelTestConsumer, TestMessage>(
                             "parallel_test_group",
                             (_, settings) =>
                             {

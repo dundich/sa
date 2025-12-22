@@ -11,10 +11,10 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
         public async ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> outboxMessages, 
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages, 
             CancellationToken cancellationToken)
         {
-            Console.WriteLine(outboxMessages.Length);
+            Console.WriteLine(messages.Length);
             await Task.Delay(1000, cancellationToken);
         }
     }
@@ -32,7 +32,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
                         => sp.WithTenantIds(1, 2)
                     )
                     .WithDeliveries(builder
-                        => builder.AddDelivery<TestMessageConsumer, TestMessage>("test1", (_, s) =>
+                        => builder.AddDeliveryScoped<TestMessageConsumer, TestMessage>("test1", (_, s) =>
                         {
                             s.ConsumeSettings
                                 .WithLockDuration(TimeSpan.FromMilliseconds(300))
