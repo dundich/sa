@@ -36,11 +36,11 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
 
 
     // Method to handle errors during message delivery
-    private static void HandleError<TMessage>(Exception error, ReadOnlySpan<IOutboxContextOperations<TMessage>> outboxMessages)
+    private static void HandleError<TMessage>(Exception error, ReadOnlySpan<IOutboxContextOperations<TMessage>> messages)
     {
-        foreach (IOutboxContextOperations<TMessage> item in outboxMessages)
+        foreach (IOutboxContextOperations<TMessage> item in messages)
         {
-            if (item.DeliveryResult.Code == DeliveryStatusCode.Pending)
+            if (DeliveryStatusCode.IsPending(item.DeliveryResult.Code))
             {
                 item.Warn(
                     error ?? new DeliveryException("Unknown delivery error."),
@@ -61,9 +61,10 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
         {
             if (IsAttemptsError(message, maxDeliveryAttempts))
             {
-                MarkAsMaximumAttemptsError(message);
+                // Mark the message as a permanent error
+                message.ErrorMaxAttempts();
             }
-            else if (message.DeliveryResult.Code == DeliveryStatusCode.Pending) // If delivery was successful
+            else if (DeliveryStatusCode.IsPending(message.DeliveryResult.Code)) // If delivery was successful
             {
                 message.Ok();
                 successfulDeliveries++; // Increment the success counter
@@ -78,21 +79,8 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsAttemptsError(IOutboxContext message, int maxDeliveryAttempts)
-        => message.DeliveryResult.Code >= DeliveryStatusCode.Warn
-            && message.DeliveryResult.Code < DeliveryStatusCode.Error
+        => DeliveryStatusCode.IsWarning(message.DeliveryResult.Code)
             && message.DeliveryInfo.Attempt + 1 > maxDeliveryAttempts;
-
-
-    private readonly static DeliveryPermanentException s_DeliveryPermanentException
-        = new("Maximum delivery attempts exceeded", statusCode: 501);
-
-    // Mark the message as a permanent error
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void MarkAsMaximumAttemptsError<TMessage>(IOutboxContextOperations<TMessage> message)
-    {
-        Exception exception = message.Exception ?? s_DeliveryPermanentException;
-        message.Error(exception, statusCode: DeliveryStatusCode.MaximumAttemptsError);
-    }
 
 
     /// <summary>

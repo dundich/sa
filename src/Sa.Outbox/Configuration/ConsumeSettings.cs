@@ -9,12 +9,6 @@ namespace Sa.Outbox;
 /// <param name="consumerGroupId">Group identity for consuming. If null or empty, uses default.</param>
 public sealed class ConsumeSettings
 {
-
-    ///// <summary>
-    ///// Group identity for consuming
-    ///// </summary>
-    //public string ConsumerGroupId { get; } = consumerGroupId ?? string.Empty;
-
     /// <summary>
     /// Maximum number of processing iterations when greedy mode is enabled.
     /// -1 means unlimited iterations.

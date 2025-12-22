@@ -70,9 +70,9 @@ namespace MyNamespace
 {
     public class MyMessageConsumer : IConsumer<MyMessage>
     {
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<MyMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<MyMessage>> messages, CancellationToken cancellationToken)
         {
-            foreach (var messageContext in outboxMessages)
+            foreach (var messageContext in messages)
             {
                 Console.WriteLine($"Processing message with ID: {messageContext.Payload.PayloadId} and Content: {messageContext.Payload.Content}");
                 messageContext.Ok("Message processed successfully.");

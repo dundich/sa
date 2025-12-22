@@ -43,7 +43,8 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
                 .WithDeliveries(builder
                     => builder.AddDeliveryScoped<TestMessageConsumer, TestMessage>("test2", (_, s) =>
                     {
-                        s.ConsumeSettings.WithNoBatchingWindow();
+                        s.ConsumeSettings
+                            .WithNoBatchingWindow();
                         OutboxSettings = s;
                     })
                 )
@@ -78,8 +79,8 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
 
         Assert.Equal(0, result);
 
-
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>($"select count(error_id) from {_tableSettings.DatabaseErrorTableName}", TestContext.Current.CancellationToken);
+        var sql = $"select count(error_id) from {_tableSettings.DatabaseErrorTableName}";
+        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, errCount);
     }

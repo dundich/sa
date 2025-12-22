@@ -20,57 +20,105 @@ public sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> deli
 
 
     public DeliveryStatus DeliveryResult { get; private set; }
-    public TimeSpan PostponeAt { get; private set; }
+    public TimeSpan PostponeAt { get; private set; } = TimeSpan.Zero;
     public Exception? Exception { get; private set; }
 
     public void Error(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.Error)
-        => Warn(exception, message, statusCode);
-
-    public void Warn(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.Warn, TimeSpan? postpone = null)
     {
-        DeliveryException? deliveryException = exception as DeliveryException;
+        ArgumentNullException.ThrowIfNull(exception);
 
-        DeliveryResult = new DeliveryStatus(
-            deliveryException?.StatusCode ?? statusCode, 
-            message ?? exception.Message, 
-            GetUtcNow());
+        if (!DeliveryStatusCode.IsError(statusCode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(statusCode));
+        }
 
-        Exception = exception;
-        PostponeAt = postpone ?? deliveryException?.PostponeAt ?? TimeSpan.Zero;
+        SetDeliveryStatus(
+            statusCode,
+            message ?? exception.Message,
+            exception,
+            null);
     }
 
-    public void Ok(string? message = null)
+    public void ErrorMaxAttempts()
     {
-        DeliveryResult = new DeliveryStatus(
-            DeliveryStatusCode.Ok, 
-            message ?? string.Empty, 
-            GetUtcNow());
+        SetDeliveryStatus(
+            DeliveryPermanentException.StatusCode,
+            Exception?.Message ?? DeliveryPermanentException.Message,
+            Exception ?? DeliveryPermanentException,
+            null);
+    }
 
-        Exception = null;
-        PostponeAt = TimeSpan.Zero;
+    public void Warn(Exception exception, string? message = null, TimeSpan? postpone = null, int statusCode = DeliveryStatusCode.Warn)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        if (!DeliveryStatusCode.IsWarning(statusCode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(statusCode));
+        }
+
+
+        var deliveryException = exception as DeliveryException;
+
+        SetDeliveryStatus(
+            deliveryException?.StatusCode ?? statusCode,
+            message ?? exception.Message,
+            exception,
+            postpone ?? deliveryException?.PostponeAt);
+    }
+
+    public void Ok(string? message = null, int statusCode = DeliveryStatusCode.Ok)
+    {
+        if (!DeliveryStatusCode.IsSuccess(statusCode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(statusCode));
+        }
+
+        SetDeliveryStatus(
+            DeliveryStatusCode.Ok,
+            message ?? string.Empty,
+            null,
+            TimeSpan.Zero);
     }
 
     public void Postpone(TimeSpan postpone, string? message = null)
     {
-        DeliveryResult = new DeliveryStatus(
-            DeliveryStatusCode.Postpone, 
-            message ?? string.Empty, 
-            GetUtcNow());
-        
-        Exception = null;
-        PostponeAt = postpone;
+        if (postpone <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(postpone), "Postpone must be positive");
+
+        SetDeliveryStatus(
+            DeliveryStatusCode.Postpone,
+            message ?? string.Empty,
+            null,
+            postpone);
     }
 
     public void Aborted(string? message = null)
     {
+        SetDeliveryStatus(
+            DeliveryStatusCode.Aborted,
+            message ?? string.Empty,
+            null,
+            TimeSpan.Zero);
+    }
+
+    private void SetDeliveryStatus(
+        int statusCode,
+        string message,
+        Exception? exception = null,
+        TimeSpan? postpone = null)
+    {
         DeliveryResult = new DeliveryStatus(
-            DeliveryStatusCode.Aborted, 
-            message ?? string.Empty, 
+            statusCode,
+            message,
             GetUtcNow());
 
-        Exception = null;
-        PostponeAt = TimeSpan.Zero;
+        Exception = exception;
+        PostponeAt = postpone ?? TimeSpan.Zero;
     }
 
     public DateTimeOffset GetUtcNow() => (timeProvider ?? TimeProvider.System).GetUtcNow();
+
+
+    private readonly static DeliveryPermanentException DeliveryPermanentException
+        = new("Maximum delivery attempts exceeded", statusCode: DeliveryStatusCode.MaximumAttemptsError);
 }

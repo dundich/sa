@@ -31,31 +31,31 @@ internal sealed class DeliveryRepository(
     }
 
     public async Task<int> ReturnDelivery<TMessage>(
-        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
     {
-        IReadOnlyDictionary<Exception, ErrorInfo> errors = await GetErrors(outboxMessages, cancellationToken);
+        IReadOnlyDictionary<Exception, ErrorInfo> errors = await GetErrors(messages, cancellationToken);
 
-        var parts = outboxMessages
+        var parts = messages
             .Span
             .SelectWhere(c => c.DeliveryInfo.PartInfo with { CreatedAt = c.DeliveryResult.CreatedAt })
             .Distinct();
 
         await partRepository.EnsureDeliveryParts(parts, cancellationToken);
 
-        return await finishCmd.Execute(outboxMessages, errors, filter, cancellationToken);
+        return await finishCmd.Execute(messages, errors, filter, cancellationToken);
     }
 
     private async ValueTask<IReadOnlyDictionary<Exception, ErrorInfo>> GetErrors<TMessage>(
-        ReadOnlyMemory<IOutboxContextOperations<TMessage>> outboxMessages,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
     {
-        IOutboxContextOperations<TMessage>[] errs = outboxMessages
+        IOutboxContextOperations<TMessage>[] errs = messages
             .Span
             .SelectWhere(m => m, m => m.Exception != null);
 
-        if (errs.Length > 0)
+        if (errs.Length == 0)
             return ReadOnlyDictionary<Exception, ErrorInfo>.Empty;
 
         var dates = errs.Select(c => c.DeliveryResult.CreatedAt);

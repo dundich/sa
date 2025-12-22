@@ -45,7 +45,10 @@ internal sealed partial class OutboxTaskLoader(
         }
     }
 
-    private async Task<LoadGroupResult> LoadGroupAndShiftOffsetWithRetry(OutboxMessageFilter filter, int batchSize, CancellationToken cancellationToken)
+    private async Task<LoadGroupResult> LoadGroupAndShiftOffsetWithRetry(
+        OutboxMessageFilter filter,
+        int batchSize,
+        CancellationToken cancellationToken)
     {
         return await Retry.Jitter(
             async t => await LoadGroupAndShiftOffset(filter, batchSize, cancellationToken)

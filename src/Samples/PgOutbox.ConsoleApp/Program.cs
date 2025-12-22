@@ -68,11 +68,11 @@ namespace PgOutbox
         public async ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
             CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
-            Handler.Log(logger, filter, outboxMessages.Span);
+            Handler.Log(logger, filter, messages.Span);
         }
     }
 
@@ -83,7 +83,7 @@ namespace PgOutbox
         public async ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> outboxMessages,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
             CancellationToken cancellationToken)
         {
             await Task.Delay(500, cancellationToken);
@@ -93,7 +93,7 @@ namespace PgOutbox
                 settings.ConsumeSettings.WithMaxProcessingIterations(100);
             }
 
-            foreach (var msg in outboxMessages.Span)
+            foreach (var msg in messages.Span)
             {
                 switch (Random.Shared.Next(0, 6))
                 {
@@ -115,7 +115,7 @@ namespace PgOutbox
                 }
             }
 
-            Handler.Log(logger, filter, outboxMessages.Span);
+            Handler.Log(logger, filter, messages.Span);
         }
     }
 
@@ -125,10 +125,10 @@ namespace PgOutbox
         public static void Log(
             ILogger logger,
             OutboxMessageFilter filter,
-            ReadOnlySpan<IOutboxContextOperations<SomeMessage>> outboxMessages)
+            ReadOnlySpan<IOutboxContextOperations<SomeMessage>> messages)
         {
             logger.LogWarning("======= {Group} : {Tenant} =======", filter.ConsumerGroupId, filter.TenantId);
-            foreach (var msg in outboxMessages)
+            foreach (var msg in messages)
             {
                 logger.LogInformation("{Date}   #{TaskId}: {Payload} [{Code}]"
                     , msg.GetUtcNow()

@@ -7,7 +7,9 @@ internal sealed class OutboxRepository(IMsgBulkCommand bulkCmd, IOutboxPartRepos
     : IOutboxRepository
 {
 
-    public async ValueTask<ulong> Save<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken = default)
+    public async ValueTask<ulong> Save<TMessage>(
+        ReadOnlyMemory<OutboxMessage<TMessage>> messages, 
+        CancellationToken cancellationToken = default)
     {
         if (messages.Length == 0) return 0;
 

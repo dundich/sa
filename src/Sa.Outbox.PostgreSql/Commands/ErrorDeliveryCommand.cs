@@ -11,10 +11,10 @@ internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTe
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlError(len));
 
     public async Task<IReadOnlyDictionary<Exception, ErrorInfo>> Execute(
-        ReadOnlyMemory<IOutboxContext> outboxMessages,
+        ReadOnlyMemory<IOutboxContext> messages,
         CancellationToken cancellationToken)
     {
-        Dictionary<Exception, ErrorInfo> errors = GroupByException(outboxMessages.Span);
+        Dictionary<Exception, ErrorInfo> errors = GroupByException(messages.Span);
 
         int len = errors.Count;
 
@@ -58,13 +58,13 @@ internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTe
         }
     }
 
-    private static Dictionary<Exception, ErrorInfo> GroupByException(ReadOnlySpan<IOutboxContext> outboxMessages)
+    private static Dictionary<Exception, ErrorInfo> GroupByException(ReadOnlySpan<IOutboxContext> messages)
     {
-        Dictionary<Exception, ErrorInfo> result = new(outboxMessages.Length);
+        Dictionary<Exception, ErrorInfo> result = new(messages.Length);
 
-        foreach (var message in outboxMessages)
+        foreach (var message in messages)
         {
-            if (message.Exception == null || !result.ContainsKey(message.Exception)) break;
+            if (message.Exception == null || result.ContainsKey(message.Exception)) break;
 
             result[message.Exception]
                 = new ErrorInfo(

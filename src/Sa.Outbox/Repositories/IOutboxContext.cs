@@ -68,7 +68,7 @@ public interface IOutboxContextOperations<TMessage> : IOutboxContext<TMessage>
     /// </summary>
     /// <param name="message">An optional message providing additional context.</param>
     /// <returns>The current Outbox context.</returns>
-    void Ok(string? message = null);
+    void Ok(string? message = null, int statusCode = DeliveryStatusCode.Ok);
 
     /// <summary>
     /// Marks the message processing as aborted.
@@ -82,10 +82,10 @@ public interface IOutboxContextOperations<TMessage> : IOutboxContext<TMessage>
     /// </summary>
     /// <param name="exception">The exception that occurred during processing.</param>
     /// <param name="message">An optional message providing additional context.</param>
-    /// <param name="statusCode">The status code associated with the error.</param>
     /// <param name="postpone">An optional duration to postpone processing.</param>
+    /// <param name="statusCode">The status code associated with the error.</param>
     /// <returns>The current Outbox context.</returns>
-    void Warn(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.Warn, TimeSpan? postpone = null);
+    void Warn(Exception exception, string? message = null, TimeSpan? postpone = null, int statusCode = DeliveryStatusCode.Warn);
 
     /// <summary>
     /// Marks the message processing as a permanent error.
@@ -95,6 +95,9 @@ public interface IOutboxContextOperations<TMessage> : IOutboxContext<TMessage>
     /// <param name="statusCode">The status code associated with the permanent error.</param>
     /// <returns>The current Outbox context.</returns>
     void Error(Exception exception, string? message = null, int statusCode = DeliveryStatusCode.Error);
+
+
+    void ErrorMaxAttempts();
 
     /// <summary>
     /// Marks the message processing as postponed.

@@ -82,7 +82,7 @@ public interface IDeliveryRepository
     /// <summary>
     /// Complete the delivery
     /// </summary>
-    Task<int> FinishDelivery<TMessage>(IOutboxContext<TMessage>[] outboxMessages, OutboxMessageFilter filter, CancellationToken cancellationToken);
+    Task<int> FinishDelivery<TMessage>(IOutboxContext<TMessage>[] messages, OutboxMessageFilter filter, CancellationToken cancellationToken);
 
     /// <summary>
     /// Extend the delivery (retain the lock for the client)
@@ -126,7 +126,7 @@ public interface IConsumer<TMessage> : IConsumer
     /// <summary>
     /// Consumes a collection of Outbox messages.
     /// </summary>
-    ValueTask Consume(IReadOnlyCollection<IOutboxContext<TMessage>> outboxMessages, CancellationToken cancellationToken);
+    ValueTask Consume(IReadOnlyCollection<IOutboxContext<TMessage>> messages, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -229,9 +229,9 @@ public class MessageSender(IOutboxMessagePublisher publisher)
 // Consuming
 public class MyMessageConsumer : IConsumer<MyMessage>
 {
-    public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<MyMessage>> outboxMessages, CancellationToken cancellationToken)
+    public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<MyMessage>> messages, CancellationToken cancellationToken)
     {
-        foreach (var messageContext in outboxMessages)
+        foreach (var messageContext in messages)
         {
             // Logic for processing the message
             Console.WriteLine($"Processing message with ID: {messageContext.Payload.PayloadId} and Content: {messageContext.Payload.Content}");

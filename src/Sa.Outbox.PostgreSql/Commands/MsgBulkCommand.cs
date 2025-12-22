@@ -20,14 +20,19 @@ internal sealed class MsgBulkCommand(
 ) : IMsgBulkCommand
 {
 
-    public async ValueTask<ulong> BulkWrite<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, CancellationToken cancellationToken)
+    public async ValueTask<ulong> BulkWrite<TMessage>(
+        ReadOnlyMemory<OutboxMessage<TMessage>> messages, 
+        CancellationToken cancellationToken)
     {
         long typeCode = await hashResolver.GetCode(typeof(TMessage).Name, cancellationToken);
 
         return await BulkWithRetry(messages, typeCode, cancellationToken);
     }
 
-    private async Task<ulong> BulkWithRetry<TMessage>(ReadOnlyMemory<OutboxMessage<TMessage>> messages, long typeCode, CancellationToken cancellationToken)
+    private async Task<ulong> BulkWithRetry<TMessage>(
+        ReadOnlyMemory<OutboxMessage<TMessage>> messages, 
+        long typeCode, 
+        CancellationToken cancellationToken)
     {
         return await Retry.Jitter(
             async t =>
@@ -56,7 +61,10 @@ internal sealed class MsgBulkCommand(
     ///     ,msg_created_at
     ///     </code>
     /// </summary>
-    private void WriteRows<TMessage>(NpgsqlBinaryImporter writer, long payloadTypeCode, ReadOnlyMemory<OutboxMessage<TMessage>> messages)
+    private void WriteRows<TMessage>(
+        NpgsqlBinaryImporter writer, 
+        long payloadTypeCode, 
+        ReadOnlyMemory<OutboxMessage<TMessage>> messages)
     {
         foreach (OutboxMessage<TMessage> row in messages.Span)
         {

@@ -57,4 +57,14 @@ public static class DeliveryStatusCode
     /// and the message will not be retried further.
     /// </summary>
     public const int MaximumAttemptsError = 501;
+
+
+    public static bool IsPending(int statusCode) => statusCode == DeliveryStatusCode.Pending;
+    public static bool IsProcessing(int statusCode) => statusCode == DeliveryStatusCode.Processing;
+    public static bool IsPostponed(int statusCode) => statusCode == DeliveryStatusCode.Postpone;
+    public static bool IsSuccess(int statusCode) => statusCode >= DeliveryStatusCode.Ok && statusCode <= DeliveryStatusCode.Aborted;
+    public static bool IsAborted(int statusCode) => statusCode == DeliveryStatusCode.Aborted;
+    public static bool IsWarning(int statusCode) => statusCode >= DeliveryStatusCode.Warn && statusCode <= DeliveryStatusCode.WarnEof;
+    public static bool IsError(int statusCode) => statusCode >= DeliveryStatusCode.Error;
 }
+
