@@ -18,7 +18,7 @@ internal sealed class MsgTypeRepository(IPgDataSource dataSource, SqlOutboxTempl
     public async Task<IReadOnlyCollection<(long id, string typeName)>> SelectAll(CancellationToken cancellationToken)
     {
         return await dataSource.ExecuteReaderList(template.SqlSelectType,
-            reader => (id: reader.GetTypeId(), typeName: reader.GetTypeName())
+            reader => (id: reader.GetTypeId(template.Settings), typeName: reader.GetTypeName(template.Settings))
         , cancellationToken);
     }
 }
