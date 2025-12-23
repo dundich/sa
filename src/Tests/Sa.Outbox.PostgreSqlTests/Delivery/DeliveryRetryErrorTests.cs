@@ -90,15 +90,15 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
             }
         }
 
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>($"select count(error_id) from {_tableSettings.DatabaseErrorTableName}", TestContext.Current.CancellationToken);
+        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>($"select count(*) from {_tableSettings.Error.TableName}", TestContext.Current.CancellationToken);
         Assert.Equal(1, errCount);
 
-        var delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"select delivery_id from {_tableSettings.DatabaseDeliveryTableName} where delivery_status_code = 501", TestContext.Current.CancellationToken);
+        var delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"select {_tableSettings.Delivery.Fields.DeliveryId} from {_tableSettings.Delivery.TableName} where {_tableSettings.Delivery.Fields.DeliveryStatusCode} = {DeliveryStatusCode.MaximumAttemptsError}", TestContext.Current.CancellationToken);
         Assert.NotEqual(0, delivery_id);
 
-        var outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"SELECT delivery_id FROM  {_tableSettings.DatabaseTableName} WHERE delivery_status_code = 501", TestContext.Current.CancellationToken);
+        var outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"SELECT {_tableSettings.TaskQueue.Fields.DeliveryId} FROM  {_tableSettings.TaskQueue.TableName} WHERE {_tableSettings.TaskQueue.Fields.DeliveryStatusCode} = {DeliveryStatusCode.MaximumAttemptsError}", TestContext.Current.CancellationToken);
         Assert.Equal(delivery_id, outbox_delivery_id);
     }
 
-    private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>($"select count(delivery_id) from {_tableSettings.DatabaseDeliveryTableName}", TestContext.Current.CancellationToken);
+    private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>($"select count({_tableSettings.Delivery.Fields.DeliveryId}) from {_tableSettings.Delivery.TableName}", TestContext.Current.CancellationToken);
 }

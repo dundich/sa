@@ -4,11 +4,10 @@ using Npgsql;
 using Sa.Classes;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
+using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
-
-internal sealed record ConsumerGroupIdentifier(string ConsumerGroupId, int TenantId);
 
 internal sealed partial class OutboxTaskLoader(
     IPgDataSource pg,
@@ -16,6 +15,8 @@ internal sealed partial class OutboxTaskLoader(
     IOutboxPartRepository partitionManager,
     ILogger<OutboxTaskLoader>? logger) : IOutboxTaskLoader
 {
+
+    internal sealed record ConsumerGroupIdentifier(string ConsumerGroupId, int TenantId);
 
     public async Task<LoadGroupResult> LoadGroupBatch(
         OutboxMessageFilter filter,
@@ -95,14 +96,16 @@ internal sealed partial class OutboxTaskLoader(
         await using var command = new NpgsqlCommand(sql.SqlLoadConsumerGroup, conn, tx);
 
 
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, filter.TenantId));
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.MsgPart, filter.Part));
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, filter.ConsumerGroupId));
-        command.Parameters.Add(new NpgsqlParameter<Guid>(SqlParam.Offset, currentOffset));
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.Limit, batchSize));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.NowDate, filter.NowDate.ToUnixTimeSeconds()));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.FromDate, filter.FromDate.ToUnixTimeSeconds()));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.ToDate, filter.ToDate.ToUnixTimeSeconds()));
+        command
+            .AddParamTenantId(filter.TenantId)
+            .AddParamMsgPart(filter.Part)
+            .AddParamConsumerGroupId(filter.ConsumerGroupId)
+            .AddParamOffset(currentOffset)
+            .AddParamLimit(batchSize)
+            .AddParamNowDate(filter.NowDate)
+            .AddParamFromDate(filter.FromDate)
+            .AddParamToDate(filter.ToDate)
+            ;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
@@ -129,10 +132,11 @@ internal sealed partial class OutboxTaskLoader(
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
     {
-        using var lockCmd = new NpgsqlCommand(sql.SqlLockOffset, conn, tx);
         int lockKey = CalculateLockKey(consumerGroup);
-        lockCmd.Parameters.AddWithValue(SqlParam.OffsetKey, lockKey);
-        await lockCmd.ExecuteNonQueryAsync(cancellationToken);
+
+        using var command = new NpgsqlCommand(sql.SqlLockOffset, conn, tx);
+        command.AddParamAdvisoryXactLock(lockKey);        
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private async Task UpdateOffsetAsync(
@@ -144,9 +148,10 @@ internal sealed partial class OutboxTaskLoader(
     {
         using var command = new NpgsqlCommand(sql.SqlUpdateOffset, conn, tx);
 
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, consumerGroup.TenantId));
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, consumerGroup.ConsumerGroupId));
-        command.Parameters.Add(new NpgsqlParameter<Guid>(SqlParam.Offset, newOffset));
+        command
+            .AddParamTenantId(consumerGroup.TenantId)
+            .AddParamConsumerGroupId(consumerGroup.ConsumerGroupId)
+            .AddParamOffset(newOffset);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -159,8 +164,9 @@ internal sealed partial class OutboxTaskLoader(
     {
         await using var command = new NpgsqlCommand(sql.SqlSelectOffset, conn, tx);
 
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, consumerGroup.TenantId));
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, consumerGroup.ConsumerGroupId));
+        command
+            .AddParamTenantId(consumerGroup.TenantId)
+            .AddParamConsumerGroupId(consumerGroup.ConsumerGroupId);
 
         object? currentOffsetObj = await command.ExecuteScalarAsync(cancellationToken);
 
@@ -179,8 +185,9 @@ internal sealed partial class OutboxTaskLoader(
     {
         await using var command = new NpgsqlCommand(sql.SqlInitOffset, conn, tx);
 
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, consumerGroup.TenantId));
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, consumerGroup.ConsumerGroupId));
+        command
+            .AddParamTenantId(consumerGroup.TenantId)
+            .AddParamConsumerGroupId(consumerGroup.ConsumerGroupId);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
 

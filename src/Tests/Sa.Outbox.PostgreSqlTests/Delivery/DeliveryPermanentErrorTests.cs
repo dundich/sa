@@ -79,7 +79,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
 
         Assert.Equal(0, result);
 
-        var sql = $"select count(error_id) from {_tableSettings.DatabaseErrorTableName}";
+        var sql = $"select count(*) from {_tableSettings.Error.TableName}";
         int errCount = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, errCount);

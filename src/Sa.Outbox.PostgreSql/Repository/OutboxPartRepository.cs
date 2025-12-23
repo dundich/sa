@@ -7,13 +7,13 @@ internal sealed class OutboxPartRepository(IPartitionManager partManager, PgOutb
     : IOutboxPartRepository
 {
     public Task<int> EnsureMsgParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
-        => EnsureParts(tableSettings.DatabaseMsgTableName, outboxParts, cancellationToken);
+        => EnsureParts(tableSettings.Message.TableName, outboxParts, cancellationToken);
 
     public Task<int> EnsureTaskParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
-        => EnsureParts(tableSettings.DatabaseTableName, outboxParts, cancellationToken);
+        => EnsureParts(tableSettings.TaskQueue.TableName, outboxParts, cancellationToken);
 
     public Task<int> EnsureDeliveryParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
-        => EnsureParts(tableSettings.DatabaseDeliveryTableName, outboxParts, cancellationToken);
+        => EnsureParts(tableSettings.Delivery.TableName, outboxParts, cancellationToken);
 
 
     public async Task<int> EnsureErrorParts(IEnumerable<DateTimeOffset> dates, CancellationToken cancellationToken)
@@ -22,7 +22,7 @@ internal sealed class OutboxPartRepository(IPartitionManager partManager, PgOutb
         foreach (DateTimeOffset date in dates.Select(c => c.StartOfDay()).Distinct())
         {
             i++;
-            await partManager.EnsureParts(tableSettings.DatabaseErrorTableName, date, [], cancellationToken);
+            await partManager.EnsureParts(tableSettings.Error.TableName, date, [], cancellationToken);
         }
 
         return i;

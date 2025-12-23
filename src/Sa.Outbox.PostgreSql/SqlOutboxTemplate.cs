@@ -1,248 +1,131 @@
-using System.Data;
 using System.Text;
-using Npgsql;
-using Sa.Data.PostgreSql;
-using Sa.Extensions;
 
 namespace Sa.Outbox.PostgreSql;
 
+/// <summary>
+/// Provides SQL query templates for working with PostgreSQL outbox tables.
+/// </summary>
 internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
 {
-    public string DatabaseSchemaName => settings.DatabaseSchemaName;
-    public string DatabaseMsgTableName => settings.DatabaseMsgTableName;
-    public string DatabaseDeliveryTableName => settings.DatabaseDeliveryTableName;
-    public string DatabaseErrorTableName => settings.DatabaseErrorTableName;
-    public string DatabaseOffsetTableName => settings.DatabaseOffsetTableName;
-
-    public string DatabaseTaskTableName => settings.DatabaseTableName;
-
-    // ro
-    public readonly static string[] MsgFields =
-    [
-        // ulid
-        "msg_id UUID NOT NULL",
-
-        "tenant_id INT NOT NULL DEFAULT 0",
-        "msg_part TEXT NOT NULL",
-
-        "msg_payload_id TEXT NOT NULL DEFAULT ''",
-        "msg_payload_type BIGINT NOT NULL",
-        "msg_payload BYTEA NOT NULL",
-        "msg_payload_size INT NOT NULL"
-    ];
-
-
-    // rw
-    public readonly static string[] TaskQueueFields =
-    [
-        "task_id BIGSERIAL NOT NULL",
-        "consumer_group TEXT NOT NULL",
-        // rw
-        "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
-        "task_transact_id TEXT NOT NULL DEFAULT ''",
-
-        // msg
-        "msg_id UUID NOT NULL",
-        "msg_part TEXT NOT NULL",
-        "tenant_id INT NOT NULL DEFAULT 0",
-        "msg_payload_id TEXT NOT NULL",
-        "msg_created_at BIGINT NOT NULL DEFAULT 0",
-        
-        // -- delivery
-        "delivery_id BIGINT NOT NULL DEFAULT 0",
-        "delivery_attempt int NOT NULL DEFAULT 0",
-
-        $"delivery_status_code INT NOT NULL DEFAULT {DeliveryStatusCode.Pending}",
-        "delivery_status_message TEXT NOT NULL DEFAULT ''",
-        "delivery_created_at BIGINT NOT NULL DEFAULT 0",
-
-        // -- ref to error
-        "error_id BIGINT NOT NULL DEFAULT 0",
-    ];
-
-    // ro
-    public readonly static string[] DeliveryFields =
-    [
-        "delivery_id BIGSERIAL NOT NULL",
-        $"delivery_status_code INT NOT NULL DEFAULT {DeliveryStatusCode.Pending}",
-        "delivery_status_message TEXT NOT NULL DEFAULT ''",
-        
-        // copy
-        "msg_payload_id TEXT NOT NULL",
-        "tenant_id INT NOT NULL DEFAULT 0",
-
-        // copy
-        "task_id BIGINT NOT NULL DEFAULT 0",
-        "consumer_group TEXT NOT NULL",
-        "task_created_at BIGINT NOT NULL DEFAULT 0",
-
-        "task_transact_id TEXT NOT NULL DEFAULT ''",
-        "task_lock_expires_on BIGINT NOT NULL DEFAULT 0",
-
-        // ref
-        "error_id BIGINT NOT NULL DEFAULT 0",
-    ];
-
-    // Delivery errors
-    public readonly static string[] ErrorFields =
-    [
-        "error_id BIGINT NOT NULL",
-        "error_type TEXT NOT NULL",
-        "error_message TEXT NOT NULL",
-    ];
-
-
-    //CREATE INDEX IF NOT EXISTS ix_{DatabaseTableName}__payload_id 
-    //    ON {GetQualifiedTableName()} (payload_id) 
-    //    WHERE payload_id <> '' AND (outbox_delivery_status_code BETWEEN {DeliveryStatusCode.Ok} AND 299 OR outbox_delivery_status_code >= 500)
+    internal PgOutboxTableSettings Settings => settings;
 
 
     public string SqlBulkMsgCopy =
 $"""
 COPY {settings.GetQualifiedMsgTableName()} (
-    msg_id
-    ,tenant_id
-    ,msg_part
-    ,msg_payload_id
-    ,msg_payload_type
-    ,msg_payload
-    ,msg_payload_size
-    ,msg_created_at
+    {OutboxTableFields.Message.MsgId}
+    ,{OutboxTableFields.Message.TenantId}
+    ,{OutboxTableFields.Message.MsgPart}
+    ,{OutboxTableFields.Message.MsgPayloadId}
+    ,{OutboxTableFields.Message.MsgPayloadType}
+    ,{OutboxTableFields.Message.MsgPayload}
+    ,{OutboxTableFields.Message.MsgPayloadSize}
+    ,{OutboxTableFields.Message.MsgCreatedAt}
 )
 FROM STDIN (FORMAT BINARY)
 ;
 """;
 
-
-    static readonly string s_InTaskProcessing = $"(delivery_status_code < {DeliveryStatusCode.Ok} OR delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.WarnEof})";
-
+    static readonly string s_InTaskProcessing =
+        $"(delivery_status_code < {DeliveryStatusCode.Ok} OR delivery_status_code BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.WarnEof})";
 
     public string SqlLockAndSelect =
 $"""
 WITH next_task AS (
-    SELECT 
-        task.task_id,
-        task.tenant_id,
-        task.consumer_group,
-        msg.msg_id,
-        msg.msg_part,
-        msg.msg_payload,
-        msg.msg_payload_id,
-        msg.msg_payload_type,
-        msg.msg_created_at,
-        task.delivery_id,
-        task.delivery_attempt,
-        task.delivery_status_code,
-        task.delivery_status_message,
-        task.delivery_created_at,
-        task.error_id,
-        task.task_created_at
-    FROM {settings.GetQualifiedTaskTableName()} task
-    INNER JOIN {settings.GetQualifiedMsgTableName()} msg 
-        ON task.msg_id = msg.msg_id
-    WHERE
-        task.tenant_id = {SqlParam.TenantId}
-        AND task.consumer_group = {SqlParam.ConsumerGroupId}
-        AND task.task_created_at >= {SqlParam.FromDate}
-        AND {s_InTaskProcessing}
-        AND task.task_lock_expires_on < {SqlParam.ToDate}
-        AND msg.msg_part = {SqlParam.MsgPart}
-        AND msg.tenant_id = {SqlParam.TenantId}
-        AND msg.msg_created_at >= {SqlParam.FromDate}
-        AND msg.msg_payload_type = {SqlParam.TypeId}
-    ORDER BY task.task_id
-    LIMIT {SqlParam.Limit}
-    FOR UPDATE SKIP LOCKED
-),
-updated_tasks AS (
-    UPDATE {settings.GetQualifiedTaskTableName()} t
-    SET
-        delivery_status_code = {DeliveryStatusCode.Processing},
-        task_transact_id = {SqlParam.TransactId},
-        task_lock_expires_on = {SqlParam.LockExpiresOn}
-    FROM next_task nt
-    WHERE 
-        t.task_id = nt.task_id 
-        AND t.tenant_id = {SqlParam.TenantId}
-        AND t.consumer_group = {SqlParam.ConsumerGroupId} 
-    RETURNING t.*
+  SELECT 
+    task.{OutboxTableFields.TaskQueue.TaskId},
+    task.{OutboxTableFields.TaskQueue.TenantId},
+    task.{OutboxTableFields.TaskQueue.ConsumerGroup},
+    msg.{OutboxTableFields.Message.MsgId},
+    msg.{OutboxTableFields.Message.MsgPart},
+    msg.{OutboxTableFields.Message.MsgPayload},
+    msg.{OutboxTableFields.Message.MsgPayloadId},
+    msg.{OutboxTableFields.Message.MsgPayloadType},
+    msg.{OutboxTableFields.Message.MsgCreatedAt},
+    task.{OutboxTableFields.TaskQueue.DeliveryId},
+    task.{OutboxTableFields.TaskQueue.DeliveryAttempt},
+    task.{OutboxTableFields.TaskQueue.DeliveryStatusCode},
+    task.{OutboxTableFields.TaskQueue.DeliveryStatusMessage},
+    task.{OutboxTableFields.TaskQueue.DeliveryCreatedAt},
+    task.{OutboxTableFields.TaskQueue.ErrorId},
+    task.{OutboxTableFields.TaskQueue.TaskCreatedAt}
+  FROM {settings.GetQualifiedTaskTableName()} task
+  INNER JOIN {settings.GetQualifiedMsgTableName()} msg 
+    ON task.{OutboxTableFields.TaskQueue.MsgId} = msg.{OutboxTableFields.Message.MsgId}
+  WHERE
+    task.{OutboxTableFields.TaskQueue.TenantId} = {SqlParam.TenantId}
+    AND task.{OutboxTableFields.TaskQueue.ConsumerGroup} = {SqlParam.ConsumerGroupId}
+    AND task.{OutboxTableFields.TaskQueue.TaskCreatedAt} >= {SqlParam.FromDate}
+    AND {s_InTaskProcessing}
+    AND task.{OutboxTableFields.TaskQueue.TaskLockExpiresOn} < {SqlParam.ToDate}
+    AND msg.{OutboxTableFields.Message.MsgPart} = {SqlParam.MsgPart}
+    AND msg.{OutboxTableFields.Message.TenantId} = {SqlParam.TenantId}
+    AND msg.{OutboxTableFields.Message.MsgCreatedAt} >= {SqlParam.FromDate}
+    AND msg.{OutboxTableFields.Message.MsgPayloadType} = {SqlParam.TypeId}
+  ORDER BY task.{OutboxTableFields.TaskQueue.TaskId}
+  LIMIT {SqlParam.Limit}
+  FOR UPDATE SKIP LOCKED
 )
-SELECT
-    nt.task_id,
-    nt.tenant_id,
-    nt.consumer_group,
-    nt.msg_id,
-    nt.msg_part,
-    nt.msg_payload_id,
-    nt.msg_payload,
-    nt.msg_payload_type,
-    nt.msg_created_at,
-    nt.delivery_id,
-    nt.delivery_attempt,
-    nt.delivery_status_code,
-    nt.delivery_status_message,
-    nt.delivery_created_at,
-    nt.error_id,
-    nt.task_created_at
+UPDATE {settings.GetQualifiedTaskTableName()} t
+SET
+  {OutboxTableFields.TaskQueue.DeliveryStatusCode} = {DeliveryStatusCode.Processing},
+  {OutboxTableFields.TaskQueue.TaskTransactId} = {SqlParam.TransactId},
+  {OutboxTableFields.TaskQueue.TaskLockExpiresOn} = {SqlParam.LockExpiresOn}
 FROM next_task nt
+WHERE 
+  t.{OutboxTableFields.TaskQueue.TaskId} = nt.{OutboxTableFields.TaskQueue.TaskId} 
+  AND t.{OutboxTableFields.TaskQueue.TenantId} = {SqlParam.TenantId}
+  AND t.{OutboxTableFields.TaskQueue.ConsumerGroup} = {SqlParam.ConsumerGroupId} 
+RETURNING nt.*
 ;
-
 """;
-
-
 
     public string SqlExtendDelivery =
 $"""
 UPDATE {settings.GetQualifiedTaskTableName()}
-SET 
-    task_lock_expires_on = {SqlParam.LockExpiresOn}
-WHERE
-    tenant_id = {SqlParam.TenantId}
-    AND consumer_group = {SqlParam.ConsumerGroupId}
-    AND task_created_at >= {SqlParam.FromDate}
-    AND {s_InTaskProcessing}
-    AND task_transact_id = {SqlParam.TransactId}
-    AND msg_payload_type = {SqlParam.TypeId}
-    AND task_lock_expires_on > {SqlParam.NowDate} -- now
+SET {OutboxTableFields.TaskQueue.TaskLockExpiresOn} = {SqlParam.LockExpiresOn}
+WHERE  {OutboxTableFields.TaskQueue.TenantId} = {SqlParam.TenantId}
+  AND {OutboxTableFields.TaskQueue.ConsumerGroup} = {SqlParam.ConsumerGroupId}
+  AND {OutboxTableFields.TaskQueue.TaskCreatedAt} >= {SqlParam.FromDate}
+  AND {s_InTaskProcessing}
+  AND {OutboxTableFields.TaskQueue.TaskTransactId} = {SqlParam.TransactId}
+  AND {OutboxTableFields.Message.MsgPayloadType} = {SqlParam.TypeId}
+  AND {OutboxTableFields.TaskQueue.TaskLockExpiresOn} > {SqlParam.NowDate}
 ;
 """;
 
-
-    public string SqlCreateTypeTable
-    =
+    public string SqlCreateTypeTable =
 $"""
 CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTypeTableName()}
 (
-    type_id BIGINT NOT NULL,
-    type_name TEXT NOT NULL,
-    CONSTRAINT "pk_{settings.DatabaseTypeTableName}" PRIMARY KEY (type_id)
+  {OutboxTableFields.TypeTable.TypeId} BIGINT NOT NULL,
+  {OutboxTableFields.TypeTable.TypeName} TEXT NOT NULL,
+  CONSTRAINT "pk_{settings.Type.TableName}" PRIMARY KEY ({OutboxTableFields.TypeTable.TypeId})
 )
 ;
 """;
-
 
     public string SqlSelectType = $"SELECT * FROM {settings.GetQualifiedTypeTableName()}";
 
     public string SqlInsertType =
 $"""
 INSERT INTO {settings.GetQualifiedTypeTableName()} 
-    (type_id, type_name)
+  ({OutboxTableFields.TypeTable.TypeId}, {OutboxTableFields.TypeTable.TypeName})
 VALUES
-    ({SqlParam.TypeId},{SqlParam.TypeName})
+  ({SqlParam.TypeId},{SqlParam.TypeName})
 ON CONFLICT DO NOTHING
 ;
 """;
-
 
     public string SqlCreateOffsetTable =
 $"""
 CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
 (
-    consumer_group TEXT,
-    tenant_id INT NOT NULL DEFAULT 0,
-    group_offset UUID NOT NULL DEFAULT '{Guid.Empty}',
-    group_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT "pk_{settings.DatabaseOffsetTableName}" PRIMARY KEY (consumer_group, tenant_id)
+  {OutboxTableFields.Offset.ConsumerGroup} TEXT,
+  {OutboxTableFields.Offset.TenantId} INT NOT NULL DEFAULT 0,
+  {OutboxTableFields.Offset.GroupOffset} UUID NOT NULL DEFAULT '{Guid.Empty}',
+  {OutboxTableFields.Offset.GroupUpdatedAt} TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT "pk_{settings.Offset.TableName}" PRIMARY KEY ({OutboxTableFields.Offset.ConsumerGroup}, {OutboxTableFields.Offset.TenantId})
 )
 ;
 """;
@@ -250,80 +133,74 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
     public string SqlInsertOffset =
 $"""
 INSERT INTO {settings.GetQualifiedOffsetTableName()} 
-    (consumer_group, tenant_id, group_offset)
+  ({OutboxTableFields.Offset.ConsumerGroup}, {OutboxTableFields.Offset.TenantId}, {OutboxTableFields.Offset.GroupOffset})
 VALUES 
-    ({SqlParam.ConsumerGroupId},{SqlParam.TenantId},{SqlParam.Offset})
-ON CONFLICT (consumer_group, tenant_id) DO NOTHING;
+  ({SqlParam.ConsumerGroupId},{SqlParam.TenantId},{SqlParam.Offset})
+ON CONFLICT ({OutboxTableFields.Offset.ConsumerGroup}, {OutboxTableFields.Offset.TenantId}) DO NOTHING;
 ;
 """;
-
 
     public string SqlSelectOffset =
 $"""
-SELECT group_offset 
+SELECT {OutboxTableFields.Offset.GroupOffset} 
 FROM {settings.GetQualifiedOffsetTableName()} 
 WHERE 
-    consumer_group = {SqlParam.ConsumerGroupId} 
-    AND tenant_id = {SqlParam.TenantId}
+  {OutboxTableFields.Offset.ConsumerGroup}={SqlParam.ConsumerGroupId} 
+  AND {OutboxTableFields.Offset.TenantId}={SqlParam.TenantId}
 ;
 """;
-
 
     public string SqlUpdateOffset = $"""
 UPDATE {settings.GetQualifiedOffsetTableName()}
 SET 
-    group_offset = {SqlParam.Offset}, 
-    group_updated_at = NOW()
+  {OutboxTableFields.Offset.GroupOffset}={SqlParam.Offset}, 
+  {OutboxTableFields.Offset.GroupUpdatedAt}=NOW()
 WHERE 
-    consumer_group = {SqlParam.ConsumerGroupId}
-    AND tenant_id = {SqlParam.TenantId}
+  {OutboxTableFields.Offset.ConsumerGroup}={SqlParam.ConsumerGroupId}
+  AND {OutboxTableFields.Offset.TenantId}={SqlParam.TenantId}
 ;
 """;
-
 
     public string SqlInitOffset = $"""
 INSERT INTO {settings.GetQualifiedOffsetTableName()} 
-    (consumer_group, tenant_id)
+  ({OutboxTableFields.Offset.ConsumerGroup}, {OutboxTableFields.Offset.TenantId})
 VALUES 
-    ({SqlParam.ConsumerGroupId},{SqlParam.TenantId})
-ON CONFLICT (consumer_group, tenant_id) DO NOTHING
+  ({SqlParam.ConsumerGroupId},{SqlParam.TenantId})
+ON CONFLICT ({OutboxTableFields.Offset.ConsumerGroup}, {OutboxTableFields.Offset.TenantId}) DO NOTHING
 ;
 """;
-
 
     public string SqlLockOffset = $"SELECT pg_advisory_xact_lock({SqlParam.OffsetKey});";
 
-
     public string SqlLoadConsumerGroup = $"""
 WITH inserted_rows AS(
-    INSERT INTO {settings.GetQualifiedTaskTableName()}
-        (consumer_group,task_created_at,msg_id,msg_part,tenant_id,msg_payload_id,msg_created_at)
-    SELECT
-        {SqlParam.ConsumerGroupId}
-        ,{SqlParam.NowDate}
-        ,msg_id
-        ,{SqlParam.MsgPart}
-        ,{SqlParam.TenantId}
-        ,msg_payload_id
-        ,msg_created_at
-    FROM {settings.GetQualifiedMsgTableName()}
-    WHERE
-        msg_part = {SqlParam.MsgPart}
-        AND tenant_id = {SqlParam.TenantId}
-        AND msg_created_at >= {SqlParam.FromDate}
-        AND msg_created_at <= {SqlParam.ToDate}
-        AND msg_id > {SqlParam.Offset}
-    ORDER BY msg_id
-    LIMIT {SqlParam.Limit}
-    RETURNING msg_id
+  INSERT INTO {settings.GetQualifiedTaskTableName()}
+    ({OutboxTableFields.TaskQueue.ConsumerGroup},{OutboxTableFields.TaskQueue.TaskCreatedAt},{OutboxTableFields.TaskQueue.MsgId},{OutboxTableFields.TaskQueue.MsgPart},{OutboxTableFields.TaskQueue.TenantId},{OutboxTableFields.TaskQueue.MsgPayloadId},{OutboxTableFields.TaskQueue.MsgCreatedAt})
+  SELECT
+    {SqlParam.ConsumerGroupId}
+    ,{SqlParam.NowDate}
+    ,{OutboxTableFields.Message.MsgId}
+    ,{SqlParam.MsgPart}
+    ,{SqlParam.TenantId}
+    ,{OutboxTableFields.Message.MsgPayloadId}
+    ,{OutboxTableFields.Message.MsgCreatedAt}
+  FROM {settings.GetQualifiedMsgTableName()}
+  WHERE
+    {OutboxTableFields.Message.MsgPart} = {SqlParam.MsgPart}
+    AND {OutboxTableFields.Message.TenantId} = {SqlParam.TenantId}
+    AND {OutboxTableFields.Message.MsgCreatedAt} >= {SqlParam.FromDate}
+    AND {OutboxTableFields.Message.MsgCreatedAt} <= {SqlParam.ToDate}
+    AND {OutboxTableFields.Message.MsgId} > {SqlParam.Offset}
+  ORDER BY {OutboxTableFields.Message.MsgId}
+  LIMIT {SqlParam.Limit}
+  RETURNING {OutboxTableFields.Message.MsgId}
 )
 SELECT
-    COUNT(*) as copied_rows,
-    (SELECT msg_id FROM inserted_rows ORDER BY msg_id DESC LIMIT 1) as max_id
+  COUNT(*) as copied_rows,
+  (SELECT {OutboxTableFields.Message.MsgId} FROM inserted_rows ORDER BY {OutboxTableFields.Message.MsgId} DESC LIMIT 1) as max_id
 FROM inserted_rows
 ;
 """;
-
 
     private static string BuildErrorInsertValues(int count)
     {
@@ -355,7 +232,7 @@ FROM inserted_rows
     private static string SqlError(PgOutboxTableSettings settings, int count) =>
 $"""
 INSERT INTO {settings.GetQualifiedErrorTableName()} 
-    (error_id,error_type,error_message,error_created_at)
+  ({OutboxTableFields.Error.ErrorId},{OutboxTableFields.Error.ErrorType},{OutboxTableFields.Error.ErrorMessage},{OutboxTableFields.Error.ErrorCreatedAt})
 VALUES
 {BuildErrorInsertValues(count)}
 ON CONFLICT DO NOTHING
@@ -364,9 +241,6 @@ ON CONFLICT DO NOTHING
 
     public string SqlError(int count) => SqlError(settings, count);
 
-
-
-
     public string SqlFinishDelivery(int count) => SqlFinishDelivery(settings, count);
 
     private static string SqlFinishDelivery(PgOutboxTableSettings settings, int count)
@@ -374,60 +248,48 @@ ON CONFLICT DO NOTHING
         return
 $"""
 WITH inserted_delivery AS (
-    INSERT INTO {settings.GetQualifiedDeliveryTableName()} (
-
-        delivery_status_code
-        , delivery_status_message
-        , delivery_created_at
-
-        , msg_payload_id
-
-        , tenant_id
-        , consumer_group
-
-        , task_id
-        , task_transact_id
-        , task_lock_expires_on
-        , task_created_at
-
-        , error_id
-    )
-    VALUES
+  INSERT INTO {settings.GetQualifiedDeliveryTableName()} (
+    {OutboxTableFields.Delivery.DeliveryStatusCode}
+    , {OutboxTableFields.Delivery.DeliveryStatusMessage}
+    , {OutboxTableFields.Delivery.DeliveryCreatedAt}
+    , {OutboxTableFields.Delivery.MsgPayloadId}
+    , {OutboxTableFields.Delivery.TenantId}
+    , {OutboxTableFields.Delivery.ConsumerGroup}
+    , {OutboxTableFields.Delivery.TaskId}
+    , {OutboxTableFields.Delivery.TaskTransactId}
+    , {OutboxTableFields.Delivery.TaskLockExpiresOn}
+    , {OutboxTableFields.Delivery.TaskCreatedAt}
+    , {OutboxTableFields.Delivery.ErrorId}
+  )
+  VALUES
 {BuildDeliveryInsertValues(count)}
-    ON CONFLICT DO NOTHING
-    RETURNING *
+  ON CONFLICT DO NOTHING
+  RETURNING *
 )
 UPDATE {settings.GetQualifiedTaskTableName()} task
 SET
-    delivery_id = inserted_delivery.delivery_id
-    , delivery_attempt = task.delivery_attempt
-        + CASE 
-            WHEN inserted_delivery.delivery_status_code <> {DeliveryStatusCode.Postpone} 
-                THEN 1
-                ELSE 0
-          END
-    , error_id = inserted_delivery.error_id
-
-    , delivery_status_code = inserted_delivery.delivery_status_code
-    , delivery_status_message = inserted_delivery.delivery_status_message
-    , delivery_created_at = inserted_delivery.delivery_created_at
-
-    , task_lock_expires_on = inserted_delivery.task_lock_expires_on
+  {OutboxTableFields.TaskQueue.DeliveryId} = inserted_delivery.{OutboxTableFields.Delivery.DeliveryId}
+  , {OutboxTableFields.TaskQueue.DeliveryAttempt} = task.{OutboxTableFields.TaskQueue.DeliveryAttempt}
+    + CASE WHEN inserted_delivery.{OutboxTableFields.Delivery.DeliveryStatusCode} <> {DeliveryStatusCode.Postpone} 
+        THEN 1
+        ELSE 0
+      END
+  , {OutboxTableFields.TaskQueue.ErrorId} = inserted_delivery.{OutboxTableFields.Delivery.ErrorId}
+  , {OutboxTableFields.TaskQueue.DeliveryStatusCode} = inserted_delivery.{OutboxTableFields.Delivery.DeliveryStatusCode}
+  , {OutboxTableFields.TaskQueue.DeliveryStatusMessage} = inserted_delivery.{OutboxTableFields.Delivery.DeliveryStatusMessage}
+  , {OutboxTableFields.TaskQueue.DeliveryCreatedAt} = inserted_delivery.{OutboxTableFields.Delivery.DeliveryCreatedAt}
+  , {OutboxTableFields.TaskQueue.TaskLockExpiresOn} = inserted_delivery.{OutboxTableFields.Delivery.TaskLockExpiresOn}
 FROM 
-    inserted_delivery
+  inserted_delivery
 WHERE 
-    task.tenant_id = {SqlParam.TenantId}
-    AND task.consumer_group = {SqlParam.ConsumerGroupId}
-    AND task.task_id = inserted_delivery.task_id
-
-    AND task.task_created_at >= {SqlParam.FromDate}
-    AND task.task_transact_id = {SqlParam.TransactId}
+  task.{OutboxTableFields.TaskQueue.TenantId} = {SqlParam.TenantId}
+  AND task.{OutboxTableFields.TaskQueue.ConsumerGroup} = {SqlParam.ConsumerGroupId}
+  AND task.{OutboxTableFields.TaskQueue.TaskId} = inserted_delivery.{OutboxTableFields.Delivery.TaskId}
+  AND task.{OutboxTableFields.TaskQueue.TaskCreatedAt} >= {SqlParam.FromDate}
+  AND task.{OutboxTableFields.TaskQueue.TaskTransactId} = {SqlParam.TransactId}
 ;
-
 """;
     }
-
-
 
     private static string BuildDeliveryInsertValues(int count)
     {
@@ -454,207 +316,5 @@ WHERE
         }
 
         return sb.ToString();
-    }
-}
-
-internal static class NpgsqlDataReaderExtension
-{
-    public static Guid GetMgsId(this NpgsqlDataReader reader)
-        => reader.GetGuid("msg_id");
-
-    public static string GetMgsPayloadId(this NpgsqlDataReader reader)
-        => reader.GetString("msg_payload_id");
-
-    public static Stream GetMgsPayload(this NpgsqlDataReader reader)
-        => reader.GetStream("msg_payload");
-
-    public static int GetTenantId(this NpgsqlDataReader reader)
-        => reader.GetInt32("tenant_id");
-
-    public static string GetMsgPart(this NpgsqlDataReader reader)
-        => reader.GetString("msg_part");
-
-    public static DateTimeOffset GetMsgCreatedAt(this NpgsqlDataReader reader)
-        => reader.GetInt64("msg_created_at").ToDateTimeOffsetFromUnixTimestamp();
-
-    public static long GetTaskId(this NpgsqlDataReader reader)
-        => reader.GetInt64("task_id");
-
-    public static DateTimeOffset GetTaskCreatedAt(this NpgsqlDataReader reader)
-        => reader.GetInt64("task_created_at").ToDateTimeOffsetFromUnixTimestamp();
-
-    public static long GetDeliveryId(this NpgsqlDataReader reader)
-        => reader.GetInt64("delivery_id");
-
-    public static int GetDeliveryAttempt(this NpgsqlDataReader reader)
-        => reader.GetInt32("delivery_attempt");
-
-    public static long GetErrorId(this NpgsqlDataReader reader)
-        => reader.GetInt64("error_id");
-
-    public static string GetConsumerGroup(this NpgsqlDataReader reader)
-        => reader.GetString("consumer_group");
-
-    public static int GetDeliveryStatusCode(this NpgsqlDataReader reader)
-    => reader.GetInt32("delivery_status_code");
-
-    public static string GetDeliveryStatusMessage(this NpgsqlDataReader reader)
-        => reader.GetString("delivery_status_message");
-
-    public static long GetDeliveryCreatedAt(this NpgsqlDataReader reader)
-        => reader.GetInt64("delivery_created_at");
-
-    public static long GetTypeId(this NpgsqlDataReader reader)
-        => reader.GetInt64("type_id");
-
-    public static string GetTypeName(this NpgsqlDataReader reader)
-        => reader.GetString("type_name");
-
-}
-
-internal static class SqlParam
-{
-    public const string TenantId = "@tnt";
-
-    public const string ConsumerGroupId = "@gr";
-    public const string MsgPart = "@prt";
-    public const string TypeId = "@typ_id";
-    public const string TypeName = "@typ_nm";
-
-    public const string FromDate = "@frm";
-    public const string ToDate = "@to";
-    public const string NowDate = "@now";
-    public const string TransactId = "@trn";
-
-    public const string OffsetKey = "@off_key";
-    public const string Offset = "@offset";
-
-    public const string Limit = "@limit";
-    public const string LockExpiresOn = "@lck";
-
-    public const string PayloadId = "@pl_id";
-    public const string TaskId = "@tsk";
-    public const string StatusCode = "@st_cd";
-    public const string StatusMessage = "@st_msg";
-    public const string CreatedAt = "@cr_at";
-    public const string TaskCreatedAt = "@tsk_at";
-    public const string ErrorId = "@err_id";
-}
-
-
-internal static class NpgsqlCommandExtension
-{
-    public static NpgsqlCommand AddParamTenantId(this NpgsqlCommand command, int value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, value));
-        return command;
-    }
-    public static NpgsqlCommand AddParamMsgPart(this NpgsqlCommand command, string value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.MsgPart, value));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamFromDate(this NpgsqlCommand command, DateTimeOffset value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.FromDate, value.ToUnixTimeSeconds()));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamToDate(this NpgsqlCommand command, DateTimeOffset value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.ToDate, value.ToUnixTimeSeconds()));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamNowDate(this NpgsqlCommand command, DateTimeOffset value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.NowDate, value.ToUnixTimeSeconds()));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamConsumerGroupId(this NpgsqlCommand command, string value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, value));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamTypeId(this NpgsqlCommand command, long value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.TypeId, value));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamTransactId(this NpgsqlCommand command, string value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.TransactId, value));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamLimit(this NpgsqlCommand command, int value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.Limit, value));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamLockExpiresOn(this NpgsqlCommand command, DateTimeOffset value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.LockExpiresOn, value.ToUnixTimeSeconds()));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamLockExpiresOn(this NpgsqlCommand command, long value, int index)
-        => command.AddParam<BatchParams, long>(SqlParam.LockExpiresOn, value, index);
-
-
-    public static NpgsqlCommand AddParamErrorId(this NpgsqlCommand command, long? value, int index)
-        => command.AddParam<BatchParams, long>(SqlParam.ErrorId, value ?? 0, index);
-
-
-    public static NpgsqlCommand AddParamTypeName(this NpgsqlCommand command, string value)
-    {
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.TypeName, value));
-        return command;
-    }
-
-    public static NpgsqlCommand AddParamTypeName(this NpgsqlCommand command, string? value, int index)
-        => command.AddParam<BatchParams, string>(SqlParam.TypeName, value ?? string.Empty, index);
-
-    public static NpgsqlCommand AddParamStatusCode(this NpgsqlCommand command, int value, int index)
-        => command.AddParam<BatchParams, int>(SqlParam.StatusCode, value, index);
-
-    public static NpgsqlCommand AddParamStatusMessage(this NpgsqlCommand command, string? value, int index)
-        => command.AddParam<BatchParams, string>(SqlParam.StatusMessage, value ?? string.Empty, index);
-
-    public static NpgsqlCommand AddParamCreatedAt(this NpgsqlCommand command, DateTimeOffset value, int index)
-        => command.AddParam<BatchParams, long>(SqlParam.CreatedAt, value.ToUnixTimeSeconds(), index);
-
-    public static NpgsqlCommand AddParamPayloadId(this NpgsqlCommand command, string value, int index)
-        => command.AddParam<BatchParams, string>(SqlParam.PayloadId, value, index);
-
-    public static NpgsqlCommand AddParamTaskId(this NpgsqlCommand command, long value, int index)
-        => command.AddParam<BatchParams, long>(SqlParam.TaskId, value, index);
-
-
-    public static NpgsqlCommand AddParamTaskCreatedAt(this NpgsqlCommand command, DateTimeOffset value, int index)
-        => command.AddParam<BatchParams, long>(SqlParam.TaskCreatedAt, value.ToUnixTimeSeconds(), index);
-
-
-    sealed class BatchParams : INamePrefixProvider
-    {
-        public static int MaxIndex => 512;
-
-        public static string[] GetPrefixes() =>
-        [
-            SqlParam.ErrorId
-            , SqlParam.TypeName
-            , SqlParam.StatusCode
-            , SqlParam.StatusMessage
-            , SqlParam.CreatedAt
-            , SqlParam.PayloadId
-            , SqlParam.TaskId
-            , SqlParam.LockExpiresOn
-            , SqlParam.TaskCreatedAt
-        ];
     }
 }

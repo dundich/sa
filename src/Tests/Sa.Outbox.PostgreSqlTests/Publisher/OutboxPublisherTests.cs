@@ -1,7 +1,10 @@
+using Sa.Outbox.PostgreSql;
+
 namespace Sa.Outbox.PostgreSqlTests.Publisher;
 
 
-public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture) : IClassFixture<OutboxPublisherTests.Fixture>
+public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture) 
+    : IClassFixture<OutboxPublisherTests.Fixture>
 {
     public class Fixture : OutboxPostgreSqlFixture<IOutboxMessagePublisher>
     {
@@ -28,7 +31,8 @@ public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture) : IClass
         // Assert
         Assert.Equal(2, (int)result);
 
-        int count = await fixture.DataSource.ExecuteReaderFirst<int>("select count(*) from outbox__msg$", TestContext.Current.CancellationToken);
+        var sql = $"select count(*) from {PgOutboxTableSettings.Defaults.DatabaseTableName}{PgOutboxTableSettings.MessageTable.Suffix}";
+        int count = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
         Assert.Equal(2, count);
     }
 }

@@ -14,12 +14,12 @@ internal static class Setup
         _ = services.AddPartitional((sp, builder) =>
         {
             SqlOutboxTemplate sql = sp.GetRequiredService<SqlOutboxTemplate>();
+            var tableSettings = sql.Settings;
 
-
-            builder.AddSchema(sql.DatabaseSchemaName, schema =>
+            builder.AddSchema(sql.Settings.DatabaseSchemaName, schema =>
             {
                 ITableBuilder outboxTableBuilder = schema
-                    .AddTable(sql.DatabaseMsgTableName, SqlOutboxTemplate.MsgFields)
+                    .AddTable(tableSettings.Message.TableName, tableSettings.Message.Fields.All())
                     .PartByList("tenant_id", "msg_part")
                     .TimestampAs("msg_created_at")
                     .WithFillFactor(100) // insert only
@@ -27,22 +27,22 @@ internal static class Setup
                 ;
 
                 ITableBuilder queueTableBuilder = schema
-                    .AddTable(sql.DatabaseTaskTableName, SqlOutboxTemplate.TaskQueueFields)
+                    .AddTable(tableSettings.TaskQueue.TableName, tableSettings.TaskQueue.Fields.All())
                     .PartByList("tenant_id", "consumer_group")
                     .TimestampAs("task_created_at")
-                    .WithFillFactor(60)
+                    .WithFillFactor(50)
                     .AddPostSql(() => sql.SqlCreateOffsetTable)
                 ;
 
                 ITableBuilder deliveryTableBuilder = schema
-                    .AddTable(sql.DatabaseDeliveryTableName, SqlOutboxTemplate.DeliveryFields)
+                    .AddTable(tableSettings.Delivery.TableName, tableSettings.Delivery.Fields.All())
                     .PartByList("tenant_id", "consumer_group")
                     .TimestampAs("delivery_created_at")
                     .WithFillFactor(100)
                 ;
 
                 ITableBuilder errorTableBuilder = schema
-                    .AddTable(sql.DatabaseErrorTableName, SqlOutboxTemplate.ErrorFields)
+                    .AddTable(tableSettings.Error.TableName, tableSettings.Error.Fields.All())
                     .TimestampAs("error_created_at")
                     .WithFillFactor(100)
                 ;

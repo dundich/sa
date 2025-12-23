@@ -12,26 +12,33 @@ internal static class SqlTemplate
     /// </summary>
     public static string CreateRootSql(this ITableSettings settings)
     {
-        string pkList = settings.PartByListFieldNames.Contains(settings.IdFieldName)
-            ? settings.PartByListFieldNames.JoinByString(",")
-            : new string[] { settings.IdFieldName }.Concat(settings.PartByListFieldNames).JoinByString(",")
-            ;
+        var partByRangeExists = settings.Fields.Any(c => c.StartsWith(settings.PartByRangeFieldName));
+        string pkColumns = GetPrimaryKeyColumns(settings);
+
+        var rangeFieldDefinition = partByRangeExists
+            ? string.Empty
+            : $"{settings.PartByRangeFieldName} bigint NOT NULL,";
 
         return $"""
-
 CREATE SCHEMA IF NOT EXISTS {settings.DatabaseSchemaName};
 
 CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTableName()} (
-    {settings.Fields.JoinByString($",{Environment.NewLine}    ")},
-    {settings.PartByRangeFieldName} bigint NOT NULL,
-    CONSTRAINT "{settings.Pk()}" PRIMARY KEY ({pkList},{settings.PartByRangeFieldName})
-) {settings.GetPartitionalSql(0)}
-;
+  {settings.Fields.JoinByString($",{Environment.NewLine}  ")},
+  {rangeFieldDefinition}
+  CONSTRAINT "{settings.Pk()}" PRIMARY KEY ({pkColumns},{settings.PartByRangeFieldName})
+) {settings.GetPartitionalSql(0)};
 
 -- post sql
 {settings.PostRootSql?.Invoke()}
 
 """;
+    }
+
+    private static string GetPrimaryKeyColumns(ITableSettings settings)
+    {
+        return settings.PartByListFieldNames.Contains(settings.IdFieldName)
+            ? settings.PartByListFieldNames.JoinByString(",")
+            : new string[] { settings.IdFieldName }.Concat(settings.PartByListFieldNames).JoinByString(",");
     }
 
     /// <summary>
@@ -67,6 +74,7 @@ FOR VALUES IN ({values[^1].Match(s => $"'{s}'", n => n.ToString())})
         string timeRangeTablename = settings.GetQualifiedTableName(date, values);
         LimSection<DateTimeOffset> range = settings.PartBy.GetRange(date);
         string cacheTablename = settings.GetCacheByRangeTableName();
+        var partValues = StrOrNumsToFmtString(values);
 
         return
 $"""
@@ -83,17 +91,17 @@ FOR VALUES FROM ({range.Start.ToUnixTimeSeconds()}) TO ({range.End.ToUnixTimeSec
 -- cache
 
 CREATE TABLE IF NOT EXISTS {cacheTablename} (
-    id TEXT PRIMARY KEY,
-    root TEXT NOT NULL,
-    part_values TEXT NOT NULL, 
-    part_by TEXT NOT NULL,
-    from_date bigint NOT NULL,
-    to_date bigint NOT NULL
+  id TEXT PRIMARY KEY,
+  root TEXT NOT NULL,
+  part_values TEXT NOT NULL, 
+  part_by TEXT NOT NULL,
+  from_date bigint NOT NULL,
+  to_date bigint NOT NULL
 )
 ;
 
 INSERT INTO {cacheTablename} (id,root,part_values,part_by,from_date,to_date) 
-VALUES ('{timeRangeTablename}','{settings.FullName}','{StrOrNumsToFmtString(values)}','{settings.PartBy.Name}',{range.Start.ToUnixTimeSeconds()},{range.End.ToUnixTimeSeconds()}) 
+VALUES ('{timeRangeTablename}','{settings.FullName}','{partValues}','{settings.PartBy.Name}',{range.Start.ToUnixTimeSeconds()},{range.End.ToUnixTimeSeconds()}) 
 ON CONFLICT (id) DO NOTHING
 ;
 
@@ -119,9 +127,7 @@ ORDER BY from_date DESC
 $"""
 SELECT id,root,part_values,part_by,from_date
 FROM {settings.GetCacheByRangeTableName()} 
-WHERE 
-    root = '{settings.FullName}' 
-    AND to_date <= @to_date
+WHERE root = '{settings.FullName}' AND to_date <= @to_date
 ORDER BY from_date ASC
 ;
 """;
@@ -135,9 +141,9 @@ ORDER BY from_date ASC
         =>
 $"""
 WITH pt AS (
-    SELECT inhrelid::regclass AS pt
-    FROM pg_inherits
-    WHERE inhparent = '{qualifiedTableName}'::regclass
+  SELECT inhrelid::regclass AS pt
+  FROM pg_inherits
+  WHERE inhparent = '{qualifiedTableName}'::regclass
 )
 SELECT pt::text from pt
 ;
