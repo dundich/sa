@@ -20,31 +20,31 @@ internal static class Setup
             {
                 ITableBuilder outboxTableBuilder = schema
                     .AddTable(tableSettings.Message.TableName, tableSettings.Message.Fields.All())
-                    .PartByList("tenant_id", "msg_part")
-                    .TimestampAs("msg_created_at")
-                    .WithFillFactor(100) // insert only
+                    .PartByList(tableSettings.Message.Fields.TenantId, tableSettings.Message.Fields.MsgPart)
+                    .TimestampAs(tableSettings.Message.Fields.MsgCreatedAt)
+                    .WithFillFactor(tableSettings.Message.FillFactor) // insert only
                     .AddPostSql(() => sql.SqlCreateTypeTable)
                 ;
 
                 ITableBuilder queueTableBuilder = schema
                     .AddTable(tableSettings.TaskQueue.TableName, tableSettings.TaskQueue.Fields.All())
-                    .PartByList("tenant_id", "consumer_group")
-                    .TimestampAs("task_created_at")
-                    .WithFillFactor(50)
+                    .PartByList(tableSettings.TaskQueue.Fields.TenantId, tableSettings.TaskQueue.Fields.ConsumerGroup)
+                    .TimestampAs(tableSettings.TaskQueue.Fields.TaskCreatedAt)
+                    .WithFillFactor(tableSettings.TaskQueue.FillFactor)
                     .AddPostSql(() => sql.SqlCreateOffsetTable)
                 ;
 
                 ITableBuilder deliveryTableBuilder = schema
                     .AddTable(tableSettings.Delivery.TableName, tableSettings.Delivery.Fields.All())
-                    .PartByList("tenant_id", "consumer_group")
-                    .TimestampAs("delivery_created_at")
-                    .WithFillFactor(100)
+                    .PartByList(tableSettings.Delivery.Fields.TenantId, tableSettings.Delivery.Fields.ConsumerGroup)
+                    .TimestampAs(tableSettings.Delivery.Fields.DeliveryCreatedAt)
+                    .WithFillFactor(tableSettings.Delivery.FillFactor)
                 ;
 
                 ITableBuilder errorTableBuilder = schema
                     .AddTable(tableSettings.Error.TableName, tableSettings.Error.Fields.All())
-                    .TimestampAs("error_created_at")
-                    .WithFillFactor(100)
+                    .TimestampAs(tableSettings.Error.Fields.ErrorCreatedAt)
+                    .WithFillFactor(tableSettings.Error.FillFactor)
                 ;
 
 

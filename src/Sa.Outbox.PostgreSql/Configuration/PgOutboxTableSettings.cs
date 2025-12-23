@@ -37,11 +37,10 @@ public sealed class PgOutboxTableSettings
     public sealed class MessageTable
     {
         public const string Suffix = "__msg$";
-        /// <summary>
-        /// Gets or sets the name of the Outbox Messages table.
-        /// Default is set to "outbox__$msg".
-        /// </summary>
+
         public string TableName { get; set; } = $"{Defaults.DatabaseTableName}{Suffix}";
+
+        public int FillFactor { get; set; } = 100;
 
         public TableFields Fields { get; } = new();
 
@@ -75,10 +74,9 @@ public sealed class PgOutboxTableSettings
     /// </summary>
     public sealed class TaskQueueTable
     {
-        /// <summary>
-        /// Default is set to "outbox".
-        /// </summary>
         public string TableName { get; set; } = Defaults.DatabaseTableName;
+
+        public int FillFactor { get; set; } = 50;
 
         public TableFields Fields { get; } = new();
 
@@ -136,6 +134,8 @@ public sealed class PgOutboxTableSettings
     {
         public const string Suffix = "__log$";
 
+        public int FillFactor { get; set; } = 100;
+
         public string TableName { get; set; } = $"{Defaults.DatabaseTableName}{Suffix}";
 
         public TableFields Fields { get; } = new();
@@ -179,10 +179,9 @@ public sealed class PgOutboxTableSettings
     public sealed class ErrorTable
     {
         public const string Suffix = "__error$";
-        /// <summary>
-        /// Gets or sets the name of the delivery table.
-        /// Default is set to "outbox__log$".
-        /// </summary>
+
+        public int FillFactor { get; set; } = 100;
+
         public string TableName { get; set; } = $"{Defaults.DatabaseTableName}{Suffix}";
 
         public TableFields Fields { get; } = new();
