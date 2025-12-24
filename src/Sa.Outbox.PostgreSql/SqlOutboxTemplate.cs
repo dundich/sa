@@ -49,18 +49,18 @@ WITH next_task AS (
     t.{settings.TaskQueue.Fields.TaskCreatedAt}
   FROM {settings.GetQualifiedTaskTableName()} t
   INNER JOIN {settings.GetQualifiedMsgTableName()} m
-    ON task.{settings.TaskQueue.Fields.MsgId}=m.{settings.Message.Fields.MsgId}
+    ON t.{settings.TaskQueue.Fields.MsgId}=m.{settings.Message.Fields.MsgId}
   WHERE
-    task.{settings.TaskQueue.Fields.TenantId}={SqlParam.TenantId}
+    t.{settings.TaskQueue.Fields.TenantId}={SqlParam.TenantId}
     AND t.{settings.TaskQueue.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId}
     AND t.{settings.TaskQueue.Fields.TaskCreatedAt}>={SqlParam.FromDate}
-    AND (t.{settings.TaskQueue.Fields.DeliveryStatusCode} < {DeliveryStatusCode.Ok} 
-            OR t.{settings.TaskQueue.Fields.DeliveryStatusCode} BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.WarnEof})
+    AND (t.{settings.TaskQueue.Fields.DeliveryStatusCode}<{DeliveryStatusCode.Ok} 
+          OR t.{settings.TaskQueue.Fields.DeliveryStatusCode} BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.WarnEof})
     AND t.{settings.TaskQueue.Fields.TaskLockExpiresOn}<{SqlParam.ToDate}
     AND m.{settings.Message.Fields.MsgPart}={SqlParam.MsgPart}
     AND m.{settings.Message.Fields.TenantId}={SqlParam.TenantId}
     AND m.{settings.Message.Fields.MsgCreatedAt}>={SqlParam.FromDate}
-    AND m{settings.Message.Fields.MsgPayloadType}={SqlParam.TypeId}
+    AND m.{settings.Message.Fields.MsgPayloadType}={SqlParam.TypeId}
   ORDER BY t.{settings.TaskQueue.Fields.TaskId}
   LIMIT {SqlParam.Limit}
   FOR UPDATE SKIP LOCKED
@@ -69,7 +69,7 @@ UPDATE {settings.GetQualifiedTaskTableName()} t
 SET
   {settings.TaskQueue.Fields.DeliveryStatusCode}={DeliveryStatusCode.Processing},
   {settings.TaskQueue.Fields.TaskTransactId}={SqlParam.TransactId},
-  {settings.TaskQueue.Fields.TaskLockExpiresOn}{SqlParam.LockExpiresOn}
+  {settings.TaskQueue.Fields.TaskLockExpiresOn}={SqlParam.LockExpiresOn}
 FROM next_task nt
 WHERE 
   t.{settings.TaskQueue.Fields.TaskId}=nt.{settings.TaskQueue.Fields.TaskId} 
@@ -82,15 +82,15 @@ RETURNING nt.*
     public string SqlExtendDelivery =
 $"""
 UPDATE {settings.GetQualifiedTaskTableName()}
-SET {settings.TaskQueue.Fields.TaskLockExpiresOn} = {SqlParam.LockExpiresOn}
-WHERE {settings.TaskQueue.Fields.TenantId} = {SqlParam.TenantId}
-  AND {settings.TaskQueue.Fields.ConsumerGroup} = {SqlParam.ConsumerGroupId}
-  AND {settings.TaskQueue.Fields.TaskCreatedAt} >= {SqlParam.FromDate}
-  AND ({settings.TaskQueue.Fields.DeliveryStatusCode} < {DeliveryStatusCode.Ok} 
+SET {settings.TaskQueue.Fields.TaskLockExpiresOn}={SqlParam.LockExpiresOn}
+WHERE {settings.TaskQueue.Fields.TenantId}={SqlParam.TenantId}
+  AND {settings.TaskQueue.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId}
+  AND {settings.TaskQueue.Fields.TaskCreatedAt}>={SqlParam.FromDate}
+  AND ({settings.TaskQueue.Fields.DeliveryStatusCode}<{DeliveryStatusCode.Ok} 
         OR {settings.TaskQueue.Fields.DeliveryStatusCode} BETWEEN {DeliveryStatusCode.Status300} AND {DeliveryStatusCode.WarnEof})
-  AND {settings.TaskQueue.Fields.TaskTransactId} = {SqlParam.TransactId}
-  AND {settings.Message.Fields.MsgPayloadType} = {SqlParam.TypeId}
-  AND {settings.TaskQueue.Fields.TaskLockExpiresOn} > {SqlParam.NowDate}
+  AND {settings.TaskQueue.Fields.TaskTransactId}={SqlParam.TransactId}
+  AND {settings.Message.Fields.MsgPayloadType}={SqlParam.TypeId}
+  AND {settings.TaskQueue.Fields.TaskLockExpiresOn}>{SqlParam.NowDate}
 ;
 """;
 
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTypeTableName()}
     public string SqlInsertType =
 $"""
 INSERT INTO {settings.GetQualifiedTypeTableName()} 
-  ({settings.Type.Fields.TypeId}, {settings.Type.Fields.TypeName})
+  ({settings.Type.Fields.TypeId},{settings.Type.Fields.TypeName})
 VALUES
   ({SqlParam.TypeId},{SqlParam.TypeName})
 ON CONFLICT DO NOTHING
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
   {settings.Offset.Fields.TenantId} INT NOT NULL DEFAULT 0,
   {settings.Offset.Fields.GroupOffset} UUID NOT NULL DEFAULT '{Guid.Empty}',
   {settings.Offset.Fields.GroupUpdatedAt} TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  CONSTRAINT "pk_{settings.Offset.TableName}" PRIMARY KEY ({settings.Offset.Fields.ConsumerGroup}, {settings.Offset.Fields.TenantId})
+  CONSTRAINT "pk_{settings.Offset.TableName}" PRIMARY KEY ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId})
 )
 ;
 """;
@@ -133,10 +133,10 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
     public string SqlInsertOffset =
 $"""
 INSERT INTO {settings.GetQualifiedOffsetTableName()} 
-  ({settings.Offset.Fields.ConsumerGroup}, {settings.Offset.Fields.TenantId}, {settings.Offset.Fields.GroupOffset})
+  ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId},{settings.Offset.Fields.GroupOffset})
 VALUES 
   ({SqlParam.ConsumerGroupId},{SqlParam.TenantId},{SqlParam.Offset})
-ON CONFLICT ({settings.Offset.Fields.ConsumerGroup}, {settings.Offset.Fields.TenantId}) DO NOTHING;
+ON CONFLICT ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId}) DO NOTHING;
 ;
 """;
 
@@ -163,10 +163,10 @@ WHERE
 
     public string SqlInitOffset = $"""
 INSERT INTO {settings.GetQualifiedOffsetTableName()} 
-  ({settings.Offset.Fields.ConsumerGroup}, {settings.Offset.Fields.TenantId})
+  ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId})
 VALUES 
   ({SqlParam.ConsumerGroupId},{SqlParam.TenantId})
-ON CONFLICT ({settings.Offset.Fields.ConsumerGroup}, {settings.Offset.Fields.TenantId}) DO NOTHING
+ON CONFLICT ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId}) DO NOTHING
 ;
 """;
 
@@ -192,11 +192,11 @@ WITH inserted_rows AS(
     ,{settings.Message.Fields.MsgCreatedAt}
   FROM {settings.GetQualifiedMsgTableName()}
   WHERE
-    {settings.Message.Fields.MsgPart} = {SqlParam.MsgPart}
-    AND {settings.Message.Fields.TenantId} = {SqlParam.TenantId}
-    AND {settings.Message.Fields.MsgCreatedAt} >= {SqlParam.FromDate}
-    AND {settings.Message.Fields.MsgCreatedAt} <= {SqlParam.ToDate}
-    AND {settings.Message.Fields.MsgId} > {SqlParam.Offset}
+    {settings.Message.Fields.MsgPart}={SqlParam.MsgPart}
+    AND {settings.Message.Fields.TenantId}={SqlParam.TenantId}
+    AND {settings.Message.Fields.MsgCreatedAt}>={SqlParam.FromDate}
+    AND {settings.Message.Fields.MsgCreatedAt}<={SqlParam.ToDate}
+    AND {settings.Message.Fields.MsgId}>{SqlParam.Offset}
   ORDER BY {settings.Message.Fields.MsgId}
   LIMIT {SqlParam.Limit}
   RETURNING {settings.Message.Fields.MsgId}
@@ -253,19 +253,19 @@ ON CONFLICT DO NOTHING
     {
         return
 $"""
-WITH inserted_delivery AS (
+WITH inserted AS (
   INSERT INTO {settings.GetQualifiedDeliveryTableName()} (
     {settings.Delivery.Fields.DeliveryStatusCode}
-    , {settings.Delivery.Fields.DeliveryStatusMessage}
-    , {settings.Delivery.Fields.DeliveryCreatedAt}
-    , {settings.Delivery.Fields.MsgPayloadId}
-    , {settings.Delivery.Fields.TenantId}
-    , {settings.Delivery.Fields.ConsumerGroup}
-    , {settings.Delivery.Fields.TaskId}
-    , {settings.Delivery.Fields.TaskTransactId}
-    , {settings.Delivery.Fields.TaskLockExpiresOn}
-    , {settings.Delivery.Fields.TaskCreatedAt}
-    , {settings.Delivery.Fields.ErrorId}
+    ,{settings.Delivery.Fields.DeliveryStatusMessage}
+    ,{settings.Delivery.Fields.DeliveryCreatedAt}
+    ,{settings.Delivery.Fields.MsgPayloadId}
+    ,{settings.Delivery.Fields.TenantId}
+    ,{settings.Delivery.Fields.ConsumerGroup}
+    ,{settings.Delivery.Fields.TaskId}
+    ,{settings.Delivery.Fields.TaskTransactId}
+    ,{settings.Delivery.Fields.TaskLockExpiresOn}
+    ,{settings.Delivery.Fields.TaskCreatedAt}
+    ,{settings.Delivery.Fields.ErrorId}
   )
   VALUES
 {BuildDeliveryInsertValues(count)}
@@ -274,25 +274,25 @@ WITH inserted_delivery AS (
 )
 UPDATE {settings.GetQualifiedTaskTableName()} task
 SET
-  {settings.TaskQueue.Fields.DeliveryId} = inserted_delivery.{settings.Delivery.Fields.DeliveryId}
-  , {settings.TaskQueue.Fields.DeliveryAttempt} = task.{settings.TaskQueue.Fields.DeliveryAttempt}
-    + CASE WHEN inserted_delivery.{settings.Delivery.Fields.DeliveryStatusCode} <> {DeliveryStatusCode.Postpone} 
+  {settings.TaskQueue.Fields.DeliveryId}=inserted.{settings.Delivery.Fields.DeliveryId}
+  , {settings.TaskQueue.Fields.DeliveryAttempt}=task.{settings.TaskQueue.Fields.DeliveryAttempt}
+    + CASE WHEN inserted.{settings.Delivery.Fields.DeliveryStatusCode}<>{DeliveryStatusCode.Postpone} 
         THEN 1
         ELSE 0
       END
-  , {settings.TaskQueue.Fields.ErrorId} = inserted_delivery.{settings.Delivery.Fields.ErrorId}
-  , {settings.TaskQueue.Fields.DeliveryStatusCode} = inserted_delivery.{settings.Delivery.Fields.DeliveryStatusCode}
-  , {settings.TaskQueue.Fields.DeliveryStatusMessage} = inserted_delivery.{settings.Delivery.Fields.DeliveryStatusMessage}
-  , {settings.TaskQueue.Fields.DeliveryCreatedAt} = inserted_delivery.{settings.Delivery.Fields.DeliveryCreatedAt}
-  , {settings.TaskQueue.Fields.TaskLockExpiresOn} = inserted_delivery.{settings.Delivery.Fields.TaskLockExpiresOn}
+  , {settings.TaskQueue.Fields.ErrorId}=inserted.{settings.Delivery.Fields.ErrorId}
+  , {settings.TaskQueue.Fields.DeliveryStatusCode}=inserted.{settings.Delivery.Fields.DeliveryStatusCode}
+  , {settings.TaskQueue.Fields.DeliveryStatusMessage}=inserted.{settings.Delivery.Fields.DeliveryStatusMessage}
+  , {settings.TaskQueue.Fields.DeliveryCreatedAt}=inserted.{settings.Delivery.Fields.DeliveryCreatedAt}
+  , {settings.TaskQueue.Fields.TaskLockExpiresOn}=inserted.{settings.Delivery.Fields.TaskLockExpiresOn}
 FROM 
-  inserted_delivery
+  inserted
 WHERE 
-  task.{settings.TaskQueue.Fields.TenantId} = {SqlParam.TenantId}
-  AND task.{settings.TaskQueue.Fields.ConsumerGroup} = {SqlParam.ConsumerGroupId}
-  AND task.{settings.TaskQueue.Fields.TaskId} = inserted_delivery.{settings.Delivery.Fields.TaskId}
-  AND task.{settings.TaskQueue.Fields.TaskCreatedAt} >= {SqlParam.FromDate}
-  AND task.{settings.TaskQueue.Fields.TaskTransactId} = {SqlParam.TransactId}
+  task.{settings.TaskQueue.Fields.TenantId}={SqlParam.TenantId}
+  AND task.{settings.TaskQueue.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId}
+  AND task.{settings.TaskQueue.Fields.TaskId}=inserted.{settings.Delivery.Fields.TaskId}
+  AND task.{settings.TaskQueue.Fields.TaskCreatedAt}>={SqlParam.FromDate}
+  AND task.{settings.TaskQueue.Fields.TaskTransactId}={SqlParam.TransactId}
 ;
 """;
     }

@@ -13,7 +13,7 @@ internal sealed partial class OutboxTaskLoader(
     IPgDataSource pg,
     SqlOutboxTemplate sql,
     IOutboxPartRepository partitionManager,
-    ILogger<OutboxTaskLoader>? logger) : IOutboxTaskLoader
+    ILogger<OutboxTaskLoader>? logger = null) : IOutboxTaskLoader
 {
 
     internal sealed record ConsumerGroupIdentifier(string ConsumerGroupId, int TenantId);
@@ -25,7 +25,6 @@ internal sealed partial class OutboxTaskLoader(
     {
         if (batchSize < 1) return LoadGroupResult.Empty;
 
-
         try
         {
             await partitionManager.EnsureTaskParts(
@@ -36,12 +35,12 @@ internal sealed partial class OutboxTaskLoader(
         }
         catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
-            LogCanceledLoad(ex, filter);
+            if (logger != null) LogCanceledLoad(ex, filter);
             return LoadGroupResult.Empty;
         }
         catch (Exception ex) when (!ex.IsCritical())
         {
-            LogErrorLoad(ex, filter);
+            if (logger != null) LogErrorLoad(ex, filter);
             return LoadGroupResult.Empty;
         }
     }
@@ -95,7 +94,6 @@ internal sealed partial class OutboxTaskLoader(
     {
         await using var command = new NpgsqlCommand(sql.SqlLoadConsumerGroup, conn, tx);
 
-
         command
             .AddParamTenantId(filter.TenantId)
             .AddParamMsgPart(filter.Part)
@@ -135,7 +133,7 @@ internal sealed partial class OutboxTaskLoader(
         int lockKey = CalculateLockKey(consumerGroup);
 
         using var command = new NpgsqlCommand(sql.SqlLockOffset, conn, tx);
-        command.AddParamAdvisoryXactLock(lockKey);        
+        command.AddParamAdvisoryXactLock(lockKey);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

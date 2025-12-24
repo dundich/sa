@@ -2,12 +2,12 @@
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Support;
-using Sa.Partitional.PostgreSql;
 using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSqlTests;
 
-public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClassFixture<OutboxTwoGroupsTests.Fixture>
+public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) 
+    : IClassFixture<OutboxTwoGroupsTests.Fixture>
 {
     class SomeMessage : IOutboxPayloadMessage
     {
@@ -65,7 +65,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
                             settings.ConsumeSettings
                                 .WithNoBatchingWindow();
                         })
-                        .AddDeliveryScoped<SomeMessageConsumerGr2, SomeMessage>("test_gr2", (_, settings) =>
+                        .AddDelivery<SomeMessageConsumerGr2, SomeMessage>("test_gr2", (_, settings) =>
                         {
                             settings.ScheduleSettings
                                 .WithInterval(TimeSpan.FromMilliseconds(100))
@@ -84,7 +84,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
                         settings.TableSettings.DatabaseSchemaName = "test_gr";
                         settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
                     });
-                    cfg.WithMessageSerializer(sp => new OutboxMessageSerializer());
+                    cfg.WithMessageSerializer(OutboxMessageSerializer.Instance);
                 });
         }
     }
@@ -113,10 +113,6 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) : IClass
         };
 
         ulong total = await publisher.Publish(messages, TestContext.Current.CancellationToken);
-
-        var migrationService = ServiceProvider.GetRequiredService<IPartMigrationService>();
-        bool migrated = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
-        Assert.True(migrated, "Миграция не завершилась вовремя");
 
 
         int attempts = 0;

@@ -14,4 +14,6 @@ public class OutboxMessageSerializer : IOutboxMessageSerializer
     {
         JsonSerializer.Serialize(stream, value);
     }
+
+    public static OutboxMessageSerializer Instance { get; } = new();
 }

@@ -64,7 +64,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                         settings.TableSettings.DatabaseSchemaName = "test";
                         settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
                     });
-                    cfg.WithMessageSerializer(sp => new OutboxMessageSerializer());
+                    cfg.WithMessageSerializer(OutboxMessageSerializer.Instance);
                 })
             ;
         }
@@ -96,7 +96,6 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         ], TestContext.Current.CancellationToken);
 
         var migrationService = ServiceProvider.GetRequiredService<IPartMigrationService>();
-
         bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.True(r, "none migration");
 

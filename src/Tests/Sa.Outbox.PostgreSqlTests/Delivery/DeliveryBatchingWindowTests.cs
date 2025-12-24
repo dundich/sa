@@ -3,8 +3,8 @@ using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
-    : IClassFixture<DeliveryProcessorTests.Fixture>
+public class DeliveryBatchingWindowTests(DeliveryBatchingWindowTests.Fixture fixture)
+    : IClassFixture<DeliveryBatchingWindowTests.Fixture>
 {
     class TestMessageConsumer : IConsumer<TestMessage>
     {
@@ -18,7 +18,6 @@ public class DeliveryProcessorTests(DeliveryProcessorTests.Fixture fixture)
             await Task.Delay(100, cancellationToken);
         }
     }
-
 
     public class Fixture : OutboxPostgreSqlFixture<IDeliveryProcessor>
     {

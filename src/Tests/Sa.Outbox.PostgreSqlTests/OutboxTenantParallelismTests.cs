@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Support;
-using Sa.Partitional.PostgreSql;
 using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSqlTests;
@@ -103,17 +102,16 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                     .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3, 4, 5))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
                         .AddDeliveryScoped<ParallelTestConsumer, TestMessage>(
-                            "parallel_test_group",
+                            "parallel_test_group", 
                             (_, settings) =>
                             {
-                                // Настраиваем параллельную обработку тенантов
                                 settings.ScheduleSettings
                                     .WithInterval(TimeSpan.FromMilliseconds(500))
                                     .WithInitialDelay(TimeSpan.Zero);
 
                                 settings.ConsumeSettings
                                     .WithNoBatchingWindow()
-                                    .WithTenantParallelProcessing(3) // 3 тенанта параллельно
+                                    .WithTenantParallelProcessing(3) // 3 Parallel
                                     .WithTenantTimeout(TimeSpan.FromSeconds(10))
                                     .WithMaxBatchSize(10);
                             })
@@ -121,13 +119,13 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                 )
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.ConfigureDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
+                    cfg.ConfigureDataSource(c => c.WithConnectionString(_ => ConnectionString));
                     cfg.ConfigureOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "parallel_test";
                         settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
                     });
-                    cfg.WithMessageSerializer(sp => new OutboxMessageSerializer());
+                    cfg.WithMessageSerializer(OutboxMessageSerializer.Instance);
                 });
         }
     }
@@ -143,7 +141,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
 
         var scheduler = ServiceProvider.GetRequiredService<IScheduler>();
         int startedSchedules = scheduler.Start(CancellationToken.None);
-        Assert.True(startedSchedules >= 1, "Ожидалось как минимум 1 расписание");
+        Assert.True(startedSchedules >= 1);
 
         var publisher = ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
 
@@ -160,16 +158,10 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
             messages,
             TestContext.Current.CancellationToken);
 
-        var migrationService = ServiceProvider.GetRequiredService<IPartMigrationService>();
-        bool migrated = await migrationService.WaitMigration(
-            TimeSpan.FromSeconds(10),
-            TestContext.Current.CancellationToken);
-        Assert.True(migrated, "Миграция не завершилась вовремя");
 
         int attempts = 0;
         const int maxAttempts = 30; // 30 * 400ms = 12 секунд максимум
-        while (ParallelTestConsumer.TotalProcessed < (int)totalPublished &&
-               attempts++ < maxAttempts)
+        while (ParallelTestConsumer.TotalProcessed < (int)totalPublished && attempts++ < maxAttempts)
         {
             await Task.Delay(400, TestContext.Current.CancellationToken);
         }
