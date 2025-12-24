@@ -57,7 +57,7 @@ public sealed class PgOutboxTableSettings
 
             public string[] All() =>
             [
-                $"{MsgId} UUID NOT NULL",
+                $"{MsgId} UUID NOT NULL, -- UUID v7 is gen by app",
                 $"{TenantId} INT NOT NULL DEFAULT 0",
                 $"{MsgPart} TEXT NOT NULL",
                 $"{MsgPayloadId} TEXT NOT NULL DEFAULT ''",

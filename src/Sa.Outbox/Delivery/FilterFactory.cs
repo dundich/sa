@@ -20,7 +20,7 @@ internal static class FilterFactory
     {
         OutboxMessageTypeInfo ti = OutboxMessageTypeHelper.GetOutboxMessageTypeInfo<TMessage>();
 
-        return new OutboxMessageFilter(            
+        return new OutboxMessageFilter(
             TransactId: GenerateTransactId(),
             ConsumerGroupId: consumerGroupId,
             PayloadType: typeof(TMessage).Name,
@@ -32,6 +32,6 @@ internal static class FilterFactory
         );
     }
 
-    private static string GenerateTransactId() 
-        => $"{Environment.MachineName}-{Guid.CreateVersion7():N}";
+    private static string GenerateTransactId()
+        => $"{Environment.MachineName}-{Random.Shared.Next(0, 100000)}";
 }
