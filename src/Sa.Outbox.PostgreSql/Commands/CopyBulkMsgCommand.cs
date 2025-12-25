@@ -10,17 +10,17 @@ using Sa.Outbox.PostgreSql.TypeHashResolve;
 namespace Sa.Outbox.PostgreSql.Commands;
 
 
-internal sealed class MsgBulkCommand(
+internal sealed class CopyBulkMsgCommand(
     IPgDataSource dataSource
     , SqlOutboxTemplate sqlTemplate
     , RecyclableMemoryStreamManager streamManager
     , IOutboxMessageSerializer serializer
     , IIdGenerator idGenerator
     , IMsgTypeHashResolver hashResolver
-) : IMsgBulkCommand
+) : ICopyBulkMsgCommand
 {
 
-    public async ValueTask<ulong> BulkWrite<TMessage>(
+    public async ValueTask<ulong> Execute<TMessage>(
         ReadOnlyMemory<OutboxMessage<TMessage>> messages, 
         CancellationToken cancellationToken)
     {

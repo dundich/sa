@@ -1,70 +1,143 @@
 namespace Sa.Outbox;
 
 
-public static class DeliveryStatusCode
+public enum DeliveryStatusCode
 {
     /// <summary>
     /// Indicates that the message is pending and has not yet been processed.
     /// </summary>
-    public const int Pending = 0;
+    Pending = 0,
 
     /// <summary>
     /// Indicates that the message is currently being processed.
     /// </summary>
-    public const int Processing = 100;
+    Processing = 100,
 
     /// <summary>
     /// Indicates that the processing of the message has been postponed.
     /// This may occur due to temporary conditions that prevent immediate processing.
     /// </summary>
-    public const int Postpone = 103;
+    Postpone = 103,
 
     /// <summary>
     /// Indicates that the message has been processed successfully.
     /// </summary>
-    public const int Ok = 200;
+    Ok = 200,
+
+    /// <summary>
+    /// Indicates that the message processing resulted in creation of a new resource.
+    /// The new resource is available and its identifier is returned.
+    /// Example: Order creation, user registration, document generation.
+    /// </summary>
+    Created = 201,
+
+    /// <summary>
+    /// Indicates that the message has been accepted for processing,
+    /// but the processing is not yet complete. The operation will continue
+    /// asynchronously or will be completed later.
+    /// Example: Long-running report generation, batch processing, async API calls.
+    /// </summary>
+    Accepted = 202,
+
+    /// <summary>
+    /// Indicates that the message has been processed successfully with status 203. 
+    /// </summary>
+    Ok203 = 203,
+
+    /// <summary>
+    /// The operation completed but doesn't require returning data.
+    /// Example: Delete operations, cache invalidation, acknowledgment messages.
+    /// </summary>
+    NoContent = 204,
 
     /// <summary>
     /// Indicates that the processing of the message has been aborted.
     /// This may happen due to user intervention.
     /// </summary>
-    public const int Aborted = 299;
+    Aborted = 299,
 
     /// <summary>
-    /// Reserved for future use or specific status codes that may be defined later.
+    /// Message moved to another queue/handler
+    /// HTTP: 301 Moved Permanently
     /// </summary>
-    public const int Status300 = 300;
+    MovedPermanently = 301,
 
     /// <summary>
     /// Indicates that an error occurred during the processing of the message.
     /// This may include various types of recoverable errors.
     /// </summary>
-    public const int Warn = 400;
-
-    /// <summary>
-    /// Reserved for client-side errors that do not fall into other categories.
-    /// </summary>
-    public const int WarnEof = 499;
+    Warn = 400,
 
     /// <summary>
     /// Indicates that a permanent error has occurred, and the message cannot be processed.
     /// </summary>
-    public const int Error = 500;
+    Error = 500,
+
+    /// <summary>
+    /// Indicates that a permanent error has occurred, and the message cannot be processed.
+    /// </summary>
+    Error501 = 501,
+
+    /// <summary>
+    /// Indicates that a permanent error has occurred, and the message cannot be processed.
+    /// </summary>
+    Error502 = 502,
+
+    /// <summary>
+    /// Indicates that a permanent error has occurred, and the message cannot be processed.
+    /// </summary>
+    Error503 = 503,
+
+    /// <summary>
+    /// Indicates that a permanent error has occurred, and the message cannot be processed.
+    /// </summary>
+    Error504 = 504,
+
+    /// <summary>
+    /// Indicates that a permanent error has occurred, and the message cannot be processed.
+    /// </summary>
+    Error505 = 505,
+
+    /// <summary>
+    /// Indicates that a permanent error has occurred, and the message cannot be processed.
+    /// </summary>
+    Error506 = 506,
+
+    /// <summary>
+    /// Indicates that a permanent error has occurred, and the message cannot be processed.
+    /// </summary>
+    Error507 = 507,
 
     /// <summary>
     /// Indicates a permanent error has occurred 
     /// - that the maximum number of processing attempts has been reached,
     /// and the message will not be retried further.
     /// </summary>
-    public const int MaximumAttemptsError = 501;
-
-
-    public static bool IsPending(int statusCode) => statusCode == DeliveryStatusCode.Pending;
-    public static bool IsProcessing(int statusCode) => statusCode == DeliveryStatusCode.Processing;
-    public static bool IsPostponed(int statusCode) => statusCode == DeliveryStatusCode.Postpone;
-    public static bool IsSuccess(int statusCode) => statusCode >= DeliveryStatusCode.Ok && statusCode <= DeliveryStatusCode.Aborted;
-    public static bool IsAborted(int statusCode) => statusCode == DeliveryStatusCode.Aborted;
-    public static bool IsWarning(int statusCode) => statusCode >= DeliveryStatusCode.Warn && statusCode <= DeliveryStatusCode.WarnEof;
-    public static bool IsError(int statusCode) => statusCode >= DeliveryStatusCode.Error;
+    MaximumAttemptsError = 508
 }
 
+
+
+public static class DeliveryStatusCodeExtensions
+{
+    public static bool IsPending(this DeliveryStatusCode statusCode) =>
+        statusCode == DeliveryStatusCode.Pending;
+
+    public static bool IsProcessing(this DeliveryStatusCode statusCode) =>
+        statusCode == DeliveryStatusCode.Processing;
+
+    public static bool IsPostponed(this DeliveryStatusCode statusCode) =>
+        statusCode == DeliveryStatusCode.Postpone;
+
+    public static bool IsSuccess(this DeliveryStatusCode statusCode) =>
+        statusCode >= DeliveryStatusCode.Ok && statusCode <= DeliveryStatusCode.Aborted;
+
+    public static bool IsAborted(this DeliveryStatusCode statusCode) =>
+        statusCode == DeliveryStatusCode.Aborted;
+
+    public static bool IsWarning(this DeliveryStatusCode statusCode) =>
+        statusCode >= DeliveryStatusCode.Warn && statusCode < DeliveryStatusCode.Error;
+
+    public static bool IsError(this DeliveryStatusCode statusCode) =>
+        statusCode >= DeliveryStatusCode.Error;
+}

@@ -1,24 +1,20 @@
-using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
 
-internal sealed class MsgTypeRepository(IPgDataSource dataSource, SqlOutboxTemplate template) : IMsgTypeRepository
+internal sealed class MsgTypeRepository(
+    IInsertMsgTypeCommand insertCmd,
+    ISelectMsgTypeCommand selectCmd
+    ) : IMsgTypeRepository
 {
     public Task<int> Insert(long id, string typeName, CancellationToken cancellationToken)
     {
-        return dataSource.ExecuteNonQuery(template.SqlInsertType
-            , cmd => cmd
-                .AddParamTypeId(id)
-                .AddParamTypeName(typeName)
-            , cancellationToken);
+        return insertCmd.Execute(id, typeName, cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<(long id, string typeName)>> SelectAll(CancellationToken cancellationToken)
+    public Task<IReadOnlyCollection<(long id, string typeName)>> SelectAll(CancellationToken cancellationToken)
     {
-        return await dataSource.ExecuteReaderList(template.SqlSelectType,
-            reader => (id: reader.GetTypeId(template.Settings), typeName: reader.GetTypeName(template.Settings))
-        , cancellationToken);
+        return selectCmd.Execute(cancellationToken);
     }
 }

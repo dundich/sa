@@ -1,4 +1,5 @@
 using Sa.Classes;
+using Sa.Outbox.PlugRepositories;
 using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Publication;
@@ -50,7 +51,7 @@ internal sealed class OutboxMessagePublisher(
                     count++;
                 }
 
-                sent += await outboxRepository.Save<TMessage>(payloads.AsMemory()[..len], cancellationToken);
+                sent += await outboxRepository.BulkCopy<TMessage>(payloads.AsMemory()[..len], cancellationToken);
             }
             finally
             {

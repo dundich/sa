@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
+using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
@@ -63,7 +64,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
 
     private IDeliveryProcessor Sub => fixture.Sub;
 
-    private readonly PgOutboxTableSettings _tableSettings = new();
+    private PgOutboxTableSettings TableSettings => fixture.ServiceProvider.GetRequiredService<PgOutboxTableSettings>();
 
 
     [Fact]
@@ -90,15 +91,33 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
             }
         }
 
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>($"select count(*) from {_tableSettings.Error.TableName}", TestContext.Current.CancellationToken);
+        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>(
+            $"select count(*) from {TableSettings.Error.TableName}", 
+            TestContext.Current.CancellationToken);
+        
         Assert.Equal(1, errCount);
 
-        var delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"select {_tableSettings.Delivery.Fields.DeliveryId} from {_tableSettings.Delivery.TableName} where {_tableSettings.Delivery.Fields.DeliveryStatusCode} = {DeliveryStatusCode.MaximumAttemptsError}", TestContext.Current.CancellationToken);
+        var sql = 
+            $"""
+                select {TableSettings.Delivery.Fields.DeliveryId} from {TableSettings.Delivery.TableName} 
+                where {TableSettings.Delivery.Fields.DeliveryStatusCode} = {(int)DeliveryStatusCode.MaximumAttemptsError}
+            """;
+
+        var delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>(sql, TestContext.Current.CancellationToken);
         Assert.NotEqual(0, delivery_id);
 
-        var outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"SELECT {_tableSettings.TaskQueue.Fields.DeliveryId} FROM  {_tableSettings.TaskQueue.TableName} WHERE {_tableSettings.TaskQueue.Fields.DeliveryStatusCode} = {DeliveryStatusCode.MaximumAttemptsError}", TestContext.Current.CancellationToken);
+        var outbox_delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>($"""
+            SELECT {TableSettings.TaskQueue.Fields.DeliveryId} FROM  {TableSettings.TaskQueue.TableName} 
+            WHERE {TableSettings.TaskQueue.Fields.DeliveryStatusCode} = {(int)DeliveryStatusCode.MaximumAttemptsError}
+         """, TestContext.Current.CancellationToken);
+            
         Assert.Equal(delivery_id, outbox_delivery_id);
     }
 
-    private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>($"select count({_tableSettings.Delivery.Fields.DeliveryId}) from {_tableSettings.Delivery.TableName}", TestContext.Current.CancellationToken);
+    private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>(
+        $"""
+            select count({TableSettings.Delivery.Fields.DeliveryId}) 
+            from {TableSettings.Delivery.TableName}
+        """, TestContext.Current.CancellationToken);
+        
 }

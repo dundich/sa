@@ -46,14 +46,14 @@ public sealed class PgOutboxTableSettings
 
         public sealed class TableFields
         {
-            public string MsgId { get; set; } = "msg_id";
-            public string TenantId { get; set; } = "tenant_id";
-            public string MsgPart { get; set; } = "msg_part";
-            public string MsgPayloadId { get; set; } = "msg_payload_id";
-            public string MsgPayloadType { get; set; } = "msg_payload_type";
-            public string MsgPayload { get; set; } = "msg_payload";
-            public string MsgPayloadSize { get; set; } = "msg_payload_size";
-            public string MsgCreatedAt { get; set; } = "msg_created_at";
+            public string MsgId { get; set; } = OutboxFieldDefaults.MsgId;
+            public string TenantId { get; set; } = OutboxFieldDefaults.TenantId;
+            public string MsgPart { get; set; } = OutboxFieldDefaults.MsgPart;
+            public string MsgPayloadId { get; set; } = OutboxFieldDefaults.MsgPayloadId;
+            public string MsgPayloadType { get; set; } = OutboxFieldDefaults.MsgPayloadType;
+            public string MsgPayload { get; set; } = OutboxFieldDefaults.MsgPayload;
+            public string MsgPayloadSize { get; set; } = OutboxFieldDefaults.MsgPayloadSize;
+            public string MsgCreatedAt { get; set; } = OutboxFieldDefaults.MsgCreatedAt;
 
             public string[] All() =>
             [
@@ -61,9 +61,9 @@ public sealed class PgOutboxTableSettings
                 $"{TenantId} INT NOT NULL DEFAULT 0",
                 $"{MsgPart} TEXT NOT NULL",
                 $"{MsgPayloadId} TEXT NOT NULL DEFAULT ''",
-                $"{MsgPayloadType} BIGINT NOT NULL",
+                $"{MsgPayloadType} BIGINT NOT NULL DEFAULT 0",
                 $"{MsgPayload} BYTEA NOT NULL",
-                $"{MsgPayloadSize} INT NOT NULL",
+                $"{MsgPayloadSize} INT NOT NULL DEFAULT 0",
                 $"{MsgCreatedAt} BIGINT NOT NULL DEFAULT 0"
             ];
         }
@@ -82,28 +82,29 @@ public sealed class PgOutboxTableSettings
 
         public sealed class TableFields
         {
-            public string TaskId { get; set; } = "task_id";
-            public string ConsumerGroup { get; set; } = "consumer_group";
-            public string TaskLockExpiresOn { get; set; } = "task_lock_expires_on";
-            public string TaskTransactId { get; set; } = "task_transact_id";
+            public string TaskId { get; set; } = OutboxFieldDefaults.TaskId;
+            public string ConsumerGroup { get; set; } = OutboxFieldDefaults.ConsumerGroup;
+            public string TaskLockExpiresOn { get; set; } = OutboxFieldDefaults.TaskLockExpiresOn;
+            public string TaskTransactId { get; set; } = OutboxFieldDefaults.TaskTransactId;
 
             // Message references
-            public string MsgId { get; set; } = "msg_id";
-            public string MsgPart { get; set; } = "msg_part";
-            public string TenantId { get; set; } = "tenant_id";
-            public string MsgPayloadId { get; set; } = "msg_payload_id";
-            public string MsgCreatedAt { get; set; } = "msg_created_at";
+            public string MsgId { get; set; } = OutboxFieldDefaults.MsgId;
+            public string MsgPart { get; set; } = OutboxFieldDefaults.MsgPart;
+            public string TenantId { get; set; } = OutboxFieldDefaults.TenantId;
+            public string MsgPayloadId { get; set; } = OutboxFieldDefaults.MsgPayloadId;
+            public string MsgPayloadType { get; set; } = OutboxFieldDefaults.MsgPayloadType;
+            public string MsgCreatedAt { get; set; } = OutboxFieldDefaults.MsgCreatedAt;
 
             // Delivery information
-            public string DeliveryId { get; set; } = "delivery_id";
-            public string DeliveryAttempt { get; set; } = "delivery_attempt";
-            public string DeliveryStatusCode { get; set; } = "delivery_status_code";
-            public string DeliveryStatusMessage { get; set; } = "delivery_status_message";
-            public string DeliveryCreatedAt { get; set; } = "delivery_created_at";
+            public string DeliveryId { get; set; } = OutboxFieldDefaults.DeliveryId;
+            public string DeliveryAttempt { get; set; } = OutboxFieldDefaults.DeliveryAttempt;
+            public string DeliveryStatusCode { get; set; } = OutboxFieldDefaults.DeliveryStatusCode;
+            public string DeliveryStatusMessage { get; set; } = OutboxFieldDefaults.DeliveryStatusMessage;
+            public string DeliveryCreatedAt { get; set; } = OutboxFieldDefaults.DeliveryCreatedAt;
 
             // Error reference
-            public string ErrorId { get; set; } = "error_id";
-            public string TaskCreatedAt { get; set; } = "task_created_at";
+            public string ErrorId { get; set; } = OutboxFieldDefaults.ErrorId;
+            public string TaskCreatedAt { get; set; } = OutboxFieldDefaults.TaskCreatedAt;
 
             public string[] All() =>
             [
@@ -114,11 +115,12 @@ public sealed class PgOutboxTableSettings
                 $"{MsgId} UUID NOT NULL",
                 $"{MsgPart} TEXT NOT NULL",
                 $"{TenantId} INT NOT NULL DEFAULT 0",
-                $"{MsgPayloadId} TEXT NOT NULL",
+                $"{MsgPayloadId} TEXT NOT NULL DEFAULT ''",
+                $"{MsgPayloadType} BIGINT NOT NULL DEFAULT 0",
                 $"{MsgCreatedAt} BIGINT NOT NULL DEFAULT 0",
                 $"{DeliveryId} BIGINT NOT NULL DEFAULT 0",
-                $"{DeliveryAttempt} int NOT NULL DEFAULT 0",
-                $"{DeliveryStatusCode} INT NOT NULL DEFAULT {Sa.Outbox.DeliveryStatusCode.Pending}",
+                $"{DeliveryAttempt} INT NOT NULL DEFAULT 0",
+                $"{DeliveryStatusCode} INT NOT NULL DEFAULT {(int)Outbox.DeliveryStatusCode.Pending}",
                 $"{DeliveryStatusMessage} TEXT NOT NULL DEFAULT ''",
                 $"{DeliveryCreatedAt} BIGINT NOT NULL DEFAULT 0",
                 $"{ErrorId} BIGINT NOT NULL DEFAULT 0",
@@ -142,25 +144,25 @@ public sealed class PgOutboxTableSettings
 
         public sealed class TableFields
         {
-            public string DeliveryId { get; set; } = "delivery_id";
-            public string DeliveryStatusCode { get; set; } = "delivery_status_code";
-            public string DeliveryStatusMessage { get; set; } = "delivery_status_message";
-            public string MsgPayloadId { get; set; } = "msg_payload_id";
-            public string TenantId { get; set; } = "tenant_id";
-            public string ConsumerGroup { get; set; } = "consumer_group";
-            public string TaskId { get; set; } = "task_id";
-            public string TaskCreatedAt { get; set; } = "task_created_at";
-            public string TaskTransactId { get; set; } = "task_transact_id";
-            public string TaskLockExpiresOn { get; set; } = "task_lock_expires_on";
-            public string ErrorId { get; set; } = "error_id";
-            public string DeliveryCreatedAt { get; set; } = "delivery_created_at";
+            public string DeliveryId { get; set; } = OutboxFieldDefaults.DeliveryId;
+            public string DeliveryStatusCode { get; set; } = OutboxFieldDefaults.DeliveryStatusCode;
+            public string DeliveryStatusMessage { get; set; } = OutboxFieldDefaults.DeliveryStatusMessage;
+            public string MsgPayloadId { get; set; } = OutboxFieldDefaults.MsgPayloadId;
+            public string TenantId { get; set; } = OutboxFieldDefaults.TenantId;
+            public string ConsumerGroup { get; set; } = OutboxFieldDefaults.ConsumerGroup;
+            public string TaskId { get; set; } = OutboxFieldDefaults.TaskId;
+            public string TaskCreatedAt { get; set; } = OutboxFieldDefaults.TaskCreatedAt;
+            public string TaskTransactId { get; set; } = OutboxFieldDefaults.TaskTransactId;
+            public string TaskLockExpiresOn { get; set; } = OutboxFieldDefaults.TaskLockExpiresOn;
+            public string ErrorId { get; set; } = OutboxFieldDefaults.ErrorId;
+            public string DeliveryCreatedAt { get; set; } = OutboxFieldDefaults.DeliveryCreatedAt;
 
             public string[] All() =>
             [
                 $"{DeliveryId} BIGSERIAL NOT NULL",
-                $"{DeliveryStatusCode} INT NOT NULL DEFAULT {Sa.Outbox.DeliveryStatusCode.Pending}",
+                $"{DeliveryStatusCode} INT NOT NULL DEFAULT {(int)Outbox.DeliveryStatusCode.Pending}",
                 $"{DeliveryStatusMessage} TEXT NOT NULL DEFAULT ''",
-                $"{MsgPayloadId} TEXT NOT NULL",
+                $"{MsgPayloadId} TEXT NOT NULL DEFAULT ''",
                 $"{TenantId} INT NOT NULL DEFAULT 0",
                 $"{ConsumerGroup} TEXT NOT NULL",
                 $"{TaskId} BIGINT NOT NULL DEFAULT 0",
@@ -188,16 +190,16 @@ public sealed class PgOutboxTableSettings
 
         public sealed class TableFields
         {
-            public string ErrorId { get; set; } = "error_id";
-            public string ErrorType { get; set; } = "error_type";
-            public string ErrorMessage { get; set; } = "error_message";
-            public string ErrorCreatedAt { get; set; } = "error_created_at";
+            public string ErrorId { get; set; } = OutboxFieldDefaults.ErrorId;
+            public string ErrorType { get; set; } = OutboxFieldDefaults.ErrorType;
+            public string ErrorMessage { get; set; } = OutboxFieldDefaults.ErrorMessage;
+            public string ErrorCreatedAt { get; set; } = OutboxFieldDefaults.ErrorCreatedAt;
 
             public string[] All() =>
             [
                 $"{ErrorId} BIGINT NOT NULL",
                 $"{ErrorType} TEXT NOT NULL",
-                $"{ErrorMessage} TEXT NOT NULL",
+                $"{ErrorMessage} TEXT NOT NULL DEFAULT ''",
                 $"{ErrorCreatedAt} BIGINT NOT NULL DEFAULT 0"
             ];
         }
@@ -216,8 +218,8 @@ public sealed class PgOutboxTableSettings
 
         public sealed class TableFields
         {
-            public string TypeId { get; set; } = "type_id";
-            public string TypeName { get; set; } = "type_name";
+            public string TypeId { get; set; } = OutboxFieldDefaults.TypeId;
+            public string TypeName { get; set; } = OutboxFieldDefaults.TypeName;
 
             public string[] All() =>
             [
@@ -240,10 +242,10 @@ public sealed class PgOutboxTableSettings
 
         public sealed class TableFields
         {
-            public string ConsumerGroup { get; set; } = "consumer_group";
-            public string TenantId { get; set; } = "tenant_id";
-            public string GroupOffset { get; set; } = "group_offset";
-            public string GroupUpdatedAt { get; set; } = "group_updated_at";
+            public string ConsumerGroup { get; set; } = OutboxFieldDefaults.ConsumerGroup;
+            public string TenantId { get; set; } = OutboxFieldDefaults.TenantId;
+            public string GroupOffset { get; set; } = OutboxFieldDefaults.GroupOffset;
+            public string GroupUpdatedAt { get; set; } = OutboxFieldDefaults.GroupUpdatedAt;
 
             public string[] All() =>
             [

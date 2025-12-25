@@ -17,7 +17,7 @@ public static class Setup
             .AddPartTables(configure)
             .AddPartCache()
             .AddPartMigrationSchedule((_, settings) => settings.AsJob = asJob ?? settings.AsJob)
-            .AddPartCleanupSchedule((_, settings) => settings.AsJob = asJob ?? settings.AsJob)
+            .AddPartCleanupSchedule((_, settings) => settings.AsBackgroundJob = asJob ?? settings.AsBackgroundJob)
             ;
     }
 }

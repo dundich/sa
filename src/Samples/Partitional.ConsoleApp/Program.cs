@@ -49,7 +49,7 @@ hostBuilder.Services
     // Schedule for removing old partitions
     .AddPartCleanupSchedule((sp, opts) =>
     {
-        opts.AsJob = true;
+        opts.AsBackgroundJob = true;
         opts.DropPartsAfterRetention = TimeSpan.FromDays(21);
     });
 

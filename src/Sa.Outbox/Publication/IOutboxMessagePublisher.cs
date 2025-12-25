@@ -1,6 +1,6 @@
 ﻿using Sa.Outbox.Support;
 
-namespace Sa.Outbox;
+namespace Sa.Outbox.Publication;
 
 /// <summary>
 /// Defines a contract for publishing outbox messages.

@@ -12,13 +12,12 @@ namespace Sa.Outbox.PostgreSql.Repository;
 internal sealed partial class OutboxTaskLoader(
     IPgDataSource pg,
     SqlOutboxTemplate sql,
-    IOutboxPartRepository partitionManager,
     ILogger<OutboxTaskLoader>? logger = null) : IOutboxTaskLoader
 {
 
     internal sealed record ConsumerGroupIdentifier(string ConsumerGroupId, int TenantId);
 
-    public async Task<LoadGroupResult> LoadGroupBatch(
+    public async Task<LoadGroupResult> LoadNewTasks(
         OutboxMessageFilter filter,
         int batchSize,
         CancellationToken cancellationToken = default)
@@ -26,11 +25,7 @@ internal sealed partial class OutboxTaskLoader(
         if (batchSize < 1) return LoadGroupResult.Empty;
 
         try
-        {
-            await partitionManager.EnsureTaskParts(
-                [new OutboxPartInfo(filter.TenantId, filter.ConsumerGroupId, filter.NowDate)],
-                cancellationToken);
-
+        {         
             return await LoadGroupAndShiftOffsetWithRetry(filter, batchSize, cancellationToken);
         }
         catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)

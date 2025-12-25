@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.PostgreSql;
+using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
 using Sa.Schedule;
 

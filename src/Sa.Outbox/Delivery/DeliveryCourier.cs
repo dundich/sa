@@ -40,10 +40,10 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
     {
         foreach (IOutboxContextOperations<TMessage> item in messages)
         {
-            if (DeliveryStatusCode.IsPending(item.DeliveryResult.Code))
+            if (item.DeliveryResult.Code.IsPending())
             {
                 item.Warn(
-                    error ?? new DeliveryException("Unknown delivery error."),
+                    error ?? UnknownDeliveryException,
                     postpone: RetryStrategy.CalculateBackoff());
             }
         }
@@ -64,7 +64,7 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
                 // Mark the message as a permanent error
                 message.ErrorMaxAttempts();
             }
-            else if (DeliveryStatusCode.IsPending(message.DeliveryResult.Code)) // If delivery was successful
+            else if (message.DeliveryResult.Code.IsPending()) // If delivery was successful
             {
                 message.Ok();
                 successfulDeliveries++; // Increment the success counter
@@ -79,7 +79,7 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsAttemptsError(IOutboxContext message, int maxDeliveryAttempts)
-        => DeliveryStatusCode.IsWarning(message.DeliveryResult.Code)
+        => message.DeliveryResult.Code.IsWarning()
             && message.DeliveryInfo.Attempt + 1 > maxDeliveryAttempts;
 
 
@@ -95,4 +95,6 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
         public static TimeSpan CalculateBackoff()
             => TimeSpan.FromSeconds(Random.Shared.Next(60 * 10, 60 * 45));
     }
+
+    private readonly static DeliveryException UnknownDeliveryException = new("Unknown delivery error.", null, DeliveryStatusCode.Warn);
 }

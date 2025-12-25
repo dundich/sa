@@ -7,6 +7,7 @@ using PgOutbox;
 using Sa.Outbox;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
+using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
 
 Console.WriteLine("Hello, Pg Outbox!");

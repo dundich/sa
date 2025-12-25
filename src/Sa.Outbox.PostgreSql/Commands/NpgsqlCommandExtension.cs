@@ -86,8 +86,8 @@ internal static class NpgsqlCommandExtension
     public static NpgsqlCommand AddParamTypeName(this NpgsqlCommand command, string? value, int index)
         => command.AddParam<BatchParams, string>(SqlParam.TypeName, value ?? string.Empty, index);
 
-    public static NpgsqlCommand AddParamStatusCode(this NpgsqlCommand command, int value, int index)
-        => command.AddParam<BatchParams, int>(SqlParam.StatusCode, value, index);
+    public static NpgsqlCommand AddParamStatusCode(this NpgsqlCommand command, DeliveryStatusCode value, int index)
+        => command.AddParam<BatchParams, int>(SqlParam.StatusCode, (int)value, index);
 
     public static NpgsqlCommand AddParamStatusMessage(this NpgsqlCommand command, string? value, int index)
         => command.AddParam<BatchParams, string>(SqlParam.StatusMessage, value ?? string.Empty, index);

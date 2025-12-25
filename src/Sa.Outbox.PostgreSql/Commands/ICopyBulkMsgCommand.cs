@@ -1,8 +1,8 @@
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal interface IMsgBulkCommand
+internal interface ICopyBulkMsgCommand
 {
-    ValueTask<ulong> BulkWrite<TMessage>(
+    ValueTask<ulong> Execute<TMessage>(
         ReadOnlyMemory<OutboxMessage<TMessage>> messages,
         CancellationToken cancellationToken);
 }

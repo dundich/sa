@@ -16,7 +16,7 @@ internal static class Setup
             SqlOutboxTemplate sql = sp.GetRequiredService<SqlOutboxTemplate>();
             var tableSettings = sql.Settings;
 
-            builder.AddSchema(sql.Settings.DatabaseSchemaName, schema =>
+            builder.AddSchema(tableSettings.DatabaseSchemaName, schema =>
             {
                 ITableBuilder outboxTableBuilder = schema
                     .AddTable(tableSettings.Message.TableName, tableSettings.Message.Fields.All())
@@ -65,7 +65,7 @@ internal static class Setup
         .AddPartCleanupSchedule((sp, opts) =>
         {
             PgOutboxCleanupSettings settings = sp.GetRequiredService<PgOutboxCleanupSettings>();
-            opts.AsJob = settings.AsJob;
+            opts.AsBackgroundJob = settings.AsJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.DropPartsAfterRetention = settings.DropPartsAfterRetention;
         })

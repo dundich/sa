@@ -23,7 +23,10 @@ internal sealed partial class PartRepository(
         await _migrationSemaphore.WaitAsync(cancellationToken);
         try
         {
-            return await dataSource.ExecuteNonQuery(sql, cancellationToken);
+            return await Retry.Jitter<int>(
+                async t => await dataSource.ExecuteNonQuery(sql, t)
+                , next: (e, _) => (e as PostgresException).IsTransient
+                , cancellationToken: cancellationToken);
         }
         finally
         {
@@ -37,6 +40,7 @@ internal sealed partial class PartRepository(
 
         ISqlTableBuilder builder = sqlBuilder[tableName] ?? throw new KeyNotFoundException(nameof(tableName));
         string sql = builder.CreateSql(date, partValues);
+
         return await ExecuteDDL(sql, cancellationToken);
     }
 
@@ -112,7 +116,7 @@ internal sealed partial class PartRepository(
                     return [];
                 }
             }
-            , next: HandleError
+            , next: CanRetryByError
             , cancellationToken: cancellationToken);
     }
 
@@ -173,8 +177,6 @@ internal sealed partial class PartRepository(
         return droppedCount;
     }
 
-
-
     private static PartByRangeInfo ReadPartInfo(NpgsqlDataReader reader)
     {
         return new PartByRangeInfo(
@@ -186,10 +188,12 @@ internal sealed partial class PartRepository(
         );
     }
 
-    private static bool HandleError(Exception ex, int _ = 0)
+    private static bool CanRetryByError(Exception ex, int _ = 0)
     {
         if (ex is PostgresException err)
         {
+            if (err.IsTransient) return true;
+
             return err.SqlState switch
             {
                 PostgresErrorCodes.ConnectionException

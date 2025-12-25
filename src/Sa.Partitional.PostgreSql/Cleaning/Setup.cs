@@ -56,7 +56,7 @@ internal static class Setup
                     .ConfigureErrorHandling(berr => berr.DoSuppressError(err => true))
                 ;
 
-                if (!settings.AsJob)
+                if (!settings.AsBackgroundJob)
                 {
                     builder.Disabled();
                 }

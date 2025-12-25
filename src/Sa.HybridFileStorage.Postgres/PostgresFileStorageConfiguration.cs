@@ -43,7 +43,7 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
         // Schedule for removing old partitions
         .AddPartCleanupSchedule((sp, opts) =>
         {
-            opts.AsJob = true;
+            opts.AsBackgroundJob = true;
             opts.DropPartsAfterRetention = TimeSpan.FromDays(_options.CleanupOptions.ExpireDays);
         });
 

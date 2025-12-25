@@ -1,4 +1,4 @@
-namespace Sa.Outbox;
+namespace Sa.Outbox.PlugRepositories;
 
 
 /// <summary>

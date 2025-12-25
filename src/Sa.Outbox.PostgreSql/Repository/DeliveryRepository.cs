@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Data;
 using Sa.Extensions;
+using Sa.Outbox.PlugRepositories;
 using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
@@ -25,9 +26,22 @@ internal sealed class DeliveryRepository(
 
         if (cancellationToken.IsCancellationRequested || batchSize == 0) return 0;
 
-        var _ = await loader.LoadGroupBatch(filter, batchSize, cancellationToken);
+        await EnsureParts(filter, cancellationToken);
 
-        return await startCmd.FillContext(writeBuffer, lockDuration, filter, cancellationToken);
+        var _ = await loader.LoadNewTasks(filter, batchSize, cancellationToken);
+
+        return await startCmd.ExecuteFill(writeBuffer, lockDuration, filter, cancellationToken);
+    }
+
+    private async Task EnsureParts(OutboxMessageFilter filter, CancellationToken cancellationToken)
+    {
+        await partRepository.EnsureMsgParts(
+            [new OutboxPartInfo(filter.TenantId, filter.Part, filter.NowDate)],
+            cancellationToken);
+
+        await partRepository.EnsureTaskParts(
+            [new OutboxPartInfo(filter.TenantId, filter.ConsumerGroupId, filter.NowDate)],
+            cancellationToken);
     }
 
     public async Task<int> ReturnDelivery<TMessage>(
