@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace Sa.Classes;
 
-public interface IResetLazy
+internal interface IResetLazy
 {
     object? Value { get; }
     void Reset();

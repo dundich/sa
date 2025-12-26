@@ -26,9 +26,9 @@ internal sealed class OutboxBuilder : IOutboxBuilder
         return this;
     }
 
-    public IOutboxBuilder WithPartitioningSupport(Action<IServiceProvider, PartitionalSettings> configure)
+    public IOutboxBuilder WithTenantSettings(Action<IServiceProvider, TenantSettings> configure)
     {
-        _services.AddPartitioningSupport(configure);
+        _services.AddTenantProvider(configure);
         return this;
     }
 

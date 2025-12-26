@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Sa.Outbox.PlugRepositories;
+using Sa.Outbox.PlugServices;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
@@ -11,19 +11,24 @@ internal static class Setup
         PlugImplementation(services);
 
         services.TryAddSingleton<IOutboxPartRepository, OutboxPartRepository>();
-        services.TryAddSingleton<IMsgTypeRepository, MsgTypeRepository>();
+        services.TryAddSingleton<IOutboxMsgTypeRepository, OutboxMsgTypeRepository>();
         services.TryAddSingleton<IOutboxTaskLoader, OutboxTaskLoader>();
+
         return services;
     }
 
     private static void PlugImplementation(IServiceCollection services)
     {
         services
-            .RemoveAll<IOutboxRepository>()
-            .AddSingleton<IOutboxRepository, OutboxRepository>();
+            .RemoveAll<IOutboxBulkWriter>()
+            .AddSingleton<IOutboxBulkWriter, OutboxBulkWriter>();
 
         services
-            .RemoveAll<IDeliveryRepository>()
-            .AddSingleton<IDeliveryRepository, DeliveryRepository>();
+            .RemoveAll<IOutboxDeliveryManager>()
+            .AddSingleton<IOutboxDeliveryManager, OutboxDeliveryManager>();
+
+        services
+            .RemoveAll<IOutboxTenantDetector>()
+            .AddSingleton<IOutboxTenantDetector, OutboxTenantDetector>();
     }
 }

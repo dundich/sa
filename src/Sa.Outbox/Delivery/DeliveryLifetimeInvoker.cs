@@ -19,7 +19,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
-        return settings.IsSingleton
+        return settings.AsSingleton
             ? ProcessInSingleton(settings, filter, messages, cancellationToken)
             : ProcessInNewScope(settings, filter, messages, cancellationToken);
     }

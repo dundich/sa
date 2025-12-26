@@ -18,8 +18,9 @@ internal static class Setup
         services.TryAddSingleton<IDeliveryProcessor, DeliveryProcessor>();
         // sender - sending to scope consumer
         services.TryAddSingleton<IDeliveryCourier, DeliveryCourier>();
+
         // support - messaging to each tenant
-        services.TryAddSingleton<IPartitionalSupportCache, PartitionalSupportCache>();
+        services.AddOutboxPartitional();
 
         services.TryAddSingleton<IDeliveryTenant, DeliveryTenant>();
 

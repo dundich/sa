@@ -1,6 +1,6 @@
+using System.Collections.Concurrent;
 using Sa.Classes;
 using Sa.Extensions;
-using System.Collections.Concurrent;
 
 namespace Sa.Partitional.PostgreSql.Cache;
 

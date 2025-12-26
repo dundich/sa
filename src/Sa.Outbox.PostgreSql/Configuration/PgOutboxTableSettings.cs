@@ -76,7 +76,7 @@ public sealed class PgOutboxTableSettings
     {
         public string TableName { get; set; } = Defaults.DatabaseTableName;
 
-        public int FillFactor { get; set; } = 50;
+        public int FillFactor { get; set; } = 65;
 
         public TableFields Fields { get; } = new();
 

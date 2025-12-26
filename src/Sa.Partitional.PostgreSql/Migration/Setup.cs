@@ -7,9 +7,9 @@ namespace Sa.Partitional.PostgreSql.Migration;
 
 internal static class Setup
 {
-    private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, PartMigrationScheduleSettings>>> s_invokers = [];
+    private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, MigrationScheduleSettings>>> s_invokers = [];
 
-    public static IServiceCollection AddPartMigration(this IServiceCollection services, Action<IServiceProvider, PartMigrationScheduleSettings>? configure = null)
+    public static IServiceCollection AddMigration(this IServiceCollection services, Action<IServiceProvider, MigrationScheduleSettings>? configure = null)
     {
 
         if (configure != null)
@@ -24,12 +24,12 @@ internal static class Setup
             }
         }
 
-        services.TryAddSingleton<PartMigrationScheduleSettings>(sp =>
+        services.TryAddSingleton<MigrationScheduleSettings>(sp =>
         {
-            var item = new PartMigrationScheduleSettings();
+            var item = new MigrationScheduleSettings();
             if (s_invokers.TryGetValue(services, out var invokers))
             {
-                foreach (Action<IServiceProvider, PartMigrationScheduleSettings> invoker in invokers)
+                foreach (Action<IServiceProvider, MigrationScheduleSettings> invoker in invokers)
                 {
                     invoker.Invoke(sp, item);
                 }
@@ -38,14 +38,14 @@ internal static class Setup
             return item;
         });
 
-        services.TryAddSingleton<IPartMigrationService, PartMigrationService>();
+        services.TryAddSingleton<IMigrationService, PartMigrationService>();
 
 
         services.AddSchedule(b => b
             .UseHostedService()
-            .AddJob<PartMigrationJob>((sp, builder) =>
+            .AddJob<MigrationJob>((sp, builder) =>
             {
-                PartMigrationScheduleSettings migrationSettings = sp.GetRequiredService<PartMigrationScheduleSettings>();
+                MigrationScheduleSettings migrationSettings = sp.GetRequiredService<MigrationScheduleSettings>();
 
                 builder.WithName(migrationSettings.MigrationJobName ?? MigrationJobConstance.MigrationDefaultJobName);
 
@@ -55,7 +55,7 @@ internal static class Setup
                     .ConfigureErrorHandling(berr => berr.DoSuppressError(err => true))
                 ;
 
-                if (!migrationSettings.AsJob)
+                if (!migrationSettings.AsBackgroundJob)
                 {
                     builder.Disabled();
                 }

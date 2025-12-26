@@ -11,7 +11,6 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
 
     public class Fixture : PgDataSourceFixture<IPartRepository>
     {
-        
         public Fixture()
         {
             Services.AddPartitional((_, builder) =>

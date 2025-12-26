@@ -35,11 +35,9 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithPartitioningSupport((_, sp)
-                        => sp.WithTenantIds(1)
-                    )
-                    .WithDeliveries(builder
-                        => builder.AddDeliveryScoped<TestMessageConsumer, TestMessage>("test4", (_, s) =>
+                    .WithTenantSettings((_, ts) => ts.WithTenantIds(1))
+                    .WithDeliveries(builder => builder
+                        .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test4", (_, s) =>
                         {
                             s.ConsumeSettings
                                 .WithNoLockDuration()
@@ -92,15 +90,15 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         }
 
         int errCount = await fixture.DataSource.ExecuteReaderFirst<int>(
-            $"select count(*) from {TableSettings.Error.TableName}", 
+            $"SELECT COUNT(*) FROM {TableSettings.Error.TableName}",
             TestContext.Current.CancellationToken);
-        
+
         Assert.Equal(1, errCount);
 
-        var sql = 
+        var sql =
             $"""
-                select {TableSettings.Delivery.Fields.DeliveryId} from {TableSettings.Delivery.TableName} 
-                where {TableSettings.Delivery.Fields.DeliveryStatusCode} = {(int)DeliveryStatusCode.MaximumAttemptsError}
+                SELECT {TableSettings.Delivery.Fields.DeliveryId} from {TableSettings.Delivery.TableName} 
+                WHERE {TableSettings.Delivery.Fields.DeliveryStatusCode} = {(int)DeliveryStatusCode.MaximumAttemptsError}
             """;
 
         var delivery_id = await fixture.DataSource.ExecuteReaderFirst<long>(sql, TestContext.Current.CancellationToken);
@@ -110,14 +108,14 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
             SELECT {TableSettings.TaskQueue.Fields.DeliveryId} FROM  {TableSettings.TaskQueue.TableName} 
             WHERE {TableSettings.TaskQueue.Fields.DeliveryStatusCode} = {(int)DeliveryStatusCode.MaximumAttemptsError}
          """, TestContext.Current.CancellationToken);
-            
+
         Assert.Equal(delivery_id, outbox_delivery_id);
     }
 
     private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>(
         $"""
-            select count({TableSettings.Delivery.Fields.DeliveryId}) 
-            from {TableSettings.Delivery.TableName}
+            SELECT COUNT({TableSettings.Delivery.Fields.DeliveryId}) 
+            FROM {TableSettings.Delivery.TableName}
         """, TestContext.Current.CancellationToken);
-        
+
 }

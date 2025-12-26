@@ -1,7 +1,7 @@
 ﻿
 namespace Sa.Partitional.PostgreSql;
 
-public interface IPartMigrationService
+public interface IMigrationService
 {
     CancellationToken OnMigrated { get; }
     Task<int> Migrate(CancellationToken cancellationToken = default);

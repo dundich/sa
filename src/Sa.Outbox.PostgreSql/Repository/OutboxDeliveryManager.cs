@@ -1,20 +1,20 @@
 using System.Collections.ObjectModel;
 using System.Data;
 using Sa.Extensions;
-using Sa.Outbox.PlugRepositories;
+using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
 
-internal sealed class DeliveryRepository(
+internal sealed class OutboxDeliveryManager(
     IStartDeliveryCommand startCmd
     , IErrorDeliveryCommand errorCmd
     , IFinishDeliveryCommand finishCmd
     , IExtendDeliveryCommand extendCmd
     , IOutboxPartRepository partRepository
     , IOutboxTaskLoader loader
-) : IDeliveryRepository
+) : IOutboxDeliveryManager
 {
     public async Task<int> RentDelivery<TMessage>(
         Memory<IOutboxContextOperations<TMessage>> writeBuffer,

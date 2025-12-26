@@ -12,10 +12,9 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 {
     class SomeMessage : IOutboxPayloadMessage
     {
-        public static string PartName => "some";
-
         public string PayloadId { get; set; } = default!;
         public int TenantId { get; set; }
+        public static string PartName => "some";
 
     }
 
@@ -42,7 +41,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1))
+                    .WithTenantSettings((_, s) => s.WithTenantIds(1))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
                         {
@@ -59,8 +58,8 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                 )
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.ConfigureDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
-                    cfg.ConfigureOutboxSettings((_, settings) =>
+                    cfg.WithDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
+                    cfg.WithOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "test";
                         settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
@@ -90,15 +89,15 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 
         ulong total = await publisher.Publish(
         [
-              new SomeMessage { TenantId = 1 }
-            , new SomeMessage { TenantId = 1 }
-            , new SomeMessage { TenantId = 1 }
-            , new SomeMessage { TenantId = 1 }
+            new SomeMessage { TenantId = 1 },
+            new SomeMessage { TenantId = 1 },
+            new SomeMessage { TenantId = 1 },
+            new SomeMessage { TenantId = 1 }
         ], TestContext.Current.CancellationToken);
 
-        var migrationService = ServiceProvider.GetRequiredService<IPartMigrationService>();
-        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
-        Assert.True(r, "none migration");
+        Assert.True(total > 0);
+
+        await Migrate();
 
         // delay for consume
         int j = 0;
@@ -111,5 +110,12 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         await scheduler.Stop();
 
         Assert.True(SomeMessageConsumer.Counter > 0);
+    }
+
+    private async Task Migrate()
+    {
+        var migrationService = ServiceProvider.GetRequiredService<IMigrationService>();
+        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        Assert.True(r, "none migration");
     }
 }

@@ -4,7 +4,7 @@ using Sa.Outbox.Publication;
 namespace Sa.Outbox.PostgreSqlTests.Publisher;
 
 
-public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture) 
+public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture)
     : IClassFixture<OutboxPublisherTests.Fixture>
 {
     public class Fixture : OutboxPostgreSqlFixture<IOutboxMessagePublisher>

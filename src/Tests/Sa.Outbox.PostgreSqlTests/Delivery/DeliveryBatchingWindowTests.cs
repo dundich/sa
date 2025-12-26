@@ -25,16 +25,14 @@ public class DeliveryBatchingWindowTests(DeliveryBatchingWindowTests.Fixture fix
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder
-                    => builder.WithPartitioningSupport((_, ps)
-                        => ps.WithTenantIds(1, 2)
-                )
-                .WithDeliveries(builder
-                    => builder.AddDeliveryScoped<TestMessageConsumer, TestMessage>("test3", (_, s) =>
-                    {
-                        s.ConsumeSettings.WithBatchingWindow(TimeSpan.FromMinutes(3));
-                        OutboxSettings = s;
-                    })
+                .AddOutbox(b => b
+                    .WithTenantSettings((_, s) => s.WithTenantIds(1, 2))
+                    .WithDeliveries(builder => builder
+                        .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test3", (_, s) =>
+                        {
+                            s.ConsumeSettings.WithBatchingWindow(TimeSpan.FromMinutes(3));
+                            OutboxSettings = s;
+                        })
                 )
             );
         }

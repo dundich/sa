@@ -37,9 +37,9 @@ internal sealed class PartConfiguration(IServiceCollection services) : IPartConf
         return this;
     }
 
-    public IPartConfiguration AddPartMigrationSchedule(Action<IServiceProvider, PartMigrationScheduleSettings>? configure = null)
+    public IPartConfiguration AddPartMigrationSchedule(Action<IServiceProvider, MigrationScheduleSettings>? configure = null)
     {
-        services.AddPartMigration(configure);
+        services.AddMigration(configure);
         return this;
     }
 

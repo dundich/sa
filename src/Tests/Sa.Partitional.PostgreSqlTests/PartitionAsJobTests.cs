@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
-using Sa.Extensions;
 using Sa.Partitional.PostgreSql;
 using Sa.Schedule;
 
@@ -35,7 +34,7 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture) : IClassFi
 
                 });
             }
-            , asJob: true
+            , AsBackgroundJob: true
             )
             .AddDataSource(configure => configure.WithConnectionString(_ => this.ConnectionString))
             ;
@@ -44,6 +43,10 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture) : IClassFi
 
 
     private IPartRepository Sub => fixture.Sub;
+
+
+    public static DateTimeOffset StartOfDay(DateTimeOffset dateTime) => new(dateTime.Year, dateTime.Month, dateTime.Day, 0, 0, 0, 0, dateTime.Offset);
+
 
     [Fact]
     public async Task MigrateAsJobTest()
@@ -55,7 +58,7 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture) : IClassFi
 
         await Task.Delay(800, TestContext.Current.CancellationToken);
 
-        var list = await Sub.GetPartsFromDate("customer", DateTimeOffset.Now.StartOfDay(), TestContext.Current.CancellationToken);
+        var list = await Sub.GetPartsFromDate("customer", StartOfDay(DateTimeOffset.Now), TestContext.Current.CancellationToken);
         Assert.NotEmpty(list);
     }
 }

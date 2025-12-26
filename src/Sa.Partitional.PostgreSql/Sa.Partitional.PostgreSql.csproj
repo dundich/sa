@@ -36,4 +36,8 @@
 		<Folder Include="AsLink\" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<InternalsVisibleTo Include="Sa.Partitional.PostgreSqlTests" />
+	</ItemGroup>
+
 </Project>

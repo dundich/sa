@@ -8,8 +8,7 @@ public class PgDataSourceFixture<TSub> : PostgreSqlFixture<TSub, PostgreSqlFixtu
 
     protected PgDataSourceFixture(PostgreSqlFixtureSettings? settings)
         : base(settings ?? PostgreSqlFixtureSettings.Instance)
-            => _dataSource = new(()
-                => IPgDataSource.Create(this.ConnectionString));
+            => _dataSource = new(() => IPgDataSource.Create(ConnectionString));
 
     public PgDataSourceFixture() : this(null) { }
 

@@ -7,10 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\Sa\Extensions\DateTimeExtensions.cs" Link="Cleaning\DateTimeExtensions.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
     <ProjectReference Include="..\Fixtures\Sa.Data.PostgreSql.Fixture\Sa.Data.PostgreSql.Fixture.csproj" />
   </ItemGroup>

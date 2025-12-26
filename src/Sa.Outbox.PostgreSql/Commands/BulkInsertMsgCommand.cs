@@ -10,14 +10,14 @@ using Sa.Outbox.PostgreSql.TypeHashResolve;
 namespace Sa.Outbox.PostgreSql.Commands;
 
 
-internal sealed class CopyBulkMsgCommand(
+internal sealed class BulkInsertMsgCommand(
     IPgDataSource dataSource
     , SqlOutboxTemplate sqlTemplate
     , RecyclableMemoryStreamManager streamManager
     , IOutboxMessageSerializer serializer
     , IIdGenerator idGenerator
     , IMsgTypeHashResolver hashResolver
-) : ICopyBulkMsgCommand
+) : IBulkInsertMsgCommand
 {
 
     public async ValueTask<ulong> Execute<TMessage>(

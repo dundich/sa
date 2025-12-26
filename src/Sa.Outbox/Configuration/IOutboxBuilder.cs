@@ -1,5 +1,5 @@
-using Sa.Outbox.Delivery;
 using System.Diagnostics.CodeAnalysis;
+using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox;
 
@@ -22,7 +22,7 @@ public interface IOutboxBuilder
     /// </summary>
     /// <param name="configure">An action to configure the partitioning settings.</param>
     /// <returns>The current instance of the IOutboxSettingsBuilder.</returns>
-    IOutboxBuilder WithPartitioningSupport(Action<IServiceProvider, PartitionalSettings> configure);
+    IOutboxBuilder WithTenantSettings(Action<IServiceProvider, TenantSettings> configure);
 
     /// <summary>
     /// Registers a custom implementation of IDeliveryBatcher to control how messages are batched for delivery.

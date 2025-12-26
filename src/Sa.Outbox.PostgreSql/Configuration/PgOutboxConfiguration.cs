@@ -10,7 +10,7 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
 {
     private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, PgOutboxSettings>>> s_invokers = [];
 
-    public IPgOutboxConfiguration ConfigureOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
+    public IPgOutboxConfiguration WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
     {
         if (configure != null)
         {
@@ -44,7 +44,7 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         return this;
     }
 
-    public IPgOutboxConfiguration ConfigureDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
+    public IPgOutboxConfiguration WithDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
     {
         services.AddPgDataSource(configure);
         return this;

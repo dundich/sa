@@ -4,24 +4,29 @@ namespace Sa.Outbox.Partitional;
 
 
 internal sealed class OutboxPartitionalSupport(
-    IDelivarySnapshot snapshot,
-    PartitionalSettings? partSettings) : IOutboxPartitionalSupport
+    IDelivarySnapshot? snapshot = null,
+    ITenantProvider? tenantProvider = null) : IOutboxPartitionalSupport
 {
     public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetMsgParts(CancellationToken cancellationToken)
     {
-        return await GetPairs(snapshot.Parts, cancellationToken);
+        return await GetPairs(snapshot?.Parts ?? [], cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetTaskParts(CancellationToken cancellationToken)
     {
-        return await GetPairs(snapshot.GetConsumeGroupIds(), cancellationToken);
+        return await GetPairs(snapshot?.GetConsumeGroupIds() ?? [], cancellationToken);
+    }
+
+    public async ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+    {
+        if (tenantProvider == null) return [];
+
+        return await tenantProvider.GetTenantIds(cancellationToken);
     }
 
     private async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPairs(IEnumerable<string> parts, CancellationToken cancellationToken)
     {
-        if (partSettings?.GetTenantIds == null) return [];
-
-        int[] tenantIds = await partSettings.GetTenantIds(cancellationToken);
+        int[] tenantIds = await GetTenantIds(cancellationToken);
         if (tenantIds.Length == 0) return [];
 
         List<OutboxTenantPartPair> result = [];

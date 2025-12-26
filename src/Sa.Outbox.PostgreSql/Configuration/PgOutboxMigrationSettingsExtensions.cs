@@ -9,7 +9,7 @@ public static class PgOutboxMigrationSettingsExtensions
     /// <returns>The configured settings instance.</returns>
     public static PgOutboxMigrationSettings RunAsJob(this PgOutboxMigrationSettings settings)
     {
-        settings.AsJob = true;
+        settings.AsBackgroundJob = true;
         return settings;
     }
 
@@ -37,7 +37,7 @@ public static class PgOutboxMigrationSettingsExtensions
     public static PgOutboxMigrationSettings UseProductionSettings(
         this PgOutboxMigrationSettings settings)
     {
-        settings.AsJob = true;
+        settings.AsBackgroundJob = true;
         settings.ForwardDays = 7; // Longer forward window for production
         settings.ExecutionInterval = TimeSpan.FromHours(6)
             .Add(TimeSpan.FromMinutes(Random.Shared.Next(1, 59)));
@@ -51,7 +51,7 @@ public static class PgOutboxMigrationSettingsExtensions
     public static PgOutboxMigrationSettings UseDevelopmentSettings(
         this PgOutboxMigrationSettings settings)
     {
-        settings.AsJob = true;
+        settings.AsBackgroundJob = true;
         settings.ForwardDays = 1;
         settings.ExecutionInterval = TimeSpan.FromHours(1);
 
@@ -64,7 +64,7 @@ public static class PgOutboxMigrationSettingsExtensions
     public static PgOutboxMigrationSettings UseTestSettings(
         this PgOutboxMigrationSettings settings)
     {
-        settings.AsJob = false;
+        settings.AsBackgroundJob = false;
         settings.ForwardDays = 0; // No forward movement in tests
         settings.ExecutionInterval = TimeSpan.Zero; // No interval for tests
 

@@ -58,14 +58,14 @@ internal static class Setup
         .AddPartMigrationSchedule((sp, opts) =>
         {
             PgOutboxMigrationSettings settings = sp.GetRequiredService<PgOutboxMigrationSettings>();
-            opts.AsJob = settings.AsJob;
+            opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.ForwardDays = settings.ForwardDays;
         })
         .AddPartCleanupSchedule((sp, opts) =>
         {
             PgOutboxCleanupSettings settings = sp.GetRequiredService<PgOutboxCleanupSettings>();
-            opts.AsBackgroundJob = settings.AsJob;
+            opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.DropPartsAfterRetention = settings.DropPartsAfterRetention;
         })

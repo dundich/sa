@@ -1,10 +1,10 @@
-namespace Sa.Outbox.PlugRepositories;
+namespace Sa.Outbox.PlugServices;
 
 
 /// <summary>
 /// needed External implementation
 /// </summary>
-public interface IDeliveryRepository
+public interface IOutboxDeliveryManager
 {
     /// <summary>
     /// Exclusively take for processing for the client

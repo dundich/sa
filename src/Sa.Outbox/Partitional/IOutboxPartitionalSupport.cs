@@ -16,6 +16,11 @@ public readonly record struct OutboxTenantPartPair(int TenantId, string Part);
 public interface IOutboxPartitionalSupport
 {
     /// <summary>
+    /// Retrieves an array of tenant IDs.
+    /// </summary>
+    ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken);
+
+    /// <summary>
     /// Asynchronously retrieves a collection of tenant-part pairs.
     /// This method can be used to get the current mapping of tenants to their respective parts.
     /// </summary>

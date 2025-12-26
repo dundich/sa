@@ -7,7 +7,7 @@ public static class PgOutboxCleanupSettingsExtensions
     /// </summary>
     public static PgOutboxCleanupSettings RunAsJob(this PgOutboxCleanupSettings settings)
     {
-        settings.AsJob = true;
+        settings.AsBackgroundJob = true;
         return settings;
     }
 
@@ -16,7 +16,7 @@ public static class PgOutboxCleanupSettingsExtensions
     /// </summary>
     public static PgOutboxCleanupSettings RunImmediately(this PgOutboxCleanupSettings settings)
     {
-        settings.AsJob = false;
+        settings.AsBackgroundJob = false;
         return settings;
     }
 
@@ -27,7 +27,7 @@ public static class PgOutboxCleanupSettingsExtensions
         this PgOutboxCleanupSettings settings,
         bool asJob)
     {
-        settings.AsJob = asJob;
+        settings.AsBackgroundJob = asJob;
         return settings;
     }
 
@@ -65,7 +65,7 @@ public static class PgOutboxCleanupSettingsExtensions
     public static PgOutboxCleanupSettings UseTestSettings(
         this PgOutboxCleanupSettings settings)
     {
-        settings.AsJob = false;
+        settings.AsBackgroundJob = false;
         settings.DropPartsAfterRetention = TimeSpan.MaxValue; // Never drop in tests
         settings.ExecutionInterval = TimeSpan.Zero;
 
@@ -88,7 +88,7 @@ public static class PgOutboxCleanupSettingsExtensions
     public static PgOutboxCleanupSettings UseAggressiveCleanup(
         this PgOutboxCleanupSettings settings)
     {
-        settings.AsJob = true;
+        settings.AsBackgroundJob = true;
         settings.DropPartsAfterRetention = TimeSpan.FromDays(7); // Keep only 7 days
         settings.ExecutionInterval = TimeSpan.FromHours(1); // Clean every hour
 
@@ -101,7 +101,7 @@ public static class PgOutboxCleanupSettingsExtensions
     public static PgOutboxCleanupSettings UseConservativeCleanup(
         this PgOutboxCleanupSettings settings)
     {
-        settings.AsJob = true;
+        settings.AsBackgroundJob = true;
         settings.DropPartsAfterRetention = TimeSpan.FromDays(90); // Keep 90 days
         settings.ExecutionInterval = TimeSpan.FromDays(1); // Clean daily
 
@@ -114,7 +114,7 @@ public static class PgOutboxCleanupSettingsExtensions
     public static PgOutboxCleanupSettings UseProductionSettings(
         this PgOutboxCleanupSettings settings)
     {
-        settings.AsJob = true;
+        settings.AsBackgroundJob = true;
         settings.DropPartsAfterRetention = TimeSpan.FromDays(30); // 30 days retention
         settings.ExecutionInterval = TimeSpan.FromHours(4)
             .Add(TimeSpan.FromMinutes(Random.Shared.Next(1, 59)));

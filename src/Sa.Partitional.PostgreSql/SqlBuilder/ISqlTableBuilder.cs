@@ -2,7 +2,7 @@
 
 namespace Sa.Partitional.PostgreSql;
 
-public interface ISqlTableBuilder
+internal interface ISqlTableBuilder
 {
     string FullName { get; }
 

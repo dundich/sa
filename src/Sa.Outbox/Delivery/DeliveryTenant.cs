@@ -1,6 +1,6 @@
 using System.Buffers;
 using Sa.Classes;
-using Sa.Outbox.PlugRepositories;
+using Sa.Outbox.PlugServices;
 using Sa.Outbox.Support;
 
 
@@ -10,7 +10,7 @@ namespace Sa.Outbox.Delivery;
 /// Processes messages for a specific tenant with locking and delivery.
 /// </summary>
 internal sealed class DeliveryTenant(
-    IDeliveryRepository repository,
+    IOutboxDeliveryManager deliveryMan,
     TimeProvider timeProvider,
     IDeliveryCourier deliveryCourier,
     IDeliveryBatcher batcher) : IDeliveryTenant
@@ -81,7 +81,7 @@ internal sealed class DeliveryTenant(
         Memory<IOutboxContextOperations<TMessage>> buffer,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
-        var lockedCount = await repository.RentDelivery(
+        var lockedCount = await deliveryMan.RentDelivery(
             buffer,
             consumeSettings.LockDuration,
             filter,
@@ -97,7 +97,7 @@ internal sealed class DeliveryTenant(
         CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
-        return repository.ReturnDelivery(
+        return deliveryMan.ReturnDelivery(
             messages,
             filter with { NowDate = timeProvider.GetUtcNow() },
             cancellationToken);
@@ -112,7 +112,7 @@ internal sealed class DeliveryTenant(
                 , t =>
                 {
                     var nowDate = timeProvider.GetUtcNow();
-                    return repository.ExtendDelivery(
+                    return deliveryMan.ExtendDelivery(
                         settings.LockDuration
                         , filter with
                         {

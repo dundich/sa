@@ -7,7 +7,9 @@ namespace Sa.Outbox.Delivery;
 /// Processes outbox messages in batches until all pending messages are delivered or cancellation is requested.
 /// Implements a continuous polling pattern to ensure reliable message delivery.
 /// </summary>
-internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalSupportCache partCache) : IDeliveryProcessor
+internal sealed class DeliveryProcessor(
+    IDeliveryTenant processor,
+    ITenantProvider tenantProvider) : IDeliveryProcessor
 {
     public async Task<long> ProcessMessages<TMessage>(ConsumerGroupSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
@@ -19,12 +21,20 @@ internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalS
 
         do
         {
-            if (iterations > 0 && settings.ConsumeSettings.IterationDelay > TimeSpan.Zero)
+            var consumeSettings = settings.ConsumeSettings;
+
+            if (iterations > 0 && consumeSettings.IterationDelay > TimeSpan.Zero)
             {
-                await Task.Delay(settings.ConsumeSettings.IterationDelay, cancellationToken);
+                await Task.Delay(consumeSettings.IterationDelay, cancellationToken);
             }
 
-            int sentCount = await ProcessForEachTenant<TMessage>(settings, cancellationToken);
+            int batchSize = consumeSettings.MaxBatchSize;
+            if (batchSize == 0) return 0;
+
+            int[] tenantIds = await tenantProvider.GetTenantIds(cancellationToken);
+            if (tenantIds.Length == 0) return 0;
+
+            int sentCount = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken);
 
             totalProcessed += sentCount;
             iterations++;
@@ -58,21 +68,11 @@ internal sealed class DeliveryProcessor(IDeliveryTenant processor, IPartitionalS
         return true;
     }
 
-    public async Task<int> ProcessForEachTenant<TMessage>(ConsumerGroupSettings settings, CancellationToken cancellationToken)
-        where TMessage : IOutboxPayloadMessage
+    private async Task<int> ProcessForEachTenant<TMessage>(
+        int[] tenantIds,
+        ConsumerGroupSettings settings,
+        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
-        int batchSize = settings.ConsumeSettings.MaxBatchSize;
-
-        if (batchSize == 0) return 0;
-
-
-        int[] tenantIds = await partCache.GetTenantIds(cancellationToken);
-
-        if (tenantIds.Length == 0)
-        {
-            return await ProcessInTenant<TMessage>(0, settings, cancellationToken);
-        }
-
         if (settings.ConsumeSettings.PerTenantMaxDegreeOfParallelism == 1)
         {
             return await ProcessTenantsSequential<TMessage>(tenantIds, settings, cancellationToken);

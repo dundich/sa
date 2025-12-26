@@ -1,6 +1,6 @@
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal interface ICopyBulkMsgCommand
+internal interface IBulkInsertMsgCommand
 {
     ValueTask<ulong> Execute<TMessage>(
         ReadOnlyMemory<OutboxMessage<TMessage>> messages,

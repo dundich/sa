@@ -37,17 +37,14 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder
-                    => builder.WithPartitioningSupport((_, sp)
-                        => sp.WithTenantIds(1, 2)
-                )
-                .WithDeliveries(builder
-                    => builder.AddDeliveryScoped<TestMessageConsumer, TestMessage>("test2", (_, s) =>
-                    {
-                        s.ConsumeSettings
-                            .WithNoBatchingWindow();
-                        OutboxSettings = s;
-                    })
+                .AddOutbox(builder => builder
+                    .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2))
+                    .WithDeliveries(builder => builder
+                        .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test2", (_, s) =>
+                        {
+                            s.ConsumeSettings.WithNoBatchingWindow();
+                            OutboxSettings = s;
+                        })
                 )
             );
         }

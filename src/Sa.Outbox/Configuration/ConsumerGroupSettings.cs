@@ -11,7 +11,10 @@ public sealed class ConsumerGroupSettings(string consumerGroupId, bool isSinglet
     /// </summary>
     public string ConsumerGroupId => consumerGroupId;
 
-    public bool IsSingleton => isSingleton;
+    /// <summary>
+    /// Di lifetime cycle
+    /// </summary>
+    public bool AsSingleton => isSingleton;
 
     /// <summary>
     /// Gets the scheduling settings for the delivery job.

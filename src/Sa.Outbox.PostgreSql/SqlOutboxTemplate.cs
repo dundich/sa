@@ -129,6 +129,18 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTypeTableName()}
     public string SqlSelectType = $"SELECT * FROM {settings.GetQualifiedTypeTableName()}";
 
 
+    public string SqlSelectTetant =
+$"""
+WITH ranked AS (
+  SELECT
+    {settings.Message.Fields.TenantId},
+    ROW_NUMBER() OVER (PARTITION BY {settings.Message.Fields.TenantId} ORDER BY {settings.Message.Fields.TenantId}) as rn
+  FROM {settings.GetQualifiedMsgTableName()}
+)
+SELECT {settings.Message.Fields.TenantId} FROM ranked WHERE rn = 1;
+""";
+
+
     public string SqlInsertType =
 $"""
 INSERT INTO {settings.GetQualifiedTypeTableName()} 
@@ -358,3 +370,4 @@ WHERE
         return sb.ToString();
     }
 }
+

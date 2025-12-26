@@ -1,15 +1,15 @@
 using Sa.Extensions;
-using Sa.Outbox.PlugRepositories;
+using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 
-internal sealed class OutboxRepository(
-    ICopyBulkMsgCommand bulkCmd, 
-    IOutboxPartRepository partRepository): IOutboxRepository
+internal sealed class OutboxBulkWriter(
+    IBulkInsertMsgCommand bulkCmd, 
+    IOutboxPartRepository partRepository): IOutboxBulkWriter
 {
 
-    public async ValueTask<ulong> BulkCopy<TMessage>(
+    public async ValueTask<ulong> InsertBulk<TMessage>(
         ReadOnlyMemory<OutboxMessage<TMessage>> messages, 
         CancellationToken cancellationToken = default)
     {

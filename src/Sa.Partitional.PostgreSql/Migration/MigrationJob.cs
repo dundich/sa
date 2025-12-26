@@ -2,7 +2,7 @@ using Sa.Schedule;
 
 namespace Sa.Partitional.PostgreSql.Migration;
 
-internal sealed class PartMigrationJob(IPartMigrationService service) : IJob
+internal sealed class MigrationJob(IMigrationService service) : IJob
 {
     public async Task Execute(IJobContext context, CancellationToken cancellationToken)
     {

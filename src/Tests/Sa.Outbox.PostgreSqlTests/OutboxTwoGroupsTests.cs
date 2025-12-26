@@ -54,7 +54,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2))
+                    .WithTenantSettings((_, s) => s.WithTenantIds(1, 2))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
 
                         .AddDeliveryScoped<SomeMessageConsumerGr1, SomeMessage>("test_gr1", (_, settings) =>
@@ -79,8 +79,8 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
                 )
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.ConfigureDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
-                    cfg.ConfigureOutboxSettings((_, settings) =>
+                    cfg.WithDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
+                    cfg.WithOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "test_gr";
                         settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);

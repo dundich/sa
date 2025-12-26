@@ -6,18 +6,25 @@ namespace Sa.Outbox.Partitional;
 
 internal static class Setup
 {
-    public static IServiceCollection AddPartitioningSupport(this IServiceCollection services, Action<IServiceProvider, PartitionalSettings> configure)
+    public static IServiceCollection AddOutboxPartitional(this IServiceCollection services)
     {
         services.TryAddSingleton<IOutboxPartitionalSupport, OutboxPartitionalSupport>();
+        return services;
+    }
 
-        services.TryAddSingleton<PartitionalSettings>(sp =>
-        {
-            PartitionalSettings settings = new();
-            configure.Invoke(sp, settings);
-            return settings;
-        });
+    public static IServiceCollection AddTenantProvider(this IServiceCollection services, Action<IServiceProvider, TenantSettings> configure)
+    {
+        // support - messaging to each tenant
+        services.TryAddSingleton<ITenantProvider, TenantProvider>();
 
-        services.TryAddSingleton<IPartitionalSupportCache, PartitionalSupportCache>();
+        services
+            .RemoveAll<TenantSettings>()
+            .AddSingleton<TenantSettings>(sp =>
+            {
+                TenantSettings settings = new();
+                configure.Invoke(sp, settings);
+                return settings;
+            });
 
         return services;
     }

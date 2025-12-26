@@ -74,6 +74,9 @@ internal sealed class NpqsqlOutboxReader(PgOutboxTableSettings settings)
     {
         public Stream GetMgsPayload(NpgsqlDataReader reader)
             => reader.GetStream(settings.Message.Fields.MsgPayload);
+
+        public int GetTenantId(NpgsqlDataReader reader)
+            => reader.GetInt32(settings.Message.Fields.TenantId);
     }
 
     #endregion

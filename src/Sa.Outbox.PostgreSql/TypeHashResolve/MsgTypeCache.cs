@@ -5,11 +5,11 @@ namespace Sa.Outbox.PostgreSql.TypeHashResolve;
 
 internal sealed class MsgTypeCache : IMsgTypeCache
 {
-    private readonly IMsgTypeRepository _repository;
+    private readonly IOutboxMsgTypeRepository _repository;
 
     private readonly ResetLazy<Task<Storage>> _cache;
 
-    public MsgTypeCache(IMsgTypeRepository repository)
+    public MsgTypeCache(IOutboxMsgTypeRepository repository)
     {
         _repository = repository;
         _cache = new(Load);

@@ -80,7 +80,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 .AddOutbox(builder =>
                 {
                     builder
-                    .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2))
+                    .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
                         {
@@ -104,8 +104,8 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
                     cfg
-                        .ConfigureDataSource(c => c.WithConnectionString(_ => ConnectionString))
-                        .ConfigureOutboxSettings((_, settings) =>
+                        .WithDataSource(c => c.WithConnectionString(_ => ConnectionString))
+                        .WithOutboxSettings((_, settings) =>
                         {
                             settings.TableSettings.DatabaseSchemaName = "parallel";
                             settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);

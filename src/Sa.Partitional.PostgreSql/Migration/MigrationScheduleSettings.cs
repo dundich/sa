@@ -1,10 +1,10 @@
 namespace Sa.Partitional.PostgreSql;
 
-public sealed class PartMigrationScheduleSettings
+public sealed class MigrationScheduleSettings
 {
     public int ForwardDays { get; set; } = 2;
 
-    public bool AsJob { get; set; } = false;
+    public bool AsBackgroundJob { get; set; } = false;
 
     public string? MigrationJobName { get; set; }
 

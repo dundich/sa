@@ -2,7 +2,7 @@
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal class SelectMsgTypeCommand(
+internal sealed class SelectMsgTypeCommand(
     IPgDataSource dataSource,
     SqlOutboxTemplate template,
     NpqsqlOutboxReader outboxReader

@@ -100,7 +100,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3, 4, 5))
+                    .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2, 3, 4, 5))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
                         .AddDeliveryScoped<ParallelTestConsumer, TestMessage>(
                             "parallel_test_group", 
@@ -120,8 +120,8 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                 )
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.ConfigureDataSource(c => c.WithConnectionString(_ => ConnectionString));
-                    cfg.ConfigureOutboxSettings((_, settings) =>
+                    cfg.WithDataSource(c => c.WithConnectionString(_ => ConnectionString));
+                    cfg.WithOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "parallel_test";
                         settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);

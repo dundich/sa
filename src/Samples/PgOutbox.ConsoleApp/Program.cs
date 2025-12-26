@@ -18,7 +18,7 @@ var connectionString = "Host=localhost;Username=postgres;Password=postgres;Datab
 IHost host = Host.CreateDefaultBuilder()
     .ConfigureServices(services => services
         .AddOutbox(builder => builder
-            .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1, 2, 3))
+            .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2, 3))
             .WithDeliveries(builder => builder
                 .AddDeliveryScoped<Group1Consumer, SomeMessage>("group1", (_, settings) =>
                 {
@@ -34,8 +34,8 @@ IHost host = Host.CreateDefaultBuilder()
         )
         // outbox pg
         .AddOutboxUsingPostgreSql(cfg => cfg
-            .ConfigureDataSource(ds => ds.WithConnectionString(connectionString))
-            .ConfigureOutboxSettings((_, settings) => settings.TableSettings.WithSchema("test"))
+            .WithDataSource(ds => ds.WithConnectionString(connectionString))
+            .WithOutboxSettings((_, settings) => settings.TableSettings.WithSchema("test"))
             .WithMessageSerializer(new OutboxMessageSerializer())
         )
         .AddHostedService<MessagePublisherService>()

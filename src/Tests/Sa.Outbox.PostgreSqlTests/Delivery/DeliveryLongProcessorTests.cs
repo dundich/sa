@@ -4,7 +4,7 @@ using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixture) 
+public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixture)
     : IClassFixture<DeliveryLongProcessorTests.Fixture>
 {
     class TestMessageConsumer : IConsumer<TestMessage>
@@ -12,7 +12,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
         public async ValueTask Consume(
             ConsumerGroupSettings settings,
             OutboxMessageFilter filter,
-            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages, 
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
         {
             Console.WriteLine(messages.Length);
@@ -27,13 +27,11 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
 
         public Fixture() : base()
         {
-            Services.AddOutbox(builder
-                => builder
-                    .WithPartitioningSupport((_, sp)
-                        => sp.WithTenantIds(1, 2)
-                    )
-                    .WithDeliveries(builder
-                        => builder.AddDeliveryScoped<TestMessageConsumer, TestMessage>("test1", (_, s) =>
+            Services
+                .AddOutbox(builder => builder
+                    .WithTenantSettings((_, s) => s.WithTenantIds(1, 2))
+                    .WithDeliveries(b => b
+                        .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test1", (_, s) =>
                         {
                             s.ConsumeSettings
                                 .WithLockDuration(TimeSpan.FromMilliseconds(300))
