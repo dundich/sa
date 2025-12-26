@@ -24,9 +24,9 @@ internal sealed partial class PartRepository(
         try
         {
             return await Retry.Jitter<int>(
-                async t => await dataSource.ExecuteNonQuery(sql, t)
-                , next: (e, _) => (e as PostgresException).IsTransient
-                , cancellationToken: cancellationToken);
+                async t => await dataSource.ExecuteNonQuery(sql, t), 
+                next: (e, _) => (e is NpgsqlException exception) && exception.IsTransient, 
+                cancellationToken: cancellationToken);
         }
         finally
         {

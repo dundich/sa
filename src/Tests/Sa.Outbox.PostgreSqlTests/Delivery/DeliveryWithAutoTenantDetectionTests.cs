@@ -9,8 +9,6 @@ using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-
-
 public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectionTests.Fixture fixture)
     : IClassFixture<DeliveryWithAutoTenantDetectionTests.Fixture>
 {
@@ -81,7 +79,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
 
 
     [Fact]
-    public async Task Deliver_Process_MustBe_Work()
+    public async Task DeliverProcessWithAutoTenantModeMustBeWork()
     {
         Console.Write(fixture.ConnectionString);
 
@@ -98,6 +96,8 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
         var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
         Assert.True(result > 0);
 
-        Assert.Equal(3, TenantStubDetector.CountTenant);
+        var countTenants = messages.Select(c => c.TenantId).Distinct().Count();
+
+        Assert.Equal(countTenants, TenantStubDetector.CountTenant);
     }
 }

@@ -14,25 +14,25 @@ internal sealed class DeliveryProcessor(
     public async Task<long> ProcessMessages<TMessage>(ConsumerGroupSettings settings, CancellationToken cancellationToken)
         where TMessage : IOutboxPayloadMessage
     {
+        var consumeSettings = settings.ConsumeSettings;
+
+        int batchSize = consumeSettings.MaxBatchSize;
+        if (batchSize == 0) return 0;
+
+        int[] tenantIds = await tenantProvider.GetTenantIds(cancellationToken);
+        if (tenantIds.Length == 0) return 0;
+
         long totalProcessed = 0;
         int iterations = 0;
 
         bool continueProcessing;
-
         do
         {
-            var consumeSettings = settings.ConsumeSettings;
 
             if (iterations > 0 && consumeSettings.IterationDelay > TimeSpan.Zero)
             {
                 await Task.Delay(consumeSettings.IterationDelay, cancellationToken);
             }
-
-            int batchSize = consumeSettings.MaxBatchSize;
-            if (batchSize == 0) return 0;
-
-            int[] tenantIds = await tenantProvider.GetTenantIds(cancellationToken);
-            if (tenantIds.Length == 0) return 0;
 
             int sentCount = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken);
 
