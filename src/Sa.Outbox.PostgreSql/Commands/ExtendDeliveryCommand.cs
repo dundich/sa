@@ -1,17 +1,17 @@
 using Sa.Data.PostgreSql;
-using Sa.Outbox.PostgreSql.TypeHashResolve;
+using Sa.Outbox.PostgreSql.TypeResolve;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
 internal sealed class ExtendDeliveryCommand(
     IPgDataSource dataSource
-    , IMsgTypeHashResolver hashResolver
+    , IOutboxTypeResolver hashResolver
     , SqlOutboxTemplate sqlTemplate
 ) : IExtendDeliveryCommand
 {
     public async Task<int> Execute(TimeSpan lockExpiration, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetCode(filter.PayloadType, cancellationToken);
+        long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
         var lockExpiresOn = filter.NowDate + lockExpiration;
 
         return await dataSource.ExecuteNonQuery(sqlTemplate.SqlExtendDelivery, cmd => cmd

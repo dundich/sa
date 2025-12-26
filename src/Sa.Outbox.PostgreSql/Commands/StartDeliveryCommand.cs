@@ -3,7 +3,7 @@ using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Serialization;
-using Sa.Outbox.PostgreSql.TypeHashResolve;
+using Sa.Outbox.PostgreSql.TypeResolve;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
@@ -12,7 +12,7 @@ internal sealed class StartDeliveryCommand(
     , IPgDataSource dataSource
     , SqlOutboxTemplate template
     , IOutboxMessageSerializer serializer
-    , IMsgTypeHashResolver hashResolver
+    , IOutboxTypeResolver hashResolver
     , NpqsqlOutboxReader outboxReader
 ) : IStartDeliveryCommand
 {
@@ -25,7 +25,7 @@ internal sealed class StartDeliveryCommand(
     {
 
         int batchSize = writeBuffer.Length;
-        long typeCode = await hashResolver.GetCode(filter.PayloadType, cancellationToken);
+        long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
         var lockOn = filter.ToDate + lockDuration;
 
 

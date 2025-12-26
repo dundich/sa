@@ -6,7 +6,7 @@ using Sa.Outbox.PostgreSql.IdGen;
 using Sa.Outbox.PostgreSql.Interceptors;
 using Sa.Outbox.PostgreSql.Partitional;
 using Sa.Outbox.PostgreSql.Repository;
-using Sa.Outbox.PostgreSql.TypeHashResolve;
+using Sa.Outbox.PostgreSql.TypeResolve;
 
 namespace Sa.Outbox.PostgreSql;
 
@@ -21,11 +21,11 @@ public static class Setup
             .AddPgOutboxSettings(configure);
 
         services
-            .AddOutboxMessageRepository()
+            .AddOutboxRepositories()
             .AddOutboxPartitional()
-            .AddIdGen()
+            .AddOutboxIdGen()
             .AddOutboxCommands()
-            .AddMsgTypeHashResolver()
+            .AddOutboxTypeResolver()
             .AddOutboxJobInterceptors()
             ;
 

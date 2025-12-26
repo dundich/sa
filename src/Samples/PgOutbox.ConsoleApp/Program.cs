@@ -18,9 +18,9 @@ var connectionString = "Host=localhost;Username=postgres;Password=postgres;Datab
 IHost host = Host.CreateDefaultBuilder()
     .ConfigureServices(services => services
         .AddOutbox(builder => builder
-            .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2, 3))
+            .WithTenantSettings((_, ts) => ts.WithTenantIds(1, 2, 3))
             .WithDeliveries(builder => builder
-                .AddDeliveryScoped<Group1Consumer, SomeMessage>("group1", (_, settings) =>
+                .AddDeliveryScoped<Group1Consumer, SomeMessage>((_, settings) =>
                 {
                     settings.ScheduleSettings.WithIntervalSeconds(5).WithImmediate();
                     settings.ConsumeSettings.WithSingleIteration();
@@ -60,7 +60,7 @@ namespace PgOutbox
 {
     public sealed record SomeMessage(string PayloadId, string Message, int TenantId) : IOutboxPayloadMessage
     {
-        static string IOutboxHasPart.PartName => "some_msg";
+        static string IOutboxHasPart.PartName => "some";
     }
 
 
@@ -73,7 +73,7 @@ namespace PgOutbox
             CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
-            Handler.Log(logger, filter, messages.Span);
+            Monitor.Log(logger, filter, messages.Span);
         }
     }
 
@@ -96,32 +96,37 @@ namespace PgOutbox
 
             foreach (var msg in messages.Span)
             {
-                switch (Random.Shared.Next(0, 6))
-                {
-                    case 0:
-                        msg.Aborted("skip");
-                        break;
-                    case 1:
-                        msg.Warn(new Exception("No permanent error"));
-                        break;
-                    case 2:
-                        msg.Postpone(TimeSpan.FromMinutes(1));
-                        break;
-                    case 3:
-                        msg.Error(new Exception("Permanent error"));
-                        break;
-                    default:
-                        msg.Ok();
-                        break;
-                }
+                Handle(msg);
             }
 
-            Handler.Log(logger, filter, messages.Span);
+            Monitor.Log(logger, filter, messages.Span);
+        }
+
+        private static void Handle(IOutboxContextOperations<SomeMessage> msg)
+        {
+            switch (Random.Shared.Next(0, 6))
+            {
+                case 0:
+                    msg.Aborted("skip");
+                    break;
+                case 1:
+                    msg.Warn(new Exception("No permanent error"));
+                    break;
+                case 2:
+                    msg.Postpone(TimeSpan.FromMinutes(1));
+                    break;
+                case 3:
+                    msg.Error(new Exception("Permanent error"));
+                    break;
+                default:
+                    msg.Ok();
+                    break;
+            }
         }
     }
 
 
-    static class Handler
+    static class Monitor
     {
         public static void Log(
             ILogger logger,
@@ -151,7 +156,13 @@ namespace PgOutbox
                 {
                     var rnd = Random.Shared.Next(1, 4);
                     await Task.Delay(TimeSpan.FromSeconds(rnd), stoppingToken);
-                    await publisher.Publish(new SomeMessage(i.ToString(), DateTime.Now.ToString(), rnd), stoppingToken);
+                    
+                    await publisher.Publish(
+                        new SomeMessage(
+                            i.ToString(), 
+                            DateTime.Now.ToString(), 
+                            rnd), 
+                        stoppingToken);
                 }
             }
             catch (OperationCanceledException)

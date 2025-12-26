@@ -25,7 +25,6 @@ public interface IDeliveryBuilder
     where TConsumer : class, IConsumer<TMessage>
     where TMessage : IOutboxPayloadMessage;
 
-
     /// <summary>
     /// Adds singleton delivery for the specified consumer and message type.
     /// </summary>
@@ -35,6 +34,7 @@ public interface IDeliveryBuilder
     )
     where TConsumer : class, IConsumer<TMessage>
     where TMessage : IOutboxPayloadMessage;
+
 
     /// <summary>
     /// Added provider functionality to dynamically calculate batch sizes for delivery

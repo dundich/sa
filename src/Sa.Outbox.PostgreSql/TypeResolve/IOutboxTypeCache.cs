@@ -1,7 +1,7 @@
 ﻿
-namespace Sa.Outbox.PostgreSql.TypeHashResolve;
+namespace Sa.Outbox.PostgreSql.TypeResolve;
 
-internal interface IMsgTypeCache
+internal interface IOutboxTypeCache
 {
     Task<long> GetCode(string typeName, CancellationToken cancellationToken);
     Task<string?> GetTypeName(long code, CancellationToken cancellationToken);

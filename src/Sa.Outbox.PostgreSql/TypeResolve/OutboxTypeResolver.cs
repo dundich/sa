@@ -1,13 +1,15 @@
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Repository;
 
-namespace Sa.Outbox.PostgreSql.TypeHashResolve;
+namespace Sa.Outbox.PostgreSql.TypeResolve;
 
-internal sealed class MsgTypeHashResolver(IMsgTypeCache cache, IOutboxMsgTypeRepository repository) : IMsgTypeHashResolver
+internal sealed class OutboxTypeResolver(
+    IOutboxTypeCache cache, 
+    IOutboxMsgTypeRepository repository) : IOutboxTypeResolver
 {
     private int _triggered = 0;
 
-    public async Task<long> GetCode(string typeName, CancellationToken cancellationToken)
+    public async Task<long> GetHashCode(string typeName, CancellationToken cancellationToken)
     {
 
         long code = await cache.GetCode(typeName, cancellationToken);
@@ -31,13 +33,13 @@ internal sealed class MsgTypeHashResolver(IMsgTypeCache cache, IOutboxMsgTypeRep
         return code;
     }
 
-    public async Task<string> GetTypeName(long typeCode, CancellationToken cancellationToken)
+    public async Task<string> GetTypeName(long typeHashCode, CancellationToken cancellationToken)
     {
-        string? typeName = await cache.GetTypeName(typeCode, cancellationToken);
+        string? typeName = await cache.GetTypeName(typeHashCode, cancellationToken);
         if (typeName != null) return typeName;
 
         await cache.Reset(cancellationToken);
 
-        return await cache.GetTypeName(typeCode, cancellationToken) ?? typeCode.ToString();
+        return await cache.GetTypeName(typeHashCode, cancellationToken) ?? typeHashCode.ToString();
     }
 }

@@ -3,6 +3,7 @@ using Npgsql;
 using Sa.Classes;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
+using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.SqlBuilder;
 
 namespace Sa.Partitional.PostgreSql.Repositories;

@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Sa.Classes;
+namespace Sa.Partitional.PostgreSql.Classes;
 
 ///<summary>
 ///StrOrNum

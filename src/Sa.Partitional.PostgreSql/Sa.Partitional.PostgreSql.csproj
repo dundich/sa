@@ -21,11 +21,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Compile Include="..\Sa\Classes\Enumeration.cs" Link="AsLink\Enumeration.cs" />
-		<Compile Include="..\Sa\Classes\IHasId.cs" Link="AsLink\IHasId.cs" />
 		<Compile Include="..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
 		<Compile Include="..\Sa\Classes\Section.cs" Link="AsLink\Section.cs" />
-		<Compile Include="..\Sa\Classes\StrOrNum.cs" Link="AsLink\StrOrNum.cs" />
 		<Compile Include="..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
 		<Compile Include="..\Sa\Extensions\EnumerableExtensions.cs" Link="AsLink\EnumerableExtensions.cs" />
 		<Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />

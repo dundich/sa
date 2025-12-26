@@ -5,7 +5,7 @@ using Sa.Classes;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.IdGen;
 using Sa.Outbox.PostgreSql.Serialization;
-using Sa.Outbox.PostgreSql.TypeHashResolve;
+using Sa.Outbox.PostgreSql.TypeResolve;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
@@ -15,8 +15,8 @@ internal sealed class BulkInsertMsgCommand(
     , SqlOutboxTemplate sqlTemplate
     , RecyclableMemoryStreamManager streamManager
     , IOutboxMessageSerializer serializer
-    , IIdGenerator idGenerator
-    , IMsgTypeHashResolver hashResolver
+    , IOutboxIdGenerator idGenerator
+    , IOutboxTypeResolver hashResolver
 ) : IBulkInsertMsgCommand
 {
 
@@ -24,7 +24,7 @@ internal sealed class BulkInsertMsgCommand(
         ReadOnlyMemory<OutboxMessage<TMessage>> messages, 
         CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetCode(typeof(TMessage).Name, cancellationToken);
+        long typeCode = await hashResolver.GetHashCode(typeof(TMessage).Name, cancellationToken);
 
         return await BulkWithRetry(messages, typeCode, cancellationToken);
     }

@@ -1,7 +1,6 @@
-﻿using Sa.Classes;
-using Sa.Extensions;
+﻿using Sa.Partitional.PostgreSql.Classes;
 
-namespace SaTests.Classes;
+namespace Sa.Partitional.PostgreSqlTests.Classes;
 
 public class StrOrNumTests
 {

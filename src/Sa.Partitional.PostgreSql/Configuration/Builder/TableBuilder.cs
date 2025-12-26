@@ -1,4 +1,4 @@
-using Sa.Classes;
+using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.Settings;
 
 namespace Sa.Partitional.PostgreSql.Configuration.Builder;
