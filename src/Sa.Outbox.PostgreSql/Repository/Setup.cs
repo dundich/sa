@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.PlugServices;
+using Sa.Outbox.PostgreSql.Repository.Plug;
 
 namespace Sa.Outbox.PostgreSql.Repository;
 

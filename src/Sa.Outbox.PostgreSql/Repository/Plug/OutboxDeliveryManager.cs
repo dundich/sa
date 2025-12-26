@@ -4,7 +4,7 @@ using Sa.Extensions;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 
-namespace Sa.Outbox.PostgreSql.Repository;
+namespace Sa.Outbox.PostgreSql.Repository.Plug;
 
 
 internal sealed class OutboxDeliveryManager(

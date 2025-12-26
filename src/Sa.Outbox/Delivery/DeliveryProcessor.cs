@@ -28,7 +28,6 @@ internal sealed class DeliveryProcessor(
         bool continueProcessing;
         do
         {
-
             if (iterations > 0 && consumeSettings.IterationDelay > TimeSpan.Zero)
             {
                 await Task.Delay(consumeSettings.IterationDelay, cancellationToken);
