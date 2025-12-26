@@ -98,6 +98,8 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
         var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
         Assert.True(result > 0);
 
-        Assert.Equal(3, TenantStubDetector.CountTenant);
+        var countTenants = messages.Select(c => c.TenantId).Distinct().Count();
+
+        Assert.Equal(countTenants, TenantStubDetector.CountTenant);
     }
 }
