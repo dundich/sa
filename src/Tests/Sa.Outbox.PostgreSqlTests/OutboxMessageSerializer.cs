@@ -3,7 +3,7 @@ using Sa.Outbox.PostgreSql.Serialization;
 
 namespace Sa.Outbox.PostgreSqlTests;
 
-public class OutboxMessageSerializer : IOutboxMessageSerializer
+internal sealed class OutboxMessageSerializer : IOutboxMessageSerializer
 {
     public T? Deserialize<T>(Stream stream)
     {
@@ -14,4 +14,6 @@ public class OutboxMessageSerializer : IOutboxMessageSerializer
     {
         JsonSerializer.Serialize(stream, value);
     }
+
+    public static OutboxMessageSerializer Instance { get; } = new();
 }

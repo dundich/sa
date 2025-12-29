@@ -1,18 +1,21 @@
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate)
+internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxBuilder sqlTemplate)
     : IErrorDeliveryCommand
 {
 
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlError(len));
 
-    public async Task<IReadOnlyDictionary<Exception, ErrorInfo>> Execute(IOutboxContext[] outboxMessages, CancellationToken cancellationToken)
+    public async Task<IReadOnlyDictionary<Exception, ErrorInfo>> Execute(
+        ReadOnlyMemory<IOutboxContext> messages,
+        CancellationToken cancellationToken)
     {
-        Dictionary<Exception, ErrorInfo> errors = GroupByException(outboxMessages);
+        Dictionary<Exception, ErrorInfo> errors = GroupByException(messages.Span);
 
         int len = errors.Count;
 
@@ -42,38 +45,36 @@ internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTe
     {
         int i = 0;
 
-        foreach ((Exception Key, ErrorInfo Value) in errorArray.AsSpan(start, count))
+        foreach ((Exception Ex, ErrorInfo Value) in errorArray.AsSpan(start, count))
         {
+
             (long ErrorId, string TypeName, DateTimeOffset CreatedAt) = Value;
 
-            command.AddParam<SqlParamNames, long>(SqlParam.ErrorId, i, ErrorId);
-            command.AddParam<SqlParamNames, string>(SqlParam.TypeName, i, TypeName);
-            command.AddParam<SqlParamNames, string>(SqlParam.StatusMessage, i, Key.ToString());
-            command.AddParam<SqlParamNames, long>(SqlParam.CreatedAt, i, CreatedAt.ToUnixTimeSeconds());
+            //(error_id, error_type, error_message, error_created_at)
+            command.AddParamErrorId(ErrorId, i);
+            command.AddParamTypeName(TypeName, i);
+            command.AddParamStatusMessage(Ex.ToString(), i);
+            command.AddParamCreatedAt(CreatedAt, i);
             i++;
         }
     }
 
-    private static Dictionary<Exception, ErrorInfo> GroupByException(IOutboxContext[] outboxMessages)
+    private static Dictionary<Exception, ErrorInfo> GroupByException(ReadOnlySpan<IOutboxContext> messages)
     {
-        return outboxMessages
-              .Where(m => m.Exception != null)
-              .GroupBy(m => m.Exception!)
-              .Select(m => (err: m.Key, createdAt: m.First().DeliveryResult.CreatedAt.StartOfDay()))
-              .ToDictionary(e => e.err, e => new ErrorInfo(e.err.ToString().GetMurmurHash3(), e.err.GetType().Name, e.createdAt));
-    }
+        Dictionary<Exception, ErrorInfo> result = new(messages.Length);
 
+        foreach (var message in messages)
+        {
+            if (message.Exception == null || result.ContainsKey(message.Exception)) break;
 
-    sealed class SqlParamNames : INamePrefixProvider
-    {
-        public static int MaxIndex => 512;
+            result[message.Exception]
+                = new ErrorInfo(
+                    message.Exception.ToString().GetMurmurHash3(),
+                    message.Exception.GetType().Name,
+                    message.DeliveryResult.CreatedAt.StartOfDay())
+                ;
+        }
 
-        public static string[] GetPrefixes() =>
-        [
-            SqlParam.ErrorId
-            , SqlParam.TypeName
-            , SqlParam.StatusMessage
-            , SqlParam.CreatedAt
-        ];
+        return result;
     }
 }

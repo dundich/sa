@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Partitional.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Partitional;
@@ -13,38 +14,38 @@ internal static class Setup
 
         _ = services.AddPartitional((sp, builder) =>
         {
-            SqlOutboxTemplate sql = sp.GetRequiredService<SqlOutboxTemplate>();
+            SqlOutboxBuilder sql = sp.GetRequiredService<SqlOutboxBuilder>();
+            var tableSettings = sql.Settings;
 
-
-            builder.AddSchema(sql.DatabaseSchemaName, schema =>
+            builder.AddSchema(tableSettings.DatabaseSchemaName, schema =>
             {
                 ITableBuilder outboxTableBuilder = schema
-                    .AddTable(sql.DatabaseMsgTableName, SqlOutboxTemplate.MsgFields)
-                    .PartByList("tenant_id", "msg_part")
-                    .TimestampAs("msg_created_at")
-                    .WithFillFactor(100) // insert only
+                    .AddTable(tableSettings.Message.TableName, tableSettings.Message.Fields.All())
+                    .PartByList(tableSettings.Message.Fields.TenantId, tableSettings.Message.Fields.MsgPart)
+                    .TimestampAs(tableSettings.Message.Fields.MsgCreatedAt)
+                    .WithFillFactor(tableSettings.Message.FillFactor) // insert only
                     .AddPostSql(() => sql.SqlCreateTypeTable)
                 ;
 
                 ITableBuilder queueTableBuilder = schema
-                    .AddTable(sql.DatabaseTaskTableName, SqlOutboxTemplate.TaskQueueFields)
-                    .PartByList("tenant_id", "consumer_group")
-                    .TimestampAs("task_created_at")
-                    .WithFillFactor(60)
+                    .AddTable(tableSettings.TaskQueue.TableName, tableSettings.TaskQueue.Fields.All())
+                    .PartByList(tableSettings.TaskQueue.Fields.TenantId, tableSettings.TaskQueue.Fields.ConsumerGroup)
+                    .TimestampAs(tableSettings.TaskQueue.Fields.TaskCreatedAt)
+                    .WithFillFactor(tableSettings.TaskQueue.FillFactor)
                     .AddPostSql(() => sql.SqlCreateOffsetTable)
                 ;
 
                 ITableBuilder deliveryTableBuilder = schema
-                    .AddTable(sql.DatabaseDeliveryTableName, SqlOutboxTemplate.DeliveryFields)
-                    .PartByList("tenant_id", "consumer_group")
-                    .TimestampAs("delivery_created_at")
-                    .WithFillFactor(100)
+                    .AddTable(tableSettings.Delivery.TableName, tableSettings.Delivery.Fields.All())
+                    .PartByList(tableSettings.Delivery.Fields.TenantId, tableSettings.Delivery.Fields.ConsumerGroup)
+                    .TimestampAs(tableSettings.Delivery.Fields.DeliveryCreatedAt)
+                    .WithFillFactor(tableSettings.Delivery.FillFactor)
                 ;
 
                 ITableBuilder errorTableBuilder = schema
-                    .AddTable(sql.DatabaseErrorTableName, SqlOutboxTemplate.ErrorFields)
-                    .TimestampAs("error_created_at")
-                    .WithFillFactor(100)
+                    .AddTable(tableSettings.Error.TableName, tableSettings.Error.Fields.All())
+                    .TimestampAs(tableSettings.Error.Fields.ErrorCreatedAt)
+                    .WithFillFactor(tableSettings.Error.FillFactor)
                 ;
 
 
@@ -58,14 +59,14 @@ internal static class Setup
         .AddPartMigrationSchedule((sp, opts) =>
         {
             PgOutboxMigrationSettings settings = sp.GetRequiredService<PgOutboxMigrationSettings>();
-            opts.AsJob = settings.AsJob;
+            opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.ForwardDays = settings.ForwardDays;
         })
         .AddPartCleanupSchedule((sp, opts) =>
         {
             PgOutboxCleanupSettings settings = sp.GetRequiredService<PgOutboxCleanupSettings>();
-            opts.AsJob = settings.AsJob;
+            opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.DropPartsAfterRetention = settings.DropPartsAfterRetention;
         })

@@ -42,14 +42,14 @@ hostBuilder.Services
     // Schedule for creating new partitions
     .AddPartMigrationSchedule((sp, opts) =>
     {
-        opts.AsJob = true;
+        opts.AsBackgroundJob = true;
         opts.ExecutionInterval = TimeSpan.FromHours(2);
         opts.ForwardDays = 2;
     })
     // Schedule for removing old partitions
     .AddPartCleanupSchedule((sp, opts) =>
     {
-        opts.AsJob = true;
+        opts.AsBackgroundJob = true;
         opts.DropPartsAfterRetention = TimeSpan.FromDays(21);
     });
 

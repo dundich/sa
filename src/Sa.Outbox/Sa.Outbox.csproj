@@ -3,17 +3,19 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Description>Simple Outbox infra for publishing and using messages</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="..\Sa\Classes\IArrayPool.cs" Link="AsLink\IArrayPool.cs" />
     <Compile Include="..\Sa\Classes\LockRenewer.cs" Link="AsLink\LockRenewer.cs" />
+    <Compile Include="..\Sa\Classes\MurmurHash3.cs" Link="AsLink\MurmurHash3.cs" />
     <Compile Include="..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
     <Compile Include="..\Sa\Extensions\EnumerableExtensions.cs" Link="AsLink\EnumerableExtensions.cs" />
     <Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
     <Compile Include="..\Sa\Extensions\SpanExtensions.cs" Link="AsLink\SpanExtensions.cs" />
+    <Compile Include="..\Sa\Extensions\StringExtensions.cs" Link="AsLink\StringExtensions.cs" />
   </ItemGroup>
 
   <ItemGroup>

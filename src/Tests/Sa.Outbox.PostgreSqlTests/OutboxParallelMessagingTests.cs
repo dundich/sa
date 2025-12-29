@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.PostgreSql;
+using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
-using Sa.Partitional.PostgreSql;
 using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSqlTests;
@@ -12,14 +12,12 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 {
     static class GenMessageRange
     {
-
         public const int Threads = 5;
         const int From = 10;
         const int To = 100;
 
         public static int GetMessageCount() => Random.Shared.Next(From, To);
     }
-
 
     class SomeMessage1 : IOutboxPayloadMessage
     {
@@ -37,7 +35,6 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         public int TenantId { get; set; } = Random.Shared.Next(1, 2);
     }
 
-
     static class CommonCounter
     {
         static int s_counter = 0;
@@ -51,19 +48,26 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     class SomeMessageConsumer1 : IConsumer<SomeMessage1>
     {
-        public ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage1>> outboxMessages, CancellationToken cancellationToken)
+        public ValueTask Consume(
+            ConsumerGroupSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage1>> messages,
+            CancellationToken cancellationToken)
         {
-            CommonCounter.Add(outboxMessages.Count);
+            CommonCounter.Add(messages.Length);
             return ValueTask.CompletedTask;
         }
     }
 
-
     class SomeMessageConsumer2 : IConsumer<SomeMessage2>
     {
-        public ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage2>> outboxMessages, CancellationToken cancellationToken)
+        public ValueTask Consume(
+            ConsumerGroupSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage2>> messages,
+            CancellationToken cancellationToken)
         {
-            CommonCounter.Add(outboxMessages.Count);
+            CommonCounter.Add(messages.Length);
             return ValueTask.CompletedTask;
         }
     }
@@ -76,10 +80,9 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 .AddOutbox(builder =>
                 {
                     builder
-                    .WithPartitioningSupport((_, sp)
-                        => sp.WithTenantIds(1, 2))
+                    .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2))
                     .WithDeliveries(builder => builder
-                        .AddDelivery<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
+                        .AddDeliveryScoped<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
                         {
                             settings.ScheduleSettings
                                 .WithInterval(TimeSpan.FromMilliseconds(500))
@@ -101,13 +104,13 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
                     cfg
-                        .ConfigureDataSource(c => c.WithConnectionString(_ => this.ConnectionString))
-                        .ConfigureOutboxSettings((_, settings) =>
+                        .WithDataSource(c => c.WithConnectionString(_ => ConnectionString))
+                        .WithOutboxSettings((_, settings) =>
                         {
                             settings.TableSettings.DatabaseSchemaName = "parallel";
                             settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
                         })
-                        .WithMessageSerializer(sp => new OutboxMessageSerializer());
+                        .WithMessageSerializer(OutboxMessageSerializer.Instance);
                 });
         }
     }
@@ -127,22 +130,12 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         // start delivery message
         var publisher = ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
 
-        List<Task<long>> tasks = [
-            RunPublish<SomeMessage1>(publisher)
-           , RunPublish<SomeMessage2>(publisher)
-        ];
-
-
+        List<Task<long>> tasks = [RunPublish<SomeMessage1>(publisher), RunPublish<SomeMessage2>(publisher)];
         await Task.WhenAll(tasks);
 
         long total = tasks.Select(c => c.Result)
             .DefaultIfEmpty()
             .Aggregate((t1, t2) => t1 + t2);
-
-        var migrationService = ServiceProvider.GetRequiredService<IPartMigrationService>();
-
-        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
-        Assert.True(r, "none migration");
 
         // delay for consume
         while (CommonCounter.Counter < (int)total)

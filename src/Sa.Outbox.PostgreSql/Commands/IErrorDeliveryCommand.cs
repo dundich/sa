@@ -7,6 +7,6 @@ public record struct ErrorInfo(long ErrorId, string TypeName, DateTimeOffset Cre
 internal interface IErrorDeliveryCommand
 {
     Task<IReadOnlyDictionary<Exception, ErrorInfo>> Execute(
-        IOutboxContext[] outboxMessages, 
+        ReadOnlyMemory<IOutboxContext> messages, 
         CancellationToken cancellationToken);
 }

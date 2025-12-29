@@ -1,6 +1,6 @@
+using System.Buffers;
 using Sa.Classes;
-using Sa.Extensions;
-using Sa.Outbox.Repository;
+using Sa.Outbox.PlugServices;
 using Sa.Outbox.Support;
 
 
@@ -10,97 +10,116 @@ namespace Sa.Outbox.Delivery;
 /// Processes messages for a specific tenant with locking and delivery.
 /// </summary>
 internal sealed class DeliveryTenant(
-    IDeliveryRepository repository,
+    IOutboxDeliveryManager deliveryMan,
     TimeProvider timeProvider,
     IDeliveryCourier deliveryCourier,
     IDeliveryBatcher batcher) : IDeliveryTenant
 {
-    public async Task<int> Process<TMessage>(
+    public async Task<int> ProcessInTenant<TMessage>(
         int tenantId,
-        ConsumeSettings settings,
+        ConsumerGroupSettings settings,
         CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
     {
+        var filter = CreateFilter<TMessage>(tenantId, settings);
 
-        var filter = FilterFactory.CreateFilter<TMessage>(
-            settings.ConsumerGroupId,
-            timeProvider.GetUtcNow(),
-            settings.LookbackInterval,
-            tenantId);
-
-        var batchSize = await batcher.CalculateBatchSize(settings.MaxBatchSize, filter, cancellationToken);
+        var batchSize = await CalculateBatchSizeAsync(settings.ConsumeSettings, filter, cancellationToken);
         if (batchSize == 0) return 0;
 
-
-        OutboxDeliveryMessage<TMessage>[] buffer = DefaultArrayPool.Shared.Rent<OutboxDeliveryMessage<TMessage>>(batchSize);
-        try
-        {
-            Memory<OutboxDeliveryMessage<TMessage>> slice = buffer.AsMemory(0, batchSize);
-
-            int locked = await SelectAndLock(settings, filter, batchSize, slice, cancellationToken);
-
-            if (locked == 0) return 0;
-
-            Memory<OutboxDeliveryMessage<TMessage>> messages = slice[..locked];
-
-            using IDisposable locker = RenewerLocker(settings, filter, cancellationToken);
-
-            return await DeliverByCourier(messages, settings, filter, cancellationToken);
-        }
-        finally
-        {
-            DefaultArrayPool.Shared.Return(buffer);
-        }
-    }
-
-    private async Task<int> SelectAndLock<TMessage>(ConsumeSettings settings, OutboxMessageFilter filter, int batchSize, Memory<OutboxDeliveryMessage<TMessage>> slice, CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
-    {
-        filter = filter with { ToDate = filter.ToDate - settings.BatchingWindow };
-
-        return await repository.RentDelivery(
-            slice,
-            batchSize: Math.Min(settings.MaxBatchSize, batchSize),
-            lockDuration: settings.LockDuration,
-            filter: filter,
-            cancellationToken: cancellationToken);
-    }
-
-    private IDisposable RenewerLocker(ConsumeSettings settings, OutboxMessageFilter filter, CancellationToken cancellationToken)
-        => LockRenewer.KeepLocked(
-            settings.LockRenewal,
-            t => repository.ExtendDelivery(
-                settings.LockDuration,
-                filter with
-                {
-                    ToDate = timeProvider.GetUtcNow(),
-                    NowDate = timeProvider.GetUtcNow()
-                }
-            , t),
-            cancellationToken: cancellationToken);
+        using var memoryOwner = RentMemory<TMessage>(batchSize);
 
 
-    private async Task<int> DeliverByCourier<TMessage>(
-        Memory<OutboxDeliveryMessage<TMessage>> deliveryMessages,
-        ConsumeSettings settings,
-        OutboxMessageFilter filter,
-        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
-    {
-        int successfulDeliveries = 0;
-        int batchSize = settings.ConsumeBatchSize ?? deliveryMessages.Length;
+        var messages = await AcquireMessagesAsync(
+            settings.ConsumeSettings,
+            filter,
+            memoryOwner.Memory[..batchSize],
+            cancellationToken);
 
-        foreach (OutboxContext<TMessage>[] outboxMessages in deliveryMessages
-            .GetChunks(batchSize)
-            .Select(chunk => chunk.Span.SelectWhere(dm => new OutboxContext<TMessage>(dm, timeProvider))))
-        {
-            if (cancellationToken.IsCancellationRequested) break;
+        if (messages.IsEmpty) return 0;
 
-            successfulDeliveries += await deliveryCourier.Deliver(
-                settings,
-                outboxMessages,
-                cancellationToken);
+        using IDisposable locker = RenewerLocker(settings.ConsumeSettings, filter, cancellationToken);
 
-            await repository.ReturnDelivery(outboxMessages, filter with { NowDate = timeProvider.GetUtcNow() }, cancellationToken);
-        }
+        var successfulDeliveries = await deliveryCourier.Deliver(settings, filter, messages, cancellationToken);
+
+        await ReleaseMessagesAsync(messages, filter, cancellationToken);
 
         return successfulDeliveries;
     }
+
+    private OutboxMessageFilter CreateFilter<TMessage>(int tenantId, ConsumerGroupSettings settings)
+        where TMessage : IOutboxPayloadMessage
+    {
+        return FilterFactory.CreateFilter<TMessage>(
+            tenantId,
+            settings.ConsumerGroupId,
+            timeProvider.GetUtcNow(),
+            settings.ConsumeSettings.LookbackInterval,
+            settings.ConsumeSettings.BatchingWindow);
+    }
+
+    private static IMemoryOwner<IOutboxContextOperations<TMessage>> RentMemory<TMessage>(int size)
+        where TMessage : IOutboxPayloadMessage
+    {
+        return MemoryPool<IOutboxContextOperations<TMessage>>.Shared.Rent(size);
+    }
+
+    private async Task<int> CalculateBatchSizeAsync(
+        ConsumeSettings consumeSettings,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken)
+    {
+        var calculatedSize = await batcher.CalculateBatchSize(
+            consumeSettings.MaxBatchSize,
+            filter,
+            cancellationToken);
+
+        return Math.Min(consumeSettings.MaxBatchSize, calculatedSize);
+    }
+
+    private async Task<ReadOnlyMemory<IOutboxContextOperations<TMessage>>> AcquireMessagesAsync<TMessage>(
+        ConsumeSettings consumeSettings,
+        OutboxMessageFilter filter,
+        Memory<IOutboxContextOperations<TMessage>> buffer,
+        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
+    {
+        var lockedCount = await deliveryMan.RentDelivery(
+            buffer,
+            consumeSettings.LockDuration,
+            filter,
+            cancellationToken);
+
+        return buffer[..lockedCount];
+    }
+
+
+    private Task<int> ReleaseMessagesAsync<TMessage>(
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken)
+        where TMessage : IOutboxPayloadMessage
+    {
+        return deliveryMan.ReturnDelivery(
+            messages,
+            filter with { NowDate = timeProvider.GetUtcNow() },
+            cancellationToken);
+    }
+
+    private IDisposable RenewerLocker(
+        ConsumeSettings settings,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken)
+            => LockRenewer.KeepLocked(
+                settings.LockRenewal
+                , t =>
+                {
+                    var nowDate = timeProvider.GetUtcNow();
+                    return deliveryMan.ExtendDelivery(
+                        settings.LockDuration
+                        , filter with
+                        {
+                            ToDate = nowDate,
+                            NowDate = nowDate
+                        }
+                        , t);
+                }
+                , cancellationToken: cancellationToken);
 }

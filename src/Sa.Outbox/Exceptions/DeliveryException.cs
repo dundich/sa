@@ -2,10 +2,10 @@
 
 public class DeliveryException(
     string message, 
-    Exception? innerException = null, 
-    int statusCode = 400, 
-    TimeSpan? postponeAt = null): OutboxMessageException(message, innerException)
+    Exception? innerException,
+    DeliveryStatusCode statusCode, 
+    TimeSpan? postponeAt = null): OutboxException(message, innerException)
 {
-    public int StatusCode => statusCode;
+    public DeliveryStatusCode StatusCode => statusCode;
     public TimeSpan? PostponeAt => postponeAt;
 }

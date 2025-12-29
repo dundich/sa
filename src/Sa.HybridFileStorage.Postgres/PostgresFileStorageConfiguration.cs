@@ -37,13 +37,13 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
         // Schedule for creating new partitions
         .AddPartMigrationSchedule((sp, opts) =>
         {
-            opts.AsJob = true;
+            opts.AsBackgroundJob = true;
             opts.ForwardDays = _options.PartOptions.MigrationScheduleForwardDays;
         })
         // Schedule for removing old partitions
         .AddPartCleanupSchedule((sp, opts) =>
         {
-            opts.AsJob = true;
+            opts.AsBackgroundJob = true;
             opts.DropPartsAfterRetention = TimeSpan.FromDays(_options.CleanupOptions.ExpireDays);
         });
 

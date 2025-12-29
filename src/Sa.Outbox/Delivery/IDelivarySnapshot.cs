@@ -5,9 +5,9 @@ namespace Sa.Outbox.Delivery;
 public interface IDelivarySnapshot
 {
     IJobSettings[] JobSettings { get; }
-    OutboxDeliverySettings[] DeliverySettings { get; }
+    ConsumerGroupSettings[] ConsumerSettings { get; }
     string[] Parts { get; }
 
     IEnumerable<string> GetConsumeGroupIds()
-        => DeliverySettings.Select(c => c.ConsumeSettings.ConsumerGroupId).Distinct();
+        => ConsumerSettings.Select(c => c.ConsumerGroupId).Distinct();
 }

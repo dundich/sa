@@ -1,5 +1,5 @@
-using Sa.Outbox.Support;
 using System.Collections.Concurrent;
+using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Publication;
 

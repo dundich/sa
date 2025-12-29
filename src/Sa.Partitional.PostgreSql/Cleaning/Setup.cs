@@ -1,7 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Collections.Concurrent;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Schedule;
-using System.Collections.Concurrent;
 
 namespace Sa.Partitional.PostgreSql.Cleaning;
 
@@ -9,7 +9,8 @@ internal static class Setup
 {
     readonly static Guid JobId = Guid.Parse("7da81411-9db7-4553-8e93-bd1f12d02b38");
 
-    private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, PartCleanupScheduleSettings>>> s_invokers = [];
+    private static readonly ConcurrentDictionary<IServiceCollection,
+        HashSet<Action<IServiceProvider, PartCleanupScheduleSettings>>> s_invokers = [];
 
     public static IServiceCollection AddPartCleaning(this IServiceCollection services, Action<IServiceProvider, PartCleanupScheduleSettings>? configure = null)
     {
@@ -56,7 +57,7 @@ internal static class Setup
                     .ConfigureErrorHandling(berr => berr.DoSuppressError(err => true))
                 ;
 
-                if (!settings.AsJob)
+                if (!settings.AsBackgroundJob)
                 {
                     builder.Disabled();
                 }

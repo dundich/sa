@@ -20,9 +20,9 @@ internal sealed class DeliveryJob<TMessage>(IDeliveryProcessor processor) : IDel
 
     public async Task Execute(IJobContext context, CancellationToken cancellationToken)
     {
-        OutboxDeliverySettings settings = context.Settings.Properties.Tag as OutboxDeliverySettings
+        ConsumerGroupSettings settings = context.Settings.Properties.Tag as ConsumerGroupSettings
             ?? throw new NotImplementedException("tag");
 
-        await processor.ProcessMessages<TMessage>(settings.ConsumeSettings, cancellationToken);
+        await processor.ProcessMessages<TMessage>(settings, cancellationToken);
     }
 }

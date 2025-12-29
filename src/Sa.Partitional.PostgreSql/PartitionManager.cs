@@ -1,10 +1,10 @@
-using Sa.Classes;
 using Sa.Partitional.PostgreSql.Cache;
+using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql;
 
 
-internal sealed class PartitionManager(IPartCache cache, IPartMigrationService migrationService) : IPartitionManager
+internal sealed class PartitionManager(IPartCache cache, IMigrationService migrationService) : IPartitionManager
 {
     public Task<bool> EnsureParts(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
         => cache.EnsureCache(tableName, date, partValues, cancellationToken);

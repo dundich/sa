@@ -2,7 +2,7 @@ using System.Buffers;
 
 namespace Sa.Classes;
 
-public interface IArrayPool
+internal interface IArrayPool
 {
     T[] Rent<T>(int minimumLength);
 

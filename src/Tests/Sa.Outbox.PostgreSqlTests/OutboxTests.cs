@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.PostgreSql;
+using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
 using Sa.Partitional.PostgreSql;
 using Sa.Schedule;
@@ -11,10 +12,9 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 {
     class SomeMessage : IOutboxPayloadMessage
     {
-        public static string PartName => "some";
-
         public string PayloadId { get; set; } = default!;
         public int TenantId { get; set; }
+        public static string PartName => "some";
 
     }
 
@@ -22,9 +22,13 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
     {
         static int s_Counter = 0;
 
-        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<SomeMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(
+            ConsumerGroupSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
+            CancellationToken cancellationToken)
         {
-            Interlocked.Add(ref s_Counter, outboxMessages.Count);
+            Interlocked.Add(ref s_Counter, messages.Length);
             await Task.Delay(100, cancellationToken);
         }
 
@@ -37,9 +41,9 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithPartitioningSupport((_, sp) => sp.WithTenantIds(1))
+                    .WithTenantSettings((_, s) => s.WithTenantIds(1))
                     .WithDeliveries(builder => builder
-                        .AddDelivery<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
+                        .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
                         {
                             settings.ScheduleSettings
                                 .WithInterval(TimeSpan.FromMilliseconds(100))
@@ -54,13 +58,13 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                 )
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.ConfigureDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
-                    cfg.ConfigureOutboxSettings((_, settings) =>
+                    cfg.WithDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
+                    cfg.WithOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "test";
                         settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(1);
                     });
-                    cfg.WithMessageSerializer(sp => new OutboxMessageSerializer());
+                    cfg.WithMessageSerializer(OutboxMessageSerializer.Instance);
                 })
             ;
         }
@@ -85,16 +89,15 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 
         ulong total = await publisher.Publish(
         [
-              new SomeMessage { TenantId = 1 }
-            , new SomeMessage { TenantId = 1 }
-            , new SomeMessage { TenantId = 1 }
-            , new SomeMessage { TenantId = 1 }
+            new SomeMessage { TenantId = 1 },
+            new SomeMessage { TenantId = 1 },
+            new SomeMessage { TenantId = 1 },
+            new SomeMessage { TenantId = 1 }
         ], TestContext.Current.CancellationToken);
 
-        var migrationService = ServiceProvider.GetRequiredService<IPartMigrationService>();
+        Assert.True(total > 0);
 
-        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
-        Assert.True(r, "none migration");
+        await Migrate();
 
         // delay for consume
         int j = 0;
@@ -107,5 +110,12 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         await scheduler.Stop();
 
         Assert.True(SomeMessageConsumer.Counter > 0);
+    }
+
+    private async Task Migrate()
+    {
+        var migrationService = ServiceProvider.GetRequiredService<IMigrationService>();
+        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        Assert.True(r, "none migration");
     }
 }

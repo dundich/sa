@@ -12,25 +12,26 @@ namespace Sa.Outbox.Delivery;
 internal static class FilterFactory
 {
     public static OutboxMessageFilter CreateFilter<TMessage>(
+        int tenantId,
         string consumerGroupId,
         DateTimeOffset now,
         TimeSpan lookbackInterval,
-        int tenantId) where TMessage : IOutboxPayloadMessage
+        TimeSpan batchingWindow) where TMessage : IOutboxPayloadMessage
     {
         OutboxMessageTypeInfo ti = OutboxMessageTypeHelper.GetOutboxMessageTypeInfo<TMessage>();
-        DateTimeOffset fromDate = now.StartOfDay() - lookbackInterval;
 
-        return new OutboxMessageFilter(            
+        return new OutboxMessageFilter(
             TransactId: GenerateTransactId(),
             ConsumerGroupId: consumerGroupId,
             PayloadType: typeof(TMessage).Name,
             tenantId,
             ti.PartName,
-            fromDate,
-            now,
+            now.StartOfDay() - lookbackInterval,
+            now - batchingWindow,
             now
         );
     }
 
-    private static string GenerateTransactId() => $"{Environment.MachineName}-{Guid.NewGuid():N}";
+    private static string GenerateTransactId()
+        => $"{Environment.MachineName}-{Random.Shared.Next(0, 100000)}";
 }

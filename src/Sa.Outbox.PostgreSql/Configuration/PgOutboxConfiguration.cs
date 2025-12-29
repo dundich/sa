@@ -1,16 +1,17 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
-using System.Collections.Concurrent;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 
 internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOutboxConfiguration
 {
-    private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, PgOutboxSettings>>> s_invokers = [];
+    private static readonly ConcurrentDictionary<
+        IServiceCollection, HashSet<Action<IServiceProvider, PgOutboxSettings>>> s_invokers = [];
 
-    public IPgOutboxConfiguration ConfigureOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
+    public IPgOutboxConfiguration WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
     {
         if (configure != null)
         {
@@ -44,7 +45,7 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         return this;
     }
 
-    public IPgOutboxConfiguration ConfigureDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
+    public IPgOutboxConfiguration WithDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
     {
         services.AddPgDataSource(configure);
         return this;
@@ -66,8 +67,8 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
     private void AddSettings()
     {
         services.TryAddSingleton<PgOutboxTableSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().TableSettings);
-        services.TryAddSingleton<PgOutboxCacheSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().CacheSettings);
         services.TryAddSingleton<PgOutboxMigrationSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().MigrationSettings);
         services.TryAddSingleton<PgOutboxCleanupSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().CleanupSettings);
+        services.TryAddSingleton<PgOutboxConsumeSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().ConsumeSettings);
     }
 }

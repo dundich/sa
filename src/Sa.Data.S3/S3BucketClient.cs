@@ -1,7 +1,7 @@
-using Sa.Data.S3.Utils;
 using System.Diagnostics;
 using System.Net;
 using System.Runtime.CompilerServices;
+using Sa.Data.S3.Utils;
 
 namespace Sa.Data.S3;
 

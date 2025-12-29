@@ -1,6 +1,6 @@
 ﻿namespace Sa.Partitional.PostgreSql;
 
-public interface ISqlBuilderFactory
+internal interface ISqlBuilderFactory
 {
     ISqlBuilder Create();
 }

@@ -5,9 +5,11 @@ namespace Sa.Outbox.PostgreSql.IdGen;
 
 internal static class Setup
 {
-    public static IServiceCollection AddIdGen(this IServiceCollection services)
+    public static IServiceCollection AddOutboxIdGen(this IServiceCollection services)
     {
-        services.TryAddSingleton<IIdGenerator, IdGenerator>();
+        services
+            .RemoveAll<IOutboxIdGenerator>()
+            .AddSingleton<IOutboxIdGenerator, OutboxIdGenerator>();
 
         return services;
     }

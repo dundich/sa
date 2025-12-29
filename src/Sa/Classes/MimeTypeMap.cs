@@ -4,7 +4,7 @@ namespace Sa.Classes;
 /// Class MimeTypeMap.
 /// </summary>
 /// <seealso href="https://github.com/samuelneff/MimeTypeMap/blob/master/MimeTypeMap.cs"/>
-public static class MimeTypeMap
+internal static class MimeTypeMap
 {
     private const string Dot = ".";
     private const string QuestionMark = "?";

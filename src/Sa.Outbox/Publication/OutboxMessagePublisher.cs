@@ -1,12 +1,12 @@
 using Sa.Classes;
+using Sa.Outbox.PlugServices;
 using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Publication;
 
 internal sealed class OutboxMessagePublisher(
     TimeProvider timeProvider,
-    IArrayPool arrayPool,
-    IOutboxRepository outboxRepository,
+    IOutboxBulkWriter bulkWriter,
     OutboxPublishSettings publishSettings
 ) : IOutboxMessagePublisher
 {
@@ -34,7 +34,7 @@ internal sealed class OutboxMessagePublisher(
                 ? maxBatchSize
                 : messages.Count - start;
 
-            OutboxMessage<TMessage>[] payloads = arrayPool.Rent<OutboxMessage<TMessage>>(len);
+            OutboxMessage<TMessage>[] payloads = DefaultArrayPool.Shared.Rent<OutboxMessage<TMessage>>(len);
             Span<OutboxMessage<TMessage>> payloadsSpan = payloads;
             try
             {
@@ -51,11 +51,11 @@ internal sealed class OutboxMessagePublisher(
                     count++;
                 }
 
-                sent += await outboxRepository.Save<TMessage>(payloads.AsMemory()[..len], cancellationToken);
+                sent += await bulkWriter.InsertBulk<TMessage>(payloads.AsMemory()[..len], cancellationToken);
             }
             finally
             {
-                arrayPool.Return(payloads);
+                DefaultArrayPool.Shared.Return(payloads);
             }
 
             start += len;

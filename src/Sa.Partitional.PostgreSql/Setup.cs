@@ -6,7 +6,9 @@ namespace Sa.Partitional.PostgreSql;
 
 public static class Setup
 {
-    public static IPartConfiguration AddPartitional(this IServiceCollection services, Action<IServiceProvider, ISettingsBuilder> configure, bool? asJob = null)
+    public static IPartConfiguration AddPartitional(this IServiceCollection services, 
+        Action<IServiceProvider, ISettingsBuilder> configure, 
+        bool? AsBackgroundJob = null)
     {
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddSingleton<IPartitionManager, PartitionManager>();
@@ -16,8 +18,8 @@ public static class Setup
             .AddDataSource()
             .AddPartTables(configure)
             .AddPartCache()
-            .AddPartMigrationSchedule((_, settings) => settings.AsJob = asJob ?? settings.AsJob)
-            .AddPartCleanupSchedule((_, settings) => settings.AsJob = asJob ?? settings.AsJob)
+            .AddPartMigrationSchedule((_, settings) => settings.AsBackgroundJob = AsBackgroundJob ?? settings.AsBackgroundJob)
+            .AddPartCleanupSchedule((_, settings) => settings.AsBackgroundJob = AsBackgroundJob ?? settings.AsBackgroundJob)
             ;
     }
 }

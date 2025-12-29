@@ -1,15 +1,21 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixture) : IClassFixture<DeliveryLongProcessorTests.Fixture>
+public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixture)
+    : IClassFixture<DeliveryLongProcessorTests.Fixture>
 {
     class TestMessageConsumer : IConsumer<TestMessage>
     {
-        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(
+            ConsumerGroupSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
+            CancellationToken cancellationToken)
         {
-            Console.WriteLine(outboxMessages.Count);
+            Console.WriteLine(messages.Length);
             await Task.Delay(1000, cancellationToken);
         }
     }
@@ -17,24 +23,22 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
 
     public class Fixture : OutboxPostgreSqlFixture<IDeliveryProcessor>
     {
-        public ConsumeSettings ConsumeSettings = default!;
+        public ConsumerGroupSettings OutboxSettings = default!;
 
         public Fixture() : base()
         {
-            Services.AddOutbox(builder
-                => builder
-                    .WithPartitioningSupport((_, sp)
-                        => sp.WithTenantIds(1, 2)
-                    )
-                    .WithDeliveries(builder
-                        => builder.AddDelivery<TestMessageConsumer, TestMessage>("test1", (_, s) =>
+            Services
+                .AddOutbox(builder => builder
+                    .WithTenantSettings((_, s) => s.WithTenantIds(1, 2))
+                    .WithDeliveries(b => b
+                        .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test1", (_, s) =>
                         {
                             s.ConsumeSettings
                                 .WithLockDuration(TimeSpan.FromMilliseconds(300))
                                 .WithLockRenewal(TimeSpan.FromMilliseconds(100))
                                 .WithNoBatchingWindow();
 
-                            ConsumeSettings = s.ConsumeSettings;
+                            OutboxSettings = s;
                         })
                     )
             )
@@ -63,7 +67,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
         Assert.True(cnt > 0);
 
 
-        var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
+        var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
         Assert.True(result > 0);
     }
 }

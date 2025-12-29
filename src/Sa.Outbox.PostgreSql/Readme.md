@@ -1,101 +1,191 @@
-# Sa.Outbox.PostgreSql
+﻿# Sa.Outbox.PostgreSql
 
-Designed for implementing the Outbox pattern using PostgreSQL, which is used to ensure reliable message delivery in distributed systems. It helps prevent message loss and guarantees that messages will be processed even in the event of failures.
+An AOT library for implementing the **Transactional Outbox** pattern using PostgreSQL in .NET applications. Provides guaranteed message delivery with support for multi-tenancy, concurrent processing, and advanced consumer management.
 
-## Features
-- Reliable message delivery: Ensures that messages are stored in the database until they are successfully processed.
-- Parallel processing: Enables messages to be processed in parallel, increasing system performance.
-- Flexibility: Supports various types of messages and their handlers.
-- Tenant support: Allows for even distribution of load.
+## Quick Start
 
-## Attention!
-- **Message delivery more than once:** Messages can be delivered more than once. This can occur due to network issues or repeated delivery attempts. Therefore, it is crucial to ensure idempotency in message processing.
-- **Unordered processing:** The order in which messages are processed may differ from the order in which they were sent.
+### Installation
+```bash
+dotnet add package Sa.Outbox.PostgreSql
+```
 
-## Examples
-
-### Configuration
+### Configuration DI
 
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
-using Sa.Outbox;
-using Sa.Outbox.PostgreSql;
+ConfigureServices(services => services
+    .AddOutbox(builder => builder
+        .WithTenantSettings((_, ts) => ts.WithTenantIds(1, 2, 3))
+        .WithDeliveries(builder => builder
+            .AddDelivery<MyConsumer, MyMessage>((_, settings) =>
+            {
+                settings.TableSettings.WithSchema("my_outbox");
+                settings.ScheduleSettings.WithIntervalSeconds(5);
+            })
+        )
+    )
+)
+```
 
-public class Startup
+### Publishing Messages
+
+```csharp
+public sealed record MyMessage(string PayloadId, int TenantId = 0) : IOutboxPayloadMessage
 {
-    public void ConfigureServices(IServiceCollection services)
-    {
-        services.AddOutbox(builder =>
-        {
-            builder.WithDeliveries(deliveryBuilder =>
-            {
-                deliveryBuilder.AddDelivery<MyMessageConsumer, MyMessage>();
-            });
-
-            builder.WithPartitioningSupport((serviceProvider, partSettings) =>
-            {
-                // Example configuration for processing messages for each tenant
-                partSettings.ForEachTenant = true; 
-                partSettings.GetTenantIds = cancellationToken => Task.FromResult(new int[] { 1, 2 });
-            });
-        });
-
-        // used PostgreSQL
-        services.AddOutboxUsingPostgreSql(cfg =>
-        {
-            cfg.AddDataSource(c => c.WithConnectionString("Host=my_host;Database=my_db;Username=my_user;Password=my_password"));
-            cfg.WithPgOutboxSettings((_, settings) =>
-            {
-                settings.TableSettings.DatabaseSchemaName = "public"; 
-                settings.CleanupSettings.DropPartsAfterRetention = TimeSpan.FromDays(30); 
-            });
-        });
-    }
+    public static string PartName => "root";
 }
+
+// Batch publishing for different tenants
+await publisher.Publish([
+    new MyMessage("#1", 1),
+    new MyMessage("#2", 2),
+    new MyMessage("#3", 3)
+]);
 ```
 
-### Message
+### Message Processing
 
 ```csharp
-[OutboxMessage]
-public record MyMessage(string PayloadId, string Content, int TenantId) : IOutboxPayloadMessage;
-```
-
-### Consume
-
-```csharp
-using Sa.Outbox;
-
-namespace MyNamespace
+public class MyConsumer : IConsumer<MyMessage>
 {
-    public class MyMessageConsumer : IConsumer<MyMessage>
-    {
-        public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<MyMessage>> outboxMessages, CancellationToken cancellationToken)
+    public async ValueTask Consume(
+        ConsumerGroupSettings settings,
+        OutboxMessageFilter filter,
+        ReadOnlyMemory<IOutboxContextOperations<MyMessage>> messages,
+        CancellationToken cancellationToken)
         {
-            foreach (var messageContext in outboxMessages)
+            await Task.Delay(100, cancellationToken);
+            foreach (var message in messages.Span)
             {
-                Console.WriteLine($"Processing message with ID: {messageContext.Payload.PayloadId} and Content: {messageContext.Payload.Content}");
-                messageContext.Ok("Message processed successfully.");
+                message.Ok("Message processed successfully.");
             }
         }
-    }
 }
 ```
 
-### Sending
+## Messages
+
+All messages for publication must implement the interface:
 
 ```csharp
-public class MessageSender(IOutboxMessagePublisher publisher)
+public interface IOutboxHasPart
 {
-    public async Task SendMessagesAsync(CancellationToken cancellationToken)
-    {
-        var messages = new List<MyMessage>
-        {
-            new MyMessage { PayloadId = Guid.NewGuid().ToString(), Content = "Hello, World!", TenantId = 1 },
-            new MyMessage { PayloadId = Guid.NewGuid().ToString(), Content = "Another message", TenantId = 2 }
-        };
+    /// <summary>
+    /// Gets the logical identifier of the partition associated with this type.
+    /// </summary>
+    /// <example>"orders", "notifications"</example>
+    static abstract string PartName { get; }
+}
 
-        await publisher.Publish(messages, cancellationToken);
-    }
+/// <summary>
+/// This interface defines the properties that any Outbox payload message must implement.
+/// </summary>
+public interface IOutboxPayloadMessage : IOutboxHasPart
+{
+    /// <summary>
+    /// Gets the unique identifier for the payload.
+    /// </summary>
+    string PayloadId { get; }
+
+    /// <summary>
+    /// Gets the identifier for the tenant associated with the payload.
+    /// </summary>
+    int TenantId { get; }
 }
 ```
+
+## Key Features
+
+### 1. Multi-Consumer Support
+A single message type can be processed by multiple independent consumers. Each consumer has its own queue with tracked offset.
+
+### 2. Multi-Tenancy
+The library is designed with data isolation between tenants in mind:
+
+```csharp
+.WithTenantSettings((_, ts) => ts
+    .WithTenantIds(1, 2, 3)                     // Explicit tenant specification
+    .WithAutoDetect()                           // Or automatic detection
+    .WithTenantDetector<TenantDetector>()       // Custom tenant detector
+    .WithTenantParallelProcessing(3)            // Can be processed concurrently
+)
+```
+
+### 3. Bulk Operations
+- **Batch publishing**: For maximum performance
+- **Batch processing**: Consumers receive messages in batches
+- **Batch acknowledgment**: Mass status updates
+
+### 4. Extended Status System
+- **`Ok()`** - Successful processing
+- **`Error(Exception)`** - Permanent error
+- **`Warn(Exception)`** - Temporary error with retry
+- **`Postpone(TimeSpan)`** - Delay processing
+- **`Aborted(string)`** - Skip with specified reason
+- e.t.c
+
+### 5. Pull Model with Static and Dynamic Management
+```csharp
+// DI
+settings.ConsumeSettings
+    .WithIntervalSeconds(5)
+    .WithMaxDeliveryAttempts(3)
+    .WithBatchingWindow(TimeSpan.FromMinutes(5))
+    .WithLockDuration(TimeSpan.FromMinutes(10));
+
+   // Dynamic management during runtime
+    public async ValueTask Consume(ConsumerGroupSettings settings,...
+        settings.ConsumeSettings.WithMaxProcessingIterations(100);
+```
+
+## Database Architecture
+
+### Table Structure
+
+```
+📂 outbox (schema)
+├── 📄 outbox__msg$     - Source messages (read-only)
+├── 📄 outbox           - Task queues for consumers (read-write)
+├── 📄 outbox__log$     - Delivery history (read-only)
+├── 📄 outbox__error$   - Permanent errors (read-only)
+├── 📄 outbox__type$    - Message type registration (read-only)
+└── 📄 outbox__offset$  - Offsets for consumer groups (read-write)
+```
+
+### Implementation Details
+
+- **BINARY COPY** for bulk message insertion into `outbox__msg$`
+- **SKIP LOCKED** for concurrent processing of `outbox`
+- **Advisory Locks** for coordinating `outbox__offset$` offsets
+- **Batch operations** to minimize round-trips
+
+### Table Settings
+```csharp
+.WithOutboxSettings((_, settings) =>
+{
+    // Schema and tables
+    settings.TableSettings
+        .WithSchema("my_schema")
+        // Table fields
+        .TaskQueue.Fields = {
+            TaskId = "id",
+            TenantId = "client_id"
+        };
+
+    // Automatic partition migration
+    settings.MigrationSettings
+        .WithForwardDays(2);
+
+    // Automatic partition cleanup
+    settings.CleanupSettings
+        .WithDropPartsAfterRetention(TimeSpan.FromDays(30));
+})
+```
+
+## Requirements
+
+- **.NET 9.0** or higher
+- **PostgreSQL 15+**
+
+## License
+
+MIT

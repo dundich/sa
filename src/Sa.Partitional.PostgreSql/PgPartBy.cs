@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Sa.Classes;
 using Sa.Extensions;
+using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql;
 
@@ -9,8 +10,7 @@ public sealed record PgPartBy(
     , Func<DateTimeOffset, LimSection<DateTimeOffset>> GetRange
     , Func<DateTimeOffset, string> Fmt
     , Func<string, DateTimeOffset?> ParseFmt
-)
-    : Enumeration<PgPartBy>((int)PartByRange, PartByRange.ToString())
+) : Enumeration<PgPartBy>((int)PartByRange, PartByRange.ToString())
 {
 
     public static readonly PgPartBy Day = new(

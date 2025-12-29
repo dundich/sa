@@ -1,8 +1,8 @@
-using Sa.Classes;
+using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql;
 
-public interface ISqlBuilder
+internal interface ISqlBuilder
 {
     ISqlTableBuilder? this[string tableName] { get; }
 

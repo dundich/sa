@@ -3,12 +3,17 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Description>Simple client for Npqsql</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Npgsql"/>
+    <Compile Include="..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
+    <Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
   </ItemGroup>
 
 </Project>

@@ -30,8 +30,8 @@ public static class DbCommandExtensions
     public static NpgsqlCommand AddParam<TProvider, T>(
         this NpgsqlCommand command,
         string prefix,
-        int index,
-        T value)
+        T value,
+        int index)
         where TProvider : INamePrefixProvider
     {
         var paramName = CachedParamNames<TProvider>.Default.Get(prefix, index);
@@ -67,7 +67,13 @@ sealed class CachedParamNames<T>(int maxIndex) where T : INamePrefixProvider
             return s_cachedBuffers[arrayIndex][index];
         }
 
-        return "{prefix}{index}";
+        return Combine(prefix, index);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string Combine(string prefix, int index)
+    {
+        return $"{prefix}{index}";
     }
 
     private static string[][] CreateCachedArrays(string[] prefixes, int maxCapacity)
@@ -79,7 +85,7 @@ sealed class CachedParamNames<T>(int maxIndex) where T : INamePrefixProvider
             string prefix = prefixes[i];
             var arr = new string[maxCapacity];
             for (int j = 0; j < maxCapacity; j++)
-                arr[j] = $"{prefix}{j}";
+                arr[j] = Combine(prefix, j);
             result[i] = arr;
         }
 

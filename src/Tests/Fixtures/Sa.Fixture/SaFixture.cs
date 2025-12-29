@@ -5,8 +5,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Sa.Fixture;
 
+public interface ISaFixture
+{
+    CancellationToken CancellationToken { get; }
+    IServiceProvider ServiceProvider { get; }
+    Action<IServiceCollection, IConfiguration>? SetupServices { get; set; }
+}
 
-public abstract class SaFixture<TSettings> : IAsyncLifetime
+public abstract class SaFixture : IAsyncLifetime, ISaFixture
 {
     private readonly Lazy<ServiceProvider> _serviceProvider;
 
@@ -20,17 +26,14 @@ public abstract class SaFixture<TSettings> : IAsyncLifetime
 
     public Action<IServiceCollection, IConfiguration>? SetupServices { get; set; }
 
-    protected SaFixture(TSettings settings)
+    protected SaFixture()
     {
-        Settings = settings;
         _serviceProvider = new Lazy<ServiceProvider>(() =>
         {
             SetupServices?.Invoke(Services, Configuration);
             return Services.BuildServiceProvider();
         });
     }
-
-    public TSettings Settings { get; }
 
     public IServiceProvider ServiceProvider => _serviceProvider.Value;
 
@@ -45,21 +48,25 @@ public abstract class SaFixture<TSettings> : IAsyncLifetime
 }
 
 
-public abstract class SaFixture<TSub, TSettings> : SaFixture<TSettings>
+public abstract class SaFixture<TSub, TSettings> : SaFixture
      where TSub : notnull
 {
     private readonly Lazy<TSub> sub;
 
-    protected SaFixture(TSettings settings) : base(settings)
+    protected SaFixture(TSettings settings) : base()
     {
+        Settings = settings;
         sub = new Lazy<TSub>(() => ServiceProvider.GetRequiredService<TSub>());
     }
 
     public TSub Sub => sub.Value;
+
+    public TSettings Settings { get; }
 }
 
 
-public abstract class SaSubFixture<TSub>() : SaFixture<TSub, object>(new())
+public abstract class SaFixture<TSub>() : SaFixture
      where TSub : notnull
 {
+    public TSub Sub => ServiceProvider.GetRequiredService<TSub>();
 }

@@ -8,6 +8,6 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 public interface IDeliveryProcessor
 {
-    Task<long> ProcessMessages<TMessage>(ConsumeSettings settings, CancellationToken cancellationToken)
+    Task<long> ProcessMessages<TMessage>(ConsumerGroupSettings settings, CancellationToken cancellationToken)
         where TMessage: IOutboxPayloadMessage;
 }

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
+using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
@@ -16,12 +17,16 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         private static readonly TestException s_err = new("test permanent error");
-        public async ValueTask Consume(ConsumeSettings settings, IReadOnlyCollection<IOutboxContextOperations<TestMessage>> outboxMessages, CancellationToken cancellationToken)
+        public async ValueTask Consume(
+            ConsumerGroupSettings settings,
+            OutboxMessageFilter filter,
+            ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
+            CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
-            foreach (var msg in outboxMessages)
+            foreach (var msg in messages.Span)
             {
-                msg.PermanentError(s_err, "test");
+                msg.Error(s_err, "test");
             }
         }
     }
@@ -32,20 +37,19 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder
-                    => builder.WithPartitioningSupport((_, sp)
-                        => sp.WithTenantIds(1, 2)
-                )
-                .WithDeliveries(builder
-                    => builder.AddDelivery<TestMessageConsumer, TestMessage>("test2", (_, s) =>
-                    {
-                        ConsumeSettings = s.ConsumeSettings.WithNoBatchingWindow();
-                    })
+                .AddOutbox(builder => builder
+                    .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2))
+                    .WithDeliveries(builder => builder
+                        .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test2", (_, s) =>
+                        {
+                            s.ConsumeSettings.WithNoBatchingWindow();
+                            OutboxSettings = s;
+                        })
                 )
             );
         }
 
-        public ConsumeSettings ConsumeSettings = default!;
+        public ConsumerGroupSettings OutboxSettings = default!;
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }
@@ -69,12 +73,12 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
-        var result = await Sub.ProcessMessages<TestMessage>(fixture.ConsumeSettings, CancellationToken.None);
+        var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
 
         Assert.Equal(0, result);
 
-
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>($"select count(error_id) from {_tableSettings.DatabaseErrorTableName}", TestContext.Current.CancellationToken);
+        var sql = $"select count(*) from {_tableSettings.Error.TableName}";
+        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, errCount);
     }

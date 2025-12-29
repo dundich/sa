@@ -10,7 +10,7 @@ public sealed class PartCleanupScheduleSettings
     /// Gets or sets a value indicating whether the cleanup should be executed as a background job.
     /// Default is set to false, meaning the cleanup will not run as a job.
     /// </summary>
-    public bool AsJob { get; set; } = false;
+    public bool AsBackgroundJob { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the duration after which old parts will be dropped.

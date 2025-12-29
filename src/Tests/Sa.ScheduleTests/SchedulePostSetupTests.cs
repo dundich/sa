@@ -6,7 +6,7 @@ namespace Sa.ScheduleTests;
 
 public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture) : IClassFixture<SchedulePostSetupTests.Fixture>
 {
-    public class Fixture : SaSubFixture<IScheduler>
+    public class Fixture : SaFixture<IScheduler>
     {
         static class Counter
         {

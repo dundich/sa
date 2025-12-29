@@ -10,18 +10,21 @@ internal static class Setup
     public static IServiceCollection AddOutboxDelivery(this IServiceCollection services, Action<IDeliveryBuilder> configure)
     {
 
+        services.TryAddSingleton<IOutboxContextFactory, OutboxContextFactory>();
+
         services.TryAddSingleton<IDeliveryBatcher, DeliveryBatcher>();
 
         // looper - job processor
         services.TryAddSingleton<IDeliveryProcessor, DeliveryProcessor>();
         // sender - sending to scope consumer
         services.TryAddSingleton<IDeliveryCourier, DeliveryCourier>();
+
         // support - messaging to each tenant
-        services.TryAddSingleton<IPartitionalSupportCache, PartitionalSupportCache>();
+        services.AddOutboxPartitional();
 
         services.TryAddSingleton<IDeliveryTenant, DeliveryTenant>();
 
-        services.TryAddSingleton<IDeliveryScoped, DeliveryScoped>();
+        services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
         configure.Invoke(new DeliveryBuilder(services));
 

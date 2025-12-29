@@ -106,51 +106,25 @@ internal sealed class ProcessExecutor : IProcessExecutor
             throw new ProcessStartException($"Failed to start process: '{startInfo.FileName}' with arguments '{startInfo.Arguments}'");
         }
 
-        var outputCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var errorCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        int exitCode = await ExecuteProcessWithHandlersAsync(process, outputDataReceived, errorDataReceived, timeout, cancellationToken)
+            .ConfigureAwait(false);
+
+        return exitCode;
+    }
+
+    private static async Task<int> ExecuteProcessWithHandlersAsync(
+        Process process,
+        Action<string>? outputDataReceived,
+        Action<string>? errorDataReceived,
+        TimeSpan? timeout,
+        CancellationToken cancellationToken)
+    {
         int exitCode;
 
         try
         {
-            if (outputDataReceived != null)
-            {
-                process.OutputDataReceived += (_, e) =>
-                {
-                    if (e.Data != null) outputDataReceived(e.Data);
-                    else outputCompletion.TrySetResult(true);
-                };
-            }
-
-            if (errorDataReceived != null)
-            {
-                process.ErrorDataReceived += (_, e) =>
-                {
-                    if (e.Data != null) errorDataReceived(e.Data);
-                    else errorCompletion.TrySetResult(true);
-                };
-            }
-
-            if (startInfo.RedirectStandardOutput)
-                process.BeginOutputReadLine();
-
-            if (startInfo.RedirectStandardError)
-                process.BeginErrorReadLine();
-
-            using var timeoutCts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken, 
-                timeoutCts?.Token ?? CancellationToken.None);
-
-            var waitTask = process.WaitForExitAsync(linkedCts.Token);
-
-            // Wait for all streams to finish reading
-            List<Task> outputTasks = [waitTask];
-
-            if (outputDataReceived != null) outputTasks.Add(outputCompletion.Task);
-            if (errorDataReceived != null) outputTasks.Add(errorCompletion.Task);
-
-            await Task.WhenAll(outputTasks).ConfigureAwait(false);
+            await Run(process, outputDataReceived, errorDataReceived, timeout, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -166,6 +140,86 @@ internal sealed class ProcessExecutor : IProcessExecutor
         }
 
         return exitCode;
+    }
+
+    private static async Task Run(
+        Process process,
+        Action<string>? outputDataReceived,
+        Action<string>? errorDataReceived,
+        TimeSpan? timeout,
+        CancellationToken cancellationToken)
+    {
+        var outputCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var errorCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (outputDataReceived != null)
+        {
+            SetupOutputDataReceived(process, outputDataReceived, outputCompletion);
+        }
+
+        if (errorDataReceived != null)
+        {
+            SetupErrorDataReceived(process, errorDataReceived, errorCompletion);
+        }
+
+        if (process.StartInfo.RedirectStandardOutput)
+        {
+            process.BeginOutputReadLine();
+        }
+
+        if (process.StartInfo.RedirectStandardError)
+        {
+            process.BeginErrorReadLine();
+        }
+
+        using var timeoutCts = timeout.HasValue
+            ? new CancellationTokenSource(timeout.Value)
+            : null;
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeoutCts?.Token ?? CancellationToken.None);
+
+        var waitTask = process.WaitForExitAsync(linkedCts.Token);
+
+        // Wait for all streams to finish reading
+        List<Task> outputTasks = [waitTask];
+
+        if (outputDataReceived != null)
+        {
+            outputTasks.Add(outputCompletion.Task);
+        }
+
+        if (errorDataReceived != null)
+        {
+            outputTasks.Add(errorCompletion.Task);
+        }
+
+        await Task.WhenAll(outputTasks).ConfigureAwait(false);
+    }
+
+    private static void SetupErrorDataReceived(
+        Process process,
+        Action<string> errorDataReceived,
+        TaskCompletionSource<bool> errorCompletion)
+    {
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data != null) errorDataReceived(e.Data);
+            else errorCompletion.TrySetResult(true);
+        };
+    }
+
+    private static void SetupOutputDataReceived(
+        Process process,
+        Action<string> outputDataReceived,
+        TaskCompletionSource<bool> outputCompletion)
+    {
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data != null) outputDataReceived(e.Data);
+            else outputCompletion.TrySetResult(true);
+        };
     }
 
     /// <summary>
@@ -206,7 +260,6 @@ internal sealed class ProcessExecutor : IProcessExecutor
         int exitCode;
         try
         {
-            // Создаём токен с таймаутом
             using var timeoutCts = timeout.HasValue
                 ? new CancellationTokenSource(timeout.Value)
                 : null;
@@ -384,22 +437,22 @@ internal sealed class ProcessExecutor : IProcessExecutor
 
 
 // Custom exceptions
-public class ProcessExecutionException(int exitCode, string message, Exception? inner = null)
+public sealed class ProcessExecutionException(int exitCode, string message, Exception? inner = null)
     : Exception(message, inner)
 {
     public int Exitcode => exitCode;
 }
 
-public class ProcessExecutionResultException(ProcessExecutionResult result)
+public sealed class ProcessExecutionResultException(ProcessExecutionResult result)
     : Exception($"Process failed (exit={result.ExitCode}): {result.StandardError}")
 {
     public ProcessExecutionResult Result { get; } = result;
 }
 
-public class ProcessStartException(string message) : IOException(message)
+public sealed class ProcessStartException(string message) : IOException(message)
 {
 }
 
-public class ProcessTimeoutException(string message) : TimeoutException(message)
+public sealed class ProcessTimeoutException(string message) : TimeoutException(message)
 {
 }

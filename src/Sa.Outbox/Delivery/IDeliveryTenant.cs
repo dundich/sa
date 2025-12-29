@@ -7,8 +7,8 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 internal interface IDeliveryTenant
 {
-    Task<int> Process<TMessage>(
+    Task<int> ProcessInTenant<TMessage>(
             int tenantId,
-            ConsumeSettings settings,
+            ConsumerGroupSettings settings,
             CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
 }

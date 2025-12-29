@@ -1,6 +1,6 @@
-﻿using Sa.Classes;
-using Sa.Data.PostgreSql.Fixture;
+﻿using Sa.Data.PostgreSql.Fixture;
 using Sa.Partitional.PostgreSql;
+using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSqlTests.Repositories;
 
@@ -11,7 +11,6 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
 
     public class Fixture : PgDataSourceFixture<IPartRepository>
     {
-        
         public Fixture()
         {
             Services.AddPartitional((_, builder) =>

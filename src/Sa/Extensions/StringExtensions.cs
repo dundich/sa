@@ -7,11 +7,13 @@ namespace Sa.Extensions;
 internal static partial class StringExtensions
 {
     [DebuggerStepThrough]
-    public static string? NullIfEmpty(this string? str) => string.IsNullOrWhiteSpace(str) ? default : str;
+    public static string? NullIfEmpty(this string? str) 
+        => string.IsNullOrWhiteSpace(str) ? default : str;
 
 
     [DebuggerStepThrough]
-    public static uint GetMurmurHash3(this string str, uint seed = 0) => MurmurHash3.Hash32(str.StrToBytes(), seed);
+    public static uint GetMurmurHash3(this string str, uint seed = 0) 
+        => MurmurHash3.Hash32(Encoding.UTF8.GetBytes(str), seed);
 
 
     [DebuggerStepThrough]

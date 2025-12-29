@@ -3,17 +3,17 @@ using System.Threading.Channels;
 namespace Sa.Classes;
 
 
-public interface IWork<in TModel>
+internal interface IWork<in TModel>
 {
     Task Execute(TModel model, CancellationToken cancellationToken);
 }
 
-public interface IWorkObserver<in TModel>
+internal interface IWorkObserver<in TModel>
 {
     Task HandleChanges(TModel model, WorkInfo work, CancellationToken cancellationToken);
 }
 
-public record struct WorkInfo(
+internal record struct WorkInfo(
     long Id,
     WorkStatus Status,
     DateTimeOffset EnqueuedTime,
@@ -25,7 +25,7 @@ public record struct WorkInfo(
     public readonly bool IsEmpty => Id == 0;
 }
 
-public enum WorkStatus
+internal enum WorkStatus
 {
     Queued,
     Running,
@@ -34,7 +34,7 @@ public enum WorkStatus
     Cancelled
 }
 
-public interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
+internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
 {
     bool IsEnabled { get; }
     int ActiveTasks { get; }
@@ -49,7 +49,7 @@ public interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
     event EventHandler<WorkInfo>? StatusChanged;
 }
 
-public sealed class WorkQueue<TModel> : IWorkQueue<TModel>
+internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 {
     private readonly Channel<WorkItemSnapshot> _queue;
 

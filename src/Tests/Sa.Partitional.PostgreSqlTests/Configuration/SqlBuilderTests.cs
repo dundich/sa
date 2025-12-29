@@ -1,4 +1,5 @@
-﻿using Sa.Fixture;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Sa.Fixture;
 using Sa.Partitional.PostgreSql;
 
 namespace Sa.Partitional.PostgreSqlTests.Configuration;
@@ -7,9 +8,9 @@ namespace Sa.Partitional.PostgreSqlTests.Configuration;
 
 public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<SqlBuilderTests.Fixture>
 {
-    public class Fixture : SaSubFixture<ISqlBuilder>
+    public class Fixture : SaFixture
     {
-        public Fixture()
+        public Fixture() : base()
         {
             Services.AddPartitional((_, builder) =>
             {
@@ -81,6 +82,8 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
                 });
             });
         }
+
+        internal ISqlBuilder SqlBuilder => ServiceProvider.GetRequiredService<ISqlBuilder>();
     }
 
 
@@ -88,7 +91,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     [Fact]
     public void PartitionalPostgreSql_SqlBuiling_Test_0()
     {
-        ISqlBuilder sqlbuilder = fixture.Sub;
+        ISqlBuilder sqlbuilder = fixture.SqlBuilder;
 
         ISqlTableBuilder? build = sqlbuilder["public.test_0"];
         Assert.NotNull(build);
@@ -110,7 +113,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     [Fact]
     public void PartitionalPostgreSql_SqlBuiling_Test_1()
     {
-        ISqlBuilder sqlbuilder = fixture.Sub;
+        ISqlBuilder sqlbuilder = fixture.SqlBuilder;
 
         ISqlTableBuilder? tblBuilder = sqlbuilder["public.test_1"];
         Assert.NotNull(tblBuilder);
@@ -122,7 +125,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     [Fact]
     public void PartitionalPostgreSql_SqlBuiling_Test_2()
     {
-        ISqlBuilder sqlbuilder = fixture.Sub;
+        ISqlBuilder sqlbuilder = fixture.SqlBuilder;
         ISqlTableBuilder? tblBuilder = sqlbuilder["test_2"];
 
         Assert.NotNull(tblBuilder);
@@ -134,7 +137,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     [Fact]
     public void PartitionalPostgreSql_SqlBuiling_Test_3()
     {
-        ISqlBuilder sqlbuilder = fixture.Sub;
+        ISqlBuilder sqlbuilder = fixture.SqlBuilder;
         ISqlTableBuilder? tblBuilder = sqlbuilder["public.test_3"];
 
         Assert.NotNull(tblBuilder);
@@ -157,7 +160,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     [Fact]
     public void PartitionalPostgreSql_SqlBuiling_Test_4()
     {
-        ISqlBuilder sqlbuilder = fixture.Sub;
+        ISqlBuilder sqlbuilder = fixture.SqlBuilder;
 
         ISqlTableBuilder? builder = sqlbuilder["test_4"];
         Assert.NotNull(builder);
@@ -171,7 +174,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     [Fact]
     public void PartitionalPostgreSql_SqlBuiling_Test_5()
     {
-        ISqlBuilder sqlbuilder = fixture.Sub;
+        ISqlBuilder sqlbuilder = fixture.SqlBuilder;
 
         ISqlTableBuilder? builder = sqlbuilder["test_5"];
 
@@ -186,7 +189,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     [Fact]
     public void PartitionalPostgreSql_CheckIdName_Test()
     {
-        ISqlBuilder sqlbuilder = fixture.Sub;
+        ISqlBuilder sqlbuilder = fixture.SqlBuilder;
 
         ISqlTableBuilder? builder = sqlbuilder["test_5"];
 

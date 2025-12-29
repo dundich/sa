@@ -1,33 +1,28 @@
-using Npgsql;
 using Sa.Data.PostgreSql;
-using Sa.Outbox.PostgreSql.TypeHashResolve;
+using Sa.Outbox.PostgreSql.SqlBuilder;
+using Sa.Outbox.PostgreSql.TypeResolve;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
 internal sealed class ExtendDeliveryCommand(
     IPgDataSource dataSource
-    , IMsgTypeHashResolver hashResolver
-    , SqlOutboxTemplate sqlTemplate
+    , IOutboxTypeResolver hashResolver
+    , SqlOutboxBuilder sql
 ) : IExtendDeliveryCommand
 {
     public async Task<int> Execute(TimeSpan lockExpiration, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetCode(filter.PayloadType, cancellationToken);
+        long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
+        var lockExpiresOn = filter.NowDate + lockExpiration;
 
-        long lockExpiresOn = (filter.NowDate + lockExpiration).ToUnixTimeSeconds();
-        long fromDate = filter.FromDate.ToUnixTimeSeconds();
-        long now = filter.NowDate.ToUnixTimeSeconds();
-
-        return await dataSource.ExecuteNonQuery(sqlTemplate.SqlExtendDelivery,
-        [
-            new NpgsqlParameter<int>(SqlParam.TenantId, filter.TenantId)
-            , new NpgsqlParameter<string>(SqlParam.ConsumerGroupId, filter.ConsumerGroupId)
-            , new NpgsqlParameter<long>(SqlParam.FromDate, fromDate)
-            , new NpgsqlParameter<string>(SqlParam.TransactId, filter.TransactId)
-            , new NpgsqlParameter<long>(SqlParam.TypeName, typeCode)
-            , new NpgsqlParameter<long>(SqlParam.LockExpiresOn, lockExpiresOn)
-            , new NpgsqlParameter<long>(SqlParam.NowDate, now)
-        ]
+        return await dataSource.ExecuteNonQuery(sql.SqlExtendDelivery, cmd => cmd
+            .AddParamTenantId(filter.TenantId)
+            .AddParamConsumerGroupId(filter.ConsumerGroupId)
+            .AddParamFromDate(filter.FromDate)
+            .AddParamNowDate(filter.NowDate)
+            .AddParamTransactId(filter.TransactId)
+            .AddParamLockExpiresOn(lockExpiresOn)
+            .AddParamTypeId(typeCode)
         , cancellationToken);
     }
 }
