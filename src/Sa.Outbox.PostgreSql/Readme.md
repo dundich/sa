@@ -13,15 +13,25 @@ dotnet add package Sa.Outbox.PostgreSql
 
 ```csharp
 ConfigureServices(services => services
+    // outbox
     .AddOutbox(builder => builder
         .WithTenantSettings((_, ts) => ts.WithTenantIds(1, 2, 3))
         .WithDeliveries(builder => builder
             .AddDelivery<MyConsumer, MyMessage>((_, settings) =>
             {
-                settings.TableSettings.WithSchema("my_outbox");
                 settings.ScheduleSettings.WithIntervalSeconds(5);
             })
         )
+    )
+    // outbox pg
+    .AddOutboxUsingPostgreSql(cfg => cfg
+        .WithDataSource(ds => ds.WithConnectionString(connectionString))
+        .WithOutboxSettings((_, settings) =>
+        {
+            settings.TableSettings.WithSchema("my_outbox");
+            settings.ConsumeSettings.WithMinOffset<MyConsumer>(DateTimeOffset.Now);
+        })
+        .WithMessageSerializer(...)
     )
 )
 ```
