@@ -1,11 +1,12 @@
 using System.Text;
+using Microsoft.Extensions.ObjectPool;
 
-namespace Sa.Outbox.PostgreSql;
+namespace Sa.Outbox.PostgreSql.SqlBuilder;
 
 /// <summary>
 /// Provides SQL query templates for working with PostgreSQL outbox tables.
 /// </summary>
-internal sealed class SqlOutboxTemplate(PgOutboxTableSettings settings)
+internal sealed class SqlOutboxBuilder(PgOutboxTableSettings settings, ObjectPool<StringBuilder> objectPool)
 {
     internal PgOutboxTableSettings Settings => settings;
 
@@ -191,7 +192,7 @@ WHERE
     public string SqlUpdateOffset = $"""
 UPDATE {settings.GetQualifiedOffsetTableName()}
 SET 
-  {settings.Offset.Fields.GroupOffset}={SqlParam.Offset}, 
+  {settings.Offset.Fields.GroupOffset}={SqlParam.Offset},
   {settings.Offset.Fields.GroupUpdatedAt}=NOW()
 WHERE 
   {settings.Offset.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId}
@@ -202,15 +203,15 @@ WHERE
 
     public string SqlInitOffset = $"""
 INSERT INTO {settings.GetQualifiedOffsetTableName()} 
-  ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId})
+  ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId},{settings.Offset.Fields.GroupOffset})
 VALUES 
-  ({SqlParam.ConsumerGroupId},{SqlParam.TenantId})
+  ({SqlParam.ConsumerGroupId},{SqlParam.TenantId},{SqlParam.Offset})
 ON CONFLICT ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId}) DO NOTHING
 ;
 """;
 
 
-    public string SqlLockOffset = $"SELECT pg_advisory_xact_lock({SqlParam.OffsetKey});";
+    public string SqlLockOffset = $"SELECT pg_advisory_xact_lock({SqlParam.LockOffset});";
 
 
     public string SqlLoadConsumerGroup = $"""
@@ -254,7 +255,7 @@ FROM inserted_rows
 
     public string SqlError(int count) => SqlError(settings, count);
 
-    private static string SqlError(PgOutboxTableSettings settings, int count) =>
+    private string SqlError(PgOutboxTableSettings settings, int count) =>
 $"""
 INSERT INTO {settings.GetQualifiedErrorTableName()} 
   ({settings.Error.Fields.ErrorId},{settings.Error.Fields.ErrorType},{settings.Error.Fields.ErrorMessage},{settings.Error.Fields.ErrorCreatedAt})
@@ -264,38 +265,44 @@ ON CONFLICT DO NOTHING
 ;
 """;
 
-    private static string BuildErrorInsertValues(int count)
+    private string BuildErrorInsertValues(int count)
     {
-        const int estimatedLengthPerRow = 70;
-        var sb = new StringBuilder(count * estimatedLengthPerRow + (count - 1) * 3);
-
-        for (int i = 0; i < count; i++)
+        var sb = objectPool.Get();
+        try
         {
-            if (i > 0)
+
+            for (int i = 0; i < count; i++)
             {
-                sb.Append(',');
-                sb.Append('\n');
+                if (i > 0)
+                {
+                    sb.Append(',');
+                    sb.Append('\n');
+                }
+
+                sb.Append('(')
+                  .Append(SqlParam.ErrorId).Append(i)
+                  .Append(',')
+                  .Append(SqlParam.TypeName).Append(i)
+                  .Append(',')
+                  .Append(SqlParam.StatusMessage).Append(i)
+                  .Append(',')
+                  .Append(SqlParam.CreatedAt).Append(i)
+                  .Append(')');
             }
 
-            sb.Append('(')
-              .Append(SqlParam.ErrorId).Append(i)
-              .Append(',')
-              .Append(SqlParam.TypeName).Append(i)
-              .Append(',')
-              .Append(SqlParam.StatusMessage).Append(i)
-              .Append(',')
-              .Append(SqlParam.CreatedAt).Append(i)
-              .Append(')');
+            return sb.ToString();
         }
-
-        return sb.ToString();
+        finally
+        {
+            objectPool.Return(sb);
+        }
     }
 
 
     public string SqlFinishDelivery(int count) => SqlFinishDelivery(settings, count);
 
 
-    private static string SqlFinishDelivery(PgOutboxTableSettings settings, int count)
+    private string SqlFinishDelivery(PgOutboxTableSettings settings, int count)
     {
         return
 $"""
@@ -343,31 +350,37 @@ WHERE
 """;
     }
 
-    private static string BuildDeliveryInsertValues(int count)
+    private string BuildDeliveryInsertValues(int count)
     {
-        var estimatedLength = count * 150 + (count - 1) * 3;
-        var sb = new StringBuilder(estimatedLength);
-
-        for (int i = 0; i < count; i++)
+        var sb = objectPool.Get();
+        try
         {
-            if (i > 0) sb.Append(",\n");
 
-            sb.Append('(')
-              .Append(SqlParam.StatusCode).Append(i).Append(',')
-              .Append(SqlParam.StatusMessage).Append(i).Append(',')
-              .Append(SqlParam.CreatedAt).Append(i).Append(',')
-              .Append(SqlParam.PayloadId).Append(i).Append(',')
-              .Append(SqlParam.TenantId).Append(',')
-              .Append(SqlParam.ConsumerGroupId).Append(',')
-              .Append(SqlParam.TaskId).Append(i).Append(',')
-              .Append(SqlParam.TransactId).Append(',')
-              .Append(SqlParam.LockExpiresOn).Append(i).Append(',')
-              .Append(SqlParam.TaskCreatedAt).Append(i).Append(',')
-              .Append(SqlParam.ErrorId).Append(i)
-              .Append(')');
+            for (int i = 0; i < count; i++)
+            {
+                if (i > 0) sb.Append(",\n");
+
+                sb.Append('(')
+                  .Append(SqlParam.StatusCode).Append(i).Append(',')
+                  .Append(SqlParam.StatusMessage).Append(i).Append(',')
+                  .Append(SqlParam.CreatedAt).Append(i).Append(',')
+                  .Append(SqlParam.PayloadId).Append(i).Append(',')
+                  .Append(SqlParam.TenantId).Append(',')
+                  .Append(SqlParam.ConsumerGroupId).Append(',')
+                  .Append(SqlParam.TaskId).Append(i).Append(',')
+                  .Append(SqlParam.TransactId).Append(',')
+                  .Append(SqlParam.LockExpiresOn).Append(i).Append(',')
+                  .Append(SqlParam.TaskCreatedAt).Append(i).Append(',')
+                  .Append(SqlParam.ErrorId).Append(i)
+                  .Append(')');
+            }
+
+            return sb.ToString();
         }
-
-        return sb.ToString();
+        finally
+        {
+            objectPool.Return(sb);
+        }
     }
 }
 

@@ -1,10 +1,11 @@
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxTemplate sqlTemplate)
+internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxBuilder sqlTemplate)
     : IErrorDeliveryCommand
 {
 

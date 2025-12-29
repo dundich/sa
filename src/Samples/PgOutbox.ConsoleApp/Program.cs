@@ -35,7 +35,11 @@ IHost host = Host.CreateDefaultBuilder()
         // outbox pg
         .AddOutboxUsingPostgreSql(cfg => cfg
             .WithDataSource(ds => ds.WithConnectionString(connectionString))
-            .WithOutboxSettings((_, settings) => settings.TableSettings.WithSchema("test"))
+            .WithOutboxSettings((_, settings) =>
+            {
+                settings.TableSettings.WithSchema("test");
+                settings.ConsumeSettings.WithMinOffset<Group1Consumer>(DateTimeOffset.Now);
+            })
             .WithMessageSerializer(new OutboxMessageSerializer())
         )
         .AddHostedService<MessagePublisherService>()
@@ -156,12 +160,12 @@ namespace PgOutbox
                 {
                     var rnd = Random.Shared.Next(1, 4);
                     await Task.Delay(TimeSpan.FromSeconds(rnd), stoppingToken);
-                    
+
                     await publisher.Publish(
                         new SomeMessage(
-                            i.ToString(), 
-                            DateTime.Now.ToString(), 
-                            rnd), 
+                            i.ToString(),
+                            DateTime.Now.ToString(),
+                            rnd),
                         stoppingToken);
                 }
             }

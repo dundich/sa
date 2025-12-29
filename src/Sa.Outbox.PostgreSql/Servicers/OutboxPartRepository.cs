@@ -1,7 +1,7 @@
 using Sa.Extensions;
 using Sa.Partitional.PostgreSql;
 
-namespace Sa.Outbox.PostgreSql.Repository;
+namespace Sa.Outbox.PostgreSql.Services;
 
 internal sealed class OutboxPartRepository(IPartitionManager partManager, PgOutboxTableSettings tableSettings)
     : IOutboxPartRepository

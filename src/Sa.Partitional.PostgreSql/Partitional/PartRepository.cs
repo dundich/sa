@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Npgsql;
-using Sa.Classes;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Partitional.PostgreSql.Classes;
@@ -24,9 +23,8 @@ internal sealed partial class PartRepository(
         await _migrationSemaphore.WaitAsync(cancellationToken);
         try
         {
-            return await Retry.Jitter<int>(
-                async t => await dataSource.ExecuteNonQuery(sql, t), 
-                next: (e, _) => (e is NpgsqlException exception) && exception.IsTransient, 
+            return await PgRetryStrategy.ExecuteWithRetry(
+                async t => await dataSource.ExecuteNonQuery(sql, t),
                 cancellationToken: cancellationToken);
         }
         finally
@@ -35,7 +33,11 @@ internal sealed partial class PartRepository(
         }
     }
 
-    public async Task<int> CreatePart(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
+    public async Task<int> CreatePart(
+        string tableName,
+        DateTimeOffset date,
+        StrOrNum[] partValues,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(partValues);
 
@@ -45,7 +47,10 @@ internal sealed partial class PartRepository(
         return await ExecuteDDL(sql, cancellationToken);
     }
 
-    public async Task<int> Migrate(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve, CancellationToken cancellationToken = default)
+    public async Task<int> Migrate(
+        DateTimeOffset[] dates,
+        Func<string, Task<StrOrNum[][]>> resolve,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(dates);
         ArgumentNullException.ThrowIfNull(resolve);
@@ -92,7 +97,10 @@ internal sealed partial class PartRepository(
         return i;
     }
 
-    public async Task<List<PartByRangeInfo>> GetPartsFromDate(string tableName, DateTimeOffset fromDate, CancellationToken cancellationToken = default)
+    public async Task<List<PartByRangeInfo>> GetPartsFromDate(
+        string tableName,
+        DateTimeOffset fromDate,
+        CancellationToken cancellationToken = default)
     {
         string sql = sqlBuilder.SelectPartsFromDateSql(tableName);
         long unixTime = fromDate.ToUniversalTime().StartOfDay().ToUnixTimeSeconds();
@@ -102,7 +110,7 @@ internal sealed partial class PartRepository(
 
     private async Task<List<PartByRangeInfo>> GetPartsFormDateWithRetry(string sql, long unixTime, CancellationToken cancellationToken)
     {
-        return await Retry.Jitter(
+        return await PgRetryStrategy.ExecuteWithRetry(
             async t =>
             {
                 try
@@ -121,7 +129,10 @@ internal sealed partial class PartRepository(
             , cancellationToken: cancellationToken);
     }
 
-    public async Task<List<PartByRangeInfo>> GetPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
+    public async Task<List<PartByRangeInfo>> GetPartsToDate(
+        string tableName,
+        DateTimeOffset toDate,
+        CancellationToken cancellationToken = default)
     {
         string sql = sqlBuilder.SelectPartsToDateSql(tableName);
         try

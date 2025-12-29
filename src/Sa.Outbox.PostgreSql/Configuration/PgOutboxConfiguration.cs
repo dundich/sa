@@ -8,7 +8,8 @@ namespace Sa.Outbox.PostgreSql.Configuration;
 
 internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOutboxConfiguration
 {
-    private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, PgOutboxSettings>>> s_invokers = [];
+    private static readonly ConcurrentDictionary<
+        IServiceCollection, HashSet<Action<IServiceProvider, PgOutboxSettings>>> s_invokers = [];
 
     public IPgOutboxConfiguration WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
     {
@@ -66,8 +67,8 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
     private void AddSettings()
     {
         services.TryAddSingleton<PgOutboxTableSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().TableSettings);
-        services.TryAddSingleton<PgOutboxCacheSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().CacheSettings);
         services.TryAddSingleton<PgOutboxMigrationSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().MigrationSettings);
         services.TryAddSingleton<PgOutboxCleanupSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().CleanupSettings);
+        services.TryAddSingleton<PgOutboxConsumeSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().ConsumeSettings);
     }
 }

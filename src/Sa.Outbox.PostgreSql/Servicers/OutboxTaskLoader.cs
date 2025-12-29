@@ -1,17 +1,18 @@
 using System.Data;
 using Microsoft.Extensions.Logging;
 using Npgsql;
-using Sa.Classes;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Commands;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 
-namespace Sa.Outbox.PostgreSql.Repository;
+namespace Sa.Outbox.PostgreSql.Services;
 
 
 internal sealed partial class OutboxTaskLoader(
     IPgDataSource pg,
-    SqlOutboxTemplate sql,
+    SqlOutboxBuilder sql,
+    PgOutboxConsumeSettings consumeSettings,
     ILogger<OutboxTaskLoader>? logger = null) : IOutboxTaskLoader
 {
 
@@ -25,7 +26,7 @@ internal sealed partial class OutboxTaskLoader(
         if (batchSize < 1) return LoadGroupResult.Empty;
 
         try
-        {         
+        {
             return await LoadGroupAndShiftOffsetWithRetry(filter, batchSize, cancellationToken);
         }
         catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
@@ -45,10 +46,9 @@ internal sealed partial class OutboxTaskLoader(
         int batchSize,
         CancellationToken cancellationToken)
     {
-        return await Retry.Jitter(
-            async t => await LoadGroupAndShiftOffset(filter, batchSize, cancellationToken)
-            , next: (ex, i) => (ex is NpgsqlException exception) && exception.IsTransient
-            , cancellationToken: cancellationToken);
+        return await PgRetryStrategy.ExecuteWithRetry(
+            async t => await LoadGroupAndShiftOffset(filter, batchSize, cancellationToken),
+            cancellationToken: cancellationToken);
     }
 
     private async Task<LoadGroupResult> LoadGroupAndShiftOffset(
@@ -163,15 +163,18 @@ internal sealed partial class OutboxTaskLoader(
 
         object? currentOffsetObj = await command.ExecuteScalarAsync(cancellationToken);
 
-        Guid currentOffset = (currentOffsetObj == null)
-            ? await InitializeOffset(consumerGroup, conn, tx, cancellationToken)
-            : (Guid)currentOffsetObj;
+        Guid minOffset = consumeSettings.GetMinOffset(consumerGroup.ConsumerGroupId);
 
-        return currentOffset;
+        Guid currentOffset = (currentOffsetObj != null)
+            ? (Guid)currentOffsetObj
+            : await InitializeOffset(consumerGroup, minOffset, conn, tx, cancellationToken);
+
+        return (currentOffset > minOffset) ? currentOffset : minOffset;
     }
 
     private async Task<Guid> InitializeOffset(
         ConsumerGroupIdentifier consumerGroup,
+        Guid minOffset,
         NpgsqlConnection conn,
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
@@ -180,11 +183,12 @@ internal sealed partial class OutboxTaskLoader(
 
         command
             .AddParamTenantId(consumerGroup.TenantId)
+            .AddParamOffset(minOffset)
             .AddParamConsumerGroupId(consumerGroup.ConsumerGroupId);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
 
-        return Guid.Empty;
+        return minOffset;
     }
 
 

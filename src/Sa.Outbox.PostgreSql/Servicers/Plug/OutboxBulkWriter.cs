@@ -2,7 +2,7 @@ using Sa.Extensions;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 
-namespace Sa.Outbox.PostgreSql.Repository.Plug;
+namespace Sa.Outbox.PostgreSql.Services.Plug;
 
 internal sealed class OutboxBulkWriter(
     IBulkInsertMsgCommand bulkCmd, 

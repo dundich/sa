@@ -1,13 +1,14 @@
 using Npgsql;
 using Sa.Data.PostgreSql;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
 internal sealed class FinishDeliveryCommand(
     IPgDataSource dataSource,
-    SqlOutboxTemplate sqlTemplate) : IFinishDeliveryCommand
+    SqlOutboxBuilder sqlBuilder) : IFinishDeliveryCommand
 {
-    private readonly SqlCacheSplitter _sqlCache = new(len => sqlTemplate.SqlFinishDelivery(len));
+    private readonly SqlCacheSplitter _sqlCache = new(len => sqlBuilder.SqlFinishDelivery(len));
 
     public async Task<int> Execute<TMessage>(
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,

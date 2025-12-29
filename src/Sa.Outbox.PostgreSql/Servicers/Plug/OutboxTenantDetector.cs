@@ -1,9 +1,8 @@
-﻿using Npgsql;
-using Sa.Classes;
+﻿using Sa.Data.PostgreSql;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 
-namespace Sa.Outbox.PostgreSql.Repository.Plug;
+namespace Sa.Outbox.PostgreSql.Services.Plug;
 
 internal class OutboxTenantDetector(ISelectTenantCommand command) : IOutboxTenantDetector
 {
@@ -16,9 +15,8 @@ internal class OutboxTenantDetector(ISelectTenantCommand command) : IOutboxTenan
 
     private ValueTask<IReadOnlyCollection<int>> ExecuteWithRetry(CancellationToken cancellationToken)
     {
-        return Retry.Jitter(
+        return PgRetryStrategy.ExecuteWithRetry(
             async ct => await command.Execute(cancellationToken),
-            next: (ex, i) => ex is NpgsqlException exception && exception.IsTransient,
             cancellationToken: cancellationToken);
     }
 }

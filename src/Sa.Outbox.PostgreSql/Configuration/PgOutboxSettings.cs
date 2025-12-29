@@ -12,11 +12,6 @@ public sealed class PgOutboxSettings
     public PgOutboxTableSettings TableSettings { get; } = new();
 
     /// <summary>
-    /// Gets the settings related to caching of message types.
-    /// </summary>
-    public PgOutboxCacheSettings CacheSettings { get; } = new();
-
-    /// <summary>
     /// Gets the settings related to migration of the Outbox schema.
     /// </summary>
     public PgOutboxMigrationSettings MigrationSettings { get; } = new();
@@ -25,4 +20,9 @@ public sealed class PgOutboxSettings
     /// Gets the settings related to cleanup of old Outbox messages and parts.
     /// </summary>
     public PgOutboxCleanupSettings CleanupSettings { get; } = new();
+
+    /// <summary>
+    ///  Represents the consumption settings for retrieving & processing messages from the Outbox
+    /// </summary>
+    public PgOutboxConsumeSettings ConsumeSettings { get; } = new();
 }

@@ -18,9 +18,11 @@
 		<Compile Include="..\Sa\Extensions\SpanExtensions.cs" Link="AsLink\SpanExtensions.cs" />
 		<Compile Include="..\Sa\Extensions\StringExtensions.cs" Link="AsLink\StringExtensions.cs" />
 		<Compile Include="..\Sa\Extensions\StrToExtensions.cs" Link="AsLink\StrToExtensions.cs" />
+		<Compile Include="..\Sa\Extensions\GuidExtensions.cs" Link="AsLink\GuidExtensions.cs" />
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.ObjectPool" />
 		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
 	</ItemGroup>
 
@@ -31,10 +33,6 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="Sa.Outbox.PostgreSqlTests" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Folder Include="AsLink\" />
 	</ItemGroup>
 
 </Project>

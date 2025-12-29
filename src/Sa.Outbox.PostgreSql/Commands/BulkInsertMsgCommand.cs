@@ -1,10 +1,10 @@
 using Microsoft.IO;
 using Npgsql;
 using NpgsqlTypes;
-using Sa.Classes;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.IdGen;
 using Sa.Outbox.PostgreSql.Serialization;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Outbox.PostgreSql.TypeResolve;
 
 namespace Sa.Outbox.PostgreSql.Commands;
@@ -12,7 +12,7 @@ namespace Sa.Outbox.PostgreSql.Commands;
 
 internal sealed class BulkInsertMsgCommand(
     IPgDataSource dataSource
-    , SqlOutboxTemplate sqlTemplate
+    , SqlOutboxBuilder sql
     , RecyclableMemoryStreamManager streamManager
     , IOutboxMessageSerializer serializer
     , IOutboxIdGenerator idGenerator
@@ -34,10 +34,10 @@ internal sealed class BulkInsertMsgCommand(
         long typeCode, 
         CancellationToken cancellationToken)
     {
-        return await Retry.Jitter(
+        return await PgRetryStrategy.ExecuteWithRetry(
             async t =>
             {
-                return await dataSource.BeginBinaryImport(sqlTemplate.SqlBulkMsgCopy, async (writer, t) =>
+                return await dataSource.BeginBinaryImport(sql.SqlBulkMsgCopy, async (writer, t) =>
                 {
                     WriteRows(writer, typeCode, messages);
 
@@ -45,7 +45,6 @@ internal sealed class BulkInsertMsgCommand(
 
                 }, cancellationToken);
             }
-            , next: (ex, i) => (ex is NpgsqlException exception) && exception.IsTransient
             , cancellationToken: cancellationToken);
     }
 

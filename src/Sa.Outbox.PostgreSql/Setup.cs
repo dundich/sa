@@ -1,26 +1,22 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.PostgreSql.Commands;
-using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.IdGen;
 using Sa.Outbox.PostgreSql.Interceptors;
 using Sa.Outbox.PostgreSql.Partitional;
-using Sa.Outbox.PostgreSql.Repository;
+using Sa.Outbox.PostgreSql.Services;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Outbox.PostgreSql.TypeResolve;
 
 namespace Sa.Outbox.PostgreSql;
 
 public static class Setup
 {
-    public static IServiceCollection AddOutboxUsingPostgreSql(this IServiceCollection services, Action<IPgOutboxConfiguration>? configure = null)
+    public static IServiceCollection AddOutboxUsingPostgreSql(
+        this IServiceCollection services,
+        Action<IPgOutboxConfiguration>? configure = null)
     {
-        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
-        services.TryAddSingleton<SqlOutboxTemplate>();
-
         services
-            .AddPgOutboxSettings(configure);
-
-        services
+            .AddOutboxSqlBuilder(configure)
             .AddOutboxRepositories()
             .AddOutboxPartitional()
             .AddOutboxIdGen()

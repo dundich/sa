@@ -10,7 +10,7 @@ namespace Sa.Partitional.PostgreSql;
 /// <param name="PartValues">An array of values that define the partitioning criteria, which can be either string or numeric.</param>
 /// <param name="PartBy">The method used for partitioning (e.g., by range, list, etc.).</param>
 /// <param name="FromDate">The date from which this partition is valid.</param>
-public record PartByRangeInfo(string Id, string RootTableName, StrOrNum[] PartValues, PgPartBy PartBy, DateTimeOffset FromDate);
+public sealed record PartByRangeInfo(string Id, string RootTableName, StrOrNum[] PartValues, PgPartBy PartBy, DateTimeOffset FromDate);
 
 /// <summary>
 /// Represents a repository interface for managing database partitions.

@@ -1,6 +1,6 @@
 using Sa.Outbox.PostgreSql.Commands;
 
-namespace Sa.Outbox.PostgreSql.Repository;
+namespace Sa.Outbox.PostgreSql.Services;
 
 
 internal sealed class OutboxMsgTypeRepository(

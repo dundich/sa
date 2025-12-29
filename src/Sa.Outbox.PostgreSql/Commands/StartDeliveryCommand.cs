@@ -3,6 +3,7 @@ using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Serialization;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Outbox.PostgreSql.TypeResolve;
 
 namespace Sa.Outbox.PostgreSql.Commands;
@@ -10,7 +11,7 @@ namespace Sa.Outbox.PostgreSql.Commands;
 internal sealed class StartDeliveryCommand(
     IOutboxContextFactory contextFactory
     , IPgDataSource dataSource
-    , SqlOutboxTemplate template
+    , SqlOutboxBuilder sql
     , IOutboxMessageSerializer serializer
     , IOutboxTypeResolver hashResolver
     , NpqsqlOutboxReader outboxReader
@@ -29,7 +30,7 @@ internal sealed class StartDeliveryCommand(
         var lockOn = filter.ToDate + lockDuration;
 
 
-        return await dataSource.ExecuteReader(template.SqlLockAndSelect
+        return await dataSource.ExecuteReader(sql.SqlLockAndSelect
             , (reader, i) =>
             {
                 OutboxDeliveryMessage<TMessage> deliveryMessage = Read<TMessage>(reader, serializer);

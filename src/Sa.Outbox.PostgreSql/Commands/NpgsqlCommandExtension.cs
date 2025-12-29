@@ -1,5 +1,6 @@
 using Npgsql;
 using Sa.Data.PostgreSql;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
@@ -61,7 +62,7 @@ internal static class NpgsqlCommandExtension
 
     public static NpgsqlCommand AddParamAdvisoryXactLock(this NpgsqlCommand command, int value)
     {
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.OffsetKey, value));
+        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.LockOffset, value));
         return command;
     }
 

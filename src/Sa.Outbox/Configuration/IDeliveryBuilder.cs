@@ -8,7 +8,7 @@ namespace Sa.Outbox;
 /// <summary>
 /// Represents a builder for creating outbox deliveries.
 /// </summary>
-public interface IDeliveryBuilder
+public partial interface IDeliveryBuilder
 {
     /// <summary>
     /// Adds scoped delivery for the specified consumer and message type.
@@ -41,4 +41,5 @@ public interface IDeliveryBuilder
     /// </summary>
     IDeliveryBuilder AddDeliveryBatching<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
             where TImplementation : class, IDeliveryBatcher;
+
 }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Partitional.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Partitional;
@@ -13,7 +14,7 @@ internal static class Setup
 
         _ = services.AddPartitional((sp, builder) =>
         {
-            SqlOutboxTemplate sql = sp.GetRequiredService<SqlOutboxTemplate>();
+            SqlOutboxBuilder sql = sp.GetRequiredService<SqlOutboxBuilder>();
             var tableSettings = sql.Settings;
 
             builder.AddSchema(tableSettings.DatabaseSchemaName, schema =>

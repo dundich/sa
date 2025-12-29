@@ -1,5 +1,5 @@
 using Sa.Extensions;
-using Sa.Outbox.PostgreSql.Repository;
+using Sa.Outbox.PostgreSql.Services;
 
 namespace Sa.Outbox.PostgreSql.TypeResolve;
 
