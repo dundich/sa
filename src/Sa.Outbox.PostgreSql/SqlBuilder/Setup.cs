@@ -17,7 +17,7 @@ public static class Setup
             var provider = serviceProvider.GetRequiredService<ObjectPoolProvider>();
             var policy = new StringBuilderPooledObjectPolicy()
             {
-                InitialCapacity = 4096,
+                InitialCapacity = 1024,
             };
             return provider.Create(policy);
         });
