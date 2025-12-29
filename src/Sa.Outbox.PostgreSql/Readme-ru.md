@@ -52,7 +52,7 @@ public class MyConsumer : IConsumer<MyMessage>
     public async ValueTask Consume(
         ConsumerGroupSettings settings,
         OutboxMessageFilter filter,
-        ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
+        ReadOnlyMemory<IOutboxContextOperations<MyMessage>> messages,
         CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
