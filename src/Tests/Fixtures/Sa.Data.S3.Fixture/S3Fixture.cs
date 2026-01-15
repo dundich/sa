@@ -32,8 +32,7 @@ public class S3Fixture<TSub> : SaFixture<TSub, S3FixtureSettings>
 
     public static MinioBuilder CreateBuilder(S3FixtureSettings settings)
     {
-        return new MinioBuilder()
-            .WithImage(settings.DockerImage)
+        return new MinioBuilder(settings.DockerImage)
             .WithPortBinding(settings.MinioInternalPort, true)
             ;
     }

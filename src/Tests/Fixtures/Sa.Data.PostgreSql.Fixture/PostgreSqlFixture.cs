@@ -16,10 +16,7 @@ public abstract class PostgreSqlFixture<TSub, TSettings> : SaFixture<TSub, TSett
     protected PostgreSqlFixture(TSettings settings)
         : base(settings)
     {
-        var builder = new PostgreSqlBuilder()
-            .WithImage(settings.DockerImage)
-            ;
-
+        var builder = new PostgreSqlBuilder(settings.DockerImage);
         settings.Configure?.Invoke(builder);
         container = builder.Build();
     }

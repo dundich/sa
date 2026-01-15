@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -9,6 +7,8 @@ using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 Console.WriteLine("Hello, Pg Outbox!");
 
@@ -140,11 +140,14 @@ namespace PgOutbox
             logger.LogWarning("======= {Group} : {Tenant} =======", filter.ConsumerGroupId, filter.TenantId);
             foreach (var msg in messages)
             {
-                logger.LogInformation("{Date}   #{TaskId}: {Payload} [{Code}]"
+                if (logger.IsEnabled(LogLevel.Information))
+                {
+                    logger.LogInformation("{Date}   #{TaskId}: {Payload} [{Code}]"
                     , msg.GetUtcNow()
                     , msg.DeliveryInfo.TaskId
                     , msg.Payload
                     , msg.DeliveryResult.Code);
+                }
             }
         }
     }
