@@ -19,4 +19,4 @@ namespace Sa.HybridFileStorage.Domain;
 /// <param name="AbsoluteUrl">Publicly accessible URL for downloading the file</param>
 /// <param name="StorageType">Type of storage backend used ("pg", "s3", "file", "azure")</param>
 /// <param name="UploadedAt">Timestamp when the file was uploaded</param>
-public record StorageResult(string FileId, string AbsoluteUrl, string StorageType, DateTimeOffset UploadedAt);
+public sealed record StorageResult(string FileId, string AbsoluteUrl, string StorageType, DateTimeOffset UploadedAt);

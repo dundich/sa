@@ -3,7 +3,7 @@
 	<Import Project="../Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
-		<Version>0.5.0</Version>
+		<Version>0.6.0</Version>
 		<Title>Sa.Data.S3</Title>
 		<Description>Simple client for S3 (Sa.Data.S3)</Description>
 		<PackageTags>s3</PackageTags>
