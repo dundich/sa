@@ -193,7 +193,7 @@ settings.ConsumeSettings
 
 ## Requirements
 
-- **.NET 9.0** or higher
+- **.NET 10.0** or higher
 - **PostgreSQL 15+**
 
 ## License
