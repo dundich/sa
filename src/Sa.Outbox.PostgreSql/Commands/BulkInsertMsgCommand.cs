@@ -1,4 +1,4 @@
-using Microsoft.IO;
+﻿using Microsoft.IO;
 using Npgsql;
 using NpgsqlTypes;
 using Sa.Data.PostgreSql;
@@ -21,7 +21,7 @@ internal sealed class BulkInsertMsgCommand(
 {
 
     public async ValueTask<ulong> Execute<TMessage>(
-        ReadOnlyMemory<OutboxMessage<TMessage>> messages, 
+        ReadOnlyMemory<OutboxMessage<TMessage>> messages,
         CancellationToken cancellationToken)
     {
         long typeCode = await hashResolver.GetHashCode(typeof(TMessage).Name, cancellationToken);
@@ -30,8 +30,8 @@ internal sealed class BulkInsertMsgCommand(
     }
 
     private async Task<ulong> BulkWithRetry<TMessage>(
-        ReadOnlyMemory<OutboxMessage<TMessage>> messages, 
-        long typeCode, 
+        ReadOnlyMemory<OutboxMessage<TMessage>> messages,
+        long typeCode,
         CancellationToken cancellationToken)
     {
         return await PgRetryStrategy.ExecuteWithRetry(
@@ -61,8 +61,8 @@ internal sealed class BulkInsertMsgCommand(
     ///     </code>
     /// </summary>
     private void WriteRows<TMessage>(
-        NpgsqlBinaryImporter writer, 
-        long payloadTypeCode, 
+        NpgsqlBinaryImporter writer,
+        long payloadTypeCode,
         ReadOnlyMemory<OutboxMessage<TMessage>> messages)
     {
         foreach (OutboxMessage<TMessage> row in messages.Span)

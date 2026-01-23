@@ -1,6 +1,6 @@
-using System.Collections.Concurrent;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Support;
+using System.Collections.Concurrent;
 
 namespace Sa.Outbox.Delivery;
 

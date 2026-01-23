@@ -1,4 +1,4 @@
-using Sa.Outbox.Support;
+﻿using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;
 
@@ -9,5 +9,5 @@ namespace Sa.Outbox.Delivery;
 public interface IDeliveryProcessor
 {
     Task<long> ProcessMessages<TMessage>(ConsumerGroupSettings settings, CancellationToken cancellationToken)
-        where TMessage: IOutboxPayloadMessage;
+        where TMessage : IOutboxPayloadMessage;
 }

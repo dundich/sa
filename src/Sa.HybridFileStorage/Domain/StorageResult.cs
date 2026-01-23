@@ -1,4 +1,4 @@
-namespace Sa.HybridFileStorage.Domain;
+﻿namespace Sa.HybridFileStorage.Domain;
 
 /// <summary>
 /// Represents the result of a file upload operation.

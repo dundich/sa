@@ -1,4 +1,4 @@
-using Npgsql;
+﻿using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 

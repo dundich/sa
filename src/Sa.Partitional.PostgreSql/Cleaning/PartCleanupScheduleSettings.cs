@@ -1,4 +1,4 @@
-namespace Sa.Partitional.PostgreSql;
+﻿namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// Represents the settings for scheduling the cleanup of Outbox message parts.

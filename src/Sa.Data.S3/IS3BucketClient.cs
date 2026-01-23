@@ -1,7 +1,7 @@
-namespace Sa.Data.S3;
+﻿namespace Sa.Data.S3;
 
-public interface IS3BucketClient: IBucketOperations, IFileOperations
+public interface IS3BucketClient : IBucketOperations, IFileOperations
 {
-	string Bucket { get; }
-	Uri Endpoint { get; }
+    string Bucket { get; }
+    Uri Endpoint { get; }
 }

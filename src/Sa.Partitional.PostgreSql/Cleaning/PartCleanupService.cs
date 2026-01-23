@@ -1,4 +1,4 @@
-namespace Sa.Partitional.PostgreSql.Cleaning;
+﻿namespace Sa.Partitional.PostgreSql.Cleaning;
 
 internal sealed class PartCleanupService(
     IPartRepository repository

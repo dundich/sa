@@ -5,7 +5,7 @@ namespace Sa.ConfigurationTests;
 
 public sealed class SecretsTests(SecretsTests.Fixture fixture) : IClassFixture<SecretsTests.Fixture>
 {
-    public sealed class Fixture: IAsyncLifetime
+    public sealed class Fixture : IAsyncLifetime
     {
         private readonly string SecretsFileName = "secrets.txt";
         private static readonly string EnvSecretsFileName = $"secrets.{SaEnvironment.Default.EnvironmentName}.txt";

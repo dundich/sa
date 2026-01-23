@@ -1,7 +1,7 @@
-using System.Runtime.CompilerServices;
-using Sa.Extensions;
+﻿using Sa.Extensions;
 using Sa.Outbox.Exceptions;
 using Sa.Outbox.Support;
+using System.Runtime.CompilerServices;
 
 namespace Sa.Outbox.Delivery;
 

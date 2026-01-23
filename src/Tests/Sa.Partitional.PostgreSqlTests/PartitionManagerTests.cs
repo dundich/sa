@@ -4,7 +4,7 @@ using Sa.Partitional.PostgreSql;
 namespace Sa.Partitional.PostgreSqlTests;
 
 
-public class PartitionManagerTests(PartitionManagerTests.Fixture fixture) 
+public class PartitionManagerTests(PartitionManagerTests.Fixture fixture)
     : IClassFixture<PartitionManagerTests.Fixture>
 {
     public class Fixture : PgDataSourceFixture<IPartitionManager>

@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.PlugServices;
 
@@ -19,7 +19,7 @@ internal static class Setup
         services
             .RemoveAll<IOutboxTenantDetector>()
             .AddSingleton<IOutboxTenantDetector, OutboxTenantDetector>();
-        
+
         return services;
     }
 }

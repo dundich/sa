@@ -1,4 +1,4 @@
-namespace Sa.Partitional.PostgreSql.SqlBuilder;
+﻿namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
 internal sealed class SqlBuilderFactory(ISettingsBuilder configuration) : ISqlBuilderFactory
 {

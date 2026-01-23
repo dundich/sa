@@ -1,4 +1,4 @@
-using Sa.Outbox.Support;
+﻿using Sa.Outbox.Support;
 
 namespace Sa.Outbox;
 

@@ -1,4 +1,4 @@
-namespace Sa.Fixture;
+﻿namespace Sa.Fixture;
 
 public static class FixtureHelper
 {

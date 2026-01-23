@@ -78,14 +78,14 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
         var timeExpected = new DateTimeOffset(2024, 12, 03, 00, 00, 00, TimeSpan.Zero);
 
         await fixture.Sub.CreatePart(
-            "test_10", 
-            timeExpected.AddMinutes(22).AddHours(12), 
-            [1, "some1", "some2"], 
+            "test_10",
+            timeExpected.AddMinutes(22).AddHours(12),
+            [1, "some1", "some2"],
             TestContext.Current.CancellationToken);
 
         IReadOnlyCollection<PartByRangeInfo> list = await fixture.Sub.GetPartsFromDate(
-            "test_10", 
-            timeExpected.AddDays(-3), 
+            "test_10",
+            timeExpected.AddDays(-3),
             TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(list);

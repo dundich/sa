@@ -1,4 +1,4 @@
-namespace Sa.Outbox.PostgreSql;
+﻿namespace Sa.Outbox.PostgreSql;
 
 public static class OutboxFieldDefaults
 {

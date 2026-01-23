@@ -37,7 +37,7 @@ public class StrOrNumTests
         StrOrNum strValue = "hello";
 
         string str = strValue.ToString();
-        
+
         // Assert
         Assert.Equal("hello", str);
 

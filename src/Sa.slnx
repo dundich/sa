@@ -39,6 +39,7 @@
     <Project Path="Sa.Schedule/Sa.Schedule.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
     <File Path="Common.NuGet.Properties.xml" />
     <File Path="Common.Properties.xml" />
     <File Path="Directory.Packages.props" />

@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Publication;

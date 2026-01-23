@@ -1,4 +1,4 @@
-using Sa.Data.S3;
+﻿using Sa.Data.S3;
 using Sa.Data.S3.Fixture;
 
 namespace Sa.Data.S3Tests;

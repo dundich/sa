@@ -1,4 +1,4 @@
-namespace Sa.Outbox.PlugServices;
+﻿namespace Sa.Outbox.PlugServices;
 
 
 /// <summary>

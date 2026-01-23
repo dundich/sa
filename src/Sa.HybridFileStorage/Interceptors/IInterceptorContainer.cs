@@ -1,4 +1,4 @@
-namespace Sa.HybridFileStorage.Interceptors;
+﻿namespace Sa.HybridFileStorage.Interceptors;
 
 public interface IInterceptorContainer
 {

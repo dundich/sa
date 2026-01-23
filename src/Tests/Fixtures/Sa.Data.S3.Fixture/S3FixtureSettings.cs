@@ -1,4 +1,4 @@
-using Testcontainers.Minio;
+﻿using Testcontainers.Minio;
 
 namespace Sa.Data.S3.Fixture;
 

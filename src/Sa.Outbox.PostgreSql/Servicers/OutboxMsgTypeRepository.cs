@@ -1,4 +1,4 @@
-using Sa.Outbox.PostgreSql.Commands;
+﻿using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Services;
 
@@ -8,9 +8,9 @@ internal sealed class OutboxMsgTypeRepository(
     ISelectMsgTypeCommand selectCmd
     ) : IOutboxMsgTypeRepository
 {
-    public Task<int> Insert(long id, string typeName, CancellationToken cancellationToken) 
+    public Task<int> Insert(long id, string typeName, CancellationToken cancellationToken)
         => insertCmd.Execute(id, typeName, cancellationToken);
 
-    public Task<IReadOnlyCollection<(long id, string typeName)>> SelectAll(CancellationToken cancellationToken) 
+    public Task<IReadOnlyCollection<(long id, string typeName)>> SelectAll(CancellationToken cancellationToken)
         => selectCmd.Execute(cancellationToken);
 }

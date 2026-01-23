@@ -1,10 +1,10 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage.Interceptors;
 
-internal sealed partial class LoggingInterceptor(ILogger<LoggingInterceptor>? logger = null) 
+internal sealed partial class LoggingInterceptor(ILogger<LoggingInterceptor>? logger = null)
     : IDeleteInterceptor, IDownloadInterceptor, IUploadInterceptor
 {
     private readonly ILogger _logger = logger ?? NullLogger<LoggingInterceptor>.Instance;
@@ -79,26 +79,26 @@ internal sealed partial class LoggingInterceptor(ILogger<LoggingInterceptor>? lo
 
 
     [LoggerMessage(
-        EventId = 2201, 
-        Level = LogLevel.Trace, 
+        EventId = 2201,
+        Level = LogLevel.Trace,
         Message = "Checking if can delete file with ID: `{FileId}` from storage: {Storage}")]
     static partial void LogCanDelete(ILogger logger, string fileId, string storage);
-    
+
     [LoggerMessage(
-        EventId = 2202, 
-        Level = LogLevel.Information, 
+        EventId = 2202,
+        Level = LogLevel.Information,
         Message = "Successfully deleted file with ID: `{FileId}` from storage: {Storage}")]
     static partial void LogDeleteSuccess(ILogger logger, string fileId, string storage);
-    
+
     [LoggerMessage(
-        EventId = 2203, 
-        Level = LogLevel.Warning, 
+        EventId = 2203,
+        Level = LogLevel.Warning,
         Message = "Failed to delete file with ID: `{FileId}` from storage: {Storage}")]
     static partial void LogDeleteFailure(ILogger logger, string fileId, string storage);
-    
+
     [LoggerMessage(
-        EventId = 2204, 
-        Level = LogLevel.Error, 
+        EventId = 2204,
+        Level = LogLevel.Error,
         Message = "Error occurred while deleting file with ID: `{FileId}` from storage: {Storage}")]
     static partial void LogDeleteError(ILogger logger, Exception ex, string fileId, string storage);
 

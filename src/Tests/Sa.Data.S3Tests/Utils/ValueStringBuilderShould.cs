@@ -1,4 +1,4 @@
-using Sa.Data.S3.Utils;
+﻿using Sa.Data.S3.Utils;
 
 namespace Sa.Data.S3Tests.Utils;
 

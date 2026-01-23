@@ -1,4 +1,4 @@
-namespace Sa.Schedule.Settings;
+﻿namespace Sa.Schedule.Settings;
 
 internal sealed class FuncJob(Func<IJobContext, CancellationToken, Task> action) : IJob
 {

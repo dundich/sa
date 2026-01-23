@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using Sa.Extensions;
 using Sa.Outbox.Support;
 
@@ -26,7 +26,7 @@ public partial interface IDeliveryBuilder
     public static string GetConsumerGroupName<TConsumer>() => _defaultNamingStrategy.GetConsumerGroupName<TConsumer>();
 
 
-    public static void ConfigureDefaultNamingStrategy(IConsumerGroupNamingStrategy strategy) 
+    public static void ConfigureDefaultNamingStrategy(IConsumerGroupNamingStrategy strategy)
         => _defaultNamingStrategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
 
     class DefaultConsumerGroupNamingStrategy : IConsumerGroupNamingStrategy

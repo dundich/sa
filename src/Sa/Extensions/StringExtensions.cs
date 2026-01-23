@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using Sa.Classes;
 
@@ -7,12 +7,12 @@ namespace Sa.Extensions;
 internal static partial class StringExtensions
 {
     [DebuggerStepThrough]
-    public static string? NullIfEmpty(this string? str) 
+    public static string? NullIfEmpty(this string? str)
         => string.IsNullOrWhiteSpace(str) ? default : str;
 
 
     [DebuggerStepThrough]
-    public static uint GetMurmurHash3(this string str, uint seed = 0) 
+    public static uint GetMurmurHash3(this string str, uint seed = 0)
         => MurmurHash3.Hash32(Encoding.UTF8.GetBytes(str), seed);
 
 

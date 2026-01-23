@@ -1,4 +1,4 @@
-using Sa.Configuration.CommandLine;
+﻿using Sa.Configuration.CommandLine;
 
 namespace Sa.ConfigurationTests;
 

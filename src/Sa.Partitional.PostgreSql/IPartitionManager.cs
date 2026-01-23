@@ -1,4 +1,4 @@
-namespace Sa.Partitional.PostgreSql;
+﻿namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// interface for managing partitions in the database

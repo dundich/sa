@@ -1,4 +1,4 @@
-namespace Sa.Schedule.Settings;
+﻿namespace Sa.Schedule.Settings;
 
 internal sealed class JobSettings(Type jobType, Guid jobId) : IJobSettings
 {
@@ -10,7 +10,7 @@ internal sealed class JobSettings(Type jobType, Guid jobId) : IJobSettings
     public Type JobType => jobType;
 
     public JobProperies Properties { get; } = new();
-    
+
     public JobErrorHandling ErrorHandling { get; } = new();
 
     IJobProperties IJobSettings.Properties => Properties;

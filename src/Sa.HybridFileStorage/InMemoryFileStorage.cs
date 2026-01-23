@@ -1,4 +1,4 @@
-using Sa.HybridFileStorage.Domain;
+﻿using Sa.HybridFileStorage.Domain;
 using System.Collections.Concurrent;
 
 namespace Sa.HybridFileStorage;

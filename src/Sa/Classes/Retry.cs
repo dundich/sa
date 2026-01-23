@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Sa.Extensions;
 
 namespace Sa.Classes;

@@ -1,8 +1,8 @@
-using Sa.HybridFileStorage.Domain;
+﻿using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage;
 
-public interface IHybridFileStorageContainer: IHybridFileStorageContainerConfiguration
+public interface IHybridFileStorageContainer : IHybridFileStorageContainerConfiguration
 {
     IReadOnlyCollection<IFileStorage> Storages { get; }
     string StorageType => string.Join(',', Storages.Select(c => c.StorageType));

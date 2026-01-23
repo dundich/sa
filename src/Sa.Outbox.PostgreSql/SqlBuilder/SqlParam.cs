@@ -1,4 +1,4 @@
-namespace Sa.Outbox.PostgreSql.SqlBuilder;
+﻿namespace Sa.Outbox.PostgreSql.SqlBuilder;
 
 internal static class SqlParam
 {

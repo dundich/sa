@@ -1,4 +1,4 @@
-namespace Sa.Configuration;
+﻿namespace Sa.Configuration;
 
 public class SaEnvironment
 {

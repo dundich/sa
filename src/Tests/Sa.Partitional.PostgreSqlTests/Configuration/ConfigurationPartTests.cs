@@ -6,7 +6,7 @@ namespace Sa.Partitional.PostgreSqlTests.Configuration;
 
 
 
-public class ConfigurationPartTests(ConfigurationPartTests.Fixture fixture) 
+public class ConfigurationPartTests(ConfigurationPartTests.Fixture fixture)
     : IClassFixture<ConfigurationPartTests.Fixture>
 {
     public class Fixture : SaFixture<ISettingsBuilder>

@@ -1,10 +1,10 @@
-using Sa.Extensions;
+﻿using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Services;
 
 namespace Sa.Outbox.PostgreSql.TypeResolve;
 
 internal sealed class OutboxTypeResolver(
-    IOutboxTypeCache cache, 
+    IOutboxTypeCache cache,
     IOutboxMsgTypeRepository repository) : IOutboxTypeResolver
 {
     private int _triggered = 0;

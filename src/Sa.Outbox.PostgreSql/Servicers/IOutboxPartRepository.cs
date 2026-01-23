@@ -1,4 +1,4 @@
-
+﻿
 namespace Sa.Outbox.PostgreSql.Services;
 
 internal interface IOutboxPartRepository

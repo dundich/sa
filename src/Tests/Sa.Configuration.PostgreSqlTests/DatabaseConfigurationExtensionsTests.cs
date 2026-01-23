@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Sa.Configuration.PostgreSql;
 using Sa.Data.PostgreSql.Fixture;

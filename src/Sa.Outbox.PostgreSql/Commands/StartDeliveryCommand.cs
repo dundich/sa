@@ -1,4 +1,4 @@
-using Npgsql;
+﻿using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.Delivery;

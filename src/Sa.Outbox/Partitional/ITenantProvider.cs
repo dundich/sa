@@ -1,5 +1,5 @@
-namespace Sa.Outbox.Partitional;
+﻿namespace Sa.Outbox.Partitional;
 
-internal interface ITenantProvider: ITenantSource
+internal interface ITenantProvider : ITenantSource
 {
 }

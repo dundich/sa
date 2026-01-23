@@ -1,8 +1,8 @@
-using Sa.Partitional.PostgreSql.Classes;
+﻿using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql;
 
-public sealed record Part(string Name, PartByRange PartBy) 
+public sealed record Part(string Name, PartByRange PartBy)
     : Enumeration<Part>(Name.GetHashCode(), Name)
 {
     public const string RootId = "root";

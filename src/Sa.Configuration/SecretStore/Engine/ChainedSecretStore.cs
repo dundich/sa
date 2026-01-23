@@ -1,4 +1,4 @@
-namespace Sa.Configuration.SecretStore.Engine;
+﻿namespace Sa.Configuration.SecretStore.Engine;
 
 internal sealed class ChainedSecretStore(IReadOnlyCollection<ISecretStore> stores) : ISecretStore
 {

@@ -1,0 +1,23 @@
+# Top-most EditorConfig file
+root = true
+
+# All files
+[*]
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+charset = utf-8
+end_of_line = lf
+
+[*.{cs,csproj}]
+charset = utf-8-bom
+end_of_line = lf
+
+# Чистота кода
+csharp_style_namespace_declarations = file_scoped:suggestion
+
+
+[*.{json,xml,yml,yaml,html,css,js,ts,props}]
+indent_size = 2
+charset = utf-8

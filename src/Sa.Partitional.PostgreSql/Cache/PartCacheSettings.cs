@@ -1,4 +1,4 @@
-namespace Sa.Partitional.PostgreSql;
+﻿namespace Sa.Partitional.PostgreSql;
 
 public sealed class PartCacheSettings
 {

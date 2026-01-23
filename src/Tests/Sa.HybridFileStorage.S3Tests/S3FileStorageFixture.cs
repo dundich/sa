@@ -1,4 +1,4 @@
-using Sa.Data.S3.Fixture;
+﻿using Sa.Data.S3.Fixture;
 using Sa.HybridFileStorage.Domain;
 using Sa.HybridFileStorage.S3;
 

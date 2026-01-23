@@ -1,4 +1,4 @@
-namespace Sa.Data.PostgreSql;
+﻿namespace Sa.Data.PostgreSql;
 
 public sealed class PgDataSourceSettings(string connectionString)
 {

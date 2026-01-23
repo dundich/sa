@@ -1,4 +1,4 @@
-namespace Sa.Schedule.Engine;
+﻿namespace Sa.Schedule.Engine;
 
 
 internal enum CanJobExecuteResult
@@ -20,15 +20,15 @@ internal interface IJobController
     ValueTask WaitToRun(CancellationToken cancellationToken);
 
     void Running();
-    
+
     void Stopped(TaskStatus status);
 
     // iteration events
     ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken);
-    
+
     Task Execute(CancellationToken cancellationToken);
-    
+
     void ExecutionFailed(Exception exception);
-    
+
     void ExecutionCompleted();
 }

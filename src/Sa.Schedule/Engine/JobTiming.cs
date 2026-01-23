@@ -1,4 +1,4 @@
-namespace Sa.Schedule.Engine;
+﻿namespace Sa.Schedule.Engine;
 
 internal sealed class JobTiming(Func<DateTimeOffset, IJobContext, DateTimeOffset?> nextTime, string name) : IJobTiming
 {

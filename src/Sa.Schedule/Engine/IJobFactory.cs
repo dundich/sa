@@ -1,4 +1,4 @@
-namespace Sa.Schedule.Engine;
+﻿namespace Sa.Schedule.Engine;
 
 internal interface IJobFactory
 {

@@ -1,4 +1,4 @@
-namespace Sa.Outbox;
+﻿namespace Sa.Outbox;
 
 /// <summary>
 /// Represents the consumption settings for retrieving & processing messages from the Outbox

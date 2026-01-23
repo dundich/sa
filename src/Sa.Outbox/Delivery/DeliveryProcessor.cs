@@ -1,4 +1,4 @@
-using Sa.Outbox.Partitional;
+﻿using Sa.Outbox.Partitional;
 using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Delivery;

@@ -1,4 +1,4 @@
-using Sa.Classes;
+﻿using Sa.Classes;
 using Sa.Media.FFmpeg;
 
 namespace Sa.Media.FFmpegTests;

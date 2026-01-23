@@ -1,4 +1,4 @@
-using Sa.Outbox.Delivery;
+﻿using Sa.Outbox.Delivery;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
 using Sa.Schedule;

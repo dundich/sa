@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
@@ -20,7 +20,7 @@ public static class Setup
 
 
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
-        
+
         services.AddS3BucketClientAsSingleton(settings);
 
 

@@ -1,4 +1,4 @@
-namespace Sa.Outbox.PostgreSql.Commands;
+﻿namespace Sa.Outbox.PostgreSql.Commands;
 
 internal sealed class SqlCacheSplitter(Func<int, string> genSql)
 {

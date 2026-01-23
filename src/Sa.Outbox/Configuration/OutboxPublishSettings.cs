@@ -1,4 +1,4 @@
-namespace Sa.Outbox;
+﻿namespace Sa.Outbox;
 
 /// <summary>
 /// Settings for publishing messages from the Outbox.

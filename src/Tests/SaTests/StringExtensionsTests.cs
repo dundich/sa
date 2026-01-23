@@ -1,4 +1,4 @@
-using Sa.Extensions;
+﻿using Sa.Extensions;
 
 namespace SaTests;
 

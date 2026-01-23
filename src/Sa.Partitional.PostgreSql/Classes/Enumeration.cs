@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
@@ -8,7 +8,7 @@ namespace Sa.Partitional.PostgreSql.Classes;
 /// https://josef.codes/enumeration-class-in-c-sharp-using-records/
 /// </summary>
 /// <typeparam name="T"></typeparam>
-public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>(int Id, string Name) 
+public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>(int Id, string Name)
     : IComparable<T> where T : Enumeration<T>
 {
 

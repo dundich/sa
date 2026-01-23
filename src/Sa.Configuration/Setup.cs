@@ -10,7 +10,7 @@ public static class Setup
     {
         builder.SetBasePath(Directory.GetCurrentDirectory());
 
-        foreach (var file in jsonFiles) 
+        foreach (var file in jsonFiles)
         {
             builder.AddJsonFile(file, optional: true);
         }

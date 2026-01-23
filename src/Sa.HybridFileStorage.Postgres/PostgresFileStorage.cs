@@ -1,4 +1,4 @@
-using Microsoft.IO;
+﻿using Microsoft.IO;
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.HybridFileStorage.Domain;
@@ -117,10 +117,10 @@ ON CONFLICT DO NOTHING
             using var fs = await reader.GetStreamAsync(0, cancellationToken);
             await loadStream(fs, cancellationToken);
         }
-        , 
+        ,
         [
-            new NpgsqlParameter<long>("tenant_id", tenantId), 
-            new NpgsqlParameter<long>("timestamp", timestamp), 
+            new NpgsqlParameter<long>("tenant_id", tenantId),
+            new NpgsqlParameter<long>("timestamp", timestamp),
             new NpgsqlParameter<string>("id", fileId)
         ]
         , cancellationToken);

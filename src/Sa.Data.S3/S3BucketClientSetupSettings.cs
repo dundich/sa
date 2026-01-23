@@ -1,6 +1,6 @@
-namespace Sa.Data.S3;
+﻿namespace Sa.Data.S3;
 
-public sealed class S3BucketClientSetupSettings: S3BucketSettings
+public sealed class S3BucketClientSetupSettings : S3BucketSettings
 {
     public TimeSpan TotalRequestTimeout { get; set; } = TimeSpan.FromSeconds(180);
 }

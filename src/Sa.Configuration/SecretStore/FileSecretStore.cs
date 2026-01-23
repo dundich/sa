@@ -1,4 +1,4 @@
-namespace Sa.Configuration.SecretStore;
+﻿namespace Sa.Configuration.SecretStore;
 
 public sealed class FileSecretStore : ISecretStore
 {

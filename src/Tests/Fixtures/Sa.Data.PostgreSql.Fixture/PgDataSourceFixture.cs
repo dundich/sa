@@ -1,4 +1,4 @@
-namespace Sa.Data.PostgreSql.Fixture;
+﻿namespace Sa.Data.PostgreSql.Fixture;
 
 
 public class PgDataSourceFixture<TSub> : PostgreSqlFixture<TSub, PostgreSqlFixtureSettings>

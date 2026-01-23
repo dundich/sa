@@ -1,12 +1,12 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Sa.Schedule.Engine;
 
 internal sealed partial class JobErrorHandler(
-    IScheduleSettings settings, 
-    IHostApplicationLifetime? lifetime, 
+    IScheduleSettings settings,
+    IHostApplicationLifetime? lifetime,
     ILogger<JobErrorHandler>? logger) : IJobErrorHandler
 {
     public void HandleError(IJobContext context, Exception exception)

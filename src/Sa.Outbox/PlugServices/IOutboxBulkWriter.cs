@@ -14,6 +14,6 @@ public interface IOutboxBulkWriter
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task representing the asynchronous operation, containing the number of messages saved.</returns>
     ValueTask<ulong> InsertBulk<TMessage>(
-        ReadOnlyMemory<OutboxMessage<TMessage>> messages, 
+        ReadOnlyMemory<OutboxMessage<TMessage>> messages,
         CancellationToken cancellationToken = default);
 }

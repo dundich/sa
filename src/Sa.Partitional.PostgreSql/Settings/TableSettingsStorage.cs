@@ -1,4 +1,4 @@
-namespace Sa.Partitional.PostgreSql.Settings;
+﻿namespace Sa.Partitional.PostgreSql.Settings;
 
 internal sealed class TableSettingsStorage(IReadOnlyCollection<ITableSettings> settings) : ITableSettingsStorage
 {

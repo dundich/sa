@@ -1,4 +1,4 @@
-using Sa.Partitional.PostgreSql.Cache;
+﻿using Sa.Partitional.PostgreSql.Cache;
 using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql;

@@ -1,4 +1,4 @@
-namespace Sa.Outbox.Delivery;
+﻿namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Provides functionality to dynamically calculate batch sizes based on current system load or other metrics.

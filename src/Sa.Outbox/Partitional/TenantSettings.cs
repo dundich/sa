@@ -1,4 +1,4 @@
-namespace Sa.Outbox;
+﻿namespace Sa.Outbox;
 
 /// <summary>
 /// Represents the settings for partitioning in the Outbox processing system.

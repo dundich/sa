@@ -1,4 +1,4 @@
-using Sa.Extensions;
+﻿using Sa.Extensions;
 using Sa.Partitional.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Services;

@@ -3,8 +3,8 @@
 
 internal sealed class AsyncManualResetEvent
 {
-    private readonly Lock _syncRoot = new ();
-    private TaskCompletionSource _tcs = new (TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly Lock _syncRoot = new();
+    private TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _isSignaled;
 
     public AsyncManualResetEvent(bool initialSet = false)

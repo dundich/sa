@@ -7,7 +7,7 @@ using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSqlTests;
 
-public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture) 
+public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
     : IClassFixture<OutboxTwoGroupsTests.Fixture>
 {
     class SomeMessage : IOutboxPayloadMessage

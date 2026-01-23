@@ -1,4 +1,4 @@
-using Sa.Fixture;
+﻿using Sa.Fixture;
 using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage.S3Tests;

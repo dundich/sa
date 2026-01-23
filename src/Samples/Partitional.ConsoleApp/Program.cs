@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Partitional.ConsoleApp;
@@ -73,7 +73,7 @@ namespace Partitional.ConsoleApp
 
             logger.LogInformation($"list of parts:{Environment.NewLine}{string.Join(Environment.NewLine, parts.Select(c => c.Id))}");
 
-            logger.LogInformation("Successfully: {Ok}" , parts.Count > 0);
+            logger.LogInformation("Successfully: {Ok}", parts.Count > 0);
         }
     }
 }

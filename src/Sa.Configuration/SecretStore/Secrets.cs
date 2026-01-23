@@ -1,4 +1,4 @@
-using Sa.Configuration.SecretStore.Engine;
+﻿using Sa.Configuration.SecretStore.Engine;
 
 namespace Sa.Configuration.SecretStore;
 
@@ -37,7 +37,7 @@ public sealed class Secrets(params IReadOnlyCollection<ISecretStore> stores) : I
 
         return store;
     }
-    
+
     public Secrets AddStore(ISecretStore store)
     {
         _chainedSecrets.AddStore(store);
@@ -47,6 +47,6 @@ public sealed class Secrets(params IReadOnlyCollection<ISecretStore> stores) : I
     public string? GetSecret(string key) => _chainedSecrets.GetSecret(key);
 
     public static ISecretService Service => s_secrets.Value;
-    
+
     public static string FileSecrets => SaEnvironment.Default.DefaultFileSecrets;
 }

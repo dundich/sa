@@ -1,4 +1,5 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
@@ -16,6 +17,8 @@ internal sealed partial class OutboxTaskLoader(
     ILogger<OutboxTaskLoader>? logger = null) : IOutboxTaskLoader
 {
 
+    private readonly ILogger _logger = logger ?? NullLogger<OutboxTaskLoader>.Instance;
+
     internal sealed record ConsumerGroupIdentifier(string ConsumerGroupId, int TenantId);
 
     public async Task<LoadGroupResult> LoadNewTasks(
@@ -31,12 +34,12 @@ internal sealed partial class OutboxTaskLoader(
         }
         catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
-            if (logger != null) LogCanceledLoad(ex, filter);
+            LogCanceledLoad(_logger, ex, filter);
             return LoadGroupResult.Empty;
         }
         catch (Exception ex) when (!ex.IsCritical())
         {
-            if (logger != null) LogErrorLoad(ex, filter);
+            LogErrorLoad(_logger, ex, filter);
             return LoadGroupResult.Empty;
         }
     }
@@ -211,13 +214,13 @@ internal sealed partial class OutboxTaskLoader(
         EventId = 3006,
         Level = LogLevel.Warning,
         Message = "Load consumer group cancelled for filter: {Filter}")]
-    partial void LogCanceledLoad(Exception exception, OutboxMessageFilter filter);
+    static partial void LogCanceledLoad(ILogger logger, Exception exception, OutboxMessageFilter filter);
 
 
     [LoggerMessage(
         EventId = 3007,
         Level = LogLevel.Error,
         Message = "Error loading consumer group for filter: {Filter}")]
-    partial void LogErrorLoad(Exception exception, OutboxMessageFilter filter);
+    static partial void LogErrorLoad(ILogger logger, Exception exception, OutboxMessageFilter filter);
 
 }

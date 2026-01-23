@@ -1,4 +1,4 @@
-namespace Sa.Outbox.Delivery;
+﻿namespace Sa.Outbox.Delivery;
 
 internal sealed class OutboxContextFactory(TimeProvider? timeProvider) : IOutboxContextFactory
 {

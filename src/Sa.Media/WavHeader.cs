@@ -1,4 +1,4 @@
-namespace Sa.Media;
+﻿namespace Sa.Media;
 
 /// <summary>
 /// Представляет заголовок WAV-файла и предоставляет информацию о его содержимом.

@@ -1,4 +1,4 @@
-namespace Sa.Outbox.Support;
+﻿namespace Sa.Outbox.Support;
 
 /// <summary>
 /// Represents an entity or message that is logically associated with a specific partition ("part").

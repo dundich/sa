@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Sa.Classes;
 using Sa.Extensions;
 using Sa.Partitional.PostgreSql.Classes;

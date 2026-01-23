@@ -1,4 +1,4 @@
-namespace Sa.Partitional.PostgreSql;
+﻿namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// for managing database table configurations

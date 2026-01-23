@@ -103,7 +103,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                     .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2, 3, 4, 5))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
                         .AddDeliveryScoped<ParallelTestConsumer, TestMessage>(
-                            "parallel_test_group", 
+                            "parallel_test_group",
                             (_, settings) =>
                             {
                                 settings.ScheduleSettings

@@ -1,4 +1,4 @@
-namespace Sa.Outbox.Partitional;
+﻿namespace Sa.Outbox.Partitional;
 
 /// <summary>
 /// Represents a pair of tenant identifier and part information in the Outbox system.

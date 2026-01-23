@@ -1,4 +1,4 @@
-namespace Sa.Media.FFmpeg;
+﻿namespace Sa.Media.FFmpeg;
 
 public sealed record MediaMetadata(
     double? Duration = null,

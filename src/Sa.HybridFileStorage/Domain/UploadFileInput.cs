@@ -1,4 +1,4 @@
-namespace Sa.HybridFileStorage.Domain;
+﻿namespace Sa.HybridFileStorage.Domain;
 
 public sealed record UploadFileInput
 {
