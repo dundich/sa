@@ -1,39 +1,51 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using System.Collections.Concurrent;
+using Npgsql;
+using Sa.Data.PostgreSql;
 
 namespace Sa.Partitional.PostgreSql.Configuration.Builder;
 
 internal static class Setup
 {
-    private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, ISettingsBuilder>>> s_invokers = [];
-
     public static IServiceCollection AddSettigs(this IServiceCollection services, Action<IServiceProvider, ISettingsBuilder> build)
     {
-        if (s_invokers.TryGetValue(services, out var invokers))
-        {
-            invokers.Add(build);
-        }
-        else
-        {
-            s_invokers[services] = [build];
-        }
+        services.AddSingleton(build);
 
         services.TryAddSingleton<ISettingsBuilder>(sp =>
         {
-            var builder = new SettingsBuilder();
-            if (s_invokers.TryGetValue(services, out var invokers))
-            {
-                foreach (Action<IServiceProvider, ISettingsBuilder> build in invokers)
-                {
-                    build.Invoke(sp, builder);
-                }
+            string? searchPath = GetSearchPath(sp);
+            var builder = new SettingsBuilder(searchPath);
 
-                s_invokers.Remove(services, out _);
+            var configurators = sp.GetServices<Action<IServiceProvider, ISettingsBuilder>>();
+
+            foreach (var configure in configurators)
+            {
+                configure(sp, builder);
             }
+
             return builder;
         });
 
         return services;
+    }
+
+    private static string? GetSearchPath(IServiceProvider sp)
+    {
+        var settings = sp.GetService<PgDataSourceSettings>();
+        var connectionString = settings?.ConnectionString;
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return null;
+        }
+
+        try
+        {
+            return new NpgsqlConnectionStringBuilder(connectionString).SearchPath;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

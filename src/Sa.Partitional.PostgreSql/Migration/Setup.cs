@@ -1,5 +1,4 @@
-﻿using System.Collections.Concurrent;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Schedule;
 
@@ -7,35 +6,28 @@ namespace Sa.Partitional.PostgreSql.Migration;
 
 internal static class Setup
 {
-    private static readonly ConcurrentDictionary<IServiceCollection, HashSet<Action<IServiceProvider, MigrationScheduleSettings>>> s_invokers = [];
-
-    public static IServiceCollection AddMigration(this IServiceCollection services, Action<IServiceProvider, MigrationScheduleSettings>? configure = null)
+    public static IServiceCollection AddMigration(
+        this IServiceCollection services,
+        Action<IServiceProvider, MigrationScheduleSettings>? configure = null)
     {
 
         if (configure != null)
         {
-            if (s_invokers.TryGetValue(services, out var builder))
-            {
-                builder.Add(configure);
-            }
-            else
-            {
-                s_invokers[services] = [configure];
-            }
+            services.AddSingleton(configure);
         }
 
         services.TryAddSingleton<MigrationScheduleSettings>(sp =>
         {
-            var item = new MigrationScheduleSettings();
-            if (s_invokers.TryGetValue(services, out var invokers))
+            var settings = new MigrationScheduleSettings();
+
+            var configurators = sp.GetServices<Action<IServiceProvider, MigrationScheduleSettings>>();
+
+            foreach (var config in configurators)
             {
-                foreach (Action<IServiceProvider, MigrationScheduleSettings> invoker in invokers)
-                {
-                    invoker.Invoke(sp, item);
-                }
-                s_invokers.Remove(services, out _);
+                config(sp, settings);
             }
-            return item;
+
+            return settings;
         });
 
         services.TryAddSingleton<IMigrationService, PartMigrationService>();
@@ -45,7 +37,7 @@ internal static class Setup
             .UseHostedService()
             .AddJob<MigrationJob>((sp, builder) =>
             {
-                MigrationScheduleSettings migrationSettings = sp.GetRequiredService<MigrationScheduleSettings>();
+                var migrationSettings = sp.GetRequiredService<MigrationScheduleSettings>();
 
                 builder.WithName(migrationSettings.MigrationJobName ?? MigrationJobConstance.MigrationDefaultJobName);
 

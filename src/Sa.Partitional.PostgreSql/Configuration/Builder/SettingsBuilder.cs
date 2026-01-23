@@ -2,13 +2,13 @@
 
 namespace Sa.Partitional.PostgreSql.Configuration.Builder;
 
-internal sealed class SettingsBuilder : ISettingsBuilder
+internal sealed class SettingsBuilder(string? searchPath) : ISettingsBuilder
 {
     private readonly Dictionary<string, ISchemaBuilder> _schemas = [];
 
     public ISettingsBuilder AddSchema(Action<ISchemaBuilder> schemaBuilder)
     {
-        return AddSchema("public", schemaBuilder);
+        return AddSchema(searchPath ?? "public", schemaBuilder);
     }
 
     public ISettingsBuilder AddSchema(string schemaName, Action<ISchemaBuilder> schemaBuilder)

@@ -1,5 +1,4 @@
-﻿using System.Collections.Concurrent;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Schedule;
 
@@ -9,36 +8,25 @@ internal static class Setup
 {
     readonly static Guid JobId = Guid.Parse("7da81411-9db7-4553-8e93-bd1f12d02b38");
 
-    private static readonly ConcurrentDictionary<IServiceCollection,
-        HashSet<Action<IServiceProvider, PartCleanupScheduleSettings>>> s_invokers = [];
-
     public static IServiceCollection AddPartCleaning(this IServiceCollection services, Action<IServiceProvider, PartCleanupScheduleSettings>? configure = null)
     {
 
         if (configure != null)
         {
-            if (s_invokers.TryGetValue(services, out var builder))
-            {
-                builder.Add(configure);
-            }
-            else
-            {
-                s_invokers[services] = [configure];
-            }
+            services.AddSingleton(configure);
         }
 
         services.TryAddSingleton<PartCleanupScheduleSettings>(sp =>
         {
-            var item = new PartCleanupScheduleSettings();
-            if (s_invokers.TryGetValue(services, out var invokers))
+            var settings = new PartCleanupScheduleSettings();
+
+            var configurators = sp.GetServices<Action<IServiceProvider, PartCleanupScheduleSettings>>();
+            foreach (var config in configurators)
             {
-                foreach (Action<IServiceProvider, PartCleanupScheduleSettings> invoker in invokers)
-                {
-                    invoker.Invoke(sp, item);
-                }
-                s_invokers.Remove(services, out _);
+                config(sp, settings);
             }
-            return item;
+
+            return settings;
         });
 
         services.TryAddSingleton<IPartCleanupService, PartCleanupService>();
@@ -49,7 +37,7 @@ internal static class Setup
             {
                 builder.WithName("Cleanup job");
 
-                PartCleanupScheduleSettings settings = sp.GetRequiredService<PartCleanupScheduleSettings>();
+                var settings = sp.GetRequiredService<PartCleanupScheduleSettings>();
 
                 builder
                     .WithInitialDelay(settings.InitialDelay)

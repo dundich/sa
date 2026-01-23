@@ -1,4 +1,4 @@
-﻿# Outbox
+# Outbox
 
 The base logic and abstractions designed for implementing the Outbox pattern, with support for partitioning.
 
@@ -27,7 +27,7 @@ public interface IOutboxPayloadMessage
 
 // example message
 
-public record PingMessage(string PayloadId, int TenantId = 0) : IOutboxPayloadMessage
+public sealed record PingMessage(string PayloadId, int TenantId = 0) : IOutboxPayloadMessage
 {
     public static string PartName => "root";
 }
@@ -122,17 +122,19 @@ public interface IOutboxPartitionalSupport
 /// Represents a consumer interface for processing Outbox messages of a specific type.
 /// </summary>
 public interface IConsumer<TMessage> : IConsumer
+    where TMessage : IOutboxPayloadMessage
 {
     /// <summary>
     /// Consumes a collection of Outbox messages.
+    /// This method processes the provided messages asynchronously.
     /// </summary>
-    ValueTask Consume(IReadOnlyCollection<IOutboxContext<TMessage>> messages, CancellationToken cancellationToken);
+    ValueTask Consume(
+        ConsumerGroupSettings settings,
+        OutboxMessageFilter filter,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
+        CancellationToken cancellationToken);
 }
 
-/// <summary>
-/// Represents a base consumer interface for processing Outbox messages.
-/// This interface can be extended by specific consumer implementations.
-/// </summary>
 public interface IConsumer
 {
 }
@@ -203,9 +205,8 @@ public class Startup
 ```csharp
 
 // Some message
-public record MyMessage(string PayloadId, string Content) : IOutboxPayloadMessage
+public sealed record MyMessage(string PayloadId, string Content, int TenantId) : IOutboxPayloadMessage
 {
-    public int TenantId { get; init; }
     public static string PartName => "root";
 }
 
@@ -229,12 +230,15 @@ public class MessageSender(IOutboxMessagePublisher publisher)
 // Consuming
 public class MyMessageConsumer : IConsumer<MyMessage>
 {
-    public async ValueTask Consume(IReadOnlyCollection<IOutboxContext<MyMessage>> messages, CancellationToken cancellationToken)
+    public async ValueTask Consume(ConsumerGroupSettings settings,
+        OutboxMessageFilter filter,
+        ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
+        CancellationToken cancellationToken)
     {
         foreach (var messageContext in messages)
         {
             // Logic for processing the message
-            Console.WriteLine($"Processing message with ID: {messageContext.Payload.PayloadId} and Content: {messageContext.Payload.Content}");
+            Console.WriteLine($"Processing message: {messageContext.Payload}");
 
             // Successful message processing
             messageContext.Ok("Message processed successfully.");

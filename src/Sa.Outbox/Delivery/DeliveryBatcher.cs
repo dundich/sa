@@ -2,7 +2,10 @@
 
 internal sealed class DeliveryBatcher : IDeliveryBatcher
 {
-    public ValueTask<int> CalculateBatchSize(int maxBatchSize, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public ValueTask<int> CalculateBatchSize(
+        int maxBatchSize,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken)
     {
         return ValueTask.FromResult(maxBatchSize);
     }

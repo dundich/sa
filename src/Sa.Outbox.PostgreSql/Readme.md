@@ -1,4 +1,4 @@
-﻿# Sa.Outbox.PostgreSql
+# Sa.Outbox.PostgreSql
 
 An AOT library for implementing the **Transactional Outbox** pattern using PostgreSQL in .NET applications. Provides guaranteed message delivery with support for multi-tenancy, concurrent processing, and advanced consumer management.
 
@@ -25,7 +25,7 @@ ConfigureServices(services => services
     )
     // outbox pg
     .AddOutboxUsingPostgreSql(cfg => cfg
-        .WithDataSource(ds => ds.WithConnectionString(connectionString))
+        .WithDataSource(ds => ds.WithConnectionString("Host=my_host;Database=my_db;Username=my_user;Password=my_password"))
         .WithOutboxSettings((_, settings) =>
         {
             settings.TableSettings.WithSchema("my_outbox");
