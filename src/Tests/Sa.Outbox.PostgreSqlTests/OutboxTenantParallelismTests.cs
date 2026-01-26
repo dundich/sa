@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
@@ -100,7 +101,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2, 3, 4, 5))
+                    .WithTenants((_, sp) => sp.WithTenantIds(1, 2, 3, 4, 5))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
                         .AddDeliveryScoped<ParallelTestConsumer, TestMessage>(
                             "parallel_test_group",

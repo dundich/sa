@@ -29,7 +29,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, s) => s.WithTenantIds(1, 2))
+                    .WithTenants((_, s) => s.WithTenantIds(1, 2))
                     .WithDeliveries(b => b
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test1", (_, s) =>
                         {

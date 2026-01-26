@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
@@ -41,7 +42,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, s) => s.WithTenantIds(1))
+                    .WithTenants((_, s) => s.WithTenantIds(1))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
                         {

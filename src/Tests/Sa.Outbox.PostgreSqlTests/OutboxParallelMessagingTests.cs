@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
@@ -77,10 +78,8 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder =>
-                {
-                    builder
-                    .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2))
+                .AddOutbox(builder => builder
+                    .WithTenants((_, sp) => sp.WithTenantIds(1, 2))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
                         {
@@ -98,9 +97,9 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
                             settings.ConsumeSettings.WithMaxBatchSize(1024);
                         })
-                    );
-                    builder.PublishSettings.MaxBatchSize = 1024;
-                })
+                    )
+                    .WithPublishSettings((_, b) => b.WithMaxBatchSize(1024))
+                )
                 .AddOutboxUsingPostgreSql(cfg =>
                 {
                     cfg

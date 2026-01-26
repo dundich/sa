@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Microsoft.Extensions.ObjectPool;
+using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PostgreSql.SqlBuilder;
 

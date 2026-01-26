@@ -1,12 +1,11 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.Text.RegularExpressions;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Sa.Outbox.Delivery;
-using Sa.Outbox.Job;
+using Sa.Outbox.Delivery.Job;
 using Sa.Outbox.Support;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
 
-namespace Sa.Outbox.Configuration;
+namespace Sa.Outbox.Delivery;
 
 internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDeliveryBuilder
 {

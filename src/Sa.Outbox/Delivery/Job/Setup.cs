@@ -1,9 +1,9 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Support;
 using Sa.Schedule;
+using System.Diagnostics.CodeAnalysis;
 
-namespace Sa.Outbox.Job;
+namespace Sa.Outbox.Delivery.Job;
 
 internal static class Setup
 {

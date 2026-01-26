@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PgOutbox;
 using Sa.Outbox;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.Publication;
@@ -18,7 +19,7 @@ var connectionString = "Host=localhost;Username=postgres;Password=postgres;Datab
 IHost host = Host.CreateDefaultBuilder()
     .ConfigureServices(services => services
         .AddOutbox(builder => builder
-            .WithTenantSettings((_, ts) => ts.WithTenantIds(1, 2, 3))
+            .WithTenants((_, ts) => ts.WithTenantIds(1, 2, 3))
             .WithDeliveries(builder => builder
                 .AddDeliveryScoped<Group1Consumer, SomeMessage>((_, settings) =>
                 {

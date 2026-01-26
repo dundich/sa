@@ -1,8 +1,7 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using Sa.Outbox.Delivery;
-using Sa.Outbox.Support;
+﻿using Sa.Outbox.Support;
+using System.Diagnostics.CodeAnalysis;
 
-namespace Sa.Outbox;
+namespace Sa.Outbox.Delivery;
 
 
 /// <summary>

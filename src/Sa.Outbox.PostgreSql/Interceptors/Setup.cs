@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Sa.Outbox.Job;
+using Sa.Outbox.Delivery.Job;
 
 namespace Sa.Outbox.PostgreSql.Interceptors;
 

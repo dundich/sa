@@ -1,9 +1,8 @@
-﻿using Sa.Outbox.Delivery;
-using Sa.Outbox.Publication;
+﻿using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
 using Sa.Schedule;
 
-namespace Sa.Outbox.Job;
+namespace Sa.Outbox.Delivery.Job;
 
 
 public interface IDeliveryJob : IJob;

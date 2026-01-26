@@ -120,7 +120,7 @@ public sealed class PgOutboxTableSettings
                 $"{MsgCreatedAt} BIGINT NOT NULL DEFAULT 0",
                 $"{DeliveryId} BIGINT NOT NULL DEFAULT 0",
                 $"{DeliveryAttempt} INT NOT NULL DEFAULT 0",
-                $"{DeliveryStatusCode} INT NOT NULL DEFAULT {(int)Outbox.DeliveryStatusCode.Pending}",
+                $"{DeliveryStatusCode} INT NOT NULL DEFAULT {(int)Outbox.Delivery.DeliveryStatusCode.Pending}",
                 $"{DeliveryStatusMessage} TEXT NOT NULL DEFAULT ''",
                 $"{DeliveryCreatedAt} BIGINT NOT NULL DEFAULT 0",
                 $"{ErrorId} BIGINT NOT NULL DEFAULT 0",
@@ -160,7 +160,7 @@ public sealed class PgOutboxTableSettings
             public string[] All() =>
             [
                 $"{DeliveryId} BIGSERIAL NOT NULL",
-                $"{DeliveryStatusCode} INT NOT NULL DEFAULT {(int)Outbox.DeliveryStatusCode.Pending}",
+                $"{DeliveryStatusCode} INT NOT NULL DEFAULT {(int)Outbox.Delivery.DeliveryStatusCode.Pending}",
                 $"{DeliveryStatusMessage} TEXT NOT NULL DEFAULT ''",
                 $"{MsgPayloadId} TEXT NOT NULL DEFAULT ''",
                 $"{TenantId} INT NOT NULL DEFAULT 0",
