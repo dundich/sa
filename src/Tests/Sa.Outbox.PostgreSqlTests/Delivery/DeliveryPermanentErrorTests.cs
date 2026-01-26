@@ -38,7 +38,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2))
+                    .WithTenants((_, sp) => sp.WithTenantIds(1, 2))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test2", (_, s) =>
                         {

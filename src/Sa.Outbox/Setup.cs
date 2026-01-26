@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Sa.Outbox.Configuration;
 
 namespace Sa.Outbox;
 
@@ -9,7 +8,7 @@ public static class Setup
         this IServiceCollection services,
         Action<IOutboxBuilder>? build = null)
     {
-        OutboxBuilder builder = new(services);
+        OutboxBuilder builder = OutboxBuilder.Create(services);
         build?.Invoke(builder);
         return services;
     }

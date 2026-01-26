@@ -45,7 +45,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, s) => s.WithAutoDetect())
+                    .WithTenants((_, s) => s.WithAutoDetect())
                     .WithDeliveries(b => b
                         .AddDelivery<TestConsumer, TestMessage>("test_auto_detect", (_, s) =>
                         {

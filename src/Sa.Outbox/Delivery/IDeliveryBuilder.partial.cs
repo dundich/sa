@@ -1,8 +1,8 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using Sa.Extensions;
+﻿using Sa.Extensions;
 using Sa.Outbox.Support;
+using System.Diagnostics.CodeAnalysis;
 
-namespace Sa.Outbox;
+namespace Sa.Outbox.Delivery;
 
 public partial interface IDeliveryBuilder
 {

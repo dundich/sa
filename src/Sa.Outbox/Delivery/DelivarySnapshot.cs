@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Job;
+﻿using Sa.Outbox.Delivery.Job;
 using Sa.Outbox.Publication;
 using Sa.Schedule;
 

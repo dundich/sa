@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
 using Sa.Outbox.Support;
@@ -54,7 +55,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, s) => s.WithTenantIds(1, 2))
+                    .WithTenants((_, s) => s.WithTenantIds(1, 2))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
 
                         .AddDeliveryScoped<SomeMessageConsumerGr1, SomeMessage>("test_gr1", (_, settings) =>
