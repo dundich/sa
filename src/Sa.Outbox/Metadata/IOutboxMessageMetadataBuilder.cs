@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Metadata;
+namespace Sa.Outbox.Metadata;
 
 public interface IOutboxMessageMetadataBuilder
 {
