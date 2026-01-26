@@ -1,5 +1,4 @@
 ﻿using Sa.Outbox.Delivery;
-using Sa.Outbox.Support;
 
 namespace Sa.Outbox;
 
@@ -8,7 +7,6 @@ namespace Sa.Outbox;
 /// </summary>
 /// <typeparam name="TMessage">The type of the message being consumed.</typeparam>
 public interface IConsumer<TMessage> : IConsumer
-    where TMessage : IOutboxPayloadMessage
 {
     /// <summary>
     /// Consumes a collection of Outbox messages.

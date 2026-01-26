@@ -1,7 +1,7 @@
-namespace Sa.Outbox.Metadata;
+﻿namespace Sa.Outbox.Metadata;
 
 public interface IOutboxMessageMetadataBuilder
 {
-    IOutboxMessageMetadataBuilder WithMessageMetadata<TMessage>(string partName, Func<TMessage, string> getPayloadId)
+    IOutboxMessageMetadataBuilder AddMetadata<TMessage>(string partName, Func<TMessage, string>? getPayloadId = null)
         where TMessage : class;
 }

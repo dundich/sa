@@ -1,6 +1,4 @@
-﻿using Sa.Outbox.Support;
-
-namespace Sa.Outbox.Publication;
+﻿namespace Sa.Outbox.Publication;
 
 /// <summary>
 /// Defines a contract for publishing outbox messages.
@@ -15,8 +13,8 @@ public interface IOutboxMessagePublisher
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A <see cref="ValueTask{ulong}"/> representing the asynchronous operation, 
     /// with the number of successfully published messages as the result.</returns>
-    ValueTask<ulong> Publish<TMessage>(IReadOnlyCollection<TMessage> messages, CancellationToken cancellationToken = default)
-        where TMessage : IOutboxPayloadMessage;
+    ValueTask<ulong> Publish<TMessage>(
+        IReadOnlyCollection<TMessage> messages, int tenantId = 0, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Publishes a single message.
@@ -26,6 +24,23 @@ public interface IOutboxMessagePublisher
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A <see cref="ValueTask{ulong}"/> representing the asynchronous operation, 
     /// with the number of successfully published messages as the result.</returns>
-    ValueTask<ulong> Publish<TMessage>(TMessage messages, CancellationToken cancellationToken = default)
-        where TMessage : IOutboxPayloadMessage => Publish([messages], cancellationToken);
+    ValueTask<ulong> Publish<TMessage>(TMessage messages, int tenantId = 0, CancellationToken cancellationToken = default)
+         => Publish<TMessage>([messages], tenantId, cancellationToken);
+
+
+    async ValueTask<ulong> Publish<TMessage>(
+        IReadOnlyCollection<TMessage> messages,
+        Func<TMessage, int> GetTenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var groups = messages.GroupBy(c => GetTenantId(c));
+        ulong totals = 0;
+        foreach (var group in groups)
+        {
+            TMessage[] tmsgs = [.. group];
+
+            totals += await Publish<TMessage>(tmsgs, group.Key, cancellationToken);
+        }
+        return totals;
+    }
 }

@@ -3,7 +3,6 @@ using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
-using Sa.Outbox.Support;
 using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSqlTests;
@@ -11,10 +10,8 @@ namespace Sa.Outbox.PostgreSqlTests;
 public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
     : IClassFixture<OutboxTwoGroupsTests.Fixture>
 {
-    class SomeMessage : IOutboxPayloadMessage
+    class SomeMessage
     {
-        public static string PartName => "some";
-
         public string PayloadId { get; } = Guid.NewGuid().ToString();
         public int TenantId { get; set; }
     }
@@ -114,12 +111,13 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
             new SomeMessage { TenantId = 1 }
         };
 
-        ulong total = await publisher.Publish(messages, TestContext.Current.CancellationToken);
+        ulong total = await publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
 
 
         int attempts = 0;
         const int maxAttempts = 20;
-        while ((SomeMessageConsumerGr1.Counter < (int)total || SomeMessageConsumerGr2.Counter < (int)total) && attempts++ < maxAttempts)
+        while ((SomeMessageConsumerGr1.Counter < (int)total
+            || SomeMessageConsumerGr2.Counter < (int)total) && attempts++ < maxAttempts)
         {
             await Task.Delay(400, TestContext.Current.CancellationToken);
         }

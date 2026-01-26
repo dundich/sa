@@ -1,6 +1,4 @@
-﻿using Sa.Outbox.Support;
-
-namespace Sa.Outbox.Delivery;
+﻿namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Processes messages using a consumer in scope
@@ -11,5 +9,5 @@ internal interface IDeliveryLifetimeInvoker
         ConsumerGroupSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
-        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage;
+        CancellationToken cancellationToken);
 }

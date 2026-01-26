@@ -29,6 +29,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
         {
             Services
                 .AddOutbox(builder => builder
+                    .WithMetadata((_, b) => b.AddMetadata<TestMessage>("root_1", m => m.PayloadId))
                     .WithTenants((_, s) => s.WithTenantIds(1, 2))
                     .WithDeliveries(b => b
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test1", (_, s) =>
@@ -63,7 +64,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
             new TestMessage { PayloadId = "12", Content = "Message 2", TenantId = 2}
         ];
 
-        var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
+        var cnt = await fixture.Publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
 

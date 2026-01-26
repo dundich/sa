@@ -5,27 +5,24 @@ namespace Sa.Outbox.Metadata;
 
 internal static class Setup
 {
-    public static IServiceCollection AddOutboxMessages(
+    public static IServiceCollection AddMessagesMetadata(
         this IServiceCollection services,
-        Action<IServiceProvider, IOutboxMessageMetadataBuilder> configure)
+        Action<IServiceProvider, IOutboxMessageMetadataBuilder>? configure = null)
     {
 
         services.AddSingleton<MetadataConfiguration>(sp =>
         {
             var configuration = new MetadataConfiguration();
-            configure(sp, configuration);
+            configure?.Invoke(sp, configuration);
             return configuration;
         });
 
 
         services.TryAddSingleton<IOutboxMessageMetadataProvider>(sp =>
         {
-            var configs = sp.GetServices<MetadataConfiguration>();
-            if (configs.Count() != 1) return configs.First();
-
             var configuration = new MetadataConfiguration();
 
-            foreach (var config in configs)
+            foreach (var config in sp.GetServices<MetadataConfiguration>())
             {
                 configuration.Assign(config);
             }

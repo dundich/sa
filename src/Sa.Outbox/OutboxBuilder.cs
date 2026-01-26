@@ -31,7 +31,7 @@ internal sealed class OutboxBuilder : IOutboxBuilder
 
     public IOutboxBuilder WithMetadata(Action<IServiceProvider, IOutboxMessageMetadataBuilder> configure)
     {
-        _services.AddOutboxMessages(configure);
+        _services.AddMessagesMetadata(configure);
         return this;
     }
 

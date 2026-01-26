@@ -1,6 +1,5 @@
 ﻿using Sa.Extensions;
 using Sa.Outbox.Exceptions;
-using Sa.Outbox.Support;
 using System.Runtime.CompilerServices;
 
 namespace Sa.Outbox.Delivery;
@@ -18,7 +17,6 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
-        where TMessage : IOutboxPayloadMessage
     {
         if (messages.IsEmpty) return 0;
 

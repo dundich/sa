@@ -1,5 +1,5 @@
-﻿using System.Text.Json;
-using Sa.Outbox.PostgreSql.Serialization;
+﻿using Sa.Outbox.PostgreSql.Serialization;
+using System.Text.Json;
 
 namespace Sa.Outbox.PostgreSqlTests;
 

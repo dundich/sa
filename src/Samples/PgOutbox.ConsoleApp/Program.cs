@@ -7,7 +7,6 @@ using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.Publication;
-using Sa.Outbox.Support;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -20,6 +19,7 @@ IHost host = Host.CreateDefaultBuilder()
     .ConfigureServices(services => services
         .AddOutbox(builder => builder
             .WithTenants((_, ts) => ts.WithTenantIds(1, 2, 3))
+            .WithMetadata((_, b) => b.AddMetadata<SomeMessage>("some"))
             .WithDeliveries(builder => builder
                 .AddDeliveryScoped<Group1Consumer, SomeMessage>((_, settings) =>
                 {
@@ -52,9 +52,9 @@ IHost host = Host.CreateDefaultBuilder()
 var publisher = host.Services.GetRequiredService<IOutboxMessagePublisher>();
 
 await publisher.Publish([
-    new SomeMessage("01", "Hi 1", 1),
-    new SomeMessage("02", "Hi 2", 2),
-    new SomeMessage("03", "Hi 3", 3)
+    new SomeMessage("01", "Hi 1"),
+    new SomeMessage("02", "Hi 2"),
+    new SomeMessage("03", "Hi 3")
 ]);
 
 
@@ -63,10 +63,7 @@ await host.RunAsync();
 
 namespace PgOutbox
 {
-    public sealed record SomeMessage(string PayloadId, string Message, int TenantId) : IOutboxPayloadMessage
-    {
-        static string IOutboxHasPart.PartName => "some";
-    }
+    public sealed record SomeMessage(string PayloadId, string Message);
 
 
     public sealed class Group1Consumer(ILogger<Group1Consumer> logger) : IConsumer<SomeMessage>
@@ -162,14 +159,14 @@ namespace PgOutbox
             {
                 for (int i = 0; i < 100 && !stoppingToken.IsCancellationRequested; i++)
                 {
-                    var rnd = Random.Shared.Next(1, 4);
-                    await Task.Delay(TimeSpan.FromSeconds(rnd), stoppingToken);
+                    var tenantId = Random.Shared.Next(1, 4);
+                    await Task.Delay(TimeSpan.FromSeconds(tenantId), stoppingToken);
 
                     await publisher.Publish(
                         new SomeMessage(
                             i.ToString(),
-                            DateTime.Now.ToString(),
-                            rnd),
+                            DateTime.Now.ToString()),
+                        tenantId,
                         stoppingToken);
                 }
             }

@@ -19,15 +19,9 @@ public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture)
     {
         Console.Write(fixture.ConnectionString);
 
-        // Arrange
-        List<TestMessage> messages =
-        [
-            new TestMessage { PayloadId = "1", Content = "Message 1", TenantId = 1},
-            new TestMessage { PayloadId = "2", Content = "Message 2", TenantId = 2}
-        ];
+        ulong result = await Sub.Publish(new TestMessage { PayloadId = "1", Content = "Message 1", TenantId = 1 }, 1, TestContext.Current.CancellationToken);
 
-        // Act
-        ulong result = await Sub.Publish(messages, TestContext.Current.CancellationToken);
+        result += await Sub.Publish(new TestMessage { PayloadId = "2", Content = "Message 3", TenantId = 2 }, 2, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, (int)result);

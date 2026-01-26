@@ -22,7 +22,6 @@
   </Folder>
   <Folder Name="/Outbox/">
     <Project Path="Sa.Outbox.PostgreSql/Sa.Outbox.PostgreSql.csproj" />
-    <Project Path="Sa.Outbox.Support/Sa.Outbox.Support.csproj" />
     <Project Path="Sa.Outbox/Sa.Outbox.csproj" />
   </Folder>
   <Folder Name="/Partitional/">

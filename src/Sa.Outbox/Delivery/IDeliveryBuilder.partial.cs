@@ -1,5 +1,4 @@
 ﻿using Sa.Extensions;
-using Sa.Outbox.Support;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.Delivery;
@@ -12,14 +11,12 @@ public partial interface IDeliveryBuilder
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
     where TConsumer : class, IConsumer<TMessage>
-    where TMessage : IOutboxPayloadMessage
         => AddDeliveryScoped<TConsumer, TMessage>(GetConsumerGroupName<TConsumer>(), configure);
 
     public IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
     where TConsumer : class, IConsumer<TMessage>
-    where TMessage : IOutboxPayloadMessage
         => AddDelivery<TConsumer, TMessage>(GetConsumerGroupName<TConsumer>(), configure);
 
 

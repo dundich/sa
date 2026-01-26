@@ -19,7 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Sa.Outbox.Support\Sa.Outbox.Support.csproj" />
     <ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
   </ItemGroup>
 

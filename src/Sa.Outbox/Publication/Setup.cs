@@ -1,12 +1,17 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sa.Outbox.Metadata;
 
 namespace Sa.Outbox.Publication;
 
 internal static class Setup
 {
-    public static IServiceCollection AddMessagePublisher(this IServiceCollection services, Action<IServiceProvider, OutboxPublishSettings>? configure = null)
+    public static IServiceCollection AddMessagePublisher(
+        this IServiceCollection services,
+        Action<IServiceProvider, OutboxPublishSettings>? configure = null)
     {
+        services.AddMessagesMetadata();
+
         if (configure != null)
         {
             services.AddSingleton(configure);

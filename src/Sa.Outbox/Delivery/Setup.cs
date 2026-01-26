@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
 
 namespace Sa.Outbox.Delivery;
@@ -8,6 +9,10 @@ internal static class Setup
 {
     public static IServiceCollection AddOutboxDelivery(this IServiceCollection services, Action<IDeliveryBuilder> configure)
     {
+        services.AddMessagesMetadata();
+
+        services.TryAddSingleton<FilterFactory>();
+
         services.TryAddSingleton<IOutboxContextFactory, OutboxContextFactory>();
 
         services.TryAddSingleton<IDeliveryBatcher, DeliveryBatcher>();

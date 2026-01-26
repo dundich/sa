@@ -3,7 +3,6 @@ using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
-using Sa.Outbox.Support;
 using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSqlTests;
@@ -20,20 +19,25 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         public static int GetMessageCount() => Random.Shared.Next(From, To);
     }
 
-    class SomeMessage1 : IOutboxPayloadMessage
+
+    class HasTenant
+    {
+        public int TenantId { get; set; } = Random.Shared.Next(1, 2);
+    }
+
+
+    class SomeMessage1 : HasTenant
     {
         public static string PartName => "multi_1";
 
         public string PayloadId { get; set; } = Guid.NewGuid().ToString();
-        public int TenantId { get; set; } = Random.Shared.Next(1, 2);
     }
 
-    class SomeMessage2 : IOutboxPayloadMessage
+    class SomeMessage2 : HasTenant
     {
         public static string PartName => "multi_2";
 
         public string PayloadId { get; set; } = Guid.NewGuid().ToString();
-        public int TenantId { get; set; } = Random.Shared.Next(1, 2);
     }
 
     static class CommonCounter
@@ -79,7 +83,10 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenants((_, sp) => sp.WithTenantIds(1, 2))
+                    .WithTenants((_, b) => b.WithTenantIds(1, 2))
+                    .WithMetadata((_, configure) => configure
+                        .AddMetadata<SomeMessage1>(SomeMessage1.PartName)
+                        .AddMetadata<SomeMessage2>(SomeMessage2.PartName))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
                         {
@@ -149,7 +156,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     }
 
     private static async Task<long> RunPublish<T>(IOutboxMessagePublisher publisher)
-        where T : IOutboxPayloadMessage, new()
+        where T : HasTenant, new()
     {
         long total = 0;
         List<int> nodes = [.. Enumerable.Range(1, GenMessageRange.Threads)];
@@ -163,7 +170,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 messages.Add(new T());
             }
 
-            await publisher.Publish(messages, TestContext.Current.CancellationToken);
+            await publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
         });
 
 

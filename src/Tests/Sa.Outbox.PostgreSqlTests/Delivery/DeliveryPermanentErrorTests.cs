@@ -70,7 +70,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
             new TestMessage { PayloadId = "12", Content = "Message 2", TenantId = 2}
         ];
 
-        var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
+        var cnt = await fixture.Publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
         var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);

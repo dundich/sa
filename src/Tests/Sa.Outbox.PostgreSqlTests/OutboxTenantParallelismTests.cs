@@ -1,18 +1,17 @@
-﻿using System.Collections.Concurrent;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
-using Sa.Outbox.Support;
 using Sa.Schedule;
+using System.Collections.Concurrent;
 
 namespace Sa.Outbox.PostgreSqlTests;
 
 public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture fixture)
     : IClassFixture<OutboxTenantParallelismTests.Fixture>
 {
-    class TestMessage : IOutboxPayloadMessage
+    class TestMessage
     {
         public static string PartName => "parallel_test";
         public string PayloadId { get; } = Guid.NewGuid().ToString();
@@ -101,7 +100,8 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenants((_, sp) => sp.WithTenantIds(1, 2, 3, 4, 5))
+                    .WithTenants((_, s) => s.WithTenantIds(1, 2, 3, 4, 5))
+                    .WithMetadata((_, configure) => configure.AddMetadata<ParallelTestConsumer>(TestMessage.PartName))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
                         .AddDeliveryScoped<ParallelTestConsumer, TestMessage>(
                             "parallel_test_group",
@@ -158,6 +158,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         // Act
         ulong totalPublished = await publisher.Publish(
             messages,
+            m => m.TenantId, 
             TestContext.Current.CancellationToken);
 
 
