@@ -158,7 +158,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         // Act
         ulong totalPublished = await publisher.Publish(
             messages,
-            m => m.TenantId, 
+            m => m.TenantId,
             TestContext.Current.CancellationToken);
 
 

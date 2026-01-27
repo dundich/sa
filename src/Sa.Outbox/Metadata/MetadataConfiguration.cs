@@ -12,18 +12,22 @@ internal sealed class MetadataConfiguration : IOutboxMessageMetadataBuilder, IOu
     public IOutboxMessageMetadataBuilder AddMetadata<T>(string partName, Func<T, string>? getPayloadId = null)
         where T : class
     {
+        if (string.IsNullOrWhiteSpace(partName))
+        {
+            throw new ArgumentException(
+                "Part name cannot be null or whitespace",
+                nameof(partName));
+        }
+
         var messageType = typeof(T);
+
+        Func<object, string> payloadIdGetter = getPayloadId != null
+            ? obj => getPayloadId((T)obj)
+            : s_Dummy;
 
         _metadata[messageType] = new OutboxMessageMetadata(
             PartName: partName,
-            GetPayloadId: (obj) =>
-            {
-                if (getPayloadId != null)
-                {
-                    return getPayloadId((T)obj);
-                }
-                return s_Dummy(obj);
-            });
+            GetPayloadId: payloadIdGetter);
 
         return this;
     }
@@ -40,9 +44,9 @@ internal sealed class MetadataConfiguration : IOutboxMessageMetadataBuilder, IOu
     }
 
 
-    internal void Assign(MetadataConfiguration configuration)
+    internal void MergeFrom(MetadataConfiguration other)
     {
-        foreach (var cmeta in configuration._metadata)
+        foreach (var cmeta in other._metadata)
         {
             _metadata[cmeta.Key] = cmeta.Value;
         }

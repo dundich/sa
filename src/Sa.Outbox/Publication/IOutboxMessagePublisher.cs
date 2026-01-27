@@ -30,17 +30,21 @@ public interface IOutboxMessagePublisher
 
     async ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
-        Func<TMessage, int> GetTenantId,
+        Func<TMessage, int> getTenantId,
         CancellationToken cancellationToken = default)
     {
-        var groups = messages.GroupBy(c => GetTenantId(c));
-        ulong totals = 0;
-        foreach (var group in groups)
-        {
-            TMessage[] tmsgs = [.. group];
 
-            totals += await Publish<TMessage>(tmsgs, group.Key, cancellationToken);
+        var lookup = messages.ToLookup(getTenantId);
+        ulong totals = 0;
+
+        foreach (var tenantId in lookup.Select(g => g.Key))
+        {
+            var group = lookup[tenantId];
+            var tenantMessages = group.ToArray();
+
+            totals += await Publish<TMessage>(tenantMessages, tenantId, cancellationToken);
         }
+
         return totals;
     }
 }

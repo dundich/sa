@@ -15,37 +15,38 @@ Console.WriteLine("Hello, Pg Outbox!");
 var connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=postgres";
 
 // default configure...
-IHost host = Host.CreateDefaultBuilder()
-    .ConfigureServices(services => services
-        .AddOutbox(builder => builder
-            .WithTenants((_, ts) => ts.WithTenantIds(1, 2, 3))
-            .WithMetadata((_, b) => b.AddMetadata<SomeMessage>("some"))
-            .WithDeliveries(builder => builder
-                .AddDeliveryScoped<Group1Consumer, SomeMessage>((_, settings) =>
-                {
-                    settings.ScheduleSettings.WithIntervalSeconds(5).WithImmediate();
-                    settings.ConsumeSettings.WithSingleIteration();
-                })
-                .AddDelivery<RndConsumer, SomeMessage>("rnd", (_, settings) =>
-                {
-                    settings.ScheduleSettings.WithIntervalSeconds(25);
-                    settings.ConsumeSettings.WithSingleIteration().WithMaxDeliveryAttempts(2);
-                })
-            )
-        )
-        // outbox pg
-        .AddOutboxUsingPostgreSql(cfg => cfg
-            .WithDataSource(ds => ds.WithConnectionString(connectionString))
-            .WithOutboxSettings((_, settings) =>
+IHost host = Host.CreateDefaultBuilder().ConfigureServices(services => services
+    // outbox
+    .AddOutbox(builder => builder
+        .WithTenants((_, t) => t.WithTenantIds(1, 2, 3))
+        .WithMetadata((_, b) => b.AddMetadata<SomeMessage>("some", getPayloadId: p => p.PayloadId))
+        .WithDeliveries(b => b
+            .AddDeliveryScoped<Group1Consumer, SomeMessage>((_, settings) =>
             {
-                settings.TableSettings.WithSchema("test");
-                settings.ConsumeSettings.WithMinOffset<Group1Consumer>(DateTimeOffset.Now);
+                settings.ScheduleSettings.WithIntervalSeconds(5).WithImmediate();
+                settings.ConsumeSettings.WithSingleIteration();
             })
-            .WithMessageSerializer(new OutboxMessageSerializer())
+            .AddDelivery<RndConsumer, SomeMessage>("rnd", (_, settings) =>
+            {
+                settings.ScheduleSettings.WithIntervalSeconds(25);
+                settings.ConsumeSettings.WithSingleIteration().WithMaxDeliveryAttempts(2);
+            })
         )
-        .AddHostedService<MessagePublisherService>()
     )
-    .Build();
+    // outbox for pg
+    .AddOutboxUsingPostgreSql(cfg => cfg
+        .WithDataSource(ds => ds.WithConnectionString(connectionString))
+        .WithOutboxSettings((_, settings) =>
+        {
+            settings.TableSettings.WithSchema("test");
+            settings.ConsumeSettings.WithMinOffset<Group1Consumer>(DateTimeOffset.Now);
+        })
+        .WithMessageSerializer(OutboxMessageSerializer.Instance)
+    )
+    // publish as service
+    .AddHostedService<MessagePublisherService>()
+)
+.Build();
 
 // -- code publish
 
@@ -55,7 +56,7 @@ await publisher.Publish([
     new SomeMessage("01", "Hi 1"),
     new SomeMessage("02", "Hi 2"),
     new SomeMessage("03", "Hi 3")
-]);
+], tenantId: 1);
 
 
 await host.RunAsync();
@@ -181,15 +182,25 @@ namespace PgOutbox
     #region forAOT
     public class OutboxMessageSerializer : IOutboxMessageSerializer
     {
-        public T? Deserialize<T>(Stream stream) => (typeof(T) == typeof(SomeMessage))
-                ? (T?)(object?)JsonSerializer.Deserialize<SomeMessage>(stream, SomeMessageJsonSerializerContext.Default.SomeMessage)
-                : default;
+        public T? Deserialize<T>(Stream stream)
+        {
+            return typeof(T) switch
+            {
+                Type t when t == typeof(SomeMessage) =>
+                    (T?)(object?)JsonSerializer.Deserialize<SomeMessage>(
+                        stream, SomeMessageJsonSerializerContext.Default.SomeMessage),
+
+                _ => default
+            };
+        }
 
         public void Serialize<T>(Stream stream, T value)
         {
             if (typeof(T) == typeof(SomeMessage))
                 JsonSerializer.Serialize(stream, value!, SomeMessageJsonSerializerContext.Default.SomeMessage);
         }
+
+        public readonly static OutboxMessageSerializer Instance = new();
     }
 
     [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]

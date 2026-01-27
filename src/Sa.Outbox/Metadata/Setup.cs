@@ -24,7 +24,7 @@ internal static class Setup
 
             foreach (var config in sp.GetServices<MetadataConfiguration>())
             {
-                configuration.Assign(config);
+                configuration.MergeFrom(config);
             }
 
             return configuration;

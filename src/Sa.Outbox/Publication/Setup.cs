@@ -21,7 +21,7 @@ internal static class Setup
         {
             OutboxPublishSettings settings = new();
 
-            foreach(var build in sp.GetServices<Action<IServiceProvider, OutboxPublishSettings>>())
+            foreach (var build in sp.GetServices<Action<IServiceProvider, OutboxPublishSettings>>())
             {
                 build(sp, settings);
             }

@@ -8,13 +8,15 @@ internal static class Setup
         this IServiceCollection services,
         Action<IPgOutboxConfiguration>? configure = null)
     {
-        var cfg = new PgOutboxConfiguration(services);
-        configure?.Invoke(cfg);
-
-        cfg
+        var configuration = new PgOutboxConfiguration(services)
+            .WithDefaultSerializer()
             .WithOutboxSettings()
             .WithDataSource()
-            ;
+        ;
+
+        configure?.Invoke(configuration);
+
+
 
         return services;
     }
