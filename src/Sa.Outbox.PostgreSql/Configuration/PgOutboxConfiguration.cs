@@ -1,5 +1,4 @@
-﻿using System.Collections.Concurrent;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
@@ -8,40 +7,15 @@ namespace Sa.Outbox.PostgreSql.Configuration;
 
 internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOutboxConfiguration
 {
-    private static readonly ConcurrentDictionary<
-        IServiceCollection, HashSet<Action<IServiceProvider, PgOutboxSettings>>> s_invokers = [];
-
     public IPgOutboxConfiguration WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
     {
         if (configure != null)
         {
-            if (s_invokers.TryGetValue(services, out var invokers))
-            {
-                invokers.Add(configure);
-            }
-            else
-            {
-                s_invokers[services] = [configure];
-            }
+            services.AddSingleton(configure);
         }
 
+        RegisterOutboxSettings();
 
-        services.TryAddSingleton<PgOutboxSettings>(sp =>
-        {
-            PgOutboxSettings settings = new();
-
-            if (s_invokers.TryGetValue(services, out var invokers))
-            {
-                foreach (Action<IServiceProvider, PgOutboxSettings> build in invokers)
-                    build.Invoke(sp, settings);
-
-                s_invokers.Remove(services, out _);
-            }
-
-            return settings;
-        });
-
-        AddSettings();
         return this;
     }
 
@@ -53,6 +27,7 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
 
     public IPgOutboxConfiguration WithMessageSerializer(Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
     {
+        services.RemoveAll<IOutboxMessageSerializer>();
         services.TryAddSingleton<IOutboxMessageSerializer>(messageSerializerFactory);
         return this;
     }
@@ -60,11 +35,35 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
     public IPgOutboxConfiguration WithMessageSerializer<TService>(TService instance)
         where TService : class, IOutboxMessageSerializer
     {
+        services.RemoveAll<IOutboxMessageSerializer>();
         services.TryAddSingleton<IOutboxMessageSerializer>(instance);
         return this;
     }
 
-    private void AddSettings()
+    internal IPgOutboxConfiguration WithDefaultSerializer()
+    {
+        services.TryAddSingleton<IOutboxMessageSerializer>(OutboxMessageSerializer.Instance);
+        return this;
+    }
+
+    private void RegisterOutboxSettings()
+    {
+        services.TryAddSingleton<PgOutboxSettings>(sp =>
+        {
+            PgOutboxSettings settings = new();
+
+            var configureActions = sp.GetServices<Action<IServiceProvider, PgOutboxSettings>>();
+
+            foreach (var configureAction in configureActions)
+                configureAction.Invoke(sp, settings);
+
+            return settings;
+        });
+
+        RegisterComponentSettings();
+    }
+
+    private void RegisterComponentSettings()
     {
         services.TryAddSingleton<PgOutboxTableSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().TableSettings);
         services.TryAddSingleton<PgOutboxMigrationSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().MigrationSettings);

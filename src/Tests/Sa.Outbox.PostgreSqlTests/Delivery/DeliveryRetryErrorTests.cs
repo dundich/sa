@@ -35,7 +35,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, ts) => ts.WithTenantIds(1))
+                    .WithTenants((_, ts) => ts.WithTenantIds(1))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test4", (_, s) =>
                         {
@@ -72,7 +72,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
 
         List<TestMessage> messages = [new TestMessage { PayloadId = "1", Content = "Message 1", TenantId = 1 }];
 
-        ulong cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
+        ulong cnt = await fixture.Publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
 

@@ -1,5 +1,5 @@
-﻿using System.Diagnostics;
-using Sa.Outbox.Exceptions;
+﻿using Sa.Outbox.Exceptions;
+using System.Diagnostics;
 
 
 namespace Sa.Outbox.Delivery;

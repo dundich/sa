@@ -1,4 +1,6 @@
-﻿namespace Sa.Outbox;
+﻿using Sa.Outbox.Delivery;
+
+namespace Sa.Outbox;
 
 
 /// <summary>

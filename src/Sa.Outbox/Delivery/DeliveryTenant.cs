@@ -1,6 +1,5 @@
 ﻿using Sa.Classes;
 using Sa.Outbox.PlugServices;
-using Sa.Outbox.Support;
 using System.Buffers;
 
 
@@ -13,12 +12,13 @@ internal sealed class DeliveryTenant(
     IOutboxDeliveryManager deliveryMan,
     TimeProvider timeProvider,
     IDeliveryCourier deliveryCourier,
-    IDeliveryBatcher batcher) : IDeliveryTenant
+    IDeliveryBatcher batcher,
+    FilterFactory filterFactory) : IDeliveryTenant
 {
     public async Task<int> ProcessInTenant<TMessage>(
         int tenantId,
         ConsumerGroupSettings settings,
-        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
+        CancellationToken cancellationToken)
     {
         var filter = CreateFilter<TMessage>(tenantId, settings);
 
@@ -46,18 +46,16 @@ internal sealed class DeliveryTenant(
     }
 
     private OutboxMessageFilter CreateFilter<TMessage>(int tenantId, ConsumerGroupSettings settings)
-        where TMessage : IOutboxPayloadMessage
     {
-        return FilterFactory.CreateFilter<TMessage>(
-            tenantId,
-            settings.ConsumerGroupId,
-            timeProvider.GetUtcNow(),
-            settings.ConsumeSettings.LookbackInterval,
-            settings.ConsumeSettings.BatchingWindow);
+        return filterFactory.CreateFilter<TMessage>(
+            tenantId: tenantId,
+            consumerGroupId: settings.ConsumerGroupId,
+            now: timeProvider.GetUtcNow(),
+            lookbackInterval: settings.ConsumeSettings.LookbackInterval,
+            batchingWindow: settings.ConsumeSettings.BatchingWindow);
     }
 
     private static IMemoryOwner<IOutboxContextOperations<TMessage>> RentMemory<TMessage>(int size)
-        where TMessage : IOutboxPayloadMessage
     {
         return MemoryPool<IOutboxContextOperations<TMessage>>.Shared.Rent(size);
     }
@@ -79,7 +77,7 @@ internal sealed class DeliveryTenant(
         ConsumeSettings consumeSettings,
         OutboxMessageFilter filter,
         Memory<IOutboxContextOperations<TMessage>> buffer,
-        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
+        CancellationToken cancellationToken)
     {
         var lockedCount = await deliveryMan.RentDelivery(
             buffer,
@@ -95,7 +93,6 @@ internal sealed class DeliveryTenant(
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
-        where TMessage : IOutboxPayloadMessage
     {
         return deliveryMan.ReturnDelivery(
             messages,

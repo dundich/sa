@@ -1,5 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using Sa.Extensions;
+﻿using Sa.Extensions;
+using Sa.Outbox.Delivery;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql;
 

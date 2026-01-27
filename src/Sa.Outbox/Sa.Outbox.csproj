@@ -3,7 +3,7 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.6.1</Version>
+    <Version>0.7.0</Version>
     <Description>Simple Outbox infra for publishing and using messages</Description>
   </PropertyGroup>
 
@@ -19,7 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Sa.Outbox.Support\Sa.Outbox.Support.csproj" />
     <ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
   </ItemGroup>
 

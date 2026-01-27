@@ -1,12 +1,10 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.Text.RegularExpressions;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Sa.Outbox.Delivery;
-using Sa.Outbox.Job;
-using Sa.Outbox.Support;
+using Sa.Outbox.Delivery.Job;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
 
-namespace Sa.Outbox.Configuration;
+namespace Sa.Outbox.Delivery;
 
 internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDeliveryBuilder
 {
@@ -15,7 +13,6 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
         where TConsumer : class, IConsumer<TMessage>
-        where TMessage : IOutboxPayloadMessage
     {
         ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
         services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), false, configure);
@@ -27,7 +24,6 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
         where TConsumer : class, IConsumer<TMessage>
-        where TMessage : IOutboxPayloadMessage
     {
         ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
         services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), true, configure);

@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
-using Sa.Outbox.Support;
 using Sa.Partitional.PostgreSql;
 using Sa.Schedule;
 
@@ -10,12 +10,10 @@ namespace Sa.Outbox.PostgreSqlTests;
 
 public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTests.Fixture>
 {
-    class SomeMessage : IOutboxPayloadMessage
+    class SomeMessage
     {
         public string PayloadId { get; set; } = default!;
         public int TenantId { get; set; }
-        public static string PartName => "some";
-
     }
 
     class SomeMessageConsumer : IConsumer<SomeMessage>
@@ -41,7 +39,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, s) => s.WithTenantIds(1))
+                    .WithTenants((_, s) => s.WithTenantIds(1))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
                         {
@@ -93,7 +91,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
             new SomeMessage { TenantId = 1 },
             new SomeMessage { TenantId = 1 },
             new SomeMessage { TenantId = 1 }
-        ], TestContext.Current.CancellationToken);
+        ], 1, TestContext.Current.CancellationToken);
 
         Assert.True(total > 0);
 

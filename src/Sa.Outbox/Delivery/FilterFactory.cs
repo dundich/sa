@@ -1,6 +1,5 @@
 ﻿using Sa.Extensions;
-using Sa.Outbox.Publication;
-using Sa.Outbox.Support;
+using Sa.Outbox.Metadata;
 
 
 namespace Sa.Outbox.Delivery;
@@ -9,26 +8,24 @@ namespace Sa.Outbox.Delivery;
 /// <summary>
 /// Creates filters for outbox message queries.
 /// </summary>
-internal static class FilterFactory
+internal sealed class FilterFactory(IOutboxMessageMetadataProvider metadata)
 {
-    public static OutboxMessageFilter CreateFilter<TMessage>(
+    public OutboxMessageFilter CreateFilter<TMessage>(
         int tenantId,
         string consumerGroupId,
         DateTimeOffset now,
         TimeSpan lookbackInterval,
-        TimeSpan batchingWindow) where TMessage : IOutboxPayloadMessage
+        TimeSpan batchingWindow)
     {
-        OutboxMessageTypeInfo ti = OutboxMessageTypeHelper.GetOutboxMessageTypeInfo<TMessage>();
-
         return new OutboxMessageFilter(
             TransactId: GenerateTransactId(),
             ConsumerGroupId: consumerGroupId,
             PayloadType: typeof(TMessage).Name,
-            tenantId,
-            ti.PartName,
-            now.StartOfDay() - lookbackInterval,
-            now - batchingWindow,
-            now
+            TenantId: tenantId,
+            Part: metadata.GetMetadata<TMessage>().PartName,
+            FromDate: now.StartOfDay() - lookbackInterval,
+            ToDate: now - batchingWindow,
+            NowDate: now
         );
     }
 

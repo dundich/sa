@@ -1,10 +1,12 @@
-﻿using Sa.Outbox.Job;
-using Sa.Outbox.Publication;
+﻿using Sa.Outbox.Delivery.Job;
+using Sa.Outbox.Metadata;
 using Sa.Schedule;
 
 namespace Sa.Outbox.Delivery;
 
-internal sealed class DelivarySnapshot(IScheduleSettings scheduleSettings) : IDelivarySnapshot
+internal sealed class DelivarySnapshot(
+    IScheduleSettings scheduleSettings,
+    IOutboxMessageMetadataProvider metadataProvider) : IDelivarySnapshot
 {
 
     private readonly Lazy<IJobSettings[]> _lazyJobs = new(() => [.. scheduleSettings.GetJobSettings()]);
@@ -17,7 +19,7 @@ internal sealed class DelivarySnapshot(IScheduleSettings scheduleSettings) : IDe
             .Select(c => GetMessageTypeIfInheritsFromDeliveryJob(c.JobType, baseType))
             .Where(mt => mt != null)
             .Cast<Type>()
-            .Select(mt => OutboxMessageTypeHelper.GetOutboxMessageTypeInfo(mt).PartName)
+            .Select(mt => metadataProvider.GetMetadata(mt).PartName)
             .Distinct()];
 
         return parts;

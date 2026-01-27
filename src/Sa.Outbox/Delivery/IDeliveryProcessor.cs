@@ -1,6 +1,4 @@
-﻿using Sa.Outbox.Support;
-
-namespace Sa.Outbox.Delivery;
+﻿namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Processes outbox messages in batches until all pending messages are delivered or cancellation is requested.
@@ -8,6 +6,5 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 public interface IDeliveryProcessor
 {
-    Task<long> ProcessMessages<TMessage>(ConsumerGroupSettings settings, CancellationToken cancellationToken)
-        where TMessage : IOutboxPayloadMessage;
+    Task<long> ProcessMessages<TMessage>(ConsumerGroupSettings settings, CancellationToken cancellationToken);
 }

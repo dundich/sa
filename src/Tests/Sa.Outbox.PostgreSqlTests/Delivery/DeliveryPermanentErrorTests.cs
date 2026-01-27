@@ -38,7 +38,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, sp) => sp.WithTenantIds(1, 2))
+                    .WithTenants((_, sp) => sp.WithTenantIds(1, 2))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test2", (_, s) =>
                         {
@@ -70,7 +70,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
             new TestMessage { PayloadId = "12", Content = "Message 2", TenantId = 2}
         ];
 
-        var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
+        var cnt = await fixture.Publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
         var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);

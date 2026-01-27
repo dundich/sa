@@ -1,4 +1,6 @@
-﻿namespace Sa.Outbox.Repository;
+﻿using Sa.Outbox.Delivery;
+
+namespace Sa.Outbox.Repository;
 
 public interface IOutboxContextFactory
 {

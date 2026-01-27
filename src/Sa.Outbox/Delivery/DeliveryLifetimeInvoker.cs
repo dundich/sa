@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Sa.Outbox.Support;
 using System.Collections.Concurrent;
 
 namespace Sa.Outbox.Delivery;
@@ -17,7 +16,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ConsumerGroupSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
-        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
+        CancellationToken cancellationToken)
     {
         return settings.AsSingleton
             ? ProcessInSingleton(settings, filter, messages, cancellationToken)
@@ -28,7 +27,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ConsumerGroupSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
-        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
+        CancellationToken cancellationToken)
     {
         var consumer = GetOrCreateSingletonConsumer<TMessage>(settings);
         return ProcessMessages(consumer, settings, filter, messages, cancellationToken);
@@ -38,7 +37,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ConsumerGroupSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
-        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
+        CancellationToken cancellationToken)
     {
         using AsyncServiceScope scope = serviceProvider.CreateAsyncScope();
         IConsumer<TMessage> consumer = scope.ServiceProvider.GetRequiredKeyedService<IConsumer<TMessage>>(settings);
@@ -50,13 +49,13 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ConsumerGroupSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
-        CancellationToken cancellationToken) where TMessage : IOutboxPayloadMessage
+        CancellationToken cancellationToken)
     {
         await consumer.Consume(settings, filter, messages, cancellationToken);
     }
 
     private IConsumer<TMessage> GetOrCreateSingletonConsumer<TMessage>(
-        ConsumerGroupSettings settings) where TMessage : IOutboxPayloadMessage
+        ConsumerGroupSettings settings)
     {
         return (IConsumer<TMessage>)_singletonConsumers.GetOrAdd(settings, key =>
             serviceProvider.GetRequiredKeyedService<IConsumer<TMessage>>(key));

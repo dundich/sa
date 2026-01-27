@@ -1,19 +1,18 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.DependencyInjection;
-using Sa.Outbox.Support;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Schedule;
+using System.Diagnostics.CodeAnalysis;
 
-namespace Sa.Outbox.Job;
+namespace Sa.Outbox.Delivery.Job;
 
 internal static class Setup
 {
-    public static IServiceCollection AddDeliveryJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+    public static IServiceCollection AddDeliveryJob<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         this IServiceCollection services,
         string consumerGroupId,
         bool isSingleton,
         Action<IServiceProvider, ConsumerGroupSettings>? сonfigure = null)
             where TConsumer : class, IConsumer<TMessage>
-            where TMessage : IOutboxPayloadMessage
     {
 
         ArgumentNullException.ThrowIfNullOrWhiteSpace(consumerGroupId);

@@ -1,14 +1,16 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using Sa.Outbox.Delivery;
+﻿using Sa.Outbox.Delivery;
+using Sa.Outbox.Metadata;
+using Sa.Outbox.Publication;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox;
 
 public interface IOutboxBuilder
 {
     /// <summary>
-    /// Gets the current publish settings for the outbox configuration.
+    /// Configure publish settings for the outbox.
     /// </summary>
-    OutboxPublishSettings PublishSettings { get; }
+    IOutboxBuilder WithPublishSettings(Action<IServiceProvider, OutboxPublishSettings> configure);
 
     /// <summary>
     /// Configures the delivery settings for the outbox.
@@ -22,11 +24,14 @@ public interface IOutboxBuilder
     /// </summary>
     /// <param name="configure">An action to configure the partitioning settings.</param>
     /// <returns>The current instance of the IOutboxSettingsBuilder.</returns>
-    IOutboxBuilder WithTenantSettings(Action<IServiceProvider, TenantSettings> configure);
+    IOutboxBuilder WithTenants(Action<IServiceProvider, TenantSettings> configure);
 
     /// <summary>
     /// Registers a custom implementation of IDeliveryBatcher to control how messages are batched for delivery.
     /// </summary>
     IOutboxBuilder WithDeliveryBatcher<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
          where TImplementation : class, IDeliveryBatcher;
+
+
+    IOutboxBuilder WithMetadata(Action<IServiceProvider, IOutboxMessageMetadataBuilder> configure);
 }

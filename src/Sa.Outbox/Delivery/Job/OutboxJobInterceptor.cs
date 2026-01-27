@@ -1,8 +1,9 @@
 ﻿using Sa.Schedule;
 
-namespace Sa.Outbox.Job;
+namespace Sa.Outbox.Delivery.Job;
 
-internal sealed class OutboxJobInterceptor(IEnumerable<IOutboxJobInterceptor> interceptors) : IJobInterceptor
+internal sealed class OutboxJobInterceptor(IEnumerable<IOutboxJobInterceptor> interceptors)
+    : IJobInterceptor
 {
     public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
     {

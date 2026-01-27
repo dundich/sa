@@ -1,26 +1,31 @@
 ﻿using Sa.Classes;
+using Sa.Outbox.Metadata;
 using Sa.Outbox.PlugServices;
-using Sa.Outbox.Support;
 
 namespace Sa.Outbox.Publication;
 
 internal sealed class OutboxMessagePublisher(
     TimeProvider timeProvider,
     IOutboxBulkWriter bulkWriter,
-    OutboxPublishSettings publishSettings
+    OutboxPublishSettings publishSettings,
+    IOutboxMessageMetadataProvider metadataProvider
 ) : IOutboxMessagePublisher
 {
-    public async ValueTask<ulong> Publish<TMessage>(IReadOnlyCollection<TMessage> messages, CancellationToken cancellationToken = default)
-        where TMessage : IOutboxPayloadMessage
+    public async ValueTask<ulong> Publish<TMessage>(
+        IReadOnlyCollection<TMessage> messages,
+        int tenantId = 0,
+        CancellationToken cancellationToken = default)
     {
         if (messages.Count == 0) return 0;
-        return await Send(messages, cancellationToken);
+        return await Send(messages, tenantId, cancellationToken);
     }
 
-    private async ValueTask<ulong> Send<TMessage>(IReadOnlyCollection<TMessage> messages, CancellationToken cancellationToken)
-        where TMessage : IOutboxPayloadMessage
+    private async ValueTask<ulong> Send<TMessage>(
+        IReadOnlyCollection<TMessage> messages,
+        int tenantId,
+        CancellationToken cancellationToken)
     {
-        OutboxMessageTypeInfo typeInfo = OutboxMessageTypeHelper.GetOutboxMessageTypeInfo<TMessage>();
+        var typeInfo = metadataProvider.GetMetadata<TMessage>();
         DateTimeOffset now = timeProvider.GetUtcNow();
         int maxBatchSize = publishSettings.MaxBatchSize;
 
@@ -43,10 +48,12 @@ internal sealed class OutboxMessagePublisher(
                 {
                     TMessage message = enumerator.Current;
 
+                    var payloadId = typeInfo.GetPayloadId(message!) ?? string.Empty;
+
                     payloadsSpan[count] = new OutboxMessage<TMessage>(
-                        PayloadId: message.PayloadId ?? string.Empty,
+                        PayloadId: payloadId,
                         Payload: message,
-                        PartInfo: new OutboxPartInfo(TenantId: message.TenantId, typeInfo.PartName, now));
+                        PartInfo: new OutboxPartInfo(TenantId: tenantId, typeInfo.PartName, now));
 
                     count++;
                 }

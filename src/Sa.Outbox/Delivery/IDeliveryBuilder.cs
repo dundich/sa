@@ -1,8 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
-using Sa.Outbox.Delivery;
-using Sa.Outbox.Support;
 
-namespace Sa.Outbox;
+namespace Sa.Outbox.Delivery;
 
 
 /// <summary>
@@ -22,8 +20,7 @@ public partial interface IDeliveryBuilder
         string consumerGroupId,
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
-    where TConsumer : class, IConsumer<TMessage>
-    where TMessage : IOutboxPayloadMessage;
+    where TConsumer : class, IConsumer<TMessage>;
 
     /// <summary>
     /// Adds singleton delivery for the specified consumer and message type.
@@ -32,8 +29,7 @@ public partial interface IDeliveryBuilder
         string consumerGroupId,
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
-    where TConsumer : class, IConsumer<TMessage>
-    where TMessage : IOutboxPayloadMessage;
+    where TConsumer : class, IConsumer<TMessage>;
 
 
     /// <summary>

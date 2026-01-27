@@ -45,7 +45,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
         {
             Services
                 .AddOutbox(builder => builder
-                    .WithTenantSettings((_, s) => s.WithAutoDetect())
+                    .WithTenants((_, s) => s.WithAutoDetect())
                     .WithDeliveries(b => b
                         .AddDelivery<TestConsumer, TestMessage>("test_auto_detect", (_, s) =>
                         {
@@ -90,7 +90,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
             new TestMessage { PayloadId = "03", Content = "M 3", TenantId = 3}
         ];
 
-        var cnt = await fixture.Publisher.Publish(messages, TestContext.Current.CancellationToken);
+        var cnt = await fixture.Publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
 
         var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
