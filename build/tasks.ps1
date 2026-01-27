@@ -21,7 +21,6 @@ $projects = @(
 
 	"Sa.Partitional.PostgreSql",
 
-  "Sa.Outbox.Support",
 	"Sa.Outbox",
 	"Sa.Outbox.PostgreSql",
 
