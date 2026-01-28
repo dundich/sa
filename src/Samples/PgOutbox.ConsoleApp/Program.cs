@@ -163,7 +163,7 @@ namespace PgOutbox
                     var tenantId = Random.Shared.Next(1, 4);
                     await Task.Delay(TimeSpan.FromSeconds(tenantId), stoppingToken);
 
-                    await publisher.Publish(
+                    await publisher.PublishSingle(
                         new SomeMessage(
                             i.ToString(),
                             DateTime.Now.ToString()),

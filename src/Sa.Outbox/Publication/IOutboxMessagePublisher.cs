@@ -14,20 +14,14 @@ public interface IOutboxMessagePublisher
     /// <returns>A <see cref="ValueTask{ulong}"/> representing the asynchronous operation, 
     /// with the number of successfully published messages as the result.</returns>
     ValueTask<ulong> Publish<TMessage>(
-        IReadOnlyCollection<TMessage> messages, int tenantId = 0, CancellationToken cancellationToken = default);
+        IReadOnlyCollection<TMessage> messages,
+        int tenantId = 0,
+        CancellationToken cancellationToken = default);
+
 
     /// <summary>
-    /// Publishes a single message.
+    /// Publishes foreach tenants
     /// </summary>
-    /// <typeparam name="TMessage">The type of the message to be published, which must implement <see cref="IOutboxPayloadMessage"/>.</typeparam>
-    /// <param name="messages">The message to be published.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A <see cref="ValueTask{ulong}"/> representing the asynchronous operation, 
-    /// with the number of successfully published messages as the result.</returns>
-    ValueTask<ulong> Publish<TMessage>(TMessage messages, int tenantId = 0, CancellationToken cancellationToken = default)
-         => Publish<TMessage>([messages], tenantId, cancellationToken);
-
-
     async ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
         Func<TMessage, int> getTenantId,
@@ -47,4 +41,13 @@ public interface IOutboxMessagePublisher
 
         return totals;
     }
+
+    /// <summary>
+    /// Publishes a single message.
+    /// </summary>
+    ValueTask<ulong> PublishSingle<TMessage>(
+        TMessage message,
+        int tenantId = 0,
+        CancellationToken cancellationToken = default)
+            => Publish<TMessage>([message], tenantId, cancellationToken);
 }
