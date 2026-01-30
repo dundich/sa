@@ -47,6 +47,7 @@ WITH locked_tasks AS (
       {(int)DeliveryStatusCode.Pending},
       {(int)DeliveryStatusCode.Processing},
       {(int)DeliveryStatusCode.Postpone},
+      {(int)DeliveryStatusCode.Retry},
       {(int)DeliveryStatusCode.Warn}
     )
     AND t.{settings.TaskQueue.Fields.TaskLockExpiresOn} < {SqlParam.ToDate}

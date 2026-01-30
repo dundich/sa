@@ -24,17 +24,10 @@ internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> de
     public Exception? Exception { get; private set; }
 
     public void Postpone(TimeSpan postpone, string? message = null)
-    {
-        if (postpone <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(postpone), "Postpone must be positive");
+        => SetDeliveryStatus(DeliveryStatusCode.Postpone, message, null, postpone);
 
-        SetDeliveryStatus(
-            DeliveryStatusCode.Postpone,
-            message ?? string.Empty,
-            null,
-            postpone);
-    }
-
+    public void Retry(TimeSpan postpone, string? message = null)
+        => SetDeliveryStatus(DeliveryStatusCode.Retry, message, null, postpone);
 
     public void Ok(string? message = null)
         => SetDeliveryStatus(DeliveryStatusCode.Ok, message);

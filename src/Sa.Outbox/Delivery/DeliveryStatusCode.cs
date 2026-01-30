@@ -20,6 +20,12 @@ public enum DeliveryStatusCode
     Postpone = 103,
 
     /// <summary>
+    /// Indicates that the message processing will be retried
+    /// with an increased attempt counter.
+    /// </summary>
+    Retry = 104,
+
+    /// <summary>
     /// Indicates that the message has been processed successfully.
     /// </summary>
     Ok = 200,
@@ -128,6 +134,9 @@ public static class DeliveryStatusCodeExtensions
 
     public static bool IsPostponed(this DeliveryStatusCode statusCode) =>
         statusCode == DeliveryStatusCode.Postpone;
+
+    public static bool IsRetry(this DeliveryStatusCode statusCode) =>
+        statusCode == DeliveryStatusCode.Retry;
 
     public static bool IsSuccess(this DeliveryStatusCode statusCode) =>
         statusCode >= DeliveryStatusCode.Ok && statusCode <= DeliveryStatusCode.Aborted;

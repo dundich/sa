@@ -119,6 +119,9 @@ namespace PgOutbox
                     msg.Postpone(TimeSpan.FromMinutes(1));
                     break;
                 case 3:
+                    msg.Retry(TimeSpan.FromSeconds(30), "retry");
+                    break;
+                case 4:
                     msg.Error(new Exception("Permanent error"));
                     break;
                 default:

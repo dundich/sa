@@ -124,6 +124,12 @@ public interface IOutboxContextOperations<TMessage> : IOutboxContext<TMessage>
     /// <param name="message">An optional message providing additional context.</param>
     void Postpone(TimeSpan postpone, string? message = null);
 
+    /// <summary>
+    /// Status indicating that message processing requires a retry (104)
+    /// with an increment of the attempt counter.
+    /// </summary>
+    void Retry(TimeSpan postpone, string? message = null);
+
     #endregion
 
     #region Client Error Operations (4xx - Recoverable)
