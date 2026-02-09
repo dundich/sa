@@ -18,7 +18,7 @@ public sealed partial class Arguments
 {
     private static readonly Regex s_ReSpliter = SpliterRegex();
     private static readonly Regex s_ReRemover = RemoverRegex();
-    private readonly Dictionary<string, string> _parameters = [];
+    private readonly Dictionary<string, string?> _parameters = [];
 
     public Arguments(params IReadOnlyList<string> args)
     {
@@ -38,12 +38,17 @@ public sealed partial class Arguments
         }
     }
 
+    public static Arguments CreateDefault(string[]? args = null) => new(args ?? Environment.GetCommandLineArgs());
+
     public string? this[string param] => _parameters.TryGetValue(param, out var value) ? value : null;
 
 
-    public static IReadOnlyList<string> SplitToPairs(IReadOnlyList<string> parts)
+    public IReadOnlyDictionary<string, string?> Parameters => _parameters;
+
+
+    internal static IReadOnlyList<string> SplitToPairs(IReadOnlyList<string> parts)
     {
-        var result = new List<string>();
+        List<string> result = [];
         string? currentParam = null;
 
         foreach (var part in parts)
@@ -75,4 +80,3 @@ public sealed partial class Arguments
         result.Add(currentParam.Contains('=') ? currentParam : $"{currentParam}=true");
     }
 }
-

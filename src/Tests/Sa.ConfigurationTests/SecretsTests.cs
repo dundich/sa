@@ -1,4 +1,5 @@
-﻿using Sa.Configuration;
+﻿using Microsoft.Extensions.Configuration;
+using Sa.Configuration;
 using Sa.Configuration.SecretStore;
 
 namespace Sa.ConfigurationTests;
@@ -7,20 +8,21 @@ public sealed class SecretsTests(SecretsTests.Fixture fixture) : IClassFixture<S
 {
     public sealed class Fixture : IAsyncLifetime
     {
-        private readonly string SecretsFileName = "secrets.txt";
-        private static readonly string EnvSecretsFileName = $"secrets.{SaEnvironment.Default.EnvironmentName}.txt";
-        private const string HostKeyFileName = "secrets.host_key.txt";
-        private static readonly string HostKeEnvSecretsFileName = $"secrets.host_key.{SaEnvironment.Default.EnvironmentName}.txt";
+        public const string SecretsFileName = "secrets.txt";
+        private const string EnvironmentName = "test";
+        private static readonly string EnvSecretsFileName = $"secrets.{EnvironmentName}.txt";
 
-        public ISecretService Sub => Secrets.Service;
+        public ISecretService Sub => Secrets.CreateDefault(new SecretOptions
+        {
+            EnvironmentName = EnvironmentName,
+            FileName = SecretsFileName,
+        });
 
         public ValueTask InitializeAsync()
         {
             // Create a default secrets file for testing
             File.WriteAllText(SecretsFileName, "sa_host_key=host_key\napi_key=my_api_key\n");
-            File.WriteAllText(HostKeyFileName, "db_password=my_db_password\n");
             File.WriteAllText(EnvSecretsFileName, "env=true\n");
-            File.WriteAllText(HostKeEnvSecretsFileName, "env_host=true\n");
 
             return ValueTask.CompletedTask;
         }
@@ -28,9 +30,7 @@ public sealed class SecretsTests(SecretsTests.Fixture fixture) : IClassFixture<S
         public ValueTask DisposeAsync()
         {
             File.Delete(SecretsFileName);
-            File.Delete(HostKeyFileName);
             File.Delete(EnvSecretsFileName);
-            File.Delete(HostKeEnvSecretsFileName);
             return ValueTask.CompletedTask;
         }
     }
@@ -51,18 +51,6 @@ public sealed class SecretsTests(SecretsTests.Fixture fixture) : IClassFixture<S
         Assert.Equal("API Key: my_api_key, Host Key: host_key", result);
     }
 
-    [Fact]
-    public void PopulateSecrets_ShouldLoadSecretsFromHostKeyFile()
-    {
-        // Arrange
-        string input = "Database Password: {{db_password}}";
-
-        // Act
-        var result = Sub.PopulateSecrets(input);
-
-        // Assert
-        Assert.Equal("Database Password: my_db_password", result);
-    }
 
     [Fact]
     public void PopulateSecrets_ShouldLoadSecretsFromEnvFile()
@@ -77,18 +65,6 @@ public sealed class SecretsTests(SecretsTests.Fixture fixture) : IClassFixture<S
         Assert.Equal("Env: true", result);
     }
 
-    [Fact]
-    public void PopulateSecrets_ShouldLoadSecretsFromHostEnvFile()
-    {
-        // Arrange
-        string input = "Env_Host: {{env_host}}";
-
-        // Act
-        var result = Sub.PopulateSecrets(input);
-
-        // Assert
-        Assert.Equal("Env_Host: true", result);
-    }
 
     [Fact]
     public void PopulateSecrets_ShouldReturnNull_WhenInputIsNullOrWhitespace()
@@ -109,5 +85,22 @@ public sealed class SecretsTests(SecretsTests.Fixture fixture) : IClassFixture<S
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() => Sub.PopulateSecrets(input));
         Assert.Equal("The secret name 'missing_key' was not present in vault. Ensure that you have a local `secrets.txt` file in the src folder.", exception.Message);
+    }
+
+    [Fact]
+    public void CheckConfigurationWithSecretFiles()
+    {
+        // Arrange
+        var builder = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["SimpleKey"] = "API Key: {{api_key}}, Host Key: {{sa_host_key}}",
+            });
+
+        builder.AddSaPostSecretProcessing(Sub);
+
+        var config = builder.Build();
+
+        Assert.Equal("API Key: my_api_key, Host Key: host_key", config["SimpleKey"]);
     }
 }

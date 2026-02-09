@@ -2,7 +2,7 @@
 
 using Npgsql;
 
-public record PostgreSqlConfigurationOptions(
+public sealed record PostgreSqlConfigurationOptions(
     string ConnectionString,
     string SelectSql,
     params IReadOnlyCollection<NpgsqlParameter> Parameters);
