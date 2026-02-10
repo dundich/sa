@@ -18,7 +18,7 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddSingleton<RecyclableMemoryStreamManager>();
 
-        _partConfiguration = services.AddPartitional((sp, builder) =>
+        _partConfiguration = services.AddSaPartitional((sp, builder) =>
         {
             builder.AddSchema(_options.StorageOptions.SchemaName, schema =>
             {

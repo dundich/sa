@@ -3,7 +3,7 @@
 	<Import Project="../Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
-		<Version>0.7.2</Version>
+		<Version>0.8.0</Version>
 		<Description>Simple Outbox for Pg (publishing and using messages)</Description>
 	</PropertyGroup>
 

@@ -20,9 +20,9 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         {
             SetupServices = (services, cfg)
                 => services
-                    .AddFileSystemFileStorage(Settings)
-                    .AddInMemoryFileStorage()
-                    .AddHybridFileStorage(b
+                    .AddSaFileSystemFileStorage(Settings)
+                    .AddSaInMemoryFileStorage()
+                    .AddSaHybridFileStorage(b
                         => b.ConfigureInterceptors((_, c)
                             => c.AddUploadInterceptor(new MemUploadSomeInterceptor())));
         }
@@ -104,7 +104,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
     public async Task WhenStorageIsEmptyThrowsInvalidOperationException()
     {
         ServiceCollection services = new();
-        services.AddHybridFileStorage();
+        services.AddSaHybridFileStorage();
 
         using var sp = services.BuildServiceProvider();
 
@@ -118,7 +118,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
     public async Task WhenStorageIsReadOnlyThrowsInvalidOperationException()
     {
         ServiceCollection services = new();
-        services.AddHybridFileStorage(b
+        services.AddSaHybridFileStorage(b
             => b.ConfigureStorage((_, c)
                 => c.AddStorage(new InMemoryFileStorage(null, true))));
 

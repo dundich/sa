@@ -8,7 +8,7 @@ using Sa.Partitional.PostgreSql;
 
 Console.WriteLine("Hello, Partitional.PostgreSql!");
 
-var connectionString = "Host=localhost;Username=service_user;Password=service_user;Database=test_1";
+var connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=postgres";
 
 
 var hostBuilder = Host.CreateApplicationBuilder(args);
@@ -16,8 +16,8 @@ var hostBuilder = Host.CreateApplicationBuilder(args);
 hostBuilder.Services
     .AddSingleton<Tester>()
     .AddLogging(c => c.AddConsole())
-    .AddPgDataSource(builder => builder.WithConnectionString(connectionString))
-    .AddPartitional((sp, builder) =>
+    .AddSaPostgreSqlDataSource(builder => builder.WithConnectionString(connectionString))
+    .AddSaPartitional((sp, builder) =>
     {
         builder.AddSchema("public", schema =>
         {
@@ -71,9 +71,11 @@ namespace Partitional.ConsoleApp
             await partition.Migrate();
             var parts = await repository.GetPartsToDate("customer", DateTime.Now.AddDays(3));
 
-            logger.LogInformation($"list of parts:{Environment.NewLine}{string.Join(Environment.NewLine, parts.Select(c => c.Id))}");
-
-            logger.LogInformation("Successfully: {Ok}", parts.Count > 0);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation($"list of parts:{Environment.NewLine}{string.Join(Environment.NewLine, parts.Select(c => c.Id))}");
+                logger.LogInformation("Successfully: {Ok}", parts.Count > 0);
+            }
         }
     }
 }

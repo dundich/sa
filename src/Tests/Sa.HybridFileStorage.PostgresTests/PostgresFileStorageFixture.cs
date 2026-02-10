@@ -9,7 +9,7 @@ public class PostgresFileStorageFixture : PgDataSourceFixture<IFileStorage>
 {
     protected PostgresFileStorageFixture(string tableName)
     {
-        Services.AddPostgresHybridFileStorage(cfg => cfg
+        Services.AddSaPostgreSqlFileStorage(cfg => cfg
             .AddDataSource(b => b.WithConnectionString(sp => ConnectionString))
             .WithTableName(tableName)
         );

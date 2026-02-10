@@ -8,7 +8,7 @@ The Sa.Schedule library provides a way to configure and execute scheduled tasks.
 ### Configuring Schedule DI
 
 ```csharp
-Services.AddSchedule(b =>
+Services.AddSaSchedule(b =>
 {
     b.AddJob<SomeJob>((sp, builder) =>
     {

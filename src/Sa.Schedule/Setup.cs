@@ -16,7 +16,7 @@ public static class Setup
     /// <param name="services">The service collection to add the scheduling system to.</param>
     /// <param name="configure">An action to configure the scheduling system.</param>
     /// <returns>The service collection with the scheduling system added.</returns>
-    public static IServiceCollection AddSchedule(this IServiceCollection services, Action<IScheduleBuilder> configure)
+    public static IServiceCollection AddSaSchedule(this IServiceCollection services, Action<IScheduleBuilder> configure)
     {
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddSingleton<IScheduler, Scheduler>();

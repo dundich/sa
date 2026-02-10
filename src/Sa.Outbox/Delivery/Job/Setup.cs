@@ -28,7 +28,7 @@ internal static class Setup
             services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(settings);
         }
 
-        services.AddSchedule(builder =>
+        services.AddSaSchedule(builder =>
         {
             builder.UseHostedService();
 

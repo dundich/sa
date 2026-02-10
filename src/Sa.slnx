@@ -29,6 +29,7 @@
   </Folder>
   <Folder Name="/Samples/">
     <File Path="Samples/docker-compose.yml" />
+    <Project Path="Samples/Configuration.Web/Configuration.Web.csproj" Id="ae8f9f99-5b9b-4009-8aed-7ff837fb3ef2" />
     <Project Path="Samples/HybridFileStorage.Console/HybridFileStorage.Console.csproj" />
     <Project Path="Samples/Partitional.ConsoleApp/Partitional.ConsoleApp.csproj" />
     <Project Path="Samples/PgOutbox.ConsoleApp/PgOutbox.ConsoleApp.csproj" />

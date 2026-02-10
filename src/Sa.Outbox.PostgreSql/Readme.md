@@ -12,14 +12,14 @@ dotnet add package Sa.Outbox.PostgreSql
 ### Configuration DI
 
 ```csharp
-ConfigureServices(services => services
+builder.Services
     // outbox
-    .AddOutbox(builder => builder
+    .AddSaOutbox(builder => builder
         .WithTenants((_, ts) => ts.WithTenantIds(1, 2, 3))
         .WithDeliveries(b => b.AddDelivery<MyConsumer, MyMessage>())
     )
     // outbox pg
-    .AddOutboxUsingPostgreSql(cfg => cfg
+    .AddSaOutboxUsingPostgreSql(cfg => cfg
         .WithDataSource(ds => ds.WithConnectionString("Host=my_host;Database=my_db;Username=my_user;Password=my_password"))
         .WithOutboxSettings((_, settings) => settings.TableSettings.WithSchema("my_outbox"))
     )

@@ -31,7 +31,7 @@ internal static class Setup
 
         services.TryAddSingleton<IPartCleanupService, PartCleanupService>();
 
-        services.AddSchedule(b => b
+        services.AddSaSchedule(b => b
             .UseHostedService()
             .AddJob<PartCleanupJob>((sp, builder) =>
             {

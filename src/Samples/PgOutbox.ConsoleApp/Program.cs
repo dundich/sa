@@ -17,7 +17,7 @@ var connectionString = "Host=localhost;Username=postgres;Password=postgres;Datab
 // default configure...
 IHost host = Host.CreateDefaultBuilder().ConfigureServices(services => services
     // outbox
-    .AddOutbox(builder => builder
+    .AddSaOutbox(builder => builder
         .WithTenants((_, t) => t.WithTenantIds(1, 2, 3))
         .WithMetadata((_, b) => b.AddMetadata<SomeMessage>("some", getPayloadId: p => p.PayloadId))
         .WithDeliveries(b => b
@@ -34,7 +34,7 @@ IHost host = Host.CreateDefaultBuilder().ConfigureServices(services => services
         )
     )
     // outbox for pg
-    .AddOutboxUsingPostgreSql(cfg => cfg
+    .AddSaOutboxUsingPostgreSql(cfg => cfg
         .WithDataSource(ds => ds.WithConnectionString(connectionString))
         .WithOutboxSettings((_, settings) =>
         {

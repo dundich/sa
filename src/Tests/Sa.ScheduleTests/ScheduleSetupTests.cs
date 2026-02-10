@@ -26,7 +26,7 @@ public class ScheduleSetupTests(ScheduleSetupTests.Fixture fixture) : IClassFixt
 
         public Fixture()
         {
-            Services.AddSchedule(b =>
+            Services.AddSaSchedule(b =>
             {
                 b
                     .AddJob<SomeJob>()

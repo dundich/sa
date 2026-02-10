@@ -23,11 +23,9 @@ Audio Conversion to MP3
 
 ```csharp
 
-using var host = Host.CreateDefaultBuilder()
-    .ConfigureServices(services =>
-    {
-        services.AddFFMpeg(); // Registers IFFMpegExecutor and IFFProbeExecutor
-    })
+using var host = Host
+    .CreateDefaultBuilder()
+    .ConfigureServices(services => services.AddSaFFMpeg())
     .Build();
 
 var ffmpeg = host.Services.GetRequiredService<IFFMpegExecutor>();

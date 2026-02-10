@@ -38,7 +38,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder => builder
+                .AddSaOutbox(builder => builder
                     .WithTenants((_, s) => s.WithTenantIds(1))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
@@ -54,7 +54,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                         })
                     )
                 )
-                .AddOutboxUsingPostgreSql(cfg =>
+                .AddSaOutboxUsingPostgreSql(cfg =>
                 {
                     cfg.WithDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
                     cfg.WithOutboxSettings((_, settings) =>

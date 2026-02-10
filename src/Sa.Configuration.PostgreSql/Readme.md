@@ -21,7 +21,7 @@ var options = new PostgreSqlConfigurationOptions(
 );
 
 // Add PostgreSQL configuration to the builder
-builder.AddPostgreSqlConfiguration(options);
+builder.AddSaPostgreSqlConfiguration(options);
 
 // Build the configuration
 var configuration = builder.Build();

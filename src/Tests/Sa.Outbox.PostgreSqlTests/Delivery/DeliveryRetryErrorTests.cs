@@ -34,7 +34,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder => builder
+                .AddSaOutbox(builder => builder
                     .WithTenants((_, ts) => ts.WithTenantIds(1))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test4", (_, s) =>

@@ -14,7 +14,7 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
     {
         public Fixture()
         {
-            Services.AddPartitional((_, builder) =>
+            Services.AddSaPartitional((_, builder) =>
             {
                 builder.AddSchema(schema =>
                 {

@@ -7,7 +7,7 @@ namespace Sa.HybridFileStorage.S3;
 
 public static class Setup
 {
-    public static IServiceCollection AddS3FileStorage(this IServiceCollection services, S3FileStorageOptions options)
+    public static IServiceCollection AddSaS3FileStorage(this IServiceCollection services, S3FileStorageOptions options)
     {
         var settings = new S3BucketClientSetupSettings
         {
@@ -21,7 +21,7 @@ public static class Setup
 
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
 
-        services.AddS3BucketClientAsSingleton(settings);
+        services.AddSaS3BucketClient(settings);
 
 
         services.TryAddSingleton(options);

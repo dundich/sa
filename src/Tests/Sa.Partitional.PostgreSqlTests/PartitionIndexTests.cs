@@ -10,7 +10,7 @@ public class PartitionIndexTests(PartitionIndexTests.Fixture fixture) : IClassFi
     {
         public Fixture()
         {
-            Services.AddPartitional((_, builder) =>
+            Services.AddSaPartitional((_, builder) =>
             {
                 builder.AddSchema(schema =>
                 {

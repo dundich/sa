@@ -12,7 +12,7 @@ internal static class Setup
         services.TryAddTransient<MsgMigrationSupport>();
         services.TryAddTransient<TaskMigrationSupport>();
 
-        _ = services.AddPartitional((sp, builder) =>
+        _ = services.AddSaPartitional((sp, builder) =>
         {
             SqlOutboxBuilder sql = sp.GetRequiredService<SqlOutboxBuilder>();
             var tableSettings = sql.Settings;

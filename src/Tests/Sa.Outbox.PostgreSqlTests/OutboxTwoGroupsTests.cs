@@ -51,7 +51,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder => builder
+                .AddSaOutbox(builder => builder
                     .WithTenants((_, s) => s.WithTenantIds(1, 2))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
 
@@ -75,7 +75,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
                         })
                     )
                 )
-                .AddOutboxUsingPostgreSql(cfg =>
+                .AddSaOutboxUsingPostgreSql(cfg =>
                 {
                     cfg.WithDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
                     cfg.WithOutboxSettings((_, settings) =>

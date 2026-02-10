@@ -21,7 +21,7 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
 
     public IPgOutboxConfiguration WithDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
     {
-        services.AddPgDataSource(configure);
+        services.AddSaPostgreSqlDataSource(configure);
         return this;
     }
 

@@ -82,7 +82,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder => builder
+                .AddSaOutbox(builder => builder
                     .WithTenants((_, b) => b.WithTenantIds(1, 2))
                     .WithMetadata((_, configure) => configure
                         .AddMetadata<SomeMessage1>(SomeMessage1.PartName)
@@ -107,7 +107,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                     )
                     .WithPublishSettings((_, b) => b.WithMaxBatchSize(1024))
                 )
-                .AddOutboxUsingPostgreSql(cfg =>
+                .AddSaOutboxUsingPostgreSql(cfg =>
                 {
                     cfg
                         .WithDataSource(c => c.WithConnectionString(_ => ConnectionString))

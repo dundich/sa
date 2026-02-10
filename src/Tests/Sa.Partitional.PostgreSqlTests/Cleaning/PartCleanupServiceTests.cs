@@ -11,7 +11,7 @@ public class PartCleanupServiceTests(PartCleanupServiceTests.Fixture fixture) : 
     {
         public Fixture()
         {
-            Services.AddPartitional((_, builder) =>
+            Services.AddSaPartitional((_, builder) =>
             {
                 builder.AddSchema(schema =>
                 {

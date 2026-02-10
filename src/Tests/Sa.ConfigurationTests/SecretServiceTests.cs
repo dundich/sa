@@ -1,5 +1,6 @@
 ﻿using Sa.Configuration.SecretStore;
 using Sa.Configuration.SecretStore.Engine;
+using Sa.Configuration.SecretStore.Stories;
 
 namespace Sa.ConfigurationTests;
 

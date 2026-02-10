@@ -99,7 +99,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder => builder
+                .AddSaOutbox(builder => builder
                     .WithTenants((_, s) => s.WithTenantIds(1, 2, 3, 4, 5))
                     .WithMetadata((_, configure) => configure.AddMetadata<ParallelTestConsumer>(TestMessage.PartName))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
@@ -119,7 +119,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                             })
                     )
                 )
-                .AddOutboxUsingPostgreSql(cfg =>
+                .AddSaOutboxUsingPostgreSql(cfg =>
                 {
                     cfg.WithDataSource(c => c.WithConnectionString(_ => ConnectionString));
                     cfg.WithOutboxSettings((_, settings) =>
