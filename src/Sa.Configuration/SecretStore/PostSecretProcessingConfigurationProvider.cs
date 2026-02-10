@@ -7,7 +7,7 @@ internal sealed class PostSecretProcessingConfigurationProvider(
     ISecretService secretService) : ConfigurationProvider
 {
 
-    public Lazy<IConfiguration> _configuration = new(getInnerConfiguration);
+    private readonly Lazy<IConfiguration> _configuration = new(getInnerConfiguration);
 
     public override void Load()
         => LoadConfigurationSection(_configuration.Value, string.Empty);

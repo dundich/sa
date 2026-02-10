@@ -6,7 +6,7 @@ namespace Sa.Configuration.SecretStore;
 
 
 /// <summary>
-/// 
+/// The Secrets class simplifies the management of sensitive information in your application
 /// </summary>
 public sealed class Secrets(params IReadOnlyCollection<ISecretStore> stores) : ISecretService
 {
