@@ -7,7 +7,7 @@ namespace Sa.Media.FFmpeg;
 
 public static class Setup
 {
-    public static IServiceCollection AddFFMpeg(this IServiceCollection services, FFMpegOptions? options = null)
+    public static IServiceCollection AddSaFFMpeg(this IServiceCollection services, FFMpegOptions? options = null)
     {
         services.TryAddTransient<IProcessExecutor, ProcessExecutor>();
         services.TryAddTransient<IFFMpegLocator, FFMpegLocator>();

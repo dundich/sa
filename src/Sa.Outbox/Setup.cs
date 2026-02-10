@@ -4,7 +4,7 @@ namespace Sa.Outbox;
 
 public static class Setup
 {
-    public static IServiceCollection AddOutbox(
+    public static IServiceCollection AddSaOutbox(
         this IServiceCollection services,
         Action<IOutboxBuilder>? build = null)
     {

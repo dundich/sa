@@ -16,7 +16,7 @@ IHostBuilder builder = Host.CreateDefaultBuilder();
 
 builder.ConfigureServices(services =>
 {
-    services.AddHybridFileStorage(builder =>
+    services.AddSaHybridFileStorage(builder =>
     {
         builder.ConfigureStorage((_, c)
             => c.AddStorage(new InMemoryFileStorage())).AddLogging();

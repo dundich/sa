@@ -7,7 +7,7 @@ namespace Sa.HybridFileStorage.FileSystem;
 
 public static class Setup
 {
-    public static IServiceCollection AddFileSystemFileStorage(this IServiceCollection services, FileSystemStorageOptions options)
+    public static IServiceCollection AddSaFileSystemFileStorage(this IServiceCollection services, FileSystemStorageOptions options)
     {
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddKeyedSingleton<FileSystemStorageOptions>(options);

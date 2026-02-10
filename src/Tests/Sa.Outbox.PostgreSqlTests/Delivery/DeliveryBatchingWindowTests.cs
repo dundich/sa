@@ -25,7 +25,7 @@ public class DeliveryBatchingWindowTests(DeliveryBatchingWindowTests.Fixture fix
         public Fixture() : base()
         {
             Services
-                .AddOutbox(b => b
+                .AddSaOutbox(b => b
                     .WithTenants((_, s) => s.WithTenantIds(1, 2))
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test3", (_, s) =>

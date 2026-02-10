@@ -6,11 +6,11 @@ using Sa.Data.PostgreSql.Fixture;
 namespace Sa.Configuration.PostgreSqlTests;
 
 
-public class DatabaseConfigurationExtensionsTests(DatabaseConfigurationExtensionsTests.Fixture fixture)
+public sealed class DatabaseConfigurationExtensionsTests(DatabaseConfigurationExtensionsTests.Fixture fixture)
     : IClassFixture<DatabaseConfigurationExtensionsTests.Fixture>
 {
 
-    public class Fixture : PgDataSourceFixture
+    public sealed class Fixture : PgDataSourceFixture
     {
         public override async ValueTask InitializeAsync()
         {
@@ -55,7 +55,7 @@ public class DatabaseConfigurationExtensionsTests(DatabaseConfigurationExtension
             "SELECT key, value FROM configuration");
 
         // Act
-        builder.AddPostgreSqlConfiguration(options);
+        builder.AddSaPostgreSqlConfiguration(options);
         var configuration = builder.Build();
 
         // Assert

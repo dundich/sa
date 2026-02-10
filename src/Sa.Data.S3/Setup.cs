@@ -5,7 +5,7 @@ namespace Sa.Data.S3;
 
 public static class Setup
 {
-    public static IServiceCollection AddS3BucketClientAsSingleton(this IServiceCollection services, S3BucketClientSetupSettings settings)
+    public static IServiceCollection AddSaS3BucketClient(this IServiceCollection services, S3BucketClientSetupSettings settings)
     {
 
         services.TryAddSingleton<S3BucketSettings>(settings);

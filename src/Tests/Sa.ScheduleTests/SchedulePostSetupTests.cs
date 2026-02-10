@@ -26,7 +26,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture) : IC
 
         public Fixture()
         {
-            Services.AddSchedule(b =>
+            Services.AddSaSchedule(b =>
             {
                 b.AddJob<SomeJob>((sp, builder) =>
                 {
@@ -39,7 +39,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture) : IC
                 });
             });
 
-            Services.AddSchedule(b =>
+            Services.AddSaSchedule(b =>
             {
                 b.AddJob<SomeJob>((sp, builder) =>
                 {

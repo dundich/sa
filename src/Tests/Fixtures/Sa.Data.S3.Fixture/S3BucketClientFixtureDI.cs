@@ -10,7 +10,7 @@ public class S3BucketClientFixtureDI : S3Fixture<IS3BucketClient>
         : base()
     {
         SetupServices = (services, cfg)
-            => services.AddS3BucketClientAsSingleton(CreateSettings("mybucket"));
+            => services.AddSaS3BucketClient(CreateSettings("mybucket"));
     }
 
     public async override ValueTask InitializeAsync()

@@ -24,7 +24,7 @@ internal sealed class PartConfiguration(IServiceCollection services) : IPartConf
 
     public IPartConfiguration AddDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
     {
-        services.AddPgDataSource(configure);
+        services.AddSaPostgreSqlDataSource(configure);
 
         // inner
         services.AddPartRepository();

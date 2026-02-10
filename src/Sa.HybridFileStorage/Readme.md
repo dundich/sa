@@ -23,14 +23,8 @@ public interface IHybridFileStorage
 
 IHostBuilder builder = Host.CreateDefaultBuilder();
 
-builder.ConfigureServices(services =>
-{
-    services.AddHybridStorage((sp, builder) =>
-    {
-        builder.AddStorage(new InMemoryFileStorage());
-    });
-    services.TryAddSingleton<Proccessor>();
-});
+builder.Services.AddSaHybridStorage((_, b) => b.AddStorage(new InMemoryFileStorage()));
+builder.Services.TryAddSingleton<Proccessor>();
 
 
 builder.UseConsoleLifetime();

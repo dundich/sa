@@ -11,7 +11,7 @@ namespace Sa.Outbox.PostgreSql;
 
 public static class Setup
 {
-    public static IServiceCollection AddOutboxUsingPostgreSql(
+    public static IServiceCollection AddSaOutboxUsingPostgreSql(
         this IServiceCollection services,
         Action<IPgOutboxConfiguration>? configure = null)
     {
@@ -25,7 +25,7 @@ public static class Setup
             .AddOutboxJobInterceptors()
             ;
 
-        services.AddOutbox();
+        services.AddSaOutbox();
 
         return services;
     }

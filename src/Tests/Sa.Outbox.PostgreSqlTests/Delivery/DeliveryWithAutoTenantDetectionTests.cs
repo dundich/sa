@@ -44,7 +44,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
         public Fixture() : base()
         {
             Services
-                .AddOutbox(builder => builder
+                .AddSaOutbox(builder => builder
                     .WithTenants((_, s) => s.WithAutoDetect())
                     .WithDeliveries(b => b
                         .AddDelivery<TestConsumer, TestMessage>("test_auto_detect", (_, s) =>
@@ -58,7 +58,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
                         })
                     )
                 )
-                .AddOutboxUsingPostgreSql(builder => builder
+                .AddSaOutboxUsingPostgreSql(builder => builder
                     .WithDataSource(b => b.WithConnectionString(_ => ConnectionString))
                     .WithMessageSerializer(_ => OutboxMessageSerializer.Instance)
                     .WithOutboxSettings((_, pg) => pg.TableSettings.WithSchema("auto_detect"))

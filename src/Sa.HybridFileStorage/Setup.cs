@@ -5,7 +5,7 @@ namespace Sa.HybridFileStorage;
 
 public static class Setup
 {
-    public static IServiceCollection AddHybridFileStorage(this IServiceCollection services, Action<IHybridFileStorageConfiguration>? configure = null)
+    public static IServiceCollection AddSaHybridFileStorage(this IServiceCollection services, Action<IHybridFileStorageConfiguration>? configure = null)
     {
         HybridStorageBuilder builder = new(services);
         configure?.Invoke(builder);
@@ -14,7 +14,7 @@ public static class Setup
     }
 
 
-    public static IServiceCollection AddInMemoryFileStorage(this IServiceCollection services)
+    public static IServiceCollection AddSaInMemoryFileStorage(this IServiceCollection services)
     {
         services.AddSingleton<IFileStorage, InMemoryFileStorage>();
         return services;

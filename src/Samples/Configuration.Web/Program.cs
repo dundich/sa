@@ -29,7 +29,7 @@ ds.ExecuteScalar("""
 """, null).Wait();
 
 
-builder.Configuration.AddPostgreSqlConfiguration(new PostgreSqlConfigurationOptions
+builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions
 (
     ConnectionString: connectionString,
     SelectSql: "select * from settings"

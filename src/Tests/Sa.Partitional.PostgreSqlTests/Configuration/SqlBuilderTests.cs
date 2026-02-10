@@ -12,7 +12,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     {
         public Fixture() : base()
         {
-            Services.AddPartitional((_, builder) =>
+            Services.AddSaPartitional((_, builder) =>
             {
                 builder.AddSchema(schema =>
                 {
@@ -48,7 +48,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
                 });
             });
 
-            Services.AddPartitional((_, builder) =>
+            Services.AddSaPartitional((_, builder) =>
             {
                 builder.AddSchema("public", schema =>
                 {

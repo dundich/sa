@@ -33,7 +33,7 @@ internal static class Setup
         services.TryAddSingleton<IMigrationService, PartMigrationService>();
 
 
-        services.AddSchedule(b => b
+        services.AddSaSchedule(b => b
             .UseHostedService()
             .AddJob<MigrationJob>((sp, builder) =>
             {

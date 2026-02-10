@@ -16,7 +16,7 @@ IHostBuilder builder = Host.CreateDefaultBuilder();
 
 builder.ConfigureServices(services =>
 {
-    services.AddSchedule(builder =>
+    services.AddSaSchedule(builder =>
     {
         if (isHostService) builder.UseHostedService();
 

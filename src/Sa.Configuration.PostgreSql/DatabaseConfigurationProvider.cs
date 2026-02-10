@@ -2,21 +2,26 @@
 
 using Microsoft.Extensions.Configuration;
 using Sa.Data.PostgreSql;
+using System.Threading;
 
 public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions options) : ConfigurationProvider
 {
     public override void Load()
     {
-        LoadAsync(options).GetAwaiter().GetResult();
+         PgRetryStrategy
+            .ExecuteWithRetry(async _ => await LoadAsync(options))
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
     }
 
-    private async Task LoadAsync(PostgreSqlConfigurationOptions options)
+    private async Task<int> LoadAsync(PostgreSqlConfigurationOptions options)
     {
         try
         {
             using var dataSource = new PgDataSource(new(options.ConnectionString));
 
-            await dataSource.ExecuteReader(options.SelectSql, (reader, _) =>
+            return await dataSource.ExecuteReader(options.SelectSql, (reader, _) =>
             {
                 string key = reader.GetString(0);
                 string? val = reader.IsDBNull(1) ? null : reader.GetString(1);

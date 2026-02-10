@@ -12,7 +12,7 @@ public class DependencyInjectionTests
         var services = new ServiceCollection();
 
         // Act
-        services.AddFFMpeg();
+        services.AddSaFFMpeg();
 
         var serviceProvider = services.BuildServiceProvider();
 

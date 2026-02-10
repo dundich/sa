@@ -13,7 +13,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     {
         public Fixture()
         {
-            Services.AddPartitional((_, builder) =>
+            Services.AddSaPartitional((_, builder) =>
             {
                 builder.AddSchema(schema =>
                 {

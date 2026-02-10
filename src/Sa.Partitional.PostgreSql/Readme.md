@@ -25,7 +25,7 @@ public static class PartitioningSetup
 {
     public static IServiceCollection AddPartitioning(this IServiceCollection services)
     {
-        services.AddPartitional((sp, builder) =>
+        services.AddSaPartitional((sp, builder) =>
         {
             builder.AddSchema("public", schema =>
             {
@@ -189,6 +189,7 @@ public interface IPartitionManager
     /// <summary>
     /// Migrates the existing partitions in the database.
     /// This method may be used to reorganize or update partitions based on the current state of the data.
+    /// </summary>
     Task<int> Migrate(CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -201,10 +202,6 @@ public interface IPartitionManager
     /// Ensures that the specified partitions exist for a given table and date.
     /// This method checks if the specified partitions are present and creates them if they are not.
     /// </summary>
-    /// <param name="tableName">The name of the table for which partitions are being ensured.</param>
-    /// <param name="date">The date associated with the partition.</param>
-    /// <param name="partValues">An array of values that define the partitions (could be strings or numbers).</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     ValueTask<bool> EnsureParts(string tableName, DateTimeOffset date, Classes.StrOrNum[] partValues, CancellationToken cancellationToken = default);
 }
 ```

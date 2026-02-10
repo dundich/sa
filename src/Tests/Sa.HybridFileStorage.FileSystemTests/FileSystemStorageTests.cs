@@ -16,7 +16,7 @@ public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
             })
         {
             SetupServices = (services, cfg)
-                => services.AddFileSystemFileStorage(Settings);
+                => services.AddSaFileSystemFileStorage(Settings);
         }
 
         public override ValueTask DisposeAsync()

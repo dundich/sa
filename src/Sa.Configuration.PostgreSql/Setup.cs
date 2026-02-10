@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration;
 
 public static class Setup
 {
-    public static IConfigurationBuilder AddPostgreSqlConfiguration(
+    public static IConfigurationBuilder AddSaPostgreSqlConfiguration(
         this IConfigurationBuilder builder, PostgreSqlConfigurationOptions options)
     {
         return builder.Add(new DatabaseConfigurationSource(options

@@ -6,7 +6,7 @@ namespace Sa.Partitional.PostgreSql;
 
 public static class Setup
 {
-    public static IPartConfiguration AddPartitional(this IServiceCollection services,
+    public static IPartConfiguration AddSaPartitional(this IServiceCollection services,
         Action<IServiceProvider, ISettingsBuilder> configure,
         bool? AsBackgroundJob = null)
     {

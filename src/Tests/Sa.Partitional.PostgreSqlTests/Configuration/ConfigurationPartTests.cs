@@ -13,7 +13,7 @@ public class ConfigurationPartTests(ConfigurationPartTests.Fixture fixture)
     {
         public Fixture()
         {
-            Services.AddPartitional((_, builder) => builder.AddSchema(schema =>
+            Services.AddSaPartitional((_, builder) => builder.AddSchema(schema =>
             {
 
                 schema
@@ -36,7 +36,7 @@ public class ConfigurationPartTests(ConfigurationPartTests.Fixture fixture)
 
             }));
 
-            Services.AddPartitional((_, builder) => builder.AddSchema(schema =>
+            Services.AddSaPartitional((_, builder) => builder.AddSchema(schema =>
             {
                 schema
                     .AddTable("test_3",

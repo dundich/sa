@@ -11,7 +11,7 @@ public class PartitionManagerTests(PartitionManagerTests.Fixture fixture)
     {
         public Fixture()
         {
-            Services.AddPartitional((_, builder) =>
+            Services.AddSaPartitional((_, builder) =>
             {
                 builder.AddSchema(schema =>
                 {

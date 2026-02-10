@@ -10,7 +10,7 @@ public class S3FileStorageFixture : S3Fixture<IFileStorage>
         : base()
     {
         SetupServices = (services, cfg)
-            => services.AddS3FileStorage(CreateOptions());
+            => services.AddSaS3FileStorage(CreateOptions());
     }
 
     private S3FileStorageOptions CreateOptions()
