@@ -6,7 +6,7 @@ namespace Sa.Configuration;
 
 public static class Setup
 {
-    public static IConfigurationBuilder AddSaDefaultConfiguration(
+    public static IConfigurationBuilder AddSaConfiguration(
         this IConfigurationBuilder builder, SecretOptions? options = null)
     {
         return builder

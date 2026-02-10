@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
-builder.Configuration.AddSaDefaultConfiguration();
+builder.Configuration.AddSaConfiguration();
 
 const string PG_KEY = "sa:pg:connection";
 
