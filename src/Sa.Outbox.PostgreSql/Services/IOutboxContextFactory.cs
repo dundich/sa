@@ -1,6 +1,6 @@
 ﻿using Sa.Outbox.Delivery;
 
-namespace Sa.Outbox.Repository;
+namespace Sa.Outbox.PostgreSql.Services;
 
 public interface IOutboxContextFactory
 {

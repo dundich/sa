@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.Delivery;
-using Sa.Outbox.PostgreSql;
+using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;

@@ -5,6 +5,7 @@ using Sa.Outbox.Delivery;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Commands;
+using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;

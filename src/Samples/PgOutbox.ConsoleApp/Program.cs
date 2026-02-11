@@ -6,6 +6,7 @@ using Sa.Outbox;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
+using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.Publication;
 using System.Text.Json;
 using System.Text.Json.Serialization;

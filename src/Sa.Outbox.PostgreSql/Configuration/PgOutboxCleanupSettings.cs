@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSql;
+﻿namespace Sa.Outbox.PostgreSql.Configuration;
 
 /// <summary>
 /// Represents the settings for cleaning up old Outbox messages and parts in PostgreSQL.

@@ -4,6 +4,7 @@ using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Commands;
+using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using System.Data;
 

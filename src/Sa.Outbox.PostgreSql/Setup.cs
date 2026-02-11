@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.PostgreSql.Commands;
+using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.IdGen;
 using Sa.Outbox.PostgreSql.Interceptors;
 using Sa.Outbox.PostgreSql.Partitional;

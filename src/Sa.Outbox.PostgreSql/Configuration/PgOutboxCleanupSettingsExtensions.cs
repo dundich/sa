@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSql;
+﻿namespace Sa.Outbox.PostgreSql.Configuration;
 
 public static class PgOutboxCleanupSettingsExtensions
 {

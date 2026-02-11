@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSql;
+﻿namespace Sa.Outbox.PostgreSql.Configuration;
 
 /// <summary>
 /// Represents the settings for the PostgreSQL Outbox configuration.

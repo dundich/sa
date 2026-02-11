@@ -1,7 +1,7 @@
 ﻿using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
 
-namespace Sa.Outbox.PostgreSql;
+namespace Sa.Outbox.PostgreSql.Configuration;
 
 public interface IPgOutboxConfiguration
 {

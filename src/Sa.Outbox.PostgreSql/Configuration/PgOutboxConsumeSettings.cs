@@ -2,7 +2,7 @@
 using Sa.Outbox.Delivery;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Sa.Outbox.PostgreSql;
+namespace Sa.Outbox.PostgreSql.Configuration;
 
 public sealed class PgOutboxConsumeSettings
 {

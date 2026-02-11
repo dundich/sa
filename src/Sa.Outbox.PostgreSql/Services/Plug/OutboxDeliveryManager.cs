@@ -1,8 +1,8 @@
-﻿using System.Collections.ObjectModel;
-using System.Data;
-using Sa.Extensions;
+﻿using Sa.Extensions;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
+using System.Collections.ObjectModel;
+using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Services.Plug;
 

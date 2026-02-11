@@ -2,6 +2,7 @@
 using System.Text;
 using Npgsql;
 using Sa.Extensions;
+using Sa.Outbox.PostgreSql.Configuration;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 

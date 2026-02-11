@@ -1,8 +1,8 @@
-﻿using System.Text;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.ObjectPool;
 using Sa.Outbox.PostgreSql.Configuration;
+using System.Text;
 
 namespace Sa.Outbox.PostgreSql.SqlBuilder;
 
