@@ -10,22 +10,13 @@ internal sealed class PostSecretProcessingConfigurationProvider(
     private readonly Lazy<IConfiguration> _configuration = new(getInnerConfiguration);
 
     public override void Load()
-        => LoadConfigurationSection(_configuration.Value, string.Empty);
-
-    private void LoadConfigurationSection(IConfiguration config, string prefix)
     {
-        foreach (var child in config.GetChildren())
+        foreach (KeyValuePair<string, string> child in _configuration.Value
+        .AsEnumerable()
+        .Where(c => c.Value is not null)
+        .Cast<KeyValuePair<string, string>>())
         {
-            var key = string.IsNullOrEmpty(prefix)
-                ? child.Key
-                : $"{prefix}{ConfigurationPath.KeyDelimiter}{child.Key}";
-
-            if (child.Value != null)
-            {
-                Data[key] = secretService.PopulateSecrets(child.Value, true);
-            }
-
-            LoadConfigurationSection(child, key);
+            Data[child.Key] = secretService.PopulateSecrets(child.Value, true);
         }
     }
 }

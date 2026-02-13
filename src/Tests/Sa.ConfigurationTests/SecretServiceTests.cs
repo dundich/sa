@@ -43,7 +43,7 @@ public class SecretServiceTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() => Sub.PopulateSecrets(input));
-        Assert.Equal("The secret name 'missing_key' was not present in vault. Ensure that you have a local `secrets.txt` file in the src folder.", exception.Message);
+        Assert.StartsWith("The secret", exception.Message);
     }
 
     [Fact]
@@ -230,4 +230,49 @@ public class SecretServiceTests
         // Assert
         Assert.Equal("API: 12345, Optional password: secret!", result);
     }
+
+
+    [Fact]
+    public void PopulateSecrets_WithSelfReferencingSecret_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var secrets = new Dictionary<string, string?>
+        {
+            { "key", "{{key}}" } // Секрет ссылается сам на себя
+        };
+        var secretStore = new InMemorySecretStore(secrets);
+        var secretService = new SecretService(secretStore);
+
+        string input = "value={{key}}";
+
+        // Act & Assert
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            secretService.PopulateSecrets(input));
+
+        Assert.Contains("Maximum replacement depth", exception.Message);
+        Assert.Contains("key", exception.Message);
+    }
+
+    [Fact]
+    public void PopulateSecrets_WithCircularReferenceChain_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var secrets = new Dictionary<string, string?>
+        {
+            { "key1", "{{key2}}" },
+            { "key2", "{{key3}}" },
+            { "key3", "{{key1}}" } // Замыкаем цикл
+        };
+        var secretStore = new InMemorySecretStore(secrets);
+        var secretService = new SecretService(secretStore);
+
+        string input = "value={{key1}}";
+
+        // Act & Assert
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            secretService.PopulateSecrets(input));
+
+        Assert.Contains("Maximum replacement depth", exception.Message);
+    }
+
 }

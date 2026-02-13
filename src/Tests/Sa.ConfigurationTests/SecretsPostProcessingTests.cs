@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Sa.Configuration;
 using Sa.Configuration.SecretStore;
 using Sa.Configuration.SecretStore.Stories;
 

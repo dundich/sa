@@ -3,7 +3,7 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.8.0</Version>
+    <Version>0.8.1</Version>
     <Description>extensions for Configuration</Description>
   </PropertyGroup>
 
@@ -18,12 +18,6 @@
   <ItemGroup>
     <Compile Update="CommandLine\Arguments.partial.cs">
       <DependentUpon>CommandLine\Arguments.cs</DependentUpon>
-    </Compile>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Update="SecretStore\Engine\SecretService.partial.cs">
-      <DependentUpon>SecretStore\Engine\SecretService.cs</DependentUpon>
     </Compile>
   </ItemGroup>
 

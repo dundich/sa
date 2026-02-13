@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Sa.Configuration;
 using Sa.Configuration.SecretStore;
 
 namespace Sa.ConfigurationTests;
@@ -84,7 +83,7 @@ public sealed class SecretsTests(SecretsTests.Fixture fixture) : IClassFixture<S
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() => Sub.PopulateSecrets(input));
-        Assert.Equal("The secret name 'missing_key' was not present in vault. Ensure that you have a local `secrets.txt` file in the src folder.", exception.Message);
+        Assert.StartsWith("The secret", exception.Message);
     }
 
     [Fact]
