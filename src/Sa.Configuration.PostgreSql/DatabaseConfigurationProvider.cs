@@ -8,11 +8,11 @@ public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions
 {
     public override void Load()
     {
-         PgRetryStrategy
-            .ExecuteWithRetry(async _ => await LoadAsync(options))
-            .AsTask()
-            .GetAwaiter()
-            .GetResult();
+        PgRetryStrategy
+           .ExecuteWithRetry(async _ => await LoadAsync(options))
+           .AsTask()
+           .GetAwaiter()
+           .GetResult();
     }
 
     private async Task<int> LoadAsync(PostgreSqlConfigurationOptions options)
@@ -35,8 +35,9 @@ public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions
             {
                 if (options.Parameters?.Count > 0)
                 {
+                    cmd.Parameters.Clear();
                     foreach (var parameter in options.Parameters)
-                        cmd.Parameters.Add(parameter);
+                        cmd.Parameters.Add(parameter.Clone());
                 }
             }, CancellationToken.None);
         }
