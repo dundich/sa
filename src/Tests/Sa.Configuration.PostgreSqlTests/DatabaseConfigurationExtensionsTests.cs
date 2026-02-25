@@ -39,7 +39,28 @@ public sealed class DatabaseConfigurationExtensionsTests(DatabaseConfigurationEx
                 ('Setting5', 'Value5'),
                 ('SettingNull', null)
                 ON CONFLICT (key) DO NOTHING;", connection);
+
             await insertCommand.ExecuteNonQueryAsync();
+
+
+            // Создание таблицы
+            using (var createTableExCommand = new NpgsqlCommand(@"
+                CREATE TABLE IF NOT EXISTS configuration_ex (
+                    key TEXT PRIMARY KEY,
+                    value TEXT,
+                    client_id INT
+                );", connection))
+            {
+                await createTableExCommand.ExecuteNonQueryAsync();
+            }
+
+
+            using var insertExCommand = new NpgsqlCommand(@"
+                INSERT INTO configuration_ex (key, value, client_id) VALUES
+                ('Setting2', 'ValueEx2', 1)
+                ON CONFLICT (key) DO NOTHING;", connection);
+
+            await insertExCommand.ExecuteNonQueryAsync();
         }
     }
 
@@ -56,6 +77,15 @@ public sealed class DatabaseConfigurationExtensionsTests(DatabaseConfigurationEx
 
         // Act
         builder.AddSaPostgreSqlConfiguration(options);
+
+        var optionsEx = new PostgreSqlConfigurationOptions(
+                fixture.ConnectionString,
+                "SELECT key, value FROM configuration_ex where client_id = @client_id",
+                [new("client_id", 1)]);
+
+        builder.AddSaPostgreSqlConfiguration(optionsEx);
+
+
         var configuration = builder.Build();
 
         // Assert
@@ -63,5 +93,7 @@ public sealed class DatabaseConfigurationExtensionsTests(DatabaseConfigurationEx
 
         Assert.Equal("Value3", configuration["Setting3"]);
         Assert.Null(configuration["SettingNull"]);
+
+        Assert.Equal("ValueEx2", configuration["Setting2"]);
     }
 }
