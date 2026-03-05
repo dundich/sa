@@ -2,7 +2,7 @@
 
 public sealed class FileSystemStorageOptions
 {
-    public string StorageType { get; set; } = "file";
-    public required string BasePath { get; set; }
-    public bool? IsReadOnly { get; set; }
+    public string StorageType { get; init; } = "file";
+    public required string BasePath { get; init; }
+    public bool? IsReadOnly { get; init; }
 }

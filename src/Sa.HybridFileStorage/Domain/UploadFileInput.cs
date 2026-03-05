@@ -2,6 +2,6 @@
 
 public sealed record UploadFileInput
 {
-    public int TenantId { get; set; }
-    public string FileName { get; set; } = string.Empty;
+    public int TenantId { get; init; }
+    public string FileName { get; init; } = string.Empty;
 }
