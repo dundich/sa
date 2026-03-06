@@ -2,7 +2,9 @@
 
 internal static class Setup
 {
-    internal static IInterceptorContainer AddLoggingInterceptor(this IInterceptorContainer container, LoggingInterceptor? loggingInterceptor = null)
+    internal static IInterceptorContainer AddLoggingInterceptor(
+        this IInterceptorContainer container,
+        LoggingInterceptor? loggingInterceptor = null)
     {
         if (loggingInterceptor != null)
         {

@@ -9,7 +9,7 @@ public static class Setup
         this IServiceCollection services,
         Action<IPostgresFileStorageConfiguration>? configure = null)
     {
-        var configurator = new PostgresFileStorageConfiguration(services);
+        PostgresFileStorageConfiguration configurator = new(services);
         configure?.Invoke(configurator);
         return services;
     }

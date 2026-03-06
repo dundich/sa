@@ -43,14 +43,18 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
 
     class MemUploadSomeInterceptor : IUploadInterceptor
     {
-        public ValueTask AfterUploadAsync(IFileStorage storage, StorageResult result, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        public ValueTask AfterUploadAsync
+            (IFileStorage storage, StorageResult result, CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
-        public ValueTask<bool> CanUploadAsync(IFileStorage storage, UploadFileInput input, Stream fileStream, CancellationToken cancellationToken)
+        public ValueTask<bool> CanUploadAsync
+            (IFileStorage storage, UploadFileInput input, Stream fileStream, CancellationToken cancellationToken)
         {
-            return ValueTask.FromResult(input.FileName != "some.bin" || storage.StorageType == InMemoryFileStorage.DefaultStorageType);
+            return ValueTask.FromResult(input.FileName != "some.bin"
+                || storage.StorageType == InMemoryFileStorage.DefaultStorageType);
         }
 
-        public ValueTask OnUploadErrorAsync(IFileStorage storage, Exception exception, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        public ValueTask OnUploadErrorAsync
+            (IFileStorage storage, Exception exception, CancellationToken cancellationToken) => ValueTask.CompletedTask;
     }
 
     private IHybridFileStorage Storage => fixture.Sub;
@@ -62,18 +66,18 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "test.bin", TenantId = 2 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(input, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync(input, null, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.NotEmpty(result.FileId);
 
-        bool canProcessed = Storage.CanProcess(result.FileId);
+        bool canProcessed = Storage.Storages.Any(c => c.CanProcess(result.FileId));
         Assert.True(canProcessed);
 
         var isSame = await EnsureFileSame(result.FileId, fileContent);
         Assert.True(isSame);
 
-        var isDeleted = await Storage.DeleteAsync(result.FileId, fixture.CancellationToken);
+        var isDeleted = await Storage.DeleteAsync(result.FileId, null, fixture.CancellationToken);
 
         Assert.True(isDeleted);
 
@@ -88,7 +92,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "some.bin", TenantId = 1 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(input, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync(input, null, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal(InMemoryFileStorage.DefaultStorageType, result.StorageType);
@@ -96,7 +100,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var isSame = await EnsureFileSame(result.FileId, fileContent);
         Assert.True(isSame);
 
-        var isDeleted = await Storage.DeleteAsync(result.FileId, fixture.CancellationToken);
+        var isDeleted = await Storage.DeleteAsync(result.FileId, null, fixture.CancellationToken);
         Assert.True(isDeleted);
     }
 
@@ -109,8 +113,9 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         using var sp = services.BuildServiceProvider();
 
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-           sp.GetRequiredService<IHybridFileStorage>().UploadAsync(new UploadFileInput { FileName = "", TenantId = 1 }, fileContent, fixture.CancellationToken));
+        await Assert.ThrowsAsync<HybridFileStorageNoAvailableException>(() =>
+           sp.GetRequiredService<IHybridFileStorage>().UploadAsync(
+               new UploadFileInput { FileName = "", TenantId = 1 }, null, fileContent, fixture.CancellationToken));
     }
 
 
@@ -120,13 +125,18 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         ServiceCollection services = new();
         services.AddSaHybridFileStorage(b
             => b.ConfigureStorage((_, c)
-                => c.AddStorage(new InMemoryFileStorage(null, true))));
+                => c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions(IsReadOnly: true)))));
 
         using var sp = services.BuildServiceProvider();
 
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-           sp.GetRequiredService<IHybridFileStorage>().UploadAsync(new UploadFileInput { FileName = "", TenantId = 1 }, fileContent, fixture.CancellationToken));
+
+        await Assert.ThrowsAsync<HybridFileStorageWritableException>(() =>
+           sp.GetRequiredService<IHybridFileStorage>().UploadAsync(
+               new UploadFileInput { FileName = "", TenantId = 1 },
+               null,
+               fileContent,
+               fixture.CancellationToken));
     }
 
 
@@ -137,6 +147,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         using MemoryStream memoryStream = new();
 
         var isDownloaded = await Storage.DownloadAsync(fileName
+            , scopeName: null
             , (stream, ct) => stream.CopyToAsync(memoryStream, ct)
             , fixture.CancellationToken);
 

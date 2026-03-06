@@ -5,15 +5,36 @@ The IHybridFileStorage interface enhances the resilience and availability of fil
 This interface defines a contract for hybrid file storage systems capable of handling file operations such as uploading, downloading, and deleting files. The integration of multiple storage providers (such as file system, S3, and PostgreSQL) ensures reliable file storage, as the system can automatically switch between different providers in the event that one becomes unavailable.
 
 ```csharp
+
 public interface IHybridFileStorage
 {
-    bool IsReadOnly { get; }
-    string StorageType { get; }
+    /// <summary>
+    /// storages
+    /// </summary>
+    IReadOnlyCollection<IFileStorage> Storages { get; }
 
-    bool CanProcess(string fileId);
-    Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken);
-    Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken);
-    Task<StorageResult> UploadAsync(UploadFileInput input, Stream fileStream, CancellationToken cancellationToken);
+    /// <summary>
+    /// Deletes the file associated with the specified file ID asynchronously.
+    /// </summary>
+    Task<bool> DeleteAsync(string fileId, string? scopeName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Downloads the file associated with the specified file ID asynchronously.
+    /// </summary>
+    Task<bool> DownloadAsync(
+        string fileId,
+        string? scopeName,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Uploads a file asynchronously using the provided input and file stream.
+    /// </summary>
+    Task<StorageResult> UploadAsync(
+        UploadFileInput input,
+        string? scopeName,
+        Stream fileStream,
+        CancellationToken cancellationToken = default);
 }
 ```
 
@@ -21,34 +42,20 @@ public interface IHybridFileStorage
 
 ```csharp
 
-IHostBuilder builder = Host.CreateDefaultBuilder();
-
+// di
 builder.Services.AddSaHybridStorage((_, b) => b.AddStorage(new InMemoryFileStorage()));
-builder.Services.TryAddSingleton<Proccessor>();
 
+// some test
+using var stream = "Hello, HybridFileStorage!".ToStream();
 
-builder.UseConsoleLifetime();
-var host = builder.Build();
-await host.Services.GetRequiredService<Proccessor>().Run();
+await storage.UploadAsync(
+    new UploadFileInput { FileName = "file.txt" },
+    stream,
+    cancellationToken);
 
-namespace HybridFileStorage.Console
-{
-    public class Proccessor(IHybridFileStorage storage)
-    {
-        public async Task Run(CancellationToken cancellationToken = default)
-        {
-            var expected = "Hello, HybridFileStorage!";
-            using var stream = expected.ToStream();
+await storage.DownloadAsync(
+    result.FileId,
+    async (fs, t) => actual = await fs.ToStrAsync(t),
+    cancellationToken);
 
-            var result = await storage.UploadAsync(new UploadFileInput { FileName = "file.txt" }, stream, cancellationToken);
-
-            string? actual = null;
-
-            var isDownload = await storage.DownloadAsync(result.FileId, async (fs, t) => actual = await fs.ToStrAsync(t), cancellationToken);
-
-            Debug.Assert(isDownload);
-            Debug.Assert(expected == actual);
-        }
-    }
-}
 ```

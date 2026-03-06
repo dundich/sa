@@ -15,7 +15,6 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
 
     public PostgresFileStorageConfiguration(IServiceCollection services)
     {
-        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddSingleton<RecyclableMemoryStreamManager>();
 
         _partConfiguration = services.AddSaPartitional((sp, builder) =>
@@ -28,9 +27,10 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
                     "size INT NOT NULL",
                     "file_ext TEXT NOT NULL",
                     "tenant_id INT NOT NULL",
+                    "scope_name TEXT NOT NULL",
                     "data BYTEA NOT NULL"
                 )
-                .PartByList("tenant_id")
+                .PartByList("tenant_id", "scope_name")
                 .PartByRange(_options.PartOptions.PgPartBy, "created_at");
             });
         })
@@ -62,7 +62,7 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
                 TableName = _options.StorageOptions.TableName.Trim('"')
             };
 
-            var storage = new PostgresFileStorage(dataSource, pm, sm, options, time);
+            var storage = new PostgresFileStorage(dataSource, pm, sm, options, _options.ScopeName, time);
             return storage;
         });
     }

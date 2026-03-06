@@ -106,9 +106,9 @@ Ensure the filename contains valid characters.
             trimmed.Equals(".", StringComparison.Ordinal))
         {
             throw new SecurityException($"""
-                Path segment '{trimmed}' is not allowed. 
-                Relative paths (.. / .) are prohibited for security reasons.
-                """);
+Path segment '{trimmed}' is not allowed. 
+Relative paths (.. / .) are prohibited for security reasons.
+""");
         }
 
         if (!ContainsInvalidChars(trimmed))

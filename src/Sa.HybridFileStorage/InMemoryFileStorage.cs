@@ -3,25 +3,38 @@ using System.Collections.Concurrent;
 
 namespace Sa.HybridFileStorage;
 
-public sealed class InMemoryFileStorage(TimeProvider? currentTimeProvider = null, bool isReadOnly = false) : IFileStorage
+
+public sealed class InMemoryFileStorage(
+    InMemoryFileStorageOptions? options = null,
+    TimeProvider? timeProvider = null) : IFileStorage
 {
+    private readonly InMemoryFileStorageOptions _options = options ?? new ();
+
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public const string DefaultStorageType = "mem";
 
     private readonly ConcurrentDictionary<string, byte[]> _storage = [];
 
+
+    public string? ScopeName => _options.ScopeName;
+
     public string StorageType => DefaultStorageType;
 
-    public bool IsReadOnly => isReadOnly;
+    public bool IsReadOnly => _options.IsReadOnly;
 
     private void EnsureWritable()
     {
         if (IsReadOnly)
         {
-            throw new InvalidOperationException("Cannot perform this operation. The storage is read-only.");
+            throw new HybridFileStorageWritableException();
         }
     }
 
-    public async Task<StorageResult> UploadAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadAsync(
+        UploadFileInput metadata,
+        Stream fileStream,
+        CancellationToken cancellationToken)
     {
         EnsureWritable();
 
@@ -34,12 +47,13 @@ public sealed class InMemoryFileStorage(TimeProvider? currentTimeProvider = null
 
         _storage[fileId] = fileData;
 
-        var now = currentTimeProvider?.GetUtcNow() ?? TimeProvider.System.GetUtcNow();
-
-        return new StorageResult(fileId, fileId, StorageType, now);
+        return new StorageResult(fileId, fileId, StorageType, _timeProvider.GetUtcNow());
     }
 
-    public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public async Task<bool> DownloadAsync(
+        string fileId,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken)
     {
         if (_storage.TryGetValue(fileId, out var fileData))
         {

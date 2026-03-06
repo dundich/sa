@@ -15,7 +15,11 @@ internal sealed partial class LoggingInterceptor(ILogger<LoggingInterceptor>? lo
         return ValueTask.FromResult(true);
     }
 
-    public ValueTask AfterDeleteAsync(IFileStorage storage, string fileId, bool success, CancellationToken cancellationToken)
+    public ValueTask AfterDeleteAsync(
+        IFileStorage storage,
+        string fileId,
+        bool success,
+        CancellationToken cancellationToken)
     {
         if (success)
         {
@@ -28,19 +32,31 @@ internal sealed partial class LoggingInterceptor(ILogger<LoggingInterceptor>? lo
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask OnDeleteErrorAsync(IFileStorage storage, string fileId, Exception exception, CancellationToken cancellationToken)
+    public ValueTask OnDeleteErrorAsync(
+        IFileStorage storage,
+        string fileId,
+        Exception exception,
+        CancellationToken cancellationToken)
     {
         LogDeleteError(_logger, exception, fileId, storage.StorageType);
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask<bool> CanDownloadAsync(IFileStorage storage, string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public ValueTask<bool> CanDownloadAsync(
+        IFileStorage storage,
+        string fileId,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken)
     {
         LogCanDownload(_logger, fileId, storage.StorageType);
         return ValueTask.FromResult(true);
     }
 
-    public ValueTask AfterDownloadAsync(IFileStorage storage, string fileId, bool success, CancellationToken cancellationToken)
+    public ValueTask AfterDownloadAsync(
+        IFileStorage storage,
+        string fileId,
+        bool success,
+        CancellationToken cancellationToken)
     {
         if (success)
         {
@@ -53,25 +69,39 @@ internal sealed partial class LoggingInterceptor(ILogger<LoggingInterceptor>? lo
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask OnDownloadErrorAsync(IFileStorage storage, string fileId, Exception exception, CancellationToken cancellationToken)
+    public ValueTask OnDownloadErrorAsync(
+        IFileStorage storage,
+        string fileId,
+        Exception exception,
+        CancellationToken cancellationToken)
     {
         LogDownloadError(_logger, exception, fileId, storage.StorageType);
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask<bool> CanUploadAsync(IFileStorage storage, UploadFileInput input, Stream fileStream, CancellationToken cancellationToken)
+    public ValueTask<bool> CanUploadAsync(
+        IFileStorage storage,
+        UploadFileInput input,
+        Stream fileStream,
+        CancellationToken cancellationToken)
     {
         LogCanUpload(_logger, input, storage.StorageType);
         return ValueTask.FromResult(true);
     }
 
-    public ValueTask AfterUploadAsync(IFileStorage storage, StorageResult result, CancellationToken cancellationToken)
+    public ValueTask AfterUploadAsync(
+        IFileStorage storage,
+        StorageResult result,
+        CancellationToken cancellationToken)
     {
         LogUploadSuccess(_logger, storage.StorageType, result);
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask OnUploadErrorAsync(IFileStorage storage, Exception exception, CancellationToken cancellationToken)
+    public ValueTask OnUploadErrorAsync(
+        IFileStorage storage,
+        Exception exception,
+        CancellationToken cancellationToken)
     {
         LogUploadError(_logger, exception, storage.StorageType);
         return ValueTask.CompletedTask;

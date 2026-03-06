@@ -14,15 +14,17 @@ internal sealed class S3FileStorage(
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public string StorageType { get; } = options.StorageType;
+    public string StorageType => options.StorageType;
 
-    public bool IsReadOnly { get; } = options.IsReadOnly ?? false;
+    public bool IsReadOnly => options.IsReadOnly;
+
+    public string? ScopeName => options.ScopeName;
 
     private void EnsureWritable()
     {
         if (IsReadOnly)
         {
-            throw new InvalidOperationException("Cannot perform this operation. The storage is read-only.");
+            throw new HybridFileStorageWritableException();
         }
     }
 
@@ -92,7 +94,7 @@ internal sealed class S3FileStorage(
             throw new FormatException("Invalid file ID format.");
         }
 
-        ReadOnlySpan<char> filePath = span[(separatorIndex + 3)..]; // +3 for skip "://"
+        ReadOnlySpan<char> filePath = span[(separatorIndex + "://".Length)..]; // +3 for skip "://"
 
         return filePath.ToString();
     }

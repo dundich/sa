@@ -9,14 +9,17 @@ internal sealed class HybridStorageBuilder(IServiceCollection services) : IHybri
 {
     private Action<IServiceProvider, IHybridFileStorageContainerConfiguration>? _configureStorage;
     private Action<IServiceProvider, IInterceptorContainer>? _configureInterceptors;
+    private bool _logged = false;
 
-    public IHybridFileStorageConfiguration ConfigureStorage(Action<IServiceProvider, IHybridFileStorageContainerConfiguration> configure)
+    public IHybridFileStorageConfiguration ConfigureStorage(
+        Action<IServiceProvider, IHybridFileStorageContainerConfiguration> configure)
     {
         _configureStorage = configure;
         return this;
     }
 
-    public IHybridFileStorageConfiguration ConfigureInterceptors(Action<IServiceProvider, IInterceptorContainer> configure)
+    public IHybridFileStorageConfiguration ConfigureInterceptors(
+        Action<IServiceProvider, IInterceptorContainer> configure)
     {
         _configureInterceptors = configure;
         return this;
@@ -24,28 +27,27 @@ internal sealed class HybridStorageBuilder(IServiceCollection services) : IHybri
 
     public IHybridFileStorageConfiguration AddLogging()
     {
-        services.TryAddTransient<LoggingInterceptor>();
+        _logged = true;
         return this;
     }
 
     public void Build()
     {
-        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
+        if (_logged)
+        {
+            services.TryAddSingleton<LoggingInterceptor>();
+        }
 
         services.TryAddSingleton<IHybridFileStorage>(sp =>
         {
-
-            var interceptorContainer = new InterceptorContainer();
+            InterceptorContainer interceptorContainer = new();
             interceptorContainer.AddLoggingInterceptor(sp.GetService<LoggingInterceptor>());
 
             _configureInterceptors?.Invoke(sp, interceptorContainer);
 
-
-            IHybridFileStorageContainer storageContainer = sp.GetService<IHybridFileStorageContainer>()
-                ?? new HybridFileStorageContainer(sp.GetServices<IFileStorage>());
+            HybridFileStorageContainer storageContainer = new(sp.GetServices<IFileStorage>());
 
             _configureStorage?.Invoke(sp, storageContainer);
-
 
             return new HybridFileStorage(storageContainer, interceptorContainer);
         });

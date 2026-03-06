@@ -4,22 +4,26 @@ using System.Security;
 namespace Sa.HybridFileStorage.FileSystem;
 
 internal sealed class FileSystemStorage(
-    FileSystemStorageOptions options, TimeProvider? timeProvider = null) : IFileStorage
+    FileSystemStorageOptions options,
+    TimeProvider? timeProvider = null) : IFileStorage
 {
+
     private readonly string _basePath = Path.TrimEndingDirectorySeparator(
         Path.GetFullPath(options.BasePath ?? throw new ArgumentNullException(nameof(options.BasePath))));
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
+    public string? ScopeName => options.ScopeName;
+
     public string StorageType { get; } = options.StorageType ?? "file";
 
-    public bool IsReadOnly { get; } = options.IsReadOnly ?? false;
+    public bool IsReadOnly { get; } = options.IsReadOnly;
 
     private void EnsureWritable()
     {
         if (IsReadOnly)
         {
-            throw new InvalidOperationException("Cannot perform this operation. The storage is read-only.");
+            throw new HybridFileStorageWritableException();
         }
     }
 

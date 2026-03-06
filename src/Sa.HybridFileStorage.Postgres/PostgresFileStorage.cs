@@ -11,32 +11,44 @@ internal sealed class PostgresFileStorage(
     IPartitionManager partManager,
     RecyclableMemoryStreamManager streamManager,
     StorageOptions options,
+    string? scopeName,
     TimeProvider? timeProvider = null) : IFileStorage
 {
-    private readonly string _qualifiedTableName = $"{options.SchemaName}.\"{options.TableName}\"";
+    private readonly string _partName = Sanitize(scopeName ?? "root");
 
-    public string StorageType { get; } = options.StorageType;
+    private readonly string _qualifiedTableName = $"{options.SchemaName}.\"{Sanitize(options.TableName)}\"";
 
-    public bool IsReadOnly { get; } = options.IsReadOnly ?? false;
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
+    public string StorageType => options.StorageType;
+
+    public bool IsReadOnly => options.IsReadOnly;
+
+    public string? ScopeName => scopeName;
 
     private void EnsureWritable()
     {
         if (IsReadOnly)
         {
-            throw new InvalidOperationException("Cannot perform this operation. The storage is read-only.");
+            throw new HybridFileStorageWritableException();
         }
     }
 
-    public async Task<StorageResult> UploadAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadAsync(
+        UploadFileInput metadata,
+        Stream fileStream,
+        CancellationToken cancellationToken)
     {
         EnsureWritable();
 
-        var now = timeProvider?.GetUtcNow() ?? TimeProvider.System.GetUtcNow();
+        var now = _timeProvider.GetUtcNow();
 
-        await partManager.EnsureParts(_qualifiedTableName, now, [metadata.TenantId], cancellationToken);
+        await partManager.EnsureParts(_qualifiedTableName, now, [metadata.TenantId, _partName], cancellationToken);
 
 
-        string fileId = FileIdParser.FormatToFileId(StorageType, options.TableName, metadata.TenantId, now, metadata.FileName);
+        string fileId = FileIdParser.FormatToFileId(
+            StorageType, options.TableName, metadata.TenantId, now, metadata.FileName);
+
         string fileExtension = FileIdParser.GetFileExtension(metadata.FileName);
 
         long createdAt = now.ToUnixTimeSeconds();
@@ -56,8 +68,8 @@ internal sealed class PostgresFileStorage(
             }
 
             await dataSource.ExecuteNonQuery($"""
-INSERT INTO {_qualifiedTableName} (id, name, file_ext, data, size, tenant_id, created_at) 
-VALUES (@id, @name, @file_ext, @data, @size, @tenant_id, @created_at)
+INSERT INTO {_qualifiedTableName} (id, name, file_ext, data, size, tenant_id, scope_name, created_at) 
+VALUES (@id, @name, @file_ext, @data, @size, @tenant_id, @scope_name, @created_at)
 ON CONFLICT DO NOTHING
 """
             ,
@@ -68,6 +80,7 @@ ON CONFLICT DO NOTHING
                 , new NpgsqlParameter("data", fileStream)
                 , new NpgsqlParameter<int>("size", (int)memoryStream.Length)
                 , new NpgsqlParameter<int>("tenant_id", metadata.TenantId)
+                , new NpgsqlParameter<string>("scope_name", _partName)
                 , new NpgsqlParameter<long>("created_at", createdAt)
             ]
             , cancellationToken);
@@ -90,13 +103,17 @@ ON CONFLICT DO NOTHING
         EnsureWritable();
 
         (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId, options.TableName);
-        int rowsAffected = await dataSource.ExecuteNonQuery(
-            $"""
-            DELETE FROM {_qualifiedTableName} WHERE tenant_id = @tenant_id AND created_at >= @timestamp AND id = @id
+        int rowsAffected = await dataSource.ExecuteNonQuery($"""
+            DELETE FROM {_qualifiedTableName}
+            WHERE
+                tenant_id = @tenant_id AND scope_name = @scope_name
+                AND created_at >= @timestamp
+                AND id = @id
             """
         ,
         [
-            new NpgsqlParameter<long>("tenant_id", tenantId),
+            new NpgsqlParameter<int>("tenant_id", tenantId),
+            new NpgsqlParameter<string>("scope_name", _partName),
             new NpgsqlParameter<long>("timestamp", timestamp),
             new NpgsqlParameter<string>("id", fileId)
         ]
@@ -104,13 +121,20 @@ ON CONFLICT DO NOTHING
         return rowsAffected > 0;
     }
 
-    public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public async Task<bool> DownloadAsync(
+        string fileId,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken)
     {
         (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId, options.TableName);
 
         int rowsAffected = await dataSource.ExecuteReader(
             $"""
-            SELECT data FROM {_qualifiedTableName} WHERE tenant_id = @tenant_id AND created_at >= @timestamp AND id = @id
+            SELECT data FROM {_qualifiedTableName}
+            WHERE
+                tenant_id = @tenant_id AND scope_name = @scope_name
+                AND created_at >= @timestamp
+                AND id = @id
             """
         , async (reader, i) =>
         {
@@ -119,7 +143,8 @@ ON CONFLICT DO NOTHING
         }
         ,
         [
-            new NpgsqlParameter<long>("tenant_id", tenantId),
+            new NpgsqlParameter<int>("tenant_id", tenantId),
+            new NpgsqlParameter<string>("scope_name", _partName),
             new NpgsqlParameter<long>("timestamp", timestamp),
             new NpgsqlParameter<string>("id", fileId)
         ]
@@ -127,5 +152,19 @@ ON CONFLICT DO NOTHING
 
 
         return rowsAffected > 0;
+    }
+
+
+    private static string Sanitize(string tableName)
+    {
+        var result = new char[tableName.Length];
+
+        for (int i = 0; i < tableName.Length; i++)
+        {
+            char c = tableName[i];
+            result[i] = char.IsLetter(c) || (i > 0 && char.IsDigit(c)) || c == '_' ? c : '_';
+        }
+
+        return new string(result);
     }
 }

@@ -4,25 +4,35 @@ using Sa.HybridFileStorage.Interceptors;
 namespace Sa.HybridFileStorage;
 
 
-internal sealed class HybridFileStorage(IHybridFileStorageContainer container, InterceptorContainer interceptors) : IHybridFileStorage
+internal sealed class HybridFileStorage(
+    IHybridFileStorageContainer container,
+    InterceptorContainer interceptors) : IHybridFileStorage
 {
-    public string StorageType => container.StorageType;
 
-    public bool IsReadOnly => container.IsReadOnly;
+    public IReadOnlyCollection<IFileStorage> Storages => container.Storages;
 
-    public bool CanProcess(string fileId) => container.CanProcess(fileId);
-
-    private void EnsureWritable()
+    private void EnsureWritable(string? scopeName)
     {
-        if (IsReadOnly)
+        if (!container.Storages.Any(c => c.ScopeName == scopeName))
         {
-            throw new InvalidOperationException("Cannot perform operation. All storage options are read-only.");
+            throw new HybridFileStorageNoAvailableException();
+        }
+
+
+        if (Storages.All(f => f.ScopeName == scopeName && f.IsReadOnly))
+        {
+            throw new HybridFileStorageWritableException();
         }
     }
 
-    public async Task<StorageResult> UploadAsync(UploadFileInput input, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadAsync(
+        UploadFileInput input,
+        string? scopeName,
+        Stream fileStream,
+        CancellationToken cancellationToken = default)
     {
-        EnsureWritable();
+        EnsureWritable(scopeName);
+
         return await ExecuteStorageOperationAsync(
             container.Storages.Where(c => !c.IsReadOnly),
             async (storage, ct) => await interceptors.ExecuteBeforeUploadAsync(storage, input, fileStream, ct),
@@ -33,10 +43,14 @@ internal sealed class HybridFileStorage(IHybridFileStorageContainer container, I
         );
     }
 
-    public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public async Task<bool> DownloadAsync(
+        string fileId,
+        string? scopeName,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken = default)
     {
         return await ExecuteStorageOperationAsync(
-            container.GetStorages(fileId),
+            container.Storages.GetScopeStorages(fileId, scopeName),
             async (storage, ct) => await interceptors.ExecuteBeforeDownloadAsync(storage, fileId, loadStream, ct),
             async (storage, ct) => await storage.DownloadAsync(fileId, loadStream, ct),
             async (storage, result, ct) => await interceptors.ExecuteAfterDownloadAsync(storage, fileId, result, ct),
@@ -45,11 +59,12 @@ internal sealed class HybridFileStorage(IHybridFileStorageContainer container, I
         );
     }
 
-    public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
+    public async Task<bool> DeleteAsync(string fileId, string? scopeName, CancellationToken cancellationToken = default)
     {
-        EnsureWritable();
+        EnsureWritable(scopeName);
+
         return await ExecuteStorageOperationAsync(
-            container.GetStorages(fileId),
+            container.Storages.GetScopeStorages(fileId, scopeName),
             async (storage, ct) => await interceptors.ExecuteBeforeDeleteAsync(storage, fileId, ct),
             async (storage, ct) => await storage.DeleteAsync(fileId, ct),
             async (storage, result, ct) => await interceptors.ExecuteAfterDeleteAsync(storage, fileId, result, ct),
@@ -60,12 +75,12 @@ internal sealed class HybridFileStorage(IHybridFileStorageContainer container, I
 
 
     private static async Task<T> ExecuteStorageOperationAsync<T>(
-      IEnumerable<IFileStorage> storages,
-      Func<IFileStorage, CancellationToken, Task<bool>> beforeOperation,
-      Func<IFileStorage, CancellationToken, Task<T>> operation,
-      Func<IFileStorage, T, CancellationToken, Task> afterOperation,
-      Func<IFileStorage, Exception, CancellationToken, Task> onError,
-      CancellationToken cancellationToken)
+        IEnumerable<IFileStorage> storages,
+        Func<IFileStorage, CancellationToken, Task<bool>> beforeOperation,
+        Func<IFileStorage, CancellationToken, Task<T>> operation,
+        Func<IFileStorage, T, CancellationToken, Task> afterOperation,
+        Func<IFileStorage, Exception, CancellationToken, Task> onError,
+        CancellationToken cancellationToken)
     {
         var exceptions = new List<Exception>();
 
@@ -87,9 +102,9 @@ internal sealed class HybridFileStorage(IHybridFileStorageContainer container, I
 
         if (exceptions.Count > 0)
         {
-            throw new AggregateException("Operation failed for all available storages.", exceptions);
+            throw new HybridFileStorageAggregateException(exceptions);
         }
 
-        throw new InvalidOperationException("No storage available.");
+        throw new HybridFileStorageNoAvailableException();
     }
 }

@@ -39,7 +39,8 @@ internal static class FileIdParser
 
         ReadOnlySpan<char> dateSpan = subParts.Slice(firstSlashIndex + 1, DateFormat.Length);
 
-        if (!DateTimeOffset.TryParseExact(dateSpan, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
+        if (!DateTimeOffset.TryParseExact(
+            dateSpan, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
         {
             throw new FormatException("Invalid timestamp format in file ID.");
         }
@@ -49,8 +50,13 @@ internal static class FileIdParser
     }
 
 
-    public static string FormatToFileId(string storageType, string tableName, int tenantId, DateTimeOffset date, string fileName)
-        => $"{storageType}://{tableName}/{tenantId}/{date.ToString(DateFormat, CultureInfo.InvariantCulture)}/{NormalizeFileName(fileName)}";
+    public static string FormatToFileId(
+        string storageType,
+        string tableName,
+        int tenantId,
+        DateTimeOffset date,
+        string fileName)
+            => $"{storageType}://{tableName}/{tenantId}/{date.ToString(DateFormat, CultureInfo.InvariantCulture)}/{NormalizeFileName(fileName)}";
 
     public static string NormalizeFileName(string fileName) => fileName.TrimStart('\\', '/').Replace('\\', '/');
 

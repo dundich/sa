@@ -6,6 +6,11 @@
 public interface IFileStorage
 {
     /// <summary>
+    /// scope domain
+    /// </summary>
+    string? ScopeName { get; }
+
+    /// <summary>
     /// Gets the type of the storage.
     /// </summary>
     string StorageType { get; }
@@ -37,7 +42,10 @@ public interface IFileStorage
     /// <param name="fileId">File ID.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The file stream.</returns>
-    Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken);
+    Task<bool> DownloadAsync(
+        string fileId,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Deletes a file from the storage by its ID.

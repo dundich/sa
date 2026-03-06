@@ -10,21 +10,9 @@ namespace Sa.HybridFileStorage;
 public interface IHybridFileStorage
 {
     /// <summary>
-    /// Gets a value indicating whether the storage is read-only.
+    /// storages
     /// </summary>
-    bool IsReadOnly { get; }
-
-    /// <summary>
-    /// Gets the type of storage (e.g., "pg", "s3", "file").
-    /// </summary>
-    string StorageType { get; }
-
-    /// <summary>
-    /// Determines whether the storage can process the specified file ID.
-    /// </summary>
-    /// <param name="fileId">The unique identifier for the file.</param>
-    /// <returns>True if the storage can process the file ID; otherwise, false.</returns>
-    bool CanProcess(string fileId);
+    IReadOnlyCollection<IFileStorage> Storages { get; }
 
     /// <summary>
     /// Deletes the file associated with the specified file ID asynchronously.
@@ -32,7 +20,7 @@ public interface IHybridFileStorage
     /// <param name="fileId">The unique identifier for the file to be deleted.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
     /// <returns>True if the file was successfully deleted; otherwise, false.</returns>
-    Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken);
+    Task<bool> DeleteAsync(string fileId, string? scopeName, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Downloads the file associated with the specified file ID asynchronously.
@@ -41,7 +29,11 @@ public interface IHybridFileStorage
     /// <param name="loadStream">A function that processes the downloaded file stream.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
     /// <returns>True if the file was successfully downloaded; otherwise, false.</returns>
-    Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken);
+    Task<bool> DownloadAsync(
+        string fileId,
+        string? scopeName,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Uploads a file asynchronously using the provided input and file stream.
@@ -50,5 +42,9 @@ public interface IHybridFileStorage
     /// <param name="fileStream">A stream containing the file data to be uploaded.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
     /// <returns>A <see cref="StorageResult"/> containing the result of the upload operation.</returns>
-    Task<StorageResult> UploadAsync(UploadFileInput input, Stream fileStream, CancellationToken cancellationToken);
+    Task<StorageResult> UploadAsync(
+        UploadFileInput input,
+        string? scopeName,
+        Stream fileStream,
+        CancellationToken cancellationToken = default);
 }
