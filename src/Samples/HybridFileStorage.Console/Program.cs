@@ -45,11 +45,13 @@ namespace HybridFileStorage.Console
             var expected = "Hello, HybridFileStorage!";
             using var stream = expected.ToStream();
 
-            var result = await storage.UploadAsync(new UploadFileInput { FileName = "file.txt" }, stream, cancellationToken);
+            var result = await storage.UploadAsync(
+                new UploadFileInput { FileName = "file.txt" }, null, stream, cancellationToken);
 
             string? actual = default;
 
-            var isDowload = await storage.DownloadAsync(result.FileId, async (fs, t) => actual = await fs.ToStrAsync(t), cancellationToken);
+            var isDowload = await storage.DownloadAsync(
+                result.FileId, null, async (fs, t) => actual = await fs.ToStrAsync(t), cancellationToken);
 
             Debug.Assert(isDowload);
 

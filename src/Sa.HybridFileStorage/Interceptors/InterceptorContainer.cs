@@ -27,7 +27,11 @@ internal sealed class InterceptorContainer : IInterceptorContainer
         return this;
     }
 
-    public async Task<bool> ExecuteBeforeUploadAsync(IFileStorage storage, UploadFileInput input, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<bool> ExecuteBeforeUploadAsync(
+        IFileStorage storage,
+        UploadFileInput input,
+        Stream fileStream,
+        CancellationToken cancellationToken)
     {
         foreach (var interceptor in _uploadInterceptors)
         {
@@ -39,7 +43,10 @@ internal sealed class InterceptorContainer : IInterceptorContainer
         return true;
     }
 
-    public async Task ExecuteAfterUploadAsync(IFileStorage storage, StorageResult result, CancellationToken cancellationToken)
+    public async Task ExecuteAfterUploadAsync(
+        IFileStorage storage,
+        StorageResult result,
+        CancellationToken cancellationToken)
     {
         foreach (var interceptor in _uploadInterceptors)
         {
@@ -47,7 +54,10 @@ internal sealed class InterceptorContainer : IInterceptorContainer
         }
     }
 
-    public async Task ExecuteOnUploadErrorAsync(IFileStorage storage, Exception exception, CancellationToken cancellationToken)
+    public async Task ExecuteOnUploadErrorAsync(
+        IFileStorage storage,
+        Exception exception,
+        CancellationToken cancellationToken)
     {
         foreach (var interceptor in _uploadInterceptors)
         {
@@ -55,7 +65,11 @@ internal sealed class InterceptorContainer : IInterceptorContainer
         }
     }
 
-    public async Task<bool> ExecuteBeforeDownloadAsync(IFileStorage storage, string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public async Task<bool> ExecuteBeforeDownloadAsync(
+        IFileStorage storage,
+        string fileId,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken)
     {
         foreach (var interceptor in _downloadInterceptors)
         {
@@ -67,7 +81,11 @@ internal sealed class InterceptorContainer : IInterceptorContainer
         return true;
     }
 
-    public async Task ExecuteAfterDownloadAsync(IFileStorage storage, string fileId, bool success, CancellationToken cancellationToken)
+    public async Task ExecuteAfterDownloadAsync(
+        IFileStorage storage,
+        string fileId,
+        bool success,
+        CancellationToken cancellationToken)
     {
         foreach (var interceptor in _downloadInterceptors)
         {
@@ -75,7 +93,11 @@ internal sealed class InterceptorContainer : IInterceptorContainer
         }
     }
 
-    public async Task ExecuteOnDownloadErrorAsync(IFileStorage storage, string fileId, Exception exception, CancellationToken cancellationToken)
+    public async Task ExecuteOnDownloadErrorAsync(
+        IFileStorage storage,
+        string fileId,
+        Exception exception,
+        CancellationToken cancellationToken)
     {
         foreach (var interceptor in _downloadInterceptors)
         {
@@ -83,7 +105,10 @@ internal sealed class InterceptorContainer : IInterceptorContainer
         }
     }
 
-    public async Task<bool> ExecuteBeforeDeleteAsync(IFileStorage storage, string fileId, CancellationToken cancellationToken)
+    public async Task<bool> ExecuteBeforeDeleteAsync(
+        IFileStorage storage,
+        string fileId,
+        CancellationToken cancellationToken)
     {
         foreach (var interceptor in _deleteInterceptors)
         {
@@ -95,7 +120,11 @@ internal sealed class InterceptorContainer : IInterceptorContainer
         return true;
     }
 
-    public async Task ExecuteAfterDeleteAsync(IFileStorage storage, string fileId, bool success, CancellationToken cancellationToken)
+    public async Task ExecuteAfterDeleteAsync(
+        IFileStorage storage,
+        string fileId,
+        bool success,
+        CancellationToken cancellationToken)
     {
         foreach (var interceptor in _deleteInterceptors)
         {
@@ -103,7 +132,11 @@ internal sealed class InterceptorContainer : IInterceptorContainer
         }
     }
 
-    public async Task ExecuteOnDeleteErrorAsync(IFileStorage storage, string fileId, Exception exception, CancellationToken cancellationToken)
+    public async Task ExecuteOnDeleteErrorAsync(
+        IFileStorage storage,
+        string fileId,
+        Exception exception,
+        CancellationToken cancellationToken)
     {
         foreach (var interceptor in _deleteInterceptors)
         {

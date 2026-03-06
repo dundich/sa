@@ -5,19 +5,26 @@ using System.Globalization;
 
 namespace Sa.HybridFileStorage.S3;
 
-internal sealed class S3FileStorage(IS3BucketClient client, S3FileStorageOptions options, TimeProvider? timeProvider = null) : IFileStorage
+internal sealed class S3FileStorage(
+    IS3BucketClient client,
+    S3FileStorageOptions options,
+    TimeProvider? timeProvider = null) : IFileStorage
 {
     private const string DateFormat = "yyyy/MM/dd/HH";
 
-    public string StorageType { get; } = options.StorageType;
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public bool IsReadOnly { get; } = options.IsReadOnly ?? false;
+    public string StorageType => options.StorageType;
+
+    public bool IsReadOnly => options.IsReadOnly;
+
+    public string? ScopeName => options.ScopeName;
 
     private void EnsureWritable()
     {
         if (IsReadOnly)
         {
-            throw new InvalidOperationException("Cannot perform this operation. The storage is read-only.");
+            throw new HybridFileStorageWritableException();
         }
     }
 
@@ -49,7 +56,7 @@ internal sealed class S3FileStorage(IS3BucketClient client, S3FileStorageOptions
         EnsureWritable();
         await EnsureBucket(cancellationToken);
 
-        var now = timeProvider?.GetUtcNow() ?? TimeProvider.System.GetUtcNow();
+        var now = _timeProvider.GetUtcNow();
         var eventTime = now.ToString(DateFormat, CultureInfo.InvariantCulture);
 
         var filePath = $"{metadata.TenantId}/{eventTime}/{metadata.FileName}";
@@ -87,7 +94,7 @@ internal sealed class S3FileStorage(IS3BucketClient client, S3FileStorageOptions
             throw new FormatException("Invalid file ID format.");
         }
 
-        ReadOnlySpan<char> filePath = span[(separatorIndex + 3)..]; // +3 for skip "://"
+        ReadOnlySpan<char> filePath = span[(separatorIndex + "://".Length)..]; // +3 for skip "://"
 
         return filePath.ToString();
     }

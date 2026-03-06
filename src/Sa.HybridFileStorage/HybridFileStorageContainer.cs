@@ -8,7 +8,10 @@ internal sealed class HybridFileStorageContainer(IEnumerable<IFileStorage> stora
 
     public IHybridFileStorageContainerConfiguration AddStorage(IFileStorage storage)
     {
-        _storages.Add(storage);
+        if (!_storages.Contains(storage))
+        {
+            _storages.Add(storage);
+        }
         return this;
     }
 

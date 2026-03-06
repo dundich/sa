@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
 
@@ -18,14 +17,10 @@ public static class Setup
             Region = options.Region ?? "eu-central-1",
         };
 
-
-        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
-
         services.AddSaS3BucketClient(settings);
 
-
-        services.TryAddSingleton(options);
-        services.AddSingleton<IFileStorage, S3FileStorage>();
+        services.AddSingleton<IFileStorage, S3FileStorage>(sp
+            => new S3FileStorage(sp.GetRequiredService<IS3BucketClient>(), options, sp.GetService<TimeProvider>()));
 
         return services;
     }

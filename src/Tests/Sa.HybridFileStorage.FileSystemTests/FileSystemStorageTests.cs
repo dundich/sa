@@ -72,4 +72,27 @@ public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
 
         return isDownloaded;
     }
+
+
+    [Fact]
+    public async Task CrudEx()
+    {
+        var metadata = new UploadFileInput { FileName = "/api/files/download/file/var/www/uploads/image.bin", TenantId = 1 };
+        using MemoryStream fileContent = FixtureHelper.GetByteStream();
+
+        var result = await Storage.UploadAsync(metadata, fileContent, fixture.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.NotEmpty(result.FileId);
+
+        bool canProcessed = Storage.CanProcess(result.FileId);
+        Assert.True(canProcessed);
+
+        var isSame = await EnsureFileSame(result.FileId, fileContent);
+        Assert.True(isSame);
+
+        var isDeleted = await Storage.DeleteAsync(result.FileId, fixture.CancellationToken);
+
+        Assert.True(isDeleted);
+    }
 }
