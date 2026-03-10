@@ -3,7 +3,7 @@
 public sealed class S3FileStorageOptions
 {
     public string StorageType { get; init; } = "s3";
-    public string? ScopeName { get; init; } = null;
+    public string ScopeName { get; init; } = string.Empty;
 
     /// <summary>
     /// http://localhost:9000

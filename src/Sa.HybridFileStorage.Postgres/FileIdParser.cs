@@ -4,49 +4,46 @@ namespace Sa.HybridFileStorage.Postgres;
 
 internal static class FileIdParser
 {
-    private const string DateFormat = "yyyy/MM/dd/HH";
+    public const string SchemeSeparator = "://";
 
-    public static (int tenantId, long timestamp) ParseFromFileId(string fileId, string tableName)
+    public static bool TryParseFileIdWithFilename(
+        string fileId,
+        out int tenantId,
+        out long timestamp,
+        out string fileName)
     {
-        if (string.IsNullOrWhiteSpace(fileId))
-        {
-            throw new ArgumentException("File ID cannot be null or empty.", nameof(fileId));
-        }
+        tenantId = default;
+        timestamp = default;
+        fileName = string.Empty;
+
+        if (string.IsNullOrEmpty(fileId)) return false;
 
         ReadOnlySpan<char> span = fileId.AsSpan();
+        int schemeEnd = span.IndexOf(SchemeSeparator.AsSpan());
+        if (schemeEnd == -1) return false;
 
-        string seporator = $"://{tableName}/";
+        var afterScheme = span[(schemeEnd + SchemeSeparator.Length)..];
+        int tableEnd = afterScheme.IndexOf('/');
+        if (tableEnd == -1) return false;
+        afterScheme = afterScheme[(tableEnd + 1)..];
 
-        int separatorIndex = span.IndexOf(seporator);
-        if (separatorIndex == -1)
-        {
-            throw new FormatException("Invalid file ID format.");
-        }
+        int tenantEnd = afterScheme.IndexOf('/');
+        if (tenantEnd == -1) return false;
 
-        ReadOnlySpan<char> subParts = span[(separatorIndex + seporator.Length)..]; // +3 for skip "://files/"
+        var tenantSpan = afterScheme[..tenantEnd];
+        if (!int.TryParse(tenantSpan, NumberStyles.None, CultureInfo.InvariantCulture, out tenantId))
+            return false;
 
-        int firstSlashIndex = subParts.IndexOf('/');
-        if (firstSlashIndex == -1)
-        {
-            throw new FormatException("Invalid tenant ID format in file ID.");
-        }
+        var afterTenant = afterScheme[(tenantEnd + 1)..];
+        int timestampEnd = afterTenant.IndexOf('/');
+        if (timestampEnd == -1) return false;
 
-        ReadOnlySpan<char> tenantIdSpan = subParts[..firstSlashIndex];
-        if (!int.TryParse(tenantIdSpan, out int tenantId))
-        {
-            throw new FormatException("Invalid tenant ID format in file ID.");
-        }
+        var timestampSpan = afterTenant[..timestampEnd];
+        if (!long.TryParse(timestampSpan, NumberStyles.None, CultureInfo.InvariantCulture, out timestamp))
+            return false;
 
-        ReadOnlySpan<char> dateSpan = subParts.Slice(firstSlashIndex + 1, DateFormat.Length);
-
-        if (!DateTimeOffset.TryParseExact(
-            dateSpan, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
-        {
-            throw new FormatException("Invalid timestamp format in file ID.");
-        }
-
-        long timestamp = date.ToUnixTimeSeconds();
-        return (tenantId, timestamp);
+        fileName = afterTenant[(timestampEnd + 1)..].ToString();
+        return !string.IsNullOrEmpty(fileName);
     }
 
 
@@ -56,7 +53,7 @@ internal static class FileIdParser
         int tenantId,
         DateTimeOffset date,
         string fileName)
-            => $"{storageType}://{tableName}/{tenantId}/{date.ToString(DateFormat, CultureInfo.InvariantCulture)}/{NormalizeFileName(fileName)}";
+            => $"{storageType}://{tableName}/{tenantId}/{date.ToUnixTimeSeconds()}/{NormalizeFileName(fileName)}";
 
     public static string NormalizeFileName(string fileName) => fileName.TrimStart('\\', '/').Replace('\\', '/');
 

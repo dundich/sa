@@ -1,30 +1,44 @@
-﻿using Sa.HybridFileStorage.Domain;
-using System.Security;
-
-namespace Sa.HybridFileStorage.FileSystem;
+﻿using Sa.HybridFileStorage;
+using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.FileSystem;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 
 internal sealed class FileSystemStorage(
     FileSystemStorageSettings settings,
     TimeProvider? timeProvider = null) : IFileStorage
 {
+    private const string SchemeSeparator = "://";
 
     private readonly string _basePath = Path.TrimEndingDirectorySeparator(
-        Path.GetFullPath(settings.BasePath ?? throw new ArgumentNullException(nameof(settings.BasePath))));
+        Path.GetFullPath(Path.Combine(settings.BasePath, settings.ScopeName)));
 
+    private readonly string _schemePrefix = $"{settings.StorageType}{SchemeSeparator}";
+    private readonly string _storageType = settings.StorageType;
+    private readonly bool _isReadOnly = settings.IsReadOnly;
+    private readonly int _bufferSize = settings.BufferSize;
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public string? ScopeName => settings.ScopeName;
+    public string ScopeName => settings.ScopeName;
+    public string StorageType => _storageType;
+    public bool IsReadOnly => _isReadOnly;
 
-    public string StorageType => settings.StorageType ?? "file";
-
-    public bool IsReadOnly => settings.IsReadOnly;
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void EnsureWritable()
     {
-        if (IsReadOnly)
-        {
-            throw new HybridFileStorageWritableException();
-        }
+        if (_isReadOnly)
+            HybridFileStorageThrowHelper.ThrowWritableException();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool CanProcess(string? fileId)
+    {
+        if (string.IsNullOrEmpty(fileId)) return false;
+
+        if (!fileId.AsSpan().StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal))
+            return false;
+
+        return IsPathWithinBase(GetFullPathFast(fileId));
     }
 
     public async Task<StorageResult> UploadAsync(
@@ -39,36 +53,33 @@ internal sealed class FileSystemStorage(
 
         string filename = PathSanitizer.SanitizeRelativePath(metadata.FileName);
 
-        string relativePath = Path.Combine(metadata.TenantId.ToString(), settings.ScopeName ?? string.Empty, filename);
-
-        var filePath = Path.Combine(_basePath, relativePath);
+        string relativePath = string.Concat(metadata.TenantId.ToString(), "/", filename);
+        string filePath = Path.Combine(_basePath, relativePath);
 
         EnsurePathWithinBase(filePath);
 
         string? directory = Path.GetDirectoryName(filePath);
-        EnsureDirectory(directory);
+        if (!string.IsNullOrEmpty(directory))
+            EnsureDirectory(directory);
 
         await using var fileStreamOutput = new FileStream(filePath, new FileStreamOptions
         {
             Mode = FileMode.Create,
             Access = FileAccess.Write,
             Share = FileShare.None,
-            BufferSize = 4096,
+            BufferSize = _bufferSize,
             Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
-            PreallocationSize = 10 * 1024 * 1024
+            PreallocationSize = 5 * 1024 * 1024
         });
 
-        await fileStream.CopyToAsync(fileStreamOutput, cancellationToken);
-
-        var absolutePath = Path.GetFullPath(filePath);
+        await fileStream.CopyToAsync(fileStreamOutput, cancellationToken).ConfigureAwait(false);
 
         return new StorageResult(
-            FilePathToId(relativePath),
-            absolutePath,
-            StorageType,
+            string.Concat(_schemePrefix, relativePath),
+            Path.GetFullPath(filePath),
+            _storageType,
             _timeProvider.GetUtcNow());
     }
-
 
     public async Task<bool> DownloadAsync(
         string fileId,
@@ -79,6 +90,7 @@ internal sealed class FileSystemStorage(
         ArgumentNullException.ThrowIfNull(loadStream);
 
         string filePath = GetFullPath(fileId);
+        EnsurePathWithinBase(filePath);
 
         try
         {
@@ -87,14 +99,14 @@ internal sealed class FileSystemStorage(
                 Mode = FileMode.Open,
                 Access = FileAccess.Read,
                 Share = FileShare.Read,
-                BufferSize = 81_920,
+                BufferSize = _bufferSize,
                 Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
             });
 
-            await loadStream(fs, cancellationToken);
+            if (fs == null || fs == Stream.Null) return false;
 
+            await loadStream(fs, cancellationToken).ConfigureAwait(false);
             return true;
-
         }
         catch (FileNotFoundException)
         {
@@ -106,16 +118,21 @@ internal sealed class FileSystemStorage(
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private string GetFullPath(string fileId)
     {
         var filePath = FileIdToPath(fileId);
-        if (!Path.IsPathRooted(filePath))
-        {
-            filePath = Path.Combine(_basePath, filePath);
-        }
+        return Path.IsPathRooted(filePath)
+            ? filePath
+            : Path.Combine(_basePath, filePath);
+    }
 
-        EnsurePathWithinBase(filePath);
-        return filePath;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetFullPathFast(string fileId)
+    {
+        var relativePath = FileIdToPath(fileId);
+        return Path.Combine(_basePath, relativePath);
     }
 
     public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
@@ -124,18 +141,16 @@ internal sealed class FileSystemStorage(
         EnsureWritable();
 
         var filePath = GetFullPath(fileId);
+        EnsurePathWithinBase(filePath);
 
         if (!File.Exists(filePath))
-        {
             return false;
-        }
 
         try
         {
             await FileRetryHelper.RetryAsync(
                 () => File.Delete(filePath),
-                cancellationToken: cancellationToken);
-
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             return true;
         }
         catch (IOException)
@@ -144,67 +159,78 @@ internal sealed class FileSystemStorage(
         }
     }
 
-    public bool CanProcess(string fileId)
-    {
-        if (string.IsNullOrWhiteSpace(fileId))
-        {
-            return false;
-        }
-
-        var expectedPrefix = $"{StorageType}://";
-        return fileId.StartsWith(expectedPrefix, StringComparison.Ordinal);
-    }
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void EnsureDirectory(string? dir)
     {
-        if (!Directory.Exists(dir))
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
         {
-            Directory.CreateDirectory(dir!);
+            Directory.CreateDirectory(dir);
         }
     }
 
-    private string FilePathToId(string filePath) => $"{StorageType}://{filePath}";
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string FileIdToPath(string fileId)
     {
-        if (string.IsNullOrWhiteSpace(fileId))
-        {
-            throw new ArgumentException("File ID cannot be null or empty.", nameof(fileId));
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileId, nameof(fileId));
 
         ReadOnlySpan<char> span = fileId.AsSpan();
+        int separatorIndex = span.IndexOf(SchemeSeparator.AsSpan());
 
-        int separatorIndex = span.IndexOf("://");
         if (separatorIndex == -1)
-        {
-            throw new FormatException("Invalid file ID format.");
-        }
+            HybridFileStorageThrowHelper.ThrowInvalidFileIdFormat();
 
-        ReadOnlySpan<char> filePath = span[(separatorIndex + 3)..]; // +3 for skip "://"
-
-        return filePath.ToString();
+        return span[(separatorIndex + SchemeSeparator.Length)..].ToString();
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsPathWithinBase(string path)
+    {
+        return Path.GetFullPath(path)
+            .AsSpan()
+            .StartsWith(_basePath.AsSpan(), StringComparison.Ordinal);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void EnsurePathWithinBase(string path)
     {
-        var fullPath = Path.GetFullPath(path);
-
-        if (!fullPath.StartsWith(_basePath, StringComparison.Ordinal))
+        if (!IsPathWithinBase(path))
         {
-            throw new SecurityException($"""
-                Access denied. Path '{fullPath}' is outside the allowed base directory '{_basePath}'.
-                """);
+            HybridFileStorageThrowHelper.ThrowSecurityException(path, _basePath);
         }
+    }
 
-        if (fullPath.Length > _basePath.Length)
+    public Task<FileMetadata?> GetMetadataAsync(
+        string fileId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!CanProcess(fileId))
+            return Task.FromResult<FileMetadata?>(null);
+
+        // Парсинг формата: "storageType://tenantId/filename"
+        ReadOnlySpan<char> span = fileId.AsSpan();
+        int schemeEnd = span.IndexOf(SchemeSeparator.AsSpan());
+        if (schemeEnd == -1)
+            return Task.FromResult<FileMetadata?>(null);
+
+        var pathPart = span[(schemeEnd + SchemeSeparator.Length)..];
+
+        // Парсинг "tenantId/filename"
+        int slashIndex = pathPart.IndexOf('/');
+        if (slashIndex == -1)
+            return Task.FromResult<FileMetadata?>(null);
+
+        var tenantSpan = pathPart[..slashIndex];
+        var fileNameSpan = pathPart[(slashIndex + 1)..];
+
+        if (!int.TryParse(tenantSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int tenantId))
+            return Task.FromResult<FileMetadata?>(null);
+
+        var metadata = new FileMetadata
         {
-            var nextChar = fullPath[_basePath.Length];
-            if (nextChar != Path.DirectorySeparatorChar && nextChar != Path.AltDirectorySeparatorChar)
-            {
-                throw new SecurityException($"""
-                    Access denied. Path '{fullPath}' is outside the allowed base directory.
-                    """);
-            }
-        }
+            FileName = fileNameSpan.ToString(),
+            TenantId = tenantId
+        };
+
+        return Task.FromResult<FileMetadata?>(metadata);
     }
 }

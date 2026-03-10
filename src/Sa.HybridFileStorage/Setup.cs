@@ -20,7 +20,7 @@ public static class Setup
         this IServiceCollection services,
         InMemoryFileStorageOptions? options = null)
     {
-        options ??= new InMemoryFileStorageOptions();
+        options ??= new(string.Empty);
 
         services.AddSingleton<IFileStorage, InMemoryFileStorage>(
             sp => new InMemoryFileStorage(options, sp.GetService<TimeProvider>()));

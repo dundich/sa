@@ -1,42 +1,52 @@
-# IHybridFileStorage Interface
+# Hybrid File Storage
 
-The IHybridFileStorage interface enhances the resilience and availability of file data in applications that require reliable storage management.
+## IHybridFileStorage Interface
+
+The `IHybridFileStorage` interface enhances the resilience and availability of file data in applications that require reliable storage management.
 
 This interface defines a contract for hybrid file storage systems capable of handling file operations such as uploading, downloading, and deleting files. The integration of multiple storage providers (such as file system, S3, and PostgreSQL) ensures reliable file storage, as the system can automatically switch between different providers in the event that one becomes unavailable.
 
-```csharp
+## Supported Storage Providers
 
-public interface IHybridFileStorage
-{
-    /// <summary>
-    /// storages
-    /// </summary>
-    IReadOnlyCollection<IFileStorage> Storages { get; }
+| Provider | Class | Use Case |
+|----------|-------|----------|
+| **File System** | `FileSystemStorage` | Local development, on-premise deployments |
+| **S3 Compatible** | `S3FileStorage` | Cloud storage (AWS S3, MinIO, etc.) |
+| **PostgreSQL** | `PostgresFileStorage` | Database-embedded files, transactional consistency |
 
-    /// <summary>
-    /// Deletes the file associated with the specified file ID asynchronously.
-    /// </summary>
-    Task<bool> DeleteAsync(string fileId, string? scopeName, CancellationToken cancellationToken = default);
+## Key Features
 
-    /// <summary>
-    /// Downloads the file associated with the specified file ID asynchronously.
-    /// </summary>
-    Task<bool> DownloadAsync(
-        string fileId,
-        string? scopeName,
-        Func<Stream, CancellationToken, Task> loadStream,
-        CancellationToken cancellationToken = default);
+- ✅ **Unified API** — Single interface for all storage providers
+- ✅ **Scope-based isolation** — Multi-tenant support via scopes
+- ✅ **Read-only mode** — Protect storage from accidental modifications
+- ✅ **Streaming support** — Memory-efficient file transfers
+- ✅ **Native AOT ready** — Full compatibility with .NET 10 Native AOT
+- ✅ **Batch operations** — Efficient bulk file processing
 
-    /// <summary>
-    /// Uploads a file asynchronously using the provided input and file stream.
-    /// </summary>
-    Task<StorageResult> UploadAsync(
-        UploadFileInput input,
-        string? scopeName,
-        Stream fileStream,
-        CancellationToken cancellationToken = default);
-}
+## Batch Operations
+
+The `HybridFileStorageExtensions` class provides high-level methods for bulk file operations with built-in parallelism, error handling, and progress reporting.
+
+
+## File ID Format
+
+All files are identified using a unified URI-like format:
+
 ```
+{storageType}://{scope}/{tenantId}/{fileName}
+```
+
+**Examples:**
+- `s3://share/42/document.pdf`
+- `fs://root/100/report.xlsx`
+- `pg://files/7/1773210911/some/data.bin`
+
+## Installation
+
+```bash
+dotnet add package Sa.HybridFileStorage
+```
+
 
 ## Usage Example
 

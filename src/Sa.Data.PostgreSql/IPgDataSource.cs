@@ -18,6 +18,9 @@ public interface IPgDataSource
 
     Task<object?> ExecuteScalar(string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default);
 
+    async Task<T> ExecuteScalar<T>(string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
+        => ((T)(await ExecuteScalar(sql, initCommand, cancellationToken))!);
+
     // ExecuteReader
     Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default);
 

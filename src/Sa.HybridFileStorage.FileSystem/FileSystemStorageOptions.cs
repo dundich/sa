@@ -6,7 +6,7 @@ public sealed record FileSystemStorageOptions
 {
     [Required]
     [StringLength(10)]
-    public string StorageType { get; set; } = "file";
+    public string StorageType { get; set; } = FileSystemStorageSettings.DefaultStorageType;
     [Required]
     [StringLength(255)]
     public string BasePath { get; set; } = string.Empty;

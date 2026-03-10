@@ -33,7 +33,8 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         Assert.NotEmpty(result.FileId);
         Assert.StartsWith("pg://files/1/", result.FileId);
 
-        object? v = await fixture.DataSource.ExecuteScalar("SELECT COUNT(*) FROM public.files WHERE id = @id", cmd => cmd.Parameters.Add(new("id", result.FileId)), fixture.CancellationToken);
+        object? v = await fixture.DataSource.ExecuteScalar("SELECT COUNT(*) FROM public.files WHERE id = @id",
+            cmd => cmd.Parameters.Add(new("id", result.FileId)), fixture.CancellationToken);
         var count = (long)v!;
 
         Assert.Equal(1, count);
@@ -45,7 +46,8 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
     {
         // Arrange
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
-        var upload = await Sub.UploadAsync(new UploadFileInput { FileName = "test17.txt", TenantId = 17 }, fileContent, CancellationToken.None);
+        var upload = await Sub.UploadAsync(
+            new UploadFileInput { FileName = "test17.txt", TenantId = 17 }, fileContent, CancellationToken.None);
 
         // Act
         var result = await Sub.DeleteAsync(upload.FileId, CancellationToken.None);
@@ -53,7 +55,9 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         // Assert
         Assert.True(result);
 
-        object? v = await fixture.DataSource.ExecuteScalar("SELECT COUNT(*) FROM public.files WHERE id = @id", cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
+        object? v = await fixture.DataSource
+            .ExecuteScalar("SELECT COUNT(*) FROM public.files WHERE id = @id",
+                cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
         var count = (long)v!;
 
         Assert.Equal(0, count);
@@ -71,12 +75,50 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         string? actual = null;
 
         // Act
-        var result = await Sub.DownloadAsync(upload.FileId, async (s, t) => actual = await StreamToStringAsync(s), CancellationToken.None);
+        var result = await Sub.DownloadAsync(upload.FileId,
+            async (s, t) => actual = await StreamToStringAsync(s), CancellationToken.None);
 
         // Assert
         Assert.True(result);
 
         Assert.Equal(DataContent, actual);
+    }
+
+
+    [Fact]
+    public async Task GetMetadataAsync()
+    {
+        var metadata = await Sub.GetMetadataAsync("pg://files/7/1773210911/some/data.bin", CancellationToken.None);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(7, metadata.TenantId);
+        Assert.Equal("some/data.bin", metadata.FileName);
+    }
+
+
+    [Fact]
+    public async Task Upload2FileAsync()
+    {
+        Console.WriteLine(fixture.ConnectionString);
+
+        // Arrange
+        var metadata = new UploadFileInput { FileName = "test1.txt", TenantId = 1 };
+        using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
+
+        var t1 = Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
+        var t2 = Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
+
+        await Task.WhenAll([t1, t2]);
+
+        var fileId1 = (await t1).FileId;
+        var fileId2 = (await t2).FileId;
+
+        Assert.Equal(fileId1, fileId2);
+
+        long count = await fixture.DataSource.ExecuteScalar<long>("SELECT COUNT(*) FROM public.files WHERE id = @id",
+            cmd => cmd.Parameters.Add(new("id", fileId1)), fixture.CancellationToken);
+
+        Assert.Equal(1, count);
     }
 
 

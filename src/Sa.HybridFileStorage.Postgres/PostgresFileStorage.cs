@@ -3,6 +3,7 @@ using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.HybridFileStorage.Domain;
 using Sa.Partitional.PostgreSql;
+using System.Runtime.CompilerServices;
 
 namespace Sa.HybridFileStorage.Postgres;
 
@@ -11,12 +12,42 @@ internal sealed class PostgresFileStorage(
     IPartitionManager partManager,
     RecyclableMemoryStreamManager streamManager,
     StorageOptions options,
-    string? scopeName,
+    string scopeName,
     TimeProvider? timeProvider = null) : IFileStorage
 {
-    private readonly string _partName = Sanitize(scopeName ?? "root");
 
-    private readonly string _qualifiedTableName = $"{options.SchemaName}.\"{Sanitize(options.TableName)}\"";
+    private const string InsertSql =
+        """
+        INSERT INTO {0} (id, name, file_ext, data, size, tenant_id, scope_name, created_at) 
+        VALUES (@id, @name, @file_ext, @data, @size, @tenant_id, @scope_name, @created_at)
+        ON CONFLICT (id, tenant_id, scope_name, created_at) DO UPDATE SET
+           data = EXCLUDED.data,
+           size = EXCLUDED.size,
+           created_at = EXCLUDED.created_at
+        """;
+
+    private const string DeleteSql =
+        """
+        DELETE FROM {0}
+        WHERE tenant_id = @tenant_id AND scope_name = @scope_name
+          AND created_at >= @timestamp AND id = @id
+        """;
+
+    private const string SelectSql =
+        """
+        SELECT data FROM {0}
+        WHERE tenant_id = @tenant_id AND scope_name = @scope_name
+          AND created_at >= @timestamp AND id = @id
+        """;
+
+    private readonly string _partName
+        = string.IsNullOrWhiteSpace(scopeName) ? "share" : Sanitize(scopeName);
+
+    private readonly string _qualifiedTableName
+        = $"{options.SchemaName}.\"{Sanitize(options.TableName)}\"";
+
+    private readonly string _schemePrefix
+        = $"{options.StorageType}{FileIdParser.SchemeSeparator}{options.TableName}/";
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -24,15 +55,21 @@ internal sealed class PostgresFileStorage(
 
     public bool IsReadOnly => options.IsReadOnly;
 
-    public string? ScopeName => scopeName;
+    public string ScopeName => scopeName;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void EnsureWritable()
     {
         if (IsReadOnly)
         {
-            throw new HybridFileStorageWritableException();
+            HybridFileStorageThrowHelper.ThrowWritableException();
         }
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool CanProcess(string? fileId) =>
+        !string.IsNullOrEmpty(fileId) &&
+        fileId.AsSpan().StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal);
 
     public async Task<StorageResult> UploadAsync(
         UploadFileInput metadata,
@@ -41,83 +78,80 @@ internal sealed class PostgresFileStorage(
     {
         EnsureWritable();
 
-        var now = _timeProvider.GetUtcNow();
+        DateTimeOffset createdAtDay = _timeProvider.GetUtcNow().Date;
+        long createdAt = createdAtDay.ToUnixTimeSeconds();
 
-        await partManager.EnsureParts(_qualifiedTableName, now, [metadata.TenantId, _partName], cancellationToken);
 
+        await partManager.EnsureParts(
+            _qualifiedTableName,
+            createdAtDay,
+            [metadata.TenantId, _partName],
+            cancellationToken);
 
         string fileId = FileIdParser.FormatToFileId(
-            StorageType, options.TableName, metadata.TenantId, now, metadata.FileName);
+            StorageType, options.TableName, metadata.TenantId, createdAtDay, metadata.FileName);
 
         string fileExtension = FileIdParser.GetFileExtension(metadata.FileName);
 
-        long createdAt = now.ToUnixTimeSeconds();
 
-
-        if (fileStream is not MemoryStream memoryStream)
+        if (fileStream is not MemoryStream ms)
         {
-            memoryStream = streamManager.GetStream();
-            await fileStream.CopyToAsync(memoryStream, cancellationToken);
+            ms = streamManager.GetStream();
+            await fileStream.CopyToAsync(ms, cancellationToken);
         }
 
         try
         {
-            if (memoryStream.CanSeek)
+            if (ms.CanSeek)
             {
-                memoryStream.Position = 0;
+                ms.Position = 0;
             }
 
-            await dataSource.ExecuteNonQuery($"""
-INSERT INTO {_qualifiedTableName} (id, name, file_ext, data, size, tenant_id, scope_name, created_at) 
-VALUES (@id, @name, @file_ext, @data, @size, @tenant_id, @scope_name, @created_at)
-ON CONFLICT DO NOTHING
-"""
-            ,
+            var sql = string.Format(InsertSql, _qualifiedTableName);
+
+            await dataSource.ExecuteNonQuery(sql,
             [
                   new NpgsqlParameter<string>("id", fileId)
                 , new NpgsqlParameter<string>("name", metadata.FileName)
                 , new NpgsqlParameter<string>("file_ext", fileExtension)
                 , new NpgsqlParameter("data", fileStream)
-                , new NpgsqlParameter<int>("size", (int)memoryStream.Length)
+                , new NpgsqlParameter<int>("size", (int)ms.Length)
                 , new NpgsqlParameter<int>("tenant_id", metadata.TenantId)
                 , new NpgsqlParameter<string>("scope_name", _partName)
                 , new NpgsqlParameter<long>("created_at", createdAt)
-            ]
-            , cancellationToken);
+            ], cancellationToken);
         }
         finally
         {
-            if (memoryStream != fileStream)
+            if (ms != fileStream)
             {
-                await memoryStream.DisposeAsync();
+                await ms.DisposeAsync();
             }
         }
 
-        return new StorageResult(fileId, fileId, StorageType, now);
+        return new StorageResult(fileId, fileId, StorageType, createdAtDay);
     }
-
-    public bool CanProcess(string fileId) => fileId.StartsWith($"{StorageType}://{options.TableName}/");
 
     public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
 
-        (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId, options.TableName);
-        int rowsAffected = await dataSource.ExecuteNonQuery($"""
-            DELETE FROM {_qualifiedTableName}
-            WHERE
-                tenant_id = @tenant_id AND scope_name = @scope_name
-                AND created_at >= @timestamp
-                AND id = @id
-            """
-        ,
+        if (!FileIdParser.TryParseFileIdWithFilename(fileId, out int tenantId, out long timestamp, out _))
+        {
+            return false;
+        }
+
+        var sql = string.Format(DeleteSql, _qualifiedTableName);
+
+
+        int rowsAffected = await dataSource.ExecuteNonQuery(sql,
         [
             new NpgsqlParameter<int>("tenant_id", tenantId),
             new NpgsqlParameter<string>("scope_name", _partName),
             new NpgsqlParameter<long>("timestamp", timestamp),
             new NpgsqlParameter<string>("id", fileId)
-        ]
-        , cancellationToken);
+        ], cancellationToken);
+
         return rowsAffected > 0;
     }
 
@@ -126,45 +160,62 @@ ON CONFLICT DO NOTHING
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken)
     {
-        (int tenantId, long timestamp) = FileIdParser.ParseFromFileId(fileId, options.TableName);
+        if (!FileIdParser.TryParseFileIdWithFilename(fileId, out int tenantId, out long timestamp, out _))
+        {
+            return false;
+        }
 
-        int rowsAffected = await dataSource.ExecuteReader(
-            $"""
-            SELECT data FROM {_qualifiedTableName}
-            WHERE
-                tenant_id = @tenant_id AND scope_name = @scope_name
-                AND created_at >= @timestamp
-                AND id = @id
-            """
-        , async (reader, i) =>
+        var sql = string.Format(SelectSql, _qualifiedTableName);
+
+        int rowsAffected = await dataSource.ExecuteReader(sql, async (reader, i) =>
         {
             using var fs = await reader.GetStreamAsync(0, cancellationToken);
             await loadStream(fs, cancellationToken);
-        }
-        ,
+        },
         [
             new NpgsqlParameter<int>("tenant_id", tenantId),
             new NpgsqlParameter<string>("scope_name", _partName),
             new NpgsqlParameter<long>("timestamp", timestamp),
             new NpgsqlParameter<string>("id", fileId)
-        ]
-        , cancellationToken);
-
+        ], cancellationToken);
 
         return rowsAffected > 0;
     }
 
-
-    private static string Sanitize(string tableName)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string Sanitize(ReadOnlySpan<char> input)
     {
-        var result = new char[tableName.Length];
+        if (input.IsEmpty) return string.Empty;
 
-        for (int i = 0; i < tableName.Length; i++)
+        Span<char> result = stackalloc char[input.Length];
+
+        for (int i = 0; i < input.Length; i++)
         {
-            char c = tableName[i];
+            char c = input[i];
             result[i] = char.IsLetter(c) || (i > 0 && char.IsDigit(c)) || c == '_' ? c : '_';
         }
 
         return new string(result);
+    }
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string Sanitize(string input) => Sanitize(input.AsSpan());
+
+    public Task<FileMetadata?> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        if (!CanProcess(fileId))
+            return Task.FromResult<FileMetadata?>(null);
+
+        if (!FileIdParser.TryParseFileIdWithFilename(fileId, out var tenantId, out _, out var fileName))
+            return Task.FromResult<FileMetadata?>(null);
+
+        var metadata = new FileMetadata
+        {
+            FileName = fileName,
+            TenantId = tenantId
+        };
+
+        return Task.FromResult<FileMetadata?>(metadata);
     }
 }

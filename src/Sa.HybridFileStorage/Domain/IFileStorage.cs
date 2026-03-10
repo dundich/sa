@@ -8,7 +8,7 @@ public interface IFileStorage
     /// <summary>
     /// scope domain
     /// </summary>
-    string? ScopeName { get; }
+    string ScopeName { get; }
 
     /// <summary>
     /// Gets the type of the storage.
@@ -39,7 +39,7 @@ public interface IFileStorage
     /// <summary>
     /// Downloads a file from the storage by its ID.
     /// </summary>
-    /// <param name="fileId">File ID.</param>
+    /// <param name="fileId">pg://files/1/1773210911/test.txt</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The file stream.</returns>
     Task<bool> DownloadAsync(
@@ -54,4 +54,9 @@ public interface IFileStorage
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>True if the file was successfully deleted; otherwise, false.</returns>
     Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken);
+
+
+    Task<FileMetadata?> GetMetadataAsync(
+        string fileId,
+        CancellationToken cancellationToken = default); 
 }

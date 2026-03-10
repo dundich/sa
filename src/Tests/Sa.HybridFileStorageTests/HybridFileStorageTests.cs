@@ -66,7 +66,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "test.bin", TenantId = 2 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(input, null, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync(input, string.Empty, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.NotEmpty(result.FileId);
@@ -77,7 +77,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var isSame = await EnsureFileSame(result.FileId, fileContent);
         Assert.True(isSame);
 
-        var isDeleted = await Storage.DeleteAsync(result.FileId, null, fixture.CancellationToken);
+        var isDeleted = await Storage.DeleteAsync(result.FileId, string.Empty, fixture.CancellationToken);
 
         Assert.True(isDeleted);
 
@@ -92,7 +92,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "some.bin", TenantId = 1 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(input, null, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync(input, string.Empty, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal(InMemoryFileStorage.DefaultStorageType, result.StorageType);
@@ -100,7 +100,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var isSame = await EnsureFileSame(result.FileId, fileContent);
         Assert.True(isSame);
 
-        var isDeleted = await Storage.DeleteAsync(result.FileId, null, fixture.CancellationToken);
+        var isDeleted = await Storage.DeleteAsync(result.FileId, string.Empty, fixture.CancellationToken);
         Assert.True(isDeleted);
     }
 
@@ -115,7 +115,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
         await Assert.ThrowsAsync<HybridFileStorageNoAvailableException>(() =>
            sp.GetRequiredService<IHybridFileStorage>().UploadAsync(
-               new UploadFileInput { FileName = "", TenantId = 1 }, null, fileContent, fixture.CancellationToken));
+               new UploadFileInput { FileName = "", TenantId = 1 }, string.Empty, fileContent, fixture.CancellationToken));
     }
 
 
@@ -125,7 +125,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         ServiceCollection services = new();
         services.AddSaHybridFileStorage(b
             => b.ConfigureStorage((_, c)
-                => c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions(IsReadOnly: true)))));
+                => c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions(string.Empty, IsReadOnly: true)))));
 
         using var sp = services.BuildServiceProvider();
 
@@ -134,7 +134,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         await Assert.ThrowsAsync<HybridFileStorageWritableException>(() =>
            sp.GetRequiredService<IHybridFileStorage>().UploadAsync(
                new UploadFileInput { FileName = "", TenantId = 1 },
-               null,
+               string.Empty,
                fileContent,
                fixture.CancellationToken));
     }
@@ -147,7 +147,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         using MemoryStream memoryStream = new();
 
         var isDownloaded = await Storage.DownloadAsync(fileName
-            , scopeName: null
+            , scopeName: string.Empty
             , (stream, ct) => stream.CopyToAsync(memoryStream, ct)
             , fixture.CancellationToken);
 

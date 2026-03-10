@@ -8,7 +8,7 @@ public sealed class InMemoryFileStorage(
     InMemoryFileStorageOptions? options = null,
     TimeProvider? timeProvider = null) : IFileStorage
 {
-    private readonly InMemoryFileStorageOptions _options = options ?? new ();
+    private readonly InMemoryFileStorageOptions _options = options ?? new (string.Empty);
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -17,7 +17,7 @@ public sealed class InMemoryFileStorage(
     private readonly ConcurrentDictionary<string, byte[]> _storage = [];
 
 
-    public string? ScopeName => _options.ScopeName;
+    public string ScopeName => _options.ScopeName;
 
     public string StorageType => DefaultStorageType;
 
@@ -71,4 +71,9 @@ public sealed class InMemoryFileStorage(
     }
 
     public bool CanProcess(string fileId) => fileId.StartsWith(StorageType);
+
+    public Task<FileMetadata?> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
 }

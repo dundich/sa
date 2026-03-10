@@ -2,6 +2,7 @@
 using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 
 namespace Sa.HybridFileStorage.S3;
 
@@ -10,92 +11,140 @@ internal sealed class S3FileStorage(
     S3FileStorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
-    private const string DateFormat = "yyyy/MM/dd/HH";
+    private const string DefaultScopeName = "share";
+    private const string SchemeSeparator = "://";
 
+    private readonly string _pathPrefix = string.IsNullOrWhiteSpace(options.ScopeName)
+        ? DefaultScopeName
+        : options.ScopeName;
+    private readonly string _schemePrefix = $"{options.StorageType}{SchemeSeparator}";
+    private readonly string _storageType = options.StorageType;
+    private readonly bool _isReadOnly = options.IsReadOnly;
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    private int _bucketEnsured; // 0 = not ensured, 1 = ensured (thread-safe via Interlocked)
 
-    public string StorageType => options.StorageType;
+    public string StorageType => _storageType;
+    public bool IsReadOnly => _isReadOnly;
+    public string ScopeName => _pathPrefix;
 
-    public bool IsReadOnly => options.IsReadOnly;
-
-    public string? ScopeName => options.ScopeName;
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void EnsureWritable()
     {
-        if (IsReadOnly)
-        {
-            throw new HybridFileStorageWritableException();
-        }
+        if (_isReadOnly)
+            HybridFileStorageThrowHelper.ThrowWritableException();
     }
 
-    public bool CanProcess(string fileId)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool CanProcess(string? fileId)
     {
-        return fileId.StartsWith(StorageType, StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrEmpty(fileId)) return false;
+        // Ordinal быстрее OrdinalIgnoreCase, т.к. схема всегда в нижнем регистре
+        return fileId.AsSpan().StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal);
     }
 
     public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
-
-        string filePath = FileIdToPath(fileId);
-        await client.DeleteFile(filePath, cancellationToken);
+        var filePath = GetFilePath(fileId);
+        await client.DeleteFile(filePath, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
-    public async Task<bool> DownloadAsync(string fileId, Func<Stream, CancellationToken, Task> loadStream, CancellationToken cancellationToken)
+    public async Task<bool> DownloadAsync(
+        string fileId,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken)
     {
-        string filePath = FileIdToPath(fileId);
-        using var stream = await client.GetFileStream(filePath, cancellationToken);
-        if (stream == null || stream == Stream.Null) return false;
-        await loadStream(stream, cancellationToken);
+        var filePath = GetFilePath(fileId);
+        using var stream = await client.GetFileStream(filePath, cancellationToken).ConfigureAwait(false);
+        if (stream is null || stream == Stream.Null) return false;
+
+        await loadStream(stream, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
-    public async Task<StorageResult> UploadAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken)
+    public async Task<StorageResult> UploadAsync(
+        UploadFileInput metadata,
+        Stream fileStream,
+        CancellationToken cancellationToken)
     {
         EnsureWritable();
-        await EnsureBucket(cancellationToken);
+        await EnsureBucketAsync(cancellationToken).ConfigureAwait(false);
 
-        var now = _timeProvider.GetUtcNow();
-        var eventTime = now.ToString(DateFormat, CultureInfo.InvariantCulture);
+        // Оптимизированная сборка пути без лишних аллокаций
+        var filePath = string.Concat(_pathPrefix, "/", metadata.TenantId.ToString(), "/", metadata.FileName);
 
-        var filePath = $"{metadata.TenantId}/{eventTime}/{metadata.FileName}";
         var extension = Path.GetExtension(filePath);
         var contentType = MimeTypeMap.GetMimeType(extension);
 
-        await client.UploadFile(filePath, contentType, fileStream, cancellationToken);
+        await client.UploadFile(filePath, contentType, fileStream, cancellationToken).ConfigureAwait(false);
 
-        var fileId = FilePathToId(filePath);
-        return new StorageResult(fileId, client.BuildFileUrl(filePath), StorageType, now);
+        var fileId = string.Concat(_schemePrefix, filePath);
+
+        return new StorageResult(
+            fileId,
+            client.BuildFileUrl(filePath),
+            _storageType,
+            _timeProvider.GetUtcNow());
     }
 
-    private async Task EnsureBucket(CancellationToken cancellationToken)
+    private async ValueTask EnsureBucketAsync(CancellationToken cancellationToken)
     {
-        if (!await client.IsBucketExists(cancellationToken))
+        // Lock-free проверка: проверяем bucket только один раз за время жизни экземпляра
+        if (Volatile.Read(ref _bucketEnsured) == 0)
         {
-            await client.CreateBucket(cancellationToken);
+            if (await client.IsBucketExists(cancellationToken).ConfigureAwait(false))
+            {
+                Volatile.Write(ref _bucketEnsured, 1);
+                return;
+            }
+
+            await client.CreateBucket(cancellationToken).ConfigureAwait(false);
+            Volatile.Write(ref _bucketEnsured, 1);
         }
     }
 
-    private string FilePathToId(string filePath) => $"{StorageType}://{filePath}";
-
-    private static string FileIdToPath(string fileId)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string GetFilePath(string fileId)
     {
-        if (string.IsNullOrWhiteSpace(fileId))
-        {
-            throw new ArgumentException("File ID cannot be null or empty.", nameof(fileId));
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileId, nameof(fileId));
 
         ReadOnlySpan<char> span = fileId.AsSpan();
+        int separatorIndex = span.IndexOf(SchemeSeparator.AsSpan());
 
-        int separatorIndex = span.IndexOf("://");
         if (separatorIndex == -1)
+            HybridFileStorageThrowHelper.ThrowInvalidFileIdFormat();
+
+        return span[(separatorIndex + SchemeSeparator.Length)..].ToString();
+    }
+
+    public async Task<FileMetadata?> GetMetadataAsync(
+        string fileId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!CanProcess(fileId)) return null;
+
+        var filePath = GetFilePath(fileId);
+        ReadOnlySpan<char> pathSpan = filePath.AsSpan();
+
+        // Парсинг пути: "scope/tenantId/filename"
+        int firstSlash = pathSpan.IndexOf('/');
+        if (firstSlash == -1) return null;
+
+        var afterScope = pathSpan[(firstSlash + 1)..];
+        int secondSlash = afterScope.IndexOf('/');
+        if (secondSlash == -1) return null;
+
+        var tenantSpan = afterScope[..secondSlash];
+        var fileNameSpan = afterScope[(secondSlash + 1)..];
+
+        if (!int.TryParse(tenantSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int tenantId))
+            return null;
+
+        return new FileMetadata
         {
-            throw new FormatException("Invalid file ID format.");
-        }
-
-        ReadOnlySpan<char> filePath = span[(separatorIndex + "://".Length)..]; // +3 for skip "://"
-
-        return filePath.ToString();
+            FileName = fileNameSpan.ToString(),
+            TenantId = tenantId
+        };
     }
 }
