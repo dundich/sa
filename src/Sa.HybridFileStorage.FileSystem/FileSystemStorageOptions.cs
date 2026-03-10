@@ -1,9 +1,15 @@
-﻿namespace Sa.HybridFileStorage.FileSystem;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Sa.HybridFileStorage.FileSystem;
 
 public sealed record FileSystemStorageOptions
 {
-    public string StorageType { get; init; } = "file";
-    public required string BasePath { get; init; }
-    public bool IsReadOnly { get; init; } = false;
-    public string? ScopeName { get; init; } = null;
+    [Required]
+    [StringLength(10)]
+    public string StorageType { get; set; } = "file";
+    [Required]
+    [StringLength(255)]
+    public string BasePath { get; set; } = string.Empty;
+    public bool IsReadOnly { get; set; } = false;
+    public string? ScopeName { get; set; }
 }

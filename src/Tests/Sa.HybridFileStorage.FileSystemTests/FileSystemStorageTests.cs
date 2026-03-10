@@ -7,10 +7,10 @@ namespace Sa.HybridFileStorage.FileSystemTests;
 public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
     : IClassFixture<FileSystemStorageTests.Fixture>
 {
-    public sealed class Fixture : SaFixture<IFileStorage, FileSystemStorageOptions>
+    public sealed class Fixture : SaFixture<IFileStorage, FileSystemStorageSettings>
     {
         public Fixture()
-            : base(new FileSystemStorageOptions
+            : base(new FileSystemStorageSettings
             {
                 BasePath = "mytemp"
             })

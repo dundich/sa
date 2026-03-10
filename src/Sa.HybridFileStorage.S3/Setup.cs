@@ -19,8 +19,10 @@ public static class Setup
 
         services.AddSaS3BucketClient(settings);
 
-        services.AddSingleton<IFileStorage, S3FileStorage>(sp
-            => new S3FileStorage(sp.GetRequiredService<IS3BucketClient>(), options, sp.GetService<TimeProvider>()));
+        services.AddSingleton<IFileStorage, S3FileStorage>(sp => new S3FileStorage(
+            sp.GetRequiredService<IS3BucketClient>(),
+            options,
+            sp.GetService<TimeProvider>()));
 
         return services;
     }

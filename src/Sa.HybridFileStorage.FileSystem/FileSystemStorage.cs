@@ -4,20 +4,20 @@ using System.Security;
 namespace Sa.HybridFileStorage.FileSystem;
 
 internal sealed class FileSystemStorage(
-    FileSystemStorageOptions options,
+    FileSystemStorageSettings settings,
     TimeProvider? timeProvider = null) : IFileStorage
 {
 
     private readonly string _basePath = Path.TrimEndingDirectorySeparator(
-        Path.GetFullPath(options.BasePath ?? throw new ArgumentNullException(nameof(options.BasePath))));
+        Path.GetFullPath(settings.BasePath ?? throw new ArgumentNullException(nameof(settings.BasePath))));
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public string? ScopeName => options.ScopeName;
+    public string? ScopeName => settings.ScopeName;
 
-    public string StorageType { get; } = options.StorageType ?? "file";
+    public string StorageType => settings.StorageType ?? "file";
 
-    public bool IsReadOnly { get; } = options.IsReadOnly;
+    public bool IsReadOnly => settings.IsReadOnly;
 
     private void EnsureWritable()
     {
@@ -37,9 +37,11 @@ internal sealed class FileSystemStorage(
         ArgumentNullException.ThrowIfNull(fileStream);
         EnsureWritable();
 
-        string relativePath = PathSanitizer.SanitizeRelativePath(metadata.FileName);
+        string filename = PathSanitizer.SanitizeRelativePath(metadata.FileName);
 
-        string filePath = Path.Combine(_basePath, metadata.TenantId.ToString(), relativePath);
+        string relativePath = Path.Combine(metadata.TenantId.ToString(), settings.ScopeName ?? string.Empty, filename);
+
+        var filePath = Path.Combine(_basePath, relativePath);
 
         EnsurePathWithinBase(filePath);
 
@@ -61,7 +63,7 @@ internal sealed class FileSystemStorage(
         var absolutePath = Path.GetFullPath(filePath);
 
         return new StorageResult(
-            FilePathToId(filePath),
+            FilePathToId(relativePath),
             absolutePath,
             StorageType,
             _timeProvider.GetUtcNow());
@@ -76,11 +78,7 @@ internal sealed class FileSystemStorage(
         ArgumentNullException.ThrowIfNull(fileId);
         ArgumentNullException.ThrowIfNull(loadStream);
 
-
-        var filePath = FileIdToPath(fileId);
-
-        EnsurePathWithinBase(filePath);
-
+        string filePath = GetFullPath(fileId);
 
         try
         {
@@ -108,13 +106,24 @@ internal sealed class FileSystemStorage(
         }
     }
 
+    private string GetFullPath(string fileId)
+    {
+        var filePath = FileIdToPath(fileId);
+        if (!Path.IsPathRooted(filePath))
+        {
+            filePath = Path.Combine(_basePath, filePath);
+        }
+
+        EnsurePathWithinBase(filePath);
+        return filePath;
+    }
+
     public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fileId);
         EnsureWritable();
 
-        var filePath = FileIdToPath(fileId);
-        EnsurePathWithinBase(filePath);
+        var filePath = GetFullPath(fileId);
 
         if (!File.Exists(filePath))
         {
@@ -187,7 +196,6 @@ internal sealed class FileSystemStorage(
                 """);
         }
 
-        // Edge-case защита: basePath="C:/Data", path="C:/DataOther"
         if (fullPath.Length > _basePath.Length)
         {
             var nextChar = fullPath[_basePath.Length];
