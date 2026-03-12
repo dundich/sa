@@ -20,7 +20,7 @@ public class AsyncWavReaderTests
 
 
     [Theory]
-    [InlineData("./data/psmS16Le.wav")]
+    [InlineData("./data/pсmS16Le.wav")]
     [InlineData("./data/12345.wav")]
     public async Task ReadHeaderAsync_ValidWavFile_ReturnsValidHeader(string filePath)
     {
@@ -37,7 +37,7 @@ public class AsyncWavReaderTests
 
     [Theory]
     [InlineData("./data/ffout.wav")]
-    [InlineData("./data/psmS16Le.wav")]
+    [InlineData("./data/pсmS16Le.wav")]
     [InlineData("./data/12345.wav")]
     public async Task GetLengthSecondsAsync_ValidWav_ReturnsCorrectDuration(string filePath)
     {
@@ -64,11 +64,13 @@ public class AsyncWavReaderTests
         var pipe = OpenSharedWavFile();
         var reader = new AsyncWavReader(pipe);
 
-        await foreach (var (_, sample, _) in reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, sample, _) in
+            reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.True(sample.Length > 0);
-            return;
         }
+
+        Assert.True(true);
     }
 
 
@@ -78,7 +80,8 @@ public class AsyncWavReaderTests
         var pipe = OpenSharedWavFile();
         var reader = new AsyncWavReader(pipe);
 
-        await foreach (var (_, sample, _) in reader.ReadNormalizedDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, sample, _) in
+            reader.ReadNormalizedDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.InRange(sample, -1.0, 1.0);
             return;
@@ -91,7 +94,8 @@ public class AsyncWavReaderTests
         var pipe = OpenSharedWavFile();
         var reader = new AsyncWavReader(pipe);
 
-        await foreach (var (_, samples, _) in reader.ReadStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, samples, _) in
+            reader.ReadStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.True(samples.Length > 0);
             return;
@@ -134,7 +138,8 @@ public class AsyncWavReaderTests
         var mockStream = MockWavGenerator.CreateTestPcm16Wav(seconds: 1);
         var reader = new AsyncWavReader(mockStream);
 
-        await foreach (var (_, samples, _) in reader.ReadNormalizedDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, samples, _)
+            in reader.ReadNormalizedDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.InRange(samples, -1.0, 1.0);
         }
@@ -147,7 +152,8 @@ public class AsyncWavReaderTests
         var reader = new AsyncWavReader(mockStream);
 
         int chunks = 0;
-        await foreach (var (_, samples, _) in reader.ReadStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, samples, _)
+            in reader.ReadStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.True(samples.Length > 0);
             chunks++;
@@ -164,7 +170,8 @@ public class AsyncWavReaderTests
         var reader = new AsyncWavReader(pipe);
 
         int chunksCount = 0;
-        await foreach (var (channelId, samples, _) in reader.ReadStreamableChunksAsync(bufferSize: 512, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (channelId, samples, _)
+            in reader.ReadStreamableChunksAsync(bufferSize: 512, cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.InRange(channelId, 0, 1);
             Assert.True(samples.Length > 0);
@@ -182,7 +189,8 @@ public class AsyncWavReaderTests
 
         List<int> channelIds = [];
 
-        await foreach (var (channelId, _, _) in reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (channelId, _, _)
+            in reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
         {
             if (!channelIds.Contains(channelId)) channelIds.Add(channelId);
         }
@@ -204,7 +212,8 @@ public class AsyncWavReaderTests
         int count = 0;
         bool eof = false;
 
-        await foreach (var (_, _, isEof) in reader.ReadNormalizedDoubleSamplesAsync(cutFrom, cutTo, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, _, isEof)
+            in reader.ReadNormalizedDoubleSamplesAsync(cutFrom, cutTo, cancellationToken: TestContext.Current.CancellationToken))
         {
             count++;
             eof = isEof;
@@ -221,7 +230,8 @@ public class AsyncWavReaderTests
         var reader = new AsyncWavReader(OpenSharedWavFile());
 
         bool eof = false;
-        await foreach (var (_, _, isEof) in reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, _, isEof)
+            in reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
         {
             eof = isEof;
         }
@@ -235,7 +245,8 @@ public class AsyncWavReaderTests
     {
         var reader = new AsyncWavReader(OpenSharedWavFile());
 
-        await foreach (var (_, sample, _) in reader.ConvertNormalizedDoubleAsync(AudioEncoding.Pcm16BitSigned, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var (_, sample, _)
+            in reader.ConvertNormalizedDoubleAsync(AudioEncoding.Pcm16BitSigned, cancellationToken: TestContext.Current.CancellationToken))
         {
             Assert.Equal(2, sample.Length); // 16-bit PCM
         }

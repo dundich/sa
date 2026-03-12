@@ -9,37 +9,54 @@ namespace Sa.Media;
 /// </summary>
 public sealed class AsyncWavReader(PipeReader reader)
 {
+    private readonly Lock _headerLock = new();
 
-    private readonly Lazy<Task<WavHeader>> _header = new(WavHeaderReader.ReadHeaderAsync(reader));
+    private Task<WavHeader>? _headerTask;
 
-    public Task<WavHeader> GetHeaderAsync() => _header.Value;
+    public Task<WavHeader> GetHeaderAsync()
+    {
+        if (_headerTask is null)
+        {
+            lock (_headerLock)
+            {
+                _headerTask ??= WavHeaderReader.ReadHeaderAsync(reader);
+            }
+        }
+        return _headerTask;
+    }
 
+
+    /// <summary>
+    /// Читает сырые сэмплы по каналам с поддержкой обрезки по времени.
+    /// </summary>
+    /// <param name="allowBufferReuse">
+    /// Если true - возвращает ссылку на внутренний буфер (высокая производительность, 
+    /// но данные должны быть скопированы до следующего yield return).
+    /// Если false - возвращает копию данных (безопасно, но с аллокациями).
+    /// </param>
     public async IAsyncEnumerable<(int channelId, ReadOnlyMemory<byte> sample, bool isEof)> ReadRawChannelSamplesAsync(
-        float? cutFromSeconds = null,
-        float? cutToSeconds = null,
+        double? cutFromSeconds = null,
+        double? cutToSeconds = null,
+        bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var header = await GetHeaderAsync();
+        ValidateHeader(header);
 
-        long dataOffset = header.DataOffset;
-        long dataEndOffset = dataOffset + header.DataSize;
+        var (dataOffset, cutFrom, cutTo) =
+               CalculateCutOffsets(header, cutFromSeconds, cutToSeconds);
 
-        long cutFromOffset = cutFromSeconds.HasValue
-            ? dataOffset + (long)(cutFromSeconds.Value * header.SampleRate * header.BlockAlign)
-            : dataOffset;
+        long offsetToSkip = cutFrom - dataOffset;
 
-        long cutToOffset = cutToSeconds.HasValue
-            ? dataOffset + (long)(cutToSeconds.Value * header.SampleRate * header.BlockAlign)
-            : dataEndOffset;
-
-        long offsetToData = cutFromOffset - dataOffset;
-
-        if (offsetToData > 0)
-            await reader.SkipAsync(offsetToData, cancellationToken);
+        if (offsetToSkip > 0)
+        {
+            await reader.SkipAsync(offsetToSkip, cancellationToken);
+        }
 
         int channels = header.NumChannels;
         int blockAlign = header.BlockAlign;
         int sampleSize = header.SampleSize;
+        long currentOffset = cutFrom;
 
         var sampleBuffer = new byte[sampleSize];
 
@@ -47,60 +64,58 @@ public sealed class AsyncWavReader(PipeReader reader)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Читаем как можно больше
             ReadResult result = await reader.ReadAsync(cancellationToken);
-            ReadOnlySequence<byte> buffer = result.Buffer;
+            ReadOnlySequence<byte> sequence = result.Buffer;
 
-            if (buffer.IsEmpty)
+            SequencePosition consumed = sequence.Start;
+            bool success = false;
+            try
             {
-                if (result.IsCompleted)
-                    yield break;
-                continue;
-            }
-
-            // Пока есть достаточно данных для одного блока (на все каналы)
-            while (buffer.Length >= blockAlign)
-            {
-                // Получаем один блок (на все каналы)
-                ReadOnlySequence<byte> block = buffer.Slice(0, blockAlign);
-
-
-                // Разбираем его на каналы
-                for (int channelId = 0; channelId < channels; channelId++)
+                // Обрабатываем полные блоки
+                while (sequence.Length >= blockAlign && currentOffset < cutTo)
                 {
-                    int offsetInBlock = channelId * sampleSize;
+                    ReadOnlySequence<byte> block = sequence.Slice(0, blockAlign);
 
-                    bool isEof = (cutFromOffset + blockAlign >= cutToOffset) || result.IsCompleted;
+                    bool blockIsEof = (currentOffset + blockAlign >= cutTo) || result.IsCompleted;
 
-                    block.Slice(offsetInBlock, sampleSize).CopyTo(sampleBuffer);
+                    // Извлекаем сэмплы по каналам
+                    for (int channelId = 0; channelId < channels; channelId++)
+                    {
+                        int offsetInBlock = channelId * sampleSize;
 
-                    yield return (channelId, sampleBuffer, isEof);
+                        block.Slice(offsetInBlock, sampleSize).CopyTo(sampleBuffer);
+                        var chunk = allowBufferReuse ? sampleBuffer : [.. sampleBuffer];
+                        yield return (channelId, chunk, blockIsEof);
+                    }
+
+                    // Продвигаем позиции
+                    currentOffset += blockAlign;
+                    sequence = sequence.Slice(blockAlign);
+                    consumed = sequence.Start;
                 }
 
-                // смещаемся по буферу
-                buffer = buffer.Slice(blockAlign);
-
-                cutFromOffset += blockAlign;
-
-                if (cutFromOffset >= cutToOffset)
+                success = true;
+            }
+            finally
+            {
+                if (success)
                 {
-                    // Сообщаем PipeReader, что мы прочитали всё возможное
-                    reader.AdvanceTo(buffer.Start);
-                    yield break;
+                    reader.AdvanceTo(consumed, result.IsCompleted ? sequence.End : consumed);
+                }
+                else
+                {
+                    reader.AdvanceTo(sequence.Start, sequence.End); // Сброс при ошибке
                 }
             }
 
-            // Сообщаем PipeReader, что мы прочитали всё возможное
-            reader.AdvanceTo(buffer.Start);
-
-            if (result.IsCompleted)
-                break;
+            if (result.IsCompleted || currentOffset >= cutTo)
+                yield break;
         }
     }
 
 
     /// <summary>
-    /// Диапазон [-1.0, 1.0],
+    /// Диапазон нормализованные [-1.0, 1.0],
     /// </summary>
     /// <param name="cutFromSeconds"></param>
     /// <param name="cutToSeconds"></param>
@@ -114,29 +129,20 @@ public sealed class AsyncWavReader(PipeReader reader)
     {
         var header = await GetHeaderAsync();
 
-        await foreach (var (channelId, rawSample, isEof) in ReadRawChannelSamplesAsync(cutFromSeconds, cutToSeconds, cancellationToken))
+        await foreach (var (channelId, rawSample, isEof) in
+            ReadRawChannelSamplesAsync(cutFromSeconds, cutToSeconds, cancellationToken: cancellationToken)
+            .WithCancellation(cancellationToken))
         {
-            double result = header.BitsPerSample switch
+            double result = (header.BitsPerSample, header.AudioFormat) switch
             {
-                8 when header.AudioFormat == WaveFormatType.Pcm =>
-                    SampleConverter.Convert8BitToDouble(rawSample.Span),
-
-                16 when header.AudioFormat == WaveFormatType.Pcm =>
-                    SampleConverter.Convert16BitToDouble(rawSample.Span),
-
-                24 when header.AudioFormat == WaveFormatType.Pcm =>
-                    SampleConverter.Convert24BitToDouble(rawSample.Span),
-
-                32 when header.AudioFormat == WaveFormatType.Pcm =>
-                    SampleConverter.Convert32BitToDouble(rawSample.Span),
-
-                32 when header.AudioFormat == WaveFormatType.IeeeFloat =>
-                    SampleConverter.Convert32BitFloatToDouble(rawSample.Span),
-
-                64 when header.AudioFormat == WaveFormatType.IeeeFloat =>
-                    SampleConverter.Convert64BitFloatToDouble(rawSample.Span),
-
-                _ => throw new NotSupportedException($"Unsupported format: {header.AudioFormat} ({header.BitsPerSample}-bit)")
+                (8, WaveFormatType.Pcm) => SampleConverter.Convert8BitToDouble(rawSample.Span),
+                (16, WaveFormatType.Pcm) => SampleConverter.Convert16BitToDouble(rawSample.Span),
+                (24, WaveFormatType.Pcm) => SampleConverter.Convert24BitToDouble(rawSample.Span),
+                (32, WaveFormatType.Pcm) => SampleConverter.Convert32BitToDouble(rawSample.Span),
+                (32, WaveFormatType.IeeeFloat) => SampleConverter.Convert32BitFloatToDouble(rawSample.Span),
+                (64, WaveFormatType.IeeeFloat) => SampleConverter.Convert64BitFloatToDouble(rawSample.Span),
+                var (bits, format) => throw new NotSupportedException(
+                    $"Unsupported format: {format} ({bits}-bit)")
             };
 
             yield return (channelId, result, isEof);
@@ -148,17 +154,22 @@ public sealed class AsyncWavReader(PipeReader reader)
         AudioEncoding targetFormat = AudioEncoding.Pcm16BitSigned,
         float? cutFromSeconds = null,
         float? cutToSeconds = null,
+        bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         int bytesPerSample = targetFormat.GetBytesPerSample();
 
-        using var owner = MemoryPool<byte>.Shared.Rent(bytesPerSample);
-        Memory<byte> buffer = owner.Memory[..bytesPerSample];
+        var buffer = new byte[bytesPerSample];
 
-        await foreach (var (channelId, sample, isEof) in ReadNormalizedDoubleSamplesAsync(cutFromSeconds, cutToSeconds, cancellationToken))
+        await foreach (var (channelId, sample, isEof) in
+            ReadNormalizedDoubleSamplesAsync(cutFromSeconds, cutToSeconds, cancellationToken)
+            .WithCancellation(cancellationToken))
         {
             ReadOnlyMemory<byte> result = SampleConverter.FromNormalizedDouble(sample, targetFormat, buffer);
-            yield return (channelId, result, isEof);
+
+            var chunk = allowBufferReuse ? result : result.ToArray();
+
+            yield return (channelId, chunk, isEof);
         }
     }
 
@@ -173,6 +184,7 @@ public sealed class AsyncWavReader(PipeReader reader)
         float? cutFromSeconds = null,
         float? cutToSeconds = null,
         int bufferSize = 1024,
+        bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         int bytesPerSample = targetFormat.GetBytesPerSample();
@@ -184,31 +196,37 @@ public sealed class AsyncWavReader(PipeReader reader)
         var header = await GetHeaderAsync();
         int channelCount = header.NumChannels;
 
-        IMemoryOwner<byte>[] buffers = new IMemoryOwner<byte>[channelCount];
+        IMemoryOwner<byte>[] channelBuffers = new IMemoryOwner<byte>[channelCount];
         var positions = new int[channelCount];
 
         for (int i = 0; i < channelCount; i++)
         {
-            buffers[i] = MemoryPool<byte>.Shared.Rent(alignedSize);
+            channelBuffers[i] = MemoryPool<byte>.Shared.Rent(alignedSize);
         }
 
         try
         {
-            await foreach (var (channelId, sample, isEof) in ConvertNormalizedDoubleAsync(targetFormat, cutFromSeconds, cutToSeconds, cancellationToken: cancellationToken))
+            await foreach (var (channelId, sample, isEof) in
+                ConvertNormalizedDoubleAsync(targetFormat, cutFromSeconds, cutToSeconds, cancellationToken: cancellationToken)
+                .WithCancellation(cancellationToken))
             {
                 // Копируем семплы в соответствующий канал
-                var buffer = buffers[channelId].Memory;
-                int pos = positions[channelId];
-
-                int copyLength = Math.Min(sample.Length, alignedSize - pos);
+                var buffer = channelBuffers[channelId].Memory;
+                ref int pos = ref positions[channelId];
+                int available = alignedSize - pos;
+                int copyLength = Math.Min(sample.Length, available);
 
                 sample[..copyLength].CopyTo(buffer[pos..]);
-                positions[channelId] += copyLength;
+                pos += copyLength;
 
                 // Если порция заполнена или конец файла — отправляем
-                if (positions[channelId] == alignedSize || isEof)
+                if (pos == alignedSize || isEof)
                 {
-                    yield return (channelId, buffer[..positions[channelId]], isEof);
+                    var result = buffer[..pos];
+
+                    var chunk = allowBufferReuse ? result : result.ToArray();
+
+                    yield return (channelId, chunk, isEof);
                     positions[channelId] = 0;
                 }
             }
@@ -219,16 +237,64 @@ public sealed class AsyncWavReader(PipeReader reader)
                 int remaining = positions[channelId];
                 if (remaining > 0)
                 {
-                    yield return (channelId, buffers[channelId].Memory[..remaining], isEof: true);
+                    var result = channelBuffers[channelId].Memory[..remaining];
+                    var chunk = allowBufferReuse ? result : result.ToArray();
+
+                    yield return (channelId, chunk, isEof: true);
                 }
             }
         }
         finally
         {
-            foreach (var buffer in buffers)
+            foreach (var buffer in channelBuffers)
             {
                 buffer?.Dispose();
             }
         }
+    }
+
+    private static void ValidateHeader(WavHeader header)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(header.NumChannels, nameof(header.NumChannels));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(header.SampleRate, nameof(header.SampleRate));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(header.BlockAlign, nameof(header.BlockAlign));
+        ArgumentOutOfRangeException.ThrowIfNegative(header.DataSize, nameof(header.DataSize));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(header.BitsPerSample, 0, nameof(header.BitsPerSample));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(header.BitsPerSample, 64, nameof(header.BitsPerSample));
+    }
+
+    public static AsyncWavReader Create(Stream stream, StreamPipeReaderOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        if (!stream.CanRead) throw new ArgumentException("Stream must be readable", nameof(stream));
+
+        options ??= new StreamPipeReaderOptions(leaveOpen: false);
+        var reader = PipeReader.Create(stream, options);
+
+        return new AsyncWavReader(reader);
+    }
+
+    private static (long dataOffset, long cutFrom, long cutTo) CalculateCutOffsets(
+        WavHeader header,
+        double? cutFromSeconds,
+        double? cutToSeconds)
+    {
+        long dataOffset = header.DataOffset;
+        long dataEnd = dataOffset + header.DataSize;
+        // байтов в секунду
+        long samplesPerSecond = header.SampleRate * header.BlockAlign;
+
+        long cutFrom = cutFromSeconds.HasValue
+            ? dataOffset + (long)(cutFromSeconds.Value * samplesPerSecond)
+            : dataOffset;
+
+        long cutTo = cutToSeconds.HasValue
+            ? dataOffset + (long)(cutToSeconds.Value * samplesPerSecond)
+            : dataEnd;
+
+        cutFrom = Math.Clamp(cutFrom, dataOffset, dataEnd);
+        cutTo = Math.Clamp(cutTo, dataOffset, dataEnd);
+
+        return (dataOffset, cutFrom, cutTo);
     }
 }

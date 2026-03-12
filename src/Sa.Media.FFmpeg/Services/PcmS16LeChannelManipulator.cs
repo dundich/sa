@@ -64,7 +64,11 @@ internal sealed class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null,
         string over = isOverwrite ? "-y" : string.Empty;
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
 
-        string cmd = $"{over} {Constants.CleanBannerFlags} -i \"{inputFileName}\" -filter_complex \"[0:a]channelsplit=channel_layout=stereo[left][right]\" -map \"[left]\" -acodec pcm_s16le {sampleRate} -f wav \"{files[0]}\" -map \"[right]\"  -acodec pcm_s16le -f wav \"{files[1]}\"";
+        string cmd = $"{over} {Constants.CleanBannerFlags} -i \"{inputFileName}\" " +
+            $"-filter_complex \"[0:a]channelsplit=channel_layout=stereo[left][right]\" " +
+            $"-map \"[left]\"  -acodec pcm_s16le -ac 1 -sample_fmt s16 {sampleRate} -f wav \"{files[0]}\" " +
+            $"-map \"[right]\" -acodec pcm_s16le -ac 1 -sample_fmt s16 {sampleRate} -f wav \"{files[1]}\"";
+
 
         _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
@@ -92,7 +96,12 @@ internal sealed class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null,
         string over = isOverwrite ? "-y" : string.Empty;
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
 
-        string cmd = $"{over} {Constants.CleanBannerFlags} -i \"{leftFileName}\" -i \"{rightFileName}\" -filter_complex \"[0:a][1:a]amerge=inputs=2[a]\" -map \"[a]\" -ac 2 -acodec pcm_s16le {sampleRate} -f wav {Constants.CleanWavOutputFlags} \"{outputFileName}\"";
+        string cmd =
+            $"{over} {Constants.CleanBannerFlags} -i \"{leftFileName}\" -i \"{rightFileName}\" " +
+            $"-filter_complex \"[0:a][1:a]amerge=inputs=2[a]\" -map \"[a]\" -ac 2 " +
+            $"-acodec pcm_s16le -sample_fmt s16 {sampleRate} " +
+            $"-f wav {Constants.CleanWavOutputFlags} \"{outputFileName}\"";
+
 
         _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
