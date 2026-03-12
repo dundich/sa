@@ -10,6 +10,8 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.ObjectPool" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Primitives" Version="10.0.3" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
     <PackageVersion Include="Npgsql" Version="10.0.1" />

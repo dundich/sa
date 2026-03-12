@@ -8,6 +8,7 @@ public sealed class PcmS16LeChannelManipulatorTests
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     [Theory]
+    [InlineData("./data/hello.m4a")]
     [InlineData("./data/input.mp3")]
     [InlineData("./data/stereo_join.wav")]
     public async Task SplitAsync_WithValidInput_CreatesExpectedOutputFiles(string inputPath)

@@ -23,14 +23,19 @@ Audio Conversion to MP3
 
 ```csharp
 
-using var host = Host
-    .CreateDefaultBuilder()
-    .ConfigureServices(services => services.AddSaFFMpeg())
-    .Build();
+public class AudioService(IFFMpegExecutor ffmpeg, IFFProbeExecutor ffprobe)
+{
+    public async Task ConvertAsync(string input, string output, CancellationToken ct = default)
+    {
+        await ffmpeg.ConvertToMp3(input, output, ct);
+    }
 
-var ffmpeg = host.Services.GetRequiredService<IFFMpegExecutor>();
-
-await ffmpeg.ConvertToMp3("input.wav", "output.mp3");
+    public async Task<(int? channels, int? sampleRate)> GetInfoAsync(string file, CancellationToken ct = default)
+    {
+        // Получение базовой информации
+        return await ffprobe.GetChannelsAndSampleRate(file, ct);
+    }
+}
 ```
 
 
@@ -59,7 +64,7 @@ output_channel_1.wav
 To see all missing dependencies:
 
 ```bash
-cd bin/Debug/net9.0/runtimes/linux-x64/
+cd bin/Debug/net10.0/runtimes/linux-x64/
 ldd ffmpeg
 ```
 

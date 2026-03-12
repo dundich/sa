@@ -20,8 +20,9 @@ public class AsyncWavReaderTests
 
 
     [Theory]
-    [InlineData("./data/psmS16Le.wav")]
-    [InlineData("./data/12345.wav")]
+    //[InlineData("./data/pсmS16Le.wav")]
+    //[InlineData("./data/12345.wav")]
+    [InlineData("./data/test.wav")]
     public async Task ReadHeaderAsync_ValidWavFile_ReturnsValidHeader(string filePath)
     {
         var pipe = OpenSharedWavFile(filePath);
@@ -37,7 +38,7 @@ public class AsyncWavReaderTests
 
     [Theory]
     [InlineData("./data/ffout.wav")]
-    [InlineData("./data/psmS16Le.wav")]
+    [InlineData("./data/pсmS16Le.wav")]
     [InlineData("./data/12345.wav")]
     public async Task GetLengthSecondsAsync_ValidWav_ReturnsCorrectDuration(string filePath)
     {
