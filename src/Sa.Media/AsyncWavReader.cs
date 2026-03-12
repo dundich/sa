@@ -9,6 +9,17 @@ namespace Sa.Media;
 /// </summary>
 public sealed class AsyncWavReader(PipeReader reader)
 {
+    public static AsyncWavReader Create(Stream stream, StreamPipeReaderOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        if (!stream.CanRead) throw new ArgumentException("Stream must be readable", nameof(stream));
+
+        var reader = PipeReader.Create(stream, options);
+
+        return new AsyncWavReader(reader);
+    }
+
+
     private readonly Lock _headerLock = new();
 
     private Task<WavHeader>? _headerTask;
@@ -261,17 +272,6 @@ public sealed class AsyncWavReader(PipeReader reader)
         ArgumentOutOfRangeException.ThrowIfNegative(header.DataSize, nameof(header.DataSize));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(header.BitsPerSample, 0, nameof(header.BitsPerSample));
         ArgumentOutOfRangeException.ThrowIfGreaterThan(header.BitsPerSample, 64, nameof(header.BitsPerSample));
-    }
-
-    public static AsyncWavReader Create(Stream stream, StreamPipeReaderOptions? options = null)
-    {
-        ArgumentNullException.ThrowIfNull(stream);
-        if (!stream.CanRead) throw new ArgumentException("Stream must be readable", nameof(stream));
-
-        options ??= new StreamPipeReaderOptions(leaveOpen: false);
-        var reader = PipeReader.Create(stream, options);
-
-        return new AsyncWavReader(reader);
     }
 
     private static (long dataOffset, long cutFrom, long cutTo) CalculateCutOffsets(
