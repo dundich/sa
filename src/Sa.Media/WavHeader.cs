@@ -122,4 +122,46 @@ Data Size:      {DataSize} bytes
         string isFloat() => (IsIeeeFloat ? "FLOAT" : AudioFormat.ToString());
         string isStereo() => (IsStereo ? "Stereo" : String.Empty);
     }
+
+    /// <summary>
+    /// Возвращает количество байт аудиоданных в одной секунде.
+    /// </summary>
+    /// <returns>Байт в секунду</returns>
+    public long GetBytesPerSecond() => (long)SampleRate * BlockAlign;
+
+    public (long cutFrom, long cutTo) CalculateCutOffsets(
+        TimeRange range,
+        long? fileSize = null,
+        bool alignToFrames = true)
+    {
+        long dataOffset = DataOffset;
+        long dataEnd = HasDataSize
+            ? dataOffset + DataSize
+            : (fileSize ?? throw new InvalidOperationException("fileSize required for streaming data"));
+
+        long bytesPerSecond = GetBytesPerSecond();
+
+        long fromOffset = dataOffset + (long)(range.From.TotalSeconds * bytesPerSecond);
+        long toOffset = range.HasEnd
+            ? dataOffset + (long)(range.To!.Value.TotalSeconds * bytesPerSecond)
+            : dataEnd;
+
+        if (alignToFrames)
+        {
+            fromOffset = AlignToFrame(fromOffset, dataOffset);
+            toOffset = AlignToFrame(toOffset, dataOffset);
+        }
+
+        return (Math.Clamp(fromOffset, dataOffset, dataEnd),
+                Math.Clamp(toOffset, dataOffset, dataEnd));
+    }
+
+    private long AlignToFrame(long offset, long baseOffset)
+    {
+        if (BlockAlign <= 1) return offset;
+
+        long relativeOffset = offset - baseOffset;
+        long alignedRelative = (relativeOffset / BlockAlign) * BlockAlign;
+        return baseOffset + alignedRelative;
+    }
 }
