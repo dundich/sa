@@ -127,11 +127,6 @@ public sealed class AsyncWavReader(PipeReader reader)
     /// <summary>
     /// Диапазон нормализованные [-1.0, 1.0],
     /// </summary>
-    /// <param name="cutFromSeconds"></param>
-    /// <param name="cutToSeconds"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    /// <exception cref="NotSupportedException"></exception>
     public async IAsyncEnumerable<AudioNormalizedPacket> ReadNormalizedDoubleSamplesAsync(
         TimeRange? cutRange = null,
         bool allowBufferReuse = true,
@@ -183,11 +178,8 @@ public sealed class AsyncWavReader(PipeReader reader)
     }
 
     /// <summary>
-    /// Подходит для потоковой обработки или воспроизведения
+    /// Для потоковой обработки или воспроизведения
     /// </summary>
-    /// <param name="bufferSize"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
     public async IAsyncEnumerable<AudioPacket> ReadStreamableChunksAsync(
         AudioEncoding targetFormat = AudioEncoding.Pcm16BitSigned,
         TimeRange? cutRange = null,

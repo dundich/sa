@@ -33,7 +33,6 @@ public sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
         _numChannels = numChannels;
         _leaveOpen = leaveOpen;
 
-        // Буфер 8KB — можно увеличить для больших файлов
         _bufferOwner = MemoryPool<byte>.Shared.Rent(8192);
         _currentBuffer = _bufferOwner.Memory;
         _currentBufferSize = 0;

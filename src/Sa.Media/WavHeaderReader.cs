@@ -73,7 +73,8 @@ public static class WavHeaderReader
     }
 
 
-    private static async Task<(long, uint dataSize)> FindDataChunkAsync(BinaryPipeReader reader, CancellationToken cancellationToken = default)
+    private static async Task<(long, uint dataSize)> FindDataChunkAsync(
+        BinaryPipeReader reader, CancellationToken cancellationToken = default)
     {
         while (reader.Position < 4096)
         {

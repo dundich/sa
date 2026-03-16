@@ -107,20 +107,29 @@ public sealed class WavHeader
 
     public override string ToString()
     {
-        return $"""
-[WAV Header]
-            
-Format:         {(IsPcm ? "PCM" : isFloat())}
-Channels:       {NumChannels} {(IsMono ? "(Mono)" : isStereo())}
-Sample Rate:    {SampleRate} Hz
-Bit Depth:      {BitsPerSample}-bit
-Duration:       {GetDuration():g}
-File Size:      {ChunkSize + 8} bytes
-Data Size:      {DataSize} bytes
-""";
 
-        string isFloat() => (IsIeeeFloat ? "FLOAT" : AudioFormat.ToString());
-        string isStereo() => (IsStereo ? "Stereo" : String.Empty);
+        var format = AudioFormat switch
+        {
+            WaveFormatType.Pcm => "PCM",
+            WaveFormatType.IeeeFloat => "IEEE Float",
+            WaveFormatType.Extensible when IsPcm => "Extensible PCM",
+            WaveFormatType.Extensible when IsIeeeFloat => "Extensible Float",
+            _ => AudioFormat.ToString()
+        };
+
+        return $$"""
+    [WAV Header]
+    
+    Format:         {{format}}
+    Channels:       {{NumChannels}} {{(IsMono ? "(Mono)" : IsStereo ? "(Stereo)" : "")}}
+    Sample Rate:    {{SampleRate:N0}} Hz
+    Bit Depth:      {{BitsPerSample}}-bit
+    Byte Rate:      {{GetBytesPerSecond():N0}} bytes/sec
+    Block Align:    {{BlockAlign}} bytes
+    Duration:       {{GetDuration():g}}
+    File Size:      {{ChunkSize + 8:N0}} bytes
+    Data Offset:    {{DataOffset}} bytes
+    """;
     }
 
     /// <summary>
