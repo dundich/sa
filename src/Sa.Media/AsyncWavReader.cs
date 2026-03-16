@@ -25,13 +25,13 @@ public sealed class AsyncWavReader(PipeReader reader)
 
     private Task<WavHeader>? _headerTask;
 
-    public Task<WavHeader> GetHeaderAsync()
+    public Task<WavHeader> GetHeaderAsync(CancellationToken cancellationToken)
     {
         if (_headerTask is null)
         {
             lock (_headerLock)
             {
-                _headerTask ??= WavHeaderReader.ReadHeaderAsync(reader);
+                _headerTask ??= WavHeaderReader.ReadHeaderAsync(reader, cancellationToken);
             }
         }
         return _headerTask;
@@ -51,7 +51,7 @@ public sealed class AsyncWavReader(PipeReader reader)
         bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var header = await GetHeaderAsync();
+        var header = await GetHeaderAsync(cancellationToken);
         ValidateHeader(header);
 
         var (cutFrom, cutTo) = header.CalculateCutOffsets(cutRange ?? new());
@@ -132,7 +132,7 @@ public sealed class AsyncWavReader(PipeReader reader)
         bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var header = await GetHeaderAsync();
+        var header = await GetHeaderAsync(cancellationToken);
 
         await foreach (var (channelId, rawSample, offset, isEof) in
             ReadRawChannelSamplesAsync(cutRange, allowBufferReuse, cancellationToken: cancellationToken)
@@ -193,7 +193,7 @@ public sealed class AsyncWavReader(PipeReader reader)
         int alignedSize = Math.Max(bytesPerSample, (bufferSize / bytesPerSample) * bytesPerSample);
 
         // Инициализируем буферы по количеству каналов
-        var header = await GetHeaderAsync();
+        var header = await GetHeaderAsync(cancellationToken);
         int channelCount = header.NumChannels;
 
         IMemoryOwner<byte>[] channelBuffers = new IMemoryOwner<byte>[channelCount];
