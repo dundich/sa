@@ -53,7 +53,8 @@ public sealed record TimeRange(TimeSpan From = default, TimeSpan? To = null)
         => new(from, end);
 
     public static TimeRange RangeFromMilliseconds(long from, long end)
-        => new(TimeSpan.FromMilliseconds(from), TimeSpan.FromMilliseconds(end));
+        => new(TimeSpan.FromMilliseconds(from),
+            TimeSpan.MaxValue.TotalMilliseconds > end ? TimeSpan.FromMilliseconds(end) : TimeSpan.MaxValue);
 
     public static TimeRange RangeFromSeconds(double fromSeconds, double? toSeconds = null)
         => new(TimeSpan.FromSeconds(fromSeconds), toSeconds.HasValue ? TimeSpan.FromSeconds(toSeconds.Value) : null);

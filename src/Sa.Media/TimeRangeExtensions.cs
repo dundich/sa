@@ -124,14 +124,14 @@ public static class TimeRangeExpander
         if (chunks.Length == 0)
             return chunks;
 
-        // === Шаг 1: Слияние близких диапазонов внутри каждого чанка ===
+        // Слияние близких диапазонов внутри каждого чанка
         var mergedChunks = new TimeRange[chunks.Length][];
         for (int c = 0; c < chunks.Length; c++)
         {
             mergedChunks[c] = MergeCloseRanges(chunks[c], gapMilliseconds);
         }
 
-        // === Шаг 2: Подсчёт общего количества после слияния ===
+        // Подсчёт общего количества после слияния
         int totalCount = 0;
         foreach (var arr in mergedChunks)
             totalCount = checked(totalCount + arr.Length);
@@ -139,7 +139,7 @@ public static class TimeRangeExpander
         if (totalCount == 0)
             return mergedChunks;
 
-        // === Шаг 3: Адаптивное выделение памяти ===
+        // Адаптивное выделение памяти
         Item[]? arrayFromPool = null;
         Span<Item> span = totalCount <= 256
             ? stackalloc Item[totalCount]
@@ -158,7 +158,9 @@ public static class TimeRangeExpander
                     span[idx++] = new Item
                     {
                         From = (long)range.From.TotalMilliseconds,
-                        To = (long)range.To!.Value.TotalMilliseconds,
+                        To = range.To.HasValue
+                            ? (long)range.To.Value.TotalMilliseconds
+                            : (long)TimeSpan.MaxValue.TotalMilliseconds,
                         SourceIdx = s,
                         RangeIdx = r
                     };
@@ -168,7 +170,7 @@ public static class TimeRangeExpander
             // Сортировка по началу диапазона
             span.Sort(static (a, b) => a.From.CompareTo(b.From));
 
-            // === Шаг 4: Растягивание — фаза 1 (From слева-направо) ===
+            // Растягивание 
             ref Item first = ref MemoryMarshal.GetReference(span);
             for (int i = 1; i < span.Length; i++)
             {
@@ -182,28 +184,26 @@ public static class TimeRangeExpander
                     curr.From -= delta;
                     prev.To += delta;
                 }
+
+                if (i == span.Length - 1 && long.MaxValue - gapMilliseconds > curr.To)
+                {
+                    curr.To += gapMilliseconds;
+                }
             }
 
-            //// === Шаг 5: Растягивание — фаза 2 (To справа-налево) ===
-            //for (int i = span.Length - 2; i >= 0; i--)
-            //{
-            //    ref var curr = ref Unsafe.Add(ref first, i);
-            //    ref var next = ref Unsafe.Add(ref first, i + 1);
-
-            //    long available = next.From - curr.To - gapMilliseconds;
-            //    if (available > 0)
-            //        curr.To += (long)((ulong)available >> 1);
-            //}
-
-            // === Шаг 6: Крайний случай — первый элемент и начало координат ===
+            // первый элемент
             if (span.Length > 0)
             {
-                long available = first.From - gapMilliseconds;
-                if (available > 0)
-                    first.From -= (long)((ulong)available >> 1);
+                long from = Math.Max(first.From - gapMilliseconds, 0);
+                first.From = from;
+
+                if (span.Length == 1 && long.MaxValue - gapMilliseconds > first.To)
+                {
+                    first.To += gapMilliseconds;
+                }
             }
 
-            // === Шаг 7: Сборка результата ===
+            // Сборка результата 
             var result = new TimeRange[mergedChunks.Length][];
             for (int i = 0; i < mergedChunks.Length; i++)
                 result[i] = new TimeRange[mergedChunks[i].Length];

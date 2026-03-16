@@ -75,15 +75,14 @@ public class TimeRangeExpanderTests
 
         var expected = ToChunks(
             [
-                Ms(650, 2100),    // 800-150, 1900+100
+                Ms(300, 2100),    // 800-500, 1900+100
                 Ms(5000, 5800),   // без изменений (дельты ≤ 0)
-                Ms(7200, 9750),   // без изменений (дельты ≤ 0)
-               // Ms(9000, 9750)    // 9700+50
+                Ms(7200, 9750),   // merg
             ],
             [
                 Ms(2600, 4600),   // 2800-200
                 Ms(6300, 6899),   // без изменений
-                Ms(10250, 10700)  // 10300-50
+                Ms(10250, 11200)  // 10300-50,  10700 + 500
             ]
         );
 
@@ -116,11 +115,11 @@ public class TimeRangeExpanderTests
         // После слияния: [1000-3000], [5000-6000]
         var expected = ToChunks(
             [
-                Ms(875, 3125),    // объединённый [1000-3000] + расширение
-                Ms(4875, 6125)    // [5000-6000] + расширение
+                Ms(500, 3000),    // объединённый
+                Ms(4750, 6500)    // расширение
             ],
             [
-                Ms(3375, 4125)    // [3500-4000] + расширение
+                Ms(3500, 4250)    // расширение
             ]
         );
 
@@ -189,14 +188,14 @@ public class TimeRangeExpanderTests
         var input = ToChunks(
             [
                 Ms(0, 1000),
-                Ms(2000, 3000)    // gap=1000 > 500 → есть место для расширения
+                Ms(2000, long.MaxValue)    // gap=1000 > 500 → есть место для расширения
             ]
         );
 
         var expected = ToChunks(
             [
                 Ms(0, 1250),      // 1000 + (2000-1000-500)/2 = 1000+250
-                Ms(1750, 3000)    // 2000 - (2000-1000-500)/2 = 2000-250
+                Ms(1750, (long)TimeSpan.MaxValue.TotalMilliseconds)    // 2000 - (2000-1000-500)/2 = 2000-250
             ]
         );
 
@@ -222,8 +221,8 @@ public class TimeRangeExpanderTests
 
         // Дельты отрицательные → без расширения
         var expected = ToChunks(
-            [Ms(750, 2000)],
-            [Ms(2100, 3000)]
+            [Ms(500, 2000)],
+            [Ms(2100, 3500)]
         );
 
         // Act
@@ -242,9 +241,9 @@ public class TimeRangeExpanderTests
     {
         // Arrange
         var input = ToChunks(
-            [Ms(100, 200)],                              // чанк 0: 1 диапазон
-            [Ms(500, 600), Ms(800, 900), Ms(1200, 1300)], // чанк 1: 3 диапазона
-            [Ms(2000, 2100)]                             // чанк 2: 1 диапазон
+            [Ms(100, 200)],
+            [Ms(500, 600), Ms(800, 900), Ms(1200, 1300)],
+            [Ms(2000, 2100)]
         );
 
         // Act
@@ -253,7 +252,7 @@ public class TimeRangeExpanderTests
         // Assert
         Assert.Equal(3, actual.Length);
         Assert.Single(actual[0]);
-        Assert.Equal(3, actual[1].Length);
+        Assert.Single(actual[1]);
         Assert.Single(actual[2]);
 
         // Проверка, что все диапазоны валидны (From < To)
@@ -385,9 +384,9 @@ public class TimeRangeExpanderTests
         Assert.Single(actual[2]);
 
         // Проверяем, что диапазоны остались в своих чанках
-        Assert.Equal(1000, actual[0][0].From.TotalMilliseconds, precision: 0);
-        Assert.Equal(2000, actual[1][0].From.TotalMilliseconds, precision: 0);
-        Assert.Equal(3000, actual[2][0].From.TotalMilliseconds, precision: 0);
+        Assert.Equal(500, actual[0][0].From.TotalMilliseconds, precision: 0);
+        Assert.Equal(1800, actual[1][0].From.TotalMilliseconds, precision: 0);
+        Assert.Equal(2800, actual[2][0].From.TotalMilliseconds, precision: 0);
     }
 
     #endregion
@@ -407,13 +406,10 @@ public class TimeRangeExpanderTests
 
         // Assert - диапазоны не должны расширяться при отрицательных дельтах
         Assert.NotNull(actual[0][0].To);
-        Assert.NotNull(actual[0][1].To);
 
         // Границы остаются на месте или сдвигаются минимально
         Assert.True(actual[0][0].From.TotalMilliseconds <= 1000);
-        Assert.True(actual[0][0].To!.Value.TotalMilliseconds <= 2000);
-        Assert.True(actual[0][1].From.TotalMilliseconds >= 2100);
-        Assert.True(actual[0][1].To!.Value.TotalMilliseconds >= 3000);
+        Assert.True(actual[0][0].To!.Value.TotalMilliseconds >= 3000);
     }
 
     #endregion
@@ -456,8 +452,8 @@ public class TimeRangeExpanderTests
         // Assert
         Assert.NotNull(actual[0][0].To);
         // При gap=1500 меньше пространства для расширения
-        Assert.True(actual[0][0].To!.Value.TotalMilliseconds <= 1250);
-        Assert.True(actual[0][1].From.TotalMilliseconds >= 1750);
+        Assert.Equal(4500, actual[0][0].To!.Value.TotalMilliseconds);
+        Assert.Equal(0, actual[0][0].From.TotalMilliseconds);
     }
 
     #endregion
