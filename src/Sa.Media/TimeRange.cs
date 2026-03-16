@@ -1,7 +1,9 @@
-﻿namespace Sa.Media;
+﻿using System.Diagnostics;
+
+namespace Sa.Media;
 
 
-
+[DebuggerDisplay("[{From.TotalMilliseconds}, {To?.TotalMilliseconds}]")]
 public sealed record TimeRange(TimeSpan From = default, TimeSpan? To = null)
 {
     /// <summary>
@@ -44,15 +46,16 @@ public sealed record TimeRange(TimeSpan From = default, TimeSpan? To = null)
             throw new ArgumentOutOfRangeException(nameof(To), "End time cannot be before start time");
     }
 
-    /// <summary>
-    /// Создать диапазон с длительностью от указанного времени
-    /// </summary>
-    public static TimeRange FromWithDuration(TimeSpan from, TimeSpan duration)
+    public static TimeRange RangeFromDuration(TimeSpan from, TimeSpan duration)
         => new(from, from + duration);
 
-    /// <summary>
-    /// Создать диапазон из секунд
-    /// </summary>
+    public static TimeRange RangeFromTimes(TimeSpan from, TimeSpan end)
+        => new(from, end);
+
+    public static TimeRange RangeFromMilliseconds(long from, long end)
+        => new(TimeSpan.FromMilliseconds(from), TimeSpan.FromMilliseconds(end));
+
     public static TimeRange RangeFromSeconds(double fromSeconds, double? toSeconds = null)
         => new(TimeSpan.FromSeconds(fromSeconds), toSeconds.HasValue ? TimeSpan.FromSeconds(toSeconds.Value) : null);
 }
+

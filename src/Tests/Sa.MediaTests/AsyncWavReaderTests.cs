@@ -27,7 +27,7 @@ public class AsyncWavReaderTests
         var pipe = OpenSharedWavFile(filePath);
         var reader = new AsyncWavReader(pipe);
 
-        var header = await reader.GetHeaderAsync();
+        var header = await reader.GetHeaderAsync(TestContext.Current.CancellationToken);
 
         Assert.True(header.SampleRate > 0);
         Assert.InRange(header.BitsPerSample, 8, 64);
@@ -44,7 +44,7 @@ public class AsyncWavReaderTests
         var pipe = OpenSharedWavFile(filePath);
         var reader = new AsyncWavReader(pipe);
 
-        var h = await reader.GetHeaderAsync();
+        var h = await reader.GetHeaderAsync(TestContext.Current.CancellationToken);
 
         double lengthInSeconds = h.GetDurationInSeconds();
 
@@ -109,7 +109,9 @@ public class AsyncWavReaderTests
         var reader1 = new AsyncWavReader(OpenSharedWavFile());
         var reader2 = new AsyncWavReader(OpenSharedWavFile());
 
-        await Task.WhenAll(reader1.GetHeaderAsync(), reader2.GetHeaderAsync());
+        await Task.WhenAll(
+            reader1.GetHeaderAsync(TestContext.Current.CancellationToken)
+            , reader2.GetHeaderAsync(TestContext.Current.CancellationToken));
 
         Assert.NotNull(reader1);
         Assert.NotNull(reader2);
@@ -122,7 +124,7 @@ public class AsyncWavReaderTests
         var mockStream = MockWavGenerator.CreateTestPcm16Wav();
         var reader = new AsyncWavReader(mockStream);
 
-        var header = await reader.GetHeaderAsync();
+        var header = await reader.GetHeaderAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal<uint>(0x46464952, header.ChunkId); // "RIFF"
         Assert.Equal<uint>(0x45564157, header.Format);   // "WAVE"
