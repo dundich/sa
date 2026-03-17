@@ -54,7 +54,7 @@ public sealed class AsyncWavReader(PipeReader reader)
         var header = await GetHeaderAsync(cancellationToken);
         ValidateHeader(header);
 
-        var (cutFrom, cutTo) = header.CalculateCutOffsets(cutRange ?? new());
+        var (cutFrom, cutTo) = header.CalculateCutOffsets(cutRange ?? TimeRange.Default);
 
         long offsetToSkip = cutFrom - header.DataOffset;
 

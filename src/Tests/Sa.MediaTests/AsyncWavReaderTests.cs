@@ -215,7 +215,7 @@ public class AsyncWavReaderTests
         bool eof = false;
 
         await foreach (var (_, _, _, isEof) in reader.ReadNormalizedDoubleSamplesAsync(
-                TimeRange.RangeFromSeconds(cutFrom, cutTo),
+                TimeRange.Seconds(cutFrom, cutTo),
                 cancellationToken: TestContext.Current.CancellationToken))
         {
             count++;

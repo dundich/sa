@@ -152,7 +152,7 @@ public sealed class WavHeader
 
         long fromOffset = dataOffset + (long)(range.From.TotalSeconds * bytesPerSecond);
         long toOffset = range.HasEnd
-            ? dataOffset + (long)(range.To!.Value.TotalSeconds * bytesPerSecond)
+            ? dataOffset + (long)(range.To.TotalSeconds * bytesPerSecond)
             : dataEnd;
 
         if (alignToFrames)

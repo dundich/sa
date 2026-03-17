@@ -6,8 +6,7 @@ public class TimeRangeExpanderTests
 {
     #region Helper Methods
 
-    private static TimeRange Ms(long from, long to) =>
-        TimeRange.RangeFromMilliseconds(from, to);
+    private static TimeRange Ms(long from, long to) => TimeRange.Ms(from, to);
 
     private static TimeRange[][] ToChunks(params TimeRange[][] chunks) => chunks;
 
@@ -16,17 +15,14 @@ public class TimeRangeExpanderTests
         Assert.NotNull(actual);
         Assert.NotNull(expected);
 
-        Assert.NotNull(actual.To);
-        Assert.NotNull(expected.To);
-
         Assert.Equal(
             expected.From.TotalMilliseconds,
             actual.From.TotalMilliseconds,
             precision: 0);
 
         Assert.Equal(
-            expected.To.Value.TotalMilliseconds,
-            actual.To.Value.TotalMilliseconds,
+            expected.To.TotalMilliseconds,
+            actual.To.TotalMilliseconds,
             precision: 0);
     }
 
@@ -53,7 +49,7 @@ public class TimeRangeExpanderTests
 
     #endregion
 
-    #region Тест 1: Базовое расширение с положительными дельтами
+
 
     [Fact]
     public void ExpandTimeRanges_BasicExpansion_WithPositiveDeltas()
@@ -75,27 +71,28 @@ public class TimeRangeExpanderTests
 
         var expected = ToChunks(
             [
-                Ms(300, 2100),    // 800-500, 1900+100
-                Ms(5000, 5800),   // без изменений (дельты ≤ 0)
-                Ms(7200, 9750),   // merg
+                Ms(300, 2350),    // 800-500, (2800-1900)/2+1900
+                Ms(4800, 6050),   // 5000-(5000-4600)/2, ...
+                Ms(7050, 10000),  // mergе + delta
             ],
             [
-                Ms(2600, 4600),   // 2800-200
-                Ms(6300, 6899),   // без изменений
-                Ms(10250, 11200)  // 10300-50,  10700 + 500
+                Ms(2350, 4800),
+                Ms(6050, 7049),
+                Ms(10000, 11200)
             ]
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(
+            input,
+            thresholdMillesecods: 500,
+            gapMilliseconds: 0);
 
         // Assert
         AssertChunksEqual(expected, actual);
     }
 
-    #endregion
 
-    #region Тест 2: Слияние близких диапазонов внутри чанка
 
     [Fact]
     public void ExpandTimeRanges_MergeCloseRanges_WithinChunk()
@@ -104,7 +101,7 @@ public class TimeRangeExpanderTests
         var input = ToChunks(
             [
                 Ms(1000, 2000),
-                Ms(2300, 3000),   // gap=300 < 500 → сольётся с предыдущим
+                Ms(2300, 3000),   // thresholdMillesecods = 300 < 500 → сольётся с предыдущим
                 Ms(5000, 6000)
             ],
             [
@@ -112,27 +109,24 @@ public class TimeRangeExpanderTests
             ]
         );
 
-        // После слияния: [1000-3000], [5000-6000]
         var expected = ToChunks(
             [
-                Ms(500, 3000),    // объединённый
-                Ms(4750, 6500)    // расширение
+                Ms(500, 3250),    // объединённый
+                Ms(4500, 6500)    // расширение
             ],
             [
-                Ms(3500, 4250)    // расширение
+                Ms(3250, 4500)    // расширение
             ]
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
 
         // Assert
         AssertChunksEqual(expected, actual);
     }
 
-    #endregion
 
-    #region Тест 3: Пустые массивы
 
     [Fact]
     public void ExpandTimeRanges_EmptyInput_ReturnsEmpty()
@@ -152,9 +146,8 @@ public class TimeRangeExpanderTests
         Assert.Empty(actual[1]);
     }
 
-    #endregion
 
-    #region Тест 4: Единичный диапазон
+
 
     [Fact]
     public void ExpandTimeRanges_SingleRange_ExpandsBothSides()
@@ -165,50 +158,43 @@ public class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
 
         // Assert
         Assert.Single(actual);
         Assert.Single(actual[0]);
-        Assert.NotNull(actual[0][0].To);
 
         // Проверяем, что диапазон расширился
         Assert.True(actual[0][0].From.TotalMilliseconds <= 5000);
-        Assert.True(actual[0][0].To!.Value.TotalMilliseconds >= 6000);
+        Assert.True(actual[0][0].To.TotalMilliseconds >= 6000);
     }
 
-    #endregion
-
-    #region Тест 5: Диапазоны уже с достаточным зазором
 
     [Fact]
-    public void ExpandTimeRanges_SufficientGap_ExpandsFully()
+    public void ExpandTimeRanges_SufficientThreshold_ExpandsFully()
     {
         // Arrange
         var input = ToChunks(
             [
                 Ms(0, 1000),
-                Ms(2000, long.MaxValue)    // gap=1000 > 500 → есть место для расширения
+                Ms(2000, long.MaxValue)
             ]
         );
 
         var expected = ToChunks(
             [
-                Ms(0, 1250),      // 1000 + (2000-1000-500)/2 = 1000+250
-                Ms(1750, (long)TimeSpan.MaxValue.TotalMilliseconds)    // 2000 - (2000-1000-500)/2 = 2000-250
+                Ms(0, 1500),
+                Ms(1500, (long)TimeSpan.MaxValue.TotalMilliseconds)
             ]
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
 
         // Assert
         AssertChunksEqual(expected, actual);
     }
 
-    #endregion
-
-    #region Тест 6: Диапазоны слишком близко (без слияния, т.к. разные чанки)
 
     [Fact]
     public void ExpandTimeRanges_CloseRanges_DifferentChunks_NoMerge()
@@ -216,25 +202,47 @@ public class TimeRangeExpanderTests
         // Arrange
         var input = ToChunks(
             [Ms(1000, 2000)],
-            [Ms(2100, 3000)]    // gap=100 < 500, но разные чанки → не сливаются
+            [Ms(2100, 3000)] // не сливаются
         );
 
-        // Дельты отрицательные → без расширения
         var expected = ToChunks(
-            [Ms(500, 2000)],
-            [Ms(2100, 3500)]
+            [Ms(500, 2050)],
+            [Ms(2050, 3500)]
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
 
         // Assert
         AssertChunksEqual(expected, actual);
     }
 
-    #endregion
 
-    #region Тест 7: Несколько чанков с разным количеством диапазонов
+    [Fact]
+    public void ExpandTimeRanges_WithGap_DifferentChunks_NoMerge()
+    {
+        // Arrange
+        var input = ToChunks(
+            [Ms(1000, 2000)],
+            [Ms(2100, 3000)]
+        );
+
+        var expected = ToChunks(
+            [Ms(500, 2025)],
+            [Ms(2075, 3500)]
+        );
+
+        // Act
+        var actual = TimeRangeExpander.ExpandTimeRanges(
+            input, thresholdMillesecods: 500,
+            gapMilliseconds: 50);
+
+        // Assert
+        AssertChunksEqual(expected, actual);
+
+        Assert.Equal(50, actual[1][0].From.TotalMilliseconds - actual[0][0].To.TotalMilliseconds, 1);
+    }
+
 
     [Fact]
     public void ExpandTimeRanges_MultipleChunks_VaryingLengths()
@@ -247,7 +255,7 @@ public class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
 
         // Assert
         Assert.Equal(3, actual.Length);
@@ -255,21 +263,16 @@ public class TimeRangeExpanderTests
         Assert.Single(actual[1]);
         Assert.Single(actual[2]);
 
-        // Проверка, что все диапазоны валидны (From < To)
+        // Check all (From < To)
         foreach (var chunk in actual)
         {
             foreach (var range in chunk)
             {
-                Assert.NotNull(range.To);
-                Assert.True(range.From.TotalMilliseconds < range.To.Value.TotalMilliseconds,
-                    "диапазон должен быть валидным (From < To)");
+                Assert.True(range.From.TotalMilliseconds < range.To.TotalMilliseconds);
             }
         }
     }
 
-    #endregion
-
-    #region Тест 8: Граница с нулём (первый диапазон начинается с 0)
 
     [Fact]
     public void ExpandTimeRanges_FirstRangeAtZero_NoNegativeExpansion()
@@ -280,118 +283,62 @@ public class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
 
         // Assert
         Assert.Equal(0, actual[0][0].From.TotalMilliseconds);
-        Assert.NotNull(actual[0][0].To);
-        Assert.True(actual[0][0].To!.Value.TotalMilliseconds > 500);
+        Assert.True(actual[0][0].To.TotalMilliseconds > 500);
     }
 
-    #endregion
-
-    #region Тест 9: Большой зазор между диапазонами
 
     [Fact]
-    public void ExpandTimeRanges_LargeGap_ExpandsSignificantly()
+    public void ExpandTimeRanges_DefaultThreshold_Uses100ms()
     {
         // Arrange
         var input = ToChunks(
-            [Ms(0, 100), Ms(5000, 5100)]  // gap=4900 >> 500
+            [Ms(0, 1000), Ms(1500, 2500)]
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(input, 100);
 
-        // Assert
-        Assert.NotNull(actual[0][0].To);
-        Assert.True(actual[0][0].To!.Value.TotalMilliseconds > 100);
-        Assert.True(actual[0][1].From.TotalMilliseconds < 5000);
 
-        // Проверка, что зазор остался >= 500
-        var gap = actual[0][1].From.TotalMilliseconds - actual[0][0].To!.Value.TotalMilliseconds;
-        Assert.True(gap >= 500, $"минимальный зазор должен сохраниться. Фактический зазор: {gap}");
-    }
-
-    #endregion
-
-    #region Тест 10: Default gap (100ms)
-
-    [Fact]
-    public void ExpandTimeRanges_DefaultGap_Uses100ms()
-    {
-        // Arrange
-        var input = ToChunks(
-            [Ms(0, 1000), Ms(1500, 2500)]  // gap=500
+        var expected = ToChunks(
+            [Ms(0, 1100), Ms(1400, 2600)]
         );
 
-        // Act (gap по умолчанию = 100)
-        var actual = TimeRangeExpander.ExpandTimeRanges(input);
-
         // Assert
-        Assert.NotNull(actual[0][0].To);
-        // При gap=100: delta = (1500-1000-100)/2 = 200
-        AssertApproxEqual(1200, (long)actual[0][0].To!.Value.TotalMilliseconds, tolerance: 1);
-        AssertApproxEqual(1300, (long)actual[0][1].From.TotalMilliseconds, tolerance: 1);
+        AssertChunksEqual(expected, actual);
     }
 
-    #endregion
 
-    #region Тест 11: Null проверка To в TimeRange
 
-    [Fact]
-    public void ExpandTimeRanges_ToNotNull_AllRangesHaveTo()
-    {
-        // Arrange
-        var input = ToChunks(
-            [Ms(100, 200), Ms(300, 400)]
-        );
-
-        // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 50);
-
-        // Assert
-        foreach (var chunk in actual)
-        {
-            foreach (var range in chunk)
-            {
-                Assert.NotNull(range.To);
-            }
-        }
-    }
-
-    #endregion
-
-    #region Тест 12: Сохранение порядка чанков
 
     [Fact]
     public void ExpandTimeRanges_PreservesChunkOrder()
     {
         // Arrange
         var input = ToChunks(
-            [Ms(1000, 1100)],  // чанк 0
-            [Ms(2000, 2100)],  // чанк 1
-            [Ms(3000, 3100)]   // чанк 2
+            [Ms(1000, 1100)],
+            [Ms(2000, 2100)],
+            [Ms(3000, 3100)]
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(
+            input,
+            thresholdMillesecods: 0,
+            gapMilliseconds: 500);
 
-        // Assert
-        Assert.Equal(3, actual.Length);
-        Assert.Single(actual[0]);
-        Assert.Single(actual[1]);
-        Assert.Single(actual[2]);
+        var expected = ToChunks(
+            [Ms(1000, 1100)],
+            [Ms(2000, 2100)],
+            [Ms(3000, 3100)]
+        );
 
-        // Проверяем, что диапазоны остались в своих чанках
-        Assert.Equal(500, actual[0][0].From.TotalMilliseconds, precision: 0);
-        Assert.Equal(1800, actual[1][0].From.TotalMilliseconds, precision: 0);
-        Assert.Equal(2800, actual[2][0].From.TotalMilliseconds, precision: 0);
+        AssertChunksEqual(expected, actual);
     }
 
-    #endregion
-
-    #region Тест 13: Отрицательные дельты не применяются
 
     [Fact]
     public void ExpandTimeRanges_NegativeDeltas_NotApplied()
@@ -402,22 +349,22 @@ public class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExpander.ExpandTimeRanges(
+            input,
+            thresholdMillesecods: 0,
+            gapMilliseconds: 500);
 
-        // Assert - диапазоны не должны расширяться при отрицательных дельтах
-        Assert.NotNull(actual[0][0].To);
 
-        // Границы остаются на месте или сдвигаются минимально
-        Assert.True(actual[0][0].From.TotalMilliseconds <= 1000);
-        Assert.True(actual[0][0].To!.Value.TotalMilliseconds >= 3000);
+        var expected = ToChunks(
+            [Ms(1000, 2000), Ms(2100, 3000)]
+        );
+
+        AssertChunksEqual(expected, actual);
     }
 
-    #endregion
-
-    #region Тест 14: Очень маленький gap
 
     [Fact]
-    public void ExpandTimeRanges_VerySmallGap_MoreExpansion()
+    public void ExpandTimeRanges_VeryLargeGap()
     {
         // Arrange
         var input = ToChunks(
@@ -425,36 +372,13 @@ public class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 10);
+        var actual = TimeRangeExpander.ExpandTimeRanges(
+            input,
+            thresholdMillesecods: 1500,
+            gapMilliseconds: 1500);
 
-        // Assert
-        Assert.NotNull(actual[0][0].To);
-        // При gap=10 больше пространства для расширения
-        Assert.True(actual[0][0].To!.Value.TotalMilliseconds > 1000);
-        Assert.True(actual[0][1].From.TotalMilliseconds < 2000);
+        var expected = ToChunks([Ms(0, 4500)]);
+
+        AssertChunksEqual(expected, actual);
     }
-
-    #endregion
-
-    #region Тест 15: Очень большой gap
-
-    [Fact]
-    public void ExpandTimeRanges_VeryLargeGap_LimitedExpansion()
-    {
-        // Arrange
-        var input = ToChunks(
-            [Ms(0, 1000), Ms(2000, 3000)]
-        );
-
-        // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 1500);
-
-        // Assert
-        Assert.NotNull(actual[0][0].To);
-        // При gap=1500 меньше пространства для расширения
-        Assert.Equal(4500, actual[0][0].To!.Value.TotalMilliseconds);
-        Assert.Equal(0, actual[0][0].From.TotalMilliseconds);
-    }
-
-    #endregion
 }

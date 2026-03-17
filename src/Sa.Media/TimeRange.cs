@@ -3,36 +3,25 @@
 namespace Sa.Media;
 
 
-[DebuggerDisplay("[{From.TotalMilliseconds}, {To?.TotalMilliseconds}]")]
-public sealed record TimeRange(TimeSpan From = default, TimeSpan? To = null)
+[DebuggerDisplay("[{From.TotalMilliseconds}, {To.TotalMilliseconds}]")]
+public sealed record TimeRange(TimeSpan From, TimeSpan To)
 {
-    /// <summary>
-    /// Возвращает true, если конечное время не задано (обрезка до конца файла)
-    /// </summary>
-    public bool HasEnd => To.HasValue;
+    public bool HasEnd => To != TimeSpan.MaxValue;
 
-    /// <summary>
-    /// Длительность диапазона. Если To не задан — null
-    /// </summary>
-    public TimeSpan? Duration => To.HasValue ? To.Value - From : null;
+    public TimeSpan Duration => To - From;
 
-    /// <summary>
-    /// Начальное время в секундах (double)
-    /// </summary>
+    public bool IsPositive => To >= From;
+
     public double FromSeconds => From.TotalSeconds;
 
-    /// <summary>
-    /// Конечное время в секундах (double)
-    /// </summary>
-    public double ToSeconds => To?.TotalSeconds ?? double.PositiveInfinity;
+    public double ToSeconds => To.TotalSeconds;
 
-    /// <summary>
-    /// Проверяет, содержит ли диапазон указанное время
-    /// </summary>
-    public bool Contains(TimeSpan time)
-    {
-        return time >= From && (!HasEnd || time <= To!.Value);
-    }
+
+    public static TimeRange[][] ToChunks(params TimeRange[][] chunks) => chunks;
+
+
+    public static readonly TimeRange Default
+        = TimeRange.Create(default, TimeSpan.MaxValue);
 
     /// <summary>
     /// Валидация диапазона
@@ -42,21 +31,25 @@ public sealed record TimeRange(TimeSpan From = default, TimeSpan? To = null)
         if (From < TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(From), "Start time cannot be negative");
 
-        if (To.HasValue && To.Value < From)
+        if (To < From)
             throw new ArgumentOutOfRangeException(nameof(To), "End time cannot be before start time");
     }
 
     public static TimeRange RangeFromDuration(TimeSpan from, TimeSpan duration)
         => new(from, from + duration);
 
-    public static TimeRange RangeFromTimes(TimeSpan from, TimeSpan end)
+    public static TimeRange Create(TimeSpan from, TimeSpan end)
         => new(from, end);
 
-    public static TimeRange RangeFromMilliseconds(long from, long end)
+    public static TimeRange Ms(long from, long end)
         => new(TimeSpan.FromMilliseconds(from),
             TimeSpan.MaxValue.TotalMilliseconds > end ? TimeSpan.FromMilliseconds(end) : TimeSpan.MaxValue);
 
-    public static TimeRange RangeFromSeconds(double fromSeconds, double? toSeconds = null)
-        => new(TimeSpan.FromSeconds(fromSeconds), toSeconds.HasValue ? TimeSpan.FromSeconds(toSeconds.Value) : null);
+    public static TimeRange Seconds(double fromSeconds, double? toSeconds = null)
+        => new(TimeSpan.FromSeconds(fromSeconds),
+            toSeconds.HasValue
+            && TimeSpan.MaxValue.TotalSeconds < toSeconds
+                ? TimeSpan.FromSeconds(toSeconds.Value)
+                : TimeSpan.MaxValue);
 }
 
