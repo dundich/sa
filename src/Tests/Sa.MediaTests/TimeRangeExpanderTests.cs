@@ -164,7 +164,6 @@ public class TimeRangeExpanderTests
         Assert.Single(actual);
         Assert.Single(actual[0]);
 
-        // Проверяем, что диапазон расширился
         Assert.True(actual[0][0].From.TotalMilliseconds <= 5000);
         Assert.True(actual[0][0].To.TotalMilliseconds >= 6000);
     }
@@ -202,7 +201,7 @@ public class TimeRangeExpanderTests
         // Arrange
         var input = ToChunks(
             [Ms(1000, 2000)],
-            [Ms(2100, 3000)] // не сливаются
+            [Ms(2100, 3000)] // no merge
         );
 
         var expected = ToChunks(

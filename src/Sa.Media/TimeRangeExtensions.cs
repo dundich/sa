@@ -173,9 +173,6 @@ public static class TimeRangeExpander
         }
     }
 
-    /// <summary>
-    /// Сливает диапазоны внутри одного чанка
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static TimeRange[] MergeCloseRanges(TimeRange[] ranges, int thresholdMillesecods)
     {
