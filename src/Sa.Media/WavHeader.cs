@@ -78,7 +78,9 @@ public sealed class WavHeader
         if (BitsPerSample == 0 || NumChannels == 0 || SampleRate == 0)
             return 0;
 
-        long dataSize = (fileSize >= DataOffset && !HasDataSize) ? fileSize.Value - DataOffset : DataSize;
+        long dataSize = (fileSize >= DataOffset && !HasDataSize)
+            ? fileSize.Value - DataOffset
+            : DataSize;
 
         long bytesPerChannel = dataSize / NumChannels;
         long samplesPerChannel = bytesPerChannel / (BitsPerSample / 8);
@@ -87,7 +89,7 @@ public sealed class WavHeader
 
     public TimeSpan GetDuration() => TimeSpan.FromSeconds(GetDurationInSeconds());
 
-    public int GetBytesPerSamplePerChannel() => BitsPerSample / 8;
+    public int GetBytesPerSample() => BitsPerSample / 8;
 
     public bool IsPcm => AudioFormat == WaveFormatType.Pcm;
     public bool IsIeeeFloat => AudioFormat == WaveFormatType.IeeeFloat;
@@ -144,11 +146,13 @@ public sealed class WavHeader
         bool alignToFrames = true)
     {
         long dataOffset = DataOffset;
-        long dataEnd = HasDataSize
-            ? dataOffset + DataSize
-            : (fileSize ?? throw new InvalidOperationException("fileSize required for streaming data"));
 
         long bytesPerSecond = GetBytesPerSecond();
+
+        long dataEnd = HasDataSize
+            ? dataOffset + DataSize
+            : (fileSize ?? (long)TimeSpan.MaxValue.TotalSeconds * bytesPerSecond);//  throw new InvalidOperationException("fileSize required for streaming data"));        
+
 
         long fromOffset = dataOffset + (long)(range.From.TotalSeconds * bytesPerSecond);
         long toOffset = range.HasEnd
@@ -173,4 +177,9 @@ public sealed class WavHeader
         long alignedRelative = (relativeOffset / BlockAlign) * BlockAlign;
         return baseOffset + alignedRelative;
     }
+
+
+    public Func<ReadOnlySpan<byte>, double> GetNormalizedConverter()
+        => SampleConverter.GetNormalizedConverter(BitsPerSample, AudioFormat);
+
 }

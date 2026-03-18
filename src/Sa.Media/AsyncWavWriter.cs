@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace Sa.Media;
 
-public sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
+internal sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
 {
     private readonly Stream _stream;
     private readonly uint _sampleRate;

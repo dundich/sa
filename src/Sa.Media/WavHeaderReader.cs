@@ -2,7 +2,7 @@
 
 namespace Sa.Media;
 
-public static class WavHeaderReader
+internal static class WavHeaderReader
 {
     static class Constants
     {
@@ -12,7 +12,9 @@ public static class WavHeaderReader
         public const uint FormatWave = 0x45564157; //WAVE
     }
 
-    public static async Task<WavHeader> ReadHeaderAsync(PipeReader pipe, CancellationToken cancellationToken = default)
+    public static async Task<WavHeader> ReadHeaderAsync(
+        PipeReader pipe,
+        CancellationToken cancellationToken = default)
     {
         BinaryPipeReader reader = new(pipe);
         uint chunkId = await reader.ReadUInt32Async(cancellationToken);

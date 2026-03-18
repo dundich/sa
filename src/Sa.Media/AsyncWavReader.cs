@@ -6,10 +6,36 @@ namespace Sa.Media;
 
 
 /// <summary>
-/// <seealso href="https://stackoverflow.com/questions/8754111/how-to-read-the-data-in-a-wav-file-to-an-array/34667370#34667370"/>
+/// Async WAV file reader for .NET
 /// </summary>
-public sealed class AsyncWavReader(PipeReader reader)
+public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
 {
+    private readonly Lock _headerLock = new();
+    private readonly PipeReader _reader;
+    private readonly Stream? _stream;
+    private readonly bool _ownsReader;
+    private Task<WavHeader>? _headerTask;
+    private bool _disposed;
+
+    public AsyncWavReader(PipeReader reader)
+    {
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
+        _ownsReader = false;
+    }
+
+    public AsyncWavReader(PipeReader reader, bool ownsReader)
+    {
+        _reader = reader;
+        _ownsReader = ownsReader;
+    }
+
+    private AsyncWavReader(PipeReader reader, Stream stream)
+    {
+        _reader = reader;
+        _stream = stream;
+        _ownsReader = true;
+    }
+
     public static AsyncWavReader Create(Stream stream, StreamPipeReaderOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -17,13 +43,27 @@ public sealed class AsyncWavReader(PipeReader reader)
 
         var reader = PipeReader.Create(stream, options);
 
-        return new AsyncWavReader(reader);
+        return new AsyncWavReader(reader, ownsReader: true);
     }
 
+    public static AsyncWavReader CreateFromFile(string filePath, FileStreamOptions? fileOptions = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(filePath);
 
-    private readonly Lock _headerLock = new();
+        fileOptions ??= new FileStreamOptions
+        {
+            Access = FileAccess.Read,
+            Mode = FileMode.Open,
+            Share = FileShare.Read,
+            Options = FileOptions.Asynchronous | FileOptions.SequentialScan
+        };
 
-    private Task<WavHeader>? _headerTask;
+        var stream = new FileStream(filePath, fileOptions);
+
+        var reader = PipeReader.Create(stream);
+
+        return new AsyncWavReader(reader, stream);
+    }
 
     public Task<WavHeader> GetHeaderAsync(CancellationToken cancellationToken)
     {
@@ -31,7 +71,7 @@ public sealed class AsyncWavReader(PipeReader reader)
         {
             lock (_headerLock)
             {
-                _headerTask ??= WavHeaderReader.ReadHeaderAsync(reader, cancellationToken);
+                _headerTask ??= WavHeaderReader.ReadHeaderAsync(_reader, cancellationToken);
             }
         }
         return _headerTask;
@@ -46,7 +86,7 @@ public sealed class AsyncWavReader(PipeReader reader)
     /// но данные должны быть скопированы до следующего yield return).
     /// Если false - возвращает копию данных (безопасно, но с аллокациями).
     /// </param>
-    public async IAsyncEnumerable<AudioPacket> ReadRawChannelSamplesAsync(
+    public async IAsyncEnumerable<AudioPacket> ReadSamplesPerChannelAsync(
         TimeRange? cutRange = null,
         bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -60,7 +100,7 @@ public sealed class AsyncWavReader(PipeReader reader)
 
         if (offsetToSkip > 0)
         {
-            await reader.SkipAsync(offsetToSkip, cancellationToken);
+            await _reader.SkipAsync(offsetToSkip, cancellationToken);
         }
 
         int channels = header.NumChannels;
@@ -74,7 +114,7 @@ public sealed class AsyncWavReader(PipeReader reader)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            ReadResult result = await reader.ReadAsync(cancellationToken);
+            ReadResult result = await _reader.ReadAsync(cancellationToken);
             ReadOnlySequence<byte> sequence = result.Buffer;
 
             SequencePosition consumed = sequence.Start;
@@ -110,11 +150,11 @@ public sealed class AsyncWavReader(PipeReader reader)
             {
                 if (success)
                 {
-                    reader.AdvanceTo(consumed, result.IsCompleted ? sequence.End : consumed);
+                    _reader.AdvanceTo(consumed, result.IsCompleted ? sequence.End : consumed);
                 }
                 else
                 {
-                    reader.AdvanceTo(sequence.Start, sequence.End); // Сброс при ошибке
+                    _reader.AdvanceTo(sequence.Start, sequence.End); // Сброс при ошибке
                 }
             }
 
@@ -125,37 +165,28 @@ public sealed class AsyncWavReader(PipeReader reader)
 
 
     /// <summary>
-    /// Диапазон нормализованные [-1.0, 1.0],
+    /// Читает нормализованные double-сэмплы [-1.0, 1.0],
     /// </summary>
-    public async IAsyncEnumerable<AudioNormalizedPacket> ReadNormalizedDoubleSamplesAsync(
+    public async IAsyncEnumerable<AudioNormalizedPacket> ReadDoubleSamplesAsync(
         TimeRange? cutRange = null,
         bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var header = await GetHeaderAsync(cancellationToken);
+        var convert = await GetNormalizedConverterAsync(cancellationToken);
 
         await foreach (var (channelId, rawSample, offset, isEof) in
-            ReadRawChannelSamplesAsync(cutRange, allowBufferReuse, cancellationToken: cancellationToken)
+            ReadSamplesPerChannelAsync(cutRange, allowBufferReuse, cancellationToken: cancellationToken)
             .WithCancellation(cancellationToken))
         {
-            double sample = (header.BitsPerSample, header.AudioFormat) switch
-            {
-                (8, WaveFormatType.Pcm) => SampleConverter.Convert8BitToDouble(rawSample.Span),
-                (16, WaveFormatType.Pcm) => SampleConverter.Convert16BitToDouble(rawSample.Span),
-                (24, WaveFormatType.Pcm) => SampleConverter.Convert24BitToDouble(rawSample.Span),
-                (32, WaveFormatType.Pcm) => SampleConverter.Convert32BitToDouble(rawSample.Span),
-                (32, WaveFormatType.IeeeFloat) => SampleConverter.Convert32BitFloatToDouble(rawSample.Span),
-                (64, WaveFormatType.IeeeFloat) => SampleConverter.Convert64BitFloatToDouble(rawSample.Span),
-                var (bits, format) => throw new NotSupportedException(
-                    $"Unsupported format: {format} ({bits}-bit)")
-            };
-
+            double sample = convert(rawSample.Span);
             yield return new AudioNormalizedPacket(channelId, sample, offset, isEof);
         }
-
     }
 
-    public async IAsyncEnumerable<AudioPacket> ConvertNormalizedDoubleAsync(
+    /// <summary>
+    /// Конвертирует в целевой аудиоформат
+    /// </summary>
+    public async IAsyncEnumerable<AudioPacket> ConvertToFormatAsync(
         AudioEncoding targetFormat = AudioEncoding.Pcm16BitSigned,
         TimeRange? cutRange = null,
         bool allowBufferReuse = true,
@@ -165,54 +196,62 @@ public sealed class AsyncWavReader(PipeReader reader)
 
         var buffer = new byte[bytesPerSample];
 
+        var convert = SampleConverter.GetConverter(targetFormat);
+
         await foreach (var (channelId, sample, offset, isEof) in
-            ReadNormalizedDoubleSamplesAsync(cutRange, allowBufferReuse, cancellationToken)
+            ReadDoubleSamplesAsync(cutRange, allowBufferReuse, cancellationToken)
             .WithCancellation(cancellationToken))
         {
-            ReadOnlyMemory<byte> result = SampleConverter.FromNormalizedDouble(sample, targetFormat, buffer);
-
+            ReadOnlyMemory<byte> result = convert(sample, buffer);
+            // При true все пакеты используют ОДИН внутренний буфер!
             var chunk = allowBufferReuse ? result : result.ToArray();
-
             yield return new(channelId, chunk, offset, isEof);
         }
     }
 
     /// <summary>
-    /// Для потоковой обработки или воспроизведения
+    /// Читает пакеты сэмплов по каналам
     /// </summary>
+    /// <remarks>
+    /// Для потоковой обработки или воспроизведения
+    /// </remarks>
     public async IAsyncEnumerable<AudioPacket> ReadStreamableChunksAsync(
         AudioEncoding targetFormat = AudioEncoding.Pcm16BitSigned,
         TimeRange? cutRange = null,
-        int bufferSize = 1024,
+        int samplesPerBatch = 1024,
         bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         int bytesPerSample = targetFormat.GetBytesPerSample();
 
         // Выравниваем до кратного 16,32... bytesPerSample
-        int alignedSize = Math.Max(bytesPerSample, (bufferSize / bytesPerSample) * bytesPerSample);
+        int alignedSize = Math.Max(bytesPerSample, (samplesPerBatch / bytesPerSample) * bytesPerSample);
 
         // Инициализируем буферы по количеству каналов
         var header = await GetHeaderAsync(cancellationToken);
         int channelCount = header.NumChannels;
 
-        IMemoryOwner<byte>[] channelBuffers = new IMemoryOwner<byte>[channelCount];
-
-        var positions = new int[channelCount];
-
-        for (int i = 0; i < channelCount; i++)
-        {
-            channelBuffers[i] = MemoryPool<byte>.Shared.Rent(alignedSize);
-        }
+        var channelBuffers = new IMemoryOwner<byte>[channelCount];
 
         try
         {
-            await foreach (var (channelId, sample, offset, isEof) in ConvertNormalizedDoubleAsync(
+            var positions = new int[channelCount];
+
+            for (int i = 0; i < channelCount; i++)
+            {
+                channelBuffers[i] = MemoryPool<byte>.Shared.Rent(alignedSize);
+            }
+
+            long lastOffset = 0;
+
+            await foreach (var (channelId, sample, position, isEof) in ConvertToFormatAsync(
                 targetFormat,
                 cutRange,
                 allowBufferReuse,
                 cancellationToken: cancellationToken).WithCancellation(cancellationToken))
             {
+                lastOffset = position;
+
                 // Копируем семплы в соответствующий канал
                 var buffer = channelBuffers[channelId].Memory;
                 ref int pos = ref positions[channelId];
@@ -229,7 +268,7 @@ public sealed class AsyncWavReader(PipeReader reader)
 
                     var chunk = allowBufferReuse ? result : result.ToArray();
 
-                    yield return new(channelId, chunk, offset, isEof);
+                    yield return new(channelId, chunk, position, isEof);
                     positions[channelId] = 0;
                 }
             }
@@ -243,20 +282,27 @@ public sealed class AsyncWavReader(PipeReader reader)
                     var result = channelBuffers[channelId].Memory[..remaining];
                     var chunk = allowBufferReuse ? result : result.ToArray();
 
-                    yield return new AudioPacket(channelId, chunk, (long)remaining, true);
+                    yield return new AudioPacket(channelId, chunk, lastOffset, true);
                 }
             }
         }
         finally
         {
-            foreach (var buffer in channelBuffers)
+            foreach (IMemoryOwner<byte> buffer in channelBuffers)
             {
                 buffer?.Dispose();
             }
         }
     }
 
-    private static void ValidateHeader(WavHeader header)
+    private async Task<Func<ReadOnlySpan<byte>, double>> GetNormalizedConverterAsync(CancellationToken cancellationToken)
+    {
+        var header = await GetHeaderAsync(cancellationToken);
+        return header.GetNormalizedConverter();
+    }
+
+
+    private void ValidateHeader(WavHeader header)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(header.NumChannels, nameof(header.NumChannels));
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(header.SampleRate, nameof(header.SampleRate));
@@ -264,5 +310,45 @@ public sealed class AsyncWavReader(PipeReader reader)
         ArgumentOutOfRangeException.ThrowIfNegative(header.DataSize, nameof(header.DataSize));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(header.BitsPerSample, 0, nameof(header.BitsPerSample));
         ArgumentOutOfRangeException.ThrowIfGreaterThan(header.BitsPerSample, 64, nameof(header.BitsPerSample));
+
+
+        if (!header.HasDataSize)
+        {
+            // restore datasize
+            if (_stream != null && _stream.CanSeek && _stream.Length > 0)
+            {
+                header.DataSize = (uint)(_stream.Length - header.DataOffset);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            if (_ownsReader)
+            {
+                _reader.Complete();
+            }
+            _stream?.Dispose();
+            _disposed = true;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_disposed)
+        {
+            if (_ownsReader)
+            {
+                await _reader.CompleteAsync();
+            }
+
+            if (_stream != null)
+            {
+                await _stream.DisposeAsync();
+            }
+            _disposed = true;
+        }
     }
 }

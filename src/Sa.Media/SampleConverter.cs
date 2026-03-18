@@ -8,54 +8,54 @@ namespace Sa.Media;
 /// </summary>
 internal static class SampleConverter
 {
-
     /// <summary>
-    /// Конвертирует raw PCM/float байты в нормализованный double [-1.0, 1.0]
+    ///  Конвертирует raw PCM/float байты в нормализованный double [-1.0, 1.0]
     /// </summary>
-    public static double ToNormalizedDouble(ReadOnlySpan<byte> source, AudioEncoding format)
+    public static Func<ReadOnlySpan<byte>, double> GetNormalizedConverter(ushort bitsPerSample, WaveFormatType format)
     {
-        return format switch
+        return (bitsPerSample, format) switch
         {
-            AudioEncoding.Pcm8BitUnsigned => Convert8BitToDouble(source),
-            AudioEncoding.Pcm16BitSigned => Convert16BitToDouble(source),
-            AudioEncoding.Pcm24BitSigned => Convert24BitToDouble(source),
-            AudioEncoding.Pcm32BitSigned => Convert32BitToDouble(source),
-            AudioEncoding.IeeeFloat32Bit => Convert32BitFloatToDouble(source),
-            AudioEncoding.IeeeFloat64Bit => Convert64BitFloatToDouble(source),
-            _ => throw new NotSupportedException($"Unsupported format: {format}")
-        };
-    }
-
-    /// <summary>
-    /// Конвертирует raw PCM/float байты в нормализованный double [-1.0, 1.0]
-    /// </summary>
-    public static double ToNormalizedDouble(ReadOnlySpan<byte> source, WaveFormatType format, ushort bitsPerSample)
-    {
-        return (format, bitsPerSample) switch
-        {
-            (WaveFormatType.Pcm, 8) => Convert8BitToDouble(source),
-            (WaveFormatType.Pcm, 16) => Convert16BitToDouble(source),
-            (WaveFormatType.Pcm, 24) => Convert24BitToDouble(source),
-            (WaveFormatType.Pcm, 32) => Convert32BitToDouble(source),
-            (WaveFormatType.IeeeFloat, 32) => Convert32BitFloatToDouble(source),
-            (WaveFormatType.IeeeFloat, 64) => Convert64BitFloatToDouble(source),
+            (8, WaveFormatType.Pcm) => SampleConverter.Convert8BitToDouble,
+            (16, WaveFormatType.Pcm) => SampleConverter.Convert16BitToDouble,
+            (24, WaveFormatType.Pcm) => SampleConverter.Convert24BitToDouble,
+            (32, WaveFormatType.Pcm) => SampleConverter.Convert32BitToDouble,
+            (32, WaveFormatType.IeeeFloat) => SampleConverter.Convert32BitFloatToDouble,
+            (64, WaveFormatType.IeeeFloat) => SampleConverter.Convert64BitFloatToDouble,
             _ => throw new NotSupportedException($"Unsupported format: {format} ({bitsPerSample}-bit)")
         };
     }
 
     /// <summary>
-    /// Конвертирует нормализованный double [-1.0, 1.0] в нужный формат
+    ///  Конвертирует raw PCM/float байты в нормализованный double [-1.0, 1.0]
     /// </summary>
-    public static ReadOnlyMemory<byte> FromNormalizedDouble(double sample, AudioEncoding format, Memory<byte> buffer)
+    public static Func<ReadOnlySpan<byte>, double> GetNormalizedConverter(AudioEncoding format)
     {
         return format switch
         {
-            AudioEncoding.Pcm8BitUnsigned => WritePcm8Bit(sample, buffer),
-            AudioEncoding.Pcm16BitSigned => WritePcm16Bit(sample, buffer),
-            AudioEncoding.Pcm24BitSigned => WritePcm24Bit(sample, buffer),
-            AudioEncoding.Pcm32BitSigned => WritePcm32Bit(sample, buffer),
-            AudioEncoding.IeeeFloat32Bit => WriteIeeeFloat32Bit(sample, buffer),
-            AudioEncoding.IeeeFloat64Bit => WriteIeeeFloat64Bit(sample, buffer),
+            AudioEncoding.Pcm8BitUnsigned => SampleConverter.Convert8BitToDouble,
+            AudioEncoding.Pcm16BitSigned => SampleConverter.Convert16BitToDouble,
+            AudioEncoding.Pcm24BitSigned => SampleConverter.Convert24BitToDouble,
+            AudioEncoding.Pcm32BitSigned => SampleConverter.Convert32BitToDouble,
+            AudioEncoding.IeeeFloat32Bit => SampleConverter.Convert32BitFloatToDouble,
+            AudioEncoding.IeeeFloat64Bit => SampleConverter.Convert64BitFloatToDouble,
+            _ => throw new NotSupportedException($"Unsupported format: {format}")
+        };
+    }
+
+
+    /// <summary>
+    /// Конвертирует нормализованный double [-1.0, 1.0] в нужный формат
+    /// </summary>
+    public static Func<double, Memory<byte>, ReadOnlyMemory<byte>> GetConverter(AudioEncoding format)
+    {
+        return format switch
+        {
+            AudioEncoding.Pcm8BitUnsigned => WritePcm8Bit,
+            AudioEncoding.Pcm16BitSigned => WritePcm16Bit,
+            AudioEncoding.Pcm24BitSigned => WritePcm24Bit,
+            AudioEncoding.Pcm32BitSigned => WritePcm32Bit,
+            AudioEncoding.IeeeFloat32Bit => WriteIeeeFloat32Bit,
+            AudioEncoding.IeeeFloat64Bit => WriteIeeeFloat64Bit,
             _ => throw new NotSupportedException($"Unsupported format: {format}")
         };
     }
