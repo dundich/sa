@@ -2,5 +2,5 @@
 
 public interface IFFMpegLocator
 {
-    string FindFFmpegExecutablePath(string? writableDirectory = null);
+    string FindFFmpegExecutablePath();
 }

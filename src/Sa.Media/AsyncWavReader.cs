@@ -42,7 +42,6 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         if (!stream.CanRead) throw new ArgumentException("Stream must be readable", nameof(stream));
 
         var reader = PipeReader.Create(stream, options);
-
         return new AsyncWavReader(reader, ownsReader: true);
     }
 
@@ -92,7 +91,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var header = await GetHeaderAsync(cancellationToken);
-        ValidateHeader(header);
+        EnsureDataSize(header);
 
         var (cutFrom, cutTo) = header.CalculateCutOffsets(cutRange ?? TimeRange.Default);
 
@@ -302,23 +301,11 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
     }
 
 
-    private void ValidateHeader(WavHeader header)
+    private void EnsureDataSize(WavHeader header)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(header.NumChannels, nameof(header.NumChannels));
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(header.SampleRate, nameof(header.SampleRate));
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(header.BlockAlign, nameof(header.BlockAlign));
-        ArgumentOutOfRangeException.ThrowIfNegative(header.DataSize, nameof(header.DataSize));
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(header.BitsPerSample, 0, nameof(header.BitsPerSample));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(header.BitsPerSample, 64, nameof(header.BitsPerSample));
-
-
-        if (!header.HasDataSize)
+        if (!header.HasDataSize && _stream?.CanSeek == true && _stream.Length > 0)
         {
-            // restore datasize
-            if (_stream != null && _stream.CanSeek && _stream.Length > 0)
-            {
-                header.DataSize = (uint)(_stream.Length - header.DataOffset);
-            }
+            header.DataSize = (uint)(_stream.Length - header.DataOffset);
         }
     }
 

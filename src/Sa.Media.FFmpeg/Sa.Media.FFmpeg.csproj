@@ -1,39 +1,118 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="../Common.NuGet.Properties.xml" />
+    <Import Project="../Common.NuGet.Properties.xml" />
 
-  <PropertyGroup>
-    <Version>0.8.1</Version>
-    <Description>FFmpeg wrapper</Description>
-  </PropertyGroup>
-  
-  <ItemGroup>
-    <None Remove="runtimes\linux-x64\ffmpeg.zip" />
-    <None Remove="runtimes\win-x64\ffmpeg.zip" />
-  </ItemGroup>
+    <PropertyGroup>
+        <Version>0.9.5</Version>
+        <Description>FFmpeg wrapper</Description>
+        <GeneratePathProperty>true</GeneratePathProperty>
+        <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64</RuntimeIdentifiers>
 
-  <ItemGroup>
-    <Compile Include="..\Sa\Classes\IProcessExecutor.cs" Link="AsLink\IProcessExecutor.cs" />
-  </ItemGroup>
+        <!-- Пути для локальной работы -->
+        <FfmpegSourceZipDir>$(MSBuildThisFileDirectory)sa</FfmpegSourceZipDir>
+        <FfmpegLocalExtractDir>$(MSBuildThisFileDirectory)sa\native</FfmpegLocalExtractDir>
 
-  <ItemGroup>
-    <InternalsVisibleTo Include="Sa.Media.FFmpegTests" />
-  </ItemGroup>
+        <!-- 🔹 Определение RID -->
+        <_FfmpegCurrentRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_FfmpegCurrentRid>
+        <_FfmpegCurrentRid Condition="'$(_FfmpegCurrentRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_FfmpegCurrentRid>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="runtimes\linux-x64\ffmpeg.zip" />
-    <EmbeddedResource Include="runtimes\win-x64\ffmpeg.zip" />
-  </ItemGroup>
+    <!-- 🔹 ZIP-архивы как исходники -->
+    <ItemGroup>
+        <FfmpegZipFiles Include="$(FfmpegSourceZipDir)\**\ffmpeg.zip" />
+        <None Include="@(FfmpegZipFiles)" Pack="false" Visible="false" />
+    </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="AsLink\" />
-    <Folder Include="Properties\" />
-  </ItemGroup>
+    <Target Name="DebugRid" BeforeTargets="Build">
+        <Message Text="[Sa.Media.FFmpeg] === RID Debug ===" Importance="high" />
+        <Message Text="[Sa.Media.FFmpeg] RuntimeIdentifier: '$(RuntimeIdentifier)'" Importance="high" />
+        <Message Text="[Sa.Media.FFmpeg] NETCoreSdkRuntimeIdentifier: '$(NETCoreSdkRuntimeIdentifier)'" Importance="high" />
+        <Message Text="[Sa.Media.FFmpeg] OS: '$(OS)'" Importance="high" />
+        <Message Text="[Sa.Media.FFmpeg] ===============" Importance="high" />
+    </Target>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
-    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
-  </ItemGroup>
+    <!-- 🔹 Локальная распаковка: <rid>/ffmpeg.zip → sa/native/ -->
+    <Target Name="ExtractFfmpegLocally" BeforeTargets="BeforeBuild;CoreBuild" Condition="'$(DesignTimeBuild)' != 'true' AND '$(_FfmpegCurrentRid)' != ''">
+
+        <PropertyGroup>
+            <_SourceZip>$(FfmpegSourceZipDir)\$(_FfmpegCurrentRid)\ffmpeg.zip</_SourceZip>
+        </PropertyGroup>
+
+        <Message Text="[Sa.Media.FFmpeg] 🔍 Looking for: $(_SourceZip)" Importance="high" />
+
+        <Error Text="FFmpeg ZIP not found: $(_SourceZip). Check that sa\$(_FfmpegCurrentRid)\ffmpeg.zip exists." Condition="!Exists('$(_SourceZip)')" />
+
+        <Message Text="[Sa.Media.FFmpeg] 📦 Extracting FFmpeg for $(_FfmpegCurrentRid)..." Importance="high" Condition="Exists('$(_SourceZip)')" />
+
+        <MakeDir Directories="$(FfmpegLocalExtractDir)" />
+
+        <Unzip SourceFiles="$(_SourceZip)" DestinationFolder="$(FfmpegLocalExtractDir)" SkipUnchangedFiles="true" />
+
+        <!-- Execute bit для Unix -->
+        <Exec Command="chmod +x &quot;$(FfmpegLocalExtractDir)/ffmpeg&quot; &quot;$(FfmpegLocalExtractDir)/ffprobe&quot;" Condition="'$(OS)' != 'Windows_NT' AND Exists('$(FfmpegLocalExtractDir)/ffmpeg')" ContinueOnError="true" />
+
+        <Message Text="[Sa.Media.FFmpeg] ✓ Extracted: $(_SourceZip) → $(FfmpegLocalExtractDir)" Importance="high" />
+    </Target>
+
+
+    <!-- 🔹 Ключевое: делаем распакованные файлы видимыми для ProjectReference --><!--
+    --><!-- Используем Target-батчинг для динамического включения файлов после распаковки -->
+    <Target Name="IncludeExtractedFfmpegFiles" AfterTargets="ExtractFfmpegLocally" BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths">
+
+        <ItemGroup Condition="Exists('$(FfmpegLocalExtractDir)')">
+             <!--Находим все файлы в папке распаковки--> 
+            <_ExtractedFfmpegFiles Include="$(FfmpegLocalExtractDir)\**\*" />
+        </ItemGroup>
+
+         <!--Добавляем как Content с копированием - это работает для ProjectReference--> 
+        <ItemGroup Condition="'@(_ExtractedFfmpegFiles)' != ''">
+            <Content Include="@(_ExtractedFfmpegFiles)" Link="sa\native\%(RecursiveDir)%(FileName)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="false" Visible="false" />
+        </ItemGroup>
+
+        <Message Text="[Sa.Media.FFmpeg] 📦 Included %(_ExtractedFfmpegFiles.Filename) for copying to output" Importance="normal" Condition="'@(_ExtractedFfmpegFiles)' != ''" />
+    </Target>
+
+
+    <!--<ItemGroup Condition="'@(_ExtractedFfmpegFiles)' != ''">
+        <Content Include="@(_ExtractedFfmpegFiles)">
+            --><!-- Link задает относительный путь в папке bin потребителя --><!--
+            <Link>sa\native\%(RecursiveDir)%(FileName)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Pack>false</Pack>
+            <Visible>true</Visible>
+        </Content>
+    </ItemGroup>-->
+
+
+    <!-- 🔹 .targets для потребителей -->
+    <ItemGroup>
+        <None Include="buildTransitive\Sa.Media.FFmpeg.targets" Pack="true" PackagePath="buildTransitive\Sa.Media.FFmpeg.targets" />
+        <None Include="buildTransitive\Sa.Media.FFmpeg.targets" Pack="true" PackagePath="build\Sa.Media.FFmpeg.targets" />
+    </ItemGroup>
+
+    <!-- 🔹 Упаковка ZIP в NuGet с RID-путём -->
+    <ItemGroup>
+        <None Include="$(FfmpegSourceZipDir)\**\ffmpeg.zip">
+            <Pack>true</Pack>
+            <PackagePath>ffmpeg</PackagePath>
+            <Visible>false</Visible>
+        </None>
+    </ItemGroup>
+
+    <!-- 🔹 Остальные настройки -->
+    <ItemGroup>
+        <Compile Include="..\Sa\Classes\IProcessExecutor.cs" Link="AsLink\IProcessExecutor.cs" />
+        <InternalsVisibleTo Include="Sa.Media.FFmpegTests" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="Properties\" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+        <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+    </ItemGroup>
 
 </Project>

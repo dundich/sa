@@ -1,15 +1,30 @@
 ﻿using System.Diagnostics;
-using System.IO.Compression;
 using System.Runtime.InteropServices;
 
 namespace Sa.Media.FFmpeg.Services;
 
 internal sealed class FFMpegLocator : IFFMpegLocator
 {
+    const string PlatformFolder = "sa/native";
+
     /// <summary>
     /// Находит путь к ffmpeg-исполняемому файлу.
     /// </summary>
-    public string FindFFmpegExecutablePath(string? writableDirectory = null)
+    public string FindFFmpegExecutablePath()
+    {
+        var filePath = FindFFmpeg();
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            MakeFileExecutable(filePath);
+            var destDir = Path.GetDirectoryName(filePath);
+            MakeFileExecutable(Path.Combine(destDir!, Constants.FFprobeFileNameLinux));
+        }
+
+        return filePath;
+    }
+
+    private static string FindFFmpeg()
     {
         var executableName = Constants.FFmpegExecutableFileName;
 
@@ -20,9 +35,8 @@ internal sealed class FFMpegLocator : IFFMpegLocator
         if (File.Exists(fullPath))
             return fullPath;
 
-        // 2. (runtimes/win-x64)
-        string platformPath = GetPlatformFolder();
-        fullPath = Path.Combine(appDir, platformPath, executableName);
+        // 2. (runtimes/native)
+        fullPath = Path.Combine(appDir, PlatformFolder, executableName);
         if (File.Exists(fullPath))
             return fullPath;
 
@@ -41,54 +55,9 @@ internal sealed class FFMpegLocator : IFFMpegLocator
             }
         }
 
-        // 4. from resx
-        writableDirectory ??= FindWritableDirectory();
-        return ExtractFFmpegFromResources(platformPath, writableDirectory);
+        throw new InvalidOperationException($"ffmpeg not found.");
     }
 
-
-    static readonly Lock s_lock = new();
-
-
-    /// <summary>
-    /// Извлекает ffmpeg из встроенных ресурсов ассембли.
-    /// </summary>
-    private static string ExtractFFmpegFromResources(string relativePath, string destDir)
-    {
-        var resourcePath = Path.ChangeExtension(Path.Combine(relativePath, Constants.FFmpegExecutableFileName), "zip")
-            .Replace('\\', '.')
-            .Replace('/', '.')
-            .Replace('-', '_');
-
-        var assembly = typeof(FFMpegLocator).Assembly;
-        var resourceName = $"{assembly.GetName().Name}.{resourcePath}";
-
-        using var zipStream = assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
-
-        Directory.CreateDirectory(destDir);
-
-        string executableFile = Path.Combine(destDir, Constants.FFmpegExecutableFileName);
-
-        lock (s_lock)
-        {
-            if (File.Exists(executableFile)) return executableFile;
-
-            using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
-            foreach (var entry in archive.Entries)
-            {
-                entry.ExtractToFile(Path.Combine(destDir, entry.Name), overwrite: true);
-            }
-
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                MakeFileExecutable(Path.Combine(destDir, Constants.FFmpegFileNameLinux));
-                MakeFileExecutable(Path.Combine(destDir, Constants.FFprobeFileNameLinux));
-            }
-        }
-
-        return executableFile;
-    }
 
     /// <summary>
     /// Делает файл исполняемым (только для Linux/macOS).
@@ -110,28 +79,6 @@ internal sealed class FFMpegLocator : IFFMpegLocator
 
         if (process?.ExitCode != 0)
             throw new InvalidOperationException($"Failed to make file executable: {path}");
-    }
-
-    /// <summary>
-    /// Find a Suitable Directory for Temporary Files
-    /// </summary>
-    private static string FindWritableDirectory()
-    {
-        string[] candidates =
-        [
-            Path.Combine(AppContext.BaseDirectory, GetPlatformFolder())
-            , Path.GetTempPath()
-        ];
-
-        return Array.Find(candidates, CanWriteToDirectory)
-            ?? throw new IOException("No writable directory found.");
-    }
-
-    private static string GetPlatformFolder()
-    {
-        return Constants.IsOsLinux
-            ? Path.Combine("runtimes", "linux-x64")
-            : Path.Combine("runtimes", "win-x64");
     }
 
     private static IEnumerable<string> GetCommonSearchPaths()
@@ -158,21 +105,5 @@ internal sealed class FFMpegLocator : IFFMpegLocator
         }
 
         return paths.Distinct();
-    }
-
-    private static bool CanWriteToDirectory(string dir)
-    {
-        try
-        {
-            Directory.CreateDirectory(dir);
-            var testFile = Path.Combine(dir, ".write_test");
-            File.WriteAllText(testFile, "test");
-            File.Delete(testFile);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
     }
 }

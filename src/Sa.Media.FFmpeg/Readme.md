@@ -80,3 +80,13 @@ On Alpine Linux:
 ```bash
 sudo apk add lame-libs opus libvorbis
 ```
+
+
+wsl build
+```
+#  WSL:
+
+dotnet nuget locals all --clear
+dotnet restore -r linux-x64
+dotnet build -c Debug -r linux-x64
+```

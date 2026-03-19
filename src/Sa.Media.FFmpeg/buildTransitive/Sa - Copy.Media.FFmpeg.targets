@@ -1,0 +1,68 @@
+<Project>
+
+    <!-- 🔹 Корректное определение RID у потребителя -->
+    <PropertyGroup>
+        <_FfmpegCurrentRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_FfmpegCurrentRid>
+        <_FfmpegCurrentRid Condition="'$(_FfmpegCurrentRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_FfmpegCurrentRid>
+
+        <_FfmpegPkgRoot>$(PkgSa_Media_FFmpeg)</_FfmpegPkgRoot>
+        <_FfmpegSourceZip>$(_FfmpegPkgRoot)\ffmpeg\$(_FfmpegConsumerRid)\ffmpeg.zip</_FfmpegSourceZip>
+        <_FfmpegDestDir>$(OutputPath)sa\native</_FfmpegDestDir>
+        <_FfmpegMarker>$(_FfmpegDestDir)\.extracted-$(_FfmpegConsumerRid)</_FfmpegMarker>
+    </PropertyGroup>
+
+    <!-- Распаковка при сборке потребителя -->
+    <Target Name="ExtractFfmpegForConsumer"
+            BeforeTargets="Build;CoreBuild"
+            Condition="'$(_FfmpegConsumerRid)' != '' AND Exists('$(_FfmpegSourceZip)') AND !Exists('$(_FfmpegMarker)')">
+
+        <Message Text="📦 [FFmpeg] RID=$(_FfmpegConsumerRid)" Importance="high"/>
+        <Message Text="📦 [FFmpeg] Source=$(_FfmpegSourceZip)" Importance="high"/>
+        <Message Text="📦 [FFmpeg] Exists=$([System.IO.File]::Exists('$(_FfmpegSourceZip)'))" Importance="high"/>
+        <Message Text="📦 [FFmpeg] Dest=$(_FfmpegDestDir)" Importance="high"/>
+
+
+
+        <Message Text="📦 Extracting FFmpeg ($(_FfmpegConsumerRid)) → sa/native/"
+                 Importance="high" />
+
+        <MakeDir Directories="$(_FfmpegDestDir)" />
+
+        <Unzip SourceFiles="$(_FfmpegSourceZip)"
+               DestinationFolder="$(_FfmpegDestDir)"
+               SkipUnchangedFiles="true"
+               OverwriteReadOnlyFiles="true"/>
+
+        <!-- Маркер для incremental build -->
+        <WriteLinesToFile File="$(_FfmpegMarker)"
+                          Lines="$([System.DateTime]::Now.ToString('o'))"
+                          Overwrite="true" />
+
+        <!-- Execute bit для Unix -->
+        <Exec Command="chmod +x &quot;$(_FfmpegDestDir)/ffmpeg&quot; &quot;$(_FfmpegDestDir)/ffprobe&quot;"
+              Condition="'$(OS)' != 'Windows_NT'"
+              ContinueOnError="true" />
+
+        <Message Text="✓ FFmpeg ready at $(_FfmpegDestDir)" Importance="normal" />
+
+
+        
+
+    </Target>
+
+    <!-- Очистка старых маркеров при смене RID -->
+    <Target Name="CleanFfmpegMarkerOnRidChange"
+            BeforeTargets="ExtractFfmpegForConsumer">
+        <ItemGroup>
+            <_OldMarkers Include="$(_FfmpegDestDir)\.extracted-*"
+                         Exclude="$(_FfmpegMarker)" />
+        </ItemGroup>
+        <Delete Files="@(_OldMarkers)" Condition="'@(_OldMarkers)' != ''" />
+    </Target>
+
+    <!-- Очистка при dotnet clean -->
+    <Target Name="CleanFfmpegExtracted" AfterTargets="Clean">
+        <RemoveDir Directories="$(_FfmpegDestDir)" Condition="Exists('$(_FfmpegDestDir)')" />
+    </Target>
+
+</Project>

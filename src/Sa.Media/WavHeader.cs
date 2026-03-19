@@ -71,6 +71,9 @@ public sealed class WavHeader
 
         if (SampleRate == 0)
             throw new InvalidDataException("Sample rate is zero");
+
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(BlockAlign, nameof(BlockAlign));
+        ArgumentOutOfRangeException.ThrowIfNegative(DataSize, nameof(DataSize));
     }
 
     public double GetDurationInSeconds(long? fileSize = default)
