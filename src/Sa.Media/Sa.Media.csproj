@@ -3,8 +3,8 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.8.1</Version>
-    <Description>Async and memory-efficient WAV file reader for .NET </Description>
+    <Version>0.9.0</Version>
+    <Description>Async WAV file reader for .NET </Description>
   </PropertyGroup>
 
 </Project>

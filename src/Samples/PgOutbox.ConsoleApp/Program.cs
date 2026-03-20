@@ -5,8 +5,8 @@ using PgOutbox;
 using Sa.Outbox;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
-using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.PostgreSql.Configuration;
+using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.Publication;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -140,7 +140,11 @@ namespace PgOutbox
             OutboxMessageFilter filter,
             ReadOnlySpan<IOutboxContextOperations<SomeMessage>> messages)
         {
-            logger.LogWarning("======= {Group} : {Tenant} =======", filter.ConsumerGroupId, filter.TenantId);
+            logger.LogWarning(
+                "======= {Group} : {Tenant} =======",
+                filter.ConsumerGroupId,
+                filter.TenantId);
+
             foreach (var msg in messages)
             {
                 if (logger.IsEnabled(LogLevel.Information))

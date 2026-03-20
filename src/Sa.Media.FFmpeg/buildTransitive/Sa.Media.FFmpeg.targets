@@ -1,0 +1,79 @@
+<Project>
+
+    <!-- 🔹 определение RID у потребителя -->
+    <PropertyGroup>
+        <_FfmpegRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_FfmpegRid>
+        <_FfmpegRid Condition="'$(_FfmpegRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_FfmpegRid>
+
+        <!-- если macOS x64, принудительно ставим linux-x64 -->
+        <_FfmpegRid Condition="'$(_FfmpegRid)' == 'osx-x64'">linux-x64</_FfmpegRid>
+
+        <_FfmpegPkgRoot>$(MSBuildThisFileDirectory)..\</_FfmpegPkgRoot>
+        <_FfmpegZip>$(_FfmpegPkgRoot)ffmpeg\$(_FfmpegRid)\ffmpeg.zip</_FfmpegZip>
+        <_FfmpegDest>$(OutputPath)sa\native</_FfmpegDest>
+        <_FfmpegMarker>$(_FfmpegDest)\.extracted-$(_FfmpegRid)</_FfmpegMarker>
+    </PropertyGroup>
+
+    <!-- Распаковка при сборке потребителя -->
+    <Target Name="ExtractFfmpegInConsumer"
+            BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths;Build;CoreBuild"
+            Inputs="$(_FfmpegZip)"
+            Outputs="$(_FfmpegMarker)"
+            Condition="Exists('$(_FfmpegZip)')">
+
+        <Message Text="📦 [Sa.Media.FFmpeg] Extracting for RID $(_FfmpegRid)..." Importance="high" />
+        <Message Text="📦 [Sa.Media.FFmpeg] Source=$(_FfmpegZip)" Importance="high"/>
+        <Message Text="📦 [Sa.Media.FFmpeg] Dest=$(_FfmpegDest)" Importance="high"/>
+        
+        <MakeDir Directories="$(_FfmpegDest)" />
+
+        <Message Text="📦 [Sa.Media.FFmpeg] Extracting FFmpeg ($(_FfmpegRid)) → sa/native/"
+                 Importance="high" />
+
+        <Unzip SourceFiles="$(_FfmpegZip)"
+               DestinationFolder="$(_FfmpegDest)"
+               SkipUnchangedFiles="true"
+               OverwriteReadOnlyFiles="true"/>
+
+        <!-- Создаем маркер завершения -->
+        <Touch Files="$(_FfmpegMarker)" AlwaysCreate="true" />
+
+        <!-- Для Linux/macOS -->
+        <Exec Command="chmod +x &quot;$(_FfmpegDest)/ffmpeg&quot; &quot;$(_FfmpegDest)/ffprobe&quot;"
+              Condition="'$(OS)' != 'Windows_NT'"
+              ContinueOnError="true" />
+
+        <!-- ДИНАМИЧЕСКОЕ ВКЛЮЧЕНИЕ В ЦЕПОЧКУ СБОРКИ -->
+        <ItemGroup>
+            <_FfmpegToInclude Include="$(_FfmpegDest)\**\*" Exclude="$(_FfmpegMarker)" />
+
+            <Content Include="@(_FfmpegToInclude)">
+                <!-- Link гарантирует сохранение пути sa\native в любом потребителе -->
+                <Link>sa\native\%(RecursiveDir)%(FileName)%(Extension)</Link>
+                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                <Visible>false</Visible>
+                <!-- Чтобы файлы не попали в чужие NuGet-пакеты случайно -->
+                <Pack>false</Pack>
+            </Content>
+        </ItemGroup>
+
+        <Message Text="[Sa.Media.FFmpeg] ✓ FFmpeg ready at $(_FfmpegDest)" Importance="high" />
+    </Target>
+
+    <!-- Очистка старых маркеров при смене RID -->
+    <Target Name="CleanFfmpegMarkerOnRidChange"
+            BeforeTargets="ExtractFfmpegInConsumer">
+        <ItemGroup>
+            <_OldMarkers Include="$(_FfmpegDest)\.extracted-*"
+                         Exclude="$(_FfmpegMarker)" />
+        </ItemGroup>
+        <Delete Files="@(_OldMarkers)" Condition="'@(_OldMarkers)' != ''" />
+    </Target>
+
+    <!-- Очистка при dotnet clean -->
+    <Target Name="CleanFfmpegExtracted" AfterTargets="Clean">
+        <RemoveDir Directories="$(_FfmpegDest)" Condition="Exists('$(_FfmpegDest)')" />
+        <Message Text="🧹 [Sa.Media.FFmpeg] Cleaned up native binaries at $(_FfmpegDest)" Importance="low" />
+    </Target>
+
+</Project>

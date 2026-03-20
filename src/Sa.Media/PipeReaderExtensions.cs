@@ -2,7 +2,7 @@
 
 namespace Sa.Media;
 
-public static class PipeReaderExtensions
+internal static class PipeReaderExtensions
 {
     public static async ValueTask SkipAsync(this PipeReader reader, long count, CancellationToken ct = default)
     {

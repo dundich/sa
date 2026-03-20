@@ -71,6 +71,9 @@ public sealed class WavHeader
 
         if (SampleRate == 0)
             throw new InvalidDataException("Sample rate is zero");
+
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(BlockAlign, nameof(BlockAlign));
+        ArgumentOutOfRangeException.ThrowIfNegative(DataSize, nameof(DataSize));
     }
 
     public double GetDurationInSeconds(long? fileSize = default)
@@ -78,7 +81,9 @@ public sealed class WavHeader
         if (BitsPerSample == 0 || NumChannels == 0 || SampleRate == 0)
             return 0;
 
-        long dataSize = (fileSize >= DataOffset && !HasDataSize) ? fileSize.Value - DataOffset : DataSize;
+        long dataSize = (fileSize >= DataOffset && !HasDataSize)
+            ? fileSize.Value - DataOffset
+            : DataSize;
 
         long bytesPerChannel = dataSize / NumChannels;
         long samplesPerChannel = bytesPerChannel / (BitsPerSample / 8);
@@ -87,7 +92,7 @@ public sealed class WavHeader
 
     public TimeSpan GetDuration() => TimeSpan.FromSeconds(GetDurationInSeconds());
 
-    public int GetBytesPerSamplePerChannel() => BitsPerSample / 8;
+    public int GetBytesPerSample() => BitsPerSample / 8;
 
     public bool IsPcm => AudioFormat == WaveFormatType.Pcm;
     public bool IsIeeeFloat => AudioFormat == WaveFormatType.IeeeFloat;
@@ -107,19 +112,77 @@ public sealed class WavHeader
 
     public override string ToString()
     {
-        return $"""
-[WAV Header]
-            
-Format:         {(IsPcm ? "PCM" : isFloat())}
-Channels:       {NumChannels} {(IsMono ? "(Mono)" : isStereo())}
-Sample Rate:    {SampleRate} Hz
-Bit Depth:      {BitsPerSample}-bit
-Duration:       {GetDuration():g}
-File Size:      {ChunkSize + 8} bytes
-Data Size:      {DataSize} bytes
-""";
 
-        string isFloat() => (IsIeeeFloat ? "FLOAT" : AudioFormat.ToString());
-        string isStereo() => (IsStereo ? "Stereo" : String.Empty);
+        var format = AudioFormat switch
+        {
+            WaveFormatType.Pcm => "PCM",
+            WaveFormatType.IeeeFloat => "IEEE Float",
+            WaveFormatType.Extensible when IsPcm => "Extensible PCM",
+            WaveFormatType.Extensible when IsIeeeFloat => "Extensible Float",
+            _ => AudioFormat.ToString()
+        };
+
+        return $$"""
+    [WAV Header]
+    
+    Format:         {{format}}
+    Channels:       {{NumChannels}} {{(IsMono ? "(Mono)" : IsStereo ? "(Stereo)" : "")}}
+    Sample Rate:    {{SampleRate:N0}} Hz
+    Bit Depth:      {{BitsPerSample}}-bit
+    Byte Rate:      {{GetBytesPerSecond():N0}} bytes/sec
+    Block Align:    {{BlockAlign}} bytes
+    Duration:       {{GetDuration():g}}
+    File Size:      {{ChunkSize + 8:N0}} bytes
+    Data Offset:    {{DataOffset}} bytes
+    """;
     }
+
+    /// <summary>
+    /// Возвращает количество байт аудиоданных в одной секунде.
+    /// </summary>
+    /// <returns>Байт в секунду</returns>
+    public long GetBytesPerSecond() => (long)SampleRate * BlockAlign;
+
+    public (long cutFrom, long cutTo) CalculateCutOffsets(
+        TimeRange range,
+        long? fileSize = null,
+        bool alignToFrames = true)
+    {
+        long dataOffset = DataOffset;
+
+        long bytesPerSecond = GetBytesPerSecond();
+
+        long dataEnd = HasDataSize
+            ? dataOffset + DataSize
+            : (fileSize ?? (long)TimeSpan.MaxValue.TotalSeconds * bytesPerSecond);//  throw new InvalidOperationException("fileSize required for streaming data"));        
+
+
+        long fromOffset = dataOffset + (long)(range.From.TotalSeconds * bytesPerSecond);
+        long toOffset = range.HasEnd
+            ? dataOffset + (long)(range.To.TotalSeconds * bytesPerSecond)
+            : dataEnd;
+
+        if (alignToFrames)
+        {
+            fromOffset = AlignToFrame(fromOffset, dataOffset);
+            toOffset = AlignToFrame(toOffset, dataOffset);
+        }
+
+        return (Math.Clamp(fromOffset, dataOffset, dataEnd),
+                Math.Clamp(toOffset, dataOffset, dataEnd));
+    }
+
+    private long AlignToFrame(long offset, long baseOffset)
+    {
+        if (BlockAlign <= 1) return offset;
+
+        long relativeOffset = offset - baseOffset;
+        long alignedRelative = (relativeOffset / BlockAlign) * BlockAlign;
+        return baseOffset + alignedRelative;
+    }
+
+
+    public Func<ReadOnlySpan<byte>, double> GetNormalizedConverter()
+        => SampleConverter.GetNormalizedConverter(BitsPerSample, AudioFormat);
+
 }

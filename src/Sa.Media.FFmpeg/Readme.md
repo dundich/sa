@@ -19,23 +19,18 @@ Interfaces:
 
 ## Example Usage
 
-Audio Conversion to MP3
+Audio Conversion
 
 ```csharp
-
-public class AudioService(IFFMpegExecutor ffmpeg, IFFProbeExecutor ffprobe)
-{
-    public async Task ConvertAsync(string input, string output, CancellationToken ct = default)
-    {
-        await ffmpeg.ConvertToMp3(input, output, ct);
-    }
-
-    public async Task<(int? channels, int? sampleRate)> GetInfoAsync(string file, CancellationToken ct = default)
-    {
-        // Получение базовой информации
-        return await ffprobe.GetChannelsAndSampleRate(file, ct);
-    }
-}
+    var ffmpeg = Sa.Media.FFmpeg.IFFMpegExecutor.Default;
+    
+    var codecs = await ffmpeg.GetCodecs();
+    Console.WriteLine(codecs);
+    
+    await ffmpeg.ConvertToPcmS16Le(
+        "data/input.mp3",
+        "data/output.wav",
+        outputChannelCount: 1);
 ```
 
 
@@ -64,7 +59,7 @@ output_channel_1.wav
 To see all missing dependencies:
 
 ```bash
-cd bin/Debug/net10.0/runtimes/linux-x64/
+cd bin/Debug/net10.0/sa/native/
 ldd ffmpeg
 ```
 
@@ -79,4 +74,14 @@ On Alpine Linux:
 
 ```bash
 sudo apk add lame-libs opus libvorbis
+```
+
+
+wsl build
+```
+#  WSL:
+
+dotnet nuget locals all --clear
+dotnet restore -r linux-x64
+dotnet build -c Debug -r linux-x64
 ```

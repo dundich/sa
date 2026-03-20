@@ -4,15 +4,15 @@ namespace Sa.Media.FFmpeg;
 
 public sealed record FFMpegOptions
 {
-    [StringLength(500)]
+    [StringLength(255)]
     public string? ExecutablePath { get; set; } = null;
 
-    [StringLength(500)]
+    [StringLength(255)]
     public string? WritableDirectory { get; set; } = null;
 
     public int? TimeoutSeconds { get; set; }
 
-    public TimeSpan? Timeout => TimeoutSeconds.HasValue
+    public TimeSpan? Timeout => TimeoutSeconds > 0
         ? TimeSpan.FromSeconds(TimeoutSeconds.Value)
         : default;
 

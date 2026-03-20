@@ -1,4 +1,4 @@
-﻿#  AsyncWavReader
+#  AsyncWavReader
 
 Async and memory-efficient WAV file reader for .NET 
 
@@ -24,45 +24,14 @@ Console.WriteLine($"Sample Rate: {header.SampleRate}, Channels: {header.NumChann
 ## Read Data
 
 ```csharp
+    using var reader = AsyncWavReader.CreateFromFile("test.wav");
 
-    [Fact]
-    public async Task ReadRawChannelSamplesAsync_ValidWavFile_YieldsNonEmptyData()
+    await foreach (var (channel, samples, pos, _) in reader.ReadStreamableChunksAsync(
+        bufferSize: 1024,
+        cancellationToken: TestContext.Current.CancellationToken))
     {
-        var pipe = OpenSharedWavFile();
-        var reader = new AsyncWavReader(pipe);
-
-        await foreach (var (_, sample, _) in reader.ReadRawChannelSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
-        {
-            Assert.True(sample.Length > 0);
-            return;
-        }
-    }
-
-
-    [Fact]
-    public async Task ReadNormalizedDoubleSamplesAsync_ValidWavFile_YieldsInRangeValues()
-    {
-        var pipe = OpenSharedWavFile();
-        var reader = new AsyncWavReader(pipe);
-
-        await foreach (var (_, sample, _) in reader.ReadNormalizedDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
-        {
-            Assert.InRange(sample, -1.0, 1.0);
-            return;
-        }
-    }
-
-    [Fact]
-    public async Task ReadStreamableChunksAsync_ValidWavFile_YieldsChunks()
-    {
-        var pipe = OpenSharedWavFile();
-        var reader = new AsyncWavReader(pipe);
-
-        await foreach (var (_, samples, _) in reader.ReadStreamableChunksAsync(bufferSize: 1024, cancellationToken: TestContext.Current.CancellationToken))
-        {
-            Assert.True(samples.Length > 0);
-            return;
-        }
+        Assert.True(samples.Length > 0);
+        return;
     }
 ```
 

@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace Sa.Media;
 
-public sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
+internal sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
 {
     private readonly Stream _stream;
     private readonly uint _sampleRate;
@@ -33,7 +33,6 @@ public sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
         _numChannels = numChannels;
         _leaveOpen = leaveOpen;
 
-        // Буфер 8KB — можно увеличить для больших файлов
         _bufferOwner = MemoryPool<byte>.Shared.Rent(8192);
         _currentBuffer = _bufferOwner.Memory;
         _currentBufferSize = 0;

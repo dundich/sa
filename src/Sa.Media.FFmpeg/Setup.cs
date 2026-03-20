@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration.Binder.SourceGeneration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sa.Classes;
@@ -10,9 +11,16 @@ public static class Setup
 {
     public static IServiceCollection AddSaFFMpeg(
         this IServiceCollection services,
+        string? configSectionPath = null,
         Action<FFMpegOptions>? configure = null)
     {
-        services.AddOptions<FFMpegOptions>()
+
+        var optsBuilder = services.AddOptions<FFMpegOptions>();
+
+        if (configSectionPath != null)
+            optsBuilder.BindConfiguration(configSectionPath);
+
+        optsBuilder
             .Configure(configure ?? (_ => { }))
             .PostConfigure(options => options.Validate())
             .ValidateOnStart();
