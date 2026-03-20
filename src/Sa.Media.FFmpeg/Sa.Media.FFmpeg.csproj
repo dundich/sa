@@ -3,10 +3,10 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.9.5</Version>
+        <Version>0.9.0</Version>
         <Description>FFmpeg wrapper</Description>
         <GeneratePathProperty>true</GeneratePathProperty>
-        <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64</RuntimeIdentifiers>
+        <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64</RuntimeIdentifiers>
 
         <!-- Пути для локальной работы -->
         <FfmpegSourceZipDir>$(MSBuildThisFileDirectory)sa</FfmpegSourceZipDir>
@@ -15,6 +15,9 @@
         <!-- 🔹 Определение RID -->
         <_FfmpegCurrentRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_FfmpegCurrentRid>
         <_FfmpegCurrentRid Condition="'$(_FfmpegCurrentRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_FfmpegCurrentRid>
+
+        <!-- если macOS x64, принудительно ставим linux-x64 -->
+        <_FfmpegCurrentRid Condition="'$(_FfmpegCurrentRid)' == 'osx-x64'">linux-x64</_FfmpegCurrentRid>
     </PropertyGroup>
 
     <!-- 🔹 ZIP-архивы как исходники -->

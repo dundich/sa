@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "FFMpeg.Console": {
+    "FFmpeg.Console": {
       "commandName": "Project"
     },
     "WSL": {

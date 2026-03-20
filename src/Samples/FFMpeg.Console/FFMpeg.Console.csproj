@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sa.Media.FFmpeg" />
+    <ProjectReference Include="..\..\Sa.Media.FFmpeg\Sa.Media.FFmpeg.csproj" />
   </ItemGroup>
 
   <ItemGroup>
