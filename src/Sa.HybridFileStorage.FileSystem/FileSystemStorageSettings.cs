@@ -13,7 +13,7 @@ public sealed record FileSystemStorageSettings
     [StringLength(100, MinimumLength = 1)]
     public bool IsReadOnly { get; init; } = false;
 
-    public string ScopeName { get; init; } = string.Empty;
+    public string ScopeName { get; init; } = "share";
 
     public int BufferSize { get; init; } = 256 * 1024;
 

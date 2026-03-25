@@ -77,7 +77,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var isSame = await EnsureFileSame(result.FileId, fileContent);
         Assert.True(isSame);
 
-        var isDeleted = await Storage.DeleteAsync(result.FileId, string.Empty, fixture.CancellationToken);
+        var isDeleted = await Storage.DeleteAsync(result.FileId, fixture.CancellationToken);
 
         Assert.True(isDeleted);
 
@@ -100,7 +100,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var isSame = await EnsureFileSame(result.FileId, fileContent);
         Assert.True(isSame);
 
-        var isDeleted = await Storage.DeleteAsync(result.FileId, string.Empty, fixture.CancellationToken);
+        var isDeleted = await Storage.DeleteAsync(result.FileId, fixture.CancellationToken);
         Assert.True(isDeleted);
     }
 
@@ -147,7 +147,6 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         using MemoryStream memoryStream = new();
 
         var isDownloaded = await Storage.DownloadAsync(fileName
-            , scopeName: string.Empty
             , (stream, ct) => stream.CopyToAsync(memoryStream, ct)
             , fixture.CancellationToken);
 

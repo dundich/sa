@@ -5,9 +5,7 @@ namespace Sa.Partitional.PostgreSql.Migration;
 internal sealed class PartMigrationService(
     IPartRepository repository
     , TimeProvider timeProvider
-    , MigrationScheduleSettings settings
-)
-    : IMigrationService, IDisposable
+    , MigrationScheduleSettings settings): IMigrationService, IDisposable
 {
     private int s_triggered = 0;
     private readonly CancellationTokenSource _cts = new();

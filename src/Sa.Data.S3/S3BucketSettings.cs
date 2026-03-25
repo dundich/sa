@@ -6,7 +6,7 @@
 public class S3BucketSettings
 {
     public required string AccessKey { get; init; }
-
+    public required string SecretKey { get; init; }
     public required string Bucket { get; init; }
 
     /// <summary>
@@ -17,7 +17,6 @@ public class S3BucketSettings
 
     public string Region { get; init; } = "us-east-1";
 
-    public required string SecretKey { get; init; }
 
     public string Service { get; init; } = "s3";
 

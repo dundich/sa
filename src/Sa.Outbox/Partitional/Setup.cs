@@ -8,15 +8,17 @@ internal static class Setup
 {
     public static IServiceCollection AddOutboxPartitional(this IServiceCollection services)
     {
+        services.TryAddSingleton<ITenantProvider, TenantProvider>();
+        // support - messaging to each tenant
         services.TryAddSingleton<IOutboxPartitionalSupport, OutboxPartitionalSupport>();
+        services.TryAddSingleton<TenantSettings>();
         return services;
     }
 
-    public static IServiceCollection AddTenantProvider(this IServiceCollection services, Action<IServiceProvider, TenantSettings> configure)
+    public static IServiceCollection AddTenantSettings(
+        this IServiceCollection services, Action<IServiceProvider, TenantSettings> configure)
     {
         // support - messaging to each tenant
-        services.TryAddSingleton<ITenantProvider, TenantProvider>();
-
         services
             .RemoveAll<TenantSettings>()
             .AddSingleton<TenantSettings>(sp =>

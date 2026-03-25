@@ -28,7 +28,7 @@ public static class Setup
             {
                 BasePath = options.BasePath,
                 IsReadOnly = options.IsReadOnly,
-                ScopeName = options.ScopeName ?? string.Empty,
+                ScopeName = string.IsNullOrWhiteSpace(options.ScopeName) ? "share" : options.ScopeName,
                 StorageType = options.StorageType,
             }, sp.GetService<TimeProvider>());
         });

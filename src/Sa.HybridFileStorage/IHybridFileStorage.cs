@@ -20,7 +20,7 @@ public interface IHybridFileStorage
     /// <param name="fileId">The unique identifier for the file to be deleted.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
     /// <returns>True if the file was successfully deleted; otherwise, false.</returns>
-    Task<bool> DeleteAsync(string fileId, string scopeName, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Downloads the file associated with the specified file ID asynchronously.
@@ -31,7 +31,6 @@ public interface IHybridFileStorage
     /// <returns>True if the file was successfully downloaded; otherwise, false.</returns>
     Task<bool> DownloadAsync(
         string fileId,
-        string scopeName,
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken = default);
 
@@ -51,6 +50,5 @@ public interface IHybridFileStorage
 
     Task<FileMetadata?> GetMetadataAsync(
         string fileId,
-        string scopeName,
         CancellationToken cancellationToken = default);
 }

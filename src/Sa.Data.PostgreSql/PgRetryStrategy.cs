@@ -15,7 +15,9 @@ public static class PgRetryStrategy
             fun: fun,
             retryCount: retryCount,
             initialDelay: initialDelay
-            , next: (ex, i) => next != null ? next(ex, i) : (ex is NpgsqlException exception) && exception.IsTransient
+            , next: (ex, i) => next != null
+                ? next(ex, i)
+                : (ex is NpgsqlException exception) && exception.IsTransient
             , cancellationToken: cancellationToken);
     }
 }

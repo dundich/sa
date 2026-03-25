@@ -8,8 +8,7 @@ internal sealed class OutboxMessagePublisher(
     TimeProvider timeProvider,
     IOutboxBulkWriter bulkWriter,
     OutboxPublishSettings publishSettings,
-    IOutboxMessageMetadataProvider metadataProvider
-) : IOutboxMessagePublisher
+    IOutboxMessageMetadataProvider metadataProvider) : IOutboxMessagePublisher
 {
     public async ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
@@ -25,7 +24,8 @@ internal sealed class OutboxMessagePublisher(
         int tenantId,
         CancellationToken cancellationToken)
     {
-        var typeInfo = metadataProvider.GetMetadata<TMessage>();
+        OutboxMessageMetadata typeInfo = metadataProvider.GetMetadata<TMessage>();
+
         DateTimeOffset now = timeProvider.GetUtcNow();
         int maxBatchSize = publishSettings.MaxBatchSize;
 
@@ -41,6 +41,7 @@ internal sealed class OutboxMessagePublisher(
 
             OutboxMessage<TMessage>[] payloads = DefaultArrayPool.Shared.Rent<OutboxMessage<TMessage>>(len);
             Span<OutboxMessage<TMessage>> payloadsSpan = payloads;
+
             try
             {
                 int count = 0;

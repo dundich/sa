@@ -10,11 +10,14 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 internal sealed class DeliveryTenant(
     IOutboxDeliveryManager deliveryMan,
-    TimeProvider timeProvider,
     IDeliveryCourier deliveryCourier,
     IDeliveryBatcher batcher,
-    FilterFactory filterFactory) : IDeliveryTenant
+    FilterFactory filterFactory,
+    TimeProvider? timeProvider = null) : IDeliveryTenant
 {
+
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public async Task<int> ProcessInTenant<TMessage>(
         int tenantId,
         ConsumerGroupSettings settings,
@@ -50,10 +53,12 @@ internal sealed class DeliveryTenant(
         return filterFactory.CreateFilter<TMessage>(
             tenantId: tenantId,
             consumerGroupId: settings.ConsumerGroupId,
-            now: timeProvider.GetUtcNow(),
+            now: GetUtcNow(),
             lookbackInterval: settings.ConsumeSettings.LookbackInterval,
             batchingWindow: settings.ConsumeSettings.BatchingWindow);
     }
+
+    private DateTimeOffset GetUtcNow() => _timeProvider.GetUtcNow();
 
     private static IMemoryOwner<IOutboxContextOperations<TMessage>> RentMemory<TMessage>(int size)
     {
@@ -96,7 +101,7 @@ internal sealed class DeliveryTenant(
     {
         return deliveryMan.ReturnDelivery(
             messages,
-            filter with { NowDate = timeProvider.GetUtcNow() },
+            filter with { NowDate = GetUtcNow() },
             cancellationToken);
     }
 
@@ -108,7 +113,7 @@ internal sealed class DeliveryTenant(
                 settings.LockRenewal
                 , t =>
                 {
-                    var nowDate = timeProvider.GetUtcNow();
+                    var nowDate = GetUtcNow();
                     return deliveryMan.ExtendDelivery(
                         settings.LockDuration
                         , filter with

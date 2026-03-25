@@ -38,7 +38,6 @@ internal sealed class S3FileStorage(
     public bool CanProcess(string? fileId)
     {
         if (string.IsNullOrEmpty(fileId)) return false;
-        // Ordinal быстрее OrdinalIgnoreCase, т.к. схема всегда в нижнем регистре
         return fileId.AsSpan().StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal);
     }
 
@@ -143,6 +142,8 @@ internal sealed class S3FileStorage(
 
         return new FileMetadata
         {
+            ScopeName = ScopeName,
+            StorageType = StorageType,
             FileName = fileNameSpan.ToString(),
             TenantId = tenantId
         };

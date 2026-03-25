@@ -25,7 +25,8 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         return this;
     }
 
-    public IPgOutboxConfiguration WithMessageSerializer(Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
+    public IPgOutboxConfiguration WithMessageSerializer(
+        Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
     {
         services.RemoveAll<IOutboxMessageSerializer>();
         services.TryAddSingleton<IOutboxMessageSerializer>(messageSerializerFactory);
@@ -51,6 +52,13 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         services.TryAddSingleton<PgOutboxSettings>(sp =>
         {
             PgOutboxSettings settings = new();
+
+            var connectionSchema = sp.GetService<IPgDataSource>()?.GetSearchPath();
+
+            if (!string.IsNullOrWhiteSpace(connectionSchema))
+            {
+                settings.TableSettings.WithSchema(connectionSchema);
+            }
 
             var configureActions = sp.GetServices<Action<IServiceProvider, PgOutboxSettings>>();
 

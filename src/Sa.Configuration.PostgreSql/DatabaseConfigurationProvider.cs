@@ -19,7 +19,7 @@ public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions
     {
         try
         {
-            using var dataSource = new PgDataSource(new(options.ConnectionString));
+            using var dataSource = IPgDataSource.Create(options.ConnectionString);
 
             return await dataSource.ExecuteReader(options.SelectSql, (reader, _) =>
             {

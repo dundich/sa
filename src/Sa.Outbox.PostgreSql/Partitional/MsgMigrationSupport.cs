@@ -4,7 +4,8 @@ using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Outbox.PostgreSql.Partitional;
 
-internal sealed class MsgMigrationSupport(IOutboxPartitionalSupport? partitionalSupport = null) : IPartTableMigrationSupport
+internal sealed class MsgMigrationSupport(IOutboxPartitionalSupport? partitionalSupport = null)
+    : IPartTableMigrationSupport
 {
     public async Task<StrOrNum[][]> GetParts(CancellationToken cancellationToken)
     {

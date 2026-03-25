@@ -55,7 +55,6 @@ namespace HybridFileStorage.Console
 
             var isDowload = await storage.DownloadAsync(
                 result.FileId,
-                string.Empty,
                 async (fs, t) => actual = await fs.ToStrAsync(t),
                 cancellationToken);
 

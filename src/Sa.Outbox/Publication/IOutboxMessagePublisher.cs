@@ -15,7 +15,7 @@ public interface IOutboxMessagePublisher
     /// with the number of successfully published messages as the result.</returns>
     ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
-        int tenantId = 0,
+        int tenantId,
         CancellationToken cancellationToken = default);
 
 
@@ -27,27 +27,44 @@ public interface IOutboxMessagePublisher
         Func<TMessage, int> getTenantId,
         CancellationToken cancellationToken = default)
     {
-
-        var lookup = messages.ToLookup(getTenantId);
         ulong totals = 0;
-
-        foreach (var tenantId in lookup.Select(g => g.Key))
+        foreach (IGrouping<int, TMessage> group in messages.ToLookup(getTenantId))
         {
-            var group = lookup[tenantId];
-            var tenantMessages = group.ToArray();
-
-            totals += await Publish<TMessage>(tenantMessages, tenantId, cancellationToken);
+            totals += await Publish<TMessage>([.. group], group.Key, cancellationToken);
         }
 
         return totals;
     }
+
+
+    async ValueTask<ulong> Publish<TMessage>(
+        IReadOnlyCollection<TMessage> messages,
+        CancellationToken cancellationToken = default)
+            where TMessage : class, IOutboxPublishable
+    {
+        ulong totals = 0;
+        foreach (var group in messages.ToLookup(m => m.GetTenantId()))
+        {
+            totals += await Publish<TMessage>([.. group], group.Key, cancellationToken);
+        }
+
+        return totals;
+    }
+
 
     /// <summary>
     /// Publishes a single message.
     /// </summary>
     ValueTask<ulong> PublishSingle<TMessage>(
         TMessage message,
-        int tenantId = 0,
+        int tenantId,
         CancellationToken cancellationToken = default)
             => Publish<TMessage>([message], tenantId, cancellationToken);
+
+
+    ValueTask<ulong> PublishSingle<TMessage>(
+        TMessage message,
+        CancellationToken cancellationToken = default)
+            where TMessage : class, IOutboxPublishable
+                => Publish<TMessage>([message], message.GetTenantId(), cancellationToken);
 }

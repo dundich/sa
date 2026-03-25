@@ -39,9 +39,7 @@ internal sealed partial class PartRepository(
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(partValues);
-
-        ISqlTableBuilder builder = sqlBuilder[tableName] ?? throw new KeyNotFoundException(nameof(tableName));
+        ISqlTableBuilder builder = sqlBuilder[tableName] ?? throw new KeyNotFoundException(tableName);
         string sql = builder.CreateSql(date, partValues);
 
         return await ExecuteDDL(sql, cancellationToken);
@@ -85,7 +83,8 @@ internal sealed partial class PartRepository(
                 {
                     if (tableSettings.PartByListFieldNames.Length > 0)
                     {
-                        throw new InvalidOperationException($"Migration support is required for table '{table}' because 'PartByListFieldNames' is specified.");
+                        throw new InvalidOperationException(
+                            $"Migration support is required for table '{table}' because 'PartByListFieldNames' is specified.");
                     }
                 }
             }
@@ -108,7 +107,8 @@ internal sealed partial class PartRepository(
         return await GetPartsFormDateWithRetry(sql, unixTime, cancellationToken);
     }
 
-    private async Task<List<PartByRangeInfo>> GetPartsFormDateWithRetry(string sql, long unixTime, CancellationToken cancellationToken)
+    private async Task<List<PartByRangeInfo>> GetPartsFormDateWithRetry(
+        string sql, long unixTime, CancellationToken cancellationToken)
     {
         return await PgRetryStrategy.ExecuteWithRetry(
             async t =>
@@ -149,7 +149,8 @@ internal sealed partial class PartRepository(
         }
     }
 
-    public async Task<int> DropPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
+    public async Task<int> DropPartsToDate(
+        string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
     {
         int droppedCount = 0;
         List<PartByRangeInfo> list = await GetPartsToDate(tableName, toDate, cancellationToken);

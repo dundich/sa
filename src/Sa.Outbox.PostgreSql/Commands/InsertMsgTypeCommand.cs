@@ -3,7 +3,9 @@ using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class InsertMsgTypeCommand(IPgDataSource dataSource, SqlOutboxBuilder template) : IInsertMsgTypeCommand
+internal sealed class InsertMsgTypeCommand(
+    IPgDataSource dataSource,
+    SqlOutboxBuilder template) : IInsertMsgTypeCommand
 {
     public Task<int> Execute(long id, string typeName, CancellationToken cancellationToken)
     {

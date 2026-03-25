@@ -5,25 +5,48 @@ namespace Sa.HybridFileStorage;
 
 public static class HybridFileStorageExtensions
 {
+
+    public static async Task<StorageResult> CopyFromFileAsync(
+        this IHybridFileStorage storage,
+        string filePath,
+        UploadFileInput input,
+        string scopeName,
+        CancellationToken ct = default)
+    {
+        // копируем файл в хранилище
+        await using var fs = new FileStream(filePath, new FileStreamOptions
+        {
+            Mode = FileMode.Open,
+            Access = FileAccess.Read,
+            Share = FileShare.Read,
+            BufferSize = 4096,
+            Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+        });
+
+        return await storage.UploadAsync(
+            input: input,
+            scopeName: scopeName,
+            fileStream: fs,
+            cancellationToken: ct);
+    }
+
     public static async Task<StorageResult> CopyToScopeAsync(
         this IHybridFileStorage storage,
         string fileId,
-        string sourceScopeName,
         string targetScopeName,
         int? targetTenantId = default,
         CancellationToken ct = default)
     {
-        var metadata = await storage.GetMetadataAsync(fileId, sourceScopeName, ct);
+        var metadata = await storage.GetMetadataAsync(fileId, ct);
 
         if (metadata is null)
         {
             ThrowSourceFileNotFound(fileId);
         }
-
         int tenantId = targetTenantId ?? metadata.TenantId;
 
         if (tenantId == metadata.TenantId
-            && string.Equals(sourceScopeName, targetScopeName, StringComparison.Ordinal))
+            && string.Equals(metadata.ScopeName, targetScopeName, StringComparison.Ordinal))
         {
             ThrowFileAlreadyInTargetScope();
         }
@@ -37,7 +60,6 @@ public static class HybridFileStorageExtensions
         StorageResult result = default!;
         bool downloaded = await storage.DownloadAsync(
             fileId,
-            sourceScopeName,
             async (sourceStream, downloadCt) =>
             {
                 result = await storage.UploadAsync(
@@ -66,12 +88,9 @@ public static class HybridFileStorageExtensions
         throw new FileNotFoundException($"Source file not found: {fileId}");
 
 
-
-
     public static async Task<BatchResult<StorageResult>> CopyToScopeBatchAsync(
         this IHybridFileStorage storage,
         IEnumerable<string> fileIds,
-        string sourceScopeName,
         string targetScopeName,
         int? targetTenantId = default,
         BatchOptions? options = default,
@@ -108,7 +127,7 @@ public static class HybridFileStorageExtensions
 
                 var ct = cts?.Token ?? cancellationToken;
 
-                return await storage.CopyToScopeAsync(fileId, sourceScopeName, targetScopeName, targetTenantId, ct);
+                return await storage.CopyToScopeAsync(fileId, targetScopeName, targetTenantId, ct);
             }
             catch (Exception ex)
             {

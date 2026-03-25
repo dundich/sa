@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox;
+﻿namespace Sa.Outbox.Partitional;
 
 /// <summary>
 /// Represents the settings for partitioning in the Outbox processing system.
@@ -10,7 +10,7 @@ public sealed class TenantSettings
     /// Gets or sets a value indicating whether the system should automatically detect tenants
     /// by scanning incoming database messages
     /// </summary>
-    public bool AutoDetect { get; private set; } = false;
+    public bool AutoDetect { get; private set; } = true;
 
     /// <summary>
     /// Gets or sets a function that retrieves tenant IDs asynchronously.
@@ -54,6 +54,12 @@ public sealed class TenantSettings
     public TenantSettings WithAutoDetect()
     {
         AutoDetect = true;
+        return this;
+    }
+
+    public TenantSettings WithNoAutoDetect()
+    {
+        AutoDetect = false;
         return this;
     }
 }

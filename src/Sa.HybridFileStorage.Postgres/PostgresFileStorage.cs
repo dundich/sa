@@ -7,6 +7,9 @@ using System.Runtime.CompilerServices;
 
 namespace Sa.HybridFileStorage.Postgres;
 
+/// <summary>
+/// pg://scope/tenant/timestamp/filename
+/// </summary>
 internal sealed class PostgresFileStorage(
     IPgDataSource dataSource,
     IPartitionManager partManager,
@@ -57,6 +60,7 @@ internal sealed class PostgresFileStorage(
 
     public string ScopeName => scopeName;
 
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void EnsureWritable()
     {
@@ -67,9 +71,24 @@ internal sealed class PostgresFileStorage(
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool CanProcess(string? fileId) =>
-        !string.IsNullOrEmpty(fileId) &&
-        fileId.AsSpan().StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal);
+    public bool CanProcess(string? fileId)
+    {
+        var fileSpan = fileId.AsSpan();
+
+        if (!string.IsNullOrWhiteSpace(fileId)
+            && fileSpan.StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal)) return false;
+
+        int schemeEnd = fileSpan.IndexOf(FileIdParser.SchemeSeparator.AsSpan());
+        if (schemeEnd == -1) return false;
+
+        var afterSpan = fileSpan[(schemeEnd + FileIdParser.SchemeSeparator.Length)..];
+        int scopeEnd = afterSpan.IndexOf('/');
+        if (scopeEnd == -1) return false;
+
+        var scopeName = afterSpan[..scopeEnd];
+
+        return scopeName.Equals(_partName, StringComparison.Ordinal);
+    }
 
     public async Task<StorageResult> UploadAsync(
         UploadFileInput metadata,
@@ -89,7 +108,7 @@ internal sealed class PostgresFileStorage(
             cancellationToken);
 
         string fileId = FileIdParser.FormatToFileId(
-            StorageType, options.TableName, metadata.TenantId, createdAtDay, metadata.FileName);
+            StorageType, _partName, metadata.TenantId, createdAtDay, metadata.FileName);
 
         string fileExtension = FileIdParser.GetFileExtension(metadata.FileName);
 
@@ -136,7 +155,7 @@ internal sealed class PostgresFileStorage(
     {
         EnsureWritable();
 
-        if (!FileIdParser.TryParseFileIdWithFilename(fileId, out int tenantId, out long timestamp, out _))
+        if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
         {
             return false;
         }
@@ -160,7 +179,7 @@ internal sealed class PostgresFileStorage(
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken)
     {
-        if (!FileIdParser.TryParseFileIdWithFilename(fileId, out int tenantId, out long timestamp, out _))
+        if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
         {
             return false;
         }
@@ -207,11 +226,13 @@ internal sealed class PostgresFileStorage(
         if (!CanProcess(fileId))
             return Task.FromResult<FileMetadata?>(null);
 
-        if (!FileIdParser.TryParseFileIdWithFilename(fileId, out var tenantId, out _, out var fileName))
+        if (!FileIdParser.TryParse(fileId, out _, out var tenantId, out _, out var fileName))
             return Task.FromResult<FileMetadata?>(null);
 
         var metadata = new FileMetadata
         {
+            ScopeName = _partName,
+            StorageType = StorageType,
             FileName = fileName,
             TenantId = tenantId
         };

@@ -48,14 +48,13 @@ internal sealed class HybridFileStorage(
 
     public async Task<bool> DownloadAsync(
         string fileId,
-        string scopeName,
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(scopeName, nameof(scopeName));
+        ArgumentNullException.ThrowIfNull(fileId, nameof(fileId));
 
         return await ExecuteStorageOperationAsync(
-            CanStorages(fileId, scopeName),
+            CanStorages(fileId),
             async (storage, ct) => await interceptors.ExecuteBeforeDownloadAsync(storage, fileId, loadStream, ct),
             async (storage, ct) => await storage.DownloadAsync(fileId, loadStream, ct),
             async (storage, result, ct) => await interceptors.ExecuteAfterDownloadAsync(storage, fileId, result, ct),
@@ -64,14 +63,14 @@ internal sealed class HybridFileStorage(
         );
     }
 
-    public async Task<bool> DeleteAsync(string fileId, string scopeName, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(
+        string fileId,
+        CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(scopeName, nameof(scopeName));
-
-        EnsureWritable(scopeName);
+        ArgumentNullException.ThrowIfNull(fileId, nameof(fileId));
 
         return await ExecuteStorageOperationAsync(
-            CanStorages(fileId, scopeName),
+            CanStorages(fileId).Where(c => !c.IsReadOnly),
             async (storage, ct) => await interceptors.ExecuteBeforeDeleteAsync(storage, fileId, ct),
             async (storage, ct) => await storage.DeleteAsync(fileId, ct),
             async (storage, result, ct) => await interceptors.ExecuteAfterDeleteAsync(storage, fileId, result, ct),
@@ -117,12 +116,11 @@ internal sealed class HybridFileStorage(
 
     public async Task<FileMetadata?> GetMetadataAsync(
         string fileId,
-        string scopeName,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(scopeName, nameof(scopeName));
+        ArgumentNullException.ThrowIfNull(fileId, nameof(fileId));
 
-        foreach (var fs in CanStorages(fileId, scopeName))
+        foreach (var fs in CanStorages(fileId))
         {
             var meta = await fs.GetMetadataAsync(fileId, cancellationToken);
             if (meta != null) return meta;
@@ -132,6 +130,6 @@ internal sealed class HybridFileStorage(
     }
 
 
-    internal IEnumerable<IFileStorage> CanStorages(string fileId, string scopeName)
-        => container.Storages.Where(c => c.ScopeName == scopeName && c.CanProcess(fileId));
+    internal IEnumerable<IFileStorage> CanStorages(string fileId)
+        => container.Storages.Where(c => c.CanProcess(fileId));
 }

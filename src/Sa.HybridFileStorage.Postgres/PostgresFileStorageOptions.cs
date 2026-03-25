@@ -26,5 +26,5 @@ public sealed class PostgresFileStorageOptions
     public StorageOptions StorageOptions { get; } = new();
     public PartOptions PartOptions { get; } = new();
     public CleanupOptions CleanupOptions { get; } = new();
-    public string ScopeName { get; set; } = string.Empty;
+    public string ScopeName { get; set; } = "share";
 }

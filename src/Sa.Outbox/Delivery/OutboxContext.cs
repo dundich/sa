@@ -6,12 +6,14 @@ namespace Sa.Outbox.Delivery;
 
 
 [DebuggerDisplay("#{PayloadId}")]
-/// <summary>
-/// OutboxMessage
-/// </summary>
-internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> delivery, TimeProvider timeProvider)
+internal sealed class OutboxContext<TMessage>(
+    OutboxDeliveryMessage<TMessage> delivery,
+    TimeProvider? timeProvider = null)
     : IOutboxContextOperations<TMessage>
 {
+
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public Guid OutboxId => delivery.OutboxId;
     public string PayloadId => delivery.Message.PayloadId;
     public TMessage Payload => delivery.Message.Payload;
@@ -133,7 +135,7 @@ internal sealed class OutboxContext<TMessage>(OutboxDeliveryMessage<TMessage> de
             null);
     }
 
-    public DateTimeOffset GetUtcNow() => (timeProvider ?? TimeProvider.System).GetUtcNow();
+    public DateTimeOffset GetUtcNow() => _timeProvider.GetUtcNow();
 
 
     private readonly static DeliveryPermanentException DeliveryPermanentException

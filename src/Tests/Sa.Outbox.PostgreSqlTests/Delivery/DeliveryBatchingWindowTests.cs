@@ -52,10 +52,18 @@ public class DeliveryBatchingWindowTests(DeliveryBatchingWindowTests.Fixture fix
         Console.Write(fixture.ConnectionString);
 
 
-        var cnt = await fixture.Publisher.PublishSingle(new TestMessage { PayloadId = "11", Content = "Message 1", TenantId = 1 }, 1, TestContext.Current.CancellationToken);
+        var cnt = await fixture.Publisher.PublishSingle(
+            new TestMessage { PayloadId = "11", Content = "Message 1", TenantId = 1 },
+            tenantId: 1,
+            cancellationToken: TestContext.Current.CancellationToken);
+
         Assert.True(cnt > 0);
 
-        cnt = await fixture.Publisher.PublishSingle(new TestMessage { PayloadId = "12", Content = "Message 2", TenantId = 2 }, 2, TestContext.Current.CancellationToken);
+        cnt = await fixture.Publisher.PublishSingle(
+            new TestMessage { PayloadId = "12", Content = "Message 2", TenantId = 2 },
+            tenantId: 2,
+            cancellationToken: TestContext.Current.CancellationToken);
+
         Assert.True(cnt > 0);
 
 

@@ -5,8 +5,9 @@ using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class ErrorDeliveryCommand(IPgDataSource dataSource, SqlOutboxBuilder sqlTemplate)
-    : IErrorDeliveryCommand
+internal sealed class ErrorDeliveryCommand(
+    IPgDataSource dataSource,
+    SqlOutboxBuilder sqlTemplate): IErrorDeliveryCommand
 {
 
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlError(len));

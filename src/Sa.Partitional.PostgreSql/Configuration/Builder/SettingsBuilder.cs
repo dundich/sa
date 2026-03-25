@@ -6,9 +6,11 @@ internal sealed class SettingsBuilder(string? searchPath) : ISettingsBuilder
 {
     private readonly Dictionary<string, ISchemaBuilder> _schemas = [];
 
+    public string DefaultSchema { get; } = searchPath ?? "public";
+
     public ISettingsBuilder AddSchema(Action<ISchemaBuilder> schemaBuilder)
     {
-        return AddSchema(searchPath ?? "public", schemaBuilder);
+        return AddSchema(DefaultSchema, schemaBuilder);
     }
 
     public ISettingsBuilder AddSchema(string schemaName, Action<ISchemaBuilder> schemaBuilder)

@@ -8,11 +8,11 @@ internal static class Setup
 {
     public static IServiceCollection AddDeliveryJob<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
-        this IServiceCollection services,
-        string consumerGroupId,
-        bool isSingleton,
-        Action<IServiceProvider, ConsumerGroupSettings>? сonfigure = null)
-            where TConsumer : class, IConsumer<TMessage>
+            this IServiceCollection services,
+            string consumerGroupId,
+            bool isSingleton,
+            Action<IServiceProvider, ConsumerGroupSettings>? сonfigure = null)
+                where TConsumer : class, IConsumer<TMessage>
     {
 
         ArgumentNullException.ThrowIfNullOrWhiteSpace(consumerGroupId);

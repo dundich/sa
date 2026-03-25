@@ -15,7 +15,7 @@ internal sealed class PartConfiguration(IServiceCollection services) : IPartConf
     public IPartConfiguration AddPartTables(Action<IServiceProvider, ISettingsBuilder> configure)
     {
         services
-            .AddSettigs(configure)
+            .AddSettings(configure)
             .AddSqlBuilder()
             ;
 

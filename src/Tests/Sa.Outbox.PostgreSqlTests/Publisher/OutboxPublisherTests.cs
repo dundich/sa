@@ -19,14 +19,18 @@ public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture)
     {
         Console.Write(fixture.ConnectionString);
 
-        ulong result = await Sub.PublishSingle(new TestMessage { PayloadId = "1", Content = "Message 1", TenantId = 1 }, 1, TestContext.Current.CancellationToken);
+        ulong result = await Sub.PublishSingle(
+            new TestMessage { PayloadId = "1", Content = "Message 1", TenantId = 1 }, 1, TestContext.Current.CancellationToken);
 
-        result += await Sub.PublishSingle(new TestMessage { PayloadId = "2", Content = "Message 3", TenantId = 2 }, 2, TestContext.Current.CancellationToken);
+        result += await Sub.PublishSingle(
+            new TestMessage { PayloadId = "2", Content = "Message 3", TenantId = 2 }, 2, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, (int)result);
 
-        var sql = $"select count(*) from {PgOutboxTableSettings.Defaults.DatabaseTableName}{PgOutboxTableSettings.MessageTable.Suffix}";
+        var sql = @$"select count(*) from
+            {PgOutboxTableSettings.Defaults.DatabaseTableName}{PgOutboxTableSettings.MessageTable.Suffix}";
+
         int count = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
         Assert.Equal(2, count);
     }

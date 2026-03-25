@@ -4,8 +4,6 @@ using Sa.Partitional.PostgreSql;
 namespace Sa.Partitional.PostgreSqlTests.Configuration;
 
 
-
-
 public class ConfigurationPartTests(ConfigurationPartTests.Fixture fixture)
     : IClassFixture<ConfigurationPartTests.Fixture>
 {
