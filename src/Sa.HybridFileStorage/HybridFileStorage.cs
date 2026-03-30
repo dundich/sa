@@ -9,35 +9,35 @@ internal sealed class HybridFileStorage(
     InterceptorContainer interceptors) : IHybridFileStorage
 {
 
-    public IReadOnlyCollection<IFileStorage> Storages => container.Storages;
+    public IEnumerable<IFileStorage> Storages => container.Storages;
 
-    private void EnsureWritable(string scopeName)
+    private void EnsureWritable(string basket)
     {
-        if (!container.Storages.Any(c => c.ScopeName == scopeName))
+        if (!container.Storages.Any(c => c.Basket == basket))
         {
             throw new HybridFileStorageNoAvailableException();
         }
 
 
-        if (Storages.All(f => f.ScopeName == scopeName && f.IsReadOnly))
+        if (Storages.All(f => f.Basket == basket && f.IsReadOnly))
         {
             throw new HybridFileStorageWritableException();
         }
     }
 
     public async Task<StorageResult> UploadAsync(
+        string basket,
         UploadFileInput input,
-        string scopeName,
         Stream fileStream,
         CancellationToken cancellationToken = default)
     {
 
-        ArgumentNullException.ThrowIfNull(scopeName, nameof(scopeName));
+        ArgumentNullException.ThrowIfNull(basket, nameof(basket));
 
-        EnsureWritable(scopeName);
+        EnsureWritable(basket);
 
         return await ExecuteStorageOperationAsync(
-            container.Storages.Where(c => !c.IsReadOnly && c.ScopeName == scopeName),
+            container.Storages.Where(c => !c.IsReadOnly && c.Basket == basket),
             async (storage, ct) => await interceptors.ExecuteBeforeUploadAsync(storage, input, fileStream, ct),
             async (storage, ct) => await storage.UploadAsync(input, fileStream, ct),
             interceptors.ExecuteAfterUploadAsync,
@@ -54,7 +54,7 @@ internal sealed class HybridFileStorage(
         ArgumentNullException.ThrowIfNull(fileId, nameof(fileId));
 
         return await ExecuteStorageOperationAsync(
-            CanStorages(fileId),
+            CanProcess(fileId),
             async (storage, ct) => await interceptors.ExecuteBeforeDownloadAsync(storage, fileId, loadStream, ct),
             async (storage, ct) => await storage.DownloadAsync(fileId, loadStream, ct),
             async (storage, result, ct) => await interceptors.ExecuteAfterDownloadAsync(storage, fileId, result, ct),
@@ -70,7 +70,7 @@ internal sealed class HybridFileStorage(
         ArgumentNullException.ThrowIfNull(fileId, nameof(fileId));
 
         return await ExecuteStorageOperationAsync(
-            CanStorages(fileId).Where(c => !c.IsReadOnly),
+            CanProcess(fileId).Where(c => !c.IsReadOnly),
             async (storage, ct) => await interceptors.ExecuteBeforeDeleteAsync(storage, fileId, ct),
             async (storage, ct) => await storage.DeleteAsync(fileId, ct),
             async (storage, result, ct) => await interceptors.ExecuteAfterDeleteAsync(storage, fileId, result, ct),
@@ -120,7 +120,7 @@ internal sealed class HybridFileStorage(
     {
         ArgumentNullException.ThrowIfNull(fileId, nameof(fileId));
 
-        foreach (var fs in CanStorages(fileId))
+        foreach (var fs in container.Storages)
         {
             var meta = await fs.GetMetadataAsync(fileId, cancellationToken);
             if (meta != null) return meta;
@@ -130,6 +130,6 @@ internal sealed class HybridFileStorage(
     }
 
 
-    internal IEnumerable<IFileStorage> CanStorages(string fileId)
+    internal IEnumerable<IFileStorage> CanProcess(string fileId)
         => container.Storages.Where(c => c.CanProcess(fileId));
 }

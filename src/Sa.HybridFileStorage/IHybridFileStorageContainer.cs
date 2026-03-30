@@ -4,5 +4,5 @@ namespace Sa.HybridFileStorage;
 
 public interface IHybridFileStorageContainer : IHybridFileStorageContainerConfiguration
 {
-    IReadOnlyCollection<IFileStorage> Storages { get; }
+    IEnumerable<IFileStorage> Storages { get; }
 }

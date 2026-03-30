@@ -8,7 +8,7 @@ internal static class FileIdParser
 
     public static bool TryParse(
         string fileId,
-        out string scopeName,
+        out string basket,
         out int tenantId,
         out long timestamp,
         out string fileName)
@@ -16,7 +16,7 @@ internal static class FileIdParser
         tenantId = default;
         timestamp = default;
         fileName = string.Empty;
-        scopeName = string.Empty;
+        basket = string.Empty;
 
         if (string.IsNullOrEmpty(fileId)) return false;
 
@@ -28,7 +28,7 @@ internal static class FileIdParser
         int scopeEnd = afterSpan.IndexOf('/');
         if (scopeEnd == -1) return false;
 
-        scopeName = afterSpan[..scopeEnd].ToString();
+        basket = afterSpan[..scopeEnd].ToString();
 
         afterSpan = afterSpan[(scopeEnd + 1)..];
 
@@ -55,11 +55,11 @@ internal static class FileIdParser
 
     public static string FormatToFileId(
         string storageType,
-        string scopeName,
+        string basket,
         int tenantId,
         DateTimeOffset date,
         string fileName)
-            => $"{storageType}://{scopeName}/{tenantId}/{date.ToUnixTimeSeconds()}/{NormalizeFileName(fileName)}";
+            => $"{storageType}://{basket}/{tenantId}/{date.ToUnixTimeSeconds()}/{NormalizeFileName(fileName)}";
 
     public static string NormalizeFileName(string fileName)
         => fileName.TrimStart('\\', '/').Replace('\\', '/');

@@ -17,7 +17,7 @@ This interface defines a contract for hybrid file storage systems capable of han
 ## Key Features
 
 - ✅ **Unified API** — Single interface for all storage providers
-- ✅ **Scope-based isolation** — Multi-tenant support via scopes
+- ✅ **Basket-Tenant-based isolation** — Multi-tenant support
 - ✅ **Read-only mode** — Protect storage from accidental modifications
 - ✅ **Streaming support** — Memory-efficient file transfers
 - ✅ **Native AOT ready** — Full compatibility with .NET 10 Native AOT
@@ -33,7 +33,7 @@ The `HybridFileStorageExtensions` class provides high-level methods for bulk fil
 All files are identified using a unified URI-like format:
 
 ```
-{storageType}://{scope}/{tenantId}/{fileName}
+{storageType}://{basket}/{tenantId}/{fileName}
 ```
 
 **Examples:**
@@ -53,12 +53,14 @@ dotnet add package Sa.HybridFileStorage
 ```csharp
 
 // di
-builder.Services.AddSaHybridStorage((_, b) => b.AddStorage(new InMemoryFileStorage()));
+builder.AddStorage(new InMemoryFileStorage())
+builder.Services.AddSaHybridStorage();
 
 // some test
 using var stream = "Hello, HybridFileStorage!".ToStream();
 
 await storage.UploadAsync(
+    "basket",
     new UploadFileInput { FileName = "file.txt" },
     stream,
     cancellationToken);

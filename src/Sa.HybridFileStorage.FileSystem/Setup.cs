@@ -23,12 +23,13 @@ public static class Setup
         {
             FileSystemStorageOptions options = new();
             configure.Invoke(sp, options);
+            options.Validate();
 
             return new FileSystemStorage(new FileSystemStorageSettings
             {
                 BasePath = options.BasePath,
                 IsReadOnly = options.IsReadOnly,
-                ScopeName = string.IsNullOrWhiteSpace(options.ScopeName) ? "share" : options.ScopeName,
+                Basket = options.Basket,
                 StorageType = options.StorageType,
             }, sp.GetService<TimeProvider>());
         });

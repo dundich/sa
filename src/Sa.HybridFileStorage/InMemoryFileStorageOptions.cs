@@ -1,3 +1,3 @@
 ﻿namespace Sa.HybridFileStorage;
 
-public sealed record InMemoryFileStorageOptions(string ScopeName, bool IsReadOnly = false);
+public sealed record InMemoryFileStorageOptions(string Basket = "share", bool IsReadOnly = false);

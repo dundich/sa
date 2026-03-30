@@ -12,15 +12,20 @@ public interface IHybridFileStorage
     /// <summary>
     /// storages
     /// </summary>
-    IReadOnlyCollection<IFileStorage> Storages { get; }
+    IEnumerable<IFileStorage> Storages { get; }
 
     /// <summary>
-    /// Deletes the file associated with the specified file ID asynchronously.
+    /// Uploads a file asynchronously using the provided input and file stream.
     /// </summary>
-    /// <param name="fileId">The unique identifier for the file to be deleted.</param>
+    /// <param name="input">Metadata about the file being uploaded.</param>
+    /// <param name="fileStream">A stream containing the file data to be uploaded.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
-    /// <returns>True if the file was successfully deleted; otherwise, false.</returns>
-    Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken = default);
+    /// <returns>A <see cref="StorageResult"/> containing the result of the upload operation.</returns>
+    Task<StorageResult> UploadAsync(
+        string basket,
+        UploadFileInput input,
+        Stream fileStream,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Downloads the file associated with the specified file ID asynchronously.
@@ -34,19 +39,14 @@ public interface IHybridFileStorage
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Uploads a file asynchronously using the provided input and file stream.
-    /// </summary>
-    /// <param name="input">Metadata about the file being uploaded.</param>
-    /// <param name="fileStream">A stream containing the file data to be uploaded.</param>
-    /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
-    /// <returns>A <see cref="StorageResult"/> containing the result of the upload operation.</returns>
-    Task<StorageResult> UploadAsync(
-        UploadFileInput input,
-        string scopeName,
-        Stream fileStream,
-        CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Deletes the file associated with the specified file ID asynchronously.
+    /// </summary>
+    /// <param name="fileId">The unique identifier for the file to be deleted.</param>
+    /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
+    /// <returns>True if the file was successfully deleted; otherwise, false.</returns>
+    Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken = default);
 
     Task<FileMetadata?> GetMetadataAsync(
         string fileId,

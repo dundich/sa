@@ -9,8 +9,8 @@ public static class HybridFileStorageExtensions
     public static async Task<StorageResult> CopyFromFileAsync(
         this IHybridFileStorage storage,
         string filePath,
+        string basket,
         UploadFileInput input,
-        string scopeName,
         CancellationToken ct = default)
     {
         // копируем файл в хранилище
@@ -24,16 +24,16 @@ public static class HybridFileStorageExtensions
         });
 
         return await storage.UploadAsync(
+            basket: basket,
             input: input,
-            scopeName: scopeName,
             fileStream: fs,
             cancellationToken: ct);
     }
 
-    public static async Task<StorageResult> CopyToScopeAsync(
+    public static async Task<StorageResult> CopyToBasketAsync(
         this IHybridFileStorage storage,
         string fileId,
-        string targetScopeName,
+        string basket,
         int? targetTenantId = default,
         CancellationToken ct = default)
     {
@@ -46,7 +46,7 @@ public static class HybridFileStorageExtensions
         int tenantId = targetTenantId ?? metadata.TenantId;
 
         if (tenantId == metadata.TenantId
-            && string.Equals(metadata.ScopeName, targetScopeName, StringComparison.Ordinal))
+            && string.Equals(metadata.Basket, basket, StringComparison.Ordinal))
         {
             ThrowFileAlreadyInTargetScope();
         }
@@ -63,8 +63,8 @@ public static class HybridFileStorageExtensions
             async (sourceStream, downloadCt) =>
             {
                 result = await storage.UploadAsync(
+                    basket,
                     uploadInput,
-                    targetScopeName,
                     sourceStream,
                     downloadCt);
             },
@@ -127,7 +127,7 @@ public static class HybridFileStorageExtensions
 
                 var ct = cts?.Token ?? cancellationToken;
 
-                return await storage.CopyToScopeAsync(fileId, targetScopeName, targetTenantId, ct);
+                return await storage.CopyToBasketAsync(fileId, targetScopeName, targetTenantId, ct);
             }
             catch (Exception ex)
             {

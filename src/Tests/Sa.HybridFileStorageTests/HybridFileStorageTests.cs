@@ -66,7 +66,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "test.bin", TenantId = 2 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(input, string.Empty, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync(string.Empty, input, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.NotEmpty(result.FileId);
@@ -92,7 +92,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "some.bin", TenantId = 1 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(input, string.Empty, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync(string.Empty, input, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal(InMemoryFileStorage.DefaultStorageType, result.StorageType);
@@ -115,7 +115,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
         await Assert.ThrowsAsync<HybridFileStorageNoAvailableException>(() =>
            sp.GetRequiredService<IHybridFileStorage>().UploadAsync(
-               new UploadFileInput { FileName = "", TenantId = 1 }, string.Empty, fileContent, fixture.CancellationToken));
+               string.Empty, new UploadFileInput { FileName = "", TenantId = 1 }, fileContent, fixture.CancellationToken));
     }
 
 
@@ -133,8 +133,8 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
 
         await Assert.ThrowsAsync<HybridFileStorageWritableException>(() =>
            sp.GetRequiredService<IHybridFileStorage>().UploadAsync(
-               new UploadFileInput { FileName = "", TenantId = 1 },
                string.Empty,
+               new UploadFileInput { FileName = "", TenantId = 1 },
                fileContent,
                fixture.CancellationToken));
     }

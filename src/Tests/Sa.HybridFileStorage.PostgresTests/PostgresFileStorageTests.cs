@@ -97,7 +97,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         var metadata = await Sub.GetMetadataAsync("pg://share/7/1773210911/some/data.bin", CancellationToken.None);
 
         Assert.NotNull(metadata);
-        Assert.Equal("share", metadata.ScopeName);
+        Assert.Equal("share", metadata.Basket);
         Assert.Equal(7, metadata.TenantId);
         Assert.Equal("some/data.bin", metadata.FileName);
     }

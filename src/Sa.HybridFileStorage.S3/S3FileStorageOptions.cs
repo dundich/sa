@@ -3,7 +3,7 @@
 public sealed class S3FileStorageOptions
 {
     public string StorageType { get; init; } = "s3";
-    public string ScopeName { get; init; } = string.Empty;
+    public string Basket { get; init; } = "share";
 
     /// <summary>
     /// http://localhost:9000

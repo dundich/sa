@@ -33,10 +33,10 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
                     "size INT NOT NULL",
                     "file_ext TEXT NOT NULL",
                     "tenant_id INT NOT NULL",
-                    "scope_name TEXT NOT NULL",
+                    "basket TEXT NOT NULL",
                     "data BYTEA NOT NULL"
                 )
-                .PartByList("tenant_id", "scope_name")
+                .PartByList("tenant_id", "basket")
                 .PartByRange(_options.PartOptions.PgPartBy, "created_at");
             });
         })
@@ -65,7 +65,7 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
                 partManager: pm,
                 streamManager: sm,
                 options: _options.StorageOptions,
-                scopeName: _options.ScopeName,
+                basket: _options.PartOptions.Basket,
                 timeProvider: time);
 
             return storage;
