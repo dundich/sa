@@ -130,6 +130,22 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
     }
 
 
+    [Theory]
+    [InlineData("./data/12345.wav")]
+    public async Task UploadWavFileAsync(string filePath)
+    {
+        Console.WriteLine(fixture.ConnectionString);
+
+        // Arrange
+        var metadata = new UploadFileInput { FileName = filePath, TenantId = 1 };
+        using var fileContent = File.OpenRead(filePath);
+
+        var r = await Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
+
+        Assert.NotEmpty(r.FileId);
+    }
+
+
     private static async Task<MemoryStream> CreateStream(CancellationToken cancellationToken)
     {
         var fileContent = new MemoryStream();

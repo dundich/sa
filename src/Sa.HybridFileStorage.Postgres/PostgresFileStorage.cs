@@ -112,20 +112,17 @@ internal sealed class PostgresFileStorage(
 
         string fileExtension = FileIdParser.GetFileExtension(metadata.FileName);
 
+        Stream ms = fileStream;
 
-        if (fileStream is not MemoryStream ms)
+        if (!fileStream.CanSeek) //  fileStream is not MemoryStream ms)
         {
             ms = streamManager.GetStream();
             await fileStream.CopyToAsync(ms, cancellationToken);
+            ms.Position = 0;
         }
 
         try
         {
-            if (ms.CanSeek)
-            {
-                ms.Position = 0;
-            }
-
             var sql = string.Format(InsertSql, _qualifiedTableName);
 
             await dataSource.ExecuteNonQuery(sql,
@@ -133,7 +130,7 @@ internal sealed class PostgresFileStorage(
                   new NpgsqlParameter<string>("id", fileId)
                 , new NpgsqlParameter<string>("name", metadata.FileName)
                 , new NpgsqlParameter<string>("file_ext", fileExtension)
-                , new NpgsqlParameter("data", fileStream)
+                , new NpgsqlParameter<Stream>("data", ms)
                 , new NpgsqlParameter<int>("size", (int)ms.Length)
                 , new NpgsqlParameter<int>("tenant_id", metadata.TenantId)
                 , new NpgsqlParameter<string>("basket", _partName)
