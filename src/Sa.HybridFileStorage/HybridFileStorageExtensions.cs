@@ -5,7 +5,6 @@ namespace Sa.HybridFileStorage;
 
 public static class HybridFileStorageExtensions
 {
-
     public static async Task<StorageResult> CopyFromFileAsync(
         this IHybridFileStorage storage,
         string filePath,
@@ -34,7 +33,7 @@ public static class HybridFileStorageExtensions
         this IHybridFileStorage storage,
         string fileId,
         string basket,
-        int? targetTenantId = default,
+        Func<FileMetadata, UploadFileInput>? configure = null,
         CancellationToken ct = default)
     {
         var metadata = await storage.GetMetadataAsync(fileId, ct);
@@ -43,19 +42,19 @@ public static class HybridFileStorageExtensions
         {
             ThrowSourceFileNotFound(fileId);
         }
-        int tenantId = targetTenantId ?? metadata.TenantId;
 
-        if (tenantId == metadata.TenantId
-            && string.Equals(metadata.Basket, basket, StringComparison.Ordinal))
+        UploadFileInput uploadInput = configure?.Invoke(metadata) ?? new UploadFileInput
+        {
+            TenantId = metadata.TenantId,
+            FileName = metadata.FileName
+        };
+
+        if (uploadInput.TenantId == metadata.TenantId
+            && string.Equals(metadata.Basket, basket, StringComparison.Ordinal)
+            && string.Equals(metadata.FileName, uploadInput.FileName, StringComparison.Ordinal))
         {
             ThrowFileAlreadyInTargetScope();
         }
-
-        var uploadInput = new UploadFileInput
-        {
-            FileName = metadata.FileName,
-            TenantId = tenantId,
-        };
 
         StorageResult result = default!;
         bool downloaded = await storage.DownloadAsync(
@@ -91,8 +90,8 @@ public static class HybridFileStorageExtensions
     public static async Task<BatchResult<StorageResult>> CopyToScopeBatchAsync(
         this IHybridFileStorage storage,
         IEnumerable<string> fileIds,
-        string targetScopeName,
-        int? targetTenantId = default,
+        string basket,
+        Func<FileMetadata, UploadFileInput>? configure = null,
         BatchOptions? options = default,
         CancellationToken cancellationToken = default)
     {
@@ -127,7 +126,11 @@ public static class HybridFileStorageExtensions
 
                 var ct = cts?.Token ?? cancellationToken;
 
-                return await storage.CopyToBasketAsync(fileId, targetScopeName, targetTenantId, ct);
+                return await storage.CopyToBasketAsync(
+                    fileId,
+                    basket,
+                    configure,
+                    ct: ct);
             }
             catch (Exception ex)
             {
