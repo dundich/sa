@@ -87,7 +87,8 @@ internal sealed class ProcessExecutor : IProcessExecutor
         }
 
 
-        int exitCode = await ExecuteProcessWithHandlersAsync(process, outputDataReceived, errorDataReceived, timeout, cancellationToken)
+        int exitCode = await ExecuteProcessWithHandlersAsync(
+            process, outputDataReceived, errorDataReceived, timeout, cancellationToken)
             .ConfigureAwait(false);
 
         return exitCode;
@@ -152,7 +153,7 @@ internal sealed class ProcessExecutor : IProcessExecutor
             process.BeginErrorReadLine();
         }
 
-        using var timeoutCts = timeout.HasValue && timeout.Value == TimeSpan.Zero
+        using var timeoutCts = timeout.HasValue && timeout.Value != TimeSpan.Zero
             ? new CancellationTokenSource(timeout.Value)
             : null;
 
