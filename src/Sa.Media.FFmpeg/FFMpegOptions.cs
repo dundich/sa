@@ -14,7 +14,7 @@ public sealed record FFMpegOptions
 
     public TimeSpan? Timeout => TimeoutSeconds > 0
         ? TimeSpan.FromSeconds(TimeoutSeconds.Value)
-        : default;
+        : null;
 
     // Валидация после десериализации
     public void Validate()
