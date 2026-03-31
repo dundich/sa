@@ -2,7 +2,7 @@
 
 /// <summary>
 /// Represents the result of a file upload operation.
-/// FileId follows URI format: {storage_type}://{path_to_resource}[?parameters]
+/// FileId follows URI format: {storage_type}://{basket}/{tenant}/{path_to_resource}[?parameters]
 /// Examples:
 /// <code>
 /// // PostgreSQL storage
@@ -15,7 +15,7 @@
 /// new StorageResult("file:///var/www/uploads/image.png", "/api/files/download/file/var/www/uploads/image.png", "file", DateTimeOffset.Now)
 /// </code>
 /// </summary>
-/// <param name="FileId">Unique file identifier in URI format: {storage_type}://{path}[?params]</param>
+/// <param name="FileId">Unique file identifier in URI format: {storage_type}://{basket}/{tenant}/{path}[?params]</param>
 /// <param name="AbsoluteUrl">Publicly accessible URL for downloading the file</param>
 /// <param name="StorageType">Type of storage backend used ("pg", "s3", "file", "azure")</param>
 /// <param name="UploadedAt">Timestamp when the file was uploaded</param>

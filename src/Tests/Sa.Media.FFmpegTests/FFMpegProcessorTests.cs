@@ -1,5 +1,5 @@
-﻿using Sa.Classes;
-using Sa.Media.FFmpeg;
+﻿using Sa.Media.FFmpeg;
+using Sa.Media.FFmpeg.Services;
 
 namespace Sa.Media.FFmpegTests;
 
@@ -48,6 +48,7 @@ public sealed class FFMpegProcessorTests
     [Theory]
     [InlineData("./data/input.mp3")]
     [InlineData("./data/gsm.wav")]
+    [InlineData("./data/12345.wav")]
     public async Task ConvertToPcm16Wav_CallsFFmpegAsStream(string testFilePath)
     {
         var ext = Path.GetExtension(testFilePath).TrimStart('.');

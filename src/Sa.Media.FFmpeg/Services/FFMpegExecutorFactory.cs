@@ -1,6 +1,4 @@
-﻿using Sa.Classes;
-
-namespace Sa.Media.FFmpeg.Services;
+﻿namespace Sa.Media.FFmpeg.Services;
 
 internal sealed class FFMpegExecutorFactory(
     IFFMpegLocator? mpegLocator = null,

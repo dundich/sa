@@ -1,4 +1,6 @@
-﻿namespace Sa.Media.FFmpeg.Services;
+﻿using System.Runtime.CompilerServices;
+
+namespace Sa.Media.FFmpeg.Services;
 
 internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
 {
@@ -31,6 +33,8 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
+        CheckFiles(inputFileName, outputFileName);
+
         var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
         var channelCount = outputChannelCount.HasValue ? $"-ac {outputChannelCount}" : string.Empty;
         var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} " +
@@ -67,6 +71,8 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
+        CheckFiles(inputFileName, outputFileName);
+
         var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} " +
             $"-f mp3 {Libmp3lameArg()} -ar 16000 -b:a 128k {QuotePath(outputFileName)}";
         var result = await executor.ExecuteAsync(cmd, timeout: timeout, cancellationToken: cancellationToken);
@@ -81,21 +87,34 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
+        CheckFiles(inputFileName, outputFileName);
+
         var cmd = $"{OverArg(isOverwrite)} {Constants.CleanBannerFlags} -i {QuotePath(inputFileName)} " +
             $"-f ogg {LibopuArg(isLibopus)} {QuotePath(outputFileName)}";
         var result = await executor.ExecuteAsync(cmd, timeout: timeout, cancellationToken: cancellationToken);
         return result.StandardError;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void CheckFiles(string inputFileName, string outputFileName)
+    {
+        if (string.Equals(Path.GetFullPath(inputFileName), Path.GetFullPath(outputFileName), StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Input and output files must be different", nameof(outputFileName));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string Libmp3lameArg() => Constants.IsOsLinux ? "-c:a libmp3lame" : string.Empty;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string OverArg(bool isOverwrite) => isOverwrite ? "-y" : string.Empty;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string LibopuArg(bool isLibopus)
     {
         if (!Constants.IsOsLinux) return string.Empty;
         return isLibopus ? "-c:a libopus" : "-c:a libvorbis";
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string QuotePath(string path) => $"\"{path}\"";
 }
