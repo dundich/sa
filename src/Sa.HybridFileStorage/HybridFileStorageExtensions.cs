@@ -10,6 +10,7 @@ public static class HybridFileStorageExtensions
         string filePath,
         string basket,
         UploadFileInput input,
+        int bufferSize = 81920,
         CancellationToken ct = default)
     {
         // копируем файл в хранилище
@@ -18,7 +19,7 @@ public static class HybridFileStorageExtensions
             Mode = FileMode.Open,
             Access = FileAccess.Read,
             Share = FileShare.Read,
-            BufferSize = 4096,
+            BufferSize = bufferSize,
             Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
         });
 

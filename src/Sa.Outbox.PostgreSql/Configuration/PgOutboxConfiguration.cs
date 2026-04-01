@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 
@@ -38,6 +39,14 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
     {
         services.RemoveAll<IOutboxMessageSerializer>();
         services.TryAddSingleton<IOutboxMessageSerializer>(instance);
+        return this;
+    }
+
+    public IPgOutboxConfiguration WithMessageSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
+        where TService : class, IOutboxMessageSerializer
+    {
+        services.RemoveAll<IOutboxMessageSerializer>();
+        services.TryAddSingleton<IOutboxMessageSerializer, TService>();
         return this;
     }
 
