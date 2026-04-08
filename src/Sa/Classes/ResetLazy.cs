@@ -46,11 +46,9 @@ internal sealed class ResetLazy<T>(
 
     private Box CreatePublicationOnly()
     {
-        var newValue = new Box(_valueFactory());
-        // Если за это время кто-то уже записал значение, CompareExchange вернет старое, 
-        // а наше новое просто уйдет в GC.
-        var existing = Interlocked.CompareExchange(ref _box, newValue, null);
-        return (existing ?? newValue);
+        var newBox = new Box(_valueFactory());
+        var existing = Interlocked.CompareExchange(ref _box, newBox, null);
+        return (existing ?? newBox);
     }
 
     private Box CreateExecutionAndPublication()
@@ -70,21 +68,6 @@ internal sealed class ResetLazy<T>(
 
 
     public void Reset()
-    {
-        if (mode != LazyThreadSafetyMode.None)
-        {
-            lock (_syncLock)
-            {
-                ResetBox();
-            }
-        }
-        else
-        {
-            ResetBox();
-        }
-    }
-
-    private void ResetBox()
     {
         Box? oldBox = Interlocked.Exchange(ref _box, null);
 
