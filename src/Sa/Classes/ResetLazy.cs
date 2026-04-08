@@ -14,7 +14,7 @@ internal sealed class ResetLazy<T>(
     LazyThreadSafetyMode mode = LazyThreadSafetyMode.ExecutionAndPublication,
     Action<T>? valueReset = null)
 {
-    private record Box(T Value);
+    private sealed record Box(T Value);
 
     private readonly Func<T> _valueFactory = valueFactory
         ?? throw new ArgumentNullException(nameof(valueFactory));
@@ -38,7 +38,7 @@ internal sealed class ResetLazy<T>(
             LazyThreadSafetyMode.None => CreateAndStore(),
             LazyThreadSafetyMode.PublicationOnly => CreatePublicationOnly(),
             LazyThreadSafetyMode.ExecutionAndPublication => CreateExecutionAndPublication(),
-            _ => throw new ArgumentOutOfRangeException(nameof(mode))
+            _ => throw new InvalidOperationException($"Unsupported thread safety mode: {mode}")
         };
     }
 
