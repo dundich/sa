@@ -99,13 +99,11 @@ public class WorkQueueTests
     public async Task ConcurrencyLimit_Respected()
     {
         // Arrange
-        var concurrencyLimit = 3;
         var delay = TimeSpan.FromMilliseconds(120);
         var processor = new TestWorkWithDelay(delay);
-        using var queue = new WorkQueue<TestModel>(processor)
-        {
-            ConcurrencyLimit = concurrencyLimit
-        };
+
+        var concurrencyLimit = 3;
+        using var queue = new WorkQueue<TestModel>(processor, initialConcurrencyLimit: concurrencyLimit);
 
         var models = new List<TestModel> { new(), new(), new(), new(), new(), new(), new() };
 
@@ -120,7 +118,6 @@ public class WorkQueueTests
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
-        Console.WriteLine(queue.ActiveTasks);
 
         Assert.Equal(0, queue.ActiveTasks);
         Assert.Equal(0, queue.QueuedTasks);
@@ -207,14 +204,14 @@ public class WorkQueueTests
         WorkInfo? lastInfo = null;
         var eventTcs = new TaskCompletionSource<WorkInfo>();
 
-        using var queue = new WorkQueue<TestModel>(processor);
-
-        queue.StatusChanged += (sender, info) =>
-        {
-            lastInfo = info;
-            if (info.Status == WorkStatus.Completed)
-                eventTcs.TrySetResult(info);
-        };
+        using var queue = new WorkQueue<TestModel>(
+            processor,
+            statusChanged: (info) =>
+            {
+                lastInfo = info;
+                if (info.Status == WorkStatus.Completed)
+                    eventTcs.TrySetResult(info);
+            });
 
         var model = new TestModel();
 
@@ -281,6 +278,7 @@ public class WorkQueueTests
         var queue = new WorkQueue<TestModel>(new TestWork());
         await queue.DisposeAsync();
 
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());
+        await Assert.ThrowsAsync<ObjectDisposedException>(()
+            => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());
     }
 }

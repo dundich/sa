@@ -1,19 +1,29 @@
-﻿using System.Threading.Channels;
+﻿using Microsoft.Extensions.Logging;
+using System.Threading.Channels;
 
 namespace Sa.Classes;
 
 
+/// <summary>
+/// Интерфейс для выполнения бизнес-логики.
+/// </summary>
 internal interface IWork<in TModel>
 {
     Task Execute(TModel model, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Интерфейс для наблюдения за изменениями состояния задач в очереди.
+/// </summary>
 internal interface IWorkObserver<in TModel>
 {
     Task HandleChanges(TModel model, WorkInfo work, CancellationToken cancellationToken);
 }
 
-internal record struct WorkInfo(
+/// <summary>
+/// Представляет состояние и метаданные задачи в очереди.
+/// </summary>
+internal sealed record WorkInfo(
     long Id,
     WorkStatus Status,
     DateTimeOffset EnqueuedTime,
@@ -22,7 +32,7 @@ internal record struct WorkInfo(
     Exception? LastError = null
 )
 {
-    public readonly bool IsEmpty => Id == 0;
+    public bool IsEmpty => Id == 0;
 }
 
 internal enum WorkStatus
@@ -34,71 +44,107 @@ internal enum WorkStatus
     Cancelled
 }
 
+/// <summary>
+/// Асинхронная очередь задач с ограничением параллелизма.
+/// </summary>
 internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
 {
+    /// <summary>
+    /// Показывает, включена ли обработка задач.
+    /// </summary>
     bool IsEnabled { get; }
+
+    /// <summary>
+    /// Текущее количество активно выполняющихся задач.
+    /// </summary>
     int ActiveTasks { get; }
+
+    /// <summary>
+    /// Определяет, свободна ли очередь (нет активных и нет в очереди).
+    /// </summary>
     bool IsIdle();
+
+    /// <summary>
+    /// Максимальное количество параллельных задач (динамически изменяется).
+    /// </summary>
     int ConcurrencyLimit { get; set; }
 
+    /// <summary>
+    /// Добавляет задачу в очередь асинхронно.
+    /// </summary>
     ValueTask Enqueue(TModel model, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Блокируется до момента, когда очередь станет полностью пустой.
+    /// </summary>
     Task WaitForIdleAsync(CancellationToken cancellationToken = default);
-    Task ShutdownAsync();
 
-    event EventHandler<WorkInfo>? StatusChanged;
+    /// <summary>
+    /// Завершает обработку и отменяет ожидание новых задач.
+    /// </summary>
+    Task ShutdownAsync();
 }
 
 internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 {
-    private readonly Channel<WorkItemSnapshot> _queue;
-
-    private readonly List<WorkItemSnapshot> _activeItems = [];
+    private readonly Channel<WorkItem> _queue;
+    private readonly HashSet<long> _activeItemIds = [];
     private readonly Lock _rootSync = new();
-
-    private int _maxConcurrency = Environment.ProcessorCount;
-    private long _taskIdCounter = 0;
-    private bool _isEnabled = true;
-    private bool _disposed = false;
-
-    private readonly Task _processingTask;
+    private readonly SemaphoreSlim _concurrencySemaphore;
+    private readonly ILogger? _logger = null;
     private readonly TimeProvider _timeProvider;
-
     public readonly IWork<TModel> _processor;
     public readonly IWorkObserver<TModel>? _watcher;
-
     private readonly CancellationTokenSource _shutdownCts = new();
+    private readonly Task _processingTask;
+    private readonly Action<WorkInfo>? _statusChanged;
 
-    public event EventHandler<WorkInfo>? StatusChanged;
+    private volatile TaskCompletionSource _idleTcs = new();
+    private volatile int _activeCount = 0;
+    private volatile bool _isEnabled = true;
+
+    private int _maxConcurrency;
+    private long _taskIdCounter = 0;
+    private bool _disposed = false;
 
     public WorkQueue(
         IWork<TModel> processor,
         IWorkObserver<TModel>? observer = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        int? maxQueueCapacity = null,
+        int? initialConcurrencyLimit = null,
+        Action<WorkInfo>? statusChanged = null,
+        ILogger<WorkQueue<TModel>>? logger = null)
     {
         _processor = processor;
         _watcher = observer ?? processor as IWorkObserver<TModel>;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _maxConcurrency = initialConcurrencyLimit ?? Environment.ProcessorCount;
+        _statusChanged = statusChanged;
+        _logger = logger;
 
-        _queue = Channel.CreateUnbounded<WorkItemSnapshot>(new UnboundedChannelOptions
+        _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(maxQueueCapacity ?? 1000)
         {
             AllowSynchronousContinuations = true,
             SingleReader = false,
             SingleWriter = false,
+            FullMode = BoundedChannelFullMode.Wait
         });
+
+        _concurrencySemaphore = new SemaphoreSlim(_maxConcurrency, _maxConcurrency);
 
         _processingTask = LoopAsync();
     }
 
     public bool IsEnabled => _isEnabled;
-    public int ActiveTasks => _activeItems.Count;
+    public int ActiveTasks => _activeCount;
     public int QueuedTasks => _queue.Reader.Count;
 
     public bool IsIdle()
     {
         lock (_rootSync)
         {
-            return _activeItems.Count == 0 && _queue.Reader.Count == 0;
+            return _activeItemIds.Count == 0 && _queue.Reader.Count == 0;
         }
     }
 
@@ -108,44 +154,75 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         set
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (value < 1) throw new ArgumentOutOfRangeException(nameof(value), "Must be at least 1.");
-            _maxConcurrency = value;
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+
+            var oldValue = Interlocked.Exchange(ref _maxConcurrency, value);
+            int delta = value - oldValue;
+
+            if (delta > 0)
+            {
+                try
+                {
+                    _concurrencySemaphore.Release(delta);
+                }
+                catch (SemaphoreFullException)
+                {
+                    // Игнорируем, если семафор уже на максимуме
+                }
+                // Если уменьшаем — новые задачи просто не смогут захватить слот,
+                // а текущие завершатся естественным образом
+            }
         }
     }
 
     public async ValueTask Enqueue(TModel model, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_isEnabled) throw new InvalidOperationException("Task scheduler has been stopped.");
+        if (!_isEnabled)
+            throw new InvalidOperationException("Task scheduler has been stopped.");
 
-        var shapshot = new WorkItemSnapshot(model, cancellationToken)
+        var snapshot = new WorkItem(model, cancellationToken)
         {
             Id = Interlocked.Increment(ref _taskIdCounter),
             Status = WorkStatus.Queued,
             EnqueuedTime = _timeProvider.GetUtcNow(),
         };
 
-        await OnStatusChanged(shapshot);
-
-        await _queue.Writer.WriteAsync(shapshot, cancellationToken);
+        await OnStatusChangedAsync(snapshot);
+        await _queue.Writer.WriteAsync(snapshot, cancellationToken);
     }
 
     public async Task ShutdownAsync()
     {
         if (!_isEnabled || _disposed) return;
-
         _isEnabled = false;
-        await _shutdownCts.CancelAsync();
-        await _processingTask;
 
+        // _queue.Writer.Complete();
+
+        await _shutdownCts.CancelAsync();
+
+        try
+        {
+            await _processingTask;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error during shutdown");
+        }
     }
 
     public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+
         while (!IsIdle())
         {
-            await Task.Delay(100, cancellationToken);
+            var currentTcs = _idleTcs;
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            // Ждем сигнал от TCS или отмену. 
+            // Если ActivateItem вызовется, currentTcs будет завершен -> цикл повторится.
+            var completedTask = await Task.WhenAny(currentTcs.Task, Task.Delay(Timeout.Infinite, cts.Token));
         }
     }
 
@@ -156,11 +233,11 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         {
             while (!ct.IsCancellationRequested && await _queue.Reader.WaitToReadAsync(ct))
             {
-                while (_isEnabled
-                    && ActiveTasks < _maxConcurrency
-                    && _queue.Reader.TryRead(out var snapshot))
+                // Каждый поток пытается читать, пока есть данные
+                while (_isEnabled && _queue.Reader.TryRead(out var item))
                 {
-                    _ = Execute(snapshot); // Не ждём, запускаем параллельно
+                    // SemaphoreSlim автоматически ограничит реальную параллельность
+                    _ = ExecuteWithConcurrencyControlAsync(item, ct);
                 }
             }
         }
@@ -168,77 +245,162 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         {
             /* ignore */
         }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Unhandled error in queue processing loop");
+        }
     }
 
-    private async Task Execute(WorkItemSnapshot snapshot)
+    // Обёртка: захват слота -> выполнение -> освобождение
+    private async Task ExecuteWithConcurrencyControlAsync(WorkItem item, CancellationToken loopCt)
     {
-        ActivateSnapshot(snapshot);
+        // Ждём доступного слота (с учётом отмены)
+        try
+        {
+            await _concurrencySemaphore.WaitAsync(loopCt);
+        }
+        catch (OperationCanceledException)
+        {
+            // Если отменили ожидание слота — возвращаем задачу в очередь или отменяем
+            await CancelWorkItemAsync(item);
+            return;
+        }
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token, snapshot.CancellationToken);
+
+        try
+        {
+            // Проверяем, не остановили ли очередь пока ждали слот
+            if (!_isEnabled)
+            {
+                await CancelWorkItemAsync(item);
+                return;
+            }
+
+            await ExecuteAsync(item);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Unhandled error executing work item #{WorkItemId}", item.Id);
+
+            if (item.Status is WorkStatus.Queued or WorkStatus.Running)
+            {
+                item.Status = WorkStatus.Faulted;
+                item.LastError = ex;
+                item.EndedTime = _timeProvider.GetUtcNow();
+                await OnStatusChangedAsync(item);
+            }
+        }
+        finally
+        {
+            _concurrencySemaphore.Release(); // Освобождаем слот
+        }
+    }
+
+    private async Task CancelWorkItemAsync(WorkItem item)
+    {
+        item.Status = WorkStatus.Cancelled;
+        item.EndedTime = _timeProvider.GetUtcNow();
+        await OnStatusChangedAsync(item);
+    }
+
+    private async Task ExecuteAsync(WorkItem item)
+    {
+        ActivateItem(item);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+            _shutdownCts.Token,
+            item.CancellationToken);
+
         var ct = cts.Token;
+
         try
         {
             ct.ThrowIfCancellationRequested();
 
-            snapshot.StartedTime = _timeProvider.GetUtcNow();
-            snapshot.Status = WorkStatus.Running;
-            await OnStatusChanged(snapshot);
+            item.StartedTime = _timeProvider.GetUtcNow();
+            item.Status = WorkStatus.Running;
+            await OnStatusChangedAsync(item);
 
-            await _processor.Execute(snapshot.Model, ct);
-            snapshot.Status = WorkStatus.Completed;
+            await _processor.Execute(item.Model, ct);
+            item.Status = WorkStatus.Completed;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            snapshot.Status = WorkStatus.Cancelled;
+            item.Status = WorkStatus.Cancelled;
         }
         catch (Exception ex)
         {
-            snapshot.Status = WorkStatus.Faulted;
-            snapshot.LastError = ex;
+            item.Status = WorkStatus.Faulted;
+            item.LastError = ex;
         }
         finally
         {
-            snapshot.EndedTime = _timeProvider.GetUtcNow();
-            await OnStatusChanged(snapshot);
-
-            DeactiveSnapshot(snapshot);
+            item.EndedTime = _timeProvider.GetUtcNow();
+            await OnStatusChangedAsync(item);
+            DeactivateItem(item);
         }
     }
 
-    private void ActivateSnapshot(WorkItemSnapshot snapshot)
+    private void ActivateItem(WorkItem item)
     {
         lock (_rootSync)
         {
-            _activeItems.Add(snapshot);
+            _activeItemIds.Add(item.Id);
+            Volatile.Write(ref _activeCount, _activeItemIds.Count);
+
+            var oldTcs = _idleTcs;
+            _idleTcs = new TaskCompletionSource();
+            oldTcs.TrySetResult(); // Пробуждаем ожидающие потоки
         }
     }
 
-    private void DeactiveSnapshot(WorkItemSnapshot snapshot)
+    private void DeactivateItem(WorkItem item)
     {
+        TaskCompletionSource? tcsToNotify = null;
+
         lock (_rootSync)
         {
-            _activeItems.Remove(snapshot);
+            _activeItemIds.Remove(item.Id);
+            Volatile.Write(ref _activeCount, _activeItemIds.Count);
+
+            if (_activeItemIds.Count == 0 && _queue.Reader.Count == 0)
+            {
+                tcsToNotify = _idleTcs;
+            }
         }
+
+        tcsToNotify?.TrySetResult();
     }
 
-    private async Task OnStatusChanged(WorkItemSnapshot snapshot)
+    private async Task OnStatusChangedAsync(WorkItem item)
     {
-        var info = snapshot.ToInfo();
+        var info = item.ToInfo();
+        var watcher = _watcher;
 
-        if (_watcher != null)
+        if (watcher != null)
         {
             try
             {
-                await _watcher.HandleChanges(snapshot.Model, info, _shutdownCts.Token);
+                await watcher.HandleChanges(item.Model, info, _shutdownCts.Token);
             }
-            catch { /* ignore */ }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Observer failed for work item #{WorkItemId}", info.Id);
+            }
         }
 
-        try
+        if (_statusChanged != null)
         {
-            StatusChanged?.Invoke(this, info);
+            try
+            {
+                _statusChanged(info);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Event handler failed for work item #{WorkItemId}", info.Id);
+            }
+
         }
-        catch { /* ignore */ }
     }
 
     public void Dispose()
@@ -247,11 +409,20 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         _disposed = true;
         _isEnabled = false;
-        _queue.Writer.Complete();
-
+        _queue.Writer.TryComplete();
         _shutdownCts.Cancel();
-        _processingTask.Wait(5000);
 
+        try
+        {
+            _processingTask.Wait(TimeSpan.FromSeconds(5));
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error during synchronous disposal");
+        }
+
+        _concurrencySemaphore.Dispose();
         _shutdownCts.Dispose();
     }
 
@@ -261,15 +432,22 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         _disposed = true;
         _isEnabled = false;
-        _queue.Writer.Complete();
+        _queue.Writer.TryComplete();
 
         await _shutdownCts.CancelAsync();
-        await _processingTask;
-
+        try
+        {
+            await _processingTask;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error during synchronous disposal");
+        }
+        _concurrencySemaphore.Dispose();
         _shutdownCts.Dispose();
     }
 
-    private sealed class WorkItemSnapshot(TModel item, CancellationToken token)
+    private sealed class WorkItem(TModel item, CancellationToken token)
     {
         public long Id { get; init; }
         public TModel Model => item;
