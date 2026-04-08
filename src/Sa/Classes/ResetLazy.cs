@@ -1,13 +1,7 @@
 ﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace Sa.Classes;
-
-internal interface IResetLazy
-{
-    object? Value { get; }
-    void Reset();
-    void Load();
-}
 
 
 /// <summary>
@@ -15,84 +9,65 @@ internal interface IResetLazy
 /// </summary>
 /// <typeparam name="T">The type of object that is being lazily initialized.</typeparam>
 [DebuggerStepThrough]
-internal sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mode = LazyThreadSafetyMode.ExecutionAndPublication, Action<T>? valueReset = null) : IResetLazy
+internal sealed class ResetLazy<T>(
+    Func<T> valueFactory,
+    LazyThreadSafetyMode mode = LazyThreadSafetyMode.ExecutionAndPublication,
+    Action<T>? valueReset = null)
 {
-    record Box(T Value);
+    private record Box(T Value);
 
-    private readonly Func<T> _valueFactory = valueFactory ?? throw new ArgumentNullException(nameof(valueFactory));
+    private readonly Func<T> _valueFactory = valueFactory
+        ?? throw new ArgumentNullException(nameof(valueFactory));
 
     private readonly Lock _syncLock = new();
 
-    private Box? _box;
+    private volatile Box? _box;
 
     public T Value
     {
-        [DebuggerStepThrough]
-        get
-        {
-            Box? b1 = _box;
-            if (b1 != null)
-                return b1.Value;
-
-            if (mode == LazyThreadSafetyMode.ExecutionAndPublication)
-            {
-                return LockExecutionAndPublication();
-            }
-            else if (mode == LazyThreadSafetyMode.PublicationOnly)
-            {
-                return LockPublicationOnly();
-            }
-            else
-            {
-                return CreateAndStoreValuw();
-            }
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => (_box ?? Initialize()).Value;
     }
 
-    private T CreateAndStoreValuw()
+    public bool IsValueCreated => _box != null;
+
+    private Box Initialize()
     {
-        Box? b = new(CreateValue());
-        _box = b;
-        return b.Value;
-    }
-
-    private T LockPublicationOnly()
-    {
-        T newValue = CreateValue();
-
-        lock (_syncLock)
+        return mode switch
         {
-            Box? b2 = _box;
-            if (b2 != null)
-                return b2.Value;
-
-            _box = new Box(newValue);
-
-            return _box.Value;
-        }
+            LazyThreadSafetyMode.None => CreateAndStore(),
+            LazyThreadSafetyMode.PublicationOnly => CreatePublicationOnly(),
+            LazyThreadSafetyMode.ExecutionAndPublication => CreateExecutionAndPublication(),
+            _ => throw new ArgumentOutOfRangeException(nameof(mode))
+        };
     }
 
-    private T LockExecutionAndPublication()
+    private Box CreateAndStore() => _box = new(CreateValue());
+
+    private Box CreatePublicationOnly()
+    {
+        var newValue = new Box(_valueFactory());
+        // Если за это время кто-то уже записал значение, CompareExchange вернет старое, 
+        // а наше новое просто уйдет в GC.
+        var existing = Interlocked.CompareExchange(ref _box, newValue, null);
+        return (existing ?? newValue);
+    }
+
+    private Box CreateExecutionAndPublication()
     {
         lock (_syncLock)
         {
-            Box? b2 = _box;
-            if (b2 != null)
-                return b2.Value;
-
-            _box = new Box(CreateValue());
-
-            return _box.Value;
+            return _box ?? CreateAndStore();
         }
     }
 
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private T CreateValue() => _valueFactory();
 
     public void Load() => _ = Value;
 
-    public bool IsValueCreated => _box != null;
 
-    object? IResetLazy.Value => Value;
 
     public void Reset()
     {
@@ -111,10 +86,11 @@ internal sealed class ResetLazy<T>(Func<T> valueFactory, LazyThreadSafetyMode mo
 
     private void ResetBox()
     {
-        if (IsValueCreated)
+        Box? oldBox = Interlocked.Exchange(ref _box, null);
+
+        if (oldBox != null && valueReset != null)
         {
-            valueReset?.Invoke(_box!.Value);
-            _box = null;
+            valueReset(oldBox.Value);
         }
     }
 }
