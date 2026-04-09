@@ -33,17 +33,6 @@ internal sealed class OutboxDeliveryManager(
         return await startCmd.ExecuteFill(writeBuffer, lockDuration, filter, cancellationToken);
     }
 
-    private async Task EnsureParts(OutboxMessageFilter filter, CancellationToken cancellationToken)
-    {
-        await partRepository.EnsureMsgParts(
-            [new OutboxPartInfo(filter.TenantId, filter.Part, filter.NowDate)],
-            cancellationToken);
-
-        await partRepository.EnsureTaskParts(
-            [new OutboxPartInfo(filter.TenantId, filter.ConsumerGroupId, filter.NowDate)],
-            cancellationToken);
-    }
-
     public async Task<int> ReturnDelivery<TMessage>(
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         OutboxMessageFilter filter,
@@ -59,6 +48,23 @@ internal sealed class OutboxDeliveryManager(
         await partRepository.EnsureDeliveryParts(parts, cancellationToken);
 
         return await finishCmd.Execute(messages, errors, filter, cancellationToken);
+    }
+
+    public Task<int> ExtendDelivery(
+        TimeSpan lockExpiration,
+        OutboxMessageFilter filter,
+        CancellationToken cancellationToken)
+            => extendCmd.Execute(lockExpiration, filter, cancellationToken);
+
+    private async Task EnsureParts(OutboxMessageFilter filter, CancellationToken cancellationToken)
+    {
+        await partRepository.EnsureMsgParts(
+            [new OutboxPartInfo(filter.TenantId, filter.Part, filter.NowDate)],
+            cancellationToken);
+
+        await partRepository.EnsureTaskParts(
+            [new OutboxPartInfo(filter.TenantId, filter.ConsumerGroupId, filter.NowDate)],
+            cancellationToken);
     }
 
     private async ValueTask<IReadOnlyDictionary<Exception, ErrorInfo>> GetErrors<TMessage>(
@@ -79,10 +85,4 @@ internal sealed class OutboxDeliveryManager(
         return await errorCmd.Execute(errs, cancellationToken);
 
     }
-
-    public Task<int> ExtendDelivery(
-        TimeSpan lockExpiration,
-        OutboxMessageFilter filter,
-        CancellationToken cancellationToken)
-            => extendCmd.Execute(lockExpiration, filter, cancellationToken);
 }

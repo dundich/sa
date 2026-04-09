@@ -197,8 +197,6 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         if (!_isEnabled || _disposed) return;
         _isEnabled = false;
 
-        // _queue.Writer.Complete();
-
         await _shutdownCts.CancelAsync();
 
         try
@@ -222,7 +220,7 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
             // Ждем сигнал от TCS или отмену. 
             // Если ActivateItem вызовется, currentTcs будет завершен -> цикл повторится.
-            var completedTask = await Task.WhenAny(currentTcs.Task, Task.Delay(Timeout.Infinite, cts.Token));
+            await Task.WhenAny(currentTcs.Task, Task.Delay(Timeout.Infinite, cts.Token));
         }
     }
 
@@ -346,7 +344,7 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         lock (_rootSync)
         {
             _activeItemIds.Add(item.Id);
-            Volatile.Write(ref _activeCount, _activeItemIds.Count);
+            _activeCount = _activeItemIds.Count;
 
             var oldTcs = _idleTcs;
             _idleTcs = new TaskCompletionSource();
@@ -361,7 +359,7 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         lock (_rootSync)
         {
             _activeItemIds.Remove(item.Id);
-            Volatile.Write(ref _activeCount, _activeItemIds.Count);
+            _activeCount = _activeItemIds.Count;
 
             if (_activeItemIds.Count == 0 && _queue.Reader.Count == 0)
             {
@@ -416,7 +414,10 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         {
             _processingTask.Wait(TimeSpan.FromSeconds(5));
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // ignore
+        }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error during synchronous disposal");

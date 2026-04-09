@@ -140,6 +140,7 @@ public class WorkQueueTests
         // Assert
         var completed = observer.Changes.Find(x => x.Status == WorkStatus.Faulted);
 
+        Assert.NotNull(completed);
         Assert.IsType<InvalidOperationException>(completed.LastError);
         Assert.Contains("Test exception", completed.LastError?.Message);
     }
@@ -163,6 +164,8 @@ public class WorkQueueTests
 
         // Assert
         var cancelled = observer.Changes.Find(x => x.Status == WorkStatus.Cancelled);
+
+        Assert.NotNull(cancelled);
         Assert.NotEqual(0, cancelled.Id);
     }
 

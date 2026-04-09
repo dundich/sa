@@ -60,11 +60,6 @@ internal sealed class DeliveryTenant(
 
     private DateTimeOffset GetUtcNow() => _timeProvider.GetUtcNow();
 
-    private static IMemoryOwner<IOutboxContextOperations<TMessage>> RentMemory<TMessage>(int size)
-    {
-        return MemoryPool<IOutboxContextOperations<TMessage>>.Shared.Rent(size);
-    }
-
     private async Task<int> CalculateBatchSizeAsync(
         ConsumeSettings consumeSettings,
         OutboxMessageFilter filter,
@@ -124,4 +119,7 @@ internal sealed class DeliveryTenant(
                         , t);
                 }
                 , cancellationToken: cancellationToken);
+
+    private static IMemoryOwner<IOutboxContextOperations<TMessage>> RentMemory<TMessage>(int size)
+        => MemoryPool<IOutboxContextOperations<TMessage>>.Shared.Rent(size);
 }
