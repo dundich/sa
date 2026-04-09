@@ -118,6 +118,10 @@ internal sealed class PostgresFileStorage(
         {
             ms = streamManager.GetStream();
             await fileStream.CopyToAsync(ms, cancellationToken);
+        }
+
+        if (fileStream.CanSeek) //  fileStream is not MemoryStream ms)
+        {
             ms.Position = 0;
         }
 

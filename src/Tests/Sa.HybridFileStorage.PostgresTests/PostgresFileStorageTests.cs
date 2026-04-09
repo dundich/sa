@@ -115,7 +115,7 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         var t1 = Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
         var t2 = Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
 
-        await Task.WhenAll([t1, t2]);
+        await Task.WhenAll(t1, t2);
 
         var fileId1 = (await t1).FileId;
         var fileId2 = (await t2).FileId;
