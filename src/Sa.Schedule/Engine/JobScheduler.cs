@@ -2,9 +2,11 @@
 
 namespace Sa.Schedule.Engine;
 
-internal sealed class JobScheduler(IJobRunner runner, IJobController controller) : IJobScheduler, IDisposable, IAsyncDisposable
+internal sealed class JobScheduler(IJobRunner runner, IJobController controller)
+    : IJobScheduler, IDisposable, IAsyncDisposable
 {
-    private readonly static IChangeToken NoneChangeToken = new CancellationChangeToken(CancellationToken.None);
+    private readonly static IChangeToken NoneChangeToken
+        = new CancellationChangeToken(CancellationToken.None);
 
     private readonly Lock _locked = new();
 
@@ -17,7 +19,8 @@ internal sealed class JobScheduler(IJobRunner runner, IJobController controller)
 
     public IJobContext Context => controller.Context;
 
-    public bool IsActive => _stoppingTask?.Task.Status == TaskStatus.WaitingForActivation;
+    public bool IsActive => _stoppingTask?.Task.Status
+        == TaskStatus.WaitingForActivation;
 
     public IChangeToken GetActiveChangeToken()
     {

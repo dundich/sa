@@ -406,3 +406,4 @@ FodyWeavers.xsd
 Sa.Media.FFmpeg/runtimes/native/
 nupkgs/
 .packages/
+*.lscache

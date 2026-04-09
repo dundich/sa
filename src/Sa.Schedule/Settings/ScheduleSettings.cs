@@ -8,11 +8,15 @@ internal sealed class ScheduleSettings : IScheduleSettings
 
     public Func<IJobContext, Exception, bool>? HandleError { get; private set; }
 
-    public IEnumerable<IJobSettings> GetJobSettings() => _storage.Values.Where(c => c.Properties.Disabled != true);
+    public IEnumerable<IJobSettings> GetJobSettings()
+        => _storage.Values.Where(c => c.Properties.Disabled != true);
 
     public void UseHostedService() => IsHostedService = true;
 
-    internal static ScheduleSettings Create(IEnumerable<JobSettings> jobSettings, bool isHostedService, Func<IJobContext, Exception, bool>? handleError)
+    internal static ScheduleSettings Create(
+        IEnumerable<JobSettings> jobSettings,
+        bool isHostedService,
+        Func<IJobContext, Exception, bool>? handleError)
     {
         IEnumerable<JobSettings> items = jobSettings.GroupBy(
             c => (c.JobId, c.JobType)

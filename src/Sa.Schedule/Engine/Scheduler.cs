@@ -1,6 +1,7 @@
 ﻿namespace Sa.Schedule.Engine;
 
-internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory) : IScheduler, IDisposable, IAsyncDisposable
+internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
+    : IScheduler, IDisposable, IAsyncDisposable
 {
     private bool _disposed;
 
@@ -13,11 +14,14 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
     /// <summary>
     /// Start all jobs
     /// </summary>
-    public int Start(CancellationToken cancellationToken) => Schedules.Count(c => c.Start(cancellationToken));
+    public int Start(CancellationToken cancellationToken)
+        => Schedules.Count(c => c.Start(cancellationToken));
 
-    public int Restart() => Schedules.Count(c => c.Restart());
+    public int Restart()
+        => Schedules.Count(c => c.Restart());
 
-    public async Task Stop() => await Task.WhenAll(Schedules.Select(c => c.Stop()));
+    public async Task Stop()
+        => await Task.WhenAll(Schedules.Select(c => c.Stop()));
 
     public void Dispose()
     {

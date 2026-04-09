@@ -34,7 +34,10 @@ internal sealed class JobPipeline : IJob, IDisposable
                 .Interceptors
                 .Reverse()
                 .Aggregate(originalJob, (job, s)
-                    => new JobProxy(job, (IJobInterceptor)_scope.ServiceProvider.GetRequiredKeyedService(s.HandlerType, s.Key), s.Key));
+                    => new JobProxy(
+                        job,
+                        (IJobInterceptor)_scope.ServiceProvider.GetRequiredKeyedService(s.HandlerType, s.Key),
+                        s.Key));
         }
         else
         {
@@ -46,5 +49,6 @@ internal sealed class JobPipeline : IJob, IDisposable
 
     public void Dispose() => _scope.Dispose();
 
-    public Task Execute(IJobContext context, CancellationToken cancellationToken) => _job.Execute(context, cancellationToken);
+    public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        => _job.Execute(context, cancellationToken);
 }

@@ -25,7 +25,9 @@ internal sealed partial class JobController(
 
     public async ValueTask WaitToRun(CancellationToken cancellationToken)
     {
-        if (context.NumRuns == 0 && settings.Properties.InitialDelay.HasValue && settings.Properties.InitialDelay.Value != TimeSpan.Zero)
+        if (context.NumRuns == 0
+            && settings.Properties.InitialDelay.HasValue
+            && settings.Properties.InitialDelay.Value != TimeSpan.Zero)
         {
             context.Status = JobStatus.WaitingToRun;
             await Task.Delay(settings.Properties.InitialDelay.Value, cancellationToken);
@@ -126,7 +128,13 @@ internal sealed partial class JobController(
         if (context.FailedRetries < settings.ErrorHandling.RetryCount)
         {
             context.FailedRetries++;
-            LogFailedRetryAttempts(context.Logger, context.JobName, context.FailedRetries, errorHandling.RetryCount, exception.GetType().Name, exception.Message);
+            LogFailedRetryAttempts(
+                context.Logger,
+                context.JobName,
+                context.FailedRetries,
+                errorHandling.RetryCount,
+                exception.GetType().Name,
+                exception.Message);
             return;
         }
 
