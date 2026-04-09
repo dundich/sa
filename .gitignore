@@ -800,3 +800,5 @@ src/.vscode/
 /src/Sa.Media.FFmpeg/build/*.tar.gz
 /src/Sa.Media.FFmpeg/build/artifacts/
 /src/Sa.Media.FFmpeg/build/build.*/
+
+*.lscache
