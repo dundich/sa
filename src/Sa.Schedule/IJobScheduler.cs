@@ -8,6 +8,11 @@ namespace Sa.Schedule;
 public interface IJobScheduler: IDisposable, IAsyncDisposable
 {
     /// <summary>
+    /// Gets the unique identifier of the job.
+    /// </summary>
+    Guid JobId { get; }
+
+    /// <summary>
     /// Gets a value indicating whether the job scheduler is currently active.
     /// </summary>
     bool IsActive { get; }

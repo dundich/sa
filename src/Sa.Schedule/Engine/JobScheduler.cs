@@ -4,6 +4,7 @@ using Sa.Classes;
 namespace Sa.Schedule.Engine;
 
 internal sealed class JobScheduler(
+    Guid jobId,
     IJobRunner runner,
     Func<IJobController> createController) : IJobScheduler
 {
@@ -20,8 +21,11 @@ internal sealed class JobScheduler(
     private readonly WorkQueue<IJobController> _jobs = new(
         WorkQueueOptions<IJobController>.Create(
             (controller, ct) => runner.Run(controller, ct))
-            .WithQueueCapacity(40)
+            .WithQueueCapacity(100)
             .WithConcurrencyLimit(1));
+
+
+    public Guid JobId => jobId;
 
     public bool IsActive
     {
