@@ -4,7 +4,8 @@ using Sa.Schedule;
 namespace Sa.ScheduleTests;
 
 
-public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture) : IClassFixture<SchedulePostSetupTests.Fixture>
+public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture)
+    : IClassFixture<SchedulePostSetupTests.Fixture>
 {
     public class Fixture : SaFixture<IScheduler>
     {
@@ -28,7 +29,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture) : IC
         {
             Services.AddSaSchedule(b =>
             {
-                b.AddJob<SomeJob>((sp, builder) =>
+                b.AddJob<SomeJob>((_, builder) =>
                 {
                     builder
                         .EveryTime(TimeSpan.FromMilliseconds(100))
@@ -41,7 +42,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture) : IC
 
             Services.AddSaSchedule(b =>
             {
-                b.AddJob<SomeJob>((sp, builder) =>
+                b.AddJob<SomeJob>((_, builder) =>
                 {
                     builder
                         .EveryTime(TimeSpan.FromMilliseconds(100))
@@ -62,7 +63,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture) : IC
     [Fact]
     public async Task Check_Executing_RunOnce_ForMultiJobs()
     {
-        int i = Sub.Start(CancellationToken.None);
+        int i = await Sub.Start(CancellationToken.None);
 
         Assert.Equal(2, i);
 

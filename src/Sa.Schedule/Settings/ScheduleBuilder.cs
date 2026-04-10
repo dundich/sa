@@ -20,7 +20,12 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
         _services.TryAddSingleton<IScheduleSettings>(sp =>
         {
             IEnumerable<JobSettings> jobSettings = sp.GetServices<JobSettings>();
-            ScheduleSettings settings = ScheduleSettings.Create(jobSettings, _isHostedService, _handleError);
+
+            ScheduleSettings settings = ScheduleSettings.Create(
+                jobSettings,
+                _isHostedService,
+                _handleError);
+
             return settings;
         });
 
@@ -46,7 +51,8 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
     }
 
     public IScheduleBuilder AddJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
-        Action<IServiceProvider, IJobBuilder> configure, Guid? jobId = null)
+        Action<IServiceProvider, IJobBuilder> configure,
+        Guid? jobId = null)
             where T : class, IJob
     {
         Guid id = GetId(jobId);

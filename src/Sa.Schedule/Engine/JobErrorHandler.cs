@@ -29,11 +29,15 @@ internal sealed partial class JobErrorHandler(
                 break;
 
             case ErrorHandlingAction.CloseApplication:
-                CloseApplication(context.JobName, context.JobServices.GetRequiredService<IScheduler>(), exception);
+                CloseApplication(
+                    context.JobName,
+                    context.ServiceProvider.GetRequiredService<IScheduler>(), exception);
                 break;
 
             case ErrorHandlingAction.StopAllJobs:
-                StopAllJobs(context.JobName, context.JobServices.GetRequiredService<IScheduler>(), exception);
+                StopAllJobs(
+                    context.JobName,
+                    context.ServiceProvider.GetRequiredService<IScheduler>(), exception);
                 break;
 
             default:

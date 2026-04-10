@@ -59,11 +59,33 @@ public class WorkQueueTests
     {
         // Arrange
         var model = new TestModel();
-        var processor = new TestWork();
-        using var queue = new WorkQueue<TestModel>(processor);
+        var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(50));
+        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>.Create(processor));
 
         // Act
         await queue.Enqueue(model, cancellationToken: TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
+
+        // Assert
+        Assert.True(model.WasProcessed);
+        Assert.Equal(0, queue.ActiveTasks);
+        Assert.Equal(0, queue.QueuedTasks);
+    }
+
+
+    [Fact]
+    public async Task Enqueue_WithWaitForIdle_Completed()
+    {
+        // Arrange
+        var model = new TestModel();
+        var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(10));
+        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>.Create(processor));
+
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
+        // Act
+        await queue.Enqueue(model, cancellationToken: TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
+
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert
@@ -76,8 +98,8 @@ public class WorkQueueTests
     public async Task Enqueue_MultipleTasks_AllExecuted()
     {
         // Arrange
-        var processor = new TestWork();
-        using var queue = new WorkQueue<TestModel>(processor);
+        var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(30));
+        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>.Create(processor));
         var models = new List<TestModel>
         {
             new(), new(), new()
@@ -103,7 +125,9 @@ public class WorkQueueTests
         var processor = new TestWorkWithDelay(delay);
 
         var concurrencyLimit = 3;
-        using var queue = new WorkQueue<TestModel>(processor, initialConcurrencyLimit: concurrencyLimit);
+        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
+            .Create(processor)
+            .WithConcurrencyLimit(concurrencyLimit));
 
         var models = new List<TestModel> { new(), new(), new(), new(), new(), new(), new() };
 
@@ -129,7 +153,9 @@ public class WorkQueueTests
         // Arrange
         var processor = new TestWorkThatThrows();
         var observer = new TestObserver();
-        using var queue = new WorkQueue<TestModel>(processor, observer);
+        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
+            .Create(processor)
+            .WithObserver(observer));
 
         var model = new TestModel();
 
@@ -152,7 +178,9 @@ public class WorkQueueTests
         using var cts = new CancellationTokenSource();
         var processor = new TestWorkWithDelay(TimeSpan.FromSeconds(5));
         var observer = new TestObserver();
-        using var queue = new WorkQueue<TestModel>(processor, observer);
+        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
+            .Create(processor)
+            .WithObserver(observer));
 
         var model = new TestModel();
 
@@ -175,7 +203,9 @@ public class WorkQueueTests
         // Arrange
         var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(500));
         var observer = new TestObserver();
-        using var queue = new WorkQueue<TestModel>(processor, observer);
+        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
+            .Create(processor)
+            .WithObserver(observer));
 
         for (int i = 0; i < 5; i++)
             await queue.Enqueue(new TestModel(), cancellationToken: TestToken);
@@ -208,13 +238,15 @@ public class WorkQueueTests
         var eventTcs = new TaskCompletionSource<WorkInfo>();
 
         using var queue = new WorkQueue<TestModel>(
-            processor,
-            statusChanged: (info) =>
-            {
-                lastInfo = info;
-                if (info.Status == WorkStatus.Completed)
-                    eventTcs.TrySetResult(info);
-            });
+            WorkQueueOptions<TestModel>
+                .Create(processor)
+                .WithStatusCallback(
+                (info) =>
+                {
+                    lastInfo = info;
+                    if (info.Status == WorkStatus.Completed)
+                        eventTcs.TrySetResult(info);
+                }));
 
         var model = new TestModel();
 
@@ -232,7 +264,10 @@ public class WorkQueueTests
         // Arrange
         var observer = new TestObserver();
         var processor = new TestWork();
-        using var queue = new WorkQueue<TestModel>(processor, observer);
+        using var queue = new WorkQueue<TestModel>(
+            WorkQueueOptions<TestModel>
+                .Create(processor)
+                .WithObserver(observer));
 
         var model = new TestModel();
 
@@ -252,7 +287,8 @@ public class WorkQueueTests
     {
         // Arrange
         var processor = new TestWork();
-        var queue = new WorkQueue<TestModel>(processor);
+        var queue = new WorkQueue<TestModel>(
+            WorkQueueOptions<TestModel>.Create(processor));
 
         await queue.Enqueue(new TestModel(), cancellationToken: TestToken);
         await queue.DisposeAsync();
@@ -267,7 +303,8 @@ public class WorkQueueTests
     [Fact]
     public void ConcurrencyLimit_InvalidValue_Throws()
     {
-        var queue = new WorkQueue<TestModel>(new TestWork());
+        var queue = new WorkQueue<TestModel>(
+            WorkQueueOptions<TestModel>.Create(new TestWork()));
 
         Assert.Throws<ArgumentOutOfRangeException>(() => queue.ConcurrencyLimit = 0);
         Assert.Throws<ArgumentOutOfRangeException>(() => queue.ConcurrencyLimit = -1);
@@ -278,7 +315,8 @@ public class WorkQueueTests
     [Fact]
     public async Task Enqueue_Disposed_Throws()
     {
-        var queue = new WorkQueue<TestModel>(new TestWork());
+        var queue = new WorkQueue<TestModel>(
+            WorkQueueOptions<TestModel>.Create(new TestWork()));
         await queue.DisposeAsync();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(()

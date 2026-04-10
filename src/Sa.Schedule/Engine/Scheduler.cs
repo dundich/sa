@@ -14,23 +14,42 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
     /// <summary>
     /// Start all jobs
     /// </summary>
-    public int Start(CancellationToken cancellationToken)
-        => Schedules.Count(c => c.Start(cancellationToken));
+    public async Task<int> Start(CancellationToken cancellationToken)
+    {
+        var results = await Task.WhenAll(Schedules.Select(c => c.Start(cancellationToken)));
+        return results.Count(r => r);
+    }
 
-    public int Restart()
-        => Schedules.Count(c => c.Restart());
+    public async Task<int> Restart()
+    {
+        var results = await Task.WhenAll(Schedules.Select(c => c.Restart()));
+        return results.Count(r => r);
+    }
 
     public async Task Stop()
-        => await Task.WhenAll(Schedules.Select(c => c.Stop()));
+    {
+        await Task.WhenAll(Schedules.Select(c => c.Stop()));
+    }
 
     public void Dispose()
     {
         if (!_disposed)
         {
             _disposed = true;
-            _ = Stop();
+
+            foreach (var job in Schedules)
+            {
+                job.Dispose();
+            }
         }
     }
 
-    public async ValueTask DisposeAsync() => await Stop();
+    public async ValueTask DisposeAsync()
+    {
+        await Stop();
+        foreach (var job in Schedules)
+        {
+            await job.DisposeAsync();
+        }
+    }
 }

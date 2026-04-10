@@ -7,11 +7,17 @@ internal sealed class JobFactory(
     IServiceScopeFactory scopeFactory,
     IInterceptorSettings interceptorSettings,
     IJobRunner jobRunner,
-    TimeProvider timeProvider) : IJobFactory
+    TimeProvider? timeProvider = null) : IJobFactory
 {
-    public IJobController CreateJobController(IJobSettings settings)
-        => new JobController(settings, interceptorSettings, scopeFactory, timeProvider);
-
     public IJobScheduler CreateJobSchedule(IJobSettings settings)
-        => new JobScheduler(jobRunner, CreateJobController(settings));
+        => new JobScheduler(jobRunner, () => CreateController(settings));
+
+    private JobController CreateController(IJobSettings settings)
+    {
+        return new(
+            settings,
+            interceptorSettings,
+            scopeFactory,
+            timeProvider ?? TimeProvider.System);
+    }
 }

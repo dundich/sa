@@ -45,7 +45,7 @@ internal sealed class JobPipeline : IJob, IDisposable
         }
     }
 
-    public IServiceProvider JobServices => _scope.ServiceProvider;
+    public IServiceProvider ServiceProvider => _scope.ServiceProvider;
 
     public void Dispose() => _scope.Dispose();
 

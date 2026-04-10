@@ -107,23 +107,16 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
     private long _taskIdCounter = 0;
     private bool _disposed = false;
 
-    public WorkQueue(
-        IWork<TModel> processor,
-        IWorkObserver<TModel>? observer = null,
-        TimeProvider? timeProvider = null,
-        int? maxQueueCapacity = null,
-        int? initialConcurrencyLimit = null,
-        Action<WorkInfo>? statusChanged = null,
-        ILogger<WorkQueue<TModel>>? logger = null)
+    public WorkQueue(WorkQueueOptions<TModel> options)
     {
-        _processor = processor;
-        _watcher = observer ?? processor as IWorkObserver<TModel>;
-        _timeProvider = timeProvider ?? TimeProvider.System;
-        _maxConcurrency = initialConcurrencyLimit ?? Environment.ProcessorCount;
-        _statusChanged = statusChanged;
-        _logger = logger;
+        _processor = options.Processor;
+        _watcher = options.Observer ?? _processor as IWorkObserver<TModel>;
+        _timeProvider = options.TimeProvider ?? TimeProvider.System;
+        _maxConcurrency = options.ConcurrencyLimit ?? Environment.ProcessorCount;
+        _statusChanged = options.StatusChanged;
+        _logger = options.Logger;
 
-        _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(maxQueueCapacity ?? 1000)
+        _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(options.MaxQueueCapacity)
         {
             AllowSynchronousContinuations = true,
             SingleReader = false,
@@ -460,5 +453,56 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         public Exception? LastError { get; set; } = null;
 
         public WorkInfo ToInfo() => new(Id, Status, EnqueuedTime, StartedTime, EndedTime, LastError);
+    }
+}
+
+
+internal sealed record WorkQueueOptions<TModel>
+(
+    // Required
+    IWork<TModel> Processor,
+    // Optional with defaults
+    IWorkObserver<TModel>? Observer = null,
+    TimeProvider? TimeProvider = null,
+    int MaxQueueCapacity = 20,
+    int? ConcurrencyLimit = null,
+    Action<WorkInfo>? StatusChanged = null,
+    ILogger? Logger = null
+)
+{
+    public WorkQueueOptions<TModel> WithObserver(IWorkObserver<TModel> observer) =>
+        this with { Observer = observer };
+
+    public WorkQueueOptions<TModel> WithTimeProvider(TimeProvider timeProvider) =>
+        this with { TimeProvider = timeProvider };
+
+    public WorkQueueOptions<TModel> WithQueueCapacity(int capacity)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
+        return this with { MaxQueueCapacity = capacity };
+    }
+
+    public WorkQueueOptions<TModel> WithConcurrencyLimit(int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        return this with { ConcurrencyLimit = limit };
+    }
+
+    public WorkQueueOptions<TModel> WithStatusCallback(Action<WorkInfo> callback) =>
+        this with { StatusChanged = callback };
+
+    public WorkQueueOptions<TModel> WithLogger(ILogger<WorkQueue<TModel>> logger) =>
+        this with { Logger = logger };
+
+    public static WorkQueueOptions<TModel> Create(IWork<TModel> processor) =>
+        new(processor);
+
+    public static WorkQueueOptions<TModel> Create(Func<TModel, CancellationToken, Task> process) =>
+        new(new WrapProcessor(process));
+
+    sealed class WrapProcessor(Func<TModel, CancellationToken, Task> process) : IWork<TModel>
+    {
+        public Task Execute(TModel model, CancellationToken cancellationToken)
+            => process(model, cancellationToken);
     }
 }

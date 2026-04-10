@@ -5,7 +5,7 @@ internal sealed class JobSettings(Type jobType, Guid jobId) : IJobSettings
     /// <summary>
     /// handler id
     /// </summary>
-    public Guid JobId { get; } = jobId;
+    public Guid JobId => jobId;
 
     public Type JobType => jobType;
 

@@ -43,7 +43,8 @@ public abstract class SaFixture : IAsyncLifetime, ISaFixture
 
     public async virtual ValueTask DisposeAsync()
     {
-        if (_serviceProvider.IsValueCreated) await _serviceProvider.Value.DisposeAsync();
+        if (_serviceProvider.IsValueCreated)
+            await _serviceProvider.Value.DisposeAsync();
     }
 }
 

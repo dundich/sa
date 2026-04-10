@@ -4,10 +4,9 @@ namespace Sa.Schedule.Engine;
 
 internal sealed class ScheduleHost(IScheduler controller) : IHostedService
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        controller.Start(cancellationToken);
-        return Task.CompletedTask;
+        await controller.Start(cancellationToken);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)

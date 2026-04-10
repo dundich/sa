@@ -12,9 +12,8 @@ namespace Sa.Schedule;
 /// <seealso cref="JobStatus"/>
 public interface IJobContext
 {
-    Guid JobId => Settings.JobId;
     string JobName { get; }
-    JobStatus Status { get; }
+
     IJobSettings Settings { get; }
     ulong NumIterations { get; }
     ulong FailedIterations { get; }
@@ -23,10 +22,9 @@ public interface IJobContext
     DateTimeOffset CreatedAt { get; }
     DateTimeOffset? ExecuteAt { get; }
     JobException? LastError { get; }
-    IServiceProvider JobServices { get; }
+    IServiceProvider ServiceProvider { get; }
     IEnumerable<IJobContext> Stack { get; }
     ILogger Logger { get; }
 
     IJobContext Clone();
-    bool Active => Status == JobStatus.Running || Status == JobStatus.WaitingToRun;
 }

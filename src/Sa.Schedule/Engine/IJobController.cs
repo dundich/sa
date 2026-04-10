@@ -13,9 +13,6 @@ internal enum CanJobExecuteResult
 /// </summary>
 internal interface IJobController
 {
-    // scope context
-    public IJobContext Context { get; }
-
     // scope events
     ValueTask WaitToRun(CancellationToken cancellationToken);
 

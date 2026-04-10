@@ -15,21 +15,16 @@ internal sealed partial class JobController(
     TimeProvider timeProvider) : IJobController
 {
 
-    private readonly JobContext context = new(settings);
+    private readonly JobContext _context = new(settings);
 
-    private JobPipeline? _job;
-
-    public IJobContext Context => context;
-
-    public DateTimeOffset UtcNow => timeProvider.GetUtcNow();
+    private volatile JobPipeline? _job;
 
     public async ValueTask WaitToRun(CancellationToken cancellationToken)
     {
-        if (context.NumRuns == 0
+        if (_context.NumRuns == 0
             && settings.Properties.InitialDelay.HasValue
             && settings.Properties.InitialDelay.Value != TimeSpan.Zero)
         {
-            context.Status = JobStatus.WaitingToRun;
             await Task.Delay(settings.Properties.InitialDelay.Value, cancellationToken);
         }
     }
@@ -38,41 +33,33 @@ internal sealed partial class JobController(
     {
         _job = new JobPipeline(settings, interceptorSettings, scopeFactory);
 
-        context.JobServices = _job.JobServices;
-        context.Status = JobStatus.Running;
+        _context.ServiceProvider = _job.ServiceProvider;
 
-        if (context.NumRuns == 0) context.CreatedAt = UtcNow;
-        context.NumRuns++;
+        if (_context.NumRuns == 0) _context.CreatedAt = timeProvider.GetUtcNow();
+        _context.NumRuns++;
     }
 
     public void Stopped(TaskStatus status)
     {
-        switch (status)
-        {
-            case TaskStatus.Faulted: context.Status = JobStatus.Failed; break;
-            case TaskStatus.Canceled: context.Status = JobStatus.Cancelled; break;
-            case TaskStatus.RanToCompletion: context.Status = JobStatus.Completed; break;
-        }
-
-        context.JobServices = NullJobServices.Instance;
+        _context.ServiceProvider = NullJobServices.Instance;
         _job?.Dispose();
     }
 
     public async ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken)
     {
-        if (settings.Properties.IsRunOnce == true && context.NumIterations > 0)
+        if (settings.Properties.IsRunOnce == true && _context.NumIterations > 0)
             return CanJobExecuteResult.Abort;
 
-        if (context.NumIterations == 0 && settings.Properties.Immediate == true)
+        if (_context.NumIterations == 0 && settings.Properties.Immediate == true)
             return CanJobExecuteResult.Ok;
 
         IJobTiming? timing = settings.Properties.Timing;
 
         if (timing != null)
         {
-            DateTimeOffset now = UtcNow;
+            DateTimeOffset now = timeProvider.GetUtcNow();
 
-            DateTimeOffset? next = timing.GetNextOccurrence(now, context);
+            DateTimeOffset? next = timing.GetNextOccurrence(now, _context);
 
             if (!next.HasValue)
                 return CanJobExecuteResult.Abort;
@@ -89,8 +76,8 @@ internal sealed partial class JobController(
 
         if (stackSize > 0)
         {
-            if (context.Stack.Count == stackSize) context.Stack.Dequeue();
-            context.Stack.Enqueue(context.Clone());
+            if (_context.Stack.Count == stackSize) _context.Stack.Dequeue();
+            _context.Stack.Enqueue(_context.Clone());
         }
 
         return !cancellationToken.IsCancellationRequested
@@ -100,45 +87,50 @@ internal sealed partial class JobController(
 
     public Task Execute(CancellationToken cancellationToken)
     {
-        context.NumIterations++;
-        context.ExecuteAt = UtcNow;
-        return _job!.Execute(Context, cancellationToken);
+        _context.NumIterations++;
+        _context.ExecuteAt = timeProvider.GetUtcNow();
+        return _job!.Execute(_context, cancellationToken);
     }
 
     public void ExecutionCompleted()
     {
-        context.CompetedIterations++;
-        context.FailedRetries = 0;
+        _context.CompetedIterations++;
+        _context.FailedRetries = 0;
     }
 
     public void ExecutionFailed(Exception exception)
     {
-        JobException error = new(context, exception);
-        context.FailedIterations++;
-        context.LastError = error;
+        JobException error = new(_context, exception);
+        _context.FailedIterations++;
+        _context.LastError = error;
 
         IJobErrorHandling errorHandling = settings.ErrorHandling;
 
-        if (errorHandling.HasSuppressError && errorHandling.SuppressError?.Invoke(exception) == true)
+        if (errorHandling.HasSuppressError
+            && errorHandling.SuppressError?.Invoke(exception) == true)
         {
-            LogJobWasSuppressed(context.Logger, context.JobName, exception.GetType().Name, exception.Message);
+            LogJobWasSuppressed(
+                _context.Logger,
+                _context.JobName,
+                exception.GetType().Name,
+                exception.Message);
             return;
         }
 
-        if (context.FailedRetries < settings.ErrorHandling.RetryCount)
+        if (_context.FailedRetries < settings.ErrorHandling.RetryCount)
         {
-            context.FailedRetries++;
+            _context.FailedRetries++;
             LogFailedRetryAttempts(
-                context.Logger,
-                context.JobName,
-                context.FailedRetries,
+                _context.Logger,
+                _context.JobName,
+                _context.FailedRetries,
                 errorHandling.RetryCount,
                 exception.GetType().Name,
                 exception.Message);
             return;
         }
 
-        context.JobServices.GetService<IJobErrorHandler>()?.HandleError(Context, error);
+        _context.ServiceProvider.GetService<IJobErrorHandler>()?.HandleError(_context, error);
     }
 
 
@@ -152,5 +144,6 @@ internal sealed partial class JobController(
         EventId = 402,
         Level = LogLevel.Warning,
         Message = "[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: {Type} “{Error}”")]
-    static partial void LogFailedRetryAttempts(ILogger logger, string jobName, int failedRetryAttempts, int retryCount, string type, string error);
+    static partial void LogFailedRetryAttempts(
+        ILogger logger, string jobName, int failedRetryAttempts, int retryCount, string type, string error);
 }

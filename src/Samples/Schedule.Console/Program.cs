@@ -46,7 +46,7 @@ if (isHostService)
 }
 else
 {
-    controller.Start(cts.Token);
+    await controller.Start(cts.Token);
 }
 
 _ = Task.Run(async () =>
@@ -55,7 +55,7 @@ _ = Task.Run(async () =>
     await controller.Stop();
     Console.WriteLine($"*** stopped & restart after 2 sec");
     await Task.Delay(2000);
-    controller.Restart();
+    await controller.Restart();
 });
 
 _ = Task.Run(async () =>
@@ -93,7 +93,11 @@ namespace Schedule.Console
 
     public class SomeInterceptor : IJobInterceptor
     {
-        public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
+        public async Task OnHandle(
+            IJobContext context,
+            Func<Task> next,
+            object? key,
+            CancellationToken cancellationToken)
         {
             System.Console.WriteLine($"<beg>");
             await next();

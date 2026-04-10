@@ -142,7 +142,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         ParallelTestConsumer.Clear();
 
         var scheduler = ServiceProvider.GetRequiredService<IScheduler>();
-        int startedSchedules = scheduler.Start(CancellationToken.None);
+        int startedSchedules = await scheduler.Start(CancellationToken.None);
         Assert.True(startedSchedules >= 1);
 
         var publisher = ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
