@@ -11,7 +11,7 @@ internal sealed class JobScheduler(
         = new CancellationChangeToken(CancellationToken.None);
 
     private readonly Lock _lock = new();
-    private CancellationTokenSource _stoppingToken = new();
+    private CancellationTokenSource _stoppingTokenSource = new();
     private CancellationToken _originalToken;
 
 
@@ -39,7 +39,7 @@ internal sealed class JobScheduler(
         lock (_lock)
         {
             if (_disposed) return NoneChangeToken;
-            return new CancellationChangeToken(_stoppingToken.Token);
+            return new CancellationChangeToken(_stoppingTokenSource.Token);
         }
     }
 
@@ -51,21 +51,23 @@ internal sealed class JobScheduler(
         if (IsActive) return false;
 
         CancellationTokenSource tokenToStope;
+        CancellationTokenSource newTokenSource;
 
         lock (_lock)
         {
             if (IsActive) return false;
 
-            tokenToStope = _stoppingToken;
+            tokenToStope = _stoppingTokenSource;
 
             _originalToken = cancellationToken;
-            _stoppingToken = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _stoppingTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            newTokenSource = _stoppingTokenSource;
         }
 
         await tokenToStope.CancelAsync();
         tokenToStope.Dispose();
 
-        await ExecuteJobAsync(_stoppingToken.Token);
+        await ExecuteJobAsync(newTokenSource.Token);
         return true;
     }
 
@@ -90,46 +92,57 @@ internal sealed class JobScheduler(
 
     public async Task Stop()
     {
-        CancellationTokenSource? tokenToCancel;
+        CancellationTokenSource? tokenSourceToCancel;
 
         lock (_lock)
         {
             if (_disposed) return;
-            tokenToCancel = _stoppingToken;
+            tokenSourceToCancel = _stoppingTokenSource;
         }
 
-
-        // Отмена вне блокировки для минимизации времени удержания лога
-        if (tokenToCancel != null)
+        if (tokenSourceToCancel != null)
         {
-            await tokenToCancel.CancelAsync();
+            await tokenSourceToCancel.CancelAsync();
         }
 
-        await _jobs.WaitForIdleAsync(CancellationToken.None);
+        await _jobs.WaitForIdleAsync(_originalToken);
     }
 
 
     public void Dispose()
     {
-        CancellationTokenSource? tokenToDispose;
+        if (_disposed)
+            return;
+
+        CancellationTokenSource tokenToDispose;
 
         lock (_lock)
         {
             if (_disposed) return;
             _disposed = true;
-            tokenToDispose = _stoppingToken;
-            _stoppingToken.Cancel();
+            tokenToDispose = _stoppingTokenSource;
+        }
+
+        try
+        {
+            tokenToDispose.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // ignore
         }
 
         _jobs.Dispose();
-        tokenToDispose?.Dispose();
+        tokenToDispose.Dispose();
     }
 
     public async ValueTask DisposeAsync()
     {
-        // Корректное ожидание завершения фоновых задач
+        if (_disposed)
+            return;
+
         await Stop();
         await _jobs.DisposeAsync();
-        _stoppingToken?.Dispose();
+        _stoppingTokenSource.Dispose();
     }
 }

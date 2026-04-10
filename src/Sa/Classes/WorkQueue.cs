@@ -60,6 +60,11 @@ internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
     int ActiveTasks { get; }
 
     /// <summary>
+    ///  Gets the current number of items available from this channel reader.
+    /// </summary>
+    int QueuedTasks { get; }
+
+    /// <summary>
     /// Определяет, свободна ли очередь (нет активных и нет в очереди).
     /// </summary>
     bool IsIdle();
@@ -100,7 +105,7 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
     private readonly Action<WorkInfo>? _statusChanged;
 
     private volatile TaskCompletionSource _idleTcs = new();
-    private volatile int _activeCount = 0;
+    private int _activeCount = 0;
     private volatile bool _isEnabled = true;
 
     private int _maxConcurrency;
@@ -187,8 +192,11 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
     public async Task ShutdownAsync()
     {
-        if (!_isEnabled || _disposed) return;
-        _isEnabled = false;
+        lock (_rootSync)
+        {
+            if (!_isEnabled || _disposed) return;
+            _isEnabled = false;
+        }
 
         await _shutdownCts.CancelAsync();
 
@@ -209,11 +217,7 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         while (!IsIdle())
         {
             var currentTcs = _idleTcs;
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-            // Ждем сигнал от TCS или отмену. 
-            // Если ActivateItem вызовется, currentTcs будет завершен -> цикл повторится.
-            await Task.WhenAny(currentTcs.Task, Task.Delay(Timeout.Infinite, cts.Token));
+            await currentTcs.Task.WaitAsync(cancellationToken);
         }
     }
 
@@ -334,15 +338,18 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
     private void ActivateItem(WorkItem item)
     {
+        TaskCompletionSource oldTcs;
+
         lock (_rootSync)
         {
             _activeItemIds.Add(item.Id);
             _activeCount = _activeItemIds.Count;
 
-            var oldTcs = _idleTcs;
+            oldTcs = _idleTcs;
             _idleTcs = new TaskCompletionSource();
-            oldTcs.TrySetResult(); // Пробуждаем ожидающие потоки
         }
+
+        oldTcs.TrySetResult();
     }
 
     private void DeactivateItem(WorkItem item)
@@ -402,19 +409,6 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         _isEnabled = false;
         _queue.Writer.TryComplete();
         _shutdownCts.Cancel();
-
-        try
-        {
-            _processingTask.Wait(TimeSpan.FromSeconds(5));
-        }
-        catch (OperationCanceledException)
-        {
-            // ignore
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Error during synchronous disposal");
-        }
 
         _concurrencySemaphore.Dispose();
         _shutdownCts.Dispose();
