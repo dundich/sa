@@ -4,7 +4,7 @@ using Sa.Classes;
 namespace Sa.Schedule.Engine;
 
 internal sealed class JobScheduler(
-    Guid jobId,
+    IJobSettings settings,
     IJobRunner runner,
     Func<IJobController> createController) : IJobScheduler
 {
@@ -15,17 +15,40 @@ internal sealed class JobScheduler(
     private CancellationTokenSource _stoppingTokenSource = new();
     private CancellationToken _originalToken;
 
+    private bool _started = false;
+
 
     private bool _disposed;
 
     private readonly WorkQueue<IJobController> _jobs = new(
-        WorkQueueOptions<IJobController>.Create(
-            (controller, ct) => runner.Run(controller, ct))
-            .WithQueueCapacity(100)
-            .WithConcurrencyLimit(1));
+        WorkQueueOptions<IJobController>.Create((controller, ct) => runner.Run(controller, ct))
+            .WithQueueCapacity(settings.Properties.MaxConcurrencyLimit
+                ?? Environment.ProcessorCount)
+            .WithMaxConcurrencyLimit(settings.Properties.MaxConcurrencyLimit
+                ?? Environment.ProcessorCount)
+            .WithConcurrencyLimit(settings.Properties.ConcurrencyLimit
+                ?? 1)
+            .WithSingleWriter(settings.Properties.SingleWriter
+                ?? false)
+        );
 
 
-    public Guid JobId => jobId;
+    public Guid JobId => settings.JobId;
+
+
+    public int ConcurrencyLimit
+    {
+        get => _jobs.ConcurrencyLimit;
+        set
+        {
+            if (_jobs.ConcurrencyLimit != value)
+            {
+                _jobs.ConcurrencyLimit = Math.Min(value, _jobs.MaxConcurrency);
+                _ = Restart();
+            }
+        }
+    }
+
 
     public bool IsActive
     {
@@ -33,7 +56,7 @@ internal sealed class JobScheduler(
         {
             lock (_lock)
             {
-                return !_disposed && _jobs.ActiveTasks > 0;
+                return !_disposed && _started;
             }
         }
     }
@@ -54,38 +77,47 @@ internal sealed class JobScheduler(
     {
         if (IsActive) return false;
 
-        CancellationTokenSource tokenToStope;
-        CancellationTokenSource newTokenSource;
+        return await StartAsync(cancellationToken);
+    }
 
+    private ValueTask<bool> StartAsync(CancellationToken cancellationToken)
+    {
         lock (_lock)
         {
-            if (IsActive) return false;
 
-            tokenToStope = _stoppingTokenSource;
+            if (!_disposed && _started) return ValueTask.FromResult(false);
+
+
+            _started = true;
+
+            _stoppingTokenSource.Cancel();
+            _stoppingTokenSource.Dispose();
 
             _originalToken = cancellationToken;
             _stoppingTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            newTokenSource = _stoppingTokenSource;
+
+            return StartConcurrencyAsync(_stoppingTokenSource.Token);
         }
-
-        await tokenToStope.CancelAsync();
-        tokenToStope.Dispose();
-
-        await ExecuteJobAsync(newTokenSource.Token);
-        return true;
     }
 
-    private async Task ExecuteJobAsync(CancellationToken ct)
+    private async ValueTask<bool> StartConcurrencyAsync(CancellationToken ct)
     {
         try
         {
-            await _jobs.WaitForIdleAsync(_originalToken);
-            await _jobs.Enqueue(createController(), ct);
+            var limit = _jobs.ConcurrencyLimit;
+
+            await _jobs.WaitForIdleAsync(ct);
+
+            for (int i = 0; i < limit; i++)
+            {
+                await _jobs.Enqueue(createController(), ct);
+            }
         }
         catch
         {
             // ignore
         }
+        return IsActive;
     }
 
     public async Task<bool> Restart()
@@ -110,13 +142,16 @@ internal sealed class JobScheduler(
         }
 
         await _jobs.WaitForIdleAsync(_originalToken);
+
+        lock (_lock)
+        {
+            _started = false;
+        }
     }
 
 
     public void Dispose()
     {
-        if (_disposed)
-            return;
 
         CancellationTokenSource tokenToDispose;
 
@@ -136,16 +171,25 @@ internal sealed class JobScheduler(
             // ignore
         }
 
+
         _jobs.Dispose();
         tokenToDispose.Dispose();
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed)
-            return;
+        lock (_lock)
+        {
+            if (_disposed) return;
+        }
 
         await Stop();
+
+        lock (_lock)
+        {
+            _disposed = true;
+        }
+
         await _jobs.DisposeAsync();
         _stoppingTokenSource.Dispose();
     }

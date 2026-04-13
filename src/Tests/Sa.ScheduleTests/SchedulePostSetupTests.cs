@@ -35,6 +35,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture)
                         .EveryTime(TimeSpan.FromMilliseconds(100))
                         .RunOnce()
                         .StartImmediate()
+                        //.WithMaxConcurrencyLimit(1)
                     ;
 
                 });
@@ -48,6 +49,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture)
                         .EveryTime(TimeSpan.FromMilliseconds(100))
                         .RunOnce()
                         .StartImmediate()
+                        //.WithMaxConcurrencyLimit(1)
                     ;
 
                 });

@@ -18,6 +18,11 @@ public interface IJobScheduler: IDisposable, IAsyncDisposable
     bool IsActive { get; }
 
     /// <summary>
+    /// 
+    /// </summary>
+    int ConcurrencyLimit { get; set; }
+
+    /// <summary>
     /// Gets a change token that can be used to track changes to the active state of the scheduler.
     /// </summary>
     IChangeToken GetActiveChangeToken();

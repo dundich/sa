@@ -33,4 +33,7 @@ public interface IScheduler
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task Stop();
+
+
+    IJobScheduler? GetSchedule(Guid jobId) => Schedules.FirstOrDefault(c => c.JobId == jobId);
 }

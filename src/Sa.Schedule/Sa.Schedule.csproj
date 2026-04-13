@@ -25,4 +25,8 @@
         <PackageReference Include="Microsoft.Extensions.Primitives" />
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="Sa.ScheduleTests" />
+    </ItemGroup>
+
 </Project>

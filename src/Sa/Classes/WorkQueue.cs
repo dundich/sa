@@ -74,6 +74,12 @@ internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
     /// </summary>
     int ConcurrencyLimit { get; set; }
 
+
+    public int MaxConcurrency { get; }
+
+
+    public int QueueCapacity { get; }
+
     /// <summary>
     /// Добавляет задачу в очередь асинхронно.
     /// </summary>
@@ -108,7 +114,10 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
     private int _activeCount = 0;
     private volatile bool _isEnabled = true;
 
-    private int _maxConcurrency;
+    private int _сoncurrency;
+    private readonly int _maxConcurrency;
+    private readonly int _queueCapacity;
+
     private long _taskIdCounter = 0;
     private bool _disposed = false;
 
@@ -117,19 +126,23 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         _processor = options.Processor;
         _watcher = options.Observer ?? _processor as IWorkObserver<TModel>;
         _timeProvider = options.TimeProvider ?? TimeProvider.System;
-        _maxConcurrency = options.ConcurrencyLimit ?? Environment.ProcessorCount;
+        _сoncurrency = options.ConcurrencyLimit ?? Environment.ProcessorCount;
         _statusChanged = options.StatusChanged;
         _logger = options.Logger;
 
-        _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(options.MaxQueueCapacity)
+        _maxConcurrency = Math.Max(options.MaxConcurrencyLimit ?? Environment.ProcessorCount, _сoncurrency);
+        _queueCapacity = options.QueueCapacity ?? _maxConcurrency;
+
+        _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(_queueCapacity)
         {
             AllowSynchronousContinuations = true,
             SingleReader = false,
-            SingleWriter = false,
+            SingleWriter = options.SingleWriter ?? false,
             FullMode = BoundedChannelFullMode.Wait
         });
 
-        _concurrencySemaphore = new SemaphoreSlim(_maxConcurrency, _maxConcurrency);
+
+        _concurrencySemaphore = new SemaphoreSlim(_сoncurrency, _maxConcurrency);
 
         _processingTask = LoopAsync();
     }
@@ -148,13 +161,13 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
     public int ConcurrencyLimit
     {
-        get => _maxConcurrency;
+        get => _сoncurrency;
         set
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
 
-            var oldValue = Interlocked.Exchange(ref _maxConcurrency, value);
+            var oldValue = Interlocked.Exchange(ref _сoncurrency, value);
             int delta = value - oldValue;
 
             if (delta > 0)
@@ -167,11 +180,13 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
                 {
                     // Игнорируем, если семафор уже на максимуме
                 }
-                // Если уменьшаем — новые задачи просто не смогут захватить слот,
-                // а текущие завершатся естественным образом
             }
         }
     }
+
+    public int MaxConcurrency => _maxConcurrency;
+
+    public int QueueCapacity => _queueCapacity;
 
     public async ValueTask Enqueue(TModel model, CancellationToken cancellationToken = default)
     {
@@ -458,8 +473,10 @@ internal sealed record WorkQueueOptions<TModel>
     // Optional with defaults
     IWorkObserver<TModel>? Observer = null,
     TimeProvider? TimeProvider = null,
-    int MaxQueueCapacity = 20,
+    int? QueueCapacity = null,
     int? ConcurrencyLimit = null,
+    int? MaxConcurrencyLimit = null,
+    bool? SingleWriter = false,
     Action<WorkInfo>? StatusChanged = null,
     ILogger? Logger = null
 )
@@ -473,14 +490,23 @@ internal sealed record WorkQueueOptions<TModel>
     public WorkQueueOptions<TModel> WithQueueCapacity(int capacity)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
-        return this with { MaxQueueCapacity = capacity };
+        return this with { QueueCapacity = capacity };
     }
 
     public WorkQueueOptions<TModel> WithConcurrencyLimit(int limit)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
         return this with { ConcurrencyLimit = limit };
     }
+
+    public WorkQueueOptions<TModel> WithMaxConcurrencyLimit(int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
+        return this with { MaxConcurrencyLimit = limit };
+    }
+
+    public WorkQueueOptions<TModel> WithSingleWriter(bool singleWriter) =>
+        this with { SingleWriter = singleWriter };
 
     public WorkQueueOptions<TModel> WithStatusCallback(Action<WorkInfo> callback) =>
         this with { StatusChanged = callback };

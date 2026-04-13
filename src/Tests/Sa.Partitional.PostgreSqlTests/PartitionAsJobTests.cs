@@ -10,7 +10,7 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture)
     : IClassFixture<PartitionAsJobTests.Fixture>
 {
 
-    public class Fixture : PgDataSourceFixture<IPartRepository>
+    public sealed class Fixture : PgDataSourceFixture<IPartRepository>
     {
         public Fixture()
         {

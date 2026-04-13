@@ -74,7 +74,7 @@ public class WorkQueueTests
 
 
     [Fact]
-    public async Task Enqueue_WithWaitForIdle_Completed()
+    public async Task Enqueue_WaitForIdle_Completed()
     {
         // Arrange
         var model = new TestModel();

@@ -44,4 +44,13 @@ public interface IJobProperties
     /// Gets an optional tag associated with the job.
     /// </summary>
     object? Tag { get; }
+
+
+    int? QueueCapacity { get; }
+
+    int? ConcurrencyLimit { get; }
+
+    int? MaxConcurrencyLimit { get; }
+
+    bool? SingleWriter { get; }
 }
