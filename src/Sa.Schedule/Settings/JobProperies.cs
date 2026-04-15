@@ -12,87 +12,79 @@ internal sealed class JobProperies : IJobProperties
     public IJobTiming? Timing { get; private set; }
     public object? Tag { get; private set; }
     public int? ContextStackSize { get; private set; }
-    public int? QueueCapacity { get; private set; }
     public int? ConcurrencyLimit { get; private set; }
-    public int? MaxConcurrencyLimit { get; private set; }
+    public int? MaxConcurrency { get; private set; }
     public bool? SingleWriter { get; private set; }
 
-    public IJobProperties WithName(string name)
+    public JobProperies WithName(string name)
     {
         JobName = name;
         return this;
     }
 
-    public IJobProperties RunOnce()
+    public JobProperies RunOnce()
     {
         IsRunOnce = true;
         return this;
     }
 
-    public IJobProperties StartImmediate()
+    public JobProperies StartImmediate()
     {
         Immediate = true;
         return this;
     }
 
-    public IJobProperties WithInitialDelay(TimeSpan time)
+    public JobProperies WithInitialDelay(TimeSpan time)
     {
         InitialDelay = time;
         return this;
     }
 
-    public IJobProperties WithTiming(IJobTiming timing)
+    public JobProperies WithTiming(IJobTiming timing)
     {
         Timing = timing;
         return this;
     }
 
-    public IJobProperties SetDisabled()
+    public JobProperies SetDisabled()
     {
         Disabled = true;
         return this;
     }
 
-    public IJobProperties WithContextStackSize(int size)
+    public JobProperies WithContextStackSize(int size)
     {
         ContextStackSize = size;
         return this;
     }
 
-    public IJobProperties WithTag(object tag)
+    public JobProperies WithTag(object tag)
     {
         Tag = tag;
         return this;
     }
 
-    public IJobProperties EveryTime(TimeSpan timeSpan, string? name = null)
+    public JobProperies EveryTime(TimeSpan timeSpan, string? name = null)
     {
         Timing = JobTiming.EveryTime(timeSpan, name);
         return this;
     }
 
-    public IJobProperties WithQueueCapacity(int capacity)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
-        QueueCapacity = capacity;
-        return this;
-    }
-
-    public IJobProperties WithConcurrencyLimit(int limit)
+    public JobProperies WithConcurrencyLimit(int limit)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
         ConcurrencyLimit = limit;
         return this;
     }
 
-    public IJobProperties WithMaxConcurrencyLimit(int limit)
+    public JobProperies WithMaxConcurrencyLimit(int limit)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
-        MaxConcurrencyLimit = limit;
+        MaxConcurrency = limit;
         return this;
     }
 
-    public IJobProperties WithSingleWriter(bool singleWriter)
+    public JobProperies WithSingleWriter(bool singleWriter)
     {
         SingleWriter = singleWriter;
         return this;
@@ -108,9 +100,9 @@ internal sealed class JobProperies : IJobProperties
         InitialDelay ??= props.InitialDelay;
         ContextStackSize ??= props.ContextStackSize;
         Tag ??= props.Tag;
-        QueueCapacity ??= props.QueueCapacity;
+
         ConcurrencyLimit ??= props.ConcurrencyLimit;
-        MaxConcurrencyLimit ??= props.MaxConcurrencyLimit;
+        MaxConcurrency ??= props.MaxConcurrency;
         SingleWriter ??= props.SingleWriter;
 
         return this;

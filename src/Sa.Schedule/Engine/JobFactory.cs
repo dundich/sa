@@ -10,11 +10,12 @@ internal sealed class JobFactory(
     TimeProvider? timeProvider = null) : IJobFactory
 {
     public IJobScheduler CreateJobSchedule(IJobSettings settings)
-        => new JobScheduler(settings, jobRunner, () => CreateController(settings));
+        => new JobScheduler(settings, jobRunner, i => CreateController(i, settings));
 
-    private JobController CreateController(IJobSettings settings)
+    private JobController CreateController(int index, IJobSettings settings)
     {
         return new(
+            index,
             settings,
             interceptorSettings,
             scopeFactory,

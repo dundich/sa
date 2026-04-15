@@ -45,12 +45,9 @@ public interface IJobProperties
     /// </summary>
     object? Tag { get; }
 
-
-    int? QueueCapacity { get; }
-
     int? ConcurrencyLimit { get; }
 
-    int? MaxConcurrencyLimit { get; }
+    int? MaxConcurrency { get; }
 
     bool? SingleWriter { get; }
 }

@@ -3,7 +3,7 @@ using Sa.Schedule.Settings;
 
 namespace Sa.Schedule.Engine;
 
-internal sealed class JobPipeline : IJob, IDisposable
+internal sealed class JobExecutor : IJob, IDisposable
 {
     #region proxy
     class JobProxy(IJob job, IJobInterceptor interceptor, object? key) : IJob
@@ -20,7 +20,7 @@ internal sealed class JobPipeline : IJob, IDisposable
     private readonly IServiceScope _scope;
     private readonly IJob _job;
 
-    public JobPipeline(
+    public JobExecutor(
         IJobSettings settings,
         IInterceptorSettings interceptorSettings,
         IServiceScopeFactory scopeFactory)

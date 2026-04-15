@@ -77,11 +77,9 @@ public interface IJobBuilder
         => EveryTime(TimeSpan.FromMinutes(minutes), $"every {minutes} minutes");
 
 
-    IJobBuilder WithQueueCapacity(int capacity);
-
     IJobBuilder WithConcurrencyLimit(int limit);
 
-    IJobBuilder WithMaxConcurrencyLimit(int limit);
+    IJobBuilder WithMaxConcurrency(int limit);
 
     IJobBuilder WithSingleWriter(bool singleWriter);
 

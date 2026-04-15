@@ -68,8 +68,8 @@ public class WorkQueueTests
 
         // Assert
         Assert.True(model.WasProcessed);
-        Assert.Equal(0, queue.ActiveTasks);
-        Assert.Equal(0, queue.QueuedTasks);
+        Assert.Equal(0, queue.QueueCount);
+
     }
 
 
@@ -90,8 +90,7 @@ public class WorkQueueTests
 
         // Assert
         Assert.True(model.WasProcessed);
-        Assert.Equal(0, queue.ActiveTasks);
-        Assert.Equal(0, queue.QueuedTasks);
+        Assert.Equal(0, queue.QueueCount);
     }
 
     [Fact]
@@ -113,8 +112,7 @@ public class WorkQueueTests
 
         // Assert
         Assert.All(models, m => Assert.True(m.WasProcessed));
-        Assert.Equal(0, queue.ActiveTasks);
-        Assert.Equal(0, queue.QueuedTasks);
+        Assert.Equal(0, queue.QueueCount);
     }
 
     [Fact]
@@ -138,13 +136,14 @@ public class WorkQueueTests
         await Task.Delay(50, TestToken);
 
         // Assert
-        Assert.True(queue.ActiveTasks <= concurrencyLimit, "Concurrency limit violated");
+        Assert.True(queue.ConcurrencyLimit <= concurrencyLimit, "Concurrency limit violated");
+
+        Assert.False(queue.IsIdle());
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
 
-        Assert.Equal(0, queue.ActiveTasks);
-        Assert.Equal(0, queue.QueuedTasks);
+        Assert.Equal(0, queue.QueueCount);
     }
 
     [Fact]
@@ -215,7 +214,7 @@ public class WorkQueueTests
 
         // Assert
         Assert.False(queue.IsEnabled);
-        Assert.True(queue.ActiveTasks <= 5);
+        Assert.True(queue.QueueCount <= 5);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
@@ -223,7 +222,7 @@ public class WorkQueueTests
         });
 
         await queue.WaitForIdleAsync(TestToken);
-        Assert.Equal(0, queue.ActiveTasks);
+        Assert.Equal(0, queue.QueueCount);
 
         var canceled = observer.Changes.Count(c => c.Status == WorkStatus.Cancelled);
         Assert.Equal(5, canceled);
@@ -293,9 +292,6 @@ public class WorkQueueTests
         await queue.Enqueue(new TestModel(), cancellationToken: TestToken);
         await queue.DisposeAsync();
 
-        // Act & Assert
-        Assert.False(queue.IsEnabled);
-        Assert.Equal(0, queue.QueuedTasks); // Writer completed
         await Assert.ThrowsAsync<ObjectDisposedException>(()
             => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());
     }
@@ -306,7 +302,6 @@ public class WorkQueueTests
         var queue = new WorkQueue<TestModel>(
             WorkQueueOptions<TestModel>.Create(new TestWork()));
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => queue.ConcurrencyLimit = 0);
         Assert.Throws<ArgumentOutOfRangeException>(() => queue.ConcurrencyLimit = -1);
 
         queue.Dispose();

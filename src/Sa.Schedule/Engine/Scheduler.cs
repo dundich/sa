@@ -20,9 +20,18 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
         return results.Count(r => r);
     }
 
-    public async Task<int> Restart()
+    public async Task<int> Restart(CancellationToken cancellationToken)
     {
-        var results = await Task.WhenAll(Schedules.Select(c => c.Restart()));
+        var results = await Task
+            .WhenAll(Schedules
+                .Where(c => c.IsStarted)
+                .Select(c => Task.Run(async () =>
+                {
+                    await c.Stop();
+                    await c.Start(cancellationToken);
+                    return true;
+                })));
+
         return results.Count(r => r);
     }
 

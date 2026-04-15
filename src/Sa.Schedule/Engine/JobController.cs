@@ -9,6 +9,7 @@ namespace Sa.Schedule.Engine;
 /// job lifecycly controller with context
 /// </summary>
 internal sealed partial class JobController(
+    int index,
     IJobSettings settings,
     IInterceptorSettings interceptorSettings,
     IServiceScopeFactory scopeFactory,
@@ -17,7 +18,17 @@ internal sealed partial class JobController(
 
     private readonly JobContext _context = new(settings);
 
-    private volatile JobPipeline? _job;
+    private readonly SemaphoreSlim _pauseSemaphore = new(1, 1);
+
+
+    private volatile JobExecutor? _job;
+
+    private volatile bool _isPaused;
+
+
+    public int Index => index;
+    public bool IsPaused => _isPaused;
+
 
     public async ValueTask WaitToRun(CancellationToken cancellationToken)
     {
@@ -29,9 +40,51 @@ internal sealed partial class JobController(
         }
     }
 
-    public void Running()
+
+    public void Pause()
     {
-        _job = new JobPipeline(settings, interceptorSettings, scopeFactory);
+        if (_isPaused) return;
+
+        _isPaused = true;
+        _pauseSemaphore.Wait(); // Блокируем семафор
+    }
+
+    public void Resume()
+    {
+        if (!_isPaused) return;
+
+        _isPaused = false;
+
+        try
+        {
+            _pauseSemaphore.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // Уже разблокирован
+        }
+    }
+
+    public async ValueTask WaitIfPaused(CancellationToken cancellationToken)
+    {
+        if (!_isPaused) return;
+
+        try
+        {
+            await _pauseSemaphore.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            if (!_isPaused)
+            {
+                _pauseSemaphore.Release();
+            }
+        }
+    }
+
+    public void Init()
+    {
+        _job = new JobExecutor(settings, interceptorSettings, scopeFactory);
 
         _context.ServiceProvider = _job.ServiceProvider;
 
@@ -39,10 +92,11 @@ internal sealed partial class JobController(
         _context.NumRuns++;
     }
 
-    public void Stopped(TaskStatus status)
+    public void Free()
     {
         _context.ServiceProvider = NullJobServices.Instance;
         _job?.Dispose();
+        _pauseSemaphore.Dispose();
     }
 
     public async ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken)

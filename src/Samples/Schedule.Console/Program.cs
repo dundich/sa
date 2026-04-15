@@ -53,9 +53,10 @@ _ = Task.Run(async () =>
 {
     await Task.Delay(5000);
     await controller.Stop();
-    Console.WriteLine($"*** stopped & restart after 2 sec");
+    Console.WriteLine($"*** stopped & start after 2 sec");
+
     await Task.Delay(2000);
-    await controller.Restart();
+    await controller.Start(cts.Token);
 });
 
 _ = Task.Run(async () =>

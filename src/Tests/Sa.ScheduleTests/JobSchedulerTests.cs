@@ -8,6 +8,95 @@ namespace Sa.ScheduleTests;
 public class JobSchedulerTests
 {
 
+    [Fact]
+    public async Task Start_ConcurrentCalls_OnlyOneSucceeds()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+        var results = new ConcurrentBag<bool>();
+
+        var tasks = Enumerable.Range(0, 10).Select(_ =>
+            Task.Run(async () => results.Add(
+                await scheduler.Start(TestContext.Current.CancellationToken))
+            ));
+
+        await Task.WhenAll(tasks);
+
+        Assert.Single(results, r => r);
+    }
+
+
+    [Fact]
+    public async Task Stop_ConcurrentCalls_Succeeds()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        await scheduler.Start(TestContext.Current.CancellationToken);
+
+        Assert.True(scheduler.IsStarted);
+
+        var tasks = Enumerable.Range(0, 10).Select(_ =>
+        Task.Run(async () =>
+            await scheduler.Stop()
+        ));
+
+        await Task.WhenAll(tasks);
+
+
+        Assert.False(scheduler.IsStarted);
+        Assert.Equal(0, scheduler.ActiveTasks);
+    }
+
+
+    [Fact]
+    public async Task Dispose_ConcurrentCalls_Succeeds()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        await scheduler.Start(TestContext.Current.CancellationToken);
+
+        Assert.True(scheduler.IsStarted);
+
+        var tasks = Enumerable.Range(0, 10).Select(_ =>
+            Task.Run(async () => await scheduler.DisposeAsync()));
+
+        await Task.WhenAll(tasks);
+
+        Assert.False(scheduler.IsStarted);
+        Assert.Equal(0, scheduler.ActiveTasks);
+    }
+
+
+    [Fact]
+    public async Task ConcurrencyLimit_ConcurrentCalls_Succeeds()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        settings.Properties
+            .WithMaxConcurrencyLimit(30)
+            .WithConcurrencyLimit(1);
+
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        await scheduler.Start(TestContext.Current.CancellationToken);
+
+        Assert.True(scheduler.IsStarted);
+
+        var tasks = Enumerable.Range(0, 10).Select(_ =>
+            Task.Run(() => scheduler.ConcurrencyLimit = Random.Shared.Next(2, 45)));
+
+        await Task.WhenAll(tasks);
+
+        Assert.True(scheduler.IsStarted);
+        Assert.InRange(scheduler.ConcurrencyLimit, 2, 30);
+
+        await scheduler.DisposeAsync();
+    }
+
+
+
     class TestJob : IJob
     {
         public async Task Execute(IJobContext context, CancellationToken cancellationToken)
@@ -21,8 +110,12 @@ public class JobSchedulerTests
     }
 
 
-    class TestJobController : IJobController
+    class TestJobController(int index) : IJobController
     {
+        public bool IsPaused => false;
+
+        public int Index => index;
+
         public ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken)
         {
             return ValueTask.FromResult(CanJobExecuteResult.Ok);
@@ -40,38 +133,31 @@ public class JobSchedulerTests
             //
         }
 
-        public void Running()
+        public void Pause()
+        {
+
+        }
+
+        public void Resume()
+        {
+
+        }
+
+        public void Init()
         {
             //
         }
 
-        public void Stopped(TaskStatus status)
+        public void Free()
         {
             //
+        }
+
+        public ValueTask WaitIfPaused(CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException();
         }
 
         public ValueTask WaitToRun(CancellationToken cancellationToken) => ValueTask.CompletedTask;
-    }
-
-
-    [Fact]
-    public async Task Start_ConcurrentCalls_OnlyOneSucceeds()
-    {
-
-        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
-
-
-        var scheduler = new JobScheduler(settings, new TestJobRunner(), () => new TestJobController());
-        var results = new ConcurrentBag<bool>();
-
-        var tasks = Enumerable.Range(0, 10).Select(_ =>
-            Task.Run(async () => results.Add(
-                await scheduler.Start(TestContext.Current.CancellationToken))
-            ));
-
-        await Task.WhenAll(tasks);
-
-        Assert.Single(results, r => r);
-        Assert.Equal(9, results.Count(r => !r));
     }
 }

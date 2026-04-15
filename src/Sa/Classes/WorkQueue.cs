@@ -55,14 +55,9 @@ internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
     bool IsEnabled { get; }
 
     /// <summary>
-    /// Текущее количество активно выполняющихся задач.
+    /// Gets the current number of items available from queue.
     /// </summary>
-    int ActiveTasks { get; }
-
-    /// <summary>
-    ///  Gets the current number of items available from this channel reader.
-    /// </summary>
-    int QueuedTasks { get; }
+    int QueueCount { get; }
 
     /// <summary>
     /// Определяет, свободна ли очередь (нет активных и нет в очереди).
@@ -99,110 +94,116 @@ internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
 internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 {
     private readonly Channel<WorkItem> _queue;
-    private readonly HashSet<long> _activeItemIds = [];
+    private readonly HashSet<WorkItem> _queueItems = [];
+
     private readonly Lock _rootSync = new();
-    private readonly SemaphoreSlim _concurrencySemaphore;
+    private readonly Lock _activeReadersSync = new();
+
     private readonly ILogger? _logger = null;
     private readonly TimeProvider _timeProvider;
     public readonly IWork<TModel> _processor;
     public readonly IWorkObserver<TModel>? _watcher;
-    private readonly CancellationTokenSource _shutdownCts = new();
-    private readonly Task _processingTask;
     private readonly Action<WorkInfo>? _statusChanged;
 
-    private volatile TaskCompletionSource _idleTcs = new();
-    private int _activeCount = 0;
-    private volatile bool _isEnabled = true;
+    private readonly CancellationTokenSource _shutdownCts = new();
+    private readonly Task _processingTask;
 
-    private int _сoncurrency;
+
+    private volatile CancellationTokenSource? _throttleCts = new();
+    private volatile TaskCompletionSource _idleTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private volatile bool _isEnabled = true;
+    private volatile bool _disposed = false;
+
+
+    private int _concurrency;
     private readonly int _maxConcurrency;
     private readonly int _queueCapacity;
+    private int _queueCount;
+    private long _taskIdCounter;
 
-    private long _taskIdCounter = 0;
-    private bool _disposed = false;
+    private readonly List<Task> _activeReaders = [];
+
 
     public WorkQueue(WorkQueueOptions<TModel> options)
     {
+        ArgumentNullException.ThrowIfNull(options.Processor);
+
         _processor = options.Processor;
         _watcher = options.Observer ?? _processor as IWorkObserver<TModel>;
         _timeProvider = options.TimeProvider ?? TimeProvider.System;
-        _сoncurrency = options.ConcurrencyLimit ?? Environment.ProcessorCount;
         _statusChanged = options.StatusChanged;
         _logger = options.Logger;
 
-        _maxConcurrency = Math.Max(options.MaxConcurrencyLimit ?? Environment.ProcessorCount, _сoncurrency);
+        _maxConcurrency = options.MaxConcurrencyLimit ?? Environment.ProcessorCount;
+
+        _concurrency = Math.Clamp(
+            options.ConcurrencyLimit ?? Environment.ProcessorCount,
+            0,
+            _maxConcurrency);
+
         _queueCapacity = options.QueueCapacity ?? _maxConcurrency;
 
         _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(_queueCapacity)
         {
-            AllowSynchronousContinuations = true,
+            AllowSynchronousContinuations = false,
             SingleReader = false,
             SingleWriter = options.SingleWriter ?? false,
-            FullMode = BoundedChannelFullMode.Wait
+            FullMode = options.FullMode
         });
 
-
-        _concurrencySemaphore = new SemaphoreSlim(_сoncurrency, _maxConcurrency);
-
-        _processingTask = LoopAsync();
+        _processingTask = ProcessQueueAsync();
     }
 
     public bool IsEnabled => _isEnabled;
-    public int ActiveTasks => _activeCount;
-    public int QueuedTasks => _queue.Reader.Count;
+
+    public int QueueCount => _queueCount;
 
     public bool IsIdle()
     {
         lock (_rootSync)
         {
-            return _activeItemIds.Count == 0 && _queue.Reader.Count == 0;
+            return _queueItems.Count == 0 && _queue.Reader.Count == 0;
         }
     }
 
     public int ConcurrencyLimit
     {
-        get => _сoncurrency;
+        get => _concurrency;
         set
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 0);
 
-            var oldValue = Interlocked.Exchange(ref _сoncurrency, value);
-            int delta = value - oldValue;
+            var newLimit = Math.Clamp(value, 0, _maxConcurrency);
 
-            if (delta > 0)
-            {
-                try
-                {
-                    _concurrencySemaphore.Release(delta);
-                }
-                catch (SemaphoreFullException)
-                {
-                    // Игнорируем, если семафор уже на максимуме
-                }
-            }
+            Interlocked.Exchange(ref _concurrency, newLimit);
         }
     }
+
 
     public int MaxConcurrency => _maxConcurrency;
 
     public int QueueCapacity => _queueCapacity;
 
+
+
     public async ValueTask Enqueue(TModel model, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_isEnabled)
-            throw new InvalidOperationException("Task scheduler has been stopped.");
+            throw new InvalidOperationException("Queue has been stopped.");
 
-        var snapshot = new WorkItem(model, cancellationToken)
+        var item = new WorkItem(model, cancellationToken)
         {
             Id = Interlocked.Increment(ref _taskIdCounter),
             Status = WorkStatus.Queued,
             EnqueuedTime = _timeProvider.GetUtcNow(),
         };
 
-        await OnStatusChangedAsync(snapshot);
-        await _queue.Writer.WriteAsync(snapshot, cancellationToken);
+        await OnStatusChangedAsync(item).ConfigureAwait(false);
+        await _queue.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
+
+        ActivateItem(item);
     }
 
     public async Task ShutdownAsync()
@@ -213,11 +214,18 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
             _isEnabled = false;
         }
 
-        await _shutdownCts.CancelAsync();
+        await _shutdownCts.CancelAsync().ConfigureAwait(false);
 
         try
         {
-            await _processingTask;
+            await _processingTask.ConfigureAwait(false);
+
+            Task[] readersCopy;
+            lock (_activeReadersSync)
+            {
+                readersCopy = [.. _activeReaders];
+            }
+            await Task.WhenAll(readersCopy).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -231,94 +239,137 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         while (!IsIdle())
         {
-            var currentTcs = _idleTcs;
-            await currentTcs.Task.WaitAsync(cancellationToken);
+            TaskCompletionSource tcs;
+            lock (_rootSync)
+            {
+                if (IsIdle()) break; // Повторная проверка после входа в блокировку
+                tcs = _idleTcs;
+            }
+            await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task LoopAsync()
+    private async Task ProcessQueueAsync()
     {
-        var ct = _shutdownCts.Token;
         try
         {
-            while (!ct.IsCancellationRequested && await _queue.Reader.WaitToReadAsync(ct))
+            // Запускаем начальных reader'ов
+            await SpawnAdditionalReaders(_concurrency).ConfigureAwait(false);
+            await MonitorQueueAsync().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Queue processing failed");
+        }
+    }
+
+    private async Task MonitorQueueAsync()
+    {
+        var shutdownToken = _shutdownCts.Token;
+
+        while (!shutdownToken.IsCancellationRequested)
+        {
+            // Ждём появления элементов или изменения состояния
+            if (await _queue.Reader.WaitToReadAsync(shutdownToken).ConfigureAwait(false))
             {
-                // Каждый поток пытается читать, пока есть данные
-                while (_isEnabled && _queue.Reader.TryRead(out var item))
+                // Убеждаемся что есть активные reader'ы
+                await EnsureReadersActive().ConfigureAwait(false);
+            }
+
+            // Небольшая задержка чтобы не спамить
+            await Task.Delay(100, shutdownToken).ConfigureAwait(false);
+        }
+    }
+
+    private Task EnsureReadersActive()
+    {
+        lock (_activeReadersSync)
+        {
+            var activeCount = _activeReaders.Count(t => !t.IsCompleted);
+            var targetCount = _concurrency;
+
+            if (activeCount < targetCount && _isEnabled && !_disposed)
+            {
+                return SpawnAdditionalReaders(targetCount - activeCount);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task SpawnAdditionalReaders(int count)
+    {
+        var tasks = new List<Task>(capacity: count);
+
+        lock (_activeReadersSync)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                Task readerTask = ReaderLoopAsync(_shutdownCts.Token);
+                _activeReaders.Add(readerTask);
+                tasks.Add(readerTask);
+            }
+        }
+
+        // Не ждём запуска
+        var _ = Task.WhenAll(tasks).ContinueWith(t =>
+        {
+            lock (_activeReadersSync)
+            {
+                foreach (var task in tasks)
                 {
-                    // SemaphoreSlim автоматически ограничит реальную параллельность
-                    _ = ExecuteWithConcurrencyControlAsync(item, ct);
+                    _activeReaders.Remove(task);
                 }
             }
-        }
-        catch (OperationCanceledException)
-        {
-            /* ignore */
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Unhandled error in queue processing loop");
-        }
+        });
+
+        return Task.CompletedTask;
     }
 
-    // Обёртка: захват слота -> выполнение -> освобождение
-    private async Task ExecuteWithConcurrencyControlAsync(WorkItem item, CancellationToken loopCt)
+
+    private async Task ReaderLoopAsync(CancellationToken shutdownToken)
     {
-        // Ждём доступного слота (с учётом отмены)
-        try
-        {
-            await _concurrencySemaphore.WaitAsync(loopCt);
-        }
-        catch (OperationCanceledException)
-        {
-            // Если отменили ожидание слота — возвращаем задачу в очередь или отменяем
-            await CancelWorkItemAsync(item);
-            return;
-        }
 
-
-        try
+        while (!shutdownToken.IsCancellationRequested && _isEnabled)
         {
-            // Проверяем, не остановили ли очередь пока ждали слот
-            if (!_isEnabled)
+
+            // Создаём токен с учётом троттлинга
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                shutdownToken,
+                _throttleCts?.Token ?? CancellationToken.None);
+
+            try
             {
-                await CancelWorkItemAsync(item);
+                var item = await _queue.Reader.ReadAsync(linkedCts.Token).ConfigureAwait(false);
+
+                // Запускаем выполнение без ожидания
+                _ = ExecuteItemAsync(item, shutdownToken);
+            }
+            catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+            {
                 return;
             }
-
-            await ExecuteAsync(item);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Unhandled error executing work item #{WorkItemId}", item.Id);
-
-            if (item.Status is WorkStatus.Queued or WorkStatus.Running)
+            catch (OperationCanceledException)
             {
-                item.Status = WorkStatus.Faulted;
-                item.LastError = ex;
-                item.EndedTime = _timeProvider.GetUtcNow();
-                await OnStatusChangedAsync(item);
+                // Троттлинг — перепроверяем условия
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Reader error");
+                await Task.Delay(100, shutdownToken).ConfigureAwait(false);
             }
         }
-        finally
-        {
-            _concurrencySemaphore.Release(); // Освобождаем слот
-        }
     }
 
-    private async Task CancelWorkItemAsync(WorkItem item)
-    {
-        item.Status = WorkStatus.Cancelled;
-        item.EndedTime = _timeProvider.GetUtcNow();
-        await OnStatusChangedAsync(item);
-    }
 
-    private async Task ExecuteAsync(WorkItem item)
+    private async Task ExecuteItemAsync(WorkItem item, CancellationToken shutdownToken)
     {
-        ActivateItem(item);
-
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(
-            _shutdownCts.Token,
+            shutdownToken,
             item.CancellationToken);
 
         var ct = cts.Token;
@@ -329,9 +380,10 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
             item.StartedTime = _timeProvider.GetUtcNow();
             item.Status = WorkStatus.Running;
-            await OnStatusChangedAsync(item);
+            await OnStatusChangedAsync(item).ConfigureAwait(false);
 
-            await _processor.Execute(item.Model, ct);
+            await _processor.Execute(item.Model, ct).ConfigureAwait(false);
+
             item.Status = WorkStatus.Completed;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -342,12 +394,16 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         {
             item.Status = WorkStatus.Faulted;
             item.LastError = ex;
+            _logger?.LogError(ex, "Item {ItemId} execution failed", item.Id);
         }
         finally
         {
-            item.EndedTime = _timeProvider.GetUtcNow();
-            await OnStatusChangedAsync(item);
-            DeactivateItem(item);
+            if (!_disposed)
+            {
+                item.EndedTime = _timeProvider.GetUtcNow();
+                await OnStatusChangedAsync(item).ConfigureAwait(false);
+                DeactivateItem(item);
+            }
         }
     }
 
@@ -357,11 +413,11 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         lock (_rootSync)
         {
-            _activeItemIds.Add(item.Id);
-            _activeCount = _activeItemIds.Count;
+            _queueItems.Add(item);
+            _queueCount = _queueItems.Count;
 
             oldTcs = _idleTcs;
-            _idleTcs = new TaskCompletionSource();
+            _idleTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
         oldTcs.TrySetResult();
@@ -373,10 +429,10 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         lock (_rootSync)
         {
-            _activeItemIds.Remove(item.Id);
-            _activeCount = _activeItemIds.Count;
+            _queueItems.Remove(item);
+            _queueCount = _queueItems.Count;
 
-            if (_activeItemIds.Count == 0 && _queue.Reader.Count == 0)
+            if (_queueItems.Count == 0 && _queue.Reader.Count == 0)
             {
                 tcsToNotify = _idleTcs;
             }
@@ -394,7 +450,7 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         {
             try
             {
-                await watcher.HandleChanges(item.Model, info, _shutdownCts.Token);
+                await watcher.HandleChanges(item.Model, info, _shutdownCts.Token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -420,34 +476,56 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
     {
         if (_disposed) return;
 
-        _disposed = true;
         _isEnabled = false;
         _queue.Writer.TryComplete();
+
         _shutdownCts.Cancel();
 
-        _concurrencySemaphore.Dispose();
+        var throttle = Interlocked.Exchange(ref _throttleCts, null);
+        throttle?.Cancel();
+
+        _disposed = true;
+
         _shutdownCts.Dispose();
+        throttle?.Dispose();
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
 
-        _disposed = true;
         _isEnabled = false;
         _queue.Writer.TryComplete();
 
-        await _shutdownCts.CancelAsync();
+        await _shutdownCts.CancelAsync().ConfigureAwait(false);
+
+        var throttle = Interlocked.Exchange(ref _throttleCts, null);
+        if (throttle != null)
+        {
+            await throttle.CancelAsync().ConfigureAwait(false);
+        }
+
         try
         {
-            await _processingTask;
+            await _processingTask.ConfigureAwait(false);
+
+            Task[] readersCopy;
+            lock (_activeReadersSync)
+            {
+                readersCopy = [.. _activeReaders];
+            }
+            await Task.WhenAll(readersCopy).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error during synchronous disposal");
         }
-        _concurrencySemaphore.Dispose();
-        _shutdownCts.Dispose();
+        finally
+        {
+            _disposed = true;
+            _shutdownCts.Dispose();
+            throttle?.Dispose();
+        }
     }
 
     private sealed class WorkItem(TModel item, CancellationToken token)
@@ -472,13 +550,15 @@ internal sealed record WorkQueueOptions<TModel>
     IWork<TModel> Processor,
     // Optional with defaults
     IWorkObserver<TModel>? Observer = null,
+
     TimeProvider? TimeProvider = null,
     int? QueueCapacity = null,
     int? ConcurrencyLimit = null,
     int? MaxConcurrencyLimit = null,
     bool? SingleWriter = false,
     Action<WorkInfo>? StatusChanged = null,
-    ILogger? Logger = null
+    ILogger? Logger = null,
+    BoundedChannelFullMode FullMode = BoundedChannelFullMode.Wait
 )
 {
     public WorkQueueOptions<TModel> WithObserver(IWorkObserver<TModel> observer) =>
@@ -499,7 +579,7 @@ internal sealed record WorkQueueOptions<TModel>
         return this with { ConcurrencyLimit = limit };
     }
 
-    public WorkQueueOptions<TModel> WithMaxConcurrencyLimit(int limit)
+    public WorkQueueOptions<TModel> WithMaxConcurrency(int limit)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
         return this with { MaxConcurrencyLimit = limit };
@@ -513,6 +593,10 @@ internal sealed record WorkQueueOptions<TModel>
 
     public WorkQueueOptions<TModel> WithLogger(ILogger<WorkQueue<TModel>> logger) =>
         this with { Logger = logger };
+
+
+    public WorkQueueOptions<TModel> WithFullMode(BoundedChannelFullMode mode) =>
+        this with { FullMode = mode };
 
     public static WorkQueueOptions<TModel> Create(IWork<TModel> processor) =>
         new(processor);

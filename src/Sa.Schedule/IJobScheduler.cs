@@ -15,7 +15,12 @@ public interface IJobScheduler: IDisposable, IAsyncDisposable
     /// <summary>
     /// Gets a value indicating whether the job scheduler is currently active.
     /// </summary>
-    bool IsActive { get; }
+    bool IsStarted { get; }
+
+    /// <summary>
+    /// Gets the number of tasks that are contained in the Job.
+    /// </summary>
+    int ActiveTasks { get; }
 
     /// <summary>
     /// 
@@ -25,17 +30,12 @@ public interface IJobScheduler: IDisposable, IAsyncDisposable
     /// <summary>
     /// Gets a change token that can be used to track changes to the active state of the scheduler.
     /// </summary>
-    IChangeToken GetActiveChangeToken();
+    IChangeToken StartChangeToken();
 
     /// <summary>
     /// Starts the job scheduler asynchronously.
     /// </summary>
     Task<bool> Start(CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Restarts the job scheduler asynchronously.
-    /// </summary>
-    Task<bool> Restart();
 
     /// <summary>
     /// Stops the job scheduler asynchronously.

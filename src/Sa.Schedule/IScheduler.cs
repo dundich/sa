@@ -26,7 +26,7 @@ public interface IScheduler
     /// Restarts the scheduler.
     /// </summary>
     /// <returns>The number of jobs restarted.</returns>
-    Task<int> Restart();
+    Task<int> Restart(CancellationToken cancellationToken);
 
     /// <summary>
     /// Stops the scheduler.
