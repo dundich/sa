@@ -7,17 +7,17 @@ namespace Sa.Classes;
 /// <summary>
 /// Интерфейс для выполнения бизнес-логики.
 /// </summary>
-internal interface IWork<in TModel>
+internal interface IWork<in TInput>
 {
-    Task Execute(TModel model, CancellationToken cancellationToken);
+    Task Execute(TInput input, CancellationToken cancellationToken);
 }
 
 /// <summary>
 /// Интерфейс для наблюдения за изменениями состояния задач в очереди.
 /// </summary>
-internal interface IWorkObserver<in TModel>
+internal interface IWorkObserver<in TInput>
 {
-    Task HandleChanges(TModel model, WorkInfo work, CancellationToken cancellationToken);
+    Task HandleChanges(TInput input, WorkInfo work, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -47,7 +47,7 @@ internal enum WorkStatus
 /// <summary>
 /// Асинхронная очередь задач с ограничением параллелизма.
 /// </summary>
-internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
+internal interface IWorkQueue<in TInput> : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Показывает, включена ли обработка задач.
@@ -55,9 +55,10 @@ internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
     bool IsEnabled { get; }
 
     /// <summary>
-    /// Gets the current number of items available from queue.
+    /// Gets the current inputs from queue.
     /// </summary>
-    int QueueCount { get; }
+    int QueueTasks { get; }
+
 
     /// <summary>
     /// Определяет, свободна ли очередь (нет активных и нет в очереди).
@@ -78,7 +79,7 @@ internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
     /// <summary>
     /// Добавляет задачу в очередь асинхронно.
     /// </summary>
-    ValueTask Enqueue(TModel model, CancellationToken cancellationToken = default);
+    ValueTask Enqueue(TInput input, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Блокируется до момента, когда очередь станет полностью пустой.
@@ -91,25 +92,24 @@ internal interface IWorkQueue<in TModel> : IDisposable, IAsyncDisposable
     Task ShutdownAsync();
 }
 
-internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
+internal sealed class WorkQueue<TInput> : IWorkQueue<TInput>
 {
     private readonly Channel<WorkItem> _queue;
-    private readonly HashSet<WorkItem> _queueItems = [];
+    private readonly HashSet<WorkItem> _workItems = [];
 
     private readonly Lock _rootSync = new();
     private readonly Lock _activeReadersSync = new();
 
     private readonly ILogger? _logger = null;
     private readonly TimeProvider _timeProvider;
-    public readonly IWork<TModel> _processor;
-    public readonly IWorkObserver<TModel>? _watcher;
+    public readonly IWork<TInput> _processor;
+    public readonly IWorkObserver<TInput>? _watcher;
     private readonly Action<WorkInfo>? _statusChanged;
 
     private readonly CancellationTokenSource _shutdownCts = new();
     private readonly Task _processingTask;
 
 
-    private volatile CancellationTokenSource? _throttleCts = new();
     private volatile TaskCompletionSource _idleTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private volatile bool _isEnabled = true;
     private volatile bool _disposed = false;
@@ -118,23 +118,25 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
     private int _concurrency;
     private readonly int _maxConcurrency;
     private readonly int _queueCapacity;
-    private int _queueCount;
+    private int _workItemsCount;
     private long _taskIdCounter;
 
-    private readonly List<Task> _activeReaders = [];
+    private readonly List<ReaderTask> _activeReaders = [];
 
 
-    public WorkQueue(WorkQueueOptions<TModel> options)
+    public WorkQueue(WorkQueueOptions<TInput> options)
     {
         ArgumentNullException.ThrowIfNull(options.Processor);
 
         _processor = options.Processor;
-        _watcher = options.Observer ?? _processor as IWorkObserver<TModel>;
+        _watcher = options.Observer ?? _processor as IWorkObserver<TInput>;
         _timeProvider = options.TimeProvider ?? TimeProvider.System;
         _statusChanged = options.StatusChanged;
         _logger = options.Logger;
 
-        _maxConcurrency = options.MaxConcurrencyLimit ?? Environment.ProcessorCount;
+        _maxConcurrency = options.MaxConcurrency > 0
+            ? options.MaxConcurrency.Value
+            : Environment.ProcessorCount;
 
         _concurrency = Math.Clamp(
             options.ConcurrencyLimit ?? Environment.ProcessorCount,
@@ -156,13 +158,14 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
     public bool IsEnabled => _isEnabled;
 
-    public int QueueCount => _queueCount;
+    public int QueueTasks => _workItemsCount;
+
 
     public bool IsIdle()
     {
         lock (_rootSync)
         {
-            return _queueItems.Count == 0 && _queue.Reader.Count == 0;
+            return _workItems.Count == 0 && _queue.Reader.Count == 0;
         }
     }
 
@@ -172,10 +175,8 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         set
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, 0);
 
             var newLimit = Math.Clamp(value, 0, _maxConcurrency);
-
             Interlocked.Exchange(ref _concurrency, newLimit);
         }
     }
@@ -187,13 +188,13 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
 
 
-    public async ValueTask Enqueue(TModel model, CancellationToken cancellationToken = default)
+    public async ValueTask Enqueue(TInput input, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_isEnabled)
             throw new InvalidOperationException("Queue has been stopped.");
 
-        var item = new WorkItem(model, cancellationToken)
+        var item = new WorkItem(input, cancellationToken)
         {
             Id = Interlocked.Increment(ref _taskIdCounter),
             Status = WorkStatus.Queued,
@@ -220,16 +221,32 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         {
             await _processingTask.ConfigureAwait(false);
 
-            Task[] readersCopy;
+            Task[] readers;
             lock (_activeReadersSync)
             {
-                readersCopy = [.. _activeReaders];
+                readers = [.. _activeReaders.Select(c => c.Task)];
             }
-            await Task.WhenAll(readersCopy).ConfigureAwait(false);
+            await Task.WhenAll(readers).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error during shutdown");
+        }
+        finally
+        {
+            await ClearAll().ConfigureAwait(false);
+        }
+    }
+
+    private async Task ClearAll()
+    {
+        while (_queue.Reader.TryRead(out var input))
+        {
+            input.Status = WorkStatus.Faulted;
+            input.LastError = ShutdownAsyncException.Default;
+            input.EndedTime = _timeProvider.GetUtcNow();
+            await OnStatusChangedAsync(input).ConfigureAwait(false);
+            DeactivateItem(input);
         }
     }
 
@@ -237,24 +254,33 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+            _shutdownCts.Token,
+            cancellationToken);
+
         while (!IsIdle())
         {
             TaskCompletionSource tcs;
             lock (_rootSync)
             {
-                if (IsIdle()) break; // Повторная проверка после входа в блокировку
+                if (IsIdle()) break;
                 tcs = _idleTcs;
             }
-            await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+            await Task.WhenAny(
+                tcs.Task.WaitAsync(cts.Token),
+                Task.Delay(1000, cts.Token)).ConfigureAwait(false);
         }
     }
 
+    /// <summary>
+    /// init readers
+    /// </summary>
     private async Task ProcessQueueAsync()
     {
         try
         {
-            // Запускаем начальных reader'ов
-            await SpawnAdditionalReaders(_concurrency).ConfigureAwait(false);
+            SpawnAdditionalReaders(_concurrency);
             await MonitorQueueAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -273,107 +299,109 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         while (!shutdownToken.IsCancellationRequested)
         {
-            // Ждём появления элементов или изменения состояния
             if (await _queue.Reader.WaitToReadAsync(shutdownToken).ConfigureAwait(false))
             {
-                // Убеждаемся что есть активные reader'ы
-                await EnsureReadersActive().ConfigureAwait(false);
+                EnsureReadersActive();
             }
 
-            // Небольшая задержка чтобы не спамить
             await Task.Delay(100, shutdownToken).ConfigureAwait(false);
         }
     }
 
-    private Task EnsureReadersActive()
+    private void EnsureReadersActive()
     {
         lock (_activeReadersSync)
         {
-            var activeCount = _activeReaders.Count(t => !t.IsCompleted);
+            if (!_isEnabled && _disposed) return;
+
+            var activeCount = GetActiveCount();
+
             var targetCount = _concurrency;
 
-            if (activeCount < targetCount && _isEnabled && !_disposed)
+            var delta = targetCount - activeCount;
+
+            if (delta > 0)
             {
-                return SpawnAdditionalReaders(targetCount - activeCount);
+                SpawnAdditionalReaders(delta);
+            }
+            else if (delta < 0)
+            {
+                foreach (var item in _activeReaders.Take(Math.Abs(delta)))
+                {
+                    item.TokenSource.Cancel();
+                }
             }
         }
-
-        return Task.CompletedTask;
     }
 
-    private Task SpawnAdditionalReaders(int count)
+    private int GetActiveCount()
     {
-        var tasks = new List<Task>(capacity: count);
+        return _activeReaders
+            .Count(t => !t.Task.IsCompleted || !t.TokenSource.IsCancellationRequested);
+    }
+
+    private void SpawnAdditionalReaders(int count)
+    {
+        void Delete(ReaderTask reader)
+        {
+            lock (_activeReadersSync)
+            {
+                _activeReaders.Remove(reader);
+                reader.Dispose();
+            }
+        }
 
         lock (_activeReadersSync)
         {
             for (int i = 0; i < count; i++)
             {
-                Task readerTask = ReaderLoopAsync(_shutdownCts.Token);
-                _activeReaders.Add(readerTask);
-                tasks.Add(readerTask);
+                CancellationTokenSource tokenSource = new();
+                Task readerTask = ReaderLoopAsync(tokenSource.Token);
+
+                ReaderTask reader = new(readerTask, tokenSource);
+
+                _activeReaders.Add(reader);
+
+                readerTask.ContinueWith(t => Delete(reader));
             }
         }
-
-        // Не ждём запуска
-        var _ = Task.WhenAll(tasks).ContinueWith(t =>
-        {
-            lock (_activeReadersSync)
-            {
-                foreach (var task in tasks)
-                {
-                    _activeReaders.Remove(task);
-                }
-            }
-        });
-
-        return Task.CompletedTask;
     }
 
 
-    private async Task ReaderLoopAsync(CancellationToken shutdownToken)
+    private async Task ReaderLoopAsync(CancellationToken cancellationToken)
     {
+        var shutdownToken = _shutdownCts.Token;
 
-        while (!shutdownToken.IsCancellationRequested && _isEnabled)
+        while (!cancellationToken.IsCancellationRequested
+            && !shutdownToken.IsCancellationRequested
+            && _isEnabled)
         {
-
-            // Создаём токен с учётом троттлинга
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                shutdownToken,
-                _throttleCts?.Token ?? CancellationToken.None);
-
             try
             {
-                var item = await _queue.Reader.ReadAsync(linkedCts.Token).ConfigureAwait(false);
+                WorkItem item = await _queue.Reader.ReadAsync(shutdownToken).ConfigureAwait(false);
 
-                // Запускаем выполнение без ожидания
-                _ = ExecuteItemAsync(item, shutdownToken);
-            }
-            catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
-            {
-                return;
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+                    shutdownToken,
+                    cancellationToken,
+                    item.CancellationToken);
+
+                await ExecuteItemAsync(item, cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                // Троттлинг — перепроверяем условия
+                // ignore
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Reader error");
+                _logger?.LogError(ex, "ReaderTask error");
                 await Task.Delay(100, shutdownToken).ConfigureAwait(false);
             }
         }
     }
 
 
-    private async Task ExecuteItemAsync(WorkItem item, CancellationToken shutdownToken)
+    private async Task ExecuteItemAsync(WorkItem item, CancellationToken ct)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
-            shutdownToken,
-            item.CancellationToken);
-
-        var ct = cts.Token;
-
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -382,13 +410,18 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
             item.Status = WorkStatus.Running;
             await OnStatusChangedAsync(item).ConfigureAwait(false);
 
-            await _processor.Execute(item.Model, ct).ConfigureAwait(false);
+            await _processor.Execute(item.Input, ct).ConfigureAwait(false);
 
             item.Status = WorkStatus.Completed;
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (item.CancellationToken.IsCancellationRequested)
         {
             item.Status = WorkStatus.Cancelled;
+
+            if (_logger != null && _logger.IsEnabled(LogLevel.Warning))
+            {
+                _logger?.LogWarning(ex, "Item {ItemId} processing was cancelled", item.Id);
+            }
         }
         catch (Exception ex)
         {
@@ -413,8 +446,8 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         lock (_rootSync)
         {
-            _queueItems.Add(item);
-            _queueCount = _queueItems.Count;
+            _workItems.Add(item);
+            _workItemsCount = _workItems.Count;
 
             oldTcs = _idleTcs;
             _idleTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -429,10 +462,10 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         lock (_rootSync)
         {
-            _queueItems.Remove(item);
-            _queueCount = _queueItems.Count;
+            _workItems.Remove(item);
+            _workItemsCount = _workItems.Count;
 
-            if (_queueItems.Count == 0 && _queue.Reader.Count == 0)
+            if (_workItems.Count == 0 && _queue.Reader.Count == 0)
             {
                 tcsToNotify = _idleTcs;
             }
@@ -450,7 +483,7 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         {
             try
             {
-                await watcher.HandleChanges(item.Model, info, _shutdownCts.Token).ConfigureAwait(false);
+                await watcher.HandleChanges(item.Input, info, _shutdownCts.Token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -481,13 +514,9 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         _shutdownCts.Cancel();
 
-        var throttle = Interlocked.Exchange(ref _throttleCts, null);
-        throttle?.Cancel();
-
         _disposed = true;
 
         _shutdownCts.Dispose();
-        throttle?.Dispose();
     }
 
     public async ValueTask DisposeAsync()
@@ -499,22 +528,16 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         await _shutdownCts.CancelAsync().ConfigureAwait(false);
 
-        var throttle = Interlocked.Exchange(ref _throttleCts, null);
-        if (throttle != null)
-        {
-            await throttle.CancelAsync().ConfigureAwait(false);
-        }
-
         try
         {
             await _processingTask.ConfigureAwait(false);
 
-            Task[] readersCopy;
+            Task[] readers;
             lock (_activeReadersSync)
             {
-                readersCopy = [.. _activeReaders];
+                readers = [.. _activeReaders.Select(c => c.Task)];
             }
-            await Task.WhenAll(readersCopy).ConfigureAwait(false);
+            await Task.WhenAll(readers).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -524,14 +547,13 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
         {
             _disposed = true;
             _shutdownCts.Dispose();
-            throttle?.Dispose();
         }
     }
 
-    private sealed class WorkItem(TModel item, CancellationToken token)
+    private sealed class WorkItem(TInput item, CancellationToken token)
     {
         public long Id { get; init; }
-        public TModel Model => item;
+        public TInput Input => item;
         public CancellationToken CancellationToken => token;
         public WorkStatus Status { get; set; }
         public DateTimeOffset EnqueuedTime { get; init; }
@@ -541,72 +563,104 @@ internal sealed class WorkQueue<TModel> : IWorkQueue<TModel>
 
         public WorkInfo ToInfo() => new(Id, Status, EnqueuedTime, StartedTime, EndedTime, LastError);
     }
+
+    internal sealed record ReaderTask(Task Task, CancellationTokenSource TokenSource) : IDisposable
+    {
+        public void Dispose()
+        {
+            TokenSource.Dispose();
+        }
+    }
 }
 
 
-internal sealed record WorkQueueOptions<TModel>
+internal sealed record WorkQueueOptions<TInput>
 (
     // Required
-    IWork<TModel> Processor,
+    IWork<TInput> Processor,
     // Optional with defaults
-    IWorkObserver<TModel>? Observer = null,
+    IWorkObserver<TInput>? Observer = null,
 
     TimeProvider? TimeProvider = null,
     int? QueueCapacity = null,
     int? ConcurrencyLimit = null,
-    int? MaxConcurrencyLimit = null,
+    int? MaxConcurrency = null,
     bool? SingleWriter = false,
     Action<WorkInfo>? StatusChanged = null,
     ILogger? Logger = null,
     BoundedChannelFullMode FullMode = BoundedChannelFullMode.Wait
 )
 {
-    public WorkQueueOptions<TModel> WithObserver(IWorkObserver<TModel> observer) =>
-        this with { Observer = observer };
-
-    public WorkQueueOptions<TModel> WithTimeProvider(TimeProvider timeProvider) =>
+    public WorkQueueOptions<TInput> WithTimeProvider(TimeProvider timeProvider) =>
         this with { TimeProvider = timeProvider };
 
-    public WorkQueueOptions<TModel> WithQueueCapacity(int capacity)
+    public WorkQueueOptions<TInput> WithQueueCapacity(int capacity)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
         return this with { QueueCapacity = capacity };
     }
 
-    public WorkQueueOptions<TModel> WithConcurrencyLimit(int limit)
+    public WorkQueueOptions<TInput> WithConcurrencyLimit(int limit)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
         return this with { ConcurrencyLimit = limit };
     }
 
-    public WorkQueueOptions<TModel> WithMaxConcurrency(int limit)
+    public WorkQueueOptions<TInput> WithMaxConcurrency(int limit)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
-        return this with { MaxConcurrencyLimit = limit };
+        if (limit < 1)
+        {
+            limit = Environment.ProcessorCount;
+        }
+        return this with { MaxConcurrency = limit };
     }
 
-    public WorkQueueOptions<TModel> WithSingleWriter(bool singleWriter) =>
+    public WorkQueueOptions<TInput> WithSingleWriter(bool singleWriter) =>
         this with { SingleWriter = singleWriter };
 
-    public WorkQueueOptions<TModel> WithStatusCallback(Action<WorkInfo> callback) =>
+    public WorkQueueOptions<TInput> WithStatusCallback(Action<WorkInfo> callback) =>
         this with { StatusChanged = callback };
 
-    public WorkQueueOptions<TModel> WithLogger(ILogger<WorkQueue<TModel>> logger) =>
+    public WorkQueueOptions<TInput> WithLogger(ILogger<WorkQueue<TInput>> logger) =>
         this with { Logger = logger };
 
 
-    public WorkQueueOptions<TModel> WithFullMode(BoundedChannelFullMode mode) =>
+    public WorkQueueOptions<TInput> WithFullMode(BoundedChannelFullMode mode) =>
         this with { FullMode = mode };
 
-    public static WorkQueueOptions<TModel> Create(IWork<TModel> processor) =>
+    public WorkQueueOptions<TInput> WithObserver(Func<TInput, WorkInfo, CancellationToken, Task> process) =>
+        this with { Observer = new WorkObserverProcessor(process) };
+
+    public WorkQueueOptions<TInput> WithObserver(IWorkObserver<TInput> observer) =>
+        this with { Observer = observer };
+
+
+    // -- ct-or
+    public static WorkQueueOptions<TInput> Create(IWork<TInput> processor) =>
         new(processor);
 
-    public static WorkQueueOptions<TModel> Create(Func<TModel, CancellationToken, Task> process) =>
-        new(new WrapProcessor(process));
+    public static WorkQueueOptions<TInput> Create(Func<TInput, CancellationToken, Task> process) =>
+        new(new WorkProcessor(process));
 
-    sealed class WrapProcessor(Func<TModel, CancellationToken, Task> process) : IWork<TModel>
+
+
+    // -- wrap classes
+    sealed class WorkProcessor(Func<TInput, CancellationToken, Task> process) : IWork<TInput>
     {
-        public Task Execute(TModel model, CancellationToken cancellationToken)
-            => process(model, cancellationToken);
+        public Task Execute(TInput input, CancellationToken cancellationToken)
+            => process(input, cancellationToken);
     }
+
+    sealed class WorkObserverProcessor(Func<TInput, WorkInfo, CancellationToken, Task> process) : IWorkObserver<TInput>
+    {
+        public Task HandleChanges(TInput input, WorkInfo work, CancellationToken cancellationToken)
+            => process(input, work, cancellationToken);
+    }
+}
+
+
+
+public sealed class ShutdownAsyncException : Exception
+{
+    public static ShutdownAsyncException Default => new();
 }

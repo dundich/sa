@@ -68,7 +68,7 @@ public class WorkQueueTests
 
         // Assert
         Assert.True(model.WasProcessed);
-        Assert.Equal(0, queue.QueueCount);
+        Assert.Equal(0, queue.QueueTasks);
 
     }
 
@@ -90,7 +90,7 @@ public class WorkQueueTests
 
         // Assert
         Assert.True(model.WasProcessed);
-        Assert.Equal(0, queue.QueueCount);
+        Assert.Equal(0, queue.QueueTasks);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class WorkQueueTests
 
         // Assert
         Assert.All(models, m => Assert.True(m.WasProcessed));
-        Assert.Equal(0, queue.QueueCount);
+        Assert.Equal(0, queue.QueueTasks);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class WorkQueueTests
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
 
-        Assert.Equal(0, queue.QueueCount);
+        Assert.Equal(0, queue.QueueTasks);
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public class WorkQueueTests
 
         // Assert
         Assert.False(queue.IsEnabled);
-        Assert.True(queue.QueueCount <= 5);
+        Assert.True(queue.QueueTasks <= 5);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
@@ -222,9 +222,9 @@ public class WorkQueueTests
         });
 
         await queue.WaitForIdleAsync(TestToken);
-        Assert.Equal(0, queue.QueueCount);
+        Assert.Equal(0, queue.QueueTasks);
 
-        var canceled = observer.Changes.Count(c => c.Status == WorkStatus.Cancelled);
+        var canceled = observer.Changes.Count(c => c.LastError is OperationCanceledException);
         Assert.Equal(5, canceled);
     }
 
@@ -297,12 +297,15 @@ public class WorkQueueTests
     }
 
     [Fact]
-    public void ConcurrencyLimit_InvalidValue_Throws()
+    public void ConcurrencyLimit_InvalidValue_Clamp()
     {
         var queue = new WorkQueue<TestModel>(
-            WorkQueueOptions<TestModel>.Create(new TestWork()));
+            WorkQueueOptions<TestModel>.Create(new TestWork()))
+        {
+            ConcurrencyLimit = -1
+        };
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => queue.ConcurrencyLimit = -1);
+        Assert.Equal(0, queue.ConcurrencyLimit);
 
         queue.Dispose();
     }

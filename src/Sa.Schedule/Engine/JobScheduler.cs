@@ -77,7 +77,7 @@ internal sealed class JobScheduler : IJobScheduler
     }
 
 
-    public int ActiveTasks => _jobs.QueueCount;
+    public int ActiveTasks => _jobs.QueueTasks;
 
     public IChangeToken StartChangeToken()
     {
