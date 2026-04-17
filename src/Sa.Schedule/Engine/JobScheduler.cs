@@ -37,8 +37,10 @@ internal sealed class JobScheduler : IJobScheduler
 
         JobId = settings.JobId;
 
-        var concurrency = settings.Properties.ConcurrencyLimit ?? 1;
-        var maxConcurrency = settings.Properties.MaxConcurrency ?? concurrency;
+        var concurrency = Math.Max(0, settings.Properties.ConcurrencyLimit ?? 1);
+        var maxConcurrency = Math.Max(1, settings.Properties.MaxConcurrency ?? concurrency);
+
+        concurrency = Math.Clamp(concurrency, 0, maxConcurrency);
 
         _jobs = new(WorkQueueOptions<IJobController>.Create(CreateJob)
             .WithQueueCapacity(maxConcurrency)

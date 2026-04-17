@@ -11,8 +11,13 @@ public sealed class ConsumeSettings
 {
     /// <summary>
     /// Maximum number of processing iterations when greedy mode is enabled.
-    /// -1 means unlimited iterations.
+    /// -1 means unlimited iterations (greedy mode).
     /// </summary>
+    /// <remarks>
+    /// Consumes data in chunks of size ConsumeBatchSize repeatedly, up to a total of MaxBatchSize.
+    /// The MaxProcessingIterations limits the number of these consumption cycles.
+    /// When set to -1 (greedy mode), there is no iteration limit — the system will continue consuming batches until it reaches MaxBatchSize or runs out of data.
+    /// </remarks>
     public int MaxProcessingIterations { get; set; } = 10;
 
     /// <summary>

@@ -42,6 +42,8 @@ internal static class Setup
                     .EveryTime(scheduleSettings.Interval)
                     .WithInitialDelay(scheduleSettings.InitialDelay)
                     .WithTag(settings)
+                    .WithConcurrencyLimit(scheduleSettings.ConcurrencyLimit)
+                    .WithMaxConcurrency(scheduleSettings.MaxConcurrency)
                     .WithName(scheduleSettings.Name ?? typeof(TConsumer).Name)
                     .ConfigureErrorHandling(c => c
                         .IfErrorRetry(scheduleSettings.RetryCountOnError)

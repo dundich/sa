@@ -14,7 +14,6 @@ internal sealed class JobProperies : IJobProperties
     public int? ContextStackSize { get; private set; }
     public int? ConcurrencyLimit { get; private set; }
     public int? MaxConcurrency { get; private set; }
-    public bool? SingleWriter { get; private set; }
 
     public JobProperies WithName(string name)
     {
@@ -79,16 +78,11 @@ internal sealed class JobProperies : IJobProperties
 
     public JobProperies WithMaxConcurrencyLimit(int limit)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         MaxConcurrency = limit;
         return this;
     }
 
-    public JobProperies WithSingleWriter(bool singleWriter)
-    {
-        SingleWriter = singleWriter;
-        return this;
-    }
 
     internal JobProperies Merge(IJobProperties props)
     {
@@ -103,7 +97,6 @@ internal sealed class JobProperies : IJobProperties
 
         ConcurrencyLimit ??= props.ConcurrencyLimit;
         MaxConcurrency ??= props.MaxConcurrency;
-        SingleWriter ??= props.SingleWriter;
 
         return this;
     }

@@ -81,7 +81,6 @@ public interface IJobBuilder
 
     IJobBuilder WithMaxConcurrency(int limit);
 
-    IJobBuilder WithSingleWriter(bool singleWriter);
 
     /// <summary>
     /// Merges the specified job properties into the current job configuration.

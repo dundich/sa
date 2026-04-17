@@ -74,12 +74,6 @@ internal sealed class JobBuilder(JobSettings settings) : IJobBuilder
         return this;
     }
 
-    public IJobBuilder WithSingleWriter(bool singleWriter)
-    {
-        settings.Properties.WithSingleWriter(singleWriter);
-        return this;
-    }
-
     public IJobBuilder Disabled()
     {
         settings.Properties.SetDisabled();

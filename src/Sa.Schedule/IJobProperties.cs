@@ -45,9 +45,16 @@ public interface IJobProperties
     /// </summary>
     object? Tag { get; }
 
+    /// <summary>
+    /// Gets the current concurrency limit for the job when it starts.
+    /// This value cannot exceed <see cref="MaxConcurrency"/>.
+    /// Null means use the default limit = 1.
+    /// </summary>
     int? ConcurrencyLimit { get; }
 
+    /// <summary>
+    /// Gets the absolute maximum concurrency limit allowed for this job.
+    /// Null means = ConcurrencyLimit.
+    /// </summary>
     int? MaxConcurrency { get; }
-
-    bool? SingleWriter { get; }
 }

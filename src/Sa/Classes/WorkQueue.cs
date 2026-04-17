@@ -226,7 +226,7 @@ internal sealed class WorkQueue<TInput> : IWorkQueue<TInput>
 
             await Task.WhenAny(
                 tcs.Task.WaitAsync(cts.Token),
-                Task.Delay(1000, cts.Token)).ConfigureAwait(false);
+                Task.Delay(3000, cts.Token)).ConfigureAwait(false);
         }
     }
 

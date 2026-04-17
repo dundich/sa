@@ -19,5 +19,10 @@ public sealed class ScheduleSettings
     /// </summary>
     public TimeSpan InitialDelay { get; internal set; } = TimeSpan.FromSeconds(10);
 
-    public int RetryCountOnError { get; internal set; } = 2;
+    public int RetryCountOnError { get; internal set; } = 1;
+
+    public int ConcurrencyLimit  {get; internal set; } = 1;
+
+    public int MaxConcurrency  {get; internal set; } = 48;
+
 }
