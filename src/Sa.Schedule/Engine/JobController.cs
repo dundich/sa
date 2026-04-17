@@ -92,7 +92,7 @@ internal sealed partial class JobController(
         _context.NumRuns++;
     }
 
-    public void Free()
+    public void Finish()
     {
         _context.ServiceProvider = NullJobServices.Instance;
         _job?.Dispose();

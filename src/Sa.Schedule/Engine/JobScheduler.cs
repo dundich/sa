@@ -88,9 +88,7 @@ internal sealed class JobScheduler : IJobScheduler
         }
     }
 
-    /// <summary>
-    /// Start all jobs
-    /// </summary>
+
     public async Task<bool> Start(CancellationToken cancellationToken)
     {
         CancellationToken stoppingToken;

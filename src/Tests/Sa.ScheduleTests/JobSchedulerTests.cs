@@ -148,7 +148,7 @@ public class JobSchedulerTests
             //
         }
 
-        public void Free()
+        public void Finish()
         {
             //
         }

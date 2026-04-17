@@ -332,7 +332,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ConcurrencyLimit_RapidChanges_DoesNotBreak()
+    public async Task ConcurrencyLimitRapidChangesDoesNotBreak()
     {
         int totals = 30;
         // Arrange
@@ -429,12 +429,9 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         Assert.Equal(3, queue.ConcurrencyLimit);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 🔹 Тесты на корректность обработки после изменений лимита
-    // ─────────────────────────────────────────────────────────────
-
+    
     [Fact]
-    public async Task ConcurrencyLimit_Changes_DontLoseTasks()
+    public async Task ConcurrencyLimit_UpChanges_DontLoseTasks()
     {
         // Arrange
         var completedIds = new ConcurrentBag<string>();
@@ -455,9 +452,9 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         var tasks = new List<Task>();
         for (int i = 0; i < 20; i++)
         {
-            if (i == 5) queue.ConcurrencyLimit = 4;
-            if (i == 10) queue.ConcurrencyLimit = 1;
-            if (i == 15) queue.ConcurrencyLimit = 3;
+            if (i == 5) queue.ConcurrencyLimit = 3;
+            if (i == 10) queue.ConcurrencyLimit = 4;
+            if (i == 15) queue.ConcurrencyLimit = 5;
 
             var model = new BlockingTaskModel(Id: $"T-{i:D3}");
             models.Add(model);

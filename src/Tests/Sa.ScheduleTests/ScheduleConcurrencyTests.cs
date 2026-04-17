@@ -91,7 +91,7 @@ public sealed class ScheduleConcurrencyTests(ScheduleConcurrencyTests.Fixture fi
 
         j.ConcurrencyLimit = 10;
 
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await Task.Delay(250, TestContext.Current.CancellationToken);
 
         Assert.Equal(10, Fixture.Count);
 

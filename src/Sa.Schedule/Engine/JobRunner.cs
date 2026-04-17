@@ -17,7 +17,7 @@ internal sealed class JobRunner() : IJobRunner
         }
         finally
         {
-            controller.Free();
+            controller.Finish();
         }
     }
 

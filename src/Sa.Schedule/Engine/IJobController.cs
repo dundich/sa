@@ -19,7 +19,7 @@ internal interface IJobController
 
     void Init();
 
-    void Free();
+    void Finish();
 
 
 

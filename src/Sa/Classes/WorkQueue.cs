@@ -207,49 +207,6 @@ internal sealed class WorkQueue<TInput> : IWorkQueue<TInput>
         ActivateItem(item);
     }
 
-    public async Task ShutdownAsync()
-    {
-        lock (_rootSync)
-        {
-            if (!_isEnabled || _disposed) return;
-            _isEnabled = false;
-        }
-
-        await _shutdownCts.CancelAsync().ConfigureAwait(false);
-
-        try
-        {
-            await _processingTask.ConfigureAwait(false);
-
-            Task[] readers;
-            lock (_activeReadersSync)
-            {
-                readers = [.. _activeReaders.Select(c => c.Task)];
-            }
-            await Task.WhenAll(readers).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Error during shutdown");
-        }
-        finally
-        {
-            await ClearAll().ConfigureAwait(false);
-        }
-    }
-
-    private async Task ClearAll()
-    {
-        while (_queue.Reader.TryRead(out var input))
-        {
-            input.Status = WorkStatus.Faulted;
-            input.LastError = ShutdownAsyncException.Default;
-            input.EndedTime = _timeProvider.GetUtcNow();
-            await OnStatusChangedAsync(input).ConfigureAwait(false);
-            DeactivateItem(input);
-        }
-    }
-
     public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -505,6 +462,49 @@ internal sealed class WorkQueue<TInput> : IWorkQueue<TInput>
         }
     }
 
+    public async Task ShutdownAsync()
+    {
+        lock (_rootSync)
+        {
+            if (!_isEnabled || _disposed) return;
+            _isEnabled = false;
+        }
+
+        await _shutdownCts.CancelAsync().ConfigureAwait(false);
+
+        try
+        {
+            await _processingTask.ConfigureAwait(false);
+
+            Task[] readers;
+            lock (_activeReadersSync)
+            {
+                readers = [.. _activeReaders.Select(c => c.Task)];
+            }
+            await Task.WhenAll(readers).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error during shutdown");
+        }
+        finally
+        {
+            await ClearAll().ConfigureAwait(false);
+        }
+    }
+
+    private async Task ClearAll()
+    {
+        while (_queue.Reader.TryRead(out var input))
+        {
+            input.Status = WorkStatus.Faulted;
+            input.LastError = ShutdownAsyncException.Default;
+            input.EndedTime = _timeProvider.GetUtcNow();
+            await OnStatusChangedAsync(input).ConfigureAwait(false);
+            DeactivateItem(input);
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -523,25 +523,12 @@ internal sealed class WorkQueue<TInput> : IWorkQueue<TInput>
     {
         if (_disposed) return;
 
-        _isEnabled = false;
-        _queue.Writer.TryComplete();
-
-        await _shutdownCts.CancelAsync().ConfigureAwait(false);
-
         try
         {
-            await _processingTask.ConfigureAwait(false);
+            _isEnabled = false;
+            _queue.Writer.TryComplete();
+            await ShutdownAsync().ConfigureAwait(false);
 
-            Task[] readers;
-            lock (_activeReadersSync)
-            {
-                readers = [.. _activeReaders.Select(c => c.Task)];
-            }
-            await Task.WhenAll(readers).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Error during synchronous disposal");
         }
         finally
         {
