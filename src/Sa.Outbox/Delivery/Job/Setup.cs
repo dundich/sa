@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Schedule;
 using System.Diagnostics.CodeAnalysis;
 
@@ -55,6 +56,8 @@ internal static class Setup
 
             builder.AddInterceptor<OutboxJobInterceptor>();
         });
+
+        services.TryAddSingleton<IDeliveryScheduleProvider, DeliveryScheduleProvider>();
 
         return services;
     }

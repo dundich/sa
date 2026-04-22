@@ -21,8 +21,8 @@ public sealed class ScheduleSettings
 
     public int RetryCountOnError { get; internal set; } = 1;
 
-    public int ConcurrencyLimit  {get; internal set; } = 1;
+    public int ConcurrencyLimit { get; internal set; } = 1;
 
-    public int MaxConcurrency  {get; internal set; } = 48;
+    public int MaxConcurrency { get; internal set; } = 48;
 
 }
