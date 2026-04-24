@@ -42,6 +42,14 @@ internal record WorkItem<TInput>(TInput Input, CancellationToken CancellationTok
 
 internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
 {
+    private enum QueueState
+    {
+        Active = 0,
+        ShuttingDown = 1,
+        Shutdown = 2,
+        Disposed = 3
+    }
+
     private readonly Channel<WorkItem<TInput>> _queue;
 
     private readonly Lock _rootSync = new();
@@ -62,7 +70,7 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
     /// <summary>
     /// 0: Active, 1: ShuttingDown, 2: Shutdown, 3: Disposed
     /// </summary>
-    private int _state;
+    private volatile QueueState _state;
 
     // Lock-free счётчик активных + ожидающих задач
     private volatile int _pendingAndActiveCount;
@@ -119,7 +127,9 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
         get => _concurrency;
         set
         {
-            ObjectDisposedException.ThrowIf(_state == 2, this);
+            ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
+            if (!_isEnabled) ThrowHelper.QueueStopped();
+
             var newLimit = Math.Clamp(value, 0, _maxConcurrency);
             var oldLimit = Interlocked.Exchange(ref _concurrency, newLimit);
             if (newLimit != oldLimit) AdjustReaders(newLimit, oldLimit);
@@ -128,8 +138,7 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
 
     public async ValueTask Enqueue(TInput input, CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_state == 3, this);
-
+        ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
         if (!_isEnabled) ThrowHelper.QueueStopped();
 
         MarkActive();
@@ -147,7 +156,7 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
 
     public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_state == 3, this);
+        ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(
             _shutdownCts.Token,
@@ -273,7 +282,7 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
         }
         finally
         {
-            if (_state < 2)
+            if (_state < QueueState.Shutdown)
             {
                 MarkInactive();
             }
@@ -322,8 +331,10 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
 
     public async Task ShutdownAsync()
     {
-        if (Interlocked.Exchange(ref _state, 1) != 0) return; // Idempotent
+        if (Interlocked.Exchange(ref _state, QueueState.ShuttingDown) != QueueState.Active) return; // Idempotent
+
         _isEnabled = false;
+
         try
         {
             await _shutdownCts.CancelAsync().ConfigureAwait(false);
@@ -343,7 +354,7 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
         }
         finally
         {
-            _state = 2; // Mark as Disposed
+            _state = QueueState.ShuttingDown;
 
             lock (_rootSync)
             {
@@ -365,27 +376,33 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
         }
     }
 
+    private void CompleteDispose()
+    {
+        Interlocked.Exchange(ref _state, QueueState.Disposed);
+        _shutdownCts.Dispose();
+        lock (_rootSync) _idleTcs.TrySetResult();
+    }
+
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _state, 2) != 2)
+        if (IsEnabled)
         {
             _isEnabled = false;
             _shutdownCts.Cancel();
             _queue.Writer.TryComplete();
         }
 
-        Interlocked.Exchange(ref _state, 3);
-        _shutdownCts.Dispose();
+        CompleteDispose();
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _state, 2) != 2)
+        if (IsEnabled)
         {
             await ShutdownAsync().ConfigureAwait(false);
         }
-        Interlocked.Exchange(ref _state, 3);
-        _shutdownCts.Dispose();
+
+        CompleteDispose();
     }
 
     #endregion
