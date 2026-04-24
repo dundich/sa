@@ -11,6 +11,31 @@ internal interface IWork<in TInput>
     Task Execute(TInput input, CancellationToken cancellationToken);
 }
 
+internal enum ReaderScalingStrategy
+{
+    /// <summary>
+    /// Отменять новейших читателей (LIFO). 
+    /// </summary>
+    /// <remarks>Старые читатели живут дольше — полезно для кэшей, пулов соединений.</remarks>
+    Lifo = 0,
+
+    /// <summary>
+    /// Отменять старейших читателей (FIFO). 
+    /// </summary>
+    /// <remarks>Равномерное распределение времени жизни — полезно для ротации ресурсов.</remarks>
+    Fifo = 1,
+
+    /// <summary>
+    /// RoundRobin: отменять по очереди, циклически
+    /// </summary>
+    RoundRobin = 2,
+
+    /// <summary>
+    /// Random: отменять случайных читателей (равномерное распределение)
+    /// </summary>
+    Random = 3
+}
+
 internal enum WorkStatus
 {
     Running,
@@ -35,7 +60,6 @@ internal interface IWorkQueue<in TInput> : IDisposable, IAsyncDisposable
     Task WaitForIdleAsync(CancellationToken cancellationToken = default);
     Task ShutdownAsync();
 }
-
 
 internal record WorkItem<TInput>(TInput Input, CancellationToken CancellationToken);
 
@@ -79,6 +103,10 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
 
     private readonly List<ReaderContext> _activeReaders = [];
 
+    private readonly ReaderScalingStrategy _scalingStrategy;
+    private int _lastRemovedIndex = -1; // Для RoundRobin
+
+
     public WorkQueue(WorkQueueOptions<TInput> options, ILogger<WorkQueue<TInput>>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(options.Processor);
@@ -92,6 +120,8 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
         _maxConcurrency = options.MaxConcurrency > 0 ? options.MaxConcurrency.Value : Environment.ProcessorCount;
         _concurrency = Math.Clamp(options.ConcurrencyLimit ?? Environment.ProcessorCount, 0, _maxConcurrency);
         _queueCapacity = options.QueueCapacity ?? _maxConcurrency;
+
+        _scalingStrategy = options.ReaderScalingStrategy;
 
 
         _queue = Channel.CreateBounded<WorkItem<TInput>>(new BoundedChannelOptions(_queueCapacity)
@@ -171,6 +201,24 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
         }
     }
 
+
+    /// <summary>
+    /// Принудительно отменяет всех читателей без ожидания.
+    /// Используйте только в экстренных случаях (например, при зависании).
+    /// </summary>
+    public void ForceCancelReaders()
+    {
+        lock (_readersSync)
+        {
+            foreach (var reader in _activeReaders)
+            {
+                try { reader.StopTokenSource.Cancel(); }
+                catch (ObjectDisposedException) { /* уже отменён */ }
+            }
+            _activeReaders.Clear();
+        }
+    }
+
     #region Reader Management
 
     private void SpawnReaders(int count)
@@ -201,15 +249,66 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
             }
             else if (delta < 0)
             {
-                // Отменяем лишних читателей с конца списка
                 var toCancel = Math.Min(-delta, _activeReaders.Count);
-                for (var i = 0; i < toCancel; i++)
+
+
+                var indices = _scalingStrategy switch
                 {
-                    _activeReaders[^1].StopTokenSource.Cancel();
-                    _activeReaders.RemoveAt(_activeReaders.Count - 1);
+                    ReaderScalingStrategy.Lifo =>
+                        Enumerable.Range(_activeReaders.Count - toCancel, toCancel),
+
+                    ReaderScalingStrategy.Fifo =>
+                        Enumerable.Range(0, toCancel),
+
+                    ReaderScalingStrategy.RoundRobin =>
+                        GetRoundRobinIndices(_activeReaders.Count, toCancel),
+
+                    ReaderScalingStrategy.Random =>
+                        GetRandomIndices(_activeReaders.Count, toCancel),
+
+                    _ => Enumerable.Range(_activeReaders.Count - toCancel, toCancel)
+                };
+
+
+                foreach (var idx in indices.OrderByDescending(i => i))
+                {
+                    _activeReaders[idx].StopTokenSource.Cancel();
+                    _activeReaders.RemoveAt(idx);
                 }
             }
         }
+    }
+
+
+    private IEnumerable<int> GetRoundRobinIndices(int totalCount, int toCancel)
+    {
+        if (totalCount == 0) yield break;
+
+        var start = (_lastRemovedIndex + 1) % totalCount;
+        for (var i = 0; i < toCancel; i++)
+        {
+            var idx = (start + i) % totalCount;
+            yield return idx;
+        }
+        _lastRemovedIndex = (start + toCancel - 1) % totalCount;
+    }
+
+    private static IEnumerable<int> GetRandomIndices(int totalCount, int toCancel)
+    {
+        if (toCancel >= totalCount)
+        {
+            for (var i = 0; i < totalCount; i++) yield return i;
+            yield break;
+        }
+
+        var selected = new HashSet<int>(toCancel);
+        while (selected.Count < toCancel)
+        {
+            // Random.Shared.Next(min, max) потокобезопасен и без блокировок
+            selected.Add(Random.Shared.Next(0, totalCount));
+        }
+
+        foreach (var idx in selected) yield return idx;
     }
 
     private async Task ReaderLoopAsync(CancellationToken stopToken)
@@ -477,6 +576,7 @@ internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
     #endregion
 }
 
+
 internal sealed record WorkQueueOptions<TInput>(
     IWork<TInput> Processor,
     int? QueueCapacity = null,
@@ -484,7 +584,8 @@ internal sealed record WorkQueueOptions<TInput>(
     int? MaxConcurrency = null,
     bool? SingleWriter = false,
     Action<TInput, WorkStatus, Exception?>? StatusChanged = null,
-    BoundedChannelFullMode FullMode = BoundedChannelFullMode.Wait)
+    BoundedChannelFullMode FullMode = BoundedChannelFullMode.Wait,
+    ReaderScalingStrategy ReaderScalingStrategy = ReaderScalingStrategy.Lifo)
 {
     public WorkQueueOptions<TInput> WithQueueCapacity(int capacity)
     {
@@ -510,6 +611,9 @@ internal sealed record WorkQueueOptions<TInput>(
     public WorkQueueOptions<TInput> WithFullMode(BoundedChannelFullMode mode)
         => this with { FullMode = mode };
 
+    public WorkQueueOptions<TInput> WithReaderScalingStrategy(ReaderScalingStrategy strategy)
+        => this with { ReaderScalingStrategy = strategy };
+
 
     public static WorkQueueOptions<TInput> Create(IWork<TInput> processor) => new(processor);
 
@@ -521,10 +625,34 @@ internal sealed record WorkQueueOptions<TInput>(
         public Task Execute(TInput input, CancellationToken cancellationToken)
             => process(input, cancellationToken);
     }
-
 }
 
 internal static class ThrowHelper
 {
     public static void QueueStopped() => throw new InvalidOperationException("Queue has been stopped.");
+}
+
+internal static class WorkQueueExtensions
+{
+    public static IWorkQueue<TInput> CreateSimple<TInput>(
+        this IWork<TInput> processor,
+        int concurrency = -1,
+        ILogger? logger = null)
+    {
+        var options = WorkQueueOptions<TInput>.Create(processor)
+            .WithConcurrencyLimit(concurrency > 0 ? concurrency : Environment.ProcessorCount);
+
+        return new WorkQueue<TInput>(options, logger as ILogger<WorkQueue<TInput>>);
+    }
+
+    public static IWorkQueue<TInput> CreateSimple<TInput>(
+        Func<TInput, CancellationToken, Task> process,
+        int concurrency = -1,
+        ILogger? logger = null)
+    {
+        var options = WorkQueueOptions<TInput>.Create(process)
+            .WithConcurrencyLimit(concurrency > 0 ? concurrency : Environment.ProcessorCount);
+
+        return new WorkQueue<TInput>(options, logger as ILogger<WorkQueue<TInput>>);
+    }
 }
