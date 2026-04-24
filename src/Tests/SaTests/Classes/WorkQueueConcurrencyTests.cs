@@ -5,11 +5,9 @@ namespace SaTests.Classes;
 
 
 internal sealed class TrackingWork(
-    Func<BlockingTaskModel, CancellationToken, Task>? executeFunc = null,
-    Action<WorkInfo>? onStatusChanged = null) : IWork<BlockingTaskModel>, IWorkObserver<BlockingTaskModel>
+    Func<BlockingTaskModel, CancellationToken, Task>? executeFunc = null) : IWork<BlockingTaskModel>
 {
     private readonly Func<BlockingTaskModel, CancellationToken, Task>? _executeFunc = executeFunc;
-    private readonly Action<WorkInfo>? _onStatusChanged = onStatusChanged;
 
     // Thread-safe
     private int _maxParallelObserved;
@@ -49,14 +47,13 @@ internal sealed class TrackingWork(
         }
     }
 
-    public Task HandleChanges(
+    public void HandleChanges(
         BlockingTaskModel model,
-        WorkInfo work,
-        CancellationToken cancellationToken)
+        WorkStatus status,
+        Exception? exception)
     {
-        _onStatusChanged?.Invoke(work);
 
-        switch (work.Status)
+        switch (status)
         {
             case WorkStatus.Completed:
                 Interlocked.Increment(ref _completedCount);
@@ -68,8 +65,6 @@ internal sealed class TrackingWork(
                 Interlocked.Increment(ref _cancelledCount);
                 break;
         }
-
-        return Task.CompletedTask;
     }
 
     public void Reset()
@@ -127,7 +122,8 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             Processor: work,
             ConcurrencyLimit: concurrencyLimit,
             MaxConcurrency: maxConcurrency ?? concurrencyLimit * 2,
-            QueueCapacity: queueCapacity ?? 100
+            QueueCapacity: queueCapacity ?? 100,
+            StatusChanged: work.HandleChanges
         );
 
         var queue = new WorkQueue<BlockingTaskModel>(options);

@@ -38,20 +38,6 @@ public class WorkQueueTests
         }
     }
 
-    private sealed class TestObserver : IWorkObserver<TestModel>
-    {
-        public readonly List<WorkInfo> Changes = [];
-
-        public Task HandleChanges(TestModel model, WorkInfo work, CancellationToken cancellationToken)
-        {
-            lock (Changes)
-            {
-                Changes.Add(work);
-            }
-            return Task.CompletedTask;
-        }
-    }
-
     static CancellationToken TestToken => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -149,12 +135,14 @@ public class WorkQueueTests
     [Fact]
     public async Task FaultedTask_StatusIsFaulted()
     {
+        List<(WorkStatus Status, Exception? LastError)> changes = [];
+
         // Arrange
         var processor = new TestWorkThatThrows();
-        var observer = new TestObserver();
+
         using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
             .Create(processor)
-            .WithObserver(observer));
+            .WithStatusCallback((_, s, e) => changes.Add((s, e))));
 
         var model = new TestModel();
 
@@ -163,23 +151,26 @@ public class WorkQueueTests
         await Task.Delay(100, TestToken);
 
         // Assert
-        var completed = observer.Changes.Find(x => x.Status == WorkStatus.Faulted);
 
-        Assert.NotNull(completed);
-        Assert.IsType<InvalidOperationException>(completed.LastError);
-        Assert.Contains("Test exception", completed.LastError?.Message);
+        Assert.Contains(changes, x => x.Status == WorkStatus.Faulted);
+
+        Assert.Contains(changes, x => x.LastError is InvalidOperationException);
+        Assert.Contains(changes, x => x.LastError?.Message == "Test exception");
     }
 
     [Fact]
     public async Task CancelledTask_StatusIsCancelled()
     {
+        List<WorkStatus> statuses = [];
+
+
         // Arrange
         using var cts = new CancellationTokenSource();
         var processor = new TestWorkWithDelay(TimeSpan.FromSeconds(5));
-        var observer = new TestObserver();
+
         using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
             .Create(processor)
-            .WithObserver(observer));
+            .WithStatusCallback((_, s, _) => statuses.Add(s)));
 
         var model = new TestModel();
 
@@ -190,21 +181,21 @@ public class WorkQueueTests
         await queue.WaitForIdleAsync(TestToken);
 
         // Assert
-        var cancelled = observer.Changes.Find(x => x.Status == WorkStatus.Cancelled);
 
-        Assert.NotNull(cancelled);
-        Assert.NotEqual(0, cancelled.Id);
+        Assert.Contains(WorkStatus.Cancelled, statuses);
     }
 
     [Fact]
     public async Task ShutdownAsync_StopsProcessing()
     {
+        List<Exception?> errors = [];
+
         // Arrange
         var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(500));
-        var observer = new TestObserver();
+
         using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
             .Create(processor)
-            .WithObserver(observer));
+            .WithStatusCallback((m, s, e) => errors.Add(e)));
 
         for (int i = 0; i < 5; i++)
             await queue.Enqueue(new TestModel(), cancellationToken: TestToken);
@@ -224,49 +215,25 @@ public class WorkQueueTests
         await queue.WaitForIdleAsync(TestToken);
         Assert.Equal(0, queue.QueueTasks);
 
-        var canceled = observer.Changes.Count(c => c.LastError is OperationCanceledException);
+        var canceled = errors.Count(c => c is OperationCanceledException);
         Assert.Equal(5, canceled);
     }
 
-    [Fact]
-    public async Task StatusChanged_Event_FiresOnStateChange()
-    {
-        // Arrange
-        var processor = new TestWork();
-        WorkInfo? lastInfo = null;
-        var eventTcs = new TaskCompletionSource<WorkInfo>();
 
-        using var queue = new WorkQueue<TestModel>(
-            WorkQueueOptions<TestModel>
-                .Create(processor)
-                .WithStatusCallback(
-                (info) =>
-                {
-                    lastInfo = info;
-                    if (info.Status == WorkStatus.Completed)
-                        eventTcs.TrySetResult(info);
-                }));
-
-        var model = new TestModel();
-
-        // Act
-        await queue.Enqueue(model, cancellationToken: TestToken);
-        var result = await eventTcs.Task;
-
-        // Assert
-        Assert.Equal(WorkStatus.Completed, result.Status);
-    }
 
     [Fact]
     public async Task Observer_InvokedOnStateChange()
     {
+
+        List<WorkStatus> statuses = [];
+
+
         // Arrange
-        var observer = new TestObserver();
         var processor = new TestWork();
         using var queue = new WorkQueue<TestModel>(
             WorkQueueOptions<TestModel>
                 .Create(processor)
-                .WithObserver(observer));
+                .WithStatusCallback((_, s, _) => statuses.Add(s)));
 
         var model = new TestModel();
 
@@ -275,10 +242,9 @@ public class WorkQueueTests
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert
-        Assert.True(observer.Changes.Count >= 3); // Queued → Running → Completed
-        Assert.Contains(observer.Changes, x => x.Status == WorkStatus.Queued);
-        Assert.Contains(observer.Changes, x => x.Status == WorkStatus.Running);
-        Assert.Contains(observer.Changes, x => x.Status == WorkStatus.Completed);
+        Assert.True(statuses.Count >= 2); // Running → Completed
+        Assert.Contains(statuses, x => x == WorkStatus.Running);
+        Assert.Contains(statuses, x => x == WorkStatus.Completed);
     }
 
     [Fact]
@@ -315,7 +281,7 @@ public class WorkQueueTests
     {
         var queue = new WorkQueue<TestModel>(
             WorkQueueOptions<TestModel>.Create(new TestWork()));
-        await queue.DisposeAsync();
+        queue.Dispose();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(()
             => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());

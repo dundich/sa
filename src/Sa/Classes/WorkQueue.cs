@@ -3,7 +3,6 @@ using System.Threading.Channels;
 
 namespace Sa.Classes;
 
-
 /// <summary>
 /// Интерфейс для выполнения бизнес-логики.
 /// </summary>
@@ -12,32 +11,8 @@ internal interface IWork<in TInput>
     Task Execute(TInput input, CancellationToken cancellationToken);
 }
 
-/// <summary>
-/// Интерфейс для наблюдения за изменениями состояния задач в очереди.
-/// </summary>
-internal interface IWorkObserver<in TInput>
-{
-    Task HandleChanges(TInput input, WorkInfo work, CancellationToken cancellationToken);
-}
-
-/// <summary>
-/// Представляет состояние и метаданные задачи в очереди.
-/// </summary>
-internal sealed record WorkInfo(
-    long Id,
-    WorkStatus Status,
-    DateTimeOffset EnqueuedTime,
-    DateTimeOffset? StartedTime = null,
-    DateTimeOffset? EndedTime = null,
-    Exception? LastError = null
-)
-{
-    public bool IsEmpty => Id == 0;
-}
-
 internal enum WorkStatus
 {
-    Queued,
     Running,
     Completed,
     Faulted,
@@ -49,103 +24,69 @@ internal enum WorkStatus
 /// </summary>
 internal interface IWorkQueue<in TInput> : IDisposable, IAsyncDisposable
 {
-    /// <summary>
-    /// Показывает, включена ли обработка задач.
-    /// </summary>
     bool IsEnabled { get; }
-
-    /// <summary>
-    /// Gets the current inputs from queue.
-    /// </summary>
     int QueueTasks { get; }
-
-
-    /// <summary>
-    /// Определяет, свободна ли очередь (нет активных и нет в очереди).
-    /// </summary>
     bool IsIdle();
-
-    /// <summary>
-    /// Максимальное количество параллельных задач (динамически изменяется).
-    /// </summary>
     int ConcurrencyLimit { get; set; }
+    int MaxConcurrency { get; }
+    int QueueCapacity { get; }
 
-
-    public int MaxConcurrency { get; }
-
-
-    public int QueueCapacity { get; }
-
-    /// <summary>
-    /// Добавляет задачу в очередь асинхронно.
-    /// </summary>
     ValueTask Enqueue(TInput input, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Блокируется до момента, когда очередь станет полностью пустой.
-    /// </summary>
     Task WaitForIdleAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Завершает обработку и отменяет ожидание новых задач.
-    /// </summary>
     Task ShutdownAsync();
 }
 
-internal sealed class WorkQueue<TInput> : IWorkQueue<TInput>
+
+internal record WorkItem<TInput>(TInput Input, CancellationToken CancellationToken);
+
+
+internal sealed partial class WorkQueue<TInput> : IWorkQueue<TInput>
 {
-    private readonly Channel<WorkItem> _queue;
-    private readonly HashSet<WorkItem> _workItems = [];
+    private readonly Channel<WorkItem<TInput>> _queue;
 
     private readonly Lock _rootSync = new();
-    private readonly Lock _activeReadersSync = new();
+    private readonly Lock _readersSync = new();
 
-    private readonly ILogger? _logger = null;
-    private readonly TimeProvider _timeProvider;
-    public readonly IWork<TInput> _processor;
-    public readonly IWorkObserver<TInput>? _watcher;
-    private readonly Action<WorkInfo>? _statusChanged;
+    private readonly ILogger<WorkQueue<TInput>>? _logger;
+
+    private readonly IWork<TInput> _processor;
+
+    private readonly Action<TInput, WorkStatus, Exception?>? _statusChanged;
 
     private readonly CancellationTokenSource _shutdownCts = new();
-    private readonly Task _processingTask;
-
-
-    private volatile TaskCompletionSource _idleTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private volatile bool _isEnabled = true;
-    private volatile bool _disposed = false;
-
-
-    private int _concurrency;
     private readonly int _maxConcurrency;
     private readonly int _queueCapacity;
-    private int _workItemsCount;
-    private long _taskIdCounter;
 
-    private readonly List<ReaderTask> _activeReaders = [];
+    private volatile int _concurrency;
+    private volatile bool _isEnabled = true;
+    /// <summary>
+    /// 0: Active, 1: ShuttingDown, 2: Shutdown, 3: Disposed
+    /// </summary>
+    private int _state;
+
+    // Lock-free счётчик активных + ожидающих задач
+    private volatile int _pendingAndActiveCount;
+    private TaskCompletionSource _idleTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
 
-    public WorkQueue(WorkQueueOptions<TInput> options)
+    private readonly List<ReaderContext> _activeReaders = [];
+
+    public WorkQueue(WorkQueueOptions<TInput> options, ILogger<WorkQueue<TInput>>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(options.Processor);
 
+        _logger = logger;
+
         _processor = options.Processor;
-        _watcher = options.Observer ?? _processor as IWorkObserver<TInput>;
-        _timeProvider = options.TimeProvider ?? TimeProvider.System;
+
         _statusChanged = options.StatusChanged;
-        _logger = options.Logger;
 
-        _maxConcurrency = options.MaxConcurrency > 0
-            ? options.MaxConcurrency.Value
-            : Environment.ProcessorCount;
-
-        _concurrency = Math.Clamp(
-            options.ConcurrencyLimit ?? Environment.ProcessorCount,
-            0,
-            _maxConcurrency);
-
+        _maxConcurrency = options.MaxConcurrency > 0 ? options.MaxConcurrency.Value : Environment.ProcessorCount;
+        _concurrency = Math.Clamp(options.ConcurrencyLimit ?? Environment.ProcessorCount, 0, _maxConcurrency);
         _queueCapacity = options.QueueCapacity ?? _maxConcurrency;
 
-        _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(_queueCapacity)
+
+        _queue = Channel.CreateBounded<WorkItem<TInput>>(new BoundedChannelOptions(_queueCapacity)
         {
             AllowSynchronousContinuations = false,
             SingleReader = false,
@@ -153,63 +94,60 @@ internal sealed class WorkQueue<TInput> : IWorkQueue<TInput>
             FullMode = options.FullMode
         });
 
-        _processingTask = ProcessQueueAsync();
+        // Запускаем читателей сразу
+        SpawnReaders(_concurrency);
     }
 
     public bool IsEnabled => _isEnabled;
 
-    public int QueueTasks => _workItemsCount;
-
+    public int QueueTasks => _pendingAndActiveCount;
 
     public bool IsIdle()
     {
         lock (_rootSync)
         {
-            return _workItems.Count == 0 && _queue.Reader.Count == 0;
+            return _pendingAndActiveCount <= 0 && _queue.Reader.Count == 0;
         }
     }
+
+    public int MaxConcurrency => _maxConcurrency;
+
+    public int QueueCapacity => _queueCapacity;
 
     public int ConcurrencyLimit
     {
         get => _concurrency;
         set
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-
+            ObjectDisposedException.ThrowIf(_state == 2, this);
             var newLimit = Math.Clamp(value, 0, _maxConcurrency);
-            Interlocked.Exchange(ref _concurrency, newLimit);
+            var oldLimit = Interlocked.Exchange(ref _concurrency, newLimit);
+            if (newLimit != oldLimit) AdjustReaders(newLimit, oldLimit);
         }
     }
 
-
-    public int MaxConcurrency => _maxConcurrency;
-
-    public int QueueCapacity => _queueCapacity;
-
-
-
     public async ValueTask Enqueue(TInput input, CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_isEnabled)
-            throw new InvalidOperationException("Queue has been stopped.");
+        ObjectDisposedException.ThrowIf(_state == 3, this);
 
-        var item = new WorkItem(input, cancellationToken)
+        if (!_isEnabled) ThrowHelper.QueueStopped();
+
+        MarkActive();
+
+        try
         {
-            Id = Interlocked.Increment(ref _taskIdCounter),
-            Status = WorkStatus.Queued,
-            EnqueuedTime = _timeProvider.GetUtcNow(),
-        };
-
-        await OnStatusChangedAsync(item).ConfigureAwait(false);
-        await _queue.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
-
-        ActivateItem(item);
+            await _queue.Writer.WriteAsync(new(input, cancellationToken), cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            MarkInactive(); // Откат счётчика при ошибке записи
+            throw;
+        }
     }
 
     public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(_state == 3, this);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(
             _shutdownCts.Token,
@@ -218,369 +156,319 @@ internal sealed class WorkQueue<TInput> : IWorkQueue<TInput>
         while (!IsIdle())
         {
             TaskCompletionSource tcs;
-            lock (_rootSync)
+            lock (_rootSync) { tcs = _idleTcs; }
+
+            await tcs.Task.WaitAsync(cts.Token).ConfigureAwait(false);
+        }
+    }
+
+    #region Reader Management
+
+    private void SpawnReaders(int count)
+    {
+        lock (_readersSync)
+        {
+            for (var i = 0; i < count; i++)
             {
-                if (IsIdle()) break;
-                tcs = _idleTcs;
+                var cts = new CancellationTokenSource();
+                var task = ReaderLoopAsync(cts.Token).ContinueWith(c => c.Dispose());
+                var ctx = new ReaderContext(task, cts);
+                _activeReaders.Add(ctx);
             }
-
-            await Task.WhenAny(
-                tcs.Task.WaitAsync(cts.Token),
-                Task.Delay(3000, cts.Token)).ConfigureAwait(false);
         }
     }
 
-    /// <summary>
-    /// init readers
-    /// </summary>
-    private async Task ProcessQueueAsync()
+
+    private void AdjustReaders(int target, int current)
     {
-        try
+        lock (_readersSync)
         {
-            SpawnAdditionalReaders(_concurrency);
-            await MonitorQueueAsync().ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // Normal shutdown
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Queue processing failed");
-        }
-    }
+            if (_state > 0) return; // Не масштабируем при завершении
 
-    private async Task MonitorQueueAsync()
-    {
-        var shutdownToken = _shutdownCts.Token;
-
-        while (!shutdownToken.IsCancellationRequested)
-        {
-            if (await _queue.Reader.WaitToReadAsync(shutdownToken).ConfigureAwait(false))
-            {
-                EnsureReadersActive();
-            }
-
-            await Task.Delay(100, shutdownToken).ConfigureAwait(false);
-        }
-    }
-
-    private void EnsureReadersActive()
-    {
-        lock (_activeReadersSync)
-        {
-            if (!_isEnabled && _disposed) return;
-
-            var activeCount = GetActiveCount();
-
-            var targetCount = _concurrency;
-
-            var delta = targetCount - activeCount;
-
+            var delta = target - current;
             if (delta > 0)
             {
-                SpawnAdditionalReaders(delta);
+                SpawnReaders(delta);
             }
             else if (delta < 0)
             {
-                foreach (var item in _activeReaders.Take(Math.Abs(delta)))
+                // Отменяем лишних читателей с конца списка
+                var toCancel = Math.Min(-delta, _activeReaders.Count);
+                for (var i = 0; i < toCancel; i++)
                 {
-                    item.TokenSource.Cancel();
+                    _activeReaders[^1].StopTokenSource.Cancel();
+                    _activeReaders.RemoveAt(_activeReaders.Count - 1);
                 }
             }
         }
     }
 
-    private int GetActiveCount()
-    {
-        return _activeReaders
-            .Count(t => !t.Task.IsCompleted || !t.TokenSource.IsCancellationRequested);
-    }
-
-    private void SpawnAdditionalReaders(int count)
-    {
-        void Delete(ReaderTask reader)
-        {
-            lock (_activeReadersSync)
-            {
-                _activeReaders.Remove(reader);
-                reader.Dispose();
-            }
-        }
-
-        lock (_activeReadersSync)
-        {
-            for (int i = 0; i < count; i++)
-            {
-                CancellationTokenSource tokenSource = new();
-                Task readerTask = ReaderLoopAsync(tokenSource.Token);
-
-                ReaderTask reader = new(readerTask, tokenSource);
-
-                _activeReaders.Add(reader);
-
-                readerTask.ContinueWith(t => Delete(reader));
-            }
-        }
-    }
-
-
-    private async Task ReaderLoopAsync(CancellationToken cancellationToken)
+    private async Task ReaderLoopAsync(CancellationToken stopToken)
     {
         var shutdownToken = _shutdownCts.Token;
-
-        while (!cancellationToken.IsCancellationRequested
-            && !shutdownToken.IsCancellationRequested
-            && _isEnabled)
+        try
         {
-            try
+            while (!stopToken.IsCancellationRequested
+                && !shutdownToken.IsCancellationRequested
+                && _isEnabled)
             {
-                WorkItem item = await _queue.Reader.ReadAsync(shutdownToken).ConfigureAwait(false);
+                try
+                {
+                    var item = await _queue.Reader.ReadAsync(shutdownToken).ConfigureAwait(false);
 
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(
-                    shutdownToken,
-                    cancellationToken,
-                    item.CancellationToken);
+                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+                        shutdownToken,
+                        stopToken,
+                        item.CancellationToken);
 
-                await ExecuteItemAsync(item, cts.Token).ConfigureAwait(false);
+                    await ExecuteItemAsync(item, cts.Token).ConfigureAwait(false);
+                }
+                catch (ChannelClosedException) { break; }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    LogReaderError(_logger, ex);
+                    await Task.Delay(100, shutdownToken).ConfigureAwait(false);
+                }
             }
-            catch (OperationCanceledException)
-            {
-                // ignore
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "ReaderTask error");
-                await Task.Delay(100, shutdownToken).ConfigureAwait(false);
-            }
+        }
+        finally
+        {
+            UnregisterReader();
         }
     }
 
+    private void UnregisterReader()
+    {
+        lock (_readersSync)
+        {
+            // Удаляем завершившегося читателя (если он ещё не был удалён при масштабировании)
+            _activeReaders.RemoveAll(c => c.Task.IsCompleted);
+        }
+    }
 
-    private async Task ExecuteItemAsync(WorkItem item, CancellationToken ct)
+    #endregion
+
+    #region Execution & State
+
+    private async Task ExecuteItemAsync(WorkItem<TInput> item, CancellationToken ct)
     {
         try
         {
             ct.ThrowIfCancellationRequested();
-
-            item.StartedTime = _timeProvider.GetUtcNow();
-            item.Status = WorkStatus.Running;
-            await OnStatusChangedAsync(item).ConfigureAwait(false);
+            OnStatusChanged(item.Input, WorkStatus.Running);
 
             await _processor.Execute(item.Input, ct).ConfigureAwait(false);
-
-            item.Status = WorkStatus.Completed;
+            OnStatusChanged(item.Input, WorkStatus.Completed);
         }
         catch (OperationCanceledException ex) when (item.CancellationToken.IsCancellationRequested)
         {
-            item.Status = WorkStatus.Cancelled;
-
-            if (_logger != null && _logger.IsEnabled(LogLevel.Warning))
-            {
-                _logger?.LogWarning(ex, "Item {ItemId} processing was cancelled", item.Id);
-            }
+            OnStatusChanged(item.Input, WorkStatus.Cancelled);
+            LogItemCancelled(_logger, ex);
         }
         catch (Exception ex)
         {
-            item.Status = WorkStatus.Faulted;
-            item.LastError = ex;
-            _logger?.LogError(ex, "Item {ItemId} execution failed", item.Id);
+            OnStatusChanged(item.Input, WorkStatus.Faulted, ex);
+            LogItemExecutionFailed(_logger, ex);
         }
         finally
         {
-            if (!_disposed)
+            if (_state < 2)
             {
-                item.EndedTime = _timeProvider.GetUtcNow();
-                await OnStatusChangedAsync(item).ConfigureAwait(false);
-                DeactivateItem(item);
+                MarkInactive();
             }
         }
     }
 
-    private void ActivateItem(WorkItem item)
+    private void MarkActive()
     {
-        TaskCompletionSource oldTcs;
-
-        lock (_rootSync)
+        if (Interlocked.Increment(ref _pendingAndActiveCount) == 1)
         {
-            _workItems.Add(item);
-            _workItemsCount = _workItems.Count;
+            TaskCompletionSource tcs;
 
-            oldTcs = _idleTcs;
-            _idleTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (_rootSync)
+            {
+                tcs = _idleTcs;
+                // Переход из Idle в Active: создаём новый TCS
+                _idleTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+
+            tcs.TrySetResult();
         }
-
-        oldTcs.TrySetResult();
     }
 
-    private void DeactivateItem(WorkItem item)
+    private void MarkInactive()
     {
-        TaskCompletionSource? tcsToNotify = null;
-
-        lock (_rootSync)
+        if (Interlocked.Decrement(ref _pendingAndActiveCount) == 0)
         {
-            _workItems.Remove(item);
-            _workItemsCount = _workItems.Count;
-
-            if (_workItems.Count == 0 && _queue.Reader.Count == 0)
-            {
-                tcsToNotify = _idleTcs;
-            }
+            TaskCompletionSource tcs;
+            lock (_rootSync) { tcs = _idleTcs; }
+            tcs.TrySetResult();
         }
-
-        tcsToNotify?.TrySetResult();
     }
 
-    private async Task OnStatusChangedAsync(WorkItem item)
+    private void OnStatusChanged(TInput item, WorkStatus status, Exception? error = null)
     {
-        var info = item.ToInfo();
-        var watcher = _watcher;
-
-        if (watcher != null)
+        if (_statusChanged is not null)
         {
-            try
-            {
-                await watcher.HandleChanges(item.Input, info, _shutdownCts.Token).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Observer failed for work item #{WorkItemId}", info.Id);
-            }
-        }
-
-        if (_statusChanged != null)
-        {
-            try
-            {
-                _statusChanged(info);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Event handler failed for work item #{WorkItemId}", info.Id);
-            }
-
+            try { _statusChanged(item, status, error); }
+            catch (Exception ex) { LogEventHandlerFailed(_logger, ex); }
         }
     }
+
+    #endregion
+
+    #region Shutdown & Dispose
 
     public async Task ShutdownAsync()
     {
-        lock (_rootSync)
-        {
-            if (!_isEnabled || _disposed) return;
-            _isEnabled = false;
-        }
-
-        await _shutdownCts.CancelAsync().ConfigureAwait(false);
-
+        if (Interlocked.Exchange(ref _state, 1) != 0) return; // Idempotent
+        _isEnabled = false;
         try
         {
-            await _processingTask.ConfigureAwait(false);
+            await _shutdownCts.CancelAsync().ConfigureAwait(false);
+            _queue.Writer.TryComplete();
 
             Task[] readers;
-            lock (_activeReadersSync)
-            {
-                readers = [.. _activeReaders.Select(c => c.Task)];
-            }
+            lock (_readersSync) { readers = [.. _activeReaders.Select(c => c.Task)]; }
             await Task.WhenAll(readers).ConfigureAwait(false);
+
+            await ClearRemainingItems().ConfigureAwait(false);
+
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error during shutdown");
+            // Логируем ошибку, если что-то пошло не так при остановке
+            LogShutdownError(_logger, ex);
         }
         finally
         {
-            await ClearAll().ConfigureAwait(false);
+            _state = 2; // Mark as Disposed
+
+            lock (_rootSync)
+            {
+                _idleTcs.TrySetResult();
+            }
         }
     }
 
-    private async Task ClearAll()
+    private async Task ClearRemainingItems()
     {
-        while (_queue.Reader.TryRead(out var input))
+        OperationCanceledException? err = null;
+
+        while (_queue.Reader.TryRead(out var item))
         {
-            input.Status = WorkStatus.Faulted;
-            input.LastError = ShutdownAsyncException.Default;
-            input.EndedTime = _timeProvider.GetUtcNow();
-            await OnStatusChangedAsync(input).ConfigureAwait(false);
-            DeactivateItem(input);
+            err ??= new OperationCanceledException("Queue shutdown");
+
+            OnStatusChanged(item.Input, WorkStatus.Faulted, err);
+            MarkInactive();
         }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _state, 2) != 2)
+        {
+            _isEnabled = false;
+            _shutdownCts.Cancel();
+            _queue.Writer.TryComplete();
+        }
 
-        _isEnabled = false;
-        _queue.Writer.TryComplete();
-
-        _shutdownCts.Cancel();
-
-        _disposed = true;
-
+        Interlocked.Exchange(ref _state, 3);
         _shutdownCts.Dispose();
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-
-        try
+        if (Interlocked.Exchange(ref _state, 2) != 2)
         {
-            _isEnabled = false;
-            _queue.Writer.TryComplete();
             await ShutdownAsync().ConfigureAwait(false);
-
         }
-        finally
-        {
-            _disposed = true;
-            _shutdownCts.Dispose();
-        }
+        Interlocked.Exchange(ref _state, 3);
+        _shutdownCts.Dispose();
     }
 
-    private sealed class WorkItem(TInput item, CancellationToken token)
+    #endregion
+
+
+    private sealed record ReaderContext(Task Task, CancellationTokenSource StopTokenSource);
+
+
+    #region Logging Definitions (Source Generator)
+
+    private static partial class LogMessages
     {
-        public long Id { get; init; }
-        public TInput Input => item;
-        public CancellationToken CancellationToken => token;
-        public WorkStatus Status { get; set; }
-        public DateTimeOffset EnqueuedTime { get; init; }
-        public DateTimeOffset? StartedTime { get; set; } = default;
-        public DateTimeOffset? EndedTime { get; set; } = default;
-        public Exception? LastError { get; set; } = null;
+        [LoggerMessage(
+            EventId = 1,
+            Level = LogLevel.Warning,
+            Message = "Item processing was cancelled")]
+        public static partial void ItemCancelled(ILogger logger, Exception exception);
 
-        public WorkInfo ToInfo() => new(Id, Status, EnqueuedTime, StartedTime, EndedTime, LastError);
+        [LoggerMessage(
+            EventId = 2,
+            Level = LogLevel.Error,
+            Message = "Item execution failed")]
+        public static partial void ItemExecutionFailed(ILogger logger, Exception exception);
+
+
+        [LoggerMessage(
+            EventId = 3,
+            Level = LogLevel.Error,
+            Message = "Event handler failed for work item")]
+        public static partial void EventHandlerFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(
+            EventId = 4,
+            Level = LogLevel.Error,
+            Message = "ReaderTask error")]
+        public static partial void ReaderError(ILogger logger, Exception exception);
+
+
+        [LoggerMessage(
+            EventId = 5,
+            Level = LogLevel.Error,
+            Message = "Error during shutdown")]
+        public static partial void ShutdownError(ILogger logger, Exception exception);
     }
 
-    internal sealed record ReaderTask(Task Task, CancellationTokenSource TokenSource) : IDisposable
+    // Статические методы-обертки для удобного вызова из экземпляра класса
+    private static void LogItemCancelled(ILogger<WorkQueue<TInput>>? logger, Exception ex)
     {
-        public void Dispose()
-        {
-            TokenSource.Dispose();
-        }
+        if (logger is not null) LogMessages.ItemCancelled(logger, ex);
     }
+
+    private static void LogItemExecutionFailed(ILogger<WorkQueue<TInput>>? logger, Exception ex)
+    {
+        if (logger is not null) LogMessages.ItemExecutionFailed(logger, ex);
+    }
+
+    private static void LogEventHandlerFailed(ILogger<WorkQueue<TInput>>? logger, Exception ex)
+    {
+        if (logger is not null) LogMessages.EventHandlerFailed(logger, ex);
+    }
+
+    private static void LogReaderError(ILogger<WorkQueue<TInput>>? logger, Exception ex)
+    {
+        if (logger is not null) LogMessages.ReaderError(logger, ex);
+    }
+
+    private static void LogShutdownError(ILogger<WorkQueue<TInput>>? logger, Exception ex)
+    {
+        if (logger is not null) LogMessages.ShutdownError(logger, ex);
+    }
+
+    #endregion
 }
 
-
-internal sealed record WorkQueueOptions<TInput>
-(
-    // Required
+internal sealed record WorkQueueOptions<TInput>(
     IWork<TInput> Processor,
-    // Optional with defaults
-    IWorkObserver<TInput>? Observer = null,
-
-    TimeProvider? TimeProvider = null,
     int? QueueCapacity = null,
     int? ConcurrencyLimit = null,
     int? MaxConcurrency = null,
     bool? SingleWriter = false,
-    Action<WorkInfo>? StatusChanged = null,
-    ILogger? Logger = null,
-    BoundedChannelFullMode FullMode = BoundedChannelFullMode.Wait
-)
+    Action<TInput, WorkStatus, Exception?>? StatusChanged = null,
+    BoundedChannelFullMode FullMode = BoundedChannelFullMode.Wait)
 {
-    public WorkQueueOptions<TInput> WithTimeProvider(TimeProvider timeProvider) =>
-        this with { TimeProvider = timeProvider };
-
     public WorkQueueOptions<TInput> WithQueueCapacity(int capacity)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
@@ -594,60 +482,32 @@ internal sealed record WorkQueueOptions<TInput>
     }
 
     public WorkQueueOptions<TInput> WithMaxConcurrency(int limit)
-    {
-        if (limit < 1)
-        {
-            limit = Environment.ProcessorCount;
-        }
-        return this with { MaxConcurrency = limit };
-    }
+        => this with { MaxConcurrency = limit < 1 ? Environment.ProcessorCount : limit };
 
-    public WorkQueueOptions<TInput> WithSingleWriter(bool singleWriter) =>
-        this with { SingleWriter = singleWriter };
+    public WorkQueueOptions<TInput> WithSingleWriter(bool sw)
+        => this with { SingleWriter = sw };
 
-    public WorkQueueOptions<TInput> WithStatusCallback(Action<WorkInfo> callback) =>
-        this with { StatusChanged = callback };
+    public WorkQueueOptions<TInput> WithStatusCallback(Action<TInput, WorkStatus, Exception?> cb)
+        => this with { StatusChanged = cb };
 
-    public WorkQueueOptions<TInput> WithLogger(ILogger<WorkQueue<TInput>> logger) =>
-        this with { Logger = logger };
+    public WorkQueueOptions<TInput> WithFullMode(BoundedChannelFullMode mode)
+        => this with { FullMode = mode };
 
 
-    public WorkQueueOptions<TInput> WithFullMode(BoundedChannelFullMode mode) =>
-        this with { FullMode = mode };
+    public static WorkQueueOptions<TInput> Create(IWork<TInput> processor) => new(processor);
 
-    public WorkQueueOptions<TInput> WithObserver(Func<TInput, WorkInfo, CancellationToken, Task> process) =>
-        this with { Observer = new WorkObserverProcessor(process) };
+    public static WorkQueueOptions<TInput> Create(Func<TInput, CancellationToken, Task> process)
+        => new(new DelegatingWork(process));
 
-    public WorkQueueOptions<TInput> WithObserver(IWorkObserver<TInput> observer) =>
-        this with { Observer = observer };
-
-
-    // -- ct-or
-    public static WorkQueueOptions<TInput> Create(IWork<TInput> processor) =>
-        new(processor);
-
-    public static WorkQueueOptions<TInput> Create(Func<TInput, CancellationToken, Task> process) =>
-        new(new WorkProcessor(process));
-
-
-
-    // -- wrap classes
-    sealed class WorkProcessor(Func<TInput, CancellationToken, Task> process) : IWork<TInput>
+    private sealed class DelegatingWork(Func<TInput, CancellationToken, Task> process) : IWork<TInput>
     {
         public Task Execute(TInput input, CancellationToken cancellationToken)
             => process(input, cancellationToken);
     }
 
-    sealed class WorkObserverProcessor(Func<TInput, WorkInfo, CancellationToken, Task> process) : IWorkObserver<TInput>
-    {
-        public Task HandleChanges(TInput input, WorkInfo work, CancellationToken cancellationToken)
-            => process(input, work, cancellationToken);
-    }
 }
 
-
-
-public sealed class ShutdownAsyncException : Exception
+internal static class ThrowHelper
 {
-    public static ShutdownAsyncException Default => new();
+    public static void QueueStopped() => throw new InvalidOperationException("Queue has been stopped.");
 }
