@@ -1,6 +1,4 @@
-﻿using Sa.Classes;
-
-namespace SaTests.Classes;
+﻿namespace Sa.Utils.WorkQueue.Tests;
 
 public class WorkQueueTests
 {
@@ -10,7 +8,7 @@ public class WorkQueueTests
         public bool WasProcessed { get; set; }
     }
 
-    private sealed class TestWork : IWork<TestModel>
+    private sealed class TestWork : ISaWork<TestModel>
     {
         public Task Execute(TestModel model, CancellationToken cancellationToken)
         {
@@ -19,18 +17,21 @@ public class WorkQueueTests
         }
     }
 
-    private sealed class TestWorkWithDelay(TimeSpan delay) : IWork<TestModel>
+    private sealed class TestWorkWithDelay(TimeSpan delay) : ISaWork<TestModel>
     {
         private readonly TimeSpan _delay = delay;
 
         public async Task Execute(TestModel model, CancellationToken cancellationToken)
         {
             await Task.Delay(_delay, cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
+
             model.WasProcessed = true;
         }
     }
 
-    private sealed class TestWorkThatThrows : IWork<TestModel>
+    private sealed class TestWorkThatThrows : ISaWork<TestModel>
     {
         public Task Execute(TestModel model, CancellationToken cancellationToken)
         {
@@ -46,7 +47,7 @@ public class WorkQueueTests
         // Arrange
         var model = new TestModel();
         var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(50));
-        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>.Create(processor));
+        using var queue = new SaWorkQueue<TestModel>(SaWorkQueueOptions<TestModel>.Create(processor));
 
         // Act
         await queue.Enqueue(model, cancellationToken: TestToken);
@@ -65,7 +66,7 @@ public class WorkQueueTests
         // Arrange
         var model = new TestModel();
         var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(10));
-        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>.Create(processor));
+        using var queue = new SaWorkQueue<TestModel>(SaWorkQueueOptions<TestModel>.Create(processor));
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         // Act
@@ -84,7 +85,7 @@ public class WorkQueueTests
     {
         // Arrange
         var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(30));
-        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>.Create(processor));
+        using var queue = new SaWorkQueue<TestModel>(SaWorkQueueOptions<TestModel>.Create(processor));
         var models = new List<TestModel>
         {
             new(), new(), new()
@@ -109,7 +110,7 @@ public class WorkQueueTests
         var processor = new TestWorkWithDelay(delay);
 
         var concurrencyLimit = 3;
-        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
+        using var queue = new SaWorkQueue<TestModel>(SaWorkQueueOptions<TestModel>
             .Create(processor)
             .WithConcurrencyLimit(concurrencyLimit));
 
@@ -135,12 +136,12 @@ public class WorkQueueTests
     [Fact]
     public async Task FaultedTask_StatusIsFaulted()
     {
-        List<(WorkStatus Status, Exception? LastError)> changes = [];
+        List<(SaWorkStatus Status, Exception? LastError)> changes = [];
 
         // Arrange
         var processor = new TestWorkThatThrows();
 
-        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
+        using var queue = new SaWorkQueue<TestModel>(SaWorkQueueOptions<TestModel>
             .Create(processor)
             .WithStatusCallback((_, s, e) => changes.Add((s, e))));
 
@@ -152,23 +153,23 @@ public class WorkQueueTests
 
         // Assert
 
-        Assert.Contains(changes, x => x.Status == WorkStatus.Faulted);
+        Assert.Contains(changes, x => x.Status == SaWorkStatus.Faulted);
 
         Assert.Contains(changes, x => x.LastError is InvalidOperationException);
         Assert.Contains(changes, x => x.LastError?.Message == "Test exception");
     }
 
     [Fact]
-    public async Task CancelledTask_StatusIsCancelled()
+    public async Task CancelledTask_StatusIsAborted()
     {
-        List<WorkStatus> statuses = [];
+        List<SaWorkStatus> statuses = [];
 
 
         // Arrange
         using var cts = new CancellationTokenSource();
         var processor = new TestWorkWithDelay(TimeSpan.FromSeconds(5));
 
-        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
+        using var queue = new SaWorkQueue<TestModel>(SaWorkQueueOptions<TestModel>
             .Create(processor)
             .WithStatusCallback((_, s, _) => statuses.Add(s)));
 
@@ -182,23 +183,30 @@ public class WorkQueueTests
 
         // Assert
 
-        Assert.Contains(WorkStatus.Cancelled, statuses);
+        Assert.Contains(SaWorkStatus.Aborted, statuses);
     }
 
     [Fact]
     public async Task ShutdownAsync_StopsProcessing()
     {
-        List<Exception?> errors = [];
+        List<SaWorkStatus> errors = [];
 
         // Arrange
-        var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(500));
+        var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(300));
 
-        using var queue = new WorkQueue<TestModel>(WorkQueueOptions<TestModel>
+        using var queue = new SaWorkQueue<TestModel>(SaWorkQueueOptions<TestModel>
             .Create(processor)
-            .WithStatusCallback((m, s, e) => errors.Add(e)));
+            .WithStatusCallback((m, s, e) =>
+            {
+                if (s == SaWorkStatus.Cancelled)
+                    errors.Add(s);
+            }));
 
         for (int i = 0; i < 5; i++)
             await queue.Enqueue(new TestModel(), cancellationToken: TestToken);
+
+
+        await Task.Delay(50, TestToken);
 
         // Act
         await queue.ShutdownAsync();
@@ -215,8 +223,7 @@ public class WorkQueueTests
         await queue.WaitForIdleAsync(TestToken);
         Assert.Equal(0, queue.QueueTasks);
 
-        var canceled = errors.Count(c => c is OperationCanceledException);
-        Assert.Equal(5, canceled);
+        Assert.Equal(5, errors.Count);
     }
 
 
@@ -225,13 +232,13 @@ public class WorkQueueTests
     public async Task Observer_InvokedOnStateChange()
     {
 
-        List<WorkStatus> statuses = [];
+        List<SaWorkStatus> statuses = [];
 
 
         // Arrange
         var processor = new TestWork();
-        using var queue = new WorkQueue<TestModel>(
-            WorkQueueOptions<TestModel>
+        using var queue = new SaWorkQueue<TestModel>(
+            SaWorkQueueOptions<TestModel>
                 .Create(processor)
                 .WithStatusCallback((_, s, _) => statuses.Add(s)));
 
@@ -243,8 +250,8 @@ public class WorkQueueTests
 
         // Assert
         Assert.True(statuses.Count >= 2); // Running → Completed
-        Assert.Contains(statuses, x => x == WorkStatus.Running);
-        Assert.Contains(statuses, x => x == WorkStatus.Completed);
+        Assert.Contains(statuses, x => x == SaWorkStatus.Running);
+        Assert.Contains(statuses, x => x == SaWorkStatus.Completed);
     }
 
     [Fact]
@@ -252,8 +259,8 @@ public class WorkQueueTests
     {
         // Arrange
         var processor = new TestWork();
-        var queue = new WorkQueue<TestModel>(
-            WorkQueueOptions<TestModel>.Create(processor));
+        var queue = new SaWorkQueue<TestModel>(
+            SaWorkQueueOptions<TestModel>.Create(processor));
 
         await queue.Enqueue(new TestModel(), cancellationToken: TestToken);
         await queue.DisposeAsync();
@@ -265,8 +272,8 @@ public class WorkQueueTests
     [Fact]
     public void ConcurrencyLimit_InvalidValue_Clamp()
     {
-        var queue = new WorkQueue<TestModel>(
-            WorkQueueOptions<TestModel>.Create(new TestWork()))
+        var queue = new SaWorkQueue<TestModel>(
+            SaWorkQueueOptions<TestModel>.Create(new TestWork()))
         {
             ConcurrencyLimit = -1
         };
@@ -279,11 +286,26 @@ public class WorkQueueTests
     [Fact]
     public async Task Enqueue_Disposed_Throws()
     {
-        var queue = new WorkQueue<TestModel>(
-            WorkQueueOptions<TestModel>.Create(new TestWork()));
+        var queue = new SaWorkQueue<TestModel>(
+            SaWorkQueueOptions<TestModel>.Create(new TestWork()));
         queue.Dispose();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(()
+            => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());
+    }
+
+    [Fact]
+    public async Task ShutdownAsync_CleansUpResources()
+    {
+        // Arrange
+        var processor = new TestWork();
+        var queue = new SaWorkQueue<TestModel>(
+            SaWorkQueueOptions<TestModel>.Create(processor));
+
+        await queue.Enqueue(new TestModel(), cancellationToken: TestToken);
+        await queue.ShutdownAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(()
             => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());
     }
 }

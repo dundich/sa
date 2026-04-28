@@ -2,14 +2,13 @@
 
 namespace Sa.Schedule.Engine;
 
-
 internal sealed class JobRunner() : IJobRunner
 {
     public async Task Run(IJobController controller, CancellationToken cancellationToken)
     {
         await controller.WaitToRun(cancellationToken);
 
-        controller.Init();
+        controller.Start();
 
         try
         {
@@ -17,7 +16,7 @@ internal sealed class JobRunner() : IJobRunner
         }
         finally
         {
-            controller.Finish();
+            controller.Shutdown();
         }
     }
 

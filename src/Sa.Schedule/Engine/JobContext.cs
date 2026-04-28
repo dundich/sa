@@ -7,8 +7,7 @@ namespace Sa.Schedule.Engine;
 
 internal sealed class JobContext(IJobSettings settings) : IJobContext
 {
-    public string JobName => settings.Properties.JobName
-        ?? $"{settings.JobId}";
+    public string JobName => settings.Properties.JobName ?? $"{settings.JobId}";
 
     public IJobSettings Settings => settings;
 

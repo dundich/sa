@@ -13,17 +13,16 @@ internal sealed partial class JobController(
     IJobSettings settings,
     IInterceptorSettings interceptorSettings,
     IServiceScopeFactory scopeFactory,
-    TimeProvider timeProvider) : IJobController
+    TimeProvider timeProvider) : IJobController, IDisposable
 {
 
     private readonly JobContext _context = new(settings);
-
     private readonly SemaphoreSlim _pauseSemaphore = new(1, 1);
 
-
+    private volatile bool _disposed;
     private volatile JobExecutor? _job;
-
     private volatile bool _isPaused;
+    private readonly CancellationTokenSource _shutdownCts = new();
 
 
     public int Index => index;
@@ -32,6 +31,8 @@ internal sealed partial class JobController(
 
     public async ValueTask WaitToRun(CancellationToken cancellationToken)
     {
+        if (_disposed) return;
+
         if (_context.NumRuns == 0
             && settings.Properties.InitialDelay.HasValue
             && settings.Properties.InitialDelay.Value != TimeSpan.Zero)
@@ -43,21 +44,37 @@ internal sealed partial class JobController(
 
     public void Pause()
     {
-        if (_isPaused) return;
+        if (_disposed) return;
 
-        _isPaused = true;
+        if (Interlocked.CompareExchange(ref _isPaused, true, false))
+        {
+            return;
+        }
+
         _pauseSemaphore.Wait(); // Блокируем семафор
     }
 
     public void Resume()
     {
-        if (!_isPaused) return;
+        if (_disposed) return;
 
-        _isPaused = false;
+        if (!Interlocked.CompareExchange(ref _isPaused, false, true))
+        {
+            return;
+        }
 
+        ReleaseSemaphore();
+    }
+
+    private void ReleaseSemaphore()
+    {
         try
         {
             _pauseSemaphore.Release();
+        }
+        catch (ObjectDisposedException)
+        {
+            // ignore
         }
         catch (SemaphoreFullException)
         {
@@ -67,23 +84,28 @@ internal sealed partial class JobController(
 
     public async ValueTask WaitIfPaused(CancellationToken cancellationToken)
     {
-        if (!_isPaused) return;
+        if (_disposed || !_isPaused) return;
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, _shutdownCts.Token);
 
         try
         {
-            await _pauseSemaphore.WaitAsync(cancellationToken);
+            await _pauseSemaphore.WaitAsync(cts.Token);
         }
         finally
         {
-            if (!_isPaused)
+            if (!_disposed && !_isPaused)
             {
-                _pauseSemaphore.Release();
+                ReleaseSemaphore();
             }
         }
     }
 
-    public void Init()
+    public void Start()
     {
+        if (_disposed) return;
+
         _job = new JobExecutor(settings, interceptorSettings, scopeFactory);
 
         _context.ServiceProvider = _job.ServiceProvider;
@@ -92,11 +114,17 @@ internal sealed partial class JobController(
         _context.NumRuns++;
     }
 
-    public void Finish()
+    public void Shutdown()
     {
+        if (_disposed) return;
+
+        _disposed = true;
+        _shutdownCts.Cancel();
+
         _context.ServiceProvider = NullJobServices.Instance;
         _job?.Dispose();
         _pauseSemaphore.Dispose();
+        _shutdownCts.Dispose();
     }
 
     public async ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken)
@@ -200,4 +228,6 @@ internal sealed partial class JobController(
         Message = "[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: {Type} “{Error}”")]
     static partial void LogFailedRetryAttempts(
         ILogger logger, string jobName, int failedRetryAttempts, int retryCount, string type, string error);
+
+    public void Dispose() => Shutdown();
 }

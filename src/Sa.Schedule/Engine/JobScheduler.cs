@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.Primitives;
-using Sa.Classes;
+using Sa.Utils.WorkQueue;
 
 namespace Sa.Schedule.Engine;
 
@@ -17,7 +17,7 @@ internal sealed class JobScheduler : IJobScheduler
 
     private bool _disposed;
 
-    private readonly WorkQueue<IJobController> _jobs;
+    private readonly SaWorkQueue<IJobController> _jobs;
 
     private readonly Func<int, IJobController> _createController;
 
@@ -42,7 +42,7 @@ internal sealed class JobScheduler : IJobScheduler
 
         concurrency = Math.Clamp(concurrency, 0, maxConcurrency);
 
-        _jobs = new(WorkQueueOptions<IJobController>.Create(CreateJob)
+        _jobs = new SaWorkQueue<IJobController>(SaWorkQueueOptions<IJobController>.Create(CreateJob)
             .WithQueueCapacity(maxConcurrency)
             .WithMaxConcurrency(maxConcurrency)
             .WithConcurrencyLimit(concurrency)
@@ -128,7 +128,6 @@ internal sealed class JobScheduler : IJobScheduler
                 controllers.Add(controller);
                 await _jobs.Enqueue(controller, stoppingToken);
             }
-
         }
         finally
         {
@@ -170,6 +169,7 @@ internal sealed class JobScheduler : IJobScheduler
 
     public async Task Stop()
     {
+        if (_disposed) return;
         lock (_lock)
         {
             if (_disposed || !_started.GetValueOrDefault()) return;
@@ -183,7 +183,7 @@ internal sealed class JobScheduler : IJobScheduler
 
     public void Dispose()
     {
-
+        if (_disposed) return;
         CancellationTokenSource ctsStopping;
 
         lock (_lock)
@@ -209,6 +209,7 @@ internal sealed class JobScheduler : IJobScheduler
 
     public async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
         lock (_lock)
         {
             if (_disposed) return;

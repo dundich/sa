@@ -30,7 +30,7 @@
   <Folder Name="/Samples/">
     <File Path="Samples/docker-compose.yml" />
     <Project Path="Samples/Configuration.Web/Configuration.Web.csproj" Id="ae8f9f99-5b9b-4009-8aed-7ff837fb3ef2" />
-    <Project Path="Samples/FFMpeg.Console/FFMpeg.Console.csproj" DisplayName="FFmpeg.Console" />
+    <Project Path="Samples/FFMpeg.Console/FFMpeg.Console.csproj" />
     <Project Path="Samples/HybridFileStorage.Console/HybridFileStorage.Console.csproj" />
     <Project Path="Samples/Partitional.ConsoleApp/Partitional.ConsoleApp.csproj" />
     <Project Path="Samples/PgOutbox.ConsoleApp/PgOutbox.ConsoleApp.csproj" />
@@ -62,12 +62,16 @@
     <Project Path="Tests/Sa.Outbox.PostgreSqlTests/Sa.Outbox.PostgreSqlTests.csproj" />
     <Project Path="Tests/Sa.Partitional.PostgreSqlTests/Sa.Partitional.PostgreSqlTests.csproj" />
     <Project Path="Tests/Sa.ScheduleTests/Sa.ScheduleTests.csproj" />
+    <Project Path="Tests/Sa.Utils.WorkQueue.Tests/Sa.Utils.WorkQueue.Tests.csproj" />
     <Project Path="Tests/SaTests/SaTests.csproj" />
   </Folder>
   <Folder Name="/Tests/Fixtures/">
     <Project Path="Tests/Fixtures/Sa.Data.PostgreSql.Fixture/Sa.Data.PostgreSql.Fixture.csproj" />
     <Project Path="Tests/Fixtures/Sa.Data.S3.Fixture/Sa.Data.S3.Fixture.csproj" />
     <Project Path="Tests/Fixtures/Sa.Fixture/Sa.Fixture.csproj" />
+  </Folder>
+  <Folder Name="/Utils/">
+    <Project Path="Sa.Utils.WorkQueue/Sa.Utils.WorkQueue.csproj" />
   </Folder>
   <Project Path="Sa/Sa.csproj" />
 </Solution>

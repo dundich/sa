@@ -3,7 +3,7 @@
 internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
     : IScheduler, IDisposable, IAsyncDisposable
 {
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public IScheduleSettings Settings => settings;
 
@@ -55,10 +55,14 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
 
     public async ValueTask DisposeAsync()
     {
-        await Stop();
-        foreach (var job in Schedules)
+        if (!_disposed)
         {
-            await job.DisposeAsync();
+            _disposed = true;
+            await Stop();
+            foreach (var job in Schedules)
+            {
+                await job.DisposeAsync();
+            }
         }
     }
 }

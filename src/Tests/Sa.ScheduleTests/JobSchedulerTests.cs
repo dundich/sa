@@ -143,12 +143,12 @@ public class JobSchedulerTests
 
         }
 
-        public void Init()
+        public void Start()
         {
             //
         }
 
-        public void Finish()
+        public void Shutdown()
         {
             //
         }

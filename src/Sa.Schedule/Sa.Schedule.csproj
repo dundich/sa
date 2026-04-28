@@ -17,7 +17,6 @@
 
     <ItemGroup>
         <Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="ExceptionExtensions.cs" />
-        <Compile Include="..\Sa\Classes\WorkQueue.cs" Link="Engine\WorkQueue.cs" />
     </ItemGroup>
 
     <ItemGroup>
@@ -27,6 +26,10 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Sa.ScheduleTests" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Sa.Utils.WorkQueue\Sa.Utils.WorkQueue.csproj" />
     </ItemGroup>
 
 </Project>

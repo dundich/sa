@@ -8,6 +8,8 @@ $dist_folder = "$root\dist"
 $msbuild_verbosity = "n"
 
 $projects = @(
+	"Sa.Utils.WorkQueue",
+
 	"Sa.Media",
 	"Sa.Media.FFmpeg",
 

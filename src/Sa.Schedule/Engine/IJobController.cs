@@ -15,27 +15,19 @@ internal interface IJobController
 {
     int Index { get; }
 
-    ValueTask WaitToRun(CancellationToken cancellationToken);
+    void Start();
 
-    void Init();
+    void Shutdown();
 
-    void Finish();
-
-
-
-    // Методы управления паузой
     bool IsPaused { get; }
 
     void Pause();
 
     void Resume();
 
+
+    ValueTask WaitToRun(CancellationToken cancellationToken);
     ValueTask WaitIfPaused(CancellationToken cancellationToken);
-
-
-
-    // iteration events
-
     ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken);
 
     Task Execute(CancellationToken cancellationToken);
