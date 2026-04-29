@@ -64,3 +64,7 @@ FFmpeg .NET Wrapper - ready to use out of the box with minimal setup
 - Splits/Join audio file by channels
 - Built-in FFmpeg binaries for Windows x64 and Linux
 - Supports Dependency Injection (DI) via standard IServiceCollection integration
+
+## Sa.Utils
+
+- [Sa.Utils.WorkQueue](src/Sa.Utils.WorkQueue) - async Queue with Concurrency Limiting
