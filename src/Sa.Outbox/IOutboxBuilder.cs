@@ -1,5 +1,6 @@
 ﻿using Sa.Outbox.Delivery;
 using Sa.Outbox.Metadata;
+using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;
 using System.Diagnostics.CodeAnalysis;
 
@@ -34,4 +35,19 @@ public interface IOutboxBuilder
 
 
     IOutboxBuilder WithMetadata(Action<IServiceProvider, IOutboxMessageMetadataBuilder> configure);
+
+    /// <summary>
+    /// shortcut
+    /// </summary>
+    IOutboxBuilder AddMetadata<TMessage>(
+        string partName,
+        Func<TMessage, string>? getPayloadId = null) where TMessage : class
+    {
+        return WithMetadata((_, m) => m.AddMetadata<TMessage>(partName, getPayloadId));
+    }
+
+    IOutboxBuilder AddMetadata<TMessage>() where TMessage : class, IOutboxPublishable
+    {
+        return WithMetadata((_, m) => m.AddMetadata<TMessage>());
+    }
 }

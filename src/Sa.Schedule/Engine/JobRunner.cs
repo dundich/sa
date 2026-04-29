@@ -2,17 +2,22 @@
 
 namespace Sa.Schedule.Engine;
 
-
 internal sealed class JobRunner() : IJobRunner
 {
     public async Task Run(IJobController controller, CancellationToken cancellationToken)
     {
         await controller.WaitToRun(cancellationToken);
 
-        controller.Running();
+        controller.Start();
 
-        await RunLoop(controller, cancellationToken)
-            .ContinueWith(t => controller.Stopped(t.Status), CancellationToken.None);
+        try
+        {
+            await RunLoop(controller, cancellationToken);
+        }
+        finally
+        {
+            controller.Shutdown();
+        }
     }
 
     [StackTraceHidden]
@@ -20,24 +25,41 @@ internal sealed class JobRunner() : IJobRunner
     {
         while (!cancellationToken.IsCancellationRequested)
         {
+            await controller.WaitIfPaused(cancellationToken);
+
             CanJobExecuteResult next = await controller.CanExecute(cancellationToken);
 
-            if (next == CanJobExecuteResult.Abort) break;
-            if (next == CanJobExecuteResult.Skip) continue;
+            switch (next)
+            {
+                case CanJobExecuteResult.Abort:
+                    return;
 
-            try
-            {
-                await controller.Execute(cancellationToken);
-                controller.ExecutionCompleted();
+                case CanJobExecuteResult.Skip:
+                    continue;
+
+                case CanJobExecuteResult.Ok:
+                    await ExecuteIteration(controller, cancellationToken);
+                    break;
             }
-            catch (OperationCanceledException ex) when (ex.CancellationToken == cancellationToken)
-            {
-                // skip
-            }
-            catch (Exception ex)
-            {
-                controller.ExecutionFailed(ex);
-            }
+        }
+    }
+
+    private static async Task ExecuteIteration(
+        IJobController controller,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await controller.Execute(cancellationToken);
+            controller.ExecutionCompleted();
+        }
+        catch (OperationCanceledException ex) when (ex.CancellationToken == cancellationToken)
+        {
+            // Expected cancellation - silently exit
+        }
+        catch (Exception ex)
+        {
+            controller.ExecutionFailed(ex);
         }
     }
 }

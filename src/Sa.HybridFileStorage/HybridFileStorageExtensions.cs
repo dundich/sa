@@ -5,44 +5,66 @@ namespace Sa.HybridFileStorage;
 
 public static class HybridFileStorageExtensions
 {
-    public static async Task<StorageResult> CopyToScopeAsync(
+    public static async Task<StorageResult> CopyFromFileAsync(
         this IHybridFileStorage storage,
-        string fileId,
-        string sourceScopeName,
-        string targetScopeName,
-        int? targetTenantId = default,
+        string filePath,
+        string basket,
+        UploadFileInput input,
+        int bufferSize = 81920,
         CancellationToken ct = default)
     {
-        var metadata = await storage.GetMetadataAsync(fileId, sourceScopeName, ct);
+        // копируем файл в хранилище
+        await using var fs = new FileStream(filePath, new FileStreamOptions
+        {
+            Mode = FileMode.Open,
+            Access = FileAccess.Read,
+            Share = FileShare.Read,
+            BufferSize = bufferSize,
+            Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+        });
+
+        return await storage.UploadAsync(
+            basket: basket,
+            input: input,
+            fileStream: fs,
+            cancellationToken: ct);
+    }
+
+    public static async Task<StorageResult> CopyToBasketAsync(
+        this IHybridFileStorage storage,
+        string fileId,
+        string basket,
+        Func<FileMetadata, UploadFileInput>? configure = null,
+        CancellationToken ct = default)
+    {
+        var metadata = await storage.GetMetadataAsync(fileId, ct);
 
         if (metadata is null)
         {
             ThrowSourceFileNotFound(fileId);
         }
 
-        int tenantId = targetTenantId ?? metadata.TenantId;
+        UploadFileInput uploadInput = configure?.Invoke(metadata) ?? new UploadFileInput
+        {
+            TenantId = metadata.TenantId,
+            FileName = metadata.FileName
+        };
 
-        if (tenantId == metadata.TenantId
-            && string.Equals(sourceScopeName, targetScopeName, StringComparison.Ordinal))
+        if (uploadInput.TenantId == metadata.TenantId
+            && string.Equals(metadata.Basket, basket, StringComparison.Ordinal)
+            && string.Equals(metadata.FileName, uploadInput.FileName, StringComparison.Ordinal))
         {
             ThrowFileAlreadyInTargetScope();
         }
 
-        var uploadInput = new UploadFileInput
-        {
-            FileName = metadata.FileName,
-            TenantId = tenantId,
-        };
-
         StorageResult result = default!;
         bool downloaded = await storage.DownloadAsync(
             fileId,
-            sourceScopeName,
             async (sourceStream, downloadCt) =>
             {
                 result = await storage.UploadAsync(
+                    basket,
                     uploadInput,
-                    targetScopeName,
                     sourceStream,
                     downloadCt);
             },
@@ -66,14 +88,11 @@ public static class HybridFileStorageExtensions
         throw new FileNotFoundException($"Source file not found: {fileId}");
 
 
-
-
     public static async Task<BatchResult<StorageResult>> CopyToScopeBatchAsync(
         this IHybridFileStorage storage,
         IEnumerable<string> fileIds,
-        string sourceScopeName,
-        string targetScopeName,
-        int? targetTenantId = default,
+        string basket,
+        Func<FileMetadata, UploadFileInput>? configure = null,
         BatchOptions? options = default,
         CancellationToken cancellationToken = default)
     {
@@ -108,7 +127,11 @@ public static class HybridFileStorageExtensions
 
                 var ct = cts?.Token ?? cancellationToken;
 
-                return await storage.CopyToScopeAsync(fileId, sourceScopeName, targetScopeName, targetTenantId, ct);
+                return await storage.CopyToBasketAsync(
+                    fileId,
+                    basket,
+                    configure,
+                    ct: ct);
             }
             catch (Exception ex)
             {

@@ -39,6 +39,17 @@ public static class ScheduleSettingsExtensions
         return settings;
     }
 
+    public static ScheduleSettings WithConcurrencyLimit(this ScheduleSettings settings, int limit)
+    {
+        settings.ConcurrencyLimit = limit;
+        return settings;
+    }
+    public static ScheduleSettings WithMaxConcurrency(this ScheduleSettings settings, int maxLimit)
+    {
+        settings.MaxConcurrency = maxLimit;
+        return settings;
+    }
+
     /// <summary>
     /// Sets the number of retry attempts on error.
     /// </summary>
@@ -92,4 +103,5 @@ public static class ScheduleSettingsExtensions
 
     public static ScheduleSettings WithInitialDelayMinutes(this ScheduleSettings settings, int minutes)
         => settings.WithInitialDelay(TimeSpan.FromMinutes(minutes));
+
 }

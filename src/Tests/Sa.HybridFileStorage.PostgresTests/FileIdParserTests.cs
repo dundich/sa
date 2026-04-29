@@ -8,14 +8,16 @@ public class FileIdParserTests
     public void ParseFromFileId_ValidFileId_ReturnsTenantIdAndTimestamp()
     {
         string fileId = "pg://files/123/1773210911/foo/some.txt";
-        var result = FileIdParser.TryParseFileIdWithFilename(
+        var result = FileIdParser.TryParse(
             fileId,
+            out string scopeName,
             out int tenantId,
             out long timestamp,
             out string filename);
 
         Assert.True(result);
         Assert.Equal(123, tenantId);
+        Assert.Equal("files", scopeName);
         Assert.Equal(1773210911, timestamp);
         Assert.Equal("foo/some.txt", filename);
     }
@@ -24,8 +26,9 @@ public class FileIdParserTests
     public void ParseFromFileId_InvalidFileId()
     {
         string fileId = "invalid_file_id";
-        var result = FileIdParser.TryParseFileIdWithFilename(
+        var result = FileIdParser.TryParse(
             fileId,
+            out _,
             out _,
             out _,
             out _);

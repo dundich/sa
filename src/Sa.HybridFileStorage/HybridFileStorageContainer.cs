@@ -15,5 +15,5 @@ internal sealed class HybridFileStorageContainer(IEnumerable<IFileStorage> stora
         return this;
     }
 
-    public IReadOnlyCollection<IFileStorage> Storages => _storages;
+    public IEnumerable<IFileStorage> Storages => _storages;
 }

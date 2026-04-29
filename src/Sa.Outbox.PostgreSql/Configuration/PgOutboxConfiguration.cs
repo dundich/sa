@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 
@@ -25,7 +26,8 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         return this;
     }
 
-    public IPgOutboxConfiguration WithMessageSerializer(Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
+    public IPgOutboxConfiguration WithMessageSerializer(
+        Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
     {
         services.RemoveAll<IOutboxMessageSerializer>();
         services.TryAddSingleton<IOutboxMessageSerializer>(messageSerializerFactory);
@@ -40,6 +42,14 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         return this;
     }
 
+    public IPgOutboxConfiguration WithMessageSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
+        where TService : class, IOutboxMessageSerializer
+    {
+        services.RemoveAll<IOutboxMessageSerializer>();
+        services.TryAddSingleton<IOutboxMessageSerializer, TService>();
+        return this;
+    }
+
     internal IPgOutboxConfiguration WithDefaultSerializer()
     {
         services.TryAddSingleton<IOutboxMessageSerializer>(OutboxMessageSerializer.Instance);
@@ -51,6 +61,13 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         services.TryAddSingleton<PgOutboxSettings>(sp =>
         {
             PgOutboxSettings settings = new();
+
+            var connectionSchema = sp.GetService<IPgDataSource>()?.GetSearchPath();
+
+            if (!string.IsNullOrWhiteSpace(connectionSchema))
+            {
+                settings.TableSettings.WithSchema(connectionSchema);
+            }
 
             var configureActions = sp.GetServices<Action<IServiceProvider, PgOutboxSettings>>();
 

@@ -20,17 +20,20 @@ public interface IScheduler
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The number of jobs started.</returns>
-    int Start(CancellationToken cancellationToken);
+    Task<int> Start(CancellationToken cancellationToken);
 
     /// <summary>
     /// Restarts the scheduler.
     /// </summary>
     /// <returns>The number of jobs restarted.</returns>
-    int Restart();
+    Task<int> Restart(CancellationToken cancellationToken);
 
     /// <summary>
     /// Stops the scheduler.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task Stop();
+
+
+    IJobScheduler? GetSchedule(Guid jobId) => Schedules.FirstOrDefault(c => c.JobId == jobId);
 }

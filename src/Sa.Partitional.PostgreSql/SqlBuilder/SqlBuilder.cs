@@ -63,13 +63,11 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
     #region privates
     private ISqlTableBuilder? Find(string tableName)
     {
-        ISqlTableBuilder? item =
-            (
-                storage.Schemas.Count == 1
-                    ? builders.GetValueOrDefault(GetFullName(storage.Schemas.First(), tableName))
-                    : builders.Values.FirstOrDefault(c => c.FullName == tableName)
-            )
-            ?? builders.GetValueOrDefault(tableName);
+        ISqlTableBuilder? item = tableName.Contains('.')
+            ? builders.GetValueOrDefault(tableName)
+            : builders.GetValueOrDefault(GetFullName(storage.Schemas.First(), tableName));
+
+        item ??= builders.Values.FirstOrDefault(c => c.FullName == tableName);
 
         if (item != null) return item;
 

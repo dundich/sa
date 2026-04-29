@@ -130,7 +130,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
         // start cron schedules
         IScheduler scheduler = ServiceProvider.GetRequiredService<IScheduler>();
-        int i = scheduler.Start(CancellationToken.None);
+        int i = await scheduler.Start(CancellationToken.None);
         Assert.True(i > 0);
 
         // start delivery message

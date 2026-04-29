@@ -19,6 +19,12 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
 
         _partConfiguration = services.AddSaPartitional((sp, builder) =>
         {
+            var dataSource = sp.GetRequiredService<IPgDataSource>();
+            _options.StorageOptions.SchemaName = dataSource.GetSearchPath();
+            _configure?.Invoke(sp, _options);
+            _options.StorageOptions.TableName = _options.StorageOptions.TableName.Trim('"');
+
+
             builder.AddSchema(_options.StorageOptions.SchemaName, schema =>
             {
                 schema.AddTable(_options.StorageOptions.TableName,
@@ -27,10 +33,10 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
                     "size INT NOT NULL",
                     "file_ext TEXT NOT NULL",
                     "tenant_id INT NOT NULL",
-                    "scope_name TEXT NOT NULL",
+                    "basket TEXT NOT NULL",
                     "data BYTEA NOT NULL"
                 )
-                .PartByList("tenant_id", "scope_name")
+                .PartByList("tenant_id", "basket")
                 .PartByRange(_options.PartOptions.PgPartBy, "created_at");
             });
         })
@@ -49,20 +55,19 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
 
         services.AddSingleton<IFileStorage>(sp =>
         {
-            _configure?.Invoke(sp, _options);
-            _configure = null;
-
-            var pm = sp.GetRequiredService<IPartitionManager>();
             var dataSource = sp.GetRequiredService<IPgDataSource>();
+            var pm = sp.GetRequiredService<IPartitionManager>();
             var time = sp.GetService<TimeProvider>();
             var sm = sp.GetRequiredService<RecyclableMemoryStreamManager>();
 
-            StorageOptions options = _options.StorageOptions with
-            {
-                TableName = _options.StorageOptions.TableName.Trim('"')
-            };
+            var storage = new PostgresFileStorage(
+                dataSource: dataSource,
+                partManager: pm,
+                streamManager: sm,
+                options: _options.StorageOptions,
+                basket: _options.PartOptions.Basket,
+                timeProvider: time);
 
-            var storage = new PostgresFileStorage(dataSource, pm, sm, options, _options.ScopeName, time);
             return storage;
         });
     }
@@ -91,19 +96,15 @@ internal sealed class PostgresFileStorageConfiguration : IPostgresFileStorageCon
         return this;
     }
 
-    public IPostgresFileStorageConfiguration ConfigureOptions(Action<PostgresFileStorageOptions> configure)
-    {
-        configure?.Invoke(_options);
-        return this;
-    }
-
-    public IPostgresFileStorageConfiguration ConfigureOptions(Action<IServiceProvider, PostgresFileStorageOptions> configure)
+    public IPostgresFileStorageConfiguration ConfigureOptions(
+        Action<IServiceProvider, PostgresFileStorageOptions> configure)
     {
         _configure = configure;
         return this;
     }
 
-    public IPostgresFileStorageConfiguration AddDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
+    public IPostgresFileStorageConfiguration AddDataSource(
+        Action<IPgDataSourceSettingsBuilder>? configure = null)
     {
         _partConfiguration.AddDataSource(configure);
         return this;

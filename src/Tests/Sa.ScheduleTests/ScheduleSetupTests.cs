@@ -4,7 +4,8 @@ using Sa.Schedule;
 namespace Sa.ScheduleTests;
 
 
-public class ScheduleSetupTests(ScheduleSetupTests.Fixture fixture) : IClassFixture<ScheduleSetupTests.Fixture>
+public sealed class ScheduleSetupTests(ScheduleSetupTests.Fixture fixture)
+    : IClassFixture<ScheduleSetupTests.Fixture>
 {
     public class Fixture : SaFixture<IScheduler>
     {
@@ -45,7 +46,7 @@ public class ScheduleSetupTests(ScheduleSetupTests.Fixture fixture) : IClassFixt
     [Fact]
     public async Task Check_ExecuteCounterJob()
     {
-        int i = Sub.Start(CancellationToken.None);
+        int i = await Sub.Start(CancellationToken.None);
 
         Assert.NotEqual(0, i);
 

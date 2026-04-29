@@ -4,6 +4,9 @@ using Sa.HybridFileStorage.FileSystem;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 
+/// <summary>
+/// fs://share/tenant/filename
+/// </summary>
 internal sealed class FileSystemStorage(
     FileSystemStorageSettings settings,
     TimeProvider? timeProvider = null) : IFileStorage
@@ -11,7 +14,10 @@ internal sealed class FileSystemStorage(
     private const string SchemeSeparator = "://";
 
     private readonly string _basePath = Path.TrimEndingDirectorySeparator(
-        Path.GetFullPath(Path.Combine(settings.BasePath, settings.ScopeName)));
+        Path.GetFullPath(settings.BasePath));
+
+    private readonly string _basePathScope = Path.TrimEndingDirectorySeparator(
+        Path.GetFullPath(Path.Combine(settings.BasePath, settings.Basket)));
 
     private readonly string _schemePrefix = $"{settings.StorageType}{SchemeSeparator}";
     private readonly string _storageType = settings.StorageType;
@@ -19,7 +25,7 @@ internal sealed class FileSystemStorage(
     private readonly int _bufferSize = settings.BufferSize;
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public string ScopeName => settings.ScopeName;
+    public string Basket => settings.Basket;
     public string StorageType => _storageType;
     public bool IsReadOnly => _isReadOnly;
 
@@ -53,7 +59,7 @@ internal sealed class FileSystemStorage(
 
         string filename = PathSanitizer.SanitizeRelativePath(metadata.FileName);
 
-        string relativePath = string.Concat(metadata.TenantId.ToString(), "/", filename);
+        string relativePath = string.Concat(Basket, "/", metadata.TenantId.ToString(), "/", filename);
         string filePath = Path.Combine(_basePath, relativePath);
 
         EnsurePathWithinBase(filePath);
@@ -75,10 +81,10 @@ internal sealed class FileSystemStorage(
         await fileStream.CopyToAsync(fileStreamOutput, cancellationToken).ConfigureAwait(false);
 
         return new StorageResult(
-            string.Concat(_schemePrefix, relativePath),
-            Path.GetFullPath(filePath),
-            _storageType,
-            _timeProvider.GetUtcNow());
+            FileId: string.Concat(_schemePrefix, relativePath),
+            AbsoluteUrl: Path.GetFullPath(filePath),
+            StorageType: _storageType,
+            UploadedAt: _timeProvider.GetUtcNow());
     }
 
     public async Task<bool> DownloadAsync(
@@ -187,7 +193,7 @@ internal sealed class FileSystemStorage(
     {
         return Path.GetFullPath(path)
             .AsSpan()
-            .StartsWith(_basePath.AsSpan(), StringComparison.Ordinal);
+            .StartsWith(_basePathScope.AsSpan(), StringComparison.Ordinal);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -206,7 +212,7 @@ internal sealed class FileSystemStorage(
         if (!CanProcess(fileId))
             return Task.FromResult<FileMetadata?>(null);
 
-        // Парсинг формата: "storageType://tenantId/filename"
+        //parse: "storageType://basket/tenant/filename"
         ReadOnlySpan<char> span = fileId.AsSpan();
         int schemeEnd = span.IndexOf(SchemeSeparator.AsSpan());
         if (schemeEnd == -1)
@@ -214,19 +220,26 @@ internal sealed class FileSystemStorage(
 
         var pathPart = span[(schemeEnd + SchemeSeparator.Length)..];
 
-        // Парсинг "tenantId/filename"
+        // "tenantId/filename"
         int slashIndex = pathPart.IndexOf('/');
         if (slashIndex == -1)
             return Task.FromResult<FileMetadata?>(null);
 
-        var tenantSpan = pathPart[..slashIndex];
-        var fileNameSpan = pathPart[(slashIndex + 1)..];
+        var scopeSpan = pathPart[..slashIndex];
+
+        var nextSpan = pathPart[(slashIndex + 1)..];
+        slashIndex = nextSpan.IndexOf('/');
+
+        var tenantSpan = nextSpan[..slashIndex];
+        var fileNameSpan = nextSpan[(slashIndex + 1)..];
 
         if (!int.TryParse(tenantSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int tenantId))
             return Task.FromResult<FileMetadata?>(null);
 
         var metadata = new FileMetadata
         {
+            StorageType = StorageType,
+            Basket = scopeSpan.ToString(),
             FileName = fileNameSpan.ToString(),
             TenantId = tenantId
         };

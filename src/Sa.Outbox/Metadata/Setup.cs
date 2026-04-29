@@ -10,12 +10,16 @@ internal static class Setup
         Action<IServiceProvider, IOutboxMessageMetadataBuilder>? configure = null)
     {
 
-        services.AddSingleton<MetadataConfiguration>(sp =>
+        if (configure != null)
         {
-            var configuration = new MetadataConfiguration();
-            configure?.Invoke(sp, configuration);
-            return configuration;
-        });
+            // multiple configuration
+            services.AddSingleton<MetadataConfiguration>(sp =>
+            {
+                var configuration = new MetadataConfiguration();
+                configure.Invoke(sp, configuration);
+                return configuration;
+            });
+        }
 
 
         services.TryAddSingleton<IOutboxMessageMetadataProvider>(sp =>

@@ -65,14 +65,22 @@ public interface IJobBuilder
     /// </summary>
     /// <param name="seconds">The number of seconds (default is 1).</param>
     /// <returns>The current builder instance.</returns>
-    IJobBuilder EverySeconds(int seconds = 1) => EveryTime(TimeSpan.FromSeconds(seconds), $"every {seconds} seconds");
+    IJobBuilder EverySeconds(int seconds = 1)
+        => EveryTime(TimeSpan.FromSeconds(seconds), $"every {seconds} seconds");
 
     /// <summary>
     /// Configures the job to run every specified number of minutes.
     /// </summary>
     /// <param name="minutes">The number of minutes (default is 1).</param>
     /// <returns>The current builder instance.</returns>
-    IJobBuilder EveryMinutes(int minutes = 1) => EveryTime(TimeSpan.FromMinutes(minutes), $"every {minutes} minutes");
+    IJobBuilder EveryMinutes(int minutes = 1)
+        => EveryTime(TimeSpan.FromMinutes(minutes), $"every {minutes} minutes");
+
+
+    IJobBuilder WithConcurrencyLimit(int limit);
+
+    IJobBuilder WithMaxConcurrency(int limit);
+
 
     /// <summary>
     /// Merges the specified job properties into the current job configuration.

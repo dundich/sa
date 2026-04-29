@@ -12,14 +12,14 @@ internal sealed class OutboxBuilder : IOutboxBuilder
 {
     private readonly IServiceCollection _services;
 
-    private OutboxBuilder(IServiceCollection services)
-    {
-        _services = services;
-    }
+    private OutboxBuilder(IServiceCollection services) => _services = services;
 
     public static OutboxBuilder Create(IServiceCollection services)
     {
-        services.AddMessagePublisher();
+        services
+            .AddMessagePublisher()
+            .AddOutboxDelivery();
+
         return new OutboxBuilder(services);
     }
 
@@ -43,12 +43,13 @@ internal sealed class OutboxBuilder : IOutboxBuilder
 
     public IOutboxBuilder WithTenants(Action<IServiceProvider, TenantSettings> configure)
     {
-        _services.AddTenantProvider(configure);
+        _services.AddTenantSettings(configure);
         return this;
     }
 
-    public IOutboxBuilder WithDeliveryBatcher<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
-         where TImplementation : class, IDeliveryBatcher
+    public IOutboxBuilder WithDeliveryBatcher<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
+            where TImplementation : class, IDeliveryBatcher
     {
         _services
             .RemoveAll<IDeliveryBatcher>()

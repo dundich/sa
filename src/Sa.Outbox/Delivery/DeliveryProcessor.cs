@@ -41,7 +41,7 @@ internal sealed class DeliveryProcessor(
             continueProcessing = ShouldContinueProcessing(
                 sentCount,
                 iterations,
-                settings.ConsumeSettings,
+                consumeSettings,
                 cancellationToken);
         }
         while (continueProcessing);
@@ -72,12 +72,9 @@ internal sealed class DeliveryProcessor(
         ConsumerGroupSettings settings,
         CancellationToken cancellationToken)
     {
-        if (settings.ConsumeSettings.PerTenantMaxDegreeOfParallelism == 1)
-        {
-            return await ProcessTenantsSequential<TMessage>(tenantIds, settings, cancellationToken);
-        }
-
-        return await ProcessTenantsParallel<TMessage>(tenantIds, settings, cancellationToken);
+        return (settings.ConsumeSettings.PerTenantMaxDegreeOfParallelism == 1)
+            ? await ProcessTenantsSequential<TMessage>(tenantIds, settings, cancellationToken)
+            : await ProcessTenantsParallel<TMessage>(tenantIds, settings, cancellationToken);
     }
 
     private async Task<int> ProcessTenantsSequential<TMessage>(

@@ -9,8 +9,6 @@ internal sealed class JobContext(IJobSettings settings) : IJobContext
 {
     public string JobName => settings.Properties.JobName ?? $"{settings.JobId}";
 
-    public JobStatus Status { get; set; }
-
     public IJobSettings Settings => settings;
 
     public ulong NumIterations { get; set; }
@@ -29,13 +27,14 @@ internal sealed class JobContext(IJobSettings settings) : IJobContext
 
     public ulong NumRuns { get; set; }
 
-    public IServiceProvider JobServices { get; set; } = NullJobServices.Instance;
-
-    public Queue<IJobContext> Stack { get; private set; } = new();
+    public Queue<IJobContext> Stack { get; private set; } = [];
 
     IEnumerable<IJobContext> IJobContext.Stack => Stack.Reverse();
 
-    public ILogger Logger => JobServices.GetService<ILogger<JobContext>>() ?? NullLogger<JobContext>.Instance;
+    public IServiceProvider ServiceProvider { get; set; } = NullJobServices.Instance;
+
+    public ILogger Logger => ServiceProvider.GetService<ILogger<JobContext>>()
+        ?? NullLogger<JobContext>.Instance;
 
     public IJobContext Clone()
     {
@@ -47,7 +46,6 @@ internal sealed class JobContext(IJobSettings settings) : IJobContext
             LastError = LastError,
             CreatedAt = CreatedAt,
             ExecuteAt = ExecuteAt,
-            Status = Status,
             NumRuns = NumRuns,
             Stack = new Queue<IJobContext>(Stack.Select(x => x.Clone())),
         };

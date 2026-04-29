@@ -62,6 +62,18 @@ internal sealed class JobBuilder(JobSettings settings) : IJobBuilder
         return this;
     }
 
+    public IJobBuilder WithConcurrencyLimit(int limit)
+    {
+        settings.Properties.WithConcurrencyLimit(limit);
+        return this;
+    }
+
+    public IJobBuilder WithMaxConcurrency(int limit)
+    {
+        settings.Properties.WithMaxConcurrencyLimit(limit);
+        return this;
+    }
+
     public IJobBuilder Disabled()
     {
         settings.Properties.SetDisabled();

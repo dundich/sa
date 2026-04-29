@@ -1,5 +1,4 @@
-﻿
-namespace Sa.Outbox;
+﻿namespace Sa.Outbox.Partitional;
 
 /// <summary>
 /// Tenant provider for partitional support.

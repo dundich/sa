@@ -6,9 +6,9 @@
 public interface IFileStorage
 {
     /// <summary>
-    /// scope domain
+    /// BL - scope domain
     /// </summary>
-    string ScopeName { get; }
+    string Basket { get; }
 
     /// <summary>
     /// Gets the type of the storage.
@@ -34,12 +34,15 @@ public interface IFileStorage
     /// <param name="fileStream">Stream of the file to upload.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The result of the file upload.</returns>
-    Task<StorageResult> UploadAsync(UploadFileInput metadata, Stream fileStream, CancellationToken cancellationToken);
+    Task<StorageResult> UploadAsync(
+        UploadFileInput metadata,
+        Stream fileStream,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Downloads a file from the storage by its ID.
     /// </summary>
-    /// <param name="fileId">pg://files/1/1773210911/test.txt</param>
+    /// <param name="fileId">pg://share/1/1773210911/test.txt</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The file stream.</returns>
     Task<bool> DownloadAsync(

@@ -11,5 +11,6 @@ public sealed record LoadGroupResult(int CopiedRows, Guid NewOffset)
 
 internal interface IOutboxTaskLoader
 {
-    Task<LoadGroupResult> LoadNewTasks(OutboxMessageFilter filter, int batchSize, CancellationToken cancellationToken = default);
+    Task<LoadGroupResult> LoadNewTasks(
+        OutboxMessageFilter filter, int batchSize, CancellationToken cancellationToken = default);
 }

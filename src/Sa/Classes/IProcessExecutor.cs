@@ -172,7 +172,7 @@ internal sealed class ProcessExecutor : IProcessExecutor
             process.BeginErrorReadLine();
         }
 
-        using var timeoutCts = timeout.HasValue
+        using var timeoutCts = timeout.HasValue && timeout.Value == TimeSpan.Zero
             ? new CancellationTokenSource(timeout.Value)
             : null;
 

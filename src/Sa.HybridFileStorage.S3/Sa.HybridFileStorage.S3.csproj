@@ -1,23 +1,23 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="../Common.NuGet.Properties.xml" />
+    <Import Project="../Common.NuGet.Properties.xml" />
 
-  <PropertyGroup>
-    <Version>0.8.3</Version>
-    <Description>File storage management in S3</Description>
-  </PropertyGroup>
+    <PropertyGroup>
+        <Version>0.9.0</Version>
+        <Description>File storage management in S3</Description>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <Compile Include="..\Sa\Classes\MimeTypeMap.cs" Link="AsLink\MimeTypeMap.cs" />
-  </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\Sa\Classes\MimeTypeMap.cs" Link="AsLink\MimeTypeMap.cs" />
+    </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Sa.Data.S3\Sa.Data.S3.csproj" />
-    <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Sa.Data.S3\Sa.Data.S3.csproj" />
+        <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
+    </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="AsLink\" />
-  </ItemGroup>
+    <ItemGroup>
+        <Folder Include="AsLink\" />
+    </ItemGroup>
 
 </Project>

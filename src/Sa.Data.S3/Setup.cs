@@ -11,19 +11,15 @@ public static class Setup
     {
         services.TryAddSingleton<S3BucketSettings>(settings);
 
-        // https://www.milanjovanovic.tech/blog/the-right-way-to-use-httpclient-in-dotnet
         services
             .AddHttpClient<IS3BucketClient, S3BucketClient>((sp, client) =>
             {
                 client.Timeout = settings.TotalRequestTimeout;
                 client.BaseAddress = new Uri(settings.Endpoint);
             })
-            .ConfigurePrimaryHttpMessageHandler(() =>
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler()
             {
-                return new SocketsHttpHandler()
-                {
-                    PooledConnectionLifetime = TimeSpan.FromMinutes(15)
-                };
+                PooledConnectionLifetime = TimeSpan.FromMinutes(15)
             })
             .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
             .AddStandardResilienceHandler(options =>

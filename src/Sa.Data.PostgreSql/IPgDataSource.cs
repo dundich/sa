@@ -2,46 +2,71 @@
 
 namespace Sa.Data.PostgreSql;
 
-public interface IPgDataSource
+public interface IPgDataSource : IDisposable, IAsyncDisposable
 {
-    public static IPgDataSource Create(string connectionString) => new PgDataSource(new PgDataSourceSettings(connectionString));
+    public static IPgDataSource Create(string connectionString)
+        => new PgDataSource(new PgDataSourceSettings(connectionString));
+
+    string GetSearchPath();
 
     ValueTask<NpgsqlConnection> OpenDbConnection(CancellationToken cancellationToken);
 
-    Task<int> ExecuteNonQuery(string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default);
+    Task<int> ExecuteNonQuery(
+        string sql,
+        Action<NpgsqlCommand>? initCommand,
+        CancellationToken cancellationToken = default);
 
-    Task<int> ExecuteNonQuery(string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
-        => ExecuteNonQuery(sql, cmd => FillParams(cmd, parameters), cancellationToken);
+    Task<int> ExecuteNonQuery(
+        string sql,
+        IReadOnlyCollection<NpgsqlParameter> parameters,
+        CancellationToken cancellationToken = default)
+            => ExecuteNonQuery(sql, cmd => FillParams(cmd, parameters), cancellationToken);
 
     Task<int> ExecuteNonQuery(string sql, CancellationToken cancellationToken = default)
         => ExecuteNonQuery(sql, [], cancellationToken);
 
-    Task<object?> ExecuteScalar(string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default);
+    Task<object?> ExecuteScalar(
+        string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default);
 
-    async Task<T> ExecuteScalar<T>(string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
-        => ((T)(await ExecuteScalar(sql, initCommand, cancellationToken))!);
+    async Task<T> ExecuteScalar<T>(
+        string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
+            => ((T)(await ExecuteScalar(sql, initCommand, cancellationToken))!);
 
     // ExecuteReader
-    Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default);
+    Task<int> ExecuteReader(
+        string sql,
+        Action<NpgsqlDataReader, int> read,
+        Action<NpgsqlCommand>? initCommand,
+        CancellationToken cancellationToken = default);
 
-    Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
+    Task<int> ExecuteReader(
+        string sql,
+        Action<NpgsqlDataReader, int> read,
+        IReadOnlyCollection<NpgsqlParameter> parameters,
+        CancellationToken cancellationToken = default)
         => ExecuteReader(sql, read, cmd => FillParams(cmd, parameters), cancellationToken);
 
-    async Task<int> ExecuteReader(string sql, Action<NpgsqlDataReader, int> read, CancellationToken cancellationToken = default)
+    async Task<int> ExecuteReader(
+        string sql, Action<NpgsqlDataReader, int> read, CancellationToken cancellationToken = default)
         => await ExecuteReader(sql, read, [], cancellationToken);
 
 
     // ExecuteReaderList
 
 
-    async Task<List<T>> ExecuteReaderList<T>(string sql, Func<NpgsqlDataReader, T> read, CancellationToken cancellationToken = default)
+    async Task<List<T>> ExecuteReaderList<T>(
+        string sql, Func<NpgsqlDataReader, T> read, CancellationToken cancellationToken = default)
     {
         List<T> list = [];
         await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), cancellationToken);
         return list;
     }
 
-    async Task<List<T>> ExecuteReaderList<T>(string sql, Func<NpgsqlDataReader, T> read, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
+    async Task<List<T>> ExecuteReaderList<T>(
+        string sql,
+        Func<NpgsqlDataReader, T> read,
+        IReadOnlyCollection<NpgsqlParameter> parameters,
+        CancellationToken cancellationToken = default)
     {
         List<T> list = [];
         await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), parameters, cancellationToken);
@@ -57,7 +82,10 @@ public interface IPgDataSource
         return ExecuteReaderFirst<T>(sql, [], cancellationToken);
     }
 
-    async Task<T> ExecuteReaderFirst<T>(string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
+    async Task<T> ExecuteReaderFirst<T>(
+        string sql,
+        IReadOnlyCollection<NpgsqlParameter> parameters,
+        CancellationToken cancellationToken = default)
     {
         T value = default!;
 
@@ -85,9 +113,10 @@ public interface IPgDataSource
 
 
     // BeginBinaryImport
-
-
-    ValueTask<ulong> BeginBinaryImport(string sql, Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write, CancellationToken cancellationToken = default);
+    ValueTask<ulong> BeginBinaryImport(
+        string sql,
+        Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write,
+        CancellationToken cancellationToken = default);
 
     void FillParams(NpgsqlCommand cmd, IReadOnlyCollection<NpgsqlParameter> parameters)
     {

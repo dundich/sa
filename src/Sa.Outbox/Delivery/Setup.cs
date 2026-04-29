@@ -7,7 +7,8 @@ namespace Sa.Outbox.Delivery;
 
 internal static class Setup
 {
-    public static IServiceCollection AddOutboxDelivery(this IServiceCollection services, Action<IDeliveryBuilder> configure)
+    public static IServiceCollection AddOutboxDelivery(
+        this IServiceCollection services, Action<IDeliveryBuilder>? configure = null)
     {
         services.AddMessagesMetadata();
 
@@ -29,7 +30,7 @@ internal static class Setup
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
-        configure.Invoke(new DeliveryBuilder(services));
+        configure?.Invoke(new DeliveryBuilder(services));
 
         services.TryAddSingleton<IDelivarySnapshot, DelivarySnapshot>();
 

@@ -6,8 +6,6 @@ internal sealed class MetadataConfiguration : IOutboxMessageMetadataBuilder, IOu
 
     private static readonly Func<object, string> s_Dummy = _ => string.Empty;
 
-    private static readonly OutboxMessageMetadata s_Default = new("root", s_Dummy);
-
 
     public IOutboxMessageMetadataBuilder AddMetadata<T>(string partName, Func<T, string>? getPayloadId = null)
         where T : class
@@ -40,7 +38,7 @@ internal sealed class MetadataConfiguration : IOutboxMessageMetadataBuilder, IOu
             return metadata;
         }
 
-        return s_Default;
+        return OutboxMessageMetadata.Empty;
     }
 
 

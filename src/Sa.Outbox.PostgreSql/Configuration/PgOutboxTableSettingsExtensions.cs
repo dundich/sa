@@ -72,8 +72,8 @@ public static class PgOutboxTableSettingsExtensions
     /// </summary>
     public static PgOutboxTableSettings UseBaseTableName(
         this PgOutboxTableSettings settings,
-        string baseTableName,
-        string schemaName)
+        string schemaName,
+        string baseTableName)
     {
         if (string.IsNullOrWhiteSpace(schemaName))
             throw new ArgumentException("Schema name cannot be null or empty", nameof(schemaName));

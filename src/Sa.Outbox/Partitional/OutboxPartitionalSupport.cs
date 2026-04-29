@@ -24,7 +24,8 @@ internal sealed class OutboxPartitionalSupport(
         return await tenantProvider.GetTenantIds(cancellationToken);
     }
 
-    private async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPairs(IEnumerable<string> parts, CancellationToken cancellationToken)
+    private async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPairs(
+        IEnumerable<string> parts, CancellationToken cancellationToken)
     {
         int[] tenantIds = await GetTenantIds(cancellationToken);
         if (tenantIds.Length == 0) return [];

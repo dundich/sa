@@ -4,8 +4,9 @@ using Sa.Partitional.PostgreSql;
 
 namespace Sa.Outbox.PostgreSql.Services;
 
-internal sealed class OutboxPartRepository(IPartitionManager partManager, PgOutboxTableSettings tableSettings)
-    : IOutboxPartRepository
+internal sealed class OutboxPartRepository(
+    IPartitionManager partManager,
+    PgOutboxTableSettings tableSettings): IOutboxPartRepository
 {
     public Task<int> EnsureMsgParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
         => EnsureParts(tableSettings.Message.TableName, outboxParts, cancellationToken);
@@ -32,13 +33,20 @@ internal sealed class OutboxPartRepository(IPartitionManager partManager, PgOutb
     public Task<int> Migrate() => partManager.Migrate(CancellationToken.None);
 
 
-    private async Task<int> EnsureParts(string databaseTableName, IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
+    private async Task<int> EnsureParts(
+        string databaseTableName,
+        IEnumerable<OutboxPartInfo> outboxParts,
+        CancellationToken cancellationToken)
     {
         int i = 0;
         foreach (OutboxPartInfo part in outboxParts.Distinct())
         {
             i++;
-            await partManager.EnsureParts(databaseTableName, part.CreatedAt, [part.TenantId, part.Part], cancellationToken);
+            await partManager.EnsureParts(
+                databaseTableName,
+                part.CreatedAt,
+                [part.TenantId, part.Part],
+                cancellationToken);
         }
 
         return i;

@@ -10,7 +10,12 @@ namespace Sa.Partitional.PostgreSql;
 /// <param name="PartValues">An array of values that define the partitioning criteria, which can be either string or numeric.</param>
 /// <param name="PartBy">The method used for partitioning (e.g., by range, list, etc.).</param>
 /// <param name="FromDate">The date from which this partition is valid.</param>
-public sealed record PartByRangeInfo(string Id, string RootTableName, StrOrNum[] PartValues, PgPartBy PartBy, DateTimeOffset FromDate);
+public sealed record PartByRangeInfo(
+    string Id,
+    string RootTableName,
+    StrOrNum[] PartValues,
+    PgPartBy PartBy,
+    DateTimeOffset FromDate);
 
 /// <summary>
 /// Represents a repository interface for managing database partitions.
@@ -18,10 +23,23 @@ public sealed record PartByRangeInfo(string Id, string RootTableName, StrOrNum[]
 /// </summary>
 public interface IPartRepository
 {
-    Task<int> CreatePart(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default);
+    Task<int> CreatePart(
+        string tableName,
+        DateTimeOffset date,
+        StrOrNum[] partValues,
+        CancellationToken cancellationToken = default);
     Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
-    Task<int> Migrate(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve, CancellationToken cancellationToken = default);
-    Task<List<PartByRangeInfo>> GetPartsFromDate(string tableName, DateTimeOffset fromDate, CancellationToken cancellationToken = default);
-    Task<List<PartByRangeInfo>> GetPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default);
+    Task<int> Migrate(
+        DateTimeOffset[] dates,
+        Func<string, Task<StrOrNum[][]>> resolve,
+        CancellationToken cancellationToken = default);
+    Task<List<PartByRangeInfo>> GetPartsFromDate(
+        string tableName,
+        DateTimeOffset fromDate,
+        CancellationToken cancellationToken = default);
+    Task<List<PartByRangeInfo>> GetPartsToDate(
+        string tableName,
+        DateTimeOffset toDate,
+        CancellationToken cancellationToken = default);
     Task<int> DropPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default);
 }

@@ -8,7 +8,9 @@ namespace Sa.Outbox.PostgreSql.SqlBuilder;
 /// <summary>
 /// Provides SQL query templates for working with PostgreSQL outbox tables.
 /// </summary>
-internal sealed class SqlOutboxBuilder(PgOutboxTableSettings settings, ObjectPool<StringBuilder> objectPool)
+internal sealed class SqlOutboxBuilder(
+    PgOutboxTableSettings settings,
+    ObjectPool<StringBuilder> objectPool)
 {
     internal PgOutboxTableSettings Settings => settings;
 

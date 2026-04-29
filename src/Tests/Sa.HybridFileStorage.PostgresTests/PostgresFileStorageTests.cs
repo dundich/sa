@@ -21,23 +21,29 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         Console.WriteLine(fixture.ConnectionString);
 
         // Arrange
-        var metadata = new UploadFileInput { FileName = "test.txt", TenantId = 1 };
+        var input = new UploadFileInput { FileName = "test.txt", TenantId = 1 };
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
 
 
         // Act
-        var result = await Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
+        var result = await Sub.UploadAsync(input, fileContent, fixture.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
         Assert.NotEmpty(result.FileId);
-        Assert.StartsWith("pg://files/1/", result.FileId);
+        Assert.StartsWith("pg://share/1/", result.FileId);
 
         object? v = await fixture.DataSource.ExecuteScalar("SELECT COUNT(*) FROM public.files WHERE id = @id",
             cmd => cmd.Parameters.Add(new("id", result.FileId)), fixture.CancellationToken);
         var count = (long)v!;
 
         Assert.Equal(1, count);
+
+
+        Assert.True(Sub.CanProcess(result.FileId));
+
+        var meta = Sub.GetMetadataAsync(result.FileId, fixture.CancellationToken);
+        Assert.NotNull(meta);
     }
 
 
@@ -88,9 +94,10 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
     [Fact]
     public async Task GetMetadataAsync()
     {
-        var metadata = await Sub.GetMetadataAsync("pg://files/7/1773210911/some/data.bin", CancellationToken.None);
+        var metadata = await Sub.GetMetadataAsync("pg://share/7/1773210911/some/data.bin", CancellationToken.None);
 
         Assert.NotNull(metadata);
+        Assert.Equal("share", metadata.Basket);
         Assert.Equal(7, metadata.TenantId);
         Assert.Equal("some/data.bin", metadata.FileName);
     }
@@ -108,17 +115,34 @@ public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
         var t1 = Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
         var t2 = Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
 
-        await Task.WhenAll([t1, t2]);
+        await Task.WhenAll(t1, t2);
 
         var fileId1 = (await t1).FileId;
         var fileId2 = (await t2).FileId;
 
         Assert.Equal(fileId1, fileId2);
 
-        long count = await fixture.DataSource.ExecuteScalar<long>("SELECT COUNT(*) FROM public.files WHERE id = @id",
+        long count = await fixture.DataSource.ExecuteScalar<long>(
+            "SELECT COUNT(*) FROM public.files WHERE id = @id",
             cmd => cmd.Parameters.Add(new("id", fileId1)), fixture.CancellationToken);
 
         Assert.Equal(1, count);
+    }
+
+
+    [Theory]
+    [InlineData("./data/12345.wav")]
+    public async Task UploadWavFileAsync(string filePath)
+    {
+        Console.WriteLine(fixture.ConnectionString);
+
+        // Arrange
+        var metadata = new UploadFileInput { FileName = filePath, TenantId = 1 };
+        using var fileContent = File.OpenRead(filePath);
+
+        var r = await Sub.UploadAsync(metadata, fileContent, fixture.CancellationToken);
+
+        Assert.NotEmpty(r.FileId);
     }
 
 

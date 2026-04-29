@@ -1,7 +1,7 @@
-﻿using System.Collections.Concurrent;
-using Sa.Classes;
+﻿using Sa.Classes;
 using Sa.Extensions;
 using Sa.Partitional.PostgreSql.Classes;
+using System.Collections.Concurrent;
 
 namespace Sa.Partitional.PostgreSql.Cache;
 
@@ -15,7 +15,11 @@ internal sealed class PartCache(
 
     private readonly ConcurrentDictionary<string, Task<List<PartByRangeInfo>>> _cache = new();
 
-    public async Task<bool> InCache(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
+    public async Task<bool> InCache(
+        string tableName,
+        DateTimeOffset date,
+        StrOrNum[] partValues,
+        CancellationToken cancellationToken = default)
     {
         if (sqlBuilder[tableName] == null) return false;
 
@@ -46,7 +50,11 @@ internal sealed class PartCache(
         }
     }
 
-    public async Task<bool> EnsureCache(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
+    public async Task<bool> EnsureCache(
+        string tableName,
+        DateTimeOffset date,
+        StrOrNum[] partValues,
+        CancellationToken cancellationToken = default)
     {
         bool result = await InCache(tableName, date, partValues, cancellationToken);
         if (result) return true;

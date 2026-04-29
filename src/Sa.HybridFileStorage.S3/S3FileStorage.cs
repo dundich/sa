@@ -11,12 +11,12 @@ internal sealed class S3FileStorage(
     S3FileStorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
-    private const string DefaultScopeName = "share";
+    private const string DefaultBasket = "share";
     private const string SchemeSeparator = "://";
 
-    private readonly string _pathPrefix = string.IsNullOrWhiteSpace(options.ScopeName)
-        ? DefaultScopeName
-        : options.ScopeName;
+    private readonly string _pathPrefix = string.IsNullOrWhiteSpace(options.Basket)
+        ? DefaultBasket
+        : options.Basket;
     private readonly string _schemePrefix = $"{options.StorageType}{SchemeSeparator}";
     private readonly string _storageType = options.StorageType;
     private readonly bool _isReadOnly = options.IsReadOnly;
@@ -25,7 +25,7 @@ internal sealed class S3FileStorage(
 
     public string StorageType => _storageType;
     public bool IsReadOnly => _isReadOnly;
-    public string ScopeName => _pathPrefix;
+    public string Basket => _pathPrefix;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void EnsureWritable()
@@ -38,7 +38,6 @@ internal sealed class S3FileStorage(
     public bool CanProcess(string? fileId)
     {
         if (string.IsNullOrEmpty(fileId)) return false;
-        // Ordinal быстрее OrdinalIgnoreCase, т.к. схема всегда в нижнем регистре
         return fileId.AsSpan().StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal);
     }
 
@@ -143,6 +142,8 @@ internal sealed class S3FileStorage(
 
         return new FileMetadata
         {
+            Basket = Basket,
+            StorageType = StorageType,
             FileName = fileNameSpan.ToString(),
             TenantId = tenantId
         };

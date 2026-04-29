@@ -20,7 +20,12 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
         _services.TryAddSingleton<IScheduleSettings>(sp =>
         {
             IEnumerable<JobSettings> jobSettings = sp.GetServices<JobSettings>();
-            ScheduleSettings settings = ScheduleSettings.Create(jobSettings, _isHostedService, _handleError);
+
+            ScheduleSettings settings = ScheduleSettings.Create(
+                jobSettings,
+                _isHostedService,
+                _handleError);
+
             return settings;
         });
 
@@ -32,8 +37,9 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
     }
 
 
-    public IJobBuilder AddJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(Guid? jobId = null)
-        where T : class, IJob
+    public IJobBuilder AddJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
+        Guid? jobId = null)
+            where T : class, IJob
     {
         Guid id = GetId(jobId);
         _services.TryAddKeyedScoped<T>(id);
@@ -44,8 +50,10 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
         return new JobBuilder(jobSettings);
     }
 
-    public IScheduleBuilder AddJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(Action<IServiceProvider, IJobBuilder> configure, Guid? jobId = null)
-        where T : class, IJob
+    public IScheduleBuilder AddJob<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
+        Action<IServiceProvider, IJobBuilder> configure,
+        Guid? jobId = null)
+            where T : class, IJob
     {
         Guid id = GetId(jobId);
         _services.TryAddKeyedScoped<T>(id);
@@ -88,8 +96,9 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
         return this;
     }
 
-    public IScheduleBuilder AddInterceptor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(object? key = null)
-        where T : class, IJobInterceptor
+    public IScheduleBuilder AddInterceptor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
+        object? key = null)
+            where T : class, IJobInterceptor
     {
         _services.AddSingleton<JobInterceptorSettings>(new JobInterceptorSettings(typeof(T), key));
         _services.TryAddKeyedScoped<T>(key);

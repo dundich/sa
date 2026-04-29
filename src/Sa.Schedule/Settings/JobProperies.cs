@@ -12,18 +12,77 @@ internal sealed class JobProperies : IJobProperties
     public IJobTiming? Timing { get; private set; }
     public object? Tag { get; private set; }
     public int? ContextStackSize { get; private set; }
+    public int? ConcurrencyLimit { get; private set; }
+    public int? MaxConcurrency { get; private set; }
 
-    public void WithName(string name) => JobName = name;
-    public void RunOnce() => IsRunOnce = true;
-    public void StartImmediate() => Immediate = true;
-    public void WithInitialDelay(TimeSpan time) => InitialDelay = time;
-    public void WithTiming(IJobTiming timing) => Timing = timing;
-    public void SetDisabled() => Disabled = true;
-    public void WithContextStackSize(int size) => ContextStackSize = size;
-    public void WithTag(object tag) => Tag = tag;
+    public JobProperies WithName(string name)
+    {
+        JobName = name;
+        return this;
+    }
 
-    public void EveryTime(TimeSpan timeSpan, string? name = null)
-        => Timing = JobTiming.EveryTime(timeSpan, name);
+    public JobProperies RunOnce()
+    {
+        IsRunOnce = true;
+        return this;
+    }
+
+    public JobProperies StartImmediate()
+    {
+        Immediate = true;
+        return this;
+    }
+
+    public JobProperies WithInitialDelay(TimeSpan time)
+    {
+        InitialDelay = time;
+        return this;
+    }
+
+    public JobProperies WithTiming(IJobTiming timing)
+    {
+        Timing = timing;
+        return this;
+    }
+
+    public JobProperies SetDisabled()
+    {
+        Disabled = true;
+        return this;
+    }
+
+    public JobProperies WithContextStackSize(int size)
+    {
+        ContextStackSize = size;
+        return this;
+    }
+
+    public JobProperies WithTag(object tag)
+    {
+        Tag = tag;
+        return this;
+    }
+
+    public JobProperies EveryTime(TimeSpan timeSpan, string? name = null)
+    {
+        Timing = JobTiming.EveryTime(timeSpan, name);
+        return this;
+    }
+
+    public JobProperies WithConcurrencyLimit(int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
+        ConcurrencyLimit = limit;
+        return this;
+    }
+
+    public JobProperies WithMaxConcurrencyLimit(int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        MaxConcurrency = limit;
+        return this;
+    }
+
 
     internal JobProperies Merge(IJobProperties props)
     {
@@ -35,6 +94,10 @@ internal sealed class JobProperies : IJobProperties
         InitialDelay ??= props.InitialDelay;
         ContextStackSize ??= props.ContextStackSize;
         Tag ??= props.Tag;
+
+        ConcurrencyLimit ??= props.ConcurrencyLimit;
+        MaxConcurrency ??= props.MaxConcurrency;
+
         return this;
     }
 }

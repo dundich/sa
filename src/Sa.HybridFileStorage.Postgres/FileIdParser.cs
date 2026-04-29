@@ -6,8 +6,9 @@ internal static class FileIdParser
 {
     public const string SchemeSeparator = "://";
 
-    public static bool TryParseFileIdWithFilename(
+    public static bool TryParse(
         string fileId,
+        out string basket,
         out int tenantId,
         out long timestamp,
         out string fileName)
@@ -15,6 +16,7 @@ internal static class FileIdParser
         tenantId = default;
         timestamp = default;
         fileName = string.Empty;
+        basket = string.Empty;
 
         if (string.IsNullOrEmpty(fileId)) return false;
 
@@ -22,19 +24,23 @@ internal static class FileIdParser
         int schemeEnd = span.IndexOf(SchemeSeparator.AsSpan());
         if (schemeEnd == -1) return false;
 
-        var afterScheme = span[(schemeEnd + SchemeSeparator.Length)..];
-        int tableEnd = afterScheme.IndexOf('/');
-        if (tableEnd == -1) return false;
-        afterScheme = afterScheme[(tableEnd + 1)..];
+        var afterSpan = span[(schemeEnd + SchemeSeparator.Length)..];
+        int scopeEnd = afterSpan.IndexOf('/');
+        if (scopeEnd == -1) return false;
 
-        int tenantEnd = afterScheme.IndexOf('/');
+        basket = afterSpan[..scopeEnd].ToString();
+
+        afterSpan = afterSpan[(scopeEnd + 1)..];
+
+
+        int tenantEnd = afterSpan.IndexOf('/');
         if (tenantEnd == -1) return false;
 
-        var tenantSpan = afterScheme[..tenantEnd];
+        var tenantSpan = afterSpan[..tenantEnd];
         if (!int.TryParse(tenantSpan, NumberStyles.None, CultureInfo.InvariantCulture, out tenantId))
             return false;
 
-        var afterTenant = afterScheme[(tenantEnd + 1)..];
+        var afterTenant = afterSpan[(tenantEnd + 1)..];
         int timestampEnd = afterTenant.IndexOf('/');
         if (timestampEnd == -1) return false;
 
@@ -49,13 +55,15 @@ internal static class FileIdParser
 
     public static string FormatToFileId(
         string storageType,
-        string tableName,
+        string basket,
         int tenantId,
         DateTimeOffset date,
         string fileName)
-            => $"{storageType}://{tableName}/{tenantId}/{date.ToUnixTimeSeconds()}/{NormalizeFileName(fileName)}";
+            => $"{storageType}://{basket}/{tenantId}/{date.ToUnixTimeSeconds()}/{NormalizeFileName(fileName)}";
 
-    public static string NormalizeFileName(string fileName) => fileName.TrimStart('\\', '/').Replace('\\', '/');
+    public static string NormalizeFileName(string fileName)
+        => fileName.TrimStart('\\', '/').Replace('\\', '/');
 
-    public static string GetFileExtension(string fileName) => Path.GetExtension(fileName ?? string.Empty).ToLower().TrimStart('.');
+    public static string GetFileExtension(string fileName)
+        => Path.GetExtension(fileName ?? string.Empty).ToLower().TrimStart('.');
 }

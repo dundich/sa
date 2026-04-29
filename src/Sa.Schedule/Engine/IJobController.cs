@@ -13,22 +13,24 @@ internal enum CanJobExecuteResult
 /// </summary>
 internal interface IJobController
 {
-    // scope context
-    public IJobContext Context { get; }
+    int Index { get; }
 
-    // scope events
+    void Start();
+
+    void Shutdown();
+
+    bool IsPaused { get; }
+
+    void Pause();
+
+    void Resume();
+
+
     ValueTask WaitToRun(CancellationToken cancellationToken);
-
-    void Running();
-
-    void Stopped(TaskStatus status);
-
-    // iteration events
+    ValueTask WaitIfPaused(CancellationToken cancellationToken);
     ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken);
 
     Task Execute(CancellationToken cancellationToken);
-
-    void ExecutionFailed(Exception exception);
-
     void ExecutionCompleted();
+    void ExecutionFailed(Exception exception);
 }

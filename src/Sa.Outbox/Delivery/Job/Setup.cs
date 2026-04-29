@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Schedule;
 using System.Diagnostics.CodeAnalysis;
 
@@ -8,11 +9,11 @@ internal static class Setup
 {
     public static IServiceCollection AddDeliveryJob<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
-        this IServiceCollection services,
-        string consumerGroupId,
-        bool isSingleton,
-        Action<IServiceProvider, ConsumerGroupSettings>? сonfigure = null)
-            where TConsumer : class, IConsumer<TMessage>
+            this IServiceCollection services,
+            string consumerGroupId,
+            bool isSingleton,
+            Action<IServiceProvider, ConsumerGroupSettings>? сonfigure = null)
+                where TConsumer : class, IConsumer<TMessage>
     {
 
         ArgumentNullException.ThrowIfNullOrWhiteSpace(consumerGroupId);
@@ -42,6 +43,8 @@ internal static class Setup
                     .EveryTime(scheduleSettings.Interval)
                     .WithInitialDelay(scheduleSettings.InitialDelay)
                     .WithTag(settings)
+                    .WithConcurrencyLimit(scheduleSettings.ConcurrencyLimit)
+                    .WithMaxConcurrency(scheduleSettings.MaxConcurrency)
                     .WithName(scheduleSettings.Name ?? typeof(TConsumer).Name)
                     .ConfigureErrorHandling(c => c
                         .IfErrorRetry(scheduleSettings.RetryCountOnError)
@@ -53,6 +56,8 @@ internal static class Setup
 
             builder.AddInterceptor<OutboxJobInterceptor>();
         });
+
+        services.TryAddSingleton<IDeliveryScheduleProvider, DeliveryScheduleProvider>();
 
         return services;
     }

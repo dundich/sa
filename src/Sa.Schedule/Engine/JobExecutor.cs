@@ -3,7 +3,7 @@ using Sa.Schedule.Settings;
 
 namespace Sa.Schedule.Engine;
 
-internal sealed class JobPipeline : IJob, IDisposable
+internal sealed class JobExecutor : IJob, IDisposable
 {
     #region proxy
     class JobProxy(IJob job, IJobInterceptor interceptor, object? key) : IJob
@@ -20,7 +20,7 @@ internal sealed class JobPipeline : IJob, IDisposable
     private readonly IServiceScope _scope;
     private readonly IJob _job;
 
-    public JobPipeline(
+    public JobExecutor(
         IJobSettings settings,
         IInterceptorSettings interceptorSettings,
         IServiceScopeFactory scopeFactory)
@@ -34,7 +34,10 @@ internal sealed class JobPipeline : IJob, IDisposable
                 .Interceptors
                 .Reverse()
                 .Aggregate(originalJob, (job, s)
-                    => new JobProxy(job, (IJobInterceptor)_scope.ServiceProvider.GetRequiredKeyedService(s.HandlerType, s.Key), s.Key));
+                    => new JobProxy(
+                        job,
+                        (IJobInterceptor)_scope.ServiceProvider.GetRequiredKeyedService(s.HandlerType, s.Key),
+                        s.Key));
         }
         else
         {
@@ -42,9 +45,10 @@ internal sealed class JobPipeline : IJob, IDisposable
         }
     }
 
-    public IServiceProvider JobServices => _scope.ServiceProvider;
+    public IServiceProvider ServiceProvider => _scope.ServiceProvider;
 
     public void Dispose() => _scope.Dispose();
 
-    public Task Execute(IJobContext context, CancellationToken cancellationToken) => _job.Execute(context, cancellationToken);
+    public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        => _job.Execute(context, cancellationToken);
 }

@@ -1,4 +1,5 @@
-﻿using Sa.Data.PostgreSql;
+﻿using Npgsql;
+using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;
@@ -11,8 +12,15 @@ internal sealed class SelectTenantCommand(
 {
     public async Task<IReadOnlyCollection<int>> Execute(CancellationToken cancellationToken)
     {
-        return await dataSource.ExecuteReaderList(sql.SqlSelectTetant,
-            reader => outboxReader.Message.GetTenantId(reader),
-            cancellationToken);
+        try
+        {
+            return await dataSource.ExecuteReaderList(sql.SqlSelectTetant,
+                reader => outboxReader.Message.GetTenantId(reader),
+                cancellationToken);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable)
+        {
+            return [];
+        }
     }
 }

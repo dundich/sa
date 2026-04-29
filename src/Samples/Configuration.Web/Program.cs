@@ -12,7 +12,7 @@ const string PG_KEY = "sa:pg:connection";
 string connectionString = builder.Configuration[PG_KEY]
     ?? throw new ArgumentException(PG_KEY);
 
-using var ds = new PgDataSource(new(connectionString));
+using var ds = IPgDataSource.Create(connectionString);
 
 ds.ExecuteScalar("""
     CREATE TABLE IF NOT EXISTS settings (

@@ -4,7 +4,11 @@ namespace Sa.Classes;
 
 internal static class LockRenewer
 {
-    public static IDisposable KeepLocked(TimeSpan lockExpiration, Func<CancellationToken, Task> extendLocked, bool blockImmediately = false, CancellationToken cancellationToken = default)
+    public static IDisposable KeepLocked(
+        TimeSpan lockExpiration,
+        Func<CancellationToken, Task> extendLocked,
+        bool blockImmediately = false,
+        CancellationToken cancellationToken = default)
     {
         var timer = new PeriodicTimer(lockExpiration);
         var task = Task.Run(async () =>
@@ -55,8 +59,11 @@ internal static class LockRenewer
         {
             while (sw.Elapsed < timeout)
             {
-                if (!cancellationToken.IsCancellationRequested && await predicate(cancellationToken).ConfigureAwait(false))
+                if (!cancellationToken.IsCancellationRequested
+                    && await predicate(cancellationToken).ConfigureAwait(false))
+                {
                     return true;
+                }
 
                 await Task.Delay(interval, cancellationToken);
             }

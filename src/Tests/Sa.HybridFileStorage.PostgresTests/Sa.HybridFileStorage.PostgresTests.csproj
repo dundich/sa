@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <Import Project="../Host.Test.Properties.xml" />
 
@@ -9,6 +9,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Sa.HybridFileStorage.Postgres\Sa.HybridFileStorage.Postgres.csproj" />
     <ProjectReference Include="..\Fixtures\Sa.Data.PostgreSql.Fixture\Sa.Data.PostgreSql.Fixture.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="data\12345.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

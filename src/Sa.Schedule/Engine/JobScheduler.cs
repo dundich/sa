@@ -1,99 +1,223 @@
 ﻿using Microsoft.Extensions.Primitives;
+using Sa.Utils.WorkQueue;
 
 namespace Sa.Schedule.Engine;
 
-internal sealed class JobScheduler(IJobRunner runner, IJobController controller) : IJobScheduler, IDisposable, IAsyncDisposable
+internal sealed class JobScheduler : IJobScheduler
 {
-    private readonly static IChangeToken NoneChangeToken = new CancellationChangeToken(CancellationToken.None);
+    private readonly static IChangeToken NoneChangeToken
+        = new CancellationChangeToken(CancellationToken.None);
 
-    private readonly Lock _locked = new();
+    private readonly Lock _lock = new();
 
-    private TaskCompletionSource? _stoppingTask;
-
-    private CancellationTokenSource _stoppingToken = new();
+    private CancellationTokenSource _stoppingTokenSource = new();
     private CancellationToken _originalToken;
+
+    private bool? _started = false;
 
     private bool _disposed;
 
-    public IJobContext Context => controller.Context;
+    private readonly SaWorkQueue<IJobController> _jobs;
 
-    public bool IsActive => _stoppingTask?.Task.Status == TaskStatus.WaitingForActivation;
+    private readonly Func<int, IJobController> _createController;
 
-    public IChangeToken GetActiveChangeToken()
+    private readonly IJobRunner _runner;
+
+    private IReadOnlyList<IJobController> _jobControllers = [];
+
+
+    public JobScheduler(
+        IJobSettings settings,
+        IJobRunner runner,
+        Func<int, IJobController> createController)
     {
-        if (_disposed) return NoneChangeToken;
 
-        lock (_locked)
+        _runner = runner;
+        _createController = createController;
+
+        JobId = settings.JobId;
+
+        var concurrency = Math.Max(0, settings.Properties.ConcurrencyLimit ?? 1);
+        var maxConcurrency = Math.Max(1, settings.Properties.MaxConcurrency ?? concurrency);
+
+        concurrency = Math.Clamp(concurrency, 0, maxConcurrency);
+
+        _jobs = new SaWorkQueue<IJobController>(SaWorkQueueOptions<IJobController>.Create(CreateJob)
+            .WithQueueCapacity(maxConcurrency)
+            .WithMaxConcurrency(maxConcurrency)
+            .WithConcurrencyLimit(concurrency)
+            .WithSingleWriter(true)
+        );
+    }
+
+    private Task CreateJob(IJobController controller, CancellationToken ct)
+        => _runner.Run(controller, ct);
+
+    public Guid JobId { get; }
+
+    public int ConcurrencyLimit
+    {
+        get => _jobs.ConcurrencyLimit;
+        set
         {
-            return new CancellationChangeToken(_stoppingToken.Token);
+            if (_jobs.ConcurrencyLimit == value) return;
+
+            _jobs.ConcurrencyLimit = value;
+            RefreshConcurrency();
         }
     }
 
-    /// <summary>
-    /// Start all jobs
-    /// </summary>
-    public bool Start(CancellationToken cancellationToken)
+    public bool IsStarted
     {
-        if (IsActive) return false;
-
-        lock (_locked)
+        get
         {
-            _stoppingToken.Cancel();
-            _stoppingToken.Dispose();
+            lock (_lock)
+            {
+                return !_disposed && _started.GetValueOrDefault();
+            }
+        }
+    }
+
+
+    public int ActiveTasks => _jobs.QueueTasks;
+
+    public IChangeToken StartChangeToken()
+    {
+        lock (_lock)
+        {
+            if (_disposed) return NoneChangeToken;
+            return new CancellationChangeToken(_stoppingTokenSource.Token);
+        }
+    }
+
+
+    public async Task<bool> Start(CancellationToken cancellationToken)
+    {
+        CancellationToken stoppingToken;
+
+        lock (_lock)
+        {
+            if (_disposed || (_started == null || _started == true))
+            {
+                return false;
+            }
+
+            _started = null;
+
+            _stoppingTokenSource.Cancel();
+            _stoppingTokenSource.Dispose();
 
             _originalToken = cancellationToken;
-            _stoppingToken = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _stoppingTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            _stoppingTask = new TaskCompletionSource();
-
-            _ = runner
-                .Run(controller, _stoppingToken.Token)
-                .ContinueWith(Done, CancellationToken.None);
-
-            return true;
+            stoppingToken = _stoppingTokenSource.Token;
         }
-    }
 
-    public bool Restart() => Start(_originalToken);
+        var maxCapacity = _jobs.MaxConcurrency;
 
-    public Task Stop()
-    {
-        if (IsActive)
+        List<IJobController> controllers = new(capacity: maxCapacity);
+
+        try
         {
-            lock (_locked)
+            await _jobs.WaitForIdleAsync(_originalToken);
+
+            for (var i = 0; i < maxCapacity; i++)
             {
-                _stoppingToken?.Cancel();
+                IJobController controller = _createController(i);
+                controller.Pause();
+                controllers.Add(controller);
+                await _jobs.Enqueue(controller, stoppingToken);
+            }
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                _jobControllers = controllers;
+                _started = true;
             }
         }
 
-        return _stoppingTask?.Task ?? Task.CompletedTask;
+        RefreshConcurrency();
+
+        return true;
     }
 
-    private void Done(Task task)
+    private void RefreshConcurrency()
     {
-        lock (_locked)
+        IReadOnlyList<IJobController> controllers;
+
+        lock (_lock)
         {
-            _stoppingTask?.TrySetResult();
+            controllers = _jobControllers;
         }
+
+        int limit = _jobs.ConcurrencyLimit;
+
+        for (int i = 0; i < controllers.Count; i++)
+        {
+            if (i < limit)
+            {
+                controllers[i].Resume();
+            }
+            else
+            {
+                controllers[i].Pause();
+            }
+        }
+    }
+
+    public async Task Stop()
+    {
+        if (_disposed) return;
+        lock (_lock)
+        {
+            if (_disposed || !_started.GetValueOrDefault()) return;
+
+            _stoppingTokenSource.Cancel();
+            _started = false;
+        }
+
+        await _jobs.WaitForIdleAsync(_originalToken);
     }
 
     public void Dispose()
     {
-        if (!_disposed)
+        if (_disposed) return;
+        CancellationTokenSource ctsStopping;
+
+        lock (_lock)
         {
+            if (_disposed) return;
             _disposed = true;
-            _ = Stop();
-            _stoppingToken.Dispose();
+            ctsStopping = _stoppingTokenSource;
         }
+
+        try
+        {
+            ctsStopping.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // ignore
+        }
+
+        _jobs.Dispose();
+
+        ctsStopping.Dispose();
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (!_disposed)
+        if (_disposed) return;
+        lock (_lock)
         {
+            if (_disposed) return;
             _disposed = true;
-            await Stop();
-            _stoppingToken.Dispose();
         }
+
+        await _jobs.DisposeAsync();
+
+        _stoppingTokenSource.Dispose();
     }
 }

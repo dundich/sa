@@ -19,6 +19,7 @@ public sealed class PartOptions
 {
     public int MigrationScheduleForwardDays { get; set; } = 2;
     public PgPartBy PgPartBy { get; set; } = PgPartBy.Day;
+    public string Basket { get; set; } = "share";
 }
 
 public sealed class PostgresFileStorageOptions
@@ -26,5 +27,4 @@ public sealed class PostgresFileStorageOptions
     public StorageOptions StorageOptions { get; } = new();
     public PartOptions PartOptions { get; } = new();
     public CleanupOptions CleanupOptions { get; } = new();
-    public string ScopeName { get; set; } = string.Empty;
 }

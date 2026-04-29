@@ -8,7 +8,8 @@ namespace Sa.Outbox.Delivery;
 
 internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDeliveryBuilder
 {
-    public IDeliveryBuilder AddDeliveryScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+    public IDeliveryBuilder AddDeliveryScoped<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
@@ -19,7 +20,8 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
         return this;
     }
 
-    public IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+    public IDeliveryBuilder AddDelivery<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
         Action<IServiceProvider, ConsumerGroupSettings>? configure = null
     )
@@ -30,7 +32,8 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
         return this;
     }
 
-    public IDeliveryBuilder AddDeliveryBatching<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
+    public IDeliveryBuilder AddDeliveryBatching<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
         where TImplementation : class, IDeliveryBatcher
     {
         services
