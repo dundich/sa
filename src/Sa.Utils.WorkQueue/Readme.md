@@ -22,14 +22,11 @@
 ### 1️⃣ Implement your task processor
 
 ```csharp
-public sealed class OrderWork : ISaWork<OrderInput>
+public sealed class OrderWork(ILogger<OrderWork> logger) : ISaWork<OrderInput>
 {
-    private readonly ILogger<OrderWork> _logger;
-    public OrderWork(ILogger<OrderWork> logger) => _logger = logger;
-
     public async Task Execute(OrderInput input, CancellationToken ct)
     {
-        _logger.LogInformation("Processing order {OrderId}", input.OrderId);
+        logger.LogInformation("Processing order {OrderId}", input.OrderId);
         await ProcessAsync(input, ct); // Your business logic
     }
 }
