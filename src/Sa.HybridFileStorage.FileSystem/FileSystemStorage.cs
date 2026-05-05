@@ -1,8 +1,9 @@
-﻿using Sa.HybridFileStorage;
-using Sa.HybridFileStorage.Domain;
-using Sa.HybridFileStorage.FileSystem;
+﻿using Sa.HybridFileStorage.Domain;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+
+
+namespace Sa.HybridFileStorage.FileSystem;
 
 /// <summary>
 /// fs://share/tenant/filename
@@ -177,7 +178,7 @@ internal sealed class FileSystemStorage(
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string FileIdToPath(string fileId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileId, nameof(fileId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileId);
 
         ReadOnlySpan<char> span = fileId.AsSpan();
         int separatorIndex = span.IndexOf(SchemeSeparator.AsSpan());

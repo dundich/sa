@@ -106,7 +106,7 @@ internal sealed class S3FileStorage(
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string GetFilePath(string fileId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileId, nameof(fileId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileId);
 
         ReadOnlySpan<char> span = fileId.AsSpan();
         int separatorIndex = span.IndexOf(SchemeSeparator.AsSpan());

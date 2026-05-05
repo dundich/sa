@@ -32,7 +32,7 @@ internal sealed class HybridFileStorage(
         CancellationToken cancellationToken = default)
     {
 
-        ArgumentNullException.ThrowIfNull(basket, nameof(basket));
+        ArgumentNullException.ThrowIfNull(basket);
 
         EnsureWritable(basket);
 
@@ -51,7 +51,7 @@ internal sealed class HybridFileStorage(
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(fileId, nameof(fileId));
+        ArgumentNullException.ThrowIfNull(fileId);
 
         return await ExecuteStorageOperationAsync(
             CanProcess(fileId),
@@ -67,7 +67,7 @@ internal sealed class HybridFileStorage(
         string fileId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(fileId, nameof(fileId));
+        ArgumentNullException.ThrowIfNull(fileId);
 
         return await ExecuteStorageOperationAsync(
             CanProcess(fileId).Where(c => !c.IsReadOnly),
@@ -118,7 +118,7 @@ internal sealed class HybridFileStorage(
         string fileId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(fileId, nameof(fileId));
+        ArgumentNullException.ThrowIfNull(fileId);
 
         foreach (var fs in container.Storages)
         {

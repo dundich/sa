@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace Sa.HybridFileStorage.FileSystem;
+﻿namespace Sa.HybridFileStorage.FileSystem;
 
 public sealed record FileSystemStorageSettings
 {

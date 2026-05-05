@@ -7,7 +7,7 @@ namespace Sa.HybridFileStorage.FileSystem;
 
 internal static class PathSanitizer
 {
-    private static readonly SearchValues<char> s_separators = SearchValues.Create(['/', '\\']);
+    private static readonly SearchValues<char> s_separators = SearchValues.Create('/', '\\');
     private static readonly SearchValues<char> s_invalidChars = SearchValues.Create(Path.GetInvalidFileNameChars());
 
     public static string SanitizeRelativePath(string relativePath)
