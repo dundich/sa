@@ -25,7 +25,7 @@ public sealed record FileSystemStorageOptions
         try
         {
             // Get the full path to resolve any relative paths
-            string fullPath = Path.GetFullPath(BasePath);
+            var _ = Path.GetFullPath(BasePath);
 
             // Check if the path contains any invalid characters
             if (BasePath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)

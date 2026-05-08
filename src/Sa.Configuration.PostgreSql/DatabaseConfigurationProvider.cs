@@ -4,8 +4,14 @@ using Microsoft.Extensions.Configuration;
 using Sa.Data.PostgreSql;
 using System.Threading;
 
+/// <summary>
+/// Configuration provider that loads settings from a PostgreSQL database.
+/// </summary>
 public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions options) : ConfigurationProvider
 {
+    /// <summary>
+    /// Loads configuration from PostgreSQL database.
+    /// </summary>
     public override void Load()
     {
         PgRetryStrategy
@@ -15,6 +21,9 @@ public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions
            .GetResult();
     }
 
+    /// <summary>
+    /// Loads configuration from PostgreSQL database asynchronously.
+    /// </summary>
     private async Task<int> LoadAsync(PostgreSqlConfigurationOptions options)
     {
         try

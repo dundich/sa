@@ -11,10 +11,9 @@ internal sealed class PostSecretProcessingConfigurationProvider(
 
     public override void Load()
     {
-        foreach (KeyValuePair<string, string> child in _configuration.Value
-        .AsEnumerable()
-        .Where(c => c.Value is not null)
-        .Cast<KeyValuePair<string, string>>())
+        foreach (var child in _configuration.Value
+            .AsEnumerable()
+            .Where(c => c.Value is not null))
         {
             Data[child.Key] = secretService.PopulateSecrets(child.Value, true);
         }
