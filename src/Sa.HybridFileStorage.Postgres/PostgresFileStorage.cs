@@ -137,7 +137,7 @@ internal sealed class PostgresFileStorage(
                 , new NpgsqlParameter<Stream>("data", ms)
                 , new NpgsqlParameter<int>("size", (int)ms.Length)
                 , new NpgsqlParameter<int>("tenant_id", metadata.TenantId)
-                , new NpgsqlParameter<string>("basketName", _partName)
+                , new NpgsqlParameter<string>("basket", _partName)
                 , new NpgsqlParameter<long>("created_at", createdAt)
             ], cancellationToken);
         }
@@ -167,7 +167,7 @@ internal sealed class PostgresFileStorage(
         int rowsAffected = await dataSource.ExecuteNonQuery(sql,
         [
             new NpgsqlParameter<int>("tenant_id", tenantId),
-            new NpgsqlParameter<string>("basketName", _partName),
+            new NpgsqlParameter<string>("basket", _partName),
             new NpgsqlParameter<long>("timestamp", timestamp),
             new NpgsqlParameter<string>("id", fileId)
         ], cancellationToken);
@@ -194,7 +194,7 @@ internal sealed class PostgresFileStorage(
         },
         [
             new NpgsqlParameter<int>("tenant_id", tenantId),
-            new NpgsqlParameter<string>("basketName", _partName),
+            new NpgsqlParameter<string>("basket", _partName),
             new NpgsqlParameter<long>("timestamp", timestamp),
             new NpgsqlParameter<string>("id", fileId)
         ], cancellationToken);
