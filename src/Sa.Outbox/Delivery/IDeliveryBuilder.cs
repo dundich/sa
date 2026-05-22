@@ -18,7 +18,8 @@ public partial interface IDeliveryBuilder
     /// <returns>The delivery builder instance.</returns>
     IDeliveryBuilder AddDeliveryScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
+        Action<IServiceProvider, ConsumerGroupSettings>? configure = null,
+        Guid? jobId = null
     )
     where TConsumer : class, IConsumer<TMessage>;
 
@@ -27,7 +28,8 @@ public partial interface IDeliveryBuilder
     /// </summary>
     IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
+        Action<IServiceProvider, ConsumerGroupSettings>? configure = null,
+        Guid? jobId = null
     )
     where TConsumer : class, IConsumer<TMessage>;
 

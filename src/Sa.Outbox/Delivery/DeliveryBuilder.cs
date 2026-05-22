@@ -11,24 +11,24 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
     public IDeliveryBuilder AddDeliveryScoped<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
-    )
-        where TConsumer : class, IConsumer<TMessage>
+        Action<IServiceProvider, ConsumerGroupSettings>? configure = null,
+        Guid? jobId = null)
+            where TConsumer : class, IConsumer<TMessage>
     {
         ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
-        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), false, configure);
+        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), false, configure, jobId);
         return this;
     }
 
     public IDeliveryBuilder AddDelivery<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
-    )
-        where TConsumer : class, IConsumer<TMessage>
+        Action<IServiceProvider, ConsumerGroupSettings>? configure = null,
+        Guid? jobId = null)
+            where TConsumer : class, IConsumer<TMessage>
     {
         ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
-        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), true, configure);
+        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), true, configure, jobId);
         return this;
     }
 

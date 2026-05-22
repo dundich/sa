@@ -50,7 +50,7 @@ internal sealed partial class JobErrorHandler(
 
     private void StopAllJobs(string jobName, IScheduler scheduler, Exception exception)
     {
-        LogStopAllJobs(jobName, exception.Message);
+        LogStopAllJobs(jobName, exception.ToString());
 
         if (scheduler == null) throw exception;
         scheduler.Stop();
@@ -58,7 +58,7 @@ internal sealed partial class JobErrorHandler(
 
     private void CloseApplication(string jobName, IScheduler scheduler, Exception exception)
     {
-        LogCloseApplication(jobName, exception.Message);
+        LogCloseApplication(jobName, exception.ToString());
 
         if (lifetime == null) throw exception;
 

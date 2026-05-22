@@ -12,7 +12,8 @@ internal static class Setup
             this IServiceCollection services,
             string consumerGroupId,
             bool isSingleton,
-            Action<IServiceProvider, ConsumerGroupSettings>? сonfigure = null)
+            Action<IServiceProvider, ConsumerGroupSettings>? сonfigure = null,
+            Guid? jobId = null)
                 where TConsumer : class, IConsumer<TMessage>
     {
 
@@ -51,7 +52,7 @@ internal static class Setup
                         .ThenCloseApplication())
                     ;
 
-            }, settings.ScheduleSettings.JobId);
+            }, jobId ?? settings.ScheduleSettings.JobId);
 
 
             builder.AddInterceptor<OutboxJobInterceptor>();
