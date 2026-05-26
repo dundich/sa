@@ -70,7 +70,7 @@ internal sealed class DeliveryTenant(
             filter,
             cancellationToken);
 
-        return Math.Min(consumeSettings.MaxBatchSize, calculatedSize);
+        return Math.Clamp(calculatedSize, 0, consumeSettings.MaxBatchSize);
     }
 
     private async Task<ReadOnlyMemory<IOutboxContextOperations<TMessage>>> AcquireMessagesAsync<TMessage>(

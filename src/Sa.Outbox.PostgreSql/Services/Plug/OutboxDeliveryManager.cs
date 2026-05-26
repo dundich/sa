@@ -30,6 +30,7 @@ internal sealed class OutboxDeliveryManager(
 
         var _ = await loader.LoadNewTasks(filter, batchSize, cancellationToken);
 
+        // новых заданий может и не быть... продолжаем обработку старых
         return await startCmd.ExecuteFill(writeBuffer, lockDuration, filter, cancellationToken);
     }
 
