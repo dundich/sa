@@ -28,7 +28,7 @@ internal sealed class DelivarySnapshot(
     private readonly Lazy<ConsumerGroupSettings[]> _lazyDeliveries = new(() =>
     {
         ConsumerGroupSettings[] settings = [.. scheduleSettings.GetJobSettings()
-            .Select(c => c.Properties.Tag as ConsumerGroupSettings)
+            .Select(c => c.Properties.GetConsumerGroupSettings())
             .Where(mt => mt != null)
             .Cast<ConsumerGroupSettings>()];
 
