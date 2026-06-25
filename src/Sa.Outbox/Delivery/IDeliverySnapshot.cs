@@ -2,7 +2,7 @@
 
 namespace Sa.Outbox.Delivery;
 
-public interface IDelivarySnapshot
+public interface IDeliverySnapshot
 {
     IJobSettings[] JobSettings { get; }
     ConsumerGroupSettings[] ConsumerSettings { get; }

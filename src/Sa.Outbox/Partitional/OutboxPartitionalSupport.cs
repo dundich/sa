@@ -4,7 +4,7 @@ namespace Sa.Outbox.Partitional;
 
 
 internal sealed class OutboxPartitionalSupport(
-    IDelivarySnapshot? snapshot = null,
+    IDeliverySnapshot? snapshot = null,
     ITenantProvider? tenantProvider = null) : IOutboxPartitionalSupport
 {
     public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetMsgParts(CancellationToken cancellationToken)

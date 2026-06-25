@@ -12,10 +12,11 @@ internal sealed class OutboxMessagePublisher(
 {
     public async ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
-        int tenantId = 0,
+        int tenantId,
         CancellationToken cancellationToken = default)
     {
         if (messages.Count == 0) return 0;
+
         return await Send(messages, tenantId, cancellationToken);
     }
 

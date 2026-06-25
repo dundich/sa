@@ -60,6 +60,7 @@
     <Project Path="Tests/Sa.Media.FFmpegTests/Sa.Media.FFmpegTests.csproj" />
     <Project Path="Tests/Sa.MediaTests/Sa.MediaTests.csproj" />
     <Project Path="Tests/Sa.Outbox.PostgreSqlTests/Sa.Outbox.PostgreSqlTests.csproj" />
+    <Project Path="Tests/Sa.Outbox.Tests/Sa.Outbox.Tests.csproj" />
     <Project Path="Tests/Sa.Partitional.PostgreSqlTests/Sa.Partitional.PostgreSqlTests.csproj" />
     <Project Path="Tests/Sa.ScheduleTests/Sa.ScheduleTests.csproj" />
     <Project Path="Tests/Sa.Utils.WorkQueue.Tests/Sa.Utils.WorkQueue.Tests.csproj" />

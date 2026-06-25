@@ -32,7 +32,7 @@ internal static class Setup
 
         configure?.Invoke(new DeliveryBuilder(services));
 
-        services.TryAddSingleton<IDelivarySnapshot, DelivarySnapshot>();
+        services.TryAddSingleton<IDeliverySnapshot, DeliverySnapshot>();
 
         return services;
     }

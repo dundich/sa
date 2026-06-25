@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTypeTableName()}
     public string SqlSelectType = $"SELECT * FROM {settings.GetQualifiedTypeTableName()}";
 
 
-    public string SqlSelectTetant =
+    public string SqlSelectTenant =
 $"""
 WITH ranked AS (
   SELECT

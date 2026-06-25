@@ -5,6 +5,8 @@
   <PropertyGroup>
     <Version>0.9.1</Version>
     <Description>Simple Outbox infra for publishing and using messages</Description>
+    <!-- DiagnosticSource.Write<T> uses reflection for anonymous types — unavoidable for telemetry -->
+    <!--<NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>-->
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +26,10 @@
 
   <ItemGroup>
     <Folder Include="AsLink\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sa.Outbox.Tests" />
   </ItemGroup>
 
 </Project>
