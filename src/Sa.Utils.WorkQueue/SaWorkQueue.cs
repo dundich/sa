@@ -68,7 +68,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         _scalingStrategy = options.ReaderScalingStrategy;
         _getItemDisplayName = options.GetItemDisplayName ?? (item => $"{item}");
-        _handleItemFaulted = options.HandleItemFaulted ?? ((_, ex) => SaExecutionErrorStrategy.ShutdownQueue);
+        _handleItemFaulted = options.HandleItemFaulted ?? ((_, _) => SaExecutionErrorStrategy.ShutdownQueue);
 
         _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(_queueCapacity)
         {
@@ -111,10 +111,10 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         if (!IsEnabled) ThrowHelper.QueueStopped();
 
         var wi = new WorkItem(input, cancellationToken);
-        MarkActive();
 
         try
         {
+            MarkActive();
             await _queue.Writer.WriteAsync(wi, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -125,6 +125,8 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             {
                 ThrowHelper.QueueStopped();
             }
+
+            throw;
         }
     }
 
@@ -376,19 +378,19 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
         catch (Exception ex)
         {
-            var dislpayItem = _getItemDisplayName(item.Input);
+            var displayItem = _getItemDisplayName(item.Input);
 
             SaExecutionErrorStrategy errorStrategy = SaExecutionErrorStrategy.ShutdownQueue;
             try
             {
                 OnStatusChanged(item.Input, SaWorkStatus.Faulted, ex);
-                LogItemExecutionFailed(_logger, dislpayItem, ex);
+                LogItemExecutionFailed(_logger, displayItem, ex);
 
                 errorStrategy = _handleItemFaulted(item.Input, ex);
             }
             catch (Exception callbackEx)
             {
-                LogItemHandlerFailed(_logger, dislpayItem, callbackEx);
+                LogItemHandlerFailed(_logger, displayItem, callbackEx);
             }
 
             return errorStrategy switch
@@ -506,7 +508,8 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                 tasks = [.. _taskReaders];
             }
 
-            Task.WhenAll(tasks).GetAwaiter().GetResult();
+            // Use ConfigureAwait(false) to avoid potential deadlocks from blocking on async operations
+            Task.WhenAll(tasks).ConfigureAwait(false).GetAwaiter().GetResult();
 
             ClearRemainingItems();
         }

@@ -11,9 +11,10 @@
 | **Concurrency limiting** | Control the number of simultaneously executing tasks via `ConcurrencyLimit` |
 | **Dynamic scaling** | Change the limit at runtime: `queue.ConcurrencyLimit = newLimit` |
 | **Scaling strategies** | `Lifo` • `Fifo` • `RoundRobin` • `Random` — choose the one that fits your scenario |
-| **DI integration** | Registration via `AddWorkQueue<TProcessor, TInput>` with configuration support |
+| **DI integration** | Registration via `AddSaWorkQueue<TProcessor, TInput>` with configuration support |
 | **Zero-allocation logging** | `[LoggerMessage]` generation for `ILogger` |
 | **Safe shutdown** | `DisposeAsync`, `ShutdownAsync`, `WaitForIdleAsync` — idempotent and thread‑safe |
+| **Fault tolerance** | Configurable error strategy: `ShutdownQueue` (default), `StopReader`, or `Continue` |
 
 ---
 
@@ -55,7 +56,7 @@ public class OrderService(ISaWorkQueue<OrderInput> queue)
     {
         await queue.Enqueue(order, ct); // Does not block the caller
     }
-    
+
     public bool IsIdle() => queue.IsIdle();
     public int Pending => queue.QueueTasks;
 }
@@ -63,7 +64,7 @@ public class OrderService(ISaWorkQueue<OrderInput> queue)
 
 ---
 
-## ⚙️ `WorkQueueOptions<TInput>` Configuration
+## ⚙️ `SaWorkQueueOptions<TInput>` Configuration
 
 ```csharp
 SaWorkQueueOptions<TInput>.Create(processor)
@@ -119,6 +120,9 @@ int limit = queue.ConcurrencyLimit; // current concurrency limit
 1. **Lifecycle**: the queue is registered as `Singleton`. Do not use `Scoped`/`Transient`.
 2. **`StatusChanged`**: invoked on a thread‑pool thread. Avoid long synchronous operations inside.
 3. **Cancellation**: tasks receive a `CancellationToken`. Handle `OperationCanceledException` properly.
-4. **`ForceCancelReaders`**: use only in emergencies — may leave the queue in an inconsistent state.
-5. **Reusability**: all shutdown/cleanup methods (`Shutdown`, `Dispose`) are idempotent — safe to call multiple times.
+4. **Default error strategy**: `Shutdown` — a faulted item shut down the queue. Override with `.WithHandleItemFaulted()` if you need different behavior.
+5. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: emergency stop — kills reader tasks immediately. After calling, restore concurrency by setting `ConcurrencyLimit = X` to spawn replacement readers.
+6. **Thread safety**: all public methods are thread-safe. Changing `ConcurrencyLimit` at runtime adjusts reader count without losing queued items.
+7. **Reusability**: all shutdown/cleanup methods (`Shutdown`, `ShutdownAsync`, `Dispose`, `DisposeAsync`) are idempotent — safe to call multiple times.
+8. **`ConcurrencyLimit = 0`**: pauses all processing (kills all readers). Set back to a positive value to resume.
 
