@@ -1,32 +1,103 @@
 # Sa.Configuration.PostgreSql
 
-The `AddPostgreSqlConfiguration` extension method allows you to add a PostgreSQL-based configuration source to an IConfigurationBuilder. This enables your application to load configuration settings directly from a PostgreSQL database.
+A dynamic configuration source for .NET that loads settings from PostgreSQL. Changes in the database are applied to the running application without restart — just call `Reload()` on `IConfigurationRoot`.
 
-## Key Components
-- PostgreSqlConfigurationOptions: A record that holds the connection string, SQL query, and optional parameters for querying the database.
-- DatabaseConfigurationSource: Implements IConfigurationSource and creates a DatabaseConfigurationProvider to fetch configuration data.
-- DatabaseConfigurationProvider: Inherits from ConfigurationProvider and overrides the Load method to execute the SQL query and populate the configuration data.
+## Features
 
-## Example Usage
+- **Live configuration**: values are stored in the database and can be changed at runtime
+- **Parameterized SQL queries**: supports `@named_parameters` via `NpgsqlParameter`
+- **Automatic retry**: built-in retry strategy (PgRetryStrategy) with detection of Npgsql transaction errors
+- **Key/value trimming**: whitespace is automatically trimmed from both keys and values
+- **Safe NULL handling**: `NULL` in DB → `null` in config; empty string → `string.Empty`
+
+## Public API
+
+| Type | Purpose |
+|------|---------|
+| `PostgreSqlConfigurationOptions` | Immutable record: `ConnectionString`, `SelectSql`, `Parameters` |
+| `Setup.AddSaPostgreSqlConfiguration()` | Extension method for `IConfigurationBuilder` |
+
+## Quick Start
+
 ```csharp
-using Microsoft.Extensions.Configuration;
 using Sa.Configuration.PostgreSql;
 
-var builder = new ConfigurationBuilder();
+var builder = WebApplication.CreateBuilder(args);
 
-// Define PostgreSqlConfigurationOptions
-var options = new PostgreSqlConfigurationOptions(
-    "Host=my_host;Database=my_db;Username=my_user;Password=my_pw",
-    "SELECT key, value FROM configuration"
+builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
+    ConnectionString: "Host=localhost;Database=myapp;Username=app;Password=secret",
+    SelectSql: "SELECT key, value FROM app_settings"
+));
+
+var app = builder.Build();
+
+// Reading settings
+var theme = app.Configuration["theme"];          // → "dark"
+var lang  = app.Configuration["language"];       // → "en"
+```
+
+## Parameterized Queries
+
+Use `@parameters` for filtering by client/tenant:
+
+```csharp
+builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
+    ConnectionString: "...",
+    SelectSql: "SELECT key, value FROM client_settings WHERE client_id = @client_id",
+    Parameters: [new NpgsqlParameter("client_id", "acme-corp")]
+));
+```
+
+## Live Configuration Updates
+
+When rows in the `app_settings` table change, the application can pick up new values:
+
+```csharp
+// After modifying rows in the database:
+((IConfigurationRoot)app.Configuration).Reload();
+
+// Or manually:
+provider.Reload();  // DatabaseConfigurationProvider implements IConfigurationProvider
+```
+
+## Load Behavior
+
+| Scenario | Result |
+|----------|--------|
+| Key is empty or whitespace only | Skipped |
+| Value is `NULL` in DB | Stored as `null` |
+| Value is an empty string in DB | Stored as `string.Empty` |
+| Connection error | `InvalidOperationException` with the original exception as `InnerException` |
+
+## Table Schema
+
+Minimum table required for the provider:
+
+```sql
+CREATE TABLE app_settings (
+    key   VARCHAR PRIMARY KEY,
+    value TEXT
 );
 
-// Add PostgreSQL configuration to the builder
-builder.AddSaPostgreSqlConfiguration(options);
+-- Sample data
+INSERT INTO app_settings (key, value) VALUES
+    ('theme',      'dark'),
+    ('language',   'en'),
+    ('debug_mode', '');   -- empty string
+```
 
-// Build the configuration
-var configuration = builder.Build();
+## Dependencies
 
-// Access configuration values
-string setting1 = configuration["Setting1"];
-Console.WriteLine($"Setting1: {setting1}");
+- `Microsoft.Extensions.Configuration`
+- `Sa.Data.PostgreSql` (Npgsql wrapper with PgRetryStrategy and IPgDataSource)
+
+## Project Layout
+
+```
+src/Sa.Configuration.PostgreSql/
+├── PostgreSqlConfigurationOptions.cs   # Options record
+├── DatabaseConfigurationSource.cs      # IConfigurationSource
+├── DatabaseConfigurationProvider.cs    # ConfigurationProvider + retry
+├── Setup.cs                            # Extension method AddSaPostgreSqlConfiguration()
+└── Readme.md                           # ← you are here
 ```

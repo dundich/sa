@@ -69,7 +69,7 @@ internal sealed partial class SecretService(ISecretStore secretStore) : ISecretS
     }
 
     private static bool IsSearchPositionValid(string inputString, int currentPosition)
-        => inputString.Length >= currentPosition;
+        => currentPosition < inputString.Length;
 
     private static string NormalizeValue(string secretValue)
     {

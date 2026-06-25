@@ -1,168 +1,270 @@
-# Working with Secrets via Configuration
+# Sa.Configuration
 
-The `Sa.Configuration` library provides **secure and transparent integration of secrets** into the standard .NET configuration system. All sensitive data is automatically substituted during configuration loading — without manual processing in application code.
+Secure secrets management and command-line argument parsing within the .NET `Microsoft.Extensions.Configuration` ecosystem. Secrets are automatically substituted into configuration without manual application code.
 
----
+## Features
 
-## How It Works
+- **Automatic secret substitution**: `{{key}}` placeholders are replaced with real values from files, environment variables, or command-line arguments
+- **Cycle protection**: built-in guard against infinite recursion during placeholder resolution
+- **Optional placeholders**: `{{?key}}` — if the secret is not found, returns `null` instead of throwing
+- **Chained Stores**: multiple secret sources with priority ordering
+- **Argument parser**: supports `--key value`, `--key=value`, `-flag` formats
+- **Environments**: automatic loading of `secrets.{Environment}.txt` (Development/Staging/Production)
 
-1. **Load secrets** from secure sources (files, environment variables)
-2. **Automatic substitution** of values in configuration during loading
-3. **Transparent usage** via standard `IConfiguration`
+## Quick Start
 
----
-
-## Setup
-
-### 1. Registration in `Program.cs`
+### 1. Register in `Program.cs`
 
 ```csharp
 using Sa.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Connects arguments + secrets from files/env vars/command line
 builder.Configuration.AddSaConfiguration();
 
 var app = builder.Build();
 ```
 
-### 2. Secret Sources
-
-Secrets are loaded from the following sources (in priority order):
-
-| Source | Description | Example |
-|--------|-------------|---------|
-| **Secrets file** | Text file with `key=value` pairs | `secrets.txt` |
-| **Environment variables** | System environment variables | `SA_PG_PASSWORD=myPass` |
-| **Command-line arguments** | Application startup parameters | `--sa_pg_port=5432` |
-
----
-
-## Secrets File Format (`secrets.txt`)
+### 2. Secrets File (`secrets.txt`)
 
 ```ini
 # Postgres
 sa_pg_host=localhost
 sa_pg_user=postgres
 sa_pg_port=5432
-sa_pg_database=postgres
+sa_pg_database=myapp
 sa_pg_schema=public
 sa_pg_password=superSecret123
 
-# Other secrets
-sa_secret=TOP SECRET!
+# API keys
 api_key=abc123xyz
+jwt_secret=h8k2m9p0
 ```
 
-> ⚠️ **Important**: The `secrets.txt` file must be excluded from version control (.gitignore)
+> ⚠️ Add `secrets*.txt` to `.gitignore`!
 
----
-
-## Usage in `appsettings.json`
-
-Specify **placeholders** in the format `{{secret_key}}`:
+### 3. Placeholders in `appsettings.json`
 
 ```json
 {
   "secret": "{{sa_secret}}",
-  
+
   "sa": {
     "pg": {
       "connection": "User ID={{sa_pg_user}};Password={{sa_pg_password}};Host={{sa_pg_host}};Port={{sa_pg_port}};Database={{sa_pg_database}};Pooling=true;SearchPath={{sa_pg_schema}};Command Timeout=180;"
     }
   },
-  
+
   "ExternalApi": {
     "ApiKey": "{{api_key}}"
   }
 }
 ```
 
----
-
-## Code Example
-
-### Retrieving values via `IConfiguration`
+### 4. Reading Configuration
 
 ```csharp
-var todosApi = app.MapGroup("/settings");
-
-todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
-    new (Key: "pg_connection", Value: configuration["sa:pg:connection"]),
-    new (Key: "theme", Value: configuration["theme"]),
-    new (Key: "secret", Value: configuration["secret"])
-}).WithName("GetSettings");
+var pgConn = app.Configuration["sa:pg:connection"];
+// → "User ID=postgres;Password=superSecret123;Host=localhost;..."
 ```
 
+## Secret Priority Order
 
----
+Secrets are looked up in descending priority order:
 
-## What Happens Under the Hood
+| # | Source | Example File |
+|---|--------|-------------|
+| 1 | Base secrets file | `secrets.txt` |
+| 2 | Environment-specific file | `secrets.Development.txt` |
+| 3 | Environment variables | `SA_PG_PASSWORD=...` |
+| 4 | Command-line arguments | `--sa_pg_password=...` |
 
+The first source that has a value wins. This allows overriding secrets per environment.
+
+## Optional Placeholders
+
+Use `{{?key}}` instead of `{{key}}` to avoid an error when a secret is missing:
+
+```json
+{
+  "optional_feature": "{{?feature_flag}}"
+}
 ```
-┌─────────────────────────────────────────────────────────┐
-│  1. appsettings.json contains:                          │
-│     "connection": "Host={{sa_pg_host}};Password={{...}}" │
-├─────────────────────────────────────────────────────────┤
-│  2. secrets.txt contains:                               │
-│     sa_pg_host=localhost                                │
-│     sa_pg_password=superSecret123                       │
-├─────────────────────────────────────────────────────────┤
-│  3. IConfiguration["sa:pg:connection"] returns:         │
-│     "Host=localhost;Password=superSecret123;..."        │
-└─────────────────────────────────────────────────────────┘
-```
 
----
+If `feature_flag` is not found in any store, `null` is returned.
 
-## Advantages
+## Usage with Sa.Configuration.PostgreSql
 
-- **Security**: secrets are not stored in code or configuration files
-- **Flexibility**: supports multiple secret sources
-- **Simplicity**: transparent operation through standard `IConfiguration`
-- **Debugging**: easy to switch secrets via environment variables or arguments
-
----
-
-## Tips
-
-- For local development, create `secrets.Development.txt`; for production — use environment variables
-- Never commit secret files to the repository
-- Use different secret files for different environments (dev, staging, prod)
-
----
-
-# Core Classes
-
-## Arguments Class
-
-The `Arguments` class is designed to parse command-line arguments passed to a C# application. It provides a dictionary-like interface for easy parameter retrieval and supports both single-value and multi-value parameters.
-
-**Key Features:**
-- **Parameter Parsing**: Splits command-line arguments into key-value pairs
-- **Easy Retrieval**: Access parameter values using an indexer
-- **Default Handling**: Automatically assigns default values for boolean flags
-
-**Example:**
 ```csharp
-// some.exe --config_db /share/data.db
-var arguments = new Arguments(args);
-string? configDb = arguments["config_db"];
+using Sa.Configuration;
+using Sa.Configuration.PostgreSql;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// First, standard sources (appsettings.json, secrets.txt)
+builder.Configuration.AddSaConfiguration();
+
+// Then, dynamic settings from the database
+builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
+    ConnectionString: "...",
+    SelectSql: "SELECT key, value FROM app_settings"
+));
+
+var app = builder.Build();
 ```
 
----
+## Arguments — Command-Line Argument Parser
 
-## Secrets Class
-
-The `Secrets` class provides a secure mechanism for managing sensitive information such as API keys and database passwords from various sources. It supports loading secrets from files, environment variables, and dynamically generated host key files.
-
-**Key Features:**
-- **Chained Secret Stores**: Combines multiple sources for retrieving secrets
-- **Dynamic Loading**: Supports environment-specific configurations
-- **Placeholder Replacement**: Easily populates strings with secret values
-
-**Example:**
 ```csharp
-string input = "Database password: {{db_password}}";
-string? populatedString = service.PopulateSecrets(input);
+using Sa.Configuration.CommandLine;
+
+// some.exe --config_db /share/data.db --debug
+var args = new Arguments(args);
+
+string? configDb = args["config_db"];       // → "/share/data.db"
+bool?   debug    = args.GetBool("debug");   // → true
+int?    port     = args.GetInt("port");     // → null
+TimeSpan? timeout = args.GetTimeSpan("timeout");
+```
+
+Supported formats:
+
+```
+--key value
+--key=value
+-key value
+-key=value
+-flag          → flag=true (boolean flag)
+```
+
+Typed methods return `null` when the parameter is absent or invalid:
+
+| Method | Return Type | Conversion |
+|--------|------------|------------|
+| `GetBool()` | `bool?` | `"true"/"1"/"yes"/"on"` → `true` |
+| `GetInt()` | `int?` | `int.TryParse(..., InvariantCulture)` |
+| `GetFloat()` | `float?` | same as above |
+| `GetLong()` | `long?` | same as above |
+| `GetTimeSpan()` | `TimeSpan?` | `TimeSpan.TryParse(..., InvariantCulture)` |
+
+## Secrets — Secrets Management
+
+### Creating Defaults
+
+```csharp
+using Sa.Configuration.SecretStore;
+
+// Standard chain: File → File.Env → EnvVar → CommandLine
+var secrets = Secrets.CreateDefault();
+```
+
+### Custom Chain
+
+```csharp
+var secrets = new Secrets(
+    new FileSecretStore("my-secrets.txt"),
+    new EnvironmentVariableSecretStore(),
+    new InMemorySecretStore(new Dictionary<string, string?> {
+        { "override_key", "override_value" }
+    })
+);
+```
+
+### Placeholder Substitution
+
+```csharp
+string template = "Server={{host}};Password={{password}}";
+string result = secrets.PopulateSecrets(template);
+// → "Server=localhost;Password=s3cret!"
+```
+
+### Getting a Single Secret
+
+```csharp
+string? password = secrets.GetSecret("sa_pg_password");
+```
+
+## Public API
+
+### Namespace `Sa.Configuration`
+
+| Type | Purpose |
+|------|---------|
+| `Setup.AddSaConfiguration()` | Main entry-point: connects arguments + secret processing |
+
+### Namespace `Sa.Configuration.CommandLine`
+
+| Type | Purpose |
+|------|---------|
+| `Arguments` | Command-line argument parser |
+| `Arguments.CreateDefault()` | Creates from `Environment.GetCommandLineArgs()` |
+| `Setup.AddSaCommandLine()` | Extension method for `IConfigurationBuilder` |
+
+### Namespace `Sa.Configuration.SecretStore`
+
+| Type | Purpose |
+|------|---------|
+| `Secrets` | Main secrets management class, implements `ISecretService` |
+| `Secrets.CreateDefault()` | Standard store chain |
+| `Secrets.GetEnvironmentName()` | Resolves environment (`DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT`) |
+| `SecretOptions` | Options for `CreateDefault()`: `FileName`, `Args`, `EnvironmentName` |
+| `ISecretService` | Interface: `PopulateSecrets()` + `GetSecret()` |
+| `ISecretStore` | Interface: `GetSecret(string key)` |
+| `Setup.AddSaPostSecretProcessing()` | Extension method: applies `ISecretService` to config AFTER other sources are loaded |
+
+### Secret Stores (`Sa.Configuration.SecretStore.Stories`)
+
+| Class | Description |
+|-------|-------------|
+| `FileSecretStore` | Loads `key=value` from a text file (skips `#` comments) |
+| `EnvironmentVariableSecretStore` | Reads from `Environment.GetEnvironmentVariable()` |
+| `CommandLineArgsSecretStore` | Pulls secrets from `Arguments` |
+| `InMemorySecretStore` | Dictionary in memory, fluent `.AddSecret()` |
+
+## How It Works
+
+```
+┌──────────────────────────────────────────────────────┐
+│ 1. appsettings.json contains:                        │
+│    "connection": "Host={{sa_pg_host}};Password={{...}}"│
+├──────────────────────────────────────────────────────┤
+│ 2. secrets.txt contains:                             │
+│    sa_pg_host=localhost                              │
+│    sa_pg_password=s3cret!                            │
+├──────────────────────────────────────────────────────┤
+│ 3. AddSaPostSecretProcessing substitutes placeholders:│
+│    IConfiguration["sa:pg:connection"]                │
+│    → "Host=localhost;Password=s3cret!;..."           │
+└──────────────────────────────────────────────────────┘
+```
+
+## Project Layout
+
+```
+src/Sa.Configuration/
+├── Setup.cs                                      # AddSaConfiguration()
+├── CommandLine/
+│   ├── Arguments.cs                              # Argument parser
+│   ├── Arguments.partial.cs                      # Typed GetXxx() methods
+│   ├── ArgumentsConfigurationProvider.cs         # IConfigurationProvider
+│   └── Setup.cs                                  # AddSaCommandLine()
+├── SecretStore/
+│   ├── Secrets.cs                                # Secrets management
+│   ├── SecretOptions.cs                          # CreateDefault() options
+│   ├── ISecretService.cs                         # Service interface
+│   ├── ISecretStore.cs                           # Store interface
+│   ├── Engine/
+│   │   ├── ChainedSecretStore.cs                 # Store stacking
+│   │   ├── ChainedSecrets.cs                     # Chained + Service
+│   │   └── SecretService.cs                      # Placeholder substitution
+│   ├── Stories/
+│   │   ├── FileSecretStore.cs                    # Text file
+│   │   ├── EnvironmentVariableSecretStore.cs     # ENV vars
+│   │   ├── CommandLineArgsSecretStore.cs         # Args parser
+│   │   └── InMemorySecretStore.cs                # Dictionary in memory
+│   ├── PostSecretProcessingConfigurationProvider.cs  # IConfigurationProvider
+│   ├── PostSecretProcessingConfigurationSource.cs    # IConfigurationSource
+│   └── Setup.cs                                  # AddSaPostSecretProcessing()
+└── Readme.md                                     # ← you are here
 ```
