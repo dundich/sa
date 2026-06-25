@@ -9,17 +9,33 @@ internal static class SpanExtensions
     {
         for (int i = 0; i < arr.Length; i += chunkSize)
         {
-            // by slice
             Memory<T> chunk = arr[i..Math.Min(i + chunkSize, arr.Length)];
             yield return chunk;
         }
     }
 
     /// <summary>
+    /// Same as <see cref="GetChunks"/> but returns a materialized array with pre-allocated capacity.
+    /// </summary>
+    [DebuggerStepThrough]
+    public static Memory<T>[] GetChunksArray<T>(this Memory<T> arr, int chunkSize)
+    {
+        int count = (arr.Length + chunkSize - 1) / chunkSize;
+        var result = new Memory<T>[count];
+        int idx = 0;
+        for (int i = 0; i < arr.Length; i += chunkSize)
+        {
+            int len = Math.Min(chunkSize, arr.Length - i);
+            result[idx++] = arr.Slice(i, len);
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Combines Select and Where with indexes into a single call for optimal
     /// performance.
     /// <seealso href="https://github.com/jackmott/LinqFaster/blob/master/LinqFaster/SelectWhere.cs"/>
-    /// </summary>  
+    /// </summary>
     /// <param name="source">The input sequence to filter and select</param>
     /// <param name="selector">The transformation with index to apply before filtering.</param>
     /// <param name="predicate">The predicate with index with which to filter result.</param>

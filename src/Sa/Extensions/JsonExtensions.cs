@@ -14,7 +14,6 @@ internal static class JsonExtensions
         return JsonSerializer.Serialize<T>(value, options);
     }
 
-
     [DebuggerStepThrough]
     [RequiresDynamicCode(JsonHttpResultTrimmerWarning.SerializationRequiresDynamicCodeMessage)]
     [RequiresUnreferencedCode(JsonHttpResultTrimmerWarning.SerializationUnreferencedCodeMessage)]

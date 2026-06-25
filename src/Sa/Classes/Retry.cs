@@ -220,7 +220,7 @@ internal static class Retry
         }
         catch (TaskCanceledException)
         {
-            // ignore 
+            // ignore
         }
     }
 

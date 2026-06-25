@@ -802,3 +802,4 @@ src/.vscode/
 /src/Sa.Media.FFmpeg/build/build.*/
 
 *.lscache
+.qwen/settings.json

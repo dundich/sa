@@ -12,7 +12,7 @@ namespace Sa.Classes;
 internal static class Levenshtein
 {
     /// <summary>
-    /// Compares the two values to find the minimum Damerau-Levenshtein distance. 
+    /// Compares the two values to find the minimum Damerau-Levenshtein distance.
     /// Thread safe and memory efficient.
     /// </summary>
     /// <param name="value1">First string to compare</param>
@@ -141,9 +141,8 @@ internal static class Levenshtein
             double similarityThreshold = 0.8,
             bool isNormalize = true)
         {
-
-            string? sourceString = isNormalize && source is not null
-                ? source.Trim().NormalizeWhiteSpace().ToLower()
+            string? sourceNormalized = isNormalize && source is not null
+                ? source.NormalizeWhiteSpace(isTrimmed: true).ToLowerInvariant()
                 : source;
 
             foreach (T? target in targetObjects)
@@ -151,9 +150,9 @@ internal static class Levenshtein
                 string? targetString = targetStringSelector(target);
 
                 if (isNormalize && targetString is not null)
-                    targetString = targetString.Trim().NormalizeWhiteSpace().ToLower();
+                    targetString = targetString.NormalizeWhiteSpace(isTrimmed: true).ToLowerInvariant();
 
-                var similarity = GetSimilarity(sourceString, targetString);
+                var similarity = GetSimilarity(sourceNormalized, targetString);
 
                 if (similarity >= similarityThreshold)
                 {

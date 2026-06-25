@@ -39,7 +39,7 @@ internal sealed class DeliveryTenant(
 
         if (messages.IsEmpty) return 0;
 
-        using IDisposable locker = RenewerLocker(settings.ConsumeSettings, filter, cancellationToken);
+        await using IAsyncDisposable locker = RenewerLocker(settings.ConsumeSettings, filter, cancellationToken);
 
         var successfulDeliveries = await deliveryCourier.Deliver(settings, filter, messages, cancellationToken);
 
@@ -100,7 +100,7 @@ internal sealed class DeliveryTenant(
             cancellationToken);
     }
 
-    private IDisposable RenewerLocker(
+    private IAsyncDisposable RenewerLocker(
         ConsumeSettings settings,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)

@@ -37,7 +37,7 @@ public class ResetLazyTests
         );
 
         // Act
-        var firstList = lazy.Value;
+        _ = lazy.Value;
         lazy.Reset();
 
         // Assert

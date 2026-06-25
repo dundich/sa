@@ -9,14 +9,15 @@ internal static class MimeTypeMap
     private const string Dot = ".";
     private const string QuestionMark = "?";
     private const string DefaultMimeType = "application/octet-stream";
-    private static readonly Lazy<Dictionary<string, string>> _mappings = new(BuildMappings);
+
+    private static readonly Dictionary<string, string> _mappings = BuildMappings();
 
     private static Dictionary<string, string> BuildMappings()
     {
         var mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
 
                 #region Big freaking list of mime types
-            
+
                 // maps both ways,
                 // extension -> mime type
                 //   and
@@ -26,7 +27,7 @@ internal static class MimeTypeMap
                 // some mime types can map to multiple extensions, so to get a deterministic mapping,
                 // add those to the dictionary specifically
                 //
-                // combination of values from Windows 7 Registry and 
+                // combination of values from Windows 7 Registry and
                 // from C:\Windows\System32\inetsrv\config\applicationHost.config
                 // some added, including .7z and .dat
                 //
@@ -781,7 +782,7 @@ internal static class MimeTypeMap
             str = Dot + str;
         }
 
-        return _mappings.Value.TryGetValue(str, out mimeType);
+        return _mappings.TryGetValue(str, out mimeType);
     }
 
     /// <summary>
@@ -812,7 +813,7 @@ internal static class MimeTypeMap
             throw new ArgumentException("Requested mime type is not valid: " + mimeType);
         }
 
-        if (_mappings.Value.TryGetValue(mimeType, out string? extension))
+        if (_mappings.TryGetValue(mimeType, out string? extension))
         {
             return extension;
         }

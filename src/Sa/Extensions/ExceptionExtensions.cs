@@ -22,11 +22,12 @@ internal static class ExceptionExtensions
     [DebuggerStepThrough]
     public static string GetErrorMessages(this Exception exception)
     {
-        StringBuilder sb = new();
-        sb.AppendLine(exception.Message);
-        if (exception.InnerException != null)
+        var sb = new StringBuilder(exception.Message.Length + 64);
+        var current = exception;
+        while (current != null)
         {
-            sb.AppendLine(GetErrorMessages(exception.InnerException));
+            sb.AppendLine(current.Message);
+            current = current.InnerException;
         }
         return sb.ToString();
     }

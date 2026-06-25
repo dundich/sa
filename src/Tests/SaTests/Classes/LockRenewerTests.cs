@@ -21,7 +21,8 @@ public class LockRenewerTests
         }
 
         // Act
-        using (var locker = LockRenewer.KeepLocked(lockExpiration, extendLocked, cancellationToken: cancellationToken))
+        await using (var locker = LockRenewer.KeepLocked(
+            lockExpiration, extendLocked, cancellationToken: cancellationToken))
         {
             await Task.Delay(200, TestContext.Current.CancellationToken); // Give it some time to run
             await cancellationTokenSource.CancelAsync();
@@ -47,7 +48,8 @@ public class LockRenewerTests
         }
 
         // Act
-        using (var locker = LockRenewer.KeepLocked(lockExpiration, extendLocked, blockImmediately: true, cancellationToken: cancellationToken))
+        await using (var locker = LockRenewer.KeepLocked(
+            lockExpiration, extendLocked, blockImmediately: true, cancellationToken: cancellationToken))
         {
             await Task.Delay(100, TestContext.Current.CancellationToken); // Give it some time to run
             await cancellationTokenSource.CancelAsync();
@@ -69,7 +71,7 @@ public class LockRenewerTests
         async Task extendLocked(CancellationToken token)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(10), token); // Simulate some work
-            extensionCount++;
+            Interlocked.Increment(ref extensionCount);
         }
 
         // Act
@@ -77,7 +79,7 @@ public class LockRenewerTests
 
         await Task.Delay(100, TestContext.Current.CancellationToken);
 
-        locker.Dispose();
+        await locker.DisposeAsync();
 
 
         var expected = extensionCount;
