@@ -25,6 +25,8 @@ internal sealed class JobScheduler : IJobScheduler
 
     private IReadOnlyList<IJobController> _jobControllers = [];
 
+    private static readonly TimeSpan DefaultShutdownTimeout = TimeSpan.FromSeconds(30);
+
 
     public JobScheduler(
         IJobSettings settings,
@@ -129,6 +131,15 @@ internal sealed class JobScheduler : IJobScheduler
                 await _jobs.Enqueue(controller, stoppingToken);
             }
         }
+        catch (OperationCanceledException)
+        {
+            // Shutdown requested during startup — dispose already-enqueued controllers
+            foreach (var controller in controllers)
+            {
+                controller.Shutdown();
+            }
+            return false;
+        }
         finally
         {
             lock (_lock)
@@ -178,7 +189,18 @@ internal sealed class JobScheduler : IJobScheduler
             _started = false;
         }
 
-        await _jobs.WaitForIdleAsync(_originalToken);
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
+            _originalToken, CancellationToken.None);
+        timeoutCts.CancelAfter(DefaultShutdownTimeout);
+
+        try
+        {
+            await _jobs.WaitForIdleAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Timeout or original cancellation — log but don't block forever
+        }
     }
 
     public void Dispose()

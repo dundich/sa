@@ -9,14 +9,18 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
 
     public IReadOnlyCollection<IJobScheduler> Schedules { get; } = [.. settings
         .GetJobSettings()
-        .Select(factory.CreateJobSchedule)];
+        .Select(factory.CreateJobSchedule)
+        .OfType<IJobScheduler>()];
 
     /// <summary>
     /// Start all jobs
     /// </summary>
     public async Task<int> Start(CancellationToken cancellationToken)
     {
-        var results = await Task.WhenAll(Schedules.Select(c => c.Start(cancellationToken)));
+        var results = await Task.WhenAll(
+            Schedules
+                .Where(s => s.ConcurrencyLimit >= 0)
+                .Select(c => c.Start(cancellationToken)));
         return results.Count(r => r);
     }
 

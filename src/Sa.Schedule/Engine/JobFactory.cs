@@ -9,11 +9,16 @@ internal sealed class JobFactory(
     IJobRunner jobRunner,
     TimeProvider? timeProvider = null) : IJobFactory
 {
-    public IJobScheduler CreateJobSchedule(IJobSettings settings)
-        => new JobScheduler(
+    public IJobScheduler? CreateJobSchedule(IJobSettings settings)
+    {
+        if (settings.Properties.Disabled == true)
+            return null;
+
+        return new JobScheduler(
             settings,
             jobRunner,
             i => CreateController(i, settings));
+    }
 
     private JobController CreateController(int index, IJobSettings settings)
     {

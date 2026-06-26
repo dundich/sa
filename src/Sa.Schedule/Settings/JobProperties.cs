@@ -1,8 +1,8 @@
-﻿using Sa.Schedule.Engine;
+using Sa.Schedule.Engine;
 
 namespace Sa.Schedule.Settings;
 
-internal sealed class JobProperies : IJobProperties
+internal sealed class JobProperties : IJobProperties
 {
     public string? JobName { get; private set; }
     public bool? Immediate { get; private set; }
@@ -15,68 +15,68 @@ internal sealed class JobProperies : IJobProperties
     public int? ConcurrencyLimit { get; private set; }
     public int? MaxConcurrency { get; private set; }
 
-    public JobProperies WithName(string name)
+    public JobProperties WithName(string name)
     {
         JobName = name;
         return this;
     }
 
-    public JobProperies RunOnce()
+    public JobProperties RunOnce()
     {
         IsRunOnce = true;
         return this;
     }
 
-    public JobProperies StartImmediate()
+    public JobProperties StartImmediate()
     {
         Immediate = true;
         return this;
     }
 
-    public JobProperies WithInitialDelay(TimeSpan time)
+    public JobProperties WithInitialDelay(TimeSpan time)
     {
         InitialDelay = time;
         return this;
     }
 
-    public JobProperies WithTiming(IJobTiming timing)
+    public JobProperties WithTiming(IJobTiming timing)
     {
         Timing = timing;
         return this;
     }
 
-    public JobProperies SetDisabled()
+    public JobProperties SetDisabled()
     {
         Disabled = true;
         return this;
     }
 
-    public JobProperies WithContextStackSize(int size)
+    public JobProperties WithContextStackSize(int size)
     {
         ContextStackSize = size;
         return this;
     }
 
-    public JobProperies WithTag(object tag)
+    public JobProperties WithTag(object tag)
     {
         Tag = tag;
         return this;
     }
 
-    public JobProperies EveryTime(TimeSpan timeSpan, string? name = null)
+    public JobProperties EveryTime(TimeSpan timeSpan, string? name = null)
     {
         Timing = JobTiming.EveryTime(timeSpan, name);
         return this;
     }
 
-    public JobProperies WithConcurrencyLimit(int limit)
+    public JobProperties WithConcurrencyLimit(int limit)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
         ConcurrencyLimit = limit;
         return this;
     }
 
-    public JobProperies WithMaxConcurrencyLimit(int limit)
+    public JobProperties WithMaxConcurrencyLimit(int limit)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         MaxConcurrency = limit;
@@ -84,7 +84,7 @@ internal sealed class JobProperies : IJobProperties
     }
 
 
-    internal JobProperies Merge(IJobProperties props)
+    internal JobProperties Merge(IJobProperties props)
     {
         JobName ??= props.JobName;
         Immediate ??= props.Immediate;

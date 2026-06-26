@@ -76,10 +76,61 @@ public interface IJobBuilder
     IJobBuilder EveryMinutes(int minutes = 1)
         => EveryTime(TimeSpan.FromMinutes(minutes), $"every {minutes} minutes");
 
+    /// <summary>
+    /// Configures the job to run every specified number of hours.
+    /// </summary>
+    /// <param name="hours">The number of hours (default is 1).</param>
+    /// <returns>The current builder instance.</returns>
+    IJobBuilder EveryHours(int hours = 1)
+        => EveryTime(TimeSpan.FromHours(hours), $"every {hours} hours");
+
+    /// <summary>
+    /// Configures the job to run every specified number of days.
+    /// </summary>
+    /// <param name="days">The number of days (default is 1).</param>
+    /// <returns>The current builder instance.</returns>
+    IJobBuilder EveryDays(int days = 1)
+        => EveryTime(TimeSpan.FromDays(days), $"every {days} days");
+
+    /// <summary>
+    /// Configures the job to run once after the specified delay.
+    /// </summary>
+    /// <param name="delay">The delay before the single execution.</param>
+    /// <returns>The current builder instance.</returns>
+    IJobBuilder OnceIn(TimeSpan delay)
+        => WithInitialDelay(delay).RunOnce();
+
+    /// <summary>
+    /// Configures the job using a cron expression for scheduling.
+    /// Format: "minute hour day-of-month month day-of-week"
+    /// 
+    /// Examples:
+    ///   "0 9 * * *"       — Every day at 9:00 AM
+    ///   "0 */2 * * *"    — Every 2 hours at minute 0
+    ///   "30 14 * * 1-5"  — Weekdays (Mon-Fri) at 2:30 PM
+    ///   "0 0 1 * *"      — First day of every month at midnight
+    /// </summary>
+    /// <param name="cronExpression">The cron expression.</param>
+    /// <param name="name">Optional display name for the timing.</param>
+    /// <returns>The current builder instance.</returns>
+    IJobBuilder WithCron(string cronExpression, string? name = null);
+
 
     IJobBuilder WithConcurrencyLimit(int limit);
 
+    /// <summary>
+    /// Sets the maximum concurrency limit for the job.
+    /// </summary>
+    /// <param name="limit">The maximum concurrency limit.</param>
+    /// <returns>The current builder instance.</returns>
     IJobBuilder WithMaxConcurrency(int limit);
+
+    /// <summary>
+    /// Sets the maximum concurrency limit for the job (alias for <see cref="WithMaxConcurrency"/>).
+    /// </summary>
+    /// <param name="limit">The maximum concurrency limit.</param>
+    /// <returns>The current builder instance.</returns>
+    IJobBuilder WithMaxConcurrencyLimit(int limit) => WithMaxConcurrency(limit);
 
 
     /// <summary>

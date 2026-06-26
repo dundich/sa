@@ -11,13 +11,13 @@ internal sealed partial class JobErrorHandler(
 {
     public void HandleError(IJobContext context, Exception exception)
     {
-        if (settings.HandleError?.Invoke(context, exception) != true)
+        if (settings.HandleError?.Invoke(context, exception) == true)
         {
-            // default handle
-            DoHandleError(context, exception);
+            // Global handler consumed the error — do not rethrow
+            return;
         }
 
-        throw exception;
+        DoHandleError(context, exception);
     }
 
     private void DoHandleError(IJobContext context, Exception exception)
@@ -29,15 +29,11 @@ internal sealed partial class JobErrorHandler(
                 break;
 
             case ErrorHandlingAction.CloseApplication:
-                CloseApplication(
-                    context.JobName,
-                    context.ServiceProvider.GetRequiredService<IScheduler>(), exception);
+                CloseApplication(context.JobName, exception);
                 break;
 
             case ErrorHandlingAction.StopAllJobs:
-                StopAllJobs(
-                    context.JobName,
-                    context.ServiceProvider.GetRequiredService<IScheduler>(), exception);
+                StopAllJobs(context.JobName, context);
                 break;
 
             default:
@@ -48,27 +44,24 @@ internal sealed partial class JobErrorHandler(
         throw context.LastError ?? exception;
     }
 
-    private void StopAllJobs(string jobName, IScheduler scheduler, Exception exception)
+    private void StopAllJobs(string jobName, IJobContext context)
     {
-        LogStopAllJobs(jobName, exception.ToString());
+        LogStopAllJobs(jobName, context.LastError?.ToString() ?? string.Empty);
 
-        if (scheduler == null) throw exception;
-        scheduler.Stop();
+        var scheduler = context.ServiceProvider.GetService<IScheduler>();
+        scheduler?.Stop();
     }
 
-    private void CloseApplication(string jobName, IScheduler scheduler, Exception exception)
+    private void CloseApplication(string jobName, Exception exception)
     {
         LogCloseApplication(jobName, exception.ToString());
 
-        if (lifetime == null) throw exception;
+        if (lifetime == null) return;
 
-        if (scheduler.Settings.IsHostedService)
+        if (lifetime is IHostApplicationLifetime hostAppLifetime)
         {
-            lifetime.StopApplication();
-        }
-        else
-        {
-            scheduler.Stop().ContinueWith(_ => lifetime.StopApplication());
+            // Safe fire-and-forget — StopApplication is designed for this
+            hostAppLifetime.StopApplication();
         }
     }
 

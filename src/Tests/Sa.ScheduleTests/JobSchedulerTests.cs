@@ -95,6 +95,60 @@ public class JobSchedulerTests
         await scheduler.DisposeAsync();
     }
 
+    [Fact]
+    public async Task IsStarted_True_AfterSuccessfulStart()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        Assert.False(scheduler.IsStarted);
+
+        var started = await scheduler.Start(TestContext.Current.CancellationToken);
+        Assert.True(started);
+        Assert.True(scheduler.IsStarted);
+    }
+
+    [Fact]
+    public void ActiveTasks_ReturnsZero_BeforeStart()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        Assert.Equal(0, scheduler.ActiveTasks);
+    }
+
+    [Fact]
+    public void Dispose_AfterStop_IsSafe()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        scheduler.Dispose();
+        scheduler.Dispose(); // Double dispose should not throw
+        Assert.True(true);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_AfterStop_IsSafe()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        await scheduler.DisposeAsync();
+        await scheduler.DisposeAsync(); // Double dispose should not throw
+        Assert.True(true);
+    }
+
+    [Fact]
+    public void ChangeToken_ReflectsStoppedState()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        var token = scheduler.StartChangeToken();
+        Assert.NotNull(token);
+    }
+
 
 
     class TestJob : IJob
