@@ -23,7 +23,7 @@ builder.ConfigureServices(services =>
         builder.AddJob<SomeJob>()
             .EverySeconds(2)
             .WithName("Some 2")
-            .ConfigureErrorHandling(c => c.IfErrorRetry(2).ThenStopJob())
+            .ConfigureErrorHandling(c => c.IfErrorRetry(2).ThenAbortJob())
             ;
 
         builder.AddInterceptor<SomeInterceptor>();

@@ -7,7 +7,7 @@ namespace Sa.Data.PostgreSql;
 public static class DbCommandExtensions
 {
     /// <summary>
-    /// Добавляет параметр с именем {prefix}{index}, используя минимальные аллокации.
+    /// Adds a parameter with name {prefix}{index}, using minimal allocations.
     /// </summary>
     public static NpgsqlCommand AddParameter<TProvider>(
         this NpgsqlCommand command,
@@ -26,17 +26,22 @@ public static class DbCommandExtensions
         return command;
     }
 
-
+    /// <summary>
+    /// Adds a parameter — infers the value type from the argument.
+    /// </summary>
     public static NpgsqlCommand AddParam<TProvider, T>(
         this NpgsqlCommand command,
         string prefix,
-        T value,
+        T? value,
         int index)
         where TProvider : INamePrefixProvider
     {
         var paramName = CachedParamNames<TProvider>.Default.Get(prefix, index);
-        var param = new NpgsqlParameter<T>(paramName, value);
+        var param = command.CreateParameter();
+        param.ParameterName = paramName;
+        param.Value = value is null ? DBNull.Value : (object)value!;
         command.Parameters.Add(param);
+
         return command;
     }
 }

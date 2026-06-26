@@ -41,12 +41,6 @@ public sealed class TimeRangeExpanderTests
         }
     }
 
-    private static void AssertApproxEqual(long expected, long actual, long tolerance = 1)
-    {
-        var diff = Math.Abs(expected - actual);
-        Assert.True(diff <= tolerance);
-    }
-
     #endregion
 
 

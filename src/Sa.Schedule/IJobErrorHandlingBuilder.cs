@@ -28,13 +28,6 @@ public interface IJobErrorHandlingBuilder
     IJobErrorHandlingBuilder ThenStopAllJobs();
 
     /// <summary>
-    /// Specifies that the current job should be stopped if an error occurs.
-    /// </summary>
-    /// <returns>The current IJobErrorHandlingBuilder instance.</returns>
-    [Obsolete("Use ThenAbortJob instead. This method will be removed in a future version.")]
-    IJobErrorHandlingBuilder ThenStopJob() => ThenAbortJob();
-
-    /// <summary>
     /// Specifies a custom error suppression policy.
     /// </summary>
     /// <param name="suppressError">A function that determines whether an error should be suppressed.</param>

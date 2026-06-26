@@ -17,14 +17,14 @@ internal static class PipeReaderExtensions
             if (result.Buffer.IsEmpty && result.IsCompleted)
                 break; // Недостаточно данных
 
-            var toConsume = Math.Min(remaining, (long)result.Buffer.Length);
+            var toConsume = Math.Min(remaining, result.Buffer.Length);
             var consumed = result.Buffer.GetPosition(toConsume);
             reader.AdvanceTo(consumed, consumed);
             remaining -= toConsume;
 
-            // Если буфер маленький, но нам нужно больше — продолжаем читать
-            if ((long)result.Buffer.Length <= toConsume && !result.IsCompleted)
-                continue;
+            //// Если буфер маленький, но нам нужно больше — продолжаем читать
+            //if (result.Buffer.Length <= toConsume && !result.IsCompleted)
+            //    continue;
         }
         return count - remaining;
     }
@@ -42,7 +42,7 @@ internal static class PipeReaderExtensions
             if (result.Buffer.IsEmpty && result.IsCompleted)
                 return;
 
-            var toConsume = Math.Min(remaining, (long)result.Buffer.Length);
+            var toConsume = Math.Min(remaining, result.Buffer.Length);
             var consumed = result.Buffer.GetPosition(toConsume);
 
             // Продвигаем Buffer до consumed, frontier тоже

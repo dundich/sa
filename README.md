@@ -3,6 +3,22 @@
 dot net10 experimental aot project
 
 
+## [Sa.Data.PostgreSql](src/Sa.Data.PostgreSql)
+
+Лёгкая обёртка над Npgsql для типичных операций с PostgreSQL — без ORM overhead, с поддержкой DI, Native AOT и минимальными аллокациями.
+
+- **ExecuteNonQuery** — INSERT / UPDATE / DELETE / DDL с возвратом числа строк
+- **ExecuteScalar / ExecuteScalarTyped<T>** — получение одиночного значения с авто-кастом
+- **ExecuteReader** — потоковое чтение строк через callback (без загрузки всего результата в память)
+- **ExecuteReaderList<T>** — сборка всех строк в `List<T>`
+- **ExecuteReaderFirst<T>** — первое значение первого столбца (Guid, TimeSpan, DateTime, int, long и др.)
+- **ExecuteReaderSingle<T> / TryExecuteReaderSingle<T>** — безопасное scalar-значение
+- **ExecuteTransactionAsync** — атомарные операции с авто-commit/rollback
+- **BeginBinaryImport** — быстрый COPY BINARY для массового импорта
+- **PgDistributedLock** — распределённая блокировка на `pg_try_advisory_lock`
+- **PgRetryStrategy** — повтор попыток с jitter для transient-ошибок Npgsql
+- **DI-интеграция** — `AddSaPostgreSqlDataSource()` регистрирует всё автоматически
+
 ## [Sa.Outbox.PostgreSql](src/Sa.Outbox.PostgreSql)
 
 Designed for implementing the Outbox pattern using PostgreSQL, which is used to ensure reliable message delivery in distributed systems. It helps prevent message loss and guarantees that messages will be processed even in the event of failures.
