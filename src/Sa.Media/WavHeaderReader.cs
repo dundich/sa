@@ -78,8 +78,10 @@ internal static class WavHeaderReader
     private static async Task<(long, uint dataSize)> FindDataChunkAsync(
         BinaryPipeReader reader, CancellationToken cancellationToken = default)
     {
-        while (reader.Position < 4096)
+        while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var chunkId = await reader.ReadUInt32Async(cancellationToken);
             var chunkSize = await reader.ReadUInt32Async(cancellationToken);
 
@@ -88,11 +90,12 @@ internal static class WavHeaderReader
                 return (reader.Position, chunkSize); // возвращаем смещение и размер данных
             }
 
-            // Пропускаем чанк (с выравниванием)
+            // Пропускаем чанк (с выравниванием на чётную границу)
             long paddedSize = (chunkSize % 2 == 0) ? chunkSize : chunkSize + 1;
+            if (paddedSize == 0)
+                throw new InvalidDataException("Invalid WAV file: zero-size chunk");
+
             await reader.SkeepBytesAsync(paddedSize, cancellationToken);
         }
-
-        throw new InvalidDataException("WAV file does not contain a 'data' chunk.");
     }
 }
