@@ -1,9 +1,10 @@
 ﻿namespace Sa.Media.FFmpeg.Services;
 
-internal sealed class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null, IFFProbeExecutor? ffprobe = null)
+internal sealed class PcmS16LeChannelManipulator(
+    IFFMpegExecutor? ffmpeg = null,
+    IFFProbeExecutor? ffprobe = null)
     : IPcmS16LeChannelManipulator
 {
-
     private readonly IFFMpegExecutor _ffmpeg = ffmpeg ?? IFFMpegExecutor.Default;
     private readonly IFFProbeExecutor _ffprobe = ffprobe ?? IFFProbeExecutor.Default;
 
@@ -34,16 +35,13 @@ internal sealed class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null,
         }
 
         var outFileExtension = Path.GetExtension(outputFileName) ?? ".wav";
-
         string outFilePrefix = Path.Combine(
             Path.GetDirectoryName(outputFileName) ?? string.Empty,
-            Path.GetFileNameWithoutExtension(outputFileName)
-        );
-
-        var file0 = $"{outFilePrefix}{channelSuffix}0{outFileExtension}";
+            Path.GetFileNameWithoutExtension(outputFileName));
 
         if (channels == 1)
         {
+            var file0 = $"{outFilePrefix}{channelSuffix}0{outFileExtension}";
             await _ffmpeg.ConvertToPcmS16Le(
                 inputFileName,
                 file0,
@@ -52,23 +50,16 @@ internal sealed class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null,
                 isOverwrite,
                 timeout,
                 cancellationToken);
-
             return [file0];
         }
 
-        List<string> files = [
+        var files = new[]
+        {
             $"{outFilePrefix}{channelSuffix}0{outFileExtension}",
             $"{outFilePrefix}{channelSuffix}1{outFileExtension}"
-        ];
+        };
 
-        string over = isOverwrite ? "-y" : string.Empty;
-        var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
-
-        string cmd = $"{over} {Constants.CleanBannerFlags} -i \"{inputFileName}\" " +
-            $"-filter_complex \"[0:a]channelsplit=channel_layout=stereo[left][right]\" " +
-            $"-map \"[left]\"  -acodec pcm_s16le -ac 1 -sample_fmt s16 {sampleRate} -f wav \"{files[0]}\" " +
-            $"-map \"[right]\" -acodec pcm_s16le -ac 1 -sample_fmt s16 {sampleRate} -f wav \"{files[1]}\"";
-
+        var cmd = BuildSplitCommand(inputFileName, files, outputSampleRate, isOverwrite);
 
         _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
@@ -93,15 +84,7 @@ internal sealed class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null,
         ArgumentNullException.ThrowIfNullOrWhiteSpace(rightFileName);
         ArgumentNullException.ThrowIfNullOrWhiteSpace(outputFileName);
 
-        string over = isOverwrite ? "-y" : string.Empty;
-        var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
-
-        string cmd =
-            $"{over} {Constants.CleanBannerFlags} -i \"{leftFileName}\" -i \"{rightFileName}\" " +
-            $"-filter_complex \"[0:a][1:a]amerge=inputs=2[a]\" -map \"[a]\" -ac 2 " +
-            $"-acodec pcm_s16le -sample_fmt s16 {sampleRate} " +
-            $"-f wav {Constants.CleanWavOutputFlags} \"{outputFileName}\"";
-
+        var cmd = BuildJoinCommand(leftFileName, rightFileName, outputFileName, outputSampleRate, isOverwrite);
 
         _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
@@ -111,4 +94,39 @@ internal sealed class PcmS16LeChannelManipulator(IFFMpegExecutor? ffmpeg = null,
 
         return outputFileName;
     }
+
+    #region Private command builders
+
+    private static string BuildSplitCommand(
+        string inputFileName,
+        string[] outputFiles,
+        int? outputSampleRate,
+        bool isOverwrite)
+    {
+        string over = isOverwrite ? "-y" : string.Empty;
+        var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
+
+        return $"{over} {Constants.CleanBannerFlags} -i \"{inputFileName}\" " +
+            $"-filter_complex \"[0:a]channelsplit=channel_layout=stereo[left][right]\" " +
+            $"-map \"[left]\"  -acodec pcm_s16le -ac 1 -sample_fmt s16 {sampleRate} -f wav \"{outputFiles[0]}\" " +
+            $"-map \"[right]\" -acodec pcm_s16le -ac 1 -sample_fmt s16 {sampleRate} -f wav \"{outputFiles[1]}\"";
+    }
+
+    private static string BuildJoinCommand(
+        string leftFileName,
+        string rightFileName,
+        string outputFileName,
+        int? outputSampleRate,
+        bool isOverwrite)
+    {
+        string over = isOverwrite ? "-y" : string.Empty;
+        var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
+
+        return $"{over} {Constants.CleanBannerFlags} -i \"{leftFileName}\" -i \"{rightFileName}\" " +
+            $"-filter_complex \"[0:a][1:a]amerge=inputs=2[a]\" -map \"[a]\" -ac 2 " +
+            $"-acodec pcm_s16le -sample_fmt s16 {sampleRate} " +
+            $"-f wav {Constants.CleanWavOutputFlags} \"{outputFileName}\"";
+    }
+
+    #endregion
 }

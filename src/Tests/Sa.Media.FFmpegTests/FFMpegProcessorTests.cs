@@ -240,6 +240,37 @@ public sealed class FFMpegProcessorTests
         Assert.Equal(8000, sampleRate);
     }
 
+    [Theory]
+    [InlineData("./data/input.wav")]
+    public async Task ConvertToPcmS16LePreservingFormat_ShouldPreserveOriginalSettings(string inputPath)
+    {
+        // Arrange
+        string outputPath = "./data/output_preserved.wav";
+
+        if (File.Exists(outputPath))
+            File.Delete(outputPath);
+
+        // Получаем исходные настройки
+        var originalInfo = await IFFProbeExecutor.Default.GetMetaInfo(inputPath, CancellationToken);
+        var (origChannels, origSampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRate(inputPath, CancellationToken);
+
+        // Act
+        await Processor.ConvertToPcmS16LePreservingFormat(
+            inputFileName: inputPath,
+            outputFileName: outputPath,
+            isOverwrite: true,
+            cancellationToken: CancellationToken);
+
+        // Assert
+        Assert.True(File.Exists(outputPath));
+
+        var ffprobe = CreateFFProbeExecutor();
+        var (outChannels, outSampleRate) = await ffprobe.GetChannelsAndSampleRate(outputPath, cancellationToken: CancellationToken);
+
+        Assert.Equal(origChannels, outChannels);
+        Assert.Equal(origSampleRate, outSampleRate);
+    }
+
     private static IFFProbeExecutor CreateFFProbeExecutor()
     {
         return IFFProbeExecutor.Default;

@@ -2,7 +2,7 @@
 
 namespace Sa.MediaTests;
 
-public class TimeRangeExpanderTests
+public sealed class TimeRangeExpanderTests
 {
     #region Helper Methods
 
