@@ -5,18 +5,14 @@ namespace Sa.Partitional.PostgreSql.Migration;
 internal sealed class PartMigrationService(
     IPartRepository repository
     , TimeProvider timeProvider
-    , MigrationScheduleSettings settings): IMigrationService, IDisposable
+    , MigrationScheduleSettings settings) : IMigrationService, IDisposable
 {
     private int s_triggered = 0;
     private readonly CancellationTokenSource _cts = new();
-    private int _lastResult = -1;
 
     public CancellationToken OnMigrated => _cts.Token;
 
-    public void Dispose()
-    {
-        _cts.Dispose();
-    }
+    public void Dispose() => _cts.Dispose();
 
     public Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
        => repository.Migrate(dates, cancellationToken);
@@ -33,18 +29,12 @@ internal sealed class PartMigrationService(
                     .Select(i => now.AddDays(i))];
 
                 int result = await repository.Migrate(dates, cancellationToken);
-                _lastResult = result;
                 await _cts.CancelAsync();
                 return result;
             }
-            catch
-            {
-                _lastResult = -1;
-                throw;
-            }
             finally
             {
-                Interlocked.Exchange(ref s_triggered, 0);
+                Interlocked.CompareExchange(ref s_triggered, 0, 1);
             }
         }
         else
@@ -53,9 +43,9 @@ internal sealed class PartMigrationService(
             {
                 await Task.Delay(settings.WaitMigrationTimeout, cancellationToken);
             }
-            while (Interlocked.CompareExchange(ref s_triggered, 0, 0) != 0);
+            while (s_triggered != 0);
         }
 
-        return _lastResult;
+        return -1;
     }
 }

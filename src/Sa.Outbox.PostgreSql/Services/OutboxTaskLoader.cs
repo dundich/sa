@@ -11,7 +11,7 @@ using System.Data;
 namespace Sa.Outbox.PostgreSql.Services;
 
 /// <summary>
-///  Подгружаеи новые задания для консьюмера из таблицы вх. сообщений _msg$
+///  Подгружаем новые задания для консьюмера из таблицы вх. сообщений _msg$
 /// </summary>
 internal sealed partial class OutboxTaskLoader(
     IPgDataSource pg,

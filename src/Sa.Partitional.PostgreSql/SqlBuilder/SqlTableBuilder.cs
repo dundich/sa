@@ -37,19 +37,6 @@ $"""
 """;
     }
 
-    /// <summary>
-    /// Creates SQL for a table with no LIST partitioning (RANGE only).
-    /// </summary>
-    public string CreateSql(DateTimeOffset date)
-    {
-        return
-$"""
--- {date}
-{rootBuilder.CreateSql()}
-{partRangeBuilder.CreateSql(date, [])}
-""";
-    }
-
     public string GetPartsSql(StrOrNum[] partValues) => settings.SelectPartsQualifiedTablesSql(partValues);
 
     public override string ToString() => $"{FullName} {Settings.PartByListFieldNames}";

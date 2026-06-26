@@ -6,7 +6,7 @@ using Sa.Outbox.PostgreSql.Configuration;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class NpqsqlOutboxReader(PgOutboxTableSettings settings)
+internal sealed class NpgsqlOutboxReader(PgOutboxTableSettings settings)
 {
 
     public TypeReader Type { get; } = new(settings);

@@ -7,7 +7,7 @@ namespace Sa.Outbox.PostgreSql.Commands;
 internal sealed class SelectTenantCommand(
     IPgDataSource dataSource,
     SqlOutboxBuilder sql,
-    NpqsqlOutboxReader outboxReader) : ISelectTenantCommand
+    NpgsqlOutboxReader outboxReader) : ISelectTenantCommand
 {
     public async Task<IReadOnlyCollection<int>> Execute(CancellationToken cancellationToken)
     {
