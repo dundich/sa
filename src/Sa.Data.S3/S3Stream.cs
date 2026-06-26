@@ -74,9 +74,12 @@ internal sealed class S3Stream(HttpResponseMessage response, Stream stream) : St
 
     protected override void Dispose(bool disposing)
     {
-        stream.Dispose();
-        response.Dispose();
+        if (disposing)
+        {
+            stream.Dispose();
+            response.Dispose();
+        }
 
-        base.Dispose(true);
+        base.Dispose(disposing);
     }
 }
