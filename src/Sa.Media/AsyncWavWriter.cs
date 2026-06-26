@@ -85,23 +85,20 @@ internal sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
     ///// Каждый элемент samples — семплы для одного канала
     ///// Все ReadOnlyMemory должны быть одинаковой длины
     ///// </summary>
-    public ValueTask WriteSamplesAsync(ReadOnlyMemory<double> interleavedSamples, CancellationToken cancellationToken = default)
+    public async ValueTask WriteSamplesAsync(ReadOnlyMemory<double> interleavedSamples, CancellationToken cancellationToken = default)
     {
-        if (MemoryMarshal.TryGetArray(interleavedSamples, out ArraySegment<double> array))
+        if (MemoryMarshal.TryGetArray(interleavedSamples, out var segment))
         {
-            return new ValueTask(WriteSamplesAsync(array.Array!, array.Offset, array.Count, cancellationToken));
+            await WriteSamplesAsync(segment.Array!, segment.Offset, segment.Count, cancellationToken).ConfigureAwait(false);
+            return;
         }
 
-        var sharedBuffer = ArrayPool<double>.Shared.Rent(interleavedSamples.Length);
-        interleavedSamples.Span.CopyTo(sharedBuffer);
-        return new ValueTask(FinishWriteAsync(WriteSamplesAsync(sharedBuffer, 0, interleavedSamples.Length, cancellationToken), sharedBuffer));
-    }
-
-    private static async Task FinishWriteAsync(Task writeTask, double[] localBuffer)
-    {
+        // Данные не в backing-массиве — копируем в локальный буфер
+        var localBuffer = ArrayPool<double>.Shared.Rent(interleavedSamples.Length);
         try
         {
-            await writeTask.ConfigureAwait(false);
+            interleavedSamples.Span.CopyTo(localBuffer);
+            await WriteSamplesAsync(localBuffer, 0, interleavedSamples.Length, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -115,7 +112,7 @@ internal sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
         {
             WriteSampleCore(samples[i]);
             if (_currentBufferSize >= _currentBuffer.Length)
-                await FlushBufferAsync(cancellationToken);
+                await FlushBufferAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -161,11 +158,28 @@ internal sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
 
     private void WriteSample24Bit(double value)
     {
-        int i = (int)(value * int.MaxValue / short.MaxValue);
+        // Защита от невалидных входных значений
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            value = 0.0;
+
+        // Корректный масштаб для 24 бит
+        const double max24Bit = 8388607.0; // 2^23 - 1
+        double scaled = value * max24Bit;
+
+        // Клиппинг
+        if (scaled > max24Bit) scaled = max24Bit;
+        else if (scaled < -max24Bit - 1) scaled = -max24Bit - 1;
+
+        int i = (int)scaled;
+
+        // Проверка доступного места (если не гарантировано снаружи)
+        if (_currentBufferSize + 3 > _currentBuffer.Span.Length)
+            throw new InvalidOperationException("Buffer overflow");
+
         var span = _currentBuffer.Span[_currentBufferSize..];
-        span[0] = (byte)(i & 0xFF);
-        span[1] = (byte)((i >> 8) & 0xFF);
-        span[2] = (byte)((i >> 16) & 0xFF);
+        span[0] = (byte)(i & 0xFF);        // младший байт
+        span[1] = (byte)((i >> 8) & 0xFF); // средний
+        span[2] = (byte)((i >> 16) & 0xFF);// старший (little-endian)
         _currentBufferSize += 3;
         _dataSize += 3;
     }
@@ -184,7 +198,6 @@ internal sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
         _currentBufferSize += sizeof(double);
         _dataSize += sizeof(double);
     }
-
 
     private async Task FlushBufferAsync(CancellationToken cancellationToken)
     {

@@ -85,7 +85,9 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
     /// но данные должны быть скопированы до следующего yield return).
     /// Если false - возвращает копию данных (безопасно, но с аллокациями).
     /// </param>
+#pragma warning disable S3776
     public async IAsyncEnumerable<AudioPacket> ReadSamplesPerChannelAsync(
+#pragma warning restore S3776
         TimeRange? cutRange = null,
         bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -107,58 +109,67 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         int sampleSize = header.SampleSize;
         long currentOffset = cutFrom;
 
-        var sampleBuffer = new byte[sampleSize];
+        var samplePool = MemoryPool<byte>.Shared.Rent(sampleSize);
 
-        while (true)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            ReadResult result = await _reader.ReadAsync(cancellationToken);
-            ReadOnlySequence<byte> sequence = result.Buffer;
-
-            SequencePosition consumed = sequence.Start;
-            bool success = false;
-            try
+            while (true)
             {
-                // Обрабатываем полные блоки
-                while (sequence.Length >= blockAlign && currentOffset < cutTo)
+                cancellationToken.ThrowIfCancellationRequested();
+
+                ReadResult result = await _reader.ReadAsync(cancellationToken);
+                ReadOnlySequence<byte> sequence = result.Buffer;
+
+                SequencePosition consumed = sequence.Start;
+                bool success = false;
+                try
                 {
-                    ReadOnlySequence<byte> block = sequence.Slice(0, blockAlign);
-
-                    bool blockIsEof = (currentOffset + blockAlign >= cutTo) || result.IsCompleted;
-
-                    // Извлекаем сэмплы по каналам
-                    for (int channelId = 0; channelId < channels; channelId++)
+                    // Обрабатываем полные блоки
+                    while (sequence.Length >= blockAlign && currentOffset < cutTo)
                     {
-                        int offsetInBlock = channelId * sampleSize;
+                        ReadOnlySequence<byte> block = sequence.Slice(0, blockAlign);
 
-                        block.Slice(offsetInBlock, sampleSize).CopyTo(sampleBuffer);
-                        var chunk = allowBufferReuse ? sampleBuffer : [.. sampleBuffer];
-                        yield return new(channelId, chunk, currentOffset, blockIsEof);
+                        bool blockIsEof = (currentOffset + blockAlign >= cutTo) || result.IsCompleted;
+
+                        // Извлекаем сэмплы по каналам
+                        for (int channelId = 0; channelId < channels; channelId++)
+                        {
+                            int offsetInBlock = channelId * sampleSize;
+
+                            block.Slice(offsetInBlock, sampleSize).CopyTo(samplePool.Memory.Span);
+                            var chunk = allowBufferReuse
+                                ? samplePool.Memory[..sampleSize]
+                                : samplePool.Memory[..sampleSize].ToArray();
+                            yield return new(channelId, chunk, currentOffset, blockIsEof);
+                        }
+
+                        // Продвигаем позиции
+                        currentOffset += blockAlign;
+                        sequence = sequence.Slice(blockAlign);
+                        consumed = sequence.Start;
                     }
 
-                    // Продвигаем позиции
-                    currentOffset += blockAlign;
-                    sequence = sequence.Slice(blockAlign);
-                    consumed = sequence.Start;
+                    success = true;
+                }
+                finally
+                {
+                    if (success)
+                    {
+                        _reader.AdvanceTo(consumed, result.IsCompleted ? sequence.End : consumed);
+                    }
+                    else
+                    {
+                        _reader.AdvanceTo(sequence.Start, sequence.End); // Сброс при ошибке
+                    }
                 }
 
-                success = true;
+                if (result.IsCompleted || currentOffset >= cutTo)
+                    yield break;
             }
-            finally
-            {
-                if (success)
-                {
-                    _reader.AdvanceTo(consumed, result.IsCompleted ? sequence.End : consumed);
-                }
-                else
-                {
-                    _reader.AdvanceTo(sequence.Start, sequence.End); // Сброс при ошибке
-                }
-            }
-
-            if (result.IsCompleted || currentOffset >= cutTo)
-                yield break;
+        }
+        finally
+        {
+            samplePool.Dispose();
         }
     }
 
@@ -193,18 +204,24 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
     {
         int bytesPerSample = targetFormat.GetBytesPerSample();
 
-        var buffer = new byte[bytesPerSample];
-
-        var convert = SampleConverter.GetConverter(targetFormat);
-
-        await foreach (var (channelId, sample, offset, isEof) in
-            ReadDoubleSamplesAsync(cutRange, allowBufferReuse, cancellationToken)
-            .WithCancellation(cancellationToken))
+        var buffer = ArrayPool<byte>.Shared.Rent(bytesPerSample);
+        try
         {
-            ReadOnlyMemory<byte> result = convert(sample, buffer);
-            // При true все пакеты используют ОДИН внутренний буфер!
-            var chunk = allowBufferReuse ? result : result.ToArray();
-            yield return new(channelId, chunk, offset, isEof);
+            var convert = SampleConverter.GetConverter(targetFormat);
+
+            await foreach (var (channelId, sample, offset, isEof) in
+                ReadDoubleSamplesAsync(cutRange, allowBufferReuse, cancellationToken)
+                .WithCancellation(cancellationToken))
+            {
+                ReadOnlyMemory<byte> result = convert(sample, buffer.AsMemory()[..bytesPerSample]);
+                // При allowBufferReuse=true все пакеты используют ОДИН внутренний буфер!
+                var chunk = allowBufferReuse ? result : result.ToArray();
+                yield return new AudioPacket(channelId, chunk, offset, isEof);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
@@ -246,8 +263,10 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
             await foreach (var (channelId, sample, position, isEof) in ConvertToFormatAsync(
                 targetFormat,
                 cutRange,
-                allowBufferReuse,
-                cancellationToken: cancellationToken).WithCancellation(cancellationToken))
+                allowBufferReuse: false, // Внутренний буфер уже переиспользуется, нужен новый пакет
+                cancellationToken: cancellationToken)
+                .WithCancellation(cancellationToken)
+                .ConfigureAwait(false))
             {
                 lastOffset = position;
 

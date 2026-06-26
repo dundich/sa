@@ -31,7 +31,7 @@ internal static class WavHeaderReader
         {
             uint junkSize = await reader.ReadUInt32Async(cancellationToken);
             if (junkSize % 2 == 1) junkSize++; // align to even size
-            await reader.SkeepBytesAsync(junkSize, cancellationToken);
+            await reader.SkipBytesAsync(junkSize, cancellationToken);
             subchunk1Id = await reader.ReadUInt32Async(cancellationToken);
         }
 
@@ -95,7 +95,7 @@ internal static class WavHeaderReader
             if (paddedSize == 0)
                 throw new InvalidDataException("Invalid WAV file: zero-size chunk");
 
-            await reader.SkeepBytesAsync(paddedSize, cancellationToken);
+            await reader.SkipBytesAsync(paddedSize, cancellationToken);
         }
     }
 }
