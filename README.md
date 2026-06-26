@@ -31,13 +31,16 @@ Designed for implementing the Outbox pattern using PostgreSQL, which is used to 
 
 ## [Sa.Partitional.PostgreSql](src/Sa.Partitional.PostgreSql)
 
-A library designed for managing table partitioning in PostgreSQL with the aim of improving performance and manageability for large volumes of data.
+Declarative PostgreSQL table partitioning for .NET 10 — range (day/month/year) and list partitioning with automated migration, cleanup scheduling, and in-memory caching.
 
-- Declaratively describe a partitioned table by time (day, month, year).
-- Define partitions based on lists of keys for rows or numbers.
-- Set a schedule for migrations to create new partitions.
-- Set a schedule for deleting old partitions.
-- Manage partitions.
+- **Range partitioning** by day, month, or year with automatic timestamp-based naming
+- **List partitioning** by string or numeric keys with hierarchical child partitions
+- **Fluent builder API** for declaring tables, tuning fillfactor, custom constraints, and migrations
+- **Automated migration** — pre-create future partitions as a background job
+- **Automated cleanup** — drop old partitions past a configurable retention window
+- **In-memory cache** — avoids repeated catalog queries; auto-invalidates on runtime changes
+- **StrOrNum** discriminated union for type-safe partition key values
+- See the full [Guide](src/Sa.Partitional.PostgreSql/Guide.md) and [API Reference](src/Sa.Partitional.PostgreSql/ApiReference.md).
 
 ## [Sa.Schedule](src/Sa.Schedule)
 

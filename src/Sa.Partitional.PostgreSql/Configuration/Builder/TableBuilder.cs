@@ -69,7 +69,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
     public ITableBuilder WithFillFactor(int fillFactor)
     {
-        _fillFactor = Math.Max(100, fillFactor);
+        _fillFactor = Math.Clamp(fillFactor, 10, 100);
         return this;
     }
 

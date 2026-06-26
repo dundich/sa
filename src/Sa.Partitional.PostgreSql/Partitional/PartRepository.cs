@@ -202,32 +202,10 @@ internal sealed partial class PartRepository(
     }
 
     private static bool CanRetryByError(Exception ex, int _ = 0)
-    {
-        if (ex is PostgresException err)
-        {
-            if (err.IsTransient) return true;
-
-            return err.SqlState switch
-            {
-                PostgresErrorCodes.ConnectionException
-                 or PostgresErrorCodes.ConnectionFailure
-                 or PostgresErrorCodes.DeadlockDetected
-                 or PostgresErrorCodes.CannotConnectNow
-                   => true, //continue
+        => PgErrorCodes.CanRetryByError(ex);
 
 
-                _ => false, // abort
-            };
-        }
-
-        return true;
-    }
-
-
-    private static bool UndefinedTable(PostgresException ex) =>
-        ex.SqlState == PostgresErrorCodes.UndefinedTable
-        || ex.SqlState == PostgresErrorCodes.InvalidSchemaName
-        ;
+    private static bool UndefinedTable(PostgresException ex) => PgErrorCodes.IsUndefinedTable(ex);
 
     public void Dispose()
     {

@@ -4,8 +4,7 @@ internal sealed class PartCleanupService(
     IPartRepository repository
     , PartCleanupScheduleSettings settings
     , ISqlBuilder sqlBuilder
-    , TimeProvider? timeProvider = null
-) : IPartCleanupService
+    , TimeProvider? timeProvider = null) : IPartCleanupService
 {
     public async Task<int> Clean(DateTimeOffset toDate, CancellationToken cancellationToken)
     {

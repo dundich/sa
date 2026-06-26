@@ -9,6 +9,7 @@ internal sealed class PartMigrationService(
 {
     private int s_triggered = 0;
     private readonly CancellationTokenSource _cts = new();
+    private int _lastResult = -1;
 
     public CancellationToken OnMigrated => _cts.Token;
 
@@ -32,12 +33,18 @@ internal sealed class PartMigrationService(
                     .Select(i => now.AddDays(i))];
 
                 int result = await repository.Migrate(dates, cancellationToken);
+                _lastResult = result;
                 await _cts.CancelAsync();
                 return result;
             }
+            catch
+            {
+                _lastResult = -1;
+                throw;
+            }
             finally
             {
-                Interlocked.CompareExchange(ref s_triggered, 0, 1);
+                Interlocked.Exchange(ref s_triggered, 0);
             }
         }
         else
@@ -46,9 +53,9 @@ internal sealed class PartMigrationService(
             {
                 await Task.Delay(settings.WaitMigrationTimeout, cancellationToken);
             }
-            while (s_triggered != 0);
+            while (Interlocked.CompareExchange(ref s_triggered, 0, 0) != 0);
         }
 
-        return -1;
+        return _lastResult;
     }
 }

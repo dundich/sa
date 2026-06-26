@@ -9,8 +9,7 @@ internal sealed class PartCache(
     IPartRepository repository
     , ISqlBuilder sqlBuilder
     , PartCacheSettings settings
-    , TimeProvider? timeProvider = null
-) : IPartCache
+    , TimeProvider? timeProvider = null) : IPartCache
 {
 
     private readonly ConcurrentDictionary<string, Task<List<PartByRangeInfo>>> _cache = new();
@@ -44,7 +43,7 @@ internal sealed class PartCache(
             List<PartByRangeInfo> list = await repository.GetPartsFromDate(tableName, from, cancellationToken);
             return list;
         }
-        catch (Npgsql.PostgresException ex) when (ex.SqlState == Npgsql.PostgresErrorCodes.UndefinedTable)
+        catch (Npgsql.PostgresException ex) when (PgErrorCodes.IsUndefinedTable(ex))
         {
             return [];
         }
