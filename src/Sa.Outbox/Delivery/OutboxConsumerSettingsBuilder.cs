@@ -6,6 +6,8 @@
 /// </summary>
 public sealed class OutboxConsumerSettingsBuilder
 {
+    private readonly Guid _id = Guid.NewGuid();
+
     private string? _consumerGroupId;
     private bool? _asSingleton;
     private TimeSpan? _interval;
@@ -34,6 +36,7 @@ public sealed class OutboxConsumerSettingsBuilder
     public OutboxConsumerSettings Build()
     {
         return new OutboxConsumerSettings(
+            _id,
             _consumerGroupId ?? throw new InvalidOperationException("ConsumerGroupId is required."),
             _asSingleton ?? false,
             _interval ?? TimeSpan.FromMinutes(1),
@@ -55,37 +58,6 @@ public sealed class OutboxConsumerSettingsBuilder
             0);
     }
 
-    // ── Runtime: partial copy from existing settings ──────────
-
-    /// <summary>
-    /// Creates a copy of <paramref name="original"/> with only the builder-configured overrides applied.
-    /// Unspecified fields inherit from <paramref name="original"/>. Version increments by 1.
-    /// </summary>
-    public OutboxConsumerSettings BuildCopy(OutboxConsumerSettings original)
-    {
-        return original is null
-            ? throw new ArgumentNullException(nameof(original))
-            : new OutboxConsumerSettings(
-            _consumerGroupId ?? original.ConsumerGroupId,
-            _asSingleton ?? original.AsSingleton,
-            _interval ?? original.Interval,
-            _initialDelay ?? original.InitialDelay,
-            _concurrencyLimit ?? original.ConcurrencyLimit,
-            _maxConcurrency ?? original.MaxConcurrency,
-            _retryCountOnError ?? original.RetryCountOnError,
-            _maxBatchSize ?? original.MaxBatchSize,
-            _maxProcessingIterations ?? original.MaxProcessingIterations,
-            _iterationDelay ?? original.IterationDelay,
-            _lockDuration ?? original.LockDuration,
-            _lockRenewal ?? original.LockRenewal,
-            _lookbackInterval ?? original.LookbackInterval,
-            _maxDeliveryAttempts ?? original.MaxDeliveryAttempts,
-            _batchingWindow ?? original.BatchingWindow,
-            _perTenantTimeout ?? original.PerTenantTimeout,
-            _perTenantMaxDegreeOfParallelism ?? original.PerTenantMaxDegreeOfParallelism,
-            _paused ?? original.Paused,
-            original.Version + 1);
-    }
 
     // ── Fluent setters ────────────────────────────────────────
 
@@ -223,7 +195,7 @@ public sealed class OutboxConsumerSettingsBuilder
     /// </summary>
     public OutboxConsumerSettingsBuilder WithLockDuration(TimeSpan lockDuration)
     {
-        if (lockDuration <= TimeSpan.Zero) throw new ArgumentException("LockDuration must be > TimeSpan.Zero.", nameof(lockDuration));
+        if (lockDuration < TimeSpan.Zero) throw new ArgumentException("LockDuration must be >= TimeSpan.Zero.", nameof(lockDuration));
         _lockDuration = lockDuration;
         return this;
     }

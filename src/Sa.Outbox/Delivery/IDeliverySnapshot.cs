@@ -2,9 +2,8 @@
 
 public interface IDeliverySnapshot
 {
-    OutboxConsumerSettings[] ConsumerSettings { get; }
     string[] Parts { get; }
-
+    OutboxConsumerSettings[] ConsumerSettings { get; }
     IEnumerable<string> GetConsumeGroupIds()
         => ConsumerSettings.Select(c => c.ConsumerGroupId).Distinct();
 }

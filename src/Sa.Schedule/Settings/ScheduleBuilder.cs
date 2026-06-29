@@ -71,6 +71,7 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
     public IJobBuilder AddJob(Func<IJobContext, CancellationToken, Task> action, Guid? jobId = null)
     {
         Guid id = GetId(jobId);
+
         _services
             .RemoveAllKeyed<FuncJob>(jobId)
             .AddKeyedScoped(id, (_, __) => new FuncJob(action));

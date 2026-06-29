@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Sa.Outbox.Delivery.Job;
 using Sa.Schedule;
 using System.Diagnostics.CodeAnalysis;
 
@@ -8,12 +7,6 @@ namespace Sa.Outbox.Delivery.Job;
 
 internal static class Setup
 {
-    /// <summary>
-    /// Queue of settings registered via AddDeliveryJob, consumed by DeliverySnapshot.
-    /// Thread-safe for bootstrap phase only.
-    /// </summary>
-    internal static readonly Queue<OutboxConsumerSettings?> RegisteredSettings = new();
-
     public static IServiceCollection AddDeliveryJob<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
             this IServiceCollection services,
@@ -53,16 +46,13 @@ internal static class Setup
 
         var settings = builder.Build();
 
-        // Register in the static registry for DeliverySnapshot
-        RegisteredSettings.Enqueue(settings);
-
         if (isSingleton)
         {
-            services.AddKeyedSingleton<IConsumer<TMessage>, TConsumer>(settings);
+            services.AddKeyedSingleton<IConsumer<TMessage>, TConsumer>(settings.Id);
         }
         else
         {
-            services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(settings);
+            services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(settings.Id);
         }
 
         services.AddSaSchedule(builder =>
@@ -83,7 +73,7 @@ internal static class Setup
                         .ThenCloseApplication())
                     ;
 
-            }, jobId ?? Guid.Empty);
+            }, jobId);
 
 
             builder.AddInterceptor<OutboxJobInterceptor>();

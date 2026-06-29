@@ -4,7 +4,7 @@ using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
-public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixture)
+public sealed class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixture)
     : IClassFixture<DeliveryLongProcessorTests.Fixture>
 {
     class TestMessageConsumer : IConsumer<TestMessage>
@@ -15,7 +15,6 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
         {
-            Console.WriteLine(messages.Length);
             await Task.Delay(1000, cancellationToken);
         }
     }
@@ -34,7 +33,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
                     .WithDeliveries(b => b
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test1", (_, b) =>
                         {
-                            OutboxSettings = new OutboxConsumerSettingsBuilder()
+                            OutboxSettings = b
                                 .WithConsumerGroupId("test1")
                                 .WithLockDuration(TimeSpan.FromMilliseconds(300))
                                 .WithLockRenewal(TimeSpan.FromMilliseconds(100))
@@ -66,7 +65,6 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
 
         var cnt = await fixture.Publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
         Assert.True(cnt > 0);
-
 
         var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
         Assert.True(result > 0);

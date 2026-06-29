@@ -6,6 +6,9 @@
 /// Create new instances via <see cref="OutboxConsumerSettingsBuilder"/> or the <c>with</c> expression.
 /// </summary>
 public sealed record OutboxConsumerSettings(
+
+    Guid Id,
+
     /// <summary>
     /// Unique identifier for the consumer group. Groups settings for a single logical consumer.
     /// </summary>
@@ -108,8 +111,7 @@ public sealed record OutboxConsumerSettings(
     /// Settings version. Incremented on every change for change detection.
     /// Used for optimistic locking and notifying subscribers.
     /// </summary>
-    int Version
-    )
+    int Version)
 {
     /// <summary>
     /// Validates all settings and returns a list of error messages.
