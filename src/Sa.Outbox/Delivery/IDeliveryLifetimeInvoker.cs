@@ -6,7 +6,7 @@
 internal interface IDeliveryLifetimeInvoker
 {
     Task ConsumeInScope<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken);

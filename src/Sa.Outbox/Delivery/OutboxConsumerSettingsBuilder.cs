@@ -51,7 +51,8 @@ public sealed class OutboxConsumerSettingsBuilder
             _batchingWindow ?? TimeSpan.FromSeconds(3),
             _perTenantTimeout ?? TimeSpan.Zero,
             _perTenantMaxDegreeOfParallelism ?? 1,
-            _paused ?? false);
+            _paused ?? false,
+            0);
     }
 
     // ── Runtime: partial copy from existing settings ──────────
@@ -82,8 +83,8 @@ public sealed class OutboxConsumerSettingsBuilder
             _batchingWindow ?? original.BatchingWindow,
             _perTenantTimeout ?? original.PerTenantTimeout,
             _perTenantMaxDegreeOfParallelism ?? original.PerTenantMaxDegreeOfParallelism,
-            _paused ?? original.Paused
-        );
+            _paused ?? original.Paused,
+            original.Version + 1);
     }
 
     // ── Fluent setters ────────────────────────────────────────
@@ -228,6 +229,11 @@ public sealed class OutboxConsumerSettingsBuilder
     }
 
     /// <summary>
+    /// Disables lock duration — messages are not locked before processing.
+    /// </summary>
+    public OutboxConsumerSettingsBuilder WithNoLockDuration() => WithLockDuration(TimeSpan.Zero);
+
+    /// <summary>
     /// Sets the lock renewal time. Must be less than <see cref="LockDuration"/>.
     /// </summary>
     public OutboxConsumerSettingsBuilder WithLockRenewal(TimeSpan lockRenewal)
@@ -266,6 +272,11 @@ public sealed class OutboxConsumerSettingsBuilder
         _batchingWindow = batchingWindow;
         return this;
     }
+
+    /// <summary>
+    /// Disables batching window — take whatever is available now.
+    /// </summary>
+    public OutboxConsumerSettingsBuilder WithNoBatchingWindow() => WithBatchingWindow(TimeSpan.Zero);
 
     /// <summary>
     /// Sets the per-tenant processing timeout.

@@ -9,11 +9,11 @@ namespace Sa.Outbox.Delivery;
 internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) : IDeliveryLifetimeInvoker
 {
 
-    private readonly ConcurrentDictionary<ConsumerGroupSettings, IConsumer> _singletonConsumers = new();
+    private readonly ConcurrentDictionary<OutboxConsumerSettings, IConsumer> _singletonConsumers = new();
 
     // Method to process messages using a consumer in scope
     public Task ConsumeInScope<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
@@ -24,7 +24,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
     }
 
     private Task ProcessInSingleton<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
@@ -34,7 +34,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
     }
 
     private async Task ProcessInNewScope<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
@@ -46,7 +46,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
 
     private static async Task ProcessMessages<TMessage>(
         IConsumer<TMessage> consumer,
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
@@ -55,7 +55,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
     }
 
     private IConsumer<TMessage> GetOrCreateSingletonConsumer<TMessage>(
-        ConsumerGroupSettings settings)
+        OutboxConsumerSettings settings)
     {
         return (IConsumer<TMessage>)_singletonConsumers.GetOrAdd(settings, key =>
             serviceProvider.GetRequiredKeyedService<IConsumer<TMessage>>(key));

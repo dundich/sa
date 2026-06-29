@@ -11,21 +11,17 @@ internal sealed class DeliveryProcessor(
     ITenantProvider tenantProvider) : IDeliveryProcessor
 {
     public async Task<long> ProcessMessages<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
-        // Derive immutable snapshot from mutable bootstrap settings.
-        // Cheap operation (~20 property reads) compared to DB/network I/O.
-        var canonical = settings.ToCanonical();
-
-        if (canonical.Paused)
+        if (settings.Paused)
         {
             // Consumer group is paused — do not poll.
             await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             return 0;
         }
 
-        int batchSize = canonical.MaxBatchSize;
+        int batchSize = settings.MaxBatchSize;
         if (batchSize == 0) return 0;
 
         int[] tenantIds = await tenantProvider.GetTenantIds(cancellationToken);
@@ -37,12 +33,12 @@ internal sealed class DeliveryProcessor(
         bool continueProcessing;
         do
         {
-            if (iterations > 0 && canonical.IterationDelay > TimeSpan.Zero)
+            if (iterations > 0 && settings.IterationDelay > TimeSpan.Zero)
             {
-                await Task.Delay(canonical.IterationDelay, cancellationToken);
+                await Task.Delay(settings.IterationDelay, cancellationToken);
             }
 
-            int sentCount = await ProcessForEachTenant<TMessage>(tenantIds, settings, canonical, cancellationToken);
+            int sentCount = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken);
 
             totalProcessed += sentCount;
             iterations++;
@@ -50,7 +46,7 @@ internal sealed class DeliveryProcessor(
             continueProcessing = ShouldContinueProcessing(
                 sentCount,
                 iterations,
-                canonical,
+                settings,
                 cancellationToken);
         }
         while (continueProcessing);
@@ -78,25 +74,23 @@ internal sealed class DeliveryProcessor(
 
     private async Task<int> ProcessForEachTenant<TMessage>(
         int[] tenantIds,
-        ConsumerGroupSettings settings,
-        OutboxConsumerSettings canonical,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
-        return (canonical.PerTenantMaxDegreeOfParallelism == 1)
-            ? await ProcessTenantsSequential<TMessage>(tenantIds, settings, canonical, cancellationToken)
-            : await ProcessTenantsParallel<TMessage>(tenantIds, settings, canonical, cancellationToken);
+        return (settings.PerTenantMaxDegreeOfParallelism == 1)
+            ? await ProcessTenantsSequential<TMessage>(tenantIds, settings, cancellationToken)
+            : await ProcessTenantsParallel<TMessage>(tenantIds, settings, cancellationToken);
     }
 
     private async Task<int> ProcessTenantsSequential<TMessage>(
         int[] tenantIds,
-        ConsumerGroupSettings settings,
-        OutboxConsumerSettings canonical,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
         int count = 0;
         foreach (int tenantId in tenantIds)
         {
-            count += await ProcessInTenant<TMessage>(tenantId, settings, canonical, cancellationToken);
+            count += await ProcessInTenant<TMessage>(tenantId, settings, cancellationToken);
         }
 
         return count;
@@ -104,15 +98,14 @@ internal sealed class DeliveryProcessor(
 
     public async Task<int> ProcessTenantsParallel<TMessage>(
         int[] tenantIds,
-        ConsumerGroupSettings settings,
-        OutboxConsumerSettings canonical,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
         var parallelOptions = new ParallelOptions
         {
-            MaxDegreeOfParallelism = canonical.PerTenantMaxDegreeOfParallelism == -1
+            MaxDegreeOfParallelism = settings.PerTenantMaxDegreeOfParallelism == -1
                 ? Environment.ProcessorCount
-                : canonical.PerTenantMaxDegreeOfParallelism,
+                : settings.PerTenantMaxDegreeOfParallelism,
             CancellationToken = cancellationToken
         };
 
@@ -125,7 +118,7 @@ internal sealed class DeliveryProcessor(
                 parallelOptions,
                 async (tenantId, ct) =>
                 {
-                    int processed = await ProcessInTenant<TMessage>(tenantId, settings, canonical, ct);
+                    int processed = await ProcessInTenant<TMessage>(tenantId, settings, ct);
                     Interlocked.Add(ref totalCount, processed);
                 });
         }
@@ -139,14 +132,13 @@ internal sealed class DeliveryProcessor(
 
     private async Task<int> ProcessInTenant<TMessage>(
         int tenantId,
-        ConsumerGroupSettings settings,
-        OutboxConsumerSettings canonical,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
         using var tenantCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (canonical.PerTenantTimeout > TimeSpan.Zero)
+        if (settings.PerTenantTimeout > TimeSpan.Zero)
         {
-            tenantCts.CancelAfter(canonical.PerTenantTimeout);
+            tenantCts.CancelAfter(settings.PerTenantTimeout);
         }
 
         try

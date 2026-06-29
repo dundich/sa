@@ -6,25 +6,109 @@
 /// Create new instances via <see cref="OutboxConsumerSettingsBuilder"/> or the <c>with</c> expression.
 /// </summary>
 public sealed record OutboxConsumerSettings(
+    /// <summary>
+    /// Unique identifier for the consumer group. Groups settings for a single logical consumer.
+    /// </summary>
     string ConsumerGroupId,
+
+    /// <summary>
+    /// When true — the consumer runs as a singleton (one instance across the entire cluster).
+    /// When false — each application instance runs its own consumer copy.
+    /// </summary>
     bool AsSingleton,
+
+    /// <summary>
+    /// Periodicity of the consumer run (interval between processing iterations).
+    /// </summary>
     TimeSpan Interval,
+
+    /// <summary>
+    /// Initial delay before the consumer's first run after application startup.
+    /// </summary>
     TimeSpan InitialDelay,
+
+    /// <summary>
+    /// Maximum number of concurrent threads for message processing at the consumer group level.
+    /// </summary>
     int ConcurrencyLimit,
+
+    /// <summary>
+    /// Maximum number of simultaneously running processors (jobs) within this group.
+    /// </summary>
     int MaxConcurrency,
+
+    /// <summary>
+    /// Number of retry attempts on message processing error.
+    /// -1 means infinite retries.
+    /// </summary>
     int RetryCountOnError,
+
+    /// <summary>
+    /// Maximum batch size (number of messages) per processing iteration.
+    /// </summary>
     int MaxBatchSize,
+
+    /// <summary>
+    /// Maximum number of processing iterations per cycle (-1 = unlimited).
+    /// </summary>
     int MaxProcessingIterations,
+
+    /// <summary>
+    /// Delay between processing iterations within a single cycle.
+    /// </summary>
     TimeSpan IterationDelay,
+
+    /// <summary>
+    /// Lock duration for record processing (lock TTL).
+    /// The record is locked from other consumers for this period.
+    /// </summary>
     TimeSpan LockDuration,
+
+    /// <summary>
+    /// Lock renewal interval.
+    /// Must be less than LockDuration.
+    /// </summary>
     TimeSpan LockRenewal,
+
+    /// <summary>
+    /// Lookback interval — how far back in time to search for unprocessed messages.
+    /// Used to catch up messages that may have been missed during idle periods.
+    /// </summary>
     TimeSpan LookbackInterval,
+
+    /// <summary>
+    /// Maximum delivery attempt count for a message before sending it to the dead-letter queue (DLQ).
+    /// </summary>
     int MaxDeliveryAttempts,
+
+    /// <summary>
+    /// Time window for aggregating messages into a batch. Messages accumulated within this window are processed together.
+    /// </summary>
     TimeSpan BatchingWindow,
+
+    /// <summary>
+    /// Timeout for processing a single tenant's data.
+    /// Exceeding this timeout aborts the tenant's processing.
+    /// </summary>
     TimeSpan PerTenantTimeout,
+
+    /// <summary>
+    /// Maximum degree of parallelism for tenant-level processing.
+    /// 1 = sequential, >1 = parallel.
+    /// </summary>
     int PerTenantMaxDegreeOfParallelism,
-    bool Paused
-    //int Version
+
+    /// <summary>
+    /// Consumer pause flag. When true, processing is suspended but the consumer remains active.
+    /// Allows temporarily halting processing without stopping the entire service.
+    /// </summary>
+    bool Paused,
+
+    /// <summary>
+    /// Settings version. Incremented on every change for change detection.
+    /// Used for optimistic locking and notifying subscribers.
+    /// </summary>
+    int Version
     )
 {
     /// <summary>
@@ -102,105 +186,6 @@ public sealed record OutboxConsumerSettings(
             throw new InvalidOperationException(
                 $"Invalid OutboxConsumerSettings: {string.Join("; ", errors)}");
     }
-
-    // ── Fluent with-helpers ───────────────────────────────────
-    // Each returns a NEW instance with one field changed and version incremented.
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="Interval"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithInterval(TimeSpan interval)
-        => this with { Interval = interval };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="InitialDelay"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithInitialDelay(TimeSpan initialDelay)
-        => this with { InitialDelay = initialDelay };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="ConcurrencyLimit"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithConcurrencyLimit(int concurrencyLimit)
-        => this with { ConcurrencyLimit = concurrencyLimit };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="MaxConcurrency"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithMaxConcurrency(int maxConcurrency)
-        => this with { MaxConcurrency = maxConcurrency };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="RetryCountOnError"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithRetryCountOnError(int retryCountOnError)
-        => this with { RetryCountOnError = retryCountOnError };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="MaxBatchSize"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithMaxBatchSize(int maxBatchSize)
-        => this with { MaxBatchSize = maxBatchSize };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="MaxProcessingIterations"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithMaxProcessingIterations(int maxProcessingIterations)
-        => this with { MaxProcessingIterations = Math.Max(-1, maxProcessingIterations) };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="IterationDelay"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithIterationDelay(TimeSpan iterationDelay)
-        => this with { IterationDelay = iterationDelay };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="LockDuration"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithLockDuration(TimeSpan lockDuration)
-        => this with { LockDuration = lockDuration };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="LockRenewal"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithLockRenewal(TimeSpan lockRenewal)
-        => this with { LockRenewal = lockRenewal };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="LookbackInterval"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithLookbackInterval(TimeSpan lookbackInterval)
-        => this with { LookbackInterval = lookbackInterval };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="MaxDeliveryAttempts"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithMaxDeliveryAttempts(int maxDeliveryAttempts)
-        => this with { MaxDeliveryAttempts = maxDeliveryAttempts };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="BatchingWindow"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithBatchingWindow(TimeSpan batchingWindow)
-        => this with { BatchingWindow = batchingWindow };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="PerTenantTimeout"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithPerTenantTimeout(TimeSpan perTenantTimeout)
-        => this with { PerTenantTimeout = perTenantTimeout };
-
-    /// <summary>
-    /// Creates a copy with a new <see cref="PerTenantMaxDegreeOfParallelism"/>.
-    /// </summary>
-    public OutboxConsumerSettings WithPerTenantMaxDegreeOfParallelism(int perTenantMaxDegreeOfParallelism)
-        => this with { PerTenantMaxDegreeOfParallelism = perTenantMaxDegreeOfParallelism };
-
-    /// <summary>
-    /// Creates a paused copy of these settings.
-    /// </summary>
-    public OutboxConsumerSettings WithPaused(bool paused)
-        => this with { Paused = paused };
 
     // ── Equality helper ───────────────────────────────────────
 

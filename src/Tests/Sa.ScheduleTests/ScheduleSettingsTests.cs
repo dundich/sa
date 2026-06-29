@@ -55,7 +55,7 @@ public class ScheduleSettingsTests
         var job1 = JobSettings.Create<TestJob>(Guid.NewGuid());
         job1.ErrorHandling.IfErrorRetry(5).ThenAbortJob();
 
-        var job2 = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var _ = JobSettings.Create<TestJob>(Guid.NewGuid());
         // job2 keeps defaults
 
         var merged = JobSettings.Create(job1);

@@ -128,7 +128,7 @@ public sealed class FakeDeliveryLifetimeInvoker(Func<CancellationToken, Task> co
     public readonly List<CancellationToken> Invocations = [];
 
     public Task ConsumeInScope<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)

@@ -4,6 +4,6 @@ namespace Sa.Outbox.Delivery.Job;
 
 internal static class JobPropertiesExtension
 {
-    public static ConsumerGroupSettings? GetConsumerGroupSettings(this IJobProperties properties)
-        => properties?.Tag as ConsumerGroupSettings;
+    public static OutboxConsumerSettings? GetConsumerGroupSettings(this IJobProperties properties)
+        => properties?.Tag as OutboxConsumerSettings;
 }

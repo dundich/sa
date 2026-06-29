@@ -15,10 +15,8 @@ internal sealed class OutboxSettingsBootstrap(
     {
         foreach (var settings in snapshot.ConsumerSettings)
         {
-            // Register the canonical snapshot derived from bootstrap settings.
-            var canonical = settings.ToCanonical();
-            settingsManager.Register(settings.ConsumerGroupId, builder =>
-                builder.BuildCopy(canonical));
+            // Register the settings directly — no conversion needed anymore.
+            settingsManager.Register(settings.ConsumerGroupId, settings);
         }
 
         return Task.CompletedTask;

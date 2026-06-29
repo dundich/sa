@@ -10,8 +10,8 @@ internal sealed class DeliveryJob<TMessage>(IDeliveryProcessor processor) : IDel
 {
     public async Task Execute(IJobContext context, CancellationToken cancellationToken)
     {
-        ConsumerGroupSettings settings = context.Settings.Properties.GetConsumerGroupSettings()
-            ?? throw new NotImplementedException("tag");
+        OutboxConsumerSettings settings = context.Settings.Properties.GetConsumerGroupSettings()
+            ?? throw new InvalidOperationException("Missing OutboxConsumerSettings tag on job.");
 
         await processor.ProcessMessages<TMessage>(settings, cancellationToken);
     }

@@ -10,7 +10,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
@@ -23,7 +23,7 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
 
     public class Fixture : OutboxPostgreSqlFixture<IDeliveryProcessor>
     {
-        public ConsumerGroupSettings OutboxSettings = default!;
+        public OutboxConsumerSettings OutboxSettings = default!;
 
         public Fixture() : base()
         {
@@ -32,14 +32,14 @@ public class DeliveryLongProcessorTests(DeliveryLongProcessorTests.Fixture fixtu
                     .WithMetadata((_, b) => b.AddMetadata<TestMessage>("root_1", m => m.PayloadId))
                     .WithTenants((_, s) => s.WithTenantIds(1, 2))
                     .WithDeliveries(b => b
-                        .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test1", (_, s) =>
+                        .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test1", (_, b) =>
                         {
-                            s.ConsumeSettings
+                            OutboxSettings = new OutboxConsumerSettingsBuilder()
+                                .WithConsumerGroupId("test1")
                                 .WithLockDuration(TimeSpan.FromMilliseconds(300))
                                 .WithLockRenewal(TimeSpan.FromMilliseconds(100))
-                                .WithNoBatchingWindow();
-
-                            OutboxSettings = s;
+                                .WithNoBatchingWindow()
+                                .Build();
                         })
                     )
             )

@@ -7,6 +7,6 @@ internal interface IDeliveryTenant
 {
     Task<int> ProcessInTenant<TMessage>(
             int tenantId,
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             CancellationToken cancellationToken);
 }

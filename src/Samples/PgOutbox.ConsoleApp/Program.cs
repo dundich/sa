@@ -13,7 +13,9 @@ using System.Text.Json.Serialization;
 
 Console.WriteLine("Hello, Pg Outbox!");
 
+#pragma warning disable S2068
 var connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=postgres";
+#pragma warning restore S2068
 
 // default configure...
 IHost host = Host.CreateDefaultBuilder().ConfigureServices(services => services
@@ -22,15 +24,17 @@ IHost host = Host.CreateDefaultBuilder().ConfigureServices(services => services
         .WithTenants((_, t) => t.WithTenantIds(1, 2, 3))
         .WithMetadata((_, b) => b.AddMetadata<SomeMessage>("some", getPayloadId: p => p.PayloadId))
         .WithDeliveries(b => b
-            .AddDeliveryScoped<Group1Consumer, SomeMessage>((_, settings) =>
+            .AddDeliveryScoped<Group1Consumer, SomeMessage>((_, builder) =>
             {
-                settings.ScheduleSettings.WithIntervalSeconds(5).WithImmediate();
-                settings.ConsumeSettings.WithSingleIteration();
+                builder.WithInterval(TimeSpan.FromSeconds(5))
+                    .StartImmediately()
+                    .WithSingleIteration();
             })
-            .AddDelivery<RndConsumer, SomeMessage>("rnd", (_, settings) =>
+            .AddDelivery<RndConsumer, SomeMessage>("rnd", (_, builder) =>
             {
-                settings.ScheduleSettings.WithIntervalSeconds(25);
-                settings.ConsumeSettings.WithSingleIteration().WithMaxDeliveryAttempts(2);
+                builder.WithInterval(TimeSpan.FromSeconds(25))
+                    .WithSingleIteration()
+                    .WithMaxDeliveryAttempts(2);
             })
         )
     )
@@ -71,7 +75,7 @@ namespace PgOutbox
     public sealed class Group1Consumer(ILogger<Group1Consumer> logger) : IConsumer<SomeMessage>
     {
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
             CancellationToken cancellationToken)
@@ -86,7 +90,7 @@ namespace PgOutbox
         static int s_counter = 0;
 
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
             CancellationToken cancellationToken)
@@ -95,7 +99,8 @@ namespace PgOutbox
 
             if (Interlocked.Increment(ref s_counter) > 2)
             {
-                settings.ConsumeSettings.WithMaxProcessingIterations(100);
+                // runtime settings update — create a new settings snapshot
+                // (In practice this would go through IOutboxSettingsManager)
             }
 
             foreach (var msg in messages.Span)

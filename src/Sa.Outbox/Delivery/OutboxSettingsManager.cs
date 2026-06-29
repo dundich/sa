@@ -1,4 +1,6 @@
-﻿namespace Sa.Outbox.Delivery;
+﻿using Sa.Outbox.Delivery;
+
+namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Thread-safe manager for runtime control of outbox consumer group settings.
@@ -11,23 +13,16 @@ internal sealed class OutboxSettingsManager : IOutboxSettingsManager
     private readonly Lock _lock = new();
 
     /// <inheritdoc/>
-    public void Register(string consumerGroupId, Action<OutboxConsumerSettingsBuilder> configure)
+    public void Register(string consumerGroupId, OutboxConsumerSettings settings)
     {
         if (string.IsNullOrWhiteSpace(consumerGroupId))
             throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
 
-        ArgumentNullException.ThrowIfNull(configure, nameof(configure));
-
-        var builder = new OutboxConsumerSettingsBuilder();
-        configure(builder);
-
-        OutboxConsumerSettings newSettings;
+        ArgumentNullException.ThrowIfNull(settings);
 
         lock (_lock)
         {
-            // Register always creates a fresh snapshot — no dependency on existing.
-            newSettings = builder.Build();
-            _settings[consumerGroupId] = newSettings;
+            _settings[consumerGroupId] = settings;
             
             if (!_listeners.ContainsKey(consumerGroupId))
             {
@@ -36,36 +31,29 @@ internal sealed class OutboxSettingsManager : IOutboxSettingsManager
         }
 
         // Notify subscribers OUTSIDE the lock to avoid deadlocks
-        NotifyListeners(consumerGroupId, newSettings);
+        NotifyListeners(consumerGroupId, settings);
     }
 
     /// <inheritdoc/>
-    public void Apply(string consumerGroupId, Action<OutboxConsumerSettingsBuilder> configure)
+    public void Apply(string consumerGroupId, Func<OutboxConsumerSettings, OutboxConsumerSettings> transform)
     {
         if (string.IsNullOrWhiteSpace(consumerGroupId))
             throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
 
-        ArgumentNullException.ThrowIfNull(configure);
-
-        var builder = new OutboxConsumerSettingsBuilder();
-        configure(builder);
+        ArgumentNullException.ThrowIfNull(transform);
 
         OutboxConsumerSettings newSettings;
 
         lock (_lock)
         {
-            if (!_settings.TryGetValue(consumerGroupId, out OutboxConsumerSettings? existing))
+            if (!_settings.TryGetValue(consumerGroupId, out var existing))
             {
-                // First registration via Apply — build from scratch
-                newSettings = builder.Build();
-                _settings[consumerGroupId] = newSettings;
-                _listeners[consumerGroupId] = [];
+                throw new InvalidOperationException(
+                    $"Consumer group '{consumerGroupId}' is not registered. Call Register() first.");
             }
-            else
-            {
-                newSettings = builder.BuildCopy(existing);
-                _settings[consumerGroupId] = newSettings;
-            }
+
+            newSettings = transform(existing);
+            _settings[consumerGroupId] = newSettings;
         }
 
         // Notify subscribers OUTSIDE the lock to avoid deadlocks
@@ -114,7 +102,7 @@ internal sealed class OutboxSettingsManager : IOutboxSettingsManager
         if (string.IsNullOrWhiteSpace(consumerGroupId))
             throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
 
-        Apply(consumerGroupId, builder => builder.Paused(true));
+        Apply(consumerGroupId, s => s with { Paused = true });
     }
 
     /// <inheritdoc/>
@@ -123,7 +111,7 @@ internal sealed class OutboxSettingsManager : IOutboxSettingsManager
         if (string.IsNullOrWhiteSpace(consumerGroupId))
             throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
 
-        Apply(consumerGroupId, builder => builder.Paused(false));
+        Apply(consumerGroupId, s => s with { Paused = false });
     }
 
     /// <inheritdoc/>

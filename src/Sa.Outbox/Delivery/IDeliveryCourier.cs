@@ -6,7 +6,7 @@
 internal interface IDeliveryCourier
 {
     ValueTask<int> Deliver<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken);

@@ -1,11 +1,8 @@
-﻿using Sa.Schedule;
-
-namespace Sa.Outbox.Delivery;
+﻿namespace Sa.Outbox.Delivery;
 
 public interface IDeliverySnapshot
 {
-    IJobSettings[] JobSettings { get; }
-    ConsumerGroupSettings[] ConsumerSettings { get; }
+    OutboxConsumerSettings[] ConsumerSettings { get; }
     string[] Parts { get; }
 
     IEnumerable<string> GetConsumeGroupIds()

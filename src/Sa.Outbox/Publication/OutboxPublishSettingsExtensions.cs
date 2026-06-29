@@ -10,7 +10,7 @@ public static class OutboxPublishSettingsExtensions
     /// </summary>
     /// <param name="settings">The publish settings.</param>
     /// <param name="batchSize">The batch size (recommended to use optimized values).</param>
-    /// <returns>The configured settings instance.</returns>
+    /// <returns>A new instance with the updated batch size.</returns>
     public static OutboxPublishSettings WithMaxBatchSize(
         this OutboxPublishSettings settings,
         int batchSize)
@@ -18,8 +18,7 @@ public static class OutboxPublishSettingsExtensions
         if (batchSize <= 0)
             throw new ArgumentException("Batch size must be positive", nameof(batchSize));
 
-        settings.MaxBatchSize = batchSize;
-        return settings;
+        return settings.WithMaxBatchSize(batchSize);
     }
 
 

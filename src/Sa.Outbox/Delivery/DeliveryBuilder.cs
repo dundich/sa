@@ -11,7 +11,7 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
     public IDeliveryBuilder AddDeliveryScoped<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null,
+        Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
         Guid? jobId = null)
             where TConsumer : class, IConsumer<TMessage>
     {
@@ -24,7 +24,7 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
     public IDeliveryBuilder AddDelivery<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null,
+        Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
         Guid? jobId = null)
             where TConsumer : class, IConsumer<TMessage>
     {

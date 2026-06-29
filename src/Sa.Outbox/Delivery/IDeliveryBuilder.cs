@@ -14,11 +14,11 @@ public partial interface IDeliveryBuilder
     /// <typeparam name="TConsumer">The type of consumer.</typeparam>
     /// <typeparam name="TMessage">The type of message.</typeparam>
     /// <param name="consumerGroupId">Group identity for consuming.</param>
-    /// <param name="configure">An optional action to configure the delivery settings.</param>
+    /// <param name="configure">An optional action to configure the delivery settings via builder.</param>
     /// <returns>The delivery builder instance.</returns>
     IDeliveryBuilder AddDeliveryScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null,
+        Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
         Guid? jobId = null
     )
     where TConsumer : class, IConsumer<TMessage>;
@@ -28,7 +28,7 @@ public partial interface IDeliveryBuilder
     /// </summary>
     IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null,
+        Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
         Guid? jobId = null
     )
     where TConsumer : class, IConsumer<TMessage>;

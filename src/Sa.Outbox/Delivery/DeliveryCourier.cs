@@ -10,14 +10,14 @@ internal sealed class DeliveryCourier(
     IDeliveryLifetimeInvoker processor,
      IRetryStrategy? retryStrategy = null) : IDeliveryCourier
 {
-    
+
     private readonly IRetryStrategy _retryStrategy = retryStrategy ?? ExponentialBackoffRetryStrategy.Shared;
 
     /// <summary>
     /// Asynchronous method to deliver messages
     /// </summary>
     public async ValueTask<int> Deliver<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
@@ -33,7 +33,7 @@ internal sealed class DeliveryCourier(
             HandleError(ex, messages.Span);
         }
 
-        return PostHandle(messages.Span, settings.ConsumeSettings.MaxDeliveryAttempts);
+        return PostHandle(messages.Span, settings.MaxDeliveryAttempts);
     }
 
 

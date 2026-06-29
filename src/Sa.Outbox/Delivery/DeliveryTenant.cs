@@ -20,26 +20,26 @@ internal sealed class DeliveryTenant(
 
     public async Task<int> ProcessInTenant<TMessage>(
         int tenantId,
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
         var filter = CreateFilter<TMessage>(tenantId, settings);
 
-        var batchSize = await CalculateBatchSizeAsync(settings.ConsumeSettings, filter, cancellationToken);
+        var batchSize = await CalculateBatchSizeAsync(settings, filter, cancellationToken);
         if (batchSize == 0) return 0;
 
         using var memoryOwner = RentMemory<TMessage>(batchSize);
 
 
         var messages = await AcquireMessagesAsync(
-            settings.ConsumeSettings,
+            settings,
             filter,
             memoryOwner.Memory[..batchSize],
             cancellationToken);
 
         if (messages.IsEmpty) return 0;
 
-        await using IAsyncDisposable locker = RenewerLocker(settings.ConsumeSettings, filter, cancellationToken);
+        await using IAsyncDisposable locker = RenewerLocker(settings, filter, cancellationToken);
 
         var successfulDeliveries = await deliveryCourier.Deliver(settings, filter, messages, cancellationToken);
 
@@ -48,40 +48,40 @@ internal sealed class DeliveryTenant(
         return successfulDeliveries;
     }
 
-    private OutboxMessageFilter CreateFilter<TMessage>(int tenantId, ConsumerGroupSettings settings)
+    private OutboxMessageFilter CreateFilter<TMessage>(int tenantId, OutboxConsumerSettings settings)
     {
         return filterFactory.CreateFilter<TMessage>(
             tenantId: tenantId,
             consumerGroupId: settings.ConsumerGroupId,
             now: GetUtcNow(),
-            lookbackInterval: settings.ConsumeSettings.LookbackInterval,
-            batchingWindow: settings.ConsumeSettings.BatchingWindow);
+            lookbackInterval: settings.LookbackInterval,
+            batchingWindow: settings.BatchingWindow);
     }
 
     private DateTimeOffset GetUtcNow() => _timeProvider.GetUtcNow();
 
     private async Task<int> CalculateBatchSizeAsync(
-        ConsumeSettings consumeSettings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
     {
         var calculatedSize = await batcher.CalculateBatchSize(
-            consumeSettings.MaxBatchSize,
+            settings.MaxBatchSize,
             filter,
             cancellationToken);
 
-        return Math.Clamp(calculatedSize, 0, consumeSettings.MaxBatchSize);
+        return Math.Clamp(calculatedSize, 0, settings.MaxBatchSize);
     }
 
     private async Task<ReadOnlyMemory<IOutboxContextOperations<TMessage>>> AcquireMessagesAsync<TMessage>(
-        ConsumeSettings consumeSettings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         Memory<IOutboxContextOperations<TMessage>> buffer,
         CancellationToken cancellationToken)
     {
         var lockedCount = await deliveryMan.RentDelivery(
             buffer,
-            consumeSettings.LockDuration,
+            settings.LockDuration,
             filter,
             cancellationToken);
 
@@ -101,7 +101,7 @@ internal sealed class DeliveryTenant(
     }
 
     private IAsyncDisposable RenewerLocker(
-        ConsumeSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
             => LockRenewer.KeepLocked(

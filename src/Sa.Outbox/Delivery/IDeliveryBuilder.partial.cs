@@ -8,13 +8,13 @@ public partial interface IDeliveryBuilder
     private static IConsumerGroupNamingStrategy _defaultNamingStrategy = new DefaultConsumerGroupNamingStrategy();
 
     public IDeliveryBuilder AddDeliveryScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
+        Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null
     )
     where TConsumer : class, IConsumer<TMessage>
         => AddDeliveryScoped<TConsumer, TMessage>(GetConsumerGroupName<TConsumer>(), configure);
 
     public IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
-        Action<IServiceProvider, ConsumerGroupSettings>? configure = null
+        Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null
     )
     where TConsumer : class, IConsumer<TMessage>
         => AddDelivery<TConsumer, TMessage>(GetConsumerGroupName<TConsumer>(), configure);

@@ -42,12 +42,8 @@ public interface IOutboxBuilder
     IOutboxBuilder AddMetadata<TMessage>(
         string partName,
         Func<TMessage, string>? getPayloadId = null) where TMessage : class
-    {
-        return WithMetadata((_, m) => m.AddMetadata<TMessage>(partName, getPayloadId));
-    }
+            => WithMetadata((_, m) => m.AddMetadata<TMessage>(partName, getPayloadId));
 
     IOutboxBuilder AddMetadata<TMessage>() where TMessage : class, IOutboxPublishable
-    {
-        return WithMetadata((_, m) => m.AddMetadata<TMessage>());
-    }
+        => WithMetadata((_, m) => m.AddMetadata<TMessage>());
 }

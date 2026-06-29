@@ -3,11 +3,16 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Delivery.Job;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
+using Sa.Schedule;
+using System.Collections.Concurrent;
 
 namespace Sa.Outbox.Delivery;
 
 internal static class Setup
 {
+    // Thread-safe registry of consumer group settings discovered via AddDeliveryJob
+    internal static readonly ConcurrentQueue<OutboxConsumerSettings> RegisteredSettings = new();
+
     public static IServiceCollection AddOutboxDelivery(
         this IServiceCollection services, Action<IDeliveryBuilder>? configure = null)
     {
@@ -31,6 +36,7 @@ internal static class Setup
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
+        // DeliverySnapshot теперь собирает настройки из AddDeliveryJob через статический регистр
         services.TryAddSingleton<IDeliverySnapshot, DeliverySnapshot>();
         services.TryAddSingleton<IOutboxSettingsManager, OutboxSettingsManager>();
 

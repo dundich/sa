@@ -8,22 +8,21 @@ namespace Sa.Outbox.Delivery;
 public interface IOutboxSettingsManager
 {
     /// <summary>
-    /// Applies a partial or full settings update for an existing consumer group.
+    /// Atomically applies a transformation to the current settings for a consumer group.
     /// The update is atomically swapped — active deliveries finish their current batch,
     /// then pick up the new settings on the next iteration.
-    /// Unspecified fields inherit from the previous snapshot.
     /// </summary>
     /// <param name="consumerGroupId">The consumer group identifier.</param>
-    /// <param name="configure">A callback to configure the builder with desired overrides.</param>
-    void Apply(string consumerGroupId, Action<OutboxConsumerSettingsBuilder> configure);
+    /// <param name="transform">A function that receives the current snapshot and returns the updated one. Use <c>this with { ... }</c> expressions.</param>
+    void Apply(string consumerGroupId, Func<OutboxConsumerSettings, OutboxConsumerSettings> transform);
 
     /// <summary>
-    /// Replaces all settings for a consumer group (typically during initial registration).
+    /// Registers a consumer group with initial settings.
     /// Unlike <see cref="Apply"/>, this does not require prior registration.
     /// </summary>
     /// <param name="consumerGroupId">The consumer group identifier.</param>
-    /// <param name="configure">A callback to build the complete settings.</param>
-    void Register(string consumerGroupId, Action<OutboxConsumerSettingsBuilder> configure);
+    /// <param name="settings">The initial immutable settings snapshot.</param>
+    void Register(string consumerGroupId, OutboxConsumerSettings settings);
 
     /// <summary>
     /// Retrieves the current immutable settings snapshot. Thread-safe.

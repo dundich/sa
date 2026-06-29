@@ -21,7 +21,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         static int s_Counter = 0;
 
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
             CancellationToken cancellationToken)
@@ -41,16 +41,11 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                 .AddSaOutbox(builder => builder
                     .WithTenants((_, s) => s.WithTenantIds(1))
                     .WithDeliveries(builder => builder
-                        .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, settings) =>
+                        .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, b) =>
                         {
-                            settings.ScheduleSettings
-                                .WithInterval(TimeSpan.FromMilliseconds(100))
-                                .WithInitialDelay(TimeSpan.Zero)
-                                ;
-
-                            settings.ConsumeSettings
-                                .WithMaxBatchSize(1)
-                                .WithNoBatchingWindow();
+                            b.WithInterval(TimeSpan.FromMilliseconds(100))
+                             .WithMaxBatchSize(1)
+                             .WithNoBatchingWindow();
                         })
                     )
                 )
