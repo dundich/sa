@@ -1,6 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
-using Sa.Schedule;
-using Sa.Schedule.Engine;
+﻿using Sa.Schedule;
 using Sa.Schedule.Settings;
 
 namespace Sa.ScheduleTests;

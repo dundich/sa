@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sa.Outbox.Delivery.Job;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
 
@@ -30,9 +31,13 @@ internal static class Setup
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
+        services.TryAddSingleton<IDeliverySnapshot, DeliverySnapshot>();
+        services.TryAddSingleton<IOutboxSettingsManager, OutboxSettingsManager>();
+
         configure?.Invoke(new DeliveryBuilder(services));
 
-        services.TryAddSingleton<IDeliverySnapshot, DeliverySnapshot>();
+        // Bootstrap: register all consumer group initial settings into IOutboxSettingsManager.
+        services.AddHostedService<OutboxSettingsBootstrap>();
 
         return services;
     }

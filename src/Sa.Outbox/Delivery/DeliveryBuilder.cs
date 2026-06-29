@@ -16,7 +16,8 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
             where TConsumer : class, IConsumer<TMessage>
     {
         ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
-        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), false, configure, jobId);
+        var sanitized = SanitizeString(consumerGroupId);
+        services.AddDeliveryJob<TConsumer, TMessage>(sanitized, false, configure, jobId);
         return this;
     }
 
@@ -28,7 +29,8 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
             where TConsumer : class, IConsumer<TMessage>
     {
         ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
-        services.AddDeliveryJob<TConsumer, TMessage>(SanitizeString(consumerGroupId), true, configure, jobId);
+        var sanitized = SanitizeString(consumerGroupId);
+        services.AddDeliveryJob<TConsumer, TMessage>(sanitized, true, configure, jobId);
         return this;
     }
 
