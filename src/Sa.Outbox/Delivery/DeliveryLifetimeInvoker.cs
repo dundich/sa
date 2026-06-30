@@ -9,7 +9,7 @@ namespace Sa.Outbox.Delivery;
 internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) : IDeliveryLifetimeInvoker
 {
 
-    private readonly ConcurrentDictionary<Guid, IConsumer> _singletonConsumers = new();
+    private readonly ConcurrentDictionary<string, IConsumer> _singletonConsumers = new();
 
     // Method to process messages using a consumer in scope
     public Task ConsumeInScope<TMessage>(
@@ -40,12 +40,12 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         CancellationToken cancellationToken)
     {
         await using AsyncServiceScope scope = serviceProvider.CreateAsyncScope();
-        IConsumer<TMessage> consumer = GetConsumer<TMessage>(scope.ServiceProvider, settings.Id);
+        IConsumer<TMessage> consumer = GetConsumer<TMessage>(scope.ServiceProvider, settings.ConsumerGroupId);
         await ProcessMessages(consumer, settings, filter, messages, cancellationToken);
     }
 
-    private static IConsumer<TMessage> GetConsumer<TMessage>(IServiceProvider sp, Guid id)
-        => sp.GetRequiredKeyedService<IConsumer<TMessage>>(id);
+    private static IConsumer<TMessage> GetConsumer<TMessage>(IServiceProvider sp, string key)
+        => sp.GetRequiredKeyedService<IConsumer<TMessage>>(key);
 
     private static async Task ProcessMessages<TMessage>(
         IConsumer<TMessage> consumer,
@@ -60,7 +60,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
     private IConsumer<TMessage> GetOrCreateSingletonConsumer<TMessage>(
         OutboxConsumerSettings settings)
     {
-        return (IConsumer<TMessage>)_singletonConsumers.GetOrAdd(settings.Id, key =>
+        return (IConsumer<TMessage>)_singletonConsumers.GetOrAdd(settings.ConsumerGroupId, key =>
             GetConsumer<TMessage>(serviceProvider, key));
     }
 }

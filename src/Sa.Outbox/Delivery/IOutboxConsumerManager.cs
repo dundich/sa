@@ -5,7 +5,7 @@ namespace Sa.Outbox.Delivery;
 /// Provides atomic snapshot swaps, pause/resume lifecycle, and change subscriptions.
 /// All settings are immutable — updates create new instances, never mutate existing ones.
 /// </summary>
-public interface IOutboxSettingsManager
+public interface IOutboxConsumerManager
 {
     /// <summary>
     /// Atomically applies a transformation to the current settings for a consumer group.

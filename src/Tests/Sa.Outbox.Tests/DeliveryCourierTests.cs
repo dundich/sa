@@ -7,7 +7,7 @@ public class DeliveryCourierTests
     private sealed class TestMessage { }
 
     private static OutboxConsumerSettings CreateSettings(int maxDeliveryAttempts = 3)
-        => new(Id: Guid.NewGuid(), "test-group", AsSingleton: false, Interval: TimeSpan.FromMinutes(1), InitialDelay: TimeSpan.Zero,
+        => new(ConsumerGroupId: "test-group", AsSingleton: false, Interval: TimeSpan.FromMinutes(1), InitialDelay: TimeSpan.Zero,
             ConcurrencyLimit: 1, MaxConcurrency: 1, RetryCountOnError: 0,
             MaxBatchSize: 16, MaxProcessingIterations: -1, IterationDelay: TimeSpan.Zero,
             LockDuration: TimeSpan.FromSeconds(10), LockRenewal: TimeSpan.FromSeconds(3),

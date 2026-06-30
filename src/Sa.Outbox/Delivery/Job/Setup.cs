@@ -24,21 +24,11 @@ internal static class Setup
         builder
             .WithConsumerGroupId(consumerGroupId)
             .AsSingleton(isSingleton)
-            .WithInterval(TimeSpan.FromMinutes(1))
             .StartImmediately()
             .WithConcurrencyLimit(1)
             .WithMaxConcurrency(1)
-            .WithRetryCountOnError(3)
-            .WithMaxBatchSize(16)
             .WithMaxProcessingIterations(-1)
-            .WithIterationDelay(TimeSpan.Zero)
-            .WithLockDuration(TimeSpan.FromSeconds(10))
-            .WithLockRenewal(TimeSpan.FromSeconds(3))
-            .WithLookbackInterval(TimeSpan.FromDays(7))
-            .WithMaxDeliveryAttempts(3)
-            .WithBatchingWindow(TimeSpan.FromSeconds(3))
             .WithPerTenantTimeout(TimeSpan.Zero)
-            .WithPerTenantMaxDegreeOfParallelism(1)
             .Paused(false);
 
         // Allow caller to tweak settings via fluent builder
@@ -46,14 +36,7 @@ internal static class Setup
 
         var settings = builder.Build();
 
-        if (isSingleton)
-        {
-            services.AddKeyedSingleton<IConsumer<TMessage>, TConsumer>(settings.Id);
-        }
-        else
-        {
-            services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(settings.Id);
-        }
+        Registered<TConsumer, TMessage>(services, isSingleton, settings.ConsumerGroupId);
 
         services.AddSaSchedule(builder =>
         {
@@ -82,5 +65,20 @@ internal static class Setup
         services.TryAddSingleton<IDeliveryScheduleProvider, DeliveryScheduleProvider>();
 
         return services;
+    }
+
+    private static void Registered<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
+        IServiceCollection services,
+        bool isSingleton,
+        string consumerGroupId) where TConsumer : class, IConsumer<TMessage>
+    {
+        if (isSingleton)
+        {
+            services.AddKeyedSingleton<IConsumer<TMessage>, TConsumer>(consumerGroupId);
+        }
+        else
+        {
+            services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(consumerGroupId);
+        }
     }
 }

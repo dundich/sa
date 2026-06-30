@@ -1,12 +1,10 @@
-﻿using Sa.Outbox.Delivery;
-
-namespace Sa.Outbox.Delivery;
+﻿namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Thread-safe manager for runtime control of outbox consumer group settings.
 /// Uses atomic immutable snapshots — no mutation during active delivery, no race conditions.
 /// </summary>
-internal sealed class OutboxSettingsManager : IOutboxSettingsManager
+internal sealed class OutboxConsumerManager : IOutboxConsumerManager
 {
     private readonly Dictionary<string, OutboxConsumerSettings> _settings = [];
     private readonly Dictionary<string, List<Action<OutboxConsumerSettings>>> _listeners = [];
@@ -184,12 +182,12 @@ internal sealed class OutboxSettingsManager : IOutboxSettingsManager
 
     private sealed class Subscription : IDisposable
     {
-        private readonly OutboxSettingsManager _manager;
+        private readonly OutboxConsumerManager _manager;
         private readonly string _consumerGroupId;
         private readonly Action<OutboxConsumerSettings> _callback;
         private bool _disposed;
 
-        internal Subscription(OutboxSettingsManager manager, string consumerGroupId, Action<OutboxConsumerSettings> callback)
+        internal Subscription(OutboxConsumerManager manager, string consumerGroupId, Action<OutboxConsumerSettings> callback)
         {
             _manager = manager;
             _consumerGroupId = consumerGroupId;

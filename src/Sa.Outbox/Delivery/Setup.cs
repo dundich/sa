@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Sa.Outbox.Delivery.Job;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
 
@@ -33,12 +32,9 @@ internal static class Setup
 
         // DeliverySnapshot теперь собирает настройки из AddDeliveryJob через статический регистр
         services.TryAddSingleton<IDeliverySnapshot, DeliverySnapshot>();
-        services.TryAddSingleton<IOutboxSettingsManager, OutboxSettingsManager>();
+        services.TryAddSingleton<IOutboxConsumerManager, OutboxConsumerManager>();
 
         configure?.Invoke(new DeliveryBuilder(services));
-
-        // Bootstrap: register all consumer group initial settings into IOutboxSettingsManager.
-        services.AddHostedService<OutboxSettingsBootstrap>();
 
         return services;
     }

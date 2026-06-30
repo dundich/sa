@@ -6,8 +6,6 @@
 /// </summary>
 public sealed class OutboxConsumerSettingsBuilder
 {
-    private readonly Guid _id = Guid.NewGuid();
-
     private string? _consumerGroupId;
     private bool? _asSingleton;
     private TimeSpan? _interval;
@@ -36,7 +34,6 @@ public sealed class OutboxConsumerSettingsBuilder
     public OutboxConsumerSettings Build()
     {
         return new OutboxConsumerSettings(
-            _id,
             _consumerGroupId ?? throw new InvalidOperationException("ConsumerGroupId is required."),
             _asSingleton ?? OutboxDefaults.AsSingleton,
             _interval ?? OutboxDefaults.Interval,

@@ -7,8 +7,6 @@
 /// </summary>
 public sealed record OutboxConsumerSettings(
 
-    Guid Id,
-
     /// <summary>
     /// Unique identifier for the consumer group. Groups settings for a single logical consumer.
     /// </summary>
