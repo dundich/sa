@@ -13,7 +13,7 @@ public sealed class FakeOutboxContext<TMessage>(
     DeliveryStatusCode initialStatus = DeliveryStatusCode.Pending) : IOutboxContextOperations<TMessage>
 {
     private DeliveryStatus _deliveryResult = new(initialStatus, payloadId, DateTimeOffset.UtcNow);
-    private TimeSpan _postponeAt;
+    private TimeSpan _postponeDelay;
     private Exception? _exception;
 
     public Guid OutboxId { get; set; } = Guid.NewGuid();
@@ -33,7 +33,7 @@ public sealed class FakeOutboxContext<TMessage>(
 
     public DeliveryStatus DeliveryResult => _deliveryResult;
     public Exception? Exception => _exception;
-    public TimeSpan PostponeAt => _postponeAt;
+    public TimeSpan PostponeDelay => _postponeDelay;
 
     public FakeOutboxContext() : this("fake-msg", 0, DeliveryStatusCode.Pending) { }
 
@@ -58,17 +58,17 @@ public sealed class FakeOutboxContext<TMessage>(
     public void MovedPermanently(string? message = null)
         => SetStatus(DeliveryStatusCode.MovedPermanently, message);
 
-    public void Postpone(TimeSpan postpone, string? message = null)
-        => SetStatus(DeliveryStatusCode.Postpone, message, postpone: postpone);
+    public void Postpone(TimeSpan postponeDelay, string? message = null)
+        => SetStatus(DeliveryStatusCode.Postpone, message, postponeDelay: postponeDelay);
 
-    public void Retry(TimeSpan postpone, string? message = null)
-        => SetStatus(DeliveryStatusCode.Retry, message, postpone: postpone);
+    public void Retry(TimeSpan postponeDelay, string? message = null)
+        => SetStatus(DeliveryStatusCode.Retry, message, postponeDelay: postponeDelay);
 
-    public void Warn(Exception exception, string? message = null, TimeSpan? postpone = null)
+    public void Warn(Exception exception, string? message = null, TimeSpan? postponeDelay = null)
     {
         ArgumentNullException.ThrowIfNull(exception);
         _exception = exception;
-        _postponeAt = postpone ?? TimeSpan.Zero;
+        _postponeDelay = postponeDelay ?? TimeSpan.Zero;
         _deliveryResult = new DeliveryStatus(DeliveryStatusCode.Warn, message ?? exception.Message, GetUtcNow());
     }
 
@@ -106,10 +106,10 @@ public sealed class FakeOutboxContext<TMessage>(
 
     public DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow;
 
-    private void SetStatus(DeliveryStatusCode code, string? message, TimeSpan? postpone = null, Exception? exception = null)
+    private void SetStatus(DeliveryStatusCode code, string? message, TimeSpan? postponeDelay = null, Exception? exception = null)
     {
         _deliveryResult = new DeliveryStatus(code, message ?? "", GetUtcNow());
-        _postponeAt = postpone ?? TimeSpan.Zero;
+        _postponeDelay = postponeDelay ?? TimeSpan.Zero;
         _exception = exception;
     }
 

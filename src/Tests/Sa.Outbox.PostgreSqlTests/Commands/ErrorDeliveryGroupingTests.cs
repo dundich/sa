@@ -93,7 +93,7 @@ public class ErrorDeliveryGroupingTests
                 new OutboxPartInfo(0, "task-part", DateTimeOffset.UtcNow)),
             DeliveryResult: result,
             Exception: exception,
-            PostponeAt: TimeSpan.Zero);
+            PostponeDelay: TimeSpan.Zero);
     }
 
     /// <summary>
@@ -106,7 +106,7 @@ public class ErrorDeliveryGroupingTests
         OutboxTaskDeliveryInfo DeliveryInfo,
         DeliveryStatus DeliveryResult,
         Exception? Exception,
-        TimeSpan PostponeAt) : IOutboxContext
+        TimeSpan PostponeDelay) : IOutboxContext
     {
         public Guid OutboxId { get; } = OutboxId;
         public string PayloadId { get; } = PayloadId;
@@ -114,6 +114,6 @@ public class ErrorDeliveryGroupingTests
         public OutboxTaskDeliveryInfo DeliveryInfo { get; } = DeliveryInfo;
         public DeliveryStatus DeliveryResult { get; } = DeliveryResult;
         public Exception? Exception { get; } = Exception;
-        public TimeSpan PostponeAt { get; } = PostponeAt;
+        public TimeSpan PostponeDelay { get; } = PostponeDelay;
     }
 }

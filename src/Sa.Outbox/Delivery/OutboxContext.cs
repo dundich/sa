@@ -22,14 +22,14 @@ internal sealed class OutboxContext<TMessage>(
 
 
     public DeliveryStatus DeliveryResult { get; private set; }
-    public TimeSpan PostponeAt { get; private set; } = TimeSpan.Zero;
+    public TimeSpan PostponeDelay { get; private set; } = TimeSpan.Zero;
     public Exception? Exception { get; private set; }
 
-    public void Postpone(TimeSpan postpone, string? message = null)
-        => SetDeliveryStatus(DeliveryStatusCode.Postpone, message, null, postpone);
+    public void Postpone(TimeSpan postponeDelay, string? message = null)
+        => SetDeliveryStatus(DeliveryStatusCode.Postpone, message, null, postponeDelay);
 
-    public void Retry(TimeSpan postpone, string? message = null)
-        => SetDeliveryStatus(DeliveryStatusCode.Retry, message, null, postpone);
+    public void Retry(TimeSpan postponeDelay, string? message = null)
+        => SetDeliveryStatus(DeliveryStatusCode.Retry, message, null, postponeDelay);
 
     public void Ok(string? message = null)
         => SetDeliveryStatus(DeliveryStatusCode.Ok, message);
@@ -56,7 +56,7 @@ internal sealed class OutboxContext<TMessage>(
         => SetDeliveryStatus(DeliveryStatusCode.MovedPermanently, message);
 
 
-    public void Warn(Exception exception, string? message = null, TimeSpan? postpone = null)
+    public void Warn(Exception exception, string? message = null, TimeSpan? postponeDelay = null)
     {
         ArgumentNullException.ThrowIfNull(exception);
 
@@ -66,7 +66,7 @@ internal sealed class OutboxContext<TMessage>(
             deliveryException?.StatusCode ?? DeliveryStatusCode.Warn,
             message ?? exception.Message,
             exception,
-            postpone ?? deliveryException?.PostponeAt);
+            postponeDelay ?? deliveryException?.PostponeDelay);
     }
 
 
@@ -109,7 +109,7 @@ internal sealed class OutboxContext<TMessage>(
         DeliveryStatusCode statusCode,
         string? message = null,
         Exception? exception = null,
-        TimeSpan? postpone = null)
+        TimeSpan? postponeDelay = null)
     {
         DeliveryResult = new DeliveryStatus(
             statusCode,
@@ -117,7 +117,7 @@ internal sealed class OutboxContext<TMessage>(
             GetUtcNow());
 
         Exception = exception;
-        PostponeAt = postpone ?? TimeSpan.Zero;
+        PostponeDelay = postponeDelay ?? TimeSpan.Zero;
     }
 
 

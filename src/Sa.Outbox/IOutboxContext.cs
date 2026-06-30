@@ -40,9 +40,9 @@ public interface IOutboxContext
     Exception? Exception { get; }
 
     /// <summary>
-    /// Gets the duration for which the message processing is postponed.
+    /// Gets the delay duration before the message should be retried.
     /// </summary>
-    TimeSpan PostponeAt { get; }
+    TimeSpan PostponeDelay { get; }
 }
 
 

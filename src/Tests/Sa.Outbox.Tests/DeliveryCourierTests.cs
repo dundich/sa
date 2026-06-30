@@ -118,7 +118,7 @@ public class DeliveryCourierTests
         Assert.Equal(0, result);
         Assert.Equal(DeliveryStatusCode.Warn, ctx.DeliveryResult.Code);
         Assert.Same(testException, ctx.Exception);
-        Assert.Equal(TimeSpan.FromSeconds(5), ctx.PostponeAt);
+        Assert.Equal(TimeSpan.FromSeconds(5), ctx.PostponeDelay);
     }
 
     [Fact]
@@ -152,9 +152,9 @@ public class DeliveryCourierTests
         Assert.Equal(DeliveryStatusCode.Warn, ctx1.DeliveryResult.Code);
         Assert.Equal(DeliveryStatusCode.Warn, ctx2.DeliveryResult.Code);
         Assert.Equal(DeliveryStatusCode.Warn, ctx3.DeliveryResult.Code);
-        Assert.Equal(expectedBackoffs[0], ctx1.PostponeAt);
-        Assert.Equal(expectedBackoffs[1], ctx2.PostponeAt);
-        Assert.Equal(expectedBackoffs[2], ctx3.PostponeAt);
+        Assert.Equal(expectedBackoffs[0], ctx1.PostponeDelay);
+        Assert.Equal(expectedBackoffs[1], ctx2.PostponeDelay);
+        Assert.Equal(expectedBackoffs[2], ctx3.PostponeDelay);
         Assert.Same(testException, ctx1.Exception);
         Assert.Same(testException, ctx2.Exception);
         Assert.Same(testException, ctx3.Exception);
@@ -181,7 +181,7 @@ public class DeliveryCourierTests
         Assert.Equal(0, result);
         Assert.Equal(DeliveryStatusCode.Warn, ctx.DeliveryResult.Code);
         Assert.NotNull(ctx.Exception);
-        Assert.True(ctx.PostponeAt > TimeSpan.Zero);
+        Assert.True(ctx.PostponeDelay > TimeSpan.Zero);
     }
 
     #endregion
@@ -363,7 +363,7 @@ public class DeliveryCourierTests
 
         Assert.Single(recordedAttempts);
         Assert.Equal(1, recordedAttempts[0]); // attempt 0 + 1 = 1
-        Assert.Equal(TimeSpan.FromSeconds(5), ctx.PostponeAt);
+        Assert.Equal(TimeSpan.FromSeconds(5), ctx.PostponeDelay);
     }
 
     #endregion
@@ -418,7 +418,7 @@ public class DeliveryCourierTests
             CancellationToken.None);
 
         Assert.Equal(0, result);
-        Assert.Equal(TimeSpan.FromSeconds(1), ctx.PostponeAt);
+        Assert.Equal(TimeSpan.FromSeconds(1), ctx.PostponeDelay);
     }
 
     #endregion
