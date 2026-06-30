@@ -352,6 +352,9 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             _readerCount--;
             _concurrency = _readerCount;
         }
+
+        // Освобождаем CTS после удаления из списка
+        cts.Dispose();
     }
 
     private async Task<bool> ExecuteItemAsync(WorkItem item, CancellationToken ct)
