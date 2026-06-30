@@ -15,6 +15,9 @@ public static class OutboxDefaults
     /// <summary>Default concurrency limit (1).</summary>
     public static int ConcurrencyLimit => 1;
 
+    /// <summary>Default singleton mode True.</summary>
+    public static bool AsSingleton => true;
+
     /// <summary>Default maximum concurrency (48).</summary>
     public static int MaxConcurrency => 48;
 
