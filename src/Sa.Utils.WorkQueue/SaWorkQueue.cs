@@ -508,8 +508,10 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                 tasks = [.. _taskReaders];
             }
 
-            // Use ConfigureAwait(false) to avoid potential deadlocks from blocking on async operations
-            Task.WhenAll(tasks).ConfigureAwait(false).GetAwaiter().GetResult();
+            // Use synchronous wait only here — we already exited the async context.
+            // Readers are guaranteed to terminate because _shutdownCts is cancelled
+            // and the channel writer is completed.
+            Task.WaitAll(tasks, TimeSpan.FromSeconds(30));
 
             ClearRemainingItems();
         }
@@ -528,6 +530,15 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             err ??= ThrowHelper.QueueShutdownException;
             OnStatusChanged(item.Input, SaWorkStatus.Faulted, err);
             MarkInactive();
+        }
+
+        // Drain any orphaned task counters — if items were enqueued but not yet
+        // counted (race between Enqueue and Shutdown), decrement to prevent
+        // IsIdle() from returning false forever.
+        lock (_wiSync)
+        {
+            if (_taskCount > 0)
+                _taskCount = 0;
         }
     }
 

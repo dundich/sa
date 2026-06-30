@@ -26,7 +26,7 @@ internal sealed class DeliveryCourier(
 
         try
         {
-            await processor.ConsumeInScope(settings, filter, messages, cancellationToken);
+            await processor.ConsumeInScope(settings, filter, messages, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {

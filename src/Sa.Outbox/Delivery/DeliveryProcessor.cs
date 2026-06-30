@@ -22,14 +22,14 @@ internal sealed class DeliveryProcessor(
         if (settings.Paused)
         {
             // Consumer group is paused — do not poll.
-            await Task.Delay(PausedPollDelay, cancellationToken);
+            await Task.Delay(PausedPollDelay, cancellationToken).ConfigureAwait(false);
             return 0;
         }
 
         int batchSize = settings.MaxBatchSize;
         if (batchSize == 0) return 0;
 
-        int[] tenantIds = await tenantProvider.GetTenantIds(cancellationToken);
+        int[] tenantIds = await tenantProvider.GetTenantIds(cancellationToken).ConfigureAwait(false);
         if (tenantIds.Length == 0) return 0;
 
         long totalProcessed = 0;
@@ -42,16 +42,16 @@ internal sealed class DeliveryProcessor(
             // the greedy loop, not wait for all pending messages to drain.
             if (settings.Paused)
             {
-                await Task.Delay(PausedPollDelay, cancellationToken);
+                await Task.Delay(PausedPollDelay, cancellationToken).ConfigureAwait(false);
                 return totalProcessed;
             }
 
             if (iterations > 0 && settings.IterationDelay > TimeSpan.Zero)
             {
-                await Task.Delay(settings.IterationDelay, cancellationToken);
+                await Task.Delay(settings.IterationDelay, cancellationToken).ConfigureAwait(false);
             }
 
-            int sentCount = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken);
+            int sentCount = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false);
 
             totalProcessed += sentCount;
             iterations++;
@@ -91,8 +91,8 @@ internal sealed class DeliveryProcessor(
         CancellationToken cancellationToken)
     {
         return (settings.PerTenantMaxDegreeOfParallelism == 1)
-            ? await ProcessTenantsSequential<TMessage>(tenantIds, settings, cancellationToken)
-            : await ProcessTenantsParallel<TMessage>(tenantIds, settings, cancellationToken);
+            ? await ProcessTenantsSequential<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false)
+            : await ProcessTenantsParallel<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<int> ProcessTenantsSequential<TMessage>(
@@ -103,7 +103,7 @@ internal sealed class DeliveryProcessor(
         int count = 0;
         foreach (int tenantId in tenantIds)
         {
-            count += await ProcessInTenant<TMessage>(tenantId, settings, cancellationToken);
+            count += await ProcessInTenant<TMessage>(tenantId, settings, cancellationToken).ConfigureAwait(false);
         }
 
         return count;
@@ -131,9 +131,9 @@ internal sealed class DeliveryProcessor(
                 parallelOptions,
                 async (tenantId, ct) =>
                 {
-                    int processed = await ProcessInTenant<TMessage>(tenantId, settings, ct);
+                    int processed = await ProcessInTenant<TMessage>(tenantId, settings, ct).ConfigureAwait(false);
                     Interlocked.Add(ref totalCount, processed);
-                });
+                }).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -156,7 +156,7 @@ internal sealed class DeliveryProcessor(
 
         try
         {
-            return await processor.ProcessInTenant<TMessage>(tenantId, settings, tenantCts.Token);
+            return await processor.ProcessInTenant<TMessage>(tenantId, settings, tenantCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

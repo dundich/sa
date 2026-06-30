@@ -92,7 +92,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var header = await GetHeaderAsync(cancellationToken);
+        var header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
         EnsureDataSize(header);
 
         var (cutFrom, cutTo) = header.CalculateCutOffsets(cutRange ?? TimeRange.Default);
@@ -101,7 +101,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
 
         if (offsetToSkip > 0)
         {
-            await _reader.SkipAsync(offsetToSkip, cancellationToken);
+            await _reader.SkipAsync(offsetToSkip, cancellationToken).ConfigureAwait(false);
         }
 
         int channels = header.NumChannels;
@@ -117,7 +117,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                ReadResult result = await _reader.ReadAsync(cancellationToken);
+                ReadResult result = await _reader.ReadAsync(cancellationToken).ConfigureAwait(false);
                 ReadOnlySequence<byte> sequence = result.Buffer;
 
                 SequencePosition consumed = sequence.Start;
@@ -182,7 +182,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         bool allowBufferReuse = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var convert = await GetNormalizedConverterAsync(cancellationToken);
+        var convert = await GetNormalizedConverterAsync(cancellationToken).ConfigureAwait(false);
 
         await foreach (var (channelId, rawSample, offset, isEof) in
             ReadSamplesPerChannelAsync(cutRange, allowBufferReuse, cancellationToken: cancellationToken)
@@ -244,7 +244,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         int alignedSize = Math.Max(bytesPerSample, (samplesPerBatch / bytesPerSample) * bytesPerSample);
 
         // Инициализируем буферы по количеству каналов
-        var header = await GetHeaderAsync(cancellationToken);
+        var header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
         int channelCount = header.NumChannels;
 
         var channelBuffers = new IMemoryOwner<byte>[channelCount];
@@ -315,7 +315,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
 
     private async Task<Func<ReadOnlySpan<byte>, double>> GetNormalizedConverterAsync(CancellationToken cancellationToken)
     {
-        var header = await GetHeaderAsync(cancellationToken);
+        var header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
         return header.GetNormalizedConverter();
     }
 
@@ -347,12 +347,12 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         {
             if (_ownsReader)
             {
-                await _reader.CompleteAsync();
+                await _reader.CompleteAsync().ConfigureAwait(false);
             }
 
             if (_stream != null)
             {
-                await _stream.DisposeAsync();
+                await _stream.DisposeAsync().ConfigureAwait(false);
             }
             _disposed = true;
         }

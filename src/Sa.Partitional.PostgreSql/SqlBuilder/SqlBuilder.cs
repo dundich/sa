@@ -18,7 +18,7 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
         {
             SqlTableBuilder builder = builders[table] ?? throw new KeyNotFoundException(table);
 
-            StrOrNum[][] parValues = await resolve(table);
+            StrOrNum[][] parValues = await resolve(table).ConfigureAwait(false);
 
             if (parValues.Length > 0)
             {

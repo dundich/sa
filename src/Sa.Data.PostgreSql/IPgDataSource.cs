@@ -37,7 +37,10 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
 
     async Task<T> ExecuteScalar<T>(
         string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
-            => ((T)(await ExecuteScalar(sql, initCommand, cancellationToken))!);
+    {
+        var result = await ExecuteScalar(sql, initCommand, cancellationToken).ConfigureAwait(false);
+        return (T)(result!);
+    }
 
 
     /// <summary>
@@ -46,7 +49,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     async Task<T> ExecuteScalarTyped<T>(
         string sql, Action<NpgsqlCommand>? initCommand = null, CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteScalar(sql, initCommand, cancellationToken);
+        var result = await ExecuteScalar(sql, initCommand, cancellationToken).ConfigureAwait(false);
         if (result is null || result is DBNull)
             return default!;
 
@@ -83,7 +86,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
         IReadOnlyCollection<NpgsqlParameter> parameters,
         CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteScalar(sql, cmd => FillParams(cmd, parameters), cancellationToken);
+        var result = await ExecuteScalar(sql, cmd => FillParams(cmd, parameters), cancellationToken).ConfigureAwait(false);
         if (result is null || result is DBNull)
             return default!;
         if (result is T typed)
@@ -108,7 +111,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
 
     async Task<int> ExecuteReader(
         string sql, Action<NpgsqlDataReader, int> read, CancellationToken cancellationToken = default)
-        => await ExecuteReader(sql, read, [], cancellationToken);
+        => await ExecuteReader(sql, read, [], cancellationToken).ConfigureAwait(false);
 
 
     // ExecuteReaderList
@@ -118,7 +121,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
         string sql, Func<NpgsqlDataReader, T> read, CancellationToken cancellationToken = default)
     {
         List<T> list = [];
-        await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), cancellationToken);
+        await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), cancellationToken).ConfigureAwait(false);
         return list;
     }
 
@@ -129,7 +132,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         List<T> list = [];
-        await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), parameters, cancellationToken);
+        await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), parameters, cancellationToken).ConfigureAwait(false);
         return list;
     }
 
@@ -172,7 +175,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
             };
         }
         , parameters
-        , cancellationToken);
+        , cancellationToken).ConfigureAwait(false);
 
         return value;
     }

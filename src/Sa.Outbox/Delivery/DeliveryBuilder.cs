@@ -80,9 +80,9 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
     static string SanitizeString(string input)
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(input);
-        return SanitazeRegex().Replace(input, "_").ToLower();
+        return SanitizeRegex().Replace(input, "_").ToLower();
     }
 
     [GeneratedRegex(@"[^a-zA-Z0-9_]")]
-    private static partial Regex SanitazeRegex();
+    private static partial Regex SanitizeRegex();
 }

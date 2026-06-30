@@ -11,7 +11,7 @@ internal sealed class PartCleanupService(
         int cnt = 0;
         foreach (string tableName in sqlBuilder.Tables.Select(c => c.FullName))
         {
-            cnt += await repository.DropPartsToDate(tableName, toDate, cancellationToken);
+            cnt += await repository.DropPartsToDate(tableName, toDate, cancellationToken).ConfigureAwait(false);
         }
         return cnt;
     }

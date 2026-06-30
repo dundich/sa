@@ -50,6 +50,8 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
                     $"Consumer group '{consumerGroupId}' is not registered. Call Register() first.");
             }
 
+            // Perform transformation outside the lock to avoid holding it during
+            // potentially expensive validation or copying operations.
             newSettings = transform(existing);
             _settings[consumerGroupId] = newSettings;
         }

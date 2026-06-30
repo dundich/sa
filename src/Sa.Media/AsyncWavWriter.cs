@@ -203,25 +203,25 @@ internal sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
     {
         if (_currentBufferSize == 0) return;
 
-        await _stream.WriteAsync(_currentBuffer[.._currentBufferSize], cancellationToken);
+        await _stream.WriteAsync(_currentBuffer[.._currentBufferSize], cancellationToken).ConfigureAwait(false);
         _currentBufferSize = 0;
     }
 
     public async Task CloseAsync(CancellationToken cancellationToken = default)
     {
-        await FlushBufferAsync(cancellationToken);
+        await FlushBufferAsync(cancellationToken).ConfigureAwait(false);
         CorrectHeader();
 
         if (!_leaveOpen)
-            await _stream.FlushAsync(cancellationToken);
+            await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await CloseAsync();
+        await CloseAsync().ConfigureAwait(false);
         _bufferOwner.Dispose();
         if (!_leaveOpen)
-            await _stream.DisposeAsync();
+            await _stream.DisposeAsync().ConfigureAwait(false);
     }
 
     public void Dispose()

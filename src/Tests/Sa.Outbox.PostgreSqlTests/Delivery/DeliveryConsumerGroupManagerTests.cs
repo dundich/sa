@@ -628,7 +628,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
 
         const int iterations = 50;
         var exceptions = new List<Exception>();
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         // Publish messages
         var messages = Enumerable.Range(1, 20)
@@ -647,7 +647,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                 }
                 catch (Exception ex)
                 {
-                    Interlocked.Exchange(ref exceptions, exceptions.Append(ex).ToList());
+                    Interlocked.Exchange(ref exceptions, [.. exceptions, ex]);
                 }
 
                 await Task.Delay(2, cts.Token);
@@ -671,7 +671,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                 }
                 catch (Exception ex)
                 {
-                    Interlocked.Exchange(ref exceptions, exceptions.Append(ex).ToList());
+                    Interlocked.Exchange(ref exceptions, [.. exceptions, ex]);
                 }
 
                 await Task.Delay(2, cts.Token);
@@ -691,7 +691,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                 }
                 catch (Exception ex)
                 {
-                    Interlocked.Exchange(ref exceptions, exceptions.Append(ex).ToList());
+                    Interlocked.Exchange(ref exceptions, [.. exceptions, ex]);
                 }
             }
         }, cts.Token);

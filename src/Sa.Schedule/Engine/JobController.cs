@@ -199,6 +199,8 @@ internal sealed partial class JobController(
             return;
         }
 
+        // Track retry count. The scheduler decides whether to re-enqueue the job
+        // based on FailedRetries < RetryCount.
         if (_context.FailedRetries < settings.ErrorHandling.RetryCount)
         {
             _context.FailedRetries++;
@@ -212,6 +214,7 @@ internal sealed partial class JobController(
             return;
         }
 
+        // All retries exhausted — delegate to the registered error handler.
         _context.ServiceProvider.GetService<IJobErrorHandler>()?.HandleError(_context, error);
     }
 

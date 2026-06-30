@@ -19,6 +19,10 @@ public static class OutboxDefaults
     public static bool AsSingleton => true;
 
     /// <summary>Default maximum concurrency (48).</summary>
+    /// <remarks>
+    /// High value designed for cloud deployments with connection pooling and
+    /// partitioned outbox tables. For local/small deployments override via builder.
+    /// </remarks>
     public static int MaxConcurrency => 48;
 
     /// <summary>Default retry count on error — no retries.</summary>

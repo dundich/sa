@@ -281,7 +281,7 @@ internal sealed class ProcessExecutor : IProcessExecutor
             }
             finally
             {
-                await stdoutStream.DisposeAsync();
+                await stdoutStream.DisposeAsync().ConfigureAwait(false);
             }
             await Task.WhenAll(backgroundTasks).ConfigureAwait(false);
         }
@@ -333,11 +333,9 @@ internal sealed class ProcessExecutor : IProcessExecutor
         try
         {
             // input to stdin
-            await using (inputStream.ConfigureAwait(false))
-            {
-                await inputStream.CopyToAsync(process.StandardInput.BaseStream, cancellationToken)
+            await using var _ = inputStream;
+            await inputStream.CopyToAsync(process.StandardInput.BaseStream, cancellationToken)
                                  .ConfigureAwait(false);
-            }
 
             // Завершаем запись
             await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);

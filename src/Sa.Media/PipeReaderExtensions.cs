@@ -13,7 +13,7 @@ internal static class PipeReaderExtensions
         long remaining = count;
         while (remaining > 0)
         {
-            ReadResult result = await reader.ReadAsync(ct);
+            ReadResult result = await reader.ReadAsync(ct).ConfigureAwait(false);
             if (result.Buffer.IsEmpty && result.IsCompleted)
                 break; // Недостаточно данных
 
@@ -21,10 +21,6 @@ internal static class PipeReaderExtensions
             var consumed = result.Buffer.GetPosition(toConsume);
             reader.AdvanceTo(consumed, consumed);
             remaining -= toConsume;
-
-            //// Если буфер маленький, но нам нужно больше — продолжаем читать
-            //if (result.Buffer.Length <= toConsume && !result.IsCompleted)
-            //    continue;
         }
         return count - remaining;
     }
@@ -38,7 +34,7 @@ internal static class PipeReaderExtensions
         long remaining = count;
         while (remaining > 0)
         {
-            ReadResult result = await reader.ReadAsync(ct);
+            ReadResult result = await reader.ReadAsync(ct).ConfigureAwait(false);
             if (result.Buffer.IsEmpty && result.IsCompleted)
                 return;
 

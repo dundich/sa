@@ -24,6 +24,6 @@ internal sealed class DeliveryJob<TMessage>(
             settingsManager.Register(context.JobName, settings);
         }
 
-        await processor.ProcessMessages<TMessage>(settings, cancellationToken);
+        await processor.ProcessMessages<TMessage>(settings, cancellationToken).ConfigureAwait(false);
     }
 }

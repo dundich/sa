@@ -17,40 +17,40 @@ internal static class WavHeaderReader
         CancellationToken cancellationToken = default)
     {
         BinaryPipeReader reader = new(pipe);
-        uint chunkId = await reader.ReadUInt32Async(cancellationToken);
-        uint chunkSize = await reader.ReadUInt32Async(cancellationToken);
-        uint format = await reader.ReadUInt32Async(cancellationToken);
+        uint chunkId = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
+        uint chunkSize = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
+        uint format = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
 
         if (chunkId != Constants.СhunkRiff || format != Constants.FormatWave)
             throw new NotSupportedException("ERROR: File is not a WAV file");
 
-        uint subchunk1Id = await reader.ReadUInt32Async(cancellationToken);
+        uint subchunk1Id = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
 
         // Skip JUNK chunks
         while (subchunk1Id == Constants.Subchunk1IdJunk)
         {
-            uint junkSize = await reader.ReadUInt32Async(cancellationToken);
+            uint junkSize = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
             if (junkSize % 2 == 1) junkSize++; // align to even size
-            await reader.SkipBytesAsync(junkSize, cancellationToken);
-            subchunk1Id = await reader.ReadUInt32Async(cancellationToken);
+            await reader.SkipBytesAsync(junkSize, cancellationToken).ConfigureAwait(false);
+            subchunk1Id = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
         }
 
-        uint subchunk1Size = await reader.ReadUInt32Async(cancellationToken);
-        ushort audioFormatValue = await reader.ReadUInt16Async(cancellationToken);
+        uint subchunk1Size = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
+        ushort audioFormatValue = await reader.ReadUInt16Async(cancellationToken).ConfigureAwait(false);
         WaveFormatType audioFormat = (WaveFormatType)audioFormatValue;
 
         if (audioFormat is not (WaveFormatType.Pcm or WaveFormatType.IeeeFloat))
             throw new NotSupportedException($"Unsupported audio format: {audioFormat}");
 
-        ushort numChannels = await reader.ReadUInt16Async(cancellationToken);
-        uint sampleRate = await reader.ReadUInt32Async(cancellationToken);
-        uint byteRate = await reader.ReadUInt32Async(cancellationToken);
-        ushort blockAlign = await reader.ReadUInt16Async(cancellationToken);
-        ushort bitsPerSample = await reader.ReadUInt16Async(cancellationToken);
+        ushort numChannels = await reader.ReadUInt16Async(cancellationToken).ConfigureAwait(false);
+        uint sampleRate = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
+        uint byteRate = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
+        ushort blockAlign = await reader.ReadUInt16Async(cancellationToken).ConfigureAwait(false);
+        ushort bitsPerSample = await reader.ReadUInt16Async(cancellationToken).ConfigureAwait(false);
 
 
         // Skip extra fmt data (e.g., for WAVE_FORMAT_EXTENSIBLE)
-        var (dataOffset, dataSize) = await FindDataChunkAsync(reader, cancellationToken);
+        var (dataOffset, dataSize) = await FindDataChunkAsync(reader, cancellationToken).ConfigureAwait(false);
 
         var header = new WavHeader
         {
@@ -82,8 +82,8 @@ internal static class WavHeaderReader
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var chunkId = await reader.ReadUInt32Async(cancellationToken);
-            var chunkSize = await reader.ReadUInt32Async(cancellationToken);
+            var chunkId = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
+            var chunkSize = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
 
             if (chunkId == Constants.DataSubchunkId) // "data"
             {
@@ -95,7 +95,7 @@ internal static class WavHeaderReader
             if (paddedSize == 0)
                 throw new InvalidDataException("Invalid WAV file: zero-size chunk");
 
-            await reader.SkipBytesAsync(paddedSize, cancellationToken);
+            await reader.SkipBytesAsync(paddedSize, cancellationToken).ConfigureAwait(false);
         }
     }
 }

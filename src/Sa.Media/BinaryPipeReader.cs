@@ -10,7 +10,7 @@ internal sealed class BinaryPipeReader(PipeReader reader)
 
     public async ValueTask<uint> ReadUInt32Async(CancellationToken cancellationToken = default)
     {
-        var idBuffer = await reader.ReadAtLeastAsync(4, cancellationToken);
+        var idBuffer = await reader.ReadAtLeastAsync(4, cancellationToken).ConfigureAwait(false);
         uint result = ReadUInt32Little(idBuffer.Buffer);
         reader.AdvanceTo(idBuffer.Buffer.GetPosition(4));
         Position += 4;
@@ -19,7 +19,7 @@ internal sealed class BinaryPipeReader(PipeReader reader)
 
     public async ValueTask<ushort> ReadUInt16Async(CancellationToken cancellationToken = default)
     {
-        var idBuffer = await reader.ReadAtLeastAsync(2, cancellationToken);
+        var idBuffer = await reader.ReadAtLeastAsync(2, cancellationToken).ConfigureAwait(false);
         ushort result = ReadUInt16Little(idBuffer.Buffer);
         reader.AdvanceTo(idBuffer.Buffer.GetPosition(2));
         Position += 2;
@@ -29,7 +29,7 @@ internal sealed class BinaryPipeReader(PipeReader reader)
     public async Task SkipBytesAsync(long count, CancellationToken cancellationToken = default)
     {
         Position += count;
-        await PipeReaderExtensions.SkipAsync(reader, count, cancellationToken);
+        await PipeReaderExtensions.SkipAsync(reader, count, cancellationToken).ConfigureAwait(false);
     }
 
     private static uint ReadUInt32Little(ReadOnlySequence<byte> seq)
