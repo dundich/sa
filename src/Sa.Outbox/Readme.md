@@ -26,36 +26,6 @@ builder.Services
     );
 ```
 
-### 3. Публикация сообщений
-
-```csharp
-public sealed record OrderCreated(string OrderId);
-
-await publisher.Publish(
-    [new OrderCreated("ORD-001"), new OrderCreated("ORD-002")],
-    tenantId: 1);
-```
-
-### 4. Потребление сообщений
-
-```csharp
-sealed class OrderCreatedConsumer : IConsumer<OrderCreated>
-{
-    public async ValueTask Consume(
-        ConsumerGroupSettings settings,
-        OutboxMessageFilter filter,
-        ReadOnlyMemory<IOutboxContextOperations<OrderCreated>> messages,
-        CancellationToken cancellationToken)
-    {
-        foreach (var msg in messages.Span)
-        {
-            // обработка...
-            msg.Ok($"Processed order {msg.Payload.OrderId}");
-        }
-    }
-}
-```
-
 ## Архитектура
 
 ```
@@ -86,8 +56,10 @@ sealed class OrderCreatedConsumer : IConsumer<OrderCreated>
 | `IOutboxMessagePublisher` | Публикация сообщений в outbox |
 | `IConsumer\<TMessage\>` | Интерфейс потребителя сообщений |
 | `IOutboxContextOperations\<TMessage\>` | Операции изменения статуса доставки |
-| `ConsumeSettings` | Настройки потребления (батчи, блокировки, повторы) |
-| `ConsumerGroupSettings` | Группа потребителей + расписание |
+| `OutboxConsumerSettings` | Единый immutable-снимок настроек consumer group (интервал, батчи, параллельность, повторы и т.д.) |
+| `OutboxConsumerSettingsBuilder` | Fluent-билдер для создания и частичного обновления `OutboxConsumerSettings` |
+| `IOutboxConsumerManager` | Runtime-менеджер настроек: atomic swap, pause/resume, подписки на изменения |
+| `DeliverySnapshot` | Считывает настройки из статического регистра Schedule после билда DI |
 | `DeliveryStatus` / `DeliveryStatusCode` | HTTP-подобные статусы доставки |
 | `ExponentialBackoffRetryStrategy` | Экспоненциальный бэкофф с джиттером |
 | `OutboxPartInfo` | Информация о части: TenantId, PartName |
@@ -118,11 +90,10 @@ builder.Services.AddSaOutbox(builder => builder
     .WithDeliveries(d => d
         // Singleton delivery (один экземпляр на всё приложение)
         .AddDelivery<MyConsumer, MyMessage>("orders", (sp, cs) => {
-            cs.ConsumeSettings
+            cs
                 .WithMaxBatchSize(32)
                 .WithLockDuration(TimeSpan.FromSeconds(10))
-                .WithMaxDeliveryAttempts(5);
-            cs.ScheduleSettings
+                .WithMaxDeliveryAttempts(5)
                 .WithInterval(TimeSpan.FromSeconds(30))
                 .WithInitialDelay(TimeSpan.FromSeconds(5));
         })
@@ -132,7 +103,30 @@ builder.Services.AddSaOutbox(builder => builder
 );
 ```
 
+> **Self-bootstrapping:** `DeliveryJob` автоматически регистрирует настройки в `IOutboxConsumerManager` при первом запуске. Отдельный bootstrap-сервис не нужен — каждый job читает актуальные снимки из менеджера, включая runtime-изменения через `Apply()`.
+
+### Runtime-управление настройками
+
+`IOutboxConsumerManager` позволяет изменять настройки без перезапуска:
+
+```csharp
+// Atomic swap — новый снимок применяется атомарно
+manager.Apply("orders", s => s with { MaxBatchSize = 64 });
+
+// Pause / Resume
+manager.Pause("orders");
+manager.Resume("orders");
+
+// Подписка на изменения
+using var sub = manager.Subscribe("orders", updated =>
+{
+    // реакция на изменение настроек
+});
+```
+
 ### Настройки потребления
+
+`OutboxConsumerSettings` — единый immutable record. Все параметры задаются через `OutboxConsumerSettingsBuilder`:
 
 | Параметр | По умолчанию | Описание |
 |----------|-------------|----------|
@@ -142,7 +136,12 @@ builder.Services.AddSaOutbox(builder => builder
 | `MaxDeliveryAttempts` | 3 | Максимум попыток доставки |
 | `LookbackInterval` | 7 дней | История обработки |
 | `ConcurrencyLimit` | 1 | Одновременных задач |
+| `MaxConcurrency` | 1 | Макс. параллельных процессоров |
 | `PerTenantMaxDegreeOfParallelism` | 1 | Параллельность по тенантам |
+| `RetryCountOnError` | 0 | Повторы при ошибке (-1 = бесконечно) |
+| `MaxProcessingIterations` | -1 | Итераций за цикл (-1 = безлимитно) |
+| `BatchingWindow` | 0 сек | Окно агрегации сообщений |
+| `Paused` | false | Флаг паузы consumer group |
 
 ### Мультитенантность
 

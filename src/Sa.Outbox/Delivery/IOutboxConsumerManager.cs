@@ -20,9 +20,7 @@ public interface IOutboxConsumerManager
     /// Registers a consumer group with initial settings.
     /// Unlike <see cref="Apply"/>, this does not require prior registration.
     /// </summary>
-    /// <param name="consumerGroupId">The consumer group identifier.</param>
-    /// <param name="settings">The initial immutable settings snapshot.</param>
-    void Register(string consumerGroupId, OutboxConsumerSettings settings);
+    internal void Register(string consumerGroupId, OutboxConsumerSettings settings);
 
     /// <summary>
     /// Retrieves the current immutable settings snapshot. Thread-safe.

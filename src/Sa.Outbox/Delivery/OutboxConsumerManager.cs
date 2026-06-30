@@ -21,7 +21,7 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
         lock (_lock)
         {
             _settings[consumerGroupId] = settings;
-            
+
             if (!_listeners.ContainsKey(consumerGroupId))
             {
                 _listeners[consumerGroupId] = [];
