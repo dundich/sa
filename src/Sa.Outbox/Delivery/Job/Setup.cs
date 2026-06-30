@@ -28,8 +28,7 @@ internal static class Setup
             .WithConcurrencyLimit(1)
             .WithMaxConcurrency(1)
             .WithMaxProcessingIterations(-1)
-            .WithPerTenantTimeout(TimeSpan.Zero)
-            .Paused(false);
+            .WithPerTenantTimeout(TimeSpan.Zero);
 
         // Allow caller to tweak settings via fluent builder
         configure?.Invoke(default!, builder);

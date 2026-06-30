@@ -30,6 +30,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Sa.Outbox.Tests" />
+    <InternalsVisibleTo Include="Sa.Outbox.PostgreSqlTests" />
   </ItemGroup>
 
 </Project>

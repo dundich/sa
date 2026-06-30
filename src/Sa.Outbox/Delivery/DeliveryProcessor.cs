@@ -10,6 +10,11 @@ internal sealed class DeliveryProcessor(
     IDeliveryTenant processor,
     ITenantProvider tenantProvider) : IDeliveryProcessor
 {
+    /// <summary>
+    /// Delay when consumer group is paused — avoids busy-waiting on repeated polls.
+    /// </summary>
+    private static readonly TimeSpan PausedPollDelay = TimeSpan.FromSeconds(5);
+
     public async Task<long> ProcessMessages<TMessage>(
         OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
@@ -17,7 +22,7 @@ internal sealed class DeliveryProcessor(
         if (settings.Paused)
         {
             // Consumer group is paused — do not poll.
-            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            await Task.Delay(PausedPollDelay, cancellationToken);
             return 0;
         }
 
@@ -33,6 +38,14 @@ internal sealed class DeliveryProcessor(
         bool continueProcessing;
         do
         {
+            // Re-check Paused on each iteration — a runtime Pause() should interrupt
+            // the greedy loop, not wait for all pending messages to drain.
+            if (settings.Paused)
+            {
+                await Task.Delay(PausedPollDelay, cancellationToken);
+                return totalProcessed;
+            }
+
             if (iterations > 0 && settings.IterationDelay > TimeSpan.Zero)
             {
                 await Task.Delay(settings.IterationDelay, cancellationToken);
