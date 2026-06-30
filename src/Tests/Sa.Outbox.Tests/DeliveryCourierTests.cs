@@ -186,28 +186,6 @@ public class DeliveryCourierTests
 
     #endregion
 
-    #region Critical exceptions propagate
-
-    //[Fact]
-    //public async Task Deliver_ProcessorThrowsCritical_ExceptionPropagates()
-    //{
-    //    var ctx = new FakeOutboxContext<TestMessage>(payloadId: "msg-critical");
-    //    var messages = ToMessages(ctx);
-
-    //    var criticalException = new AccessViolationException("critical failure");
-    //    var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromException(criticalException));
-
-    //    var courier = new DeliveryCourier(processor);
-
-    //    var ex = await Assert.ThrowsAsync<AccessViolationException>(async () =>
-    //        await courier.Deliver(CreateSettings(), CreateFilter(), messages, CancellationToken.None));
-
-    //    Assert.Same(criticalException, ex);
-    //    // Critical exceptions skip the catch block, so messages are NOT touched
-    //    Assert.Equal(DeliveryStatusCode.Pending, ctx.DeliveryResult.Code);
-    //}
-
-    #endregion
 
     #region Pre-existing warning states
 
@@ -398,7 +376,7 @@ public class DeliveryCourierTests
         var ctx = new FakeOutboxContext<TestMessage>(payloadId: "cancelled");
         var messages = ToMessages(ctx);
 
-        var cts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromCanceled(cts.Token));
@@ -469,7 +447,7 @@ public class DeliveryCourierTests
         Assert.Equal("specific error", ctx.Exception!.Message);
     }
 
-    private sealed class CustomTestException(string message) : Exception(message);
+    public sealed class CustomTestException(string message) : Exception(message);
 
     #endregion
 }

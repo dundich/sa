@@ -44,7 +44,6 @@ IHost host = Host.CreateDefaultBuilder().ConfigureServices(services => services
         .WithOutboxSettings((_, settings) =>
         {
             settings.TableSettings.WithSchema("test");
-            settings.ConsumeSettings.WithMinOffset<Group1Consumer>(DateTimeOffset.Now);
         })
         .WithMessageSerializer(OutboxMessageSerializer.Instance)
     )
