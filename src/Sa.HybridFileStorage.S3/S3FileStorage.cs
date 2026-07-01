@@ -47,6 +47,10 @@ internal sealed class S3FileStorage(
     public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
+
+        if (!CanProcess(fileId))
+            return false;
+
         var filePath = GetFilePath(fileId);
         await client.DeleteFile(filePath, cancellationToken).ConfigureAwait(false);
         return true;
@@ -57,6 +61,10 @@ internal sealed class S3FileStorage(
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken)
     {
+
+        if (!CanProcess(fileId))
+            return false;
+
         var filePath = GetFilePath(fileId);
         using var stream = await client.GetFileStream(filePath, cancellationToken).ConfigureAwait(false);
         if (stream is null || stream == Stream.Null) return false;
@@ -71,6 +79,9 @@ internal sealed class S3FileStorage(
         CancellationToken cancellationToken)
     {
         EnsureWritable();
+        ArgumentNullException.ThrowIfNull(fileStream);
+
+        metadata.Validate();
         await EnsureBucketAsync(cancellationToken).ConfigureAwait(false);
 
         // Оптимизированная сборка пути без лишних аллокаций

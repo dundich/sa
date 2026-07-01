@@ -8,6 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Sa.HybridFileStorage.FileSystemTests" />
+    <InternalsVisibleTo Include="Sa.HybridFileStorageTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
   </ItemGroup>
 

@@ -19,4 +19,16 @@ public sealed record UploadFileInput
     /// Gets a default (empty) <see cref="UploadFileInput"/> instance.
     /// </summary>
     public static UploadFileInput Empty { get; } = new();
+
+    /// <summary>
+    /// Validates the input metadata. Throws <see cref="ArgumentException"/> if validation fails.
+    /// </summary>
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(FileName))
+            throw new ArgumentException("File name cannot be null or empty.", nameof(FileName));
+
+        if (TenantId < 0)
+            throw new ArgumentException("TenantId must be greater than or equal to 0.", nameof(TenantId));
+    }
 }

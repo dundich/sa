@@ -52,10 +52,10 @@ internal sealed class FileSystemStorage(
         Stream fileStream,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(metadata);
-        ArgumentException.ThrowIfNullOrWhiteSpace(metadata.FileName);
         ArgumentNullException.ThrowIfNull(fileStream);
         EnsureWritable();
+
+        metadata.Validate();
 
         string filename = PathSanitizer.SanitizeRelativePath(metadata.FileName);
 
@@ -101,6 +101,10 @@ internal sealed class FileSystemStorage(
     {
         ArgumentNullException.ThrowIfNull(fileId);
         ArgumentNullException.ThrowIfNull(loadStream);
+
+
+        if (!CanProcess(fileId))
+            return false;
 
         string filePath = GetFullPath(fileId);
         EnsurePathWithinBase(filePath);
@@ -150,6 +154,9 @@ internal sealed class FileSystemStorage(
     {
         ArgumentNullException.ThrowIfNull(fileId);
         EnsureWritable();
+
+        if (!CanProcess(fileId))
+            return false;
 
         var filePath = GetFullPath(fileId);
         EnsurePathWithinBase(filePath);

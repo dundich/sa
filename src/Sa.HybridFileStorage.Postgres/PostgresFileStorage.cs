@@ -96,6 +96,9 @@ internal sealed class PostgresFileStorage(
         CancellationToken cancellationToken)
     {
         EnsureWritable();
+        ArgumentNullException.ThrowIfNull(fileStream);
+
+        metadata.Validate();
 
         DateTimeOffset createdAtDay = _timeProvider.GetUtcNow().Date;
         long createdAt = createdAtDay.ToUnixTimeSeconds();
@@ -159,6 +162,11 @@ internal sealed class PostgresFileStorage(
     {
         EnsureWritable();
 
+
+        if (!CanProcess(fileId))
+            return false;
+
+
         if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
         {
             return false;
@@ -183,6 +191,11 @@ internal sealed class PostgresFileStorage(
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken)
     {
+
+
+        if (!CanProcess(fileId))
+            return false;
+
         if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
         {
             return false;

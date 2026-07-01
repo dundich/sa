@@ -58,6 +58,8 @@ public sealed class InMemoryFileStorage(
     {
         EnsureWritable();
 
+        metadata.Validate();
+
         using var memoryStream = new MemoryStream();
         await fileStream.CopyToAsync(memoryStream, cancellationToken)
             .ConfigureAwait(false);
@@ -90,6 +92,10 @@ public sealed class InMemoryFileStorage(
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken)
     {
+
+        if (!CanProcess(fileId))
+            return false;
+
         if (_storage.TryGetValue(fileId, out var fileData))
         {
             using var memoryStream = new MemoryStream(fileData);
@@ -103,6 +109,10 @@ public sealed class InMemoryFileStorage(
     public Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
+
+
+        if (!CanProcess(fileId))
+            return Task.FromResult(false);
 
         if (_storage.TryRemove(fileId, out var fileData))
         {
