@@ -10,7 +10,7 @@ namespace Sa.HybridFileStorage;
 public interface IHybridFileStorage
 {
     /// <summary>
-    /// storages
+    /// Gets the collection of registered file storage providers.
     /// </summary>
     IEnumerable<IFileStorage> Storages { get; }
 
@@ -48,6 +48,12 @@ public interface IHybridFileStorage
     /// <returns>True if the file was successfully deleted; otherwise, false.</returns>
     Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Retrieves the metadata for the file associated with the specified file ID.
+    /// </summary>
+    /// <param name="fileId">The unique identifier for the file.</param>
+    /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
+    /// <returns>The file metadata, or <c>null</c> if the file is not found.</returns>
     Task<FileMetadata?> GetMetadataAsync(
         string fileId,
         CancellationToken cancellationToken = default);

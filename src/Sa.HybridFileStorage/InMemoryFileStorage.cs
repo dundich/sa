@@ -4,7 +4,10 @@ using System.Globalization;
 
 namespace Sa.HybridFileStorage;
 
-
+/// <summary>
+/// An in-memory implementation of <see cref="IFileStorage"/> that stores file data as byte arrays in a <see cref="ConcurrentDictionary{TKey, TValue"/>.
+/// Suitable for testing, caching, or small-scale scenarios where persistence is not required.
+/// </summary>
 public sealed class InMemoryFileStorage(
     InMemoryFileStorageOptions? options = null,
     TimeProvider? timeProvider = null) : IFileStorage
@@ -13,17 +16,32 @@ public sealed class InMemoryFileStorage(
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
+    /// <summary>
+    /// Gets the default storage type identifier for in-memory storage.
+    /// </summary>
     public const string DefaultStorageType = "mem";
 
     private readonly ConcurrentDictionary<string, byte[]> _storage = [];
 
 
+    /// <summary>
+    /// Gets the basket (container) name used by this storage instance.
+    /// </summary>
     public string Basket => _options.Basket;
 
+    /// <summary>
+    /// Gets the storage type identifier (<c>"mem"</c>).
+    /// </summary>
     public string StorageType => DefaultStorageType;
 
+    /// <summary>
+    /// Gets a value indicating whether this storage instance is read-only.
+    /// </summary>
     public bool IsReadOnly => _options.IsReadOnly;
 
+    /// <summary>
+    /// Gets the scheme separator used to construct file IDs in the format <c>"storageType://basket/tenant/filename"</c>.
+    /// </summary>
     public const string SchemeSeparator = "://";
 
     private void EnsureWritable()
@@ -42,7 +60,8 @@ public sealed class InMemoryFileStorage(
         EnsureWritable();
 
         using var memoryStream = new MemoryStream();
-        await fileStream.CopyToAsync(memoryStream, cancellationToken);
+        await fileStream.CopyToAsync(memoryStream, cancellationToken)
+            .ConfigureAwait(false);
         byte[] fileData = memoryStream.ToArray();
 
         string path = Path.Combine(Basket, metadata.TenantId.ToString(), metadata.FileName).Replace('\\', '/');
@@ -62,7 +81,8 @@ public sealed class InMemoryFileStorage(
         if (_storage.TryGetValue(fileId, out var fileData))
         {
             using var memoryStream = new MemoryStream(fileData);
-            await loadStream(memoryStream, cancellationToken);
+            await loadStream(memoryStream, cancellationToken)
+                .ConfigureAwait(false);
             return true;
         }
         return false;

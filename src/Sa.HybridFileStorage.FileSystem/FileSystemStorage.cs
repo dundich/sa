@@ -69,6 +69,13 @@ internal sealed class FileSystemStorage(
         if (!string.IsNullOrEmpty(directory))
             EnsureDirectory(directory);
 
+        // Smart preallocation: use actual length when available, fall back to 0 for unknown sizes
+        long preallocationSize = 1024 * 1024;
+        if (fileStream.CanSeek && fileStream.Length > 0 && fileStream.Length <= int.MaxValue)
+        {
+            preallocationSize = fileStream.Length;
+        }
+
         await using var fileStreamOutput = new FileStream(filePath, new FileStreamOptions
         {
             Mode = FileMode.Create,
@@ -76,7 +83,7 @@ internal sealed class FileSystemStorage(
             Share = FileShare.None,
             BufferSize = _bufferSize,
             Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
-            PreallocationSize = 5 * 1024 * 1024
+            PreallocationSize = (int)preallocationSize
         });
 
         await fileStream.CopyToAsync(fileStreamOutput, cancellationToken).ConfigureAwait(false);

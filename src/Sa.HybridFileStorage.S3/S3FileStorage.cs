@@ -21,7 +21,9 @@ internal sealed class S3FileStorage(
     private readonly string _storageType = options.StorageType;
     private readonly bool _isReadOnly = options.IsReadOnly;
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
-    private int _bucketEnsured; // 0 = not ensured, 1 = ensured (thread-safe via Interlocked)
+
+    // Async lazy initialization for bucket ensure — prevents concurrent CreateBucket calls
+    private volatile Task _ensureBucketTask;
 
     public string StorageType => _storageType;
     public bool IsReadOnly => _isReadOnly;
@@ -87,20 +89,41 @@ internal sealed class S3FileStorage(
             _timeProvider.GetUtcNow());
     }
 
-    private async ValueTask EnsureBucketAsync(CancellationToken cancellationToken)
+    private async Task EnsureBucketAsync(CancellationToken cancellationToken)
     {
-        // Lock-free проверка: проверяем bucket только один раз за время жизни экземпляра
-        if (Volatile.Read(ref _bucketEnsured) == 0)
+        // Fast path: if already ensured, skip entirely
+        var task = _ensureBucketTask;
+        if (task is not null)
         {
-            if (await client.IsBucketExists(cancellationToken).ConfigureAwait(false))
-            {
-                Volatile.Write(ref _bucketEnsured, 1);
-                return;
-            }
-
-            await client.CreateBucket(cancellationToken).ConfigureAwait(false);
-            Volatile.Write(ref _bucketEnsured, 1);
+            await task.ConfigureAwait(false);
+            return;
         }
+
+        // Slow path: create the task that will ensure the bucket
+        var createdTask = EnsureBucketCoreAsync(cancellationToken);
+
+        // CompareExchange ensures only one task survives — others will await the winner
+        var comparison = Interlocked.CompareExchange(ref _ensureBucketTask, createdTask, null);
+        if (comparison is not null)
+        {
+            // Another thread won the race — await its task and discard ours
+            await createdTask.ConfigureAwait(false);
+            await comparison.ConfigureAwait(false);
+            return;
+        }
+
+        // We won — execute and let callers await the result
+        await createdTask.ConfigureAwait(false);
+    }
+
+    private async Task EnsureBucketCoreAsync(CancellationToken cancellationToken)
+    {
+        if (await client.IsBucketExists(cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await client.CreateBucket(cancellationToken).ConfigureAwait(false);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
