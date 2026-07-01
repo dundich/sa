@@ -1,14 +1,18 @@
 # Sa.Data.S3
 
-Обёртка над `HttpClient` для работы с S3-совместимыми хранилищами (Minio, AWS S3, DigitalOcean Spaces и др.). Полностью собственная реализация AWS Signature Version 4 — **без зависимостей от AWS SDK или Minio SDK**.
+Wrapper over `HttpClient` for working with S3-compatible storage systems (Minio, AWS S3, DigitalOcean Spaces, etc.). Fully self-implemented AWS Signature Version 4 — **no dependencies on AWS SDK or Minio SDK**.
 
-## Мотивация
+---
 
-Это форк https://github.com/teoadal/Storage. Мотивация — клиенты [AWS SDK for .NET](https://docs.aws.amazon.com/sdk-for-net/v3/developer-guide/welcome.html) (4.x) и [Minio .NET](https://github.com/minio/minio-dotnet) (6.x) потребляли слишком много памяти. Результат: скорость почти как у AWS, а потребление памяти в ~150 раз меньше чем Minio SDK и в ~17 раз меньше AWS SDK.
+## Motivation
 
-## Создание клиента
+This is a fork of https://github.com/teoadal/Storage. Motivation: the [AWS SDK for .NET](https://docs.aws.amazon.com/sdk-for-net/v3/developer-guide/welcome.html) (4.x) and [Minio .NET](https://github.com/minio/minio-dotnet) (6.x) clients consumed too much memory. Result: speed is comparable to AWS, while memory consumption is ~150× lower than Minio SDK and ~17× lower than AWS SDK.
 
-### Без DI
+---
+
+## Creating a Client
+
+### Without DI
 
 ```csharp
 var client = new S3BucketClient(new HttpClient(), new S3BucketClientSetupSettings
@@ -20,7 +24,7 @@ var client = new S3BucketClient(new HttpClient(), new S3BucketClientSetupSetting
 });
 ```
 
-### С DI
+### With DI
 
 ```csharp
 services.AddSaS3BucketClient(new S3BucketClientSetupSettings
@@ -31,27 +35,31 @@ services.AddSaS3BucketClient(new S3BucketClientSetupSettings
     SecretKey = "ChangeMe123",
     TotalRequestTimeout = TimeSpan.FromSeconds(180),
     ConnectionPoolLifetime = TimeSpan.FromMinutes(15),
-    HandlerLifetime = Timeout.InfiniteTimeSpan // или TimeSpan.FromHours(2) для периодического обновления handler
+    HandlerLifetime = Timeout.InfiniteTimeSpan // or TimeSpan.FromHours(2) for periodic handler refresh
 });
 
-// Использование:
+// Usage:
 var client = serviceProvider.GetRequiredService<IS3BucketClient>();
 ```
 
-## Настройки
+---
 
-| Свойство | Описание | По умолчанию |
-|---|---|---|
-| `AccessKey` | Ключ доступа S3 | *(обязательно)* |
-| `SecretKey` | Секретный ключ S3 | *(обязательно)* |
-| `Bucket` | Имя бакета | *(обязательно)* |
-| `Endpoint` | URL S3-хранилища | *(обязательно)* |
-| `Region` | Регион для SigV4 | `"us-east-1"` |
-| `Service` | Сервис для SigV4 | `"s3"` |
-| `UseHttp2` | Принудительный HTTP/2 | `false` |
-| `TotalRequestTimeout` | Таймаут каждого запроса | `180 сек` |
-| `ConnectionPoolLifetime` | Время жизни пула соединений | `15 мин` |
-| `HandlerLifetime` | Время жизни HttpClient handler | `∞` (бесконечность) |
+## Settings
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `AccessKey` | S3 access key | *(required)* |
+| `SecretKey` | S3 secret key | *(required)* |
+| `Bucket` | Bucket name | *(required)* |
+| `Endpoint` | S3 storage URL | *(required)* |
+| `Region` | Region for SigV4 | `"us-east-1"` |
+| `Service` | Service name for SigV4 | `"s3"` |
+| `UseHttp2` | Force HTTP/2 | `false` |
+| `TotalRequestTimeout` | Per-request timeout | `180 sec` |
+| `ConnectionPoolLifetime` | Connection pool lifetime | `15 min` |
+| `HandlerLifetime` | HttpClient handler lifetime | `∞` (infinite) |
+
+---
 
 ## API
 
@@ -62,7 +70,7 @@ public interface IBucketOperations
 {
     Task<bool> CreateBucket(CancellationToken ct);
     Task<bool> DeleteBucket(CancellationToken ct);
-    Task<bool> DeleteBucket(bool forceDelete, CancellationToken ct); // force: удалить все объекты перед удалением bucket
+    Task<bool> DeleteBucket(bool forceDelete, CancellationToken ct); // force: delete all objects before removing bucket
     Task<bool> IsBucketExists(CancellationToken ct);
 }
 ```
@@ -79,22 +87,22 @@ public interface IFileOperations
     Task<Stream> GetFileStream(string fileName, CancellationToken ct);
     Task<string?> GetFileUrl(string fileName, TimeSpan expiration, CancellationToken ct);
     Task<bool> IsFileExists(string fileName, CancellationToken ct);
-    IAsyncEnumerable<string> List(string? prefix, CancellationToken ct); // с pagination
+    IAsyncEnumerable<string> List(string? prefix, CancellationToken ct); // with pagination
     Task<bool> UploadFile(string fileName, string contentType, byte[] data, CancellationToken ct);
-    Task<S3Upload> UploadFile(string fileName, string contentType, CancellationToken ct); // ручной multipart
+    Task<S3Upload> UploadFile(string fileName, string contentType, CancellationToken ct); // manual multipart
     Task<bool> UploadFile(string fileName, string contentType, Stream data, CancellationToken ct);
 }
 ```
 
-### Rучной Multipart Upload
+### Manual Multipart Upload
 
-Для файлов > 5MB автоматически выбирается multipart upload. Для ручного управления:
+For files > 5MB, multipart upload is selected automatically. For manual control:
 
 ```csharp
 using var uploader = await client.UploadFile("large-file.bin", "application/octet-stream", ct);
 
 uploader.AddPart(chunkData, ct);
-uploader.AddPart(chunkData, offset, length, ct); // перегрузка с offset
+uploader.AddPart(chunkData, offset, length, ct); // overload with offset
 uploader.AddParts(fullDataStream, ct);
 uploader.AddParts(fullByteArray, ct);
 
@@ -108,12 +116,20 @@ else
 }
 ```
 
-## Особенности реализации
+---
 
-- **AWS SigV4** — полная ручная реализация подписывания запросов (SHA256 + HMAC-SHA256 chain)
-- **ArrayPool<T>.Shared** — пулинг буферов для минимизации GC pressure
-- **ref struct ValueStringBuilder** — стек-based строковый билдер без аллокаций
-- **stackalloc** — везде где возможно для избежания heap allocation
-- **Буферизированный XML парсер** — эффективное чтение ответов S3 (ListObjects, Multipart IDs)
-- **Pagination** — автоматическая обработка `IsTruncated` / `NextContinuationToken` в `List()`
-- **CancellationToken** — поддерживается во всех async операциях
+## Implementation Details
+
+- **AWS SigV4** — full manual implementation of request signing (SHA256 + HMAC-SHA256 chain)
+- **ArrayPool<T>.Shared** — buffer pooling to minimize GC pressure
+- **ref struct ValueStringBuilder** — stack-based string builder with zero allocations
+- **stackalloc** — wherever possible to avoid heap allocation
+- **Buffered XML parser** — efficient reading of S3 responses (ListObjects, Multipart IDs)
+- **Pagination** — automatic handling of `IsTruncated` / `NextContinuationToken` in `List()`
+- **CancellationToken** — supported in all async operations
+
+---
+
+## License
+
+MIT

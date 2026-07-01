@@ -6,7 +6,7 @@ A dynamic configuration source for .NET that loads settings from PostgreSQL. Cha
 
 - **Live configuration**: values are stored in the database and can be changed at runtime
 - **Parameterized SQL queries**: supports `@named_parameters` via `NpgsqlParameter`
-- **Automatic retry**: built-in retry strategy (PgRetryStrategy) with detection of Npgsql transaction errors
+- **Automatic retry**: built-in retry strategy (`PgRetryStrategy`) with detection of Npgsql transient errors
 - **Key/value trimming**: whitespace is automatically trimmed from both keys and values
 - **Safe NULL handling**: `NULL` in DB → `null` in config; empty string → `string.Empty`
 
@@ -15,6 +15,8 @@ A dynamic configuration source for .NET that loads settings from PostgreSQL. Cha
 | Type | Purpose |
 |------|---------|
 | `PostgreSqlConfigurationOptions` | Immutable record: `ConnectionString`, `SelectSql`, `Parameters` |
+| `DatabaseConfigurationSource` | `IConfigurationSource` implementation |
+| `DatabaseConfigurationProvider` | `ConfigurationProvider` that loads key-value pairs from DB |
 | `Setup.AddSaPostgreSqlConfiguration()` | Extension method for `IConfigurationBuilder` |
 
 ## Quick Start

@@ -1,18 +1,20 @@
 # Sa.Outbox
 
-Базовая инфраструктурная библиотека для реализации паттерна **Transactional Outbox** в распределённых .NET-системах. Гарантирует атомарную запись сообщения вместе с бизнес-операцией внутри одной транзакции БД и надёжную доставку с поддержкой повторных попыток, блокировок, многопоточности и мультитенантности.
+Base infrastructure library for implementing the **Transactional Outbox** pattern in distributed .NET systems. Guarantees atomic message recording alongside business operations within a single database transaction, with reliable delivery, retries, locking, multi-threading, and multi-tenancy support.
 
-Библиотека определяет абстракции и логику — конкретную работу с БД (PostgreSQL, SQL Server и т.д.) реализуют провайдеры-наследники (`Sa.Outbox.PostgreSql`, `Sa.Outbox.SqlServer` и др.).
+Defines abstractions and core logic — concrete database work (PostgreSQL, SQL Server, etc.) is implemented by provider packages (`Sa.Outbox.PostgreSql`, `Sa.Outbox.SqlServer`, etc.).
+
+---
 
 ## Quick Start
 
-### 1. Установите пакет провайдера
+### 1. Install a provider package
 
 ```bash
 dotnet add package Sa.Outbox.PostgreSql
 ```
 
-### 2. Настройте DI
+### 2. Configure DI
 
 ```csharp
 builder.Services
@@ -20,13 +22,15 @@ builder.Services
         .WithTenants((_, ts) => ts.WithTenantIds(1, 2, 3))
         .WithDeliveries(b => b.AddDelivery<MyConsumer, MyMessage>())
     )
-    // провайдер (пример — PostgreSQL)
+    // Provider registration (example — PostgreSQL)
     .AddSaOutboxUsingPostgreSql(cfg => cfg
         .WithDataSource(ds => ds.WithConnectionString("Host=localhost;Database=outbox"))
     );
 ```
 
-## Архитектура
+---
+
+## Architecture
 
 ```
 ┌──────────────┐     Publish      ┌─────────────┐
@@ -41,54 +45,81 @@ builder.Services
                                └─────────────┘
 ```
 
-### Два этапа жизненного цикла
+### Two lifecycle stages
 
-| Этап | Описание |
-|------|----------|
-| **Publication** | Сообщения записываются в таблицу outbox внутри транзакции бизнес-операции через `IOutboxBulkWriter.InsertBulk()` |
-| **Delivery** | Фоновые задачи (`Sa.Schedule`) захватывают заблокированные сообщения, вызывают потребителей, обновляют статус |
+| Stage | Description |
+|-------|-------------|
+| **Publication** | Messages are written to the outbox table inside the business operation's transaction via `IOutboxBulkWriter.InsertBulk()` |
+| **Delivery** | Background jobs (`Sa.Schedule`) acquire locked messages, invoke consumers, update status |
 
-## Основные типы
+---
 
-| Тип | Назначение |
-|-----|------------|
-| `IOutboxBuilder` | Fluent-билдер для конфигурации outbox-системы |
-| `IOutboxMessagePublisher` | Публикация сообщений в outbox |
-| `IConsumer\<TMessage\>` | Интерфейс потребителя сообщений |
-| `IOutboxContextOperations\<TMessage\>` | Операции изменения статуса доставки |
-| `OutboxConsumerSettings` | Единый immutable-снимок настроек consumer group (интервал, батчи, параллельность, повторы и т.д.) |
-| `OutboxConsumerSettingsBuilder` | Fluent-билдер для создания и частичного обновления `OutboxConsumerSettings` |
-| `IOutboxConsumerManager` | Runtime-менеджер настроек: atomic swap, pause/resume, подписки на изменения |
-| `DeliverySnapshot` | Считывает настройки из статического регистра Schedule после билда DI |
-| `DeliveryStatus` / `DeliveryStatusCode` | HTTP-подобные статусы доставки |
-| `ExponentialBackoffRetryStrategy` | Экспоненциальный бэкофф с джиттером |
-| `OutboxPartInfo` | Информация о части: TenantId, PartName |
+## Key Types
 
-## Статусы доставки
+| Type | Purpose |
+|------|---------|
+| `IOutboxBuilder` | Fluent configuration builder |
+| `IOutboxMessagePublisher` | Publish messages to outbox |
+| `IConsumer\<TMessage\>` | Message consumer interface |
+| `IOutboxContextOperations\<TMessage\>` | Delivery status change operations (`Ok`, `Error`, `Warn`, `Postpone`, etc.) |
+| `OutboxConsumerSettings` | Immutable snapshot of consumer group settings (interval, batches, concurrency, retries…) |
+| `OutboxConsumerSettingsBuilder` | Fluent builder for creating and partially updating `OutboxConsumerSettings` |
+| `IOutboxConsumerManager` | Runtime manager: atomic swap, pause/resume, change subscriptions |
+| `IDeliverySnapshot` | Read-only view of registered deliveries for diagnostics |
+| `DeliveryStatus` / `DeliveryStatusCode` | HTTP-like delivery status codes |
+| `ExponentialBackoffRetryStrategy` | Exponential backoff with jitter |
+| `OutboxPartInfo` | Part info: TenantId, PartName |
 
-Полный набор HTTP-подобных кодов состояния:
+---
 
-| Код | Статус | Значение |
-|-----|--------|----------|
-| 200 | `Ok()` | Успешно обработано |
-| 201 | `Created()` | Создан побочный ресурс |
-| 202 | `Accepted()` | Принято в обработку |
-| 204 | `NoContent()` | Обработано, нет данных |
-| 299 | `Aborted()` | Пропущено |
-| 400 | `Warn()` | Временная ошибка → повтор |
-| 500–508 | `Error()` | Постоянная ошибка |
-| 508 | `ErrorMaxAttempts()` | Исчерпан максимум попыток |
-| 103 | `Postpone()` | Отложенная обработка |
-| 104 | `Retry()` | Повторить сейчас |
+## Delivery Status Codes
 
-## Конфигурация
+Full set of HTTP-like status codes:
 
-### Настройка потребителей
+| Code | Status | Meaning |
+|------|--------|---------|
+| 200 | `Ok()` | Successfully processed |
+| 201 | `Created()` | Side-effect resource created |
+| 202 | `Accepted()` | Accepted for async processing |
+| 203 | `Ok203()` | Non-Authoritative Information |
+| 204 | `NoContent()` | Processed, no data |
+| 299 | `Aborted()` | Intentionally skipped |
+| 301 | `MovedPermanently()` | Moved to another queue |
+| 400 | `Warn()` | Transient error → retry |
+| 500–507 | `ErrorXXX()` | Permanent error |
+| 508 | `ErrorMaxAttempts()` | Max attempts exhausted |
+| 103 | `Postpone()` | Deferred processing |
+| 104 | `Retry()` | Retry now |
+
+---
+
+## Status Methods
+
+After processing each message, call exactly one method from `IOutboxContextOperations<T>`:
+
+| Method | Description |
+|--------|-------------|
+| `msg.Ok(message?)` | Successfully processed (200 OK) |
+| `msg.Created(message?)` | Side-effect resource created (201 Created) |
+| `msg.Accepted(message?)` | Accepted for async processing (202 Accepted) |
+| `msg.NoContent(message?)` | Processed, no data (204 No Content) |
+| `msg.Aborted(message?)` | Intentionally skipped (299 Aborted) |
+| `msg.Warn(exception, message?, postpone?)` | Transient error → retry (400 Warn) |
+| `msg.Error(exception, message?)` | Permanent error (500 Error) |
+| `msg.ErrorMaxAttempts()` | Max attempts exhausted (508) |
+| `msg.Postpone(delay, message?)` | Defer processing (103 Postpone) |
+| `msg.Retry(delay, message?)` | Retry with metadata (104 Retry) |
+
+---
+
+## Configuration
+
+### Consumer Registration
 
 ```csharp
 builder.Services.AddSaOutbox(builder => builder
     .WithDeliveries(d => d
-        // Singleton delivery (один экземпляр на всё приложение)
+        // Singleton delivery (one instance for the whole app)
         .AddDelivery<MyConsumer, MyMessage>("orders", (sp, cs) => {
             cs
                 .WithMaxBatchSize(32)
@@ -97,95 +128,123 @@ builder.Services.AddSaOutbox(builder => builder
                 .WithInterval(TimeSpan.FromSeconds(30))
                 .WithInitialDelay(TimeSpan.FromSeconds(5));
         })
-        // Scoped delivery (DI-скон на каждую доставку)
+        // Scoped delivery (DI-scoped per delivery)
         .AddDeliveryScoped<TenantAwareConsumer, EventData>("events")
     )
 );
 ```
 
-> **Self-bootstrapping:** `DeliveryJob` автоматически регистрирует настройки в `IOutboxConsumerManager` при первом запуске. Отдельный bootstrap-сервис не нужен — каждый job читает актуальные снимки из менеджера, включая runtime-изменения через `Apply()`.
+> **Self-bootstrapping:** `DeliveryJob` automatically registers settings into `IOutboxConsumerManager` on first execution. No separate bootstrap service needed — each job reads live snapshots from the manager, including runtime changes via `Apply()`.
 
-### Runtime-управление настройками
+### Runtime Settings Management
 
-`IOutboxConsumerManager` позволяет изменять настройки без перезапуска:
+`IOutboxConsumerManager` allows changing settings without restarting:
 
 ```csharp
-// Atomic swap — новый снимок применяется атомарно
+// Atomic swap — new snapshot applied atomically
 manager.Apply("orders", s => s with { MaxBatchSize = 64 });
 
 // Pause / Resume
 manager.Pause("orders");
 manager.Resume("orders");
 
-// Подписка на изменения
+// Subscribe to changes
 using var sub = manager.Subscribe("orders", updated =>
 {
-    // реакция на изменение настроек
+    // react to settings change
 });
+
+// Check state
+bool paused = manager.IsPaused("orders");
+bool registered = manager.IsRegistered("orders");
+
+// Unregister (removes settings AND detaches external control)
+manager.Unregister("orders");
+
+// List all registered groups
+var allGroups = manager.GetAllConsumerGroupIds();
 ```
 
-### Настройки потребления
+### Consumption Settings
 
-`OutboxConsumerSettings` — единый immutable record. Все параметры задаются через `OutboxConsumerSettingsBuilder`:
+`OutboxConsumerSettings` is a single immutable record. All parameters are set through `OutboxConsumerSettingsBuilder`:
 
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `MaxBatchSize` | 16 | Макс. размер батча |
-| `LockDuration` | 10 сек | Время блокировки сообщения |
-| `LockRenewal` | 3 сек | Период продления блокировки |
-| `MaxDeliveryAttempts` | 3 | Максимум попыток доставки |
-| `LookbackInterval` | 7 дней | История обработки |
-| `ConcurrencyLimit` | 1 | Одновременных задач |
-| `MaxConcurrency` | 1 | Макс. параллельных процессоров |
-| `PerTenantMaxDegreeOfParallelism` | 1 | Параллельность по тенантам |
-| `RetryCountOnError` | 0 | Повторы при ошибке (-1 = бесконечно) |
-| `MaxProcessingIterations` | -1 | Итераций за цикл (-1 = безлимитно) |
-| `BatchingWindow` | 0 сек | Окно агрегации сообщений |
-| `Paused` | false | Флаг паузы consumer group |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `ConsumerGroupId` | — | Unique group identifier |
+| `AsSingleton` | true | Singleton (one per cluster) vs Scoped |
+| `Interval` | 1 min | Execution period between iterations |
+| `InitialDelay` | 10 sec | Delay before first execution |
+| `ConcurrencyLimit` | 1 | Number of parallel workers |
+| `MaxConcurrency` | 48 | Absolute ceiling of processors |
+| `IterationDelay` | 0 sec | Delay between iterations within a cycle |
+| `MaxProcessingIterations` | 10 | Iterations per cycle (-1 = unlimited) |
+| `LockDuration` | 10 sec | Record lock TTL |
+| `LockRenewal` | 3 sec | Lock renewal interval |
+| `LookbackInterval` | 7 days | History search window for unprocessed messages |
+| `MaxDeliveryAttempts` | 3 | Max delivery attempts before DLQ |
+| `MaxBatchSize` | 16 | Max messages per batch |
+| `BatchingWindow` | 3 sec | Message aggregation window |
+| `PerTenantTimeout` | 0 | Timeout per tenant processing |
+| `PerTenantMaxDegreeOfParallelism` | 1 | Tenant parallelism (1 = sequential, -1 = all cores) |
+| `RetryCountOnError` | 0 | Retries on error (-1 = infinite) |
+| `Paused` | false | Pause flag |
 
-### Мультитенантность
+---
+
+### Multi-Tenancy
 
 ```csharp
 .WithTenants((_, ts) => ts
-    .WithTenantIds(1, 2, 3)                          // Явный список
-    .WithAutoDetect()                                // Автоопределение из БД
-    .WithTenantDetector<TenantDetector>()            // Кастомный детектор
-    .WithTenantParallelProcessing(3)                 // Параллельная обработка
+    .WithTenantIds(1, 2, 3)                          // Explicit list
+    .WithAutoDetect()                                // Auto-detect from messages at runtime
+    .WithTenantDetector<TenantDetector>()            // Custom detector
+    .WithTenantParallelProcessing(3)                 // Parallel processing per tenant
 )
 ```
 
-### Метаданные сообщений
+---
+
+### Message Metadata
 
 ```csharp
-// Вариант 1: явное указание partName и PayloadId
+// Option 1: explicit partName and PayloadId resolver
 options.AddMetadata<MyMessage>(partName: "orders", getPayloadId: m => m.Id);
 
-// Вариант 2: из IOutboxPublishable
+// Option 2: derive from IOutboxPublishable
 options.AddMetadata<MyMessage>();
 ```
 
-## Доступные провайдеры
+---
 
-| Провайдер | Пакет | Статус |
-|-----------|-------|--------|
+## Available Providers
+
+| Provider | Package | Status |
+|----------|---------|--------|
 | PostgreSQL | `Sa.Outbox.PostgreSql` | ✅ production-ready |
-| SQL Server | `Sa.Outbox.SqlServer` | 🔧 в разработке |
-| Redis | `Sa.Outbox.Redis` | 🔧 в разработке |
+| SQL Server | `Sa.Outbox.SqlServer` | 🔧 in development |
+| Redis | `Sa.Outbox.Redis` | 🔧 in development |
 
-## Требования к провайдеру
+---
 
-Провайдер должен реализовать три ключевых интерфейса:
+## Provider Requirements
 
-| Интерфейс | Назначение |
-|-----------|------------|
-| `IOutboxBulkWriter` | Массовая вставка сообщений в БД |
-| `IOutboxDeliveryManager` | Управление блокировкой и выдачей сообщений |
-| `ITenantSource` | Источник идентификаторов тенантов |
+A provider must implement three key interfaces:
 
-## Зависимости
+| Interface | Purpose |
+|-----------|---------|
+| `IOutboxBulkWriter` | Bulk message insertion into DB |
+| `IOutboxDeliveryManager` | Locking and message dispatch |
+| `ITenantSource` | Tenant ID source |
 
-- **Sa.Schedule** — планировщик фоновых задач
-- Ссылочные классы из **Sa** (LockRenewer, MurmurHash3, Retry, расширения)
+---
+
+## Dependencies
+
+- **Sa.Schedule** — background job scheduler
+- Reference classes from **Sa** (LockRenewer, MurmurHash3, Retry, extensions)
+
+---
 
 ## License
 

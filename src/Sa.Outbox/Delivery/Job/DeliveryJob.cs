@@ -17,11 +17,22 @@ internal sealed class DeliveryJob<TMessage>(
         if (settings is null)
         {
             // Auto-bootstrap: first execution hasn't been registered yet.
-            settings = context.Settings.Properties.GetConsumerGroupSettings()
+            // Use TryRegister to avoid race conditions when multiple application
+            // instances start simultaneously — only one will succeed, others skip.
+            var bootstrapped = context.Settings.Properties.GetConsumerGroupSettings()
                 ?? throw new InvalidOperationException(
                     $"No OutboxConsumerSettings for consumer group '{context.JobName}'.");
 
-            settingsManager.Register(context.JobName, settings);
+            bool registered = settingsManager.TryRegister(context.JobName, bootstrapped);
+            if (!registered)
+            {
+                // Another instance registered us concurrently — read the canonical snapshot.
+                settings = settingsManager.Get(context.JobName)!;
+            }
+            else
+            {
+                settings = bootstrapped;
+            }
         }
 
         await processor.ProcessMessages<TMessage>(settings, cancellationToken).ConfigureAwait(false);

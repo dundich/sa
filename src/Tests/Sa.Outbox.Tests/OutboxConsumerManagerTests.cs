@@ -1,4 +1,4 @@
-using Sa.Outbox.Delivery;
+﻿using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.Tests;
 
@@ -40,7 +40,7 @@ public class OutboxConsumerManagerTests
         var group = "pause-test";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
         Assert.False(manager.IsPaused(group));
 
         manager.Pause(group);
@@ -54,7 +54,7 @@ public class OutboxConsumerManagerTests
         var group = "resume-test";
         var settings = CreateSettings(group, paused: true);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
         Assert.True(manager.IsPaused(group));
 
         manager.Resume(group);
@@ -68,7 +68,7 @@ public class OutboxConsumerManagerTests
         var group = "pause-resume-cycle";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
         manager.Pause(group);
         Assert.True(manager.IsPaused(group));
 
@@ -127,7 +127,7 @@ public class OutboxConsumerManagerTests
         var group = "pause-preserve";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
         manager.Pause(group);
 
         var updated = manager.Get(group);
@@ -152,7 +152,7 @@ public class OutboxConsumerManagerTests
         var group = "subscribe-test";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         OutboxConsumerSettings? captured = null;
         using var subscription = manager.Subscribe(group, s => captured = s);
@@ -171,7 +171,7 @@ public class OutboxConsumerManagerTests
         var group = "subscribe-pause";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         OutboxConsumerSettings? captured = null;
         using var subscription = manager.Subscribe(group, s => captured = s);
@@ -189,7 +189,7 @@ public class OutboxConsumerManagerTests
         var group = "subscribe-resume";
         var settings = CreateSettings(group, paused: true);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         OutboxConsumerSettings? captured = null;
         using var subscription = manager.Subscribe(group, s => captured = s);
@@ -207,7 +207,7 @@ public class OutboxConsumerManagerTests
         var group = "subscribe-multiple";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         var callback1Invoked = false;
         var callback2Invoked = false;
@@ -228,7 +228,7 @@ public class OutboxConsumerManagerTests
         var group = "subscribe-unsubscribe";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         var callbackInvoked = false;
         var subscription = manager.Subscribe(group, _ => callbackInvoked = true);
@@ -246,7 +246,7 @@ public class OutboxConsumerManagerTests
         var group = "subscribe-version";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         int versionReceived = -1;
         using var subscription = manager.Subscribe(group, s => versionReceived = s.Version);
@@ -263,7 +263,7 @@ public class OutboxConsumerManagerTests
         var group = "subscribe-error-tolerance";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         // Subscriber that throws
         using var badSub = manager.Subscribe(group, _ => throw new InvalidOperationException("boom"));
@@ -289,7 +289,7 @@ public class OutboxConsumerManagerTests
         using var subscription = manager.Subscribe(group, _ => callbackInvoked = true);
 
         // Now register — subscriber should receive
-        manager.Register(group, CreateSettings(group));
+        manager.TryRegister(group, CreateSettings(group));
         Assert.True(callbackInvoked);
     }
 
@@ -323,7 +323,7 @@ public class OutboxConsumerManagerTests
         var group = "apply-atomic";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         manager.Apply(group, s => s with { MaxBatchSize = 128, MaxDeliveryAttempts = 5 });
 
@@ -350,7 +350,7 @@ public class OutboxConsumerManagerTests
         var group = "apply-version";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
         var initialVersion = settings.Version;
 
         manager.Apply(group, s => s with { MaxBatchSize = 1, Version = s.Version + 1 });
@@ -367,7 +367,7 @@ public class OutboxConsumerManagerTests
         var group = "apply-chain";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         manager.Apply(group, s => s with { MaxBatchSize = 8 });
         manager.Apply(group, s => s with { MaxDeliveryAttempts = 10 });
@@ -398,7 +398,7 @@ public class OutboxConsumerManagerTests
         var group = "get-snapshot";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         var snapshot = manager.Get(group);
         Assert.NotNull(snapshot);
@@ -412,7 +412,7 @@ public class OutboxConsumerManagerTests
         var group = "get-after-apply";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
         manager.Apply(group, s => s with { MaxBatchSize = 256 });
 
         var snapshot = manager.Get(group);
@@ -428,7 +428,7 @@ public class OutboxConsumerManagerTests
 
         Assert.False(manager.IsRegistered(group));
 
-        manager.Register(group, CreateSettings(group));
+        manager.TryRegister(group, CreateSettings(group));
         Assert.True(manager.IsRegistered(group));
     }
 
@@ -439,7 +439,7 @@ public class OutboxConsumerManagerTests
         var group = "is-unregistered";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
         Assert.True(manager.IsRegistered(group));
 
         manager.Unregister(group);
@@ -474,9 +474,9 @@ public class OutboxConsumerManagerTests
         var group2 = "group-beta";
         var group3 = "group-gamma";
 
-        manager.Register(group1, CreateSettings(group1));
-        manager.Register(group2, CreateSettings(group2));
-        manager.Register(group3, CreateSettings(group3));
+        manager.TryRegister(group1, CreateSettings(group1));
+        manager.TryRegister(group2, CreateSettings(group2));
+        manager.TryRegister(group3, CreateSettings(group3));
 
         var ids = manager.GetAllConsumerGroupIds();
         Assert.Equal(3, ids.Count);
@@ -492,8 +492,8 @@ public class OutboxConsumerManagerTests
         var group1 = "keep-me";
         var group2 = "remove-me";
 
-        manager.Register(group1, CreateSettings(group1));
-        manager.Register(group2, CreateSettings(group2));
+        manager.TryRegister(group1, CreateSettings(group1));
+        manager.TryRegister(group2, CreateSettings(group2));
         manager.Unregister(group2);
 
         var ids = manager.GetAllConsumerGroupIds();
@@ -512,7 +512,7 @@ public class OutboxConsumerManagerTests
         var group = "concurrent-test";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         var exceptions = new List<Exception>();
         var iterations = 100;
@@ -568,7 +568,7 @@ public class OutboxConsumerManagerTests
         var group = "stress-test";
         var settings = CreateSettings(group);
 
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
 
         var fired = 0;
         using var sub = manager.Subscribe(group, _ => Interlocked.Increment(ref fired));

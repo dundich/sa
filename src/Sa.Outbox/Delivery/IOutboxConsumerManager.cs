@@ -16,11 +16,14 @@ public interface IOutboxConsumerManager
     /// <param name="transform">A function that receives the current snapshot and returns the updated one. Use <c>this with { ... }</c> expressions.</param>
     void Apply(string consumerGroupId, Func<OutboxConsumerSettings, OutboxConsumerSettings> transform);
 
+
+
     /// <summary>
-    /// Registers a consumer group with initial settings.
-    /// Unlike <see cref="Apply"/>, this does not require prior registration.
+    /// Attempts to register a consumer group only if it is not already registered.
+    /// Thread-safe and idempotent — concurrent callers will see a consistent result.
+    /// Returns true if the group was newly registered, false if it already existed.
     /// </summary>
-    internal void Register(string consumerGroupId, OutboxConsumerSettings settings);
+    bool TryRegister(string consumerGroupId, OutboxConsumerSettings settings);
 
     /// <summary>
     /// Retrieves the current immutable settings snapshot. Thread-safe.

@@ -24,8 +24,13 @@ IHost host = Host.CreateDefaultBuilder()
             .WithDeliveries(b => b
                 .AddDeliveryScoped<OrderConsumer, OrderCreated>((_, s) =>
                 {
-                    s.ScheduleSettings.WithIntervalSeconds(5).WithImmediate();
-                    s.ConsumeSettings.WithMaxBatchSize(16);
+                    s
+                        .WithInterval(TimeSpan.FromSeconds(5))
+                        .StartImmediately()
+                        .WithMaxBatchSize(16)
+                        .WithMaxDeliveryAttempts(3)
+                        .WithLockDuration(TimeSpan.FromSeconds(10))
+                        .WithLookbackInterval(TimeSpan.FromDays(7));
                 })
             )
         )
@@ -61,7 +66,7 @@ public sealed record OrderCreated(string PayloadId, string ProductName);
 public sealed class OrderConsumer : IConsumer<OrderCreated>
 {
     public async ValueTask Consume(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<OrderCreated>> messages,
         CancellationToken ct)
@@ -81,6 +86,7 @@ public sealed class OrderConsumer : IConsumer<OrderCreated>
 - Конкурентную обработку через `SKIP LOCKED`
 - Повтор / отложенный повтор / фиксацию ошибок
 - Автоматическую очистку старых партиций
+- Self-bootstrapping настроек консьюмера в `IOutboxConsumerManager`
 
 ---
 
@@ -125,45 +131,76 @@ public sealed class OrderConsumer : IConsumer<OrderCreated>
         // С настройками
         .AddDeliveryScoped<OrderConsumer, OrderCreated>((_, settings) =>
         {
-            // Расписание опроса
-            settings.ScheduleSettings
+            settings
                 .WithInterval(TimeSpan.FromSeconds(5))
-                .WithImmediate();                  // стартовать сразу
-
-            // Ограничения потребления
-            settings.ConsumeSettings
-                .WithMaxBatchSize(16)               // макс сообщений в батче
-                .WithMaxDeliveryAttempts(3)         // стоп ретраев после N попыток
-                .WithBatchingWindow(TimeSpan.FromSeconds(2))
-                .WithLockDuration(TimeSpan.FromMinutes(10));
+                .StartImmediately()                     // стартовать сразу
+                .WithMaxBatchSize(16)                   // макс сообщений в батче
+                .WithMaxDeliveryAttempts(3)             // стоп ретраев после N попыток
+                .WithLockDuration(TimeSpan.FromSeconds(10))
+                .WithLookbackInterval(TimeSpan.FromDays(7));
         })
     )
     // ...
 )
 ```
 
-#### Справочник ConsumeSettings
+#### Справочник настроек `OutboxConsumerSettingsBuilder`
+
+Единый fluent-билдер для всех параметров consumer group:
 
 | Метод | По умолчанию | Описание |
 |---|---|---|
-| `WithInterval(interval)` | 5 с | Частота опроса |
-| `WithImmediate()` | — | Не ждать первый интервал |
-| `WithMaxBatchSize(n)` | 16 | Макс сообщений в батче |
-| `WithMaxDeliveryAttempts(n)` | ∞ | Стоп ретраев после N попыток |
-| `WithBatchingWindow(span)` | 2 с | Ждать до этого времени для заполнения батча |
-| `WithLockDuration(span)` | 10 м | TTL блокировки задачи |
-| `WithSingleIteration()` | — | Обработать один раз (для тестов) |
+| `WithInterval(span)` | 1 мин | Период опроса |
+| `StartImmediately()` | — | Старт без ожидания первого интервала |
+| `WithMaxBatchSize(n)` | 16 | Макс. сообщений за батч |
+| `WithMaxDeliveryAttempts(n)` | 3 | Стоп-повторы после N попыток |
+| `WithLockDuration(span)` | 10 с | TTL блокировки сообщения |
+| `WithLockRenewal(span)` | 3 с | Период продления блокировки |
+| `WithLookbackInterval(span)` | 7 дн | История поиска необработанных |
+| `WithBatchingWindow(span)` | 3 с | Окно агрегации сообщений |
 | `WithNoBatchingWindow()` | — | Взять всё доступное сейчас |
+| `WithConcurrencyLimit(n)` | 1 | Одновременных задач |
+| `WithMaxConcurrency(n)` | 48 | Макс. параллельных процессоров |
+| `WithRetryCountOnError(n)` | 0 | Повторы при ошибке (-1 = бесконечно) |
+| `WithNoRetries()` | — | Отключить повторы |
+| `WithInfiniteRetries()` | — | Бесконечные повторы |
+| `WithMaxProcessingIterations(n)` | 10 | Итераций за цикл (-1 = безлимитно) |
+| `WithSingleIteration()` | — | Одна итерация (тестирование) |
+| `WithUnlimitedIterations()` | — | Безлимитные итерации |
+| `WithIterationDelay(span)` | 0 с | Задержка между итерациями |
+| `WithPerTenantTimeout(span)` | 0 | Таймаут обработки одного тенанта |
+| `WithPerTenantMaxDegreeOfParallelism(n)` | 1 | Параллельность по тенантам (1 = последовательно, -1 = все ядра) |
+| `WithSequentialProcessing()` | 1 | Последовательная обработка по тенантам |
+| `WithMaxParallelism()` | -1 | Максимальная параллельность по тенантам |
+| `Paused(bool)` | false | Пауза consumer group |
+| `Resumed()` | — | Снять с паузы |
+| `AsSingleton(bool)` | true | Singleton (один на кластер) vs Scoped |
 
-#### Динамические изменения внутри `Consume()`
+#### Runtime-управление настройками
+
+Настройки автоматически регистрируются в `IOutboxConsumerManager` при первом запуске job'а. Для runtime-изменений:
 
 ```csharp
-public async ValueTask Consume(ConsumerGroupSettings settings, ...)
+var manager = host.Services.GetRequiredService<IOutboxConsumerManager>();
+
+// Atomic swap — новый снимок применяется на следующей итерации
+manager.Apply("cg_order_consumer", s => s with { MaxBatchSize = 64 });
+
+// Pause / Resume
+manager.Pause("cg_order_consumer");
+manager.Resume("cg_order_consumer");
+
+// Подписка на изменения
+using var sub = manager.Subscribe("cg_order_consumer", updated =>
 {
-    // Изменить поведение во время обработки
-    settings.ConsumeSettings.WithMaxProcessingIterations(100);
-}
+    // реакция на изменение настроек
+});
+
+// Проверка состояния
+bool paused = manager.IsPaused("cg_order_consumer");
 ```
+
+> **Self-bootstrapping:** `DeliveryJob` автоматически регистрирует настройки в `IOutboxConsumerManager` при первом запуске. Используется `TryRegister` для безопасной конкурентной регистрации — если несколько инстансов приложения стартуют одновременно, только один успешно зарегистрирует настройки, остальные прочитают канонический снимок из менеджера.
 
 ### 3. Подключение к PostgreSQL
 
@@ -194,7 +231,7 @@ public async ValueTask Consume(ConsumerGroupSettings settings, ...)
 
 #### AOT-совместимый сериализатор
 
-Для Native AOT избегайте рефлексии:
+Для Native AHT избегайте рефлексии:
 
 ```csharp
 [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
@@ -262,7 +299,7 @@ public class OrderSerializer : IOutboxMessageSerializer
         settings.CleanupSettings.ExecutionInterval = TimeSpan.FromHours(4);
 
         // ── Минимальное смещение (без повторной обработки) ─
-        settings.ConsumeSettings.WithMinOffset<OrderConsumer>(DateTimeOffset.Now);
+        // settings.ConsumeSettings.WithMinOffset<OrderConsumer>(DateTimeOffset.Now);
     })
 )
 ```
@@ -335,11 +372,15 @@ if (!migrationService.OnMigrated.IsCancellationRequested)
 | Метод | Когда использовать | Что дальше |
 |---|---|---|
 | `msg.Ok()` | Всё прошло успешно | Задача удалена |
+| `msg.Created()` | Создан побочный ресурс | Задача удалена |
+| `msg.Accepted()` | Принято в асинхронную обработку | Задача удалена |
+| `msg.NoContent()` | Обработано, данных нет | Задача удалена |
 | `msg.Error(ex)` | Неустранимая ошибка | Запись в `__error$`, без повтора |
 | `msg.Warn(ex)` | Временная проблема (сеть, таймаут) | Повтор при следующем опросе |
 | `msg.Postpone(ts)` | Нужно подождать перед повтором | Повтор после `ts` |
 | `msg.Retry(ts, reason)` | Повтор с метаданными | Повтор с информацией о попытке |
 | `msg.Aborted(reason)` | Намеренно пропустить | Отмечено как пропущенное, без повтора |
+| `msg.ErrorMaxAttempts()` | Исчерпан максимум попыток | Запись в `__error$`, без повтора |
 
 ---
 

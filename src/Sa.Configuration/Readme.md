@@ -2,6 +2,8 @@
 
 Secure secrets management and command-line argument parsing within the .NET `Microsoft.Extensions.Configuration` ecosystem. Secrets are automatically substituted into configuration without manual application code.
 
+---
+
 ## Features
 
 - **Automatic secret substitution**: `{{key}}` placeholders are replaced with real values from files, environment variables, or command-line arguments
@@ -10,6 +12,8 @@ Secure secrets management and command-line argument parsing within the .NET `Mic
 - **Chained Stores**: multiple secret sources with priority ordering
 - **Argument parser**: supports `--key value`, `--key=value`, `-flag` formats
 - **Environments**: automatic loading of `secrets.{Environment}.txt` (Development/Staging/Production)
+
+---
 
 ## Quick Start
 
@@ -69,6 +73,8 @@ var pgConn = app.Configuration["sa:pg:connection"];
 // → "User ID=postgres;Password=superSecret123;Host=localhost;..."
 ```
 
+---
+
 ## Secret Priority Order
 
 Secrets are looked up in descending priority order:
@@ -82,6 +88,8 @@ Secrets are looked up in descending priority order:
 
 The first source that has a value wins. This allows overriding secrets per environment.
 
+---
+
 ## Optional Placeholders
 
 Use `{{?key}}` instead of `{{key}}` to avoid an error when a secret is missing:
@@ -93,6 +101,8 @@ Use `{{?key}}` instead of `{{key}}` to avoid an error when a secret is missing:
 ```
 
 If `feature_flag` is not found in any store, `null` is returned.
+
+---
 
 ## Usage with Sa.Configuration.PostgreSql
 
@@ -113,6 +123,8 @@ builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOp
 
 var app = builder.Build();
 ```
+
+---
 
 ## Arguments — Command-Line Argument Parser
 
@@ -148,6 +160,15 @@ Typed methods return `null` when the parameter is absent or invalid:
 | `GetLong()` | `long?` | same as above |
 | `GetTimeSpan()` | `TimeSpan?` | `TimeSpan.TryParse(..., InvariantCulture)` |
 
+Additional methods:
+
+| Method | Return Type | Description |
+|--------|------------|-------------|
+| `Contains(param)` | `bool` | Checks if parameter exists |
+| `IsPresent(param)` | `bool` | Parameter exists AND has a non-null value |
+
+---
+
 ## Secrets — Secrets Management
 
 ### Creating Defaults
@@ -171,6 +192,12 @@ var secrets = new Secrets(
 );
 ```
 
+### Fluent Addition at Runtime
+
+```csharp
+secrets.AddStore(new FileSecretStore("additional-secrets.txt"));
+```
+
 ### Placeholder Substitution
 
 ```csharp
@@ -184,6 +211,15 @@ string result = secrets.PopulateSecrets(template);
 ```csharp
 string? password = secrets.GetSecret("sa_pg_password");
 ```
+
+### Environment Name Resolution
+
+```csharp
+string env = Secrets.GetEnvironmentName();
+// → "Development", "Staging", "Production", etc.
+```
+
+---
 
 ## Public API
 
@@ -222,6 +258,8 @@ string? password = secrets.GetSecret("sa_pg_password");
 | `CommandLineArgsSecretStore` | Pulls secrets from `Arguments` |
 | `InMemorySecretStore` | Dictionary in memory, fluent `.AddSecret()` |
 
+---
+
 ## How It Works
 
 ```
@@ -239,32 +277,8 @@ string? password = secrets.GetSecret("sa_pg_password");
 └──────────────────────────────────────────────────────┘
 ```
 
-## Project Layout
+---
 
-```
-src/Sa.Configuration/
-├── Setup.cs                                      # AddSaConfiguration()
-├── CommandLine/
-│   ├── Arguments.cs                              # Argument parser
-│   ├── Arguments.partial.cs                      # Typed GetXxx() methods
-│   ├── ArgumentsConfigurationProvider.cs         # IConfigurationProvider
-│   └── Setup.cs                                  # AddSaCommandLine()
-├── SecretStore/
-│   ├── Secrets.cs                                # Secrets management
-│   ├── SecretOptions.cs                          # CreateDefault() options
-│   ├── ISecretService.cs                         # Service interface
-│   ├── ISecretStore.cs                           # Store interface
-│   ├── Engine/
-│   │   ├── ChainedSecretStore.cs                 # Store stacking
-│   │   ├── ChainedSecrets.cs                     # Chained + Service
-│   │   └── SecretService.cs                      # Placeholder substitution
-│   ├── Stories/
-│   │   ├── FileSecretStore.cs                    # Text file
-│   │   ├── EnvironmentVariableSecretStore.cs     # ENV vars
-│   │   ├── CommandLineArgsSecretStore.cs         # Args parser
-│   │   └── InMemorySecretStore.cs                # Dictionary in memory
-│   ├── PostSecretProcessingConfigurationProvider.cs  # IConfigurationProvider
-│   ├── PostSecretProcessingConfigurationSource.cs    # IConfigurationSource
-│   └── Setup.cs                                  # AddSaPostSecretProcessing()
-└── Readme.md                                     # ← you are here
-```
+## License
+
+MIT

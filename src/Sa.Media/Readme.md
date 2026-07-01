@@ -2,6 +2,8 @@
 
 Async, memory-efficient WAV file reader for .NET 10+. Designed for Native AOT compatibility with zero allocations on hot paths.
 
+---
+
 ## Features
 
 - **Fully asynchronous** — `PipeReader`-based streaming, no blocking I/O
@@ -11,6 +13,8 @@ Async, memory-efficient WAV file reader for .NET 10+. Designed for Native AOT co
 - **Time-based trimming** — read only the portion you need via `TimeRange`
 - **Channel-aware** — per-channel sample enumeration with position tracking
 - **Automatic chunk skipping** — `JUNK`, `LIST`, and other metadata chunks are transparently skipped
+
+---
 
 ## Quick Start
 
@@ -88,6 +92,8 @@ await foreach (var packet in reader.ConvertToFormatAsync(
 }
 ```
 
+---
+
 ## Supported Formats
 
 | Format | Read | Write |
@@ -100,6 +106,8 @@ await foreach (var packet in reader.ConvertToFormatAsync(
 | IEEE Float 64-bit | ✅ | ✅ |
 
 All formats support mono and stereo. Unknown chunks (`JUNK`, `LIST`, etc.) are automatically skipped.
+
+---
 
 ## Public API Reference
 
@@ -137,12 +145,16 @@ All formats support mono and stereo. Unknown chunks (`JUNK`, `LIST`, etc.) are a
 | `TimeRange.RangeFromDuration(from, dur)` | From start + duration | Build from offset |
 | `TimeRange.Default` | `[0, ∞)` | Full file, no trim |
 
+---
+
 ## Performance Notes
 
 - `allowBufferReuse=true` (default) reuses pooled buffers across yields — caller must copy before next iteration
 - `allowBufferReuse=false` allocates a fresh array per sample — safer for parallel consumers
 - `ReadStreamableChunksAsync` forces `allowBufferReuse:false` internally to prevent buffer aliasing
 - All internal awaits use `ConfigureAwait(false)` — safe in any synchronization context
+
+---
 
 ## Project Layout
 
@@ -164,3 +176,9 @@ src/Sa.Media/
 ├── WaveFormatType.cs        # Format type enum
 └── WaveFormatTypeExtensions.cs
 ```
+
+---
+
+## License
+
+MIT

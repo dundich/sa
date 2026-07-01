@@ -1,29 +1,33 @@
 # Sa.Data.PostgreSql
 
-Лёгкая обёртка над Npgsql для типичных операций с PostgreSQL — без ORM overhead, с поддержкой DI, AOT и минимальными аллокациями.
+Lightweight Npgsql wrapper for common PostgreSQL operations — no ORM overhead, with DI, Native AOT support, and minimal allocations.
 
-## Быстрый старт
+---
+
+## Quick Start
 
 ```csharp
-// Вариант 1: прямой создание
+// Option 1: direct creation
 var dataSource = IPgDataSource.Create("Host=db;Database=mydb;Username=usr;Password=pwd");
 
-// Вариант 2: через DI
+// Option 2: via DI
 services.AddSaPostgreSqlDataSource(b => b.WithConnectionString("Host=db;Database=mydb;Username=usr;Password=pwd"));
-// или с factory (например, из IConfiguration):
+// or with factory (e.g., from IConfiguration):
 services.AddSaPostgreSqlDataSource(b => b.WithConnectionString(sp =>
     sp.GetRequiredService<IConfiguration>().GetConnectionString("Default")));
 ```
 
+---
+
 ## ExecuteNonQuery
 
-Выполняет SQL-команду, которая не возвращает данные (INSERT / UPDATE / DELETE / DDL), и возвращает число затронутых строк.
+Executes a SQL command that doesn't return data (INSERT / UPDATE / DELETE / DDL) and returns the number of affected rows.
 
 ```csharp
-// Простой запрос
+// Simple query
 int affected = await dataSource.ExecuteNonQuery("DELETE FROM sessions WHERE expired = true");
 
-// С параметрами
+// With parameters
 int affected = await dataSource.ExecuteNonQuery("""
     INSERT INTO users (name, age) VALUES (@p0, @p1);
     """, [
@@ -32,9 +36,11 @@ int affected = await dataSource.ExecuteNonQuery("""
     ]);
 ```
 
+---
+
 ## ExecuteScalar / ExecuteScalarTyped
 
-Возвращает первое значение первой строки результата. `ExecuteScalarTyped<T>` автоматически кастует результат, включая поддержку `Guid`, `DateTime`, `DateTimeOffset` и `DateOnly → DateTime`.
+Returns the first value of the first row in the result. `ExecuteScalarTyped<T>` automatically casts the result, including support for `Guid`, `DateTime`, `DateTimeOffset`, and `DateOnly → DateTime`.
 
 ```csharp
 // object? overload
@@ -46,9 +52,11 @@ long id = await dataSource.ExecuteScalarTyped<long>("SELECT nextval('users_id_se
 Guid tenantId = await dataSource.ExecuteScalarTyped<Guid>("SELECT tenant_uuid FROM tenants LIMIT 1");
 ```
 
+---
+
 ## ExecuteReader
 
-Потоковое чтение строк с callback'ом — идеально для обработки больших результатов без загрузки в память.
+Streaming row reading with a callback — ideal for processing large results without loading into memory.
 
 ```csharp
 int processed = 0;
@@ -62,57 +70,63 @@ await dataSource.ExecuteReader("SELECT id, name FROM users", (reader, rowIndex) 
 Console.WriteLine($"Processed {processed} rows");
 ```
 
+---
+
 ## ExecuteReaderList
 
-Читает все строки и собирает их в `List<T>`.
+Reads all rows and collects them into `List<T>`.
 
 ```csharp
-// Простая проекция
+// Simple projection
 var names = await dataSource.ExecuteReaderList<string>(
     "SELECT name FROM users ORDER BY name",
     reader => reader.GetString(0));
 
-// С параметрами
+// With parameters
 var activeUsers = await dataSource.ExecuteReaderList<(int Id, string Name)>(
     """SELECT id, name FROM users WHERE active = @active ORDER BY name""",
     reader => (reader.GetInt32(0), reader.GetString(1)),
     [new NpgsqlParameter { ParameterName = "active", Value = true }]);
 ```
 
+---
+
 ## ExecuteReaderFirst
 
-Возвращает первое значение из первого столбца первой строки. Возвращает `default(T)` если результат пуст.
+Returns the first value from the first column of the first row. Returns `default(T)` if the result is empty.
 
-Поддерживаемые типы: `int`, `long`, `short`, `bool`, `double`, `decimal`, `char`, `string`, `DateTime`, `Guid`, `DateTimeOffset`.
+Supported types: `int`, `long`, `short`, `bool`, `double`, `decimal`, `char`, `string`, `DateTime`, `Guid`, `DateTimeOffset`.
 
 ```csharp
-// Вернёт 0 если таблица пуста
+// Returns 0 if the table is empty
 int errorCount = await dataSource.ExecuteReaderFirst<int>(
     "SELECT COUNT(*) FROM outbox_errors");
 
-// Guid — работает автоматически
+// Guid — automatic casting works
 Guid firstTenantId = await dataSource.ExecuteReaderFirst<Guid>(
     "SELECT tenant_id FROM tenants LIMIT 1");
 ```
 
+---
+
 ## ExecuteTransactionAsync
 
-Атомарная транзакция с автоматическим rollback при ошибке.
+Atomic transaction with automatic rollback on error.
 
 ```csharp
 await dataSource.ExecuteTransactionAsync(async (transaction, ct) =>
 {
-    // Все команды внутри используют одну транзакцию
+    // All commands inside use one transaction
     await dataSource.ExecuteNonQuery(
         "INSERT INTO accounts (balance) VALUES (0)", ct);
 
     await dataSource.ExecuteNonQuery(
         "INSERT INTO transactions (account_id, amount) VALUES (1, 100)", ct);
 
-    // При успехе — авто-commit
+    // On success — auto-commit
 }, IsolationLevel.ReadCommitted, ct);
 
-// При любом исключении — авто-rollback
+// On any exception — auto-rollback
 try
 {
     await dataSource.ExecuteTransactionAsync(async (tx, ct) =>
@@ -122,13 +136,15 @@ try
 }
 catch (InvalidOperationException)
 {
-    // Транзакция откатилась автоматически
+    // Transaction rolled back automatically
 }
 ```
 
+---
+
 ## BeginBinaryImport
 
-Быстрый бинарный импорт данных через COPY — в разы быстрее поштучных INSERT'ов.
+Fast binary data import via COPY — orders of magnitude faster than individual INSERTs.
 
 ```csharp
 ulong imported = await dataSource.BeginBinaryImport(
@@ -149,15 +165,16 @@ ulong imported = await dataSource.BeginBinaryImport(
 Console.WriteLine($"Imported {imported} rows");
 ```
 
+---
 
 ## PgRetryStrategy
 
-Повтор попыток с jitter для transient-ошибок Npgsql.
+Retry with jitter for transient Npgsql errors.
 
 ```csharp
 using Sa.Data.PostgreSql;
 
-// Автоматически повторяет при transient-ошибках (connection reset, timeout и т.п.)
+// Automatically retries on transient errors (connection reset, timeout, etc.)
 var result = await PgRetryStrategy.ExecuteWithRetry(
     async ct =>
     {
@@ -168,33 +185,43 @@ var result = await PgRetryStrategy.ExecuteWithRetry(
     initialDelay: 530);
 ```
 
+---
+
 ## DbCommandExtensions + INamePrefixProvider
 
-Оптимизированный API для добавления параметризованных команд с пред-кэшированными именами параметров (минимальные аллокации).
+Optimized API for adding parameterized commands with pre-cached parameter names (minimal allocations).
 
 ```csharp
-// Объявите провайдер префиксов
+// Declare a prefix provider
 public class UserParams : INamePrefixProvider
 {
     public static string[] GetPrefixes() => ["name", "age", "email"];
     public static int MaxIndex => 10;
 }
 
-// Используйте — имена генерируются как @name0, @name1, ..., @age0, ...
+// Use — names are generated as @name0, @name1, ..., @age0, ...
 var cmd = new NpgsqlCommand("SELECT * FROM users WHERE name = @name0 AND age > @age0")
     .AddParam<UserParams>("name", "Tom", 0)
     .AddParam<UserParams>("age", 18, 0);
 ```
 
-## Сравнение методов
+---
 
-| Метод | Возврат | Когда использовать |
-|---|---|---|
-| `ExecuteNonQuery` | `int` (строки) | INSERT / UPDATE / DELETE / DDL |
-| `ExecuteScalar` | `object?` | Одно значение, нужна ручная конвертация |
-| `ExecuteScalarTyped<T>` | `T` | Одно значение с авто-кастом (Guid, DateTime, DateTimeOffset, DateOnly) |
-| `ExecuteReader` | `int` (строки) | Потоковая обработка, много строк |
-| `ExecuteReaderList<T>` | `List<T>` | Небольшой результат, нужно собрать всё |
-| `ExecuteReaderFirst<T>` | `T` | Одна строка одного столбца |
-| `BeginBinaryImport` | `ulong` (строки) | Массовый импорт COPY BINARY |
-| `ExecuteTransactionAsync` | `void` | Атомарные операции с rollback |
+## Method Comparison
+
+| Method | Return | When to use |
+|--------|--------|-------------|
+| `ExecuteNonQuery` | `int` (rows) | INSERT / UPDATE / DELETE / DDL |
+| `ExecuteScalar` | `object?` | Single value, manual cast needed |
+| `ExecuteScalarTyped<T>` | `T` | Single value with auto-cast (Guid, DateTime, DateTimeOffset, DateOnly) |
+| `ExecuteReader` | `int` (rows) | Streaming processing, many rows |
+| `ExecuteReaderList<T>` | `List<T>` | Small result, collect everything |
+| `ExecuteReaderFirst<T>` | `T` | One row, one column |
+| `BeginBinaryImport` | `ulong` (rows) | Mass import via COPY BINARY |
+| `ExecuteTransactionAsync` | `void` | Atomic operations with rollback |
+
+---
+
+## License
+
+MIT

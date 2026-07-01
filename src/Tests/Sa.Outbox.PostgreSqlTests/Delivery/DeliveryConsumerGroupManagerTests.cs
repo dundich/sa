@@ -119,7 +119,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
 
             // Авто-регистрация групп при первом доступе (имитирует поведение DeliveryJob)
             if (!manager.IsRegistered(groupId))
-                manager.Register(groupId, SettingsForTestGroup);
+                manager.TryRegister(groupId, SettingsForTestGroup);
 
             if (!manager.IsRegistered(blockingId))
             {
@@ -143,7 +143,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                     PerTenantMaxDegreeOfParallelism: 1,
                     Paused: false,
                     Version: 0);
-                manager.Register(BlockingGroupId, blockingSettings);
+                manager.TryRegister(BlockingGroupId, blockingSettings);
             }
 
             return _cachedManager = manager;
@@ -527,7 +527,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         Assert.Null(manager.Get(group));
 
         // Restore for other tests in the sequential collection
-        manager.Register(group, settings);
+        manager.TryRegister(group, settings);
     }
 
     [Fact]
@@ -547,7 +547,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         Assert.Equal(allBefore.Count - 1, allAfter.Count);
 
         // Restore for other tests in the sequential collection
-        manager.Register(removedGroup, settings);
+        manager.TryRegister(removedGroup, settings);
     }
 
     [Fact]
@@ -577,7 +577,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         Assert.True(result >= 0);
 
         // Restore for other tests in the sequential collection
-        manager.Register(fixture.CountingGroupId, fixture.SettingsForTestGroup);
+        manager.TryRegister(fixture.CountingGroupId, fixture.SettingsForTestGroup);
     }
 
     #endregion

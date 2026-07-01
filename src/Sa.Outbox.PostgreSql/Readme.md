@@ -363,11 +363,15 @@ After processing each message, call exactly one method:
 | Method | When to use | Next action |
 |---|---|---|
 | `msg.Ok()` | Everything went fine | Task removed |
+| `msg.Created()` | Side-effect resource created | Task removed |
+| `msg.Accepted()` | Accepted for async processing | Task removed |
+| `msg.NoContent()` | Processed, no data to return | Task removed |
 | `msg.Error(ex)` | Unrecoverable failure | Logged to `__error$`, no retry |
 | `msg.Warn(ex)` | Transient issue (network, timeout) | Requeued, processed next poll |
 | `msg.Postpone(ts)` | Need to wait before retry | Requeued after `ts` |
 | `msg.Retry(ts, reason)` | Retry with metadata | Requeued with attempt info |
 | `msg.Aborted(reason)` | Intentionally skip | Marked skipped, no retry |
+| `msg.ErrorMaxAttempts()` | Max attempts exhausted | Logged to `__error$`, no retry |
 
 ---
 

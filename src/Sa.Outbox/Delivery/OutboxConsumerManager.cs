@@ -11,7 +11,7 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
     private readonly Lock _lock = new();
 
     /// <inheritdoc/>
-    public void Register(string consumerGroupId, OutboxConsumerSettings settings)
+    public bool TryRegister(string consumerGroupId, OutboxConsumerSettings settings)
     {
         if (string.IsNullOrWhiteSpace(consumerGroupId))
             throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
@@ -20,6 +20,9 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
 
         lock (_lock)
         {
+            if (_settings.ContainsKey(consumerGroupId))
+                return false;
+
             _settings[consumerGroupId] = settings;
 
             if (!_listeners.ContainsKey(consumerGroupId))
@@ -30,6 +33,7 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
 
         // Notify subscribers OUTSIDE the lock to avoid deadlocks
         NotifyListeners(consumerGroupId, settings);
+        return true;
     }
 
     /// <inheritdoc/>

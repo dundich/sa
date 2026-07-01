@@ -97,7 +97,9 @@ b.AddJob((context, ct) =>
 | `.Merge(IJobProperties)` | Merge another configuration |
 | `.ConfigureErrorHandling(Action<IJobErrorHandlingBuilder>)` | Error recovery policy |
 
-### Cron Scheduling
+---
+
+## Cron Scheduling
 
 Use cron expressions for precise scheduling control. The format follows standard 5-field cron:
 
@@ -169,7 +171,9 @@ b.AddJob[PeakMonitor]()
  .WithName("Peak monitoring");
 ```
 
-### Concurrency Model
+---
+
+## Concurrency Model
 
 - **`ConcurrencyLimit`** — how many slots are actively running at any time (initially). Can be changed dynamically via `IJobScheduler.ConcurrencyLimit`.
 - **`MaxConcurrency`** — total number of slot pre-allocated. `ConcurrencyLimit ≤ MaxConcurrency`.
@@ -348,3 +352,9 @@ IJob.Execute(...)
 6. **Monitor via `IJobScheduler.IsStarted` and `ActiveTasks`** — integrate with health checks
 7. **Use `OnceIn(TimeSpan)` for migration jobs** — run once after deployment delay
 8. **Disable jobs instead of removing** — useful for feature flags and gradual rollout
+
+---
+
+## License
+
+MIT
