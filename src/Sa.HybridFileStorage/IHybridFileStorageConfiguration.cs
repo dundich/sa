@@ -18,10 +18,10 @@ public interface IHybridFileStorageConfiguration
     /// <summary>
     /// Configures storage providers that will participate in the hybrid file storage system.
     /// </summary>
-    /// <param name="configure">An action that receives a <see cref="IHybridFileStorageContainerConfiguration"/> for registering storage implementations.</param>
+    /// <param name="configure">An action that receives a <see cref="HybridFileStorageContainerConfiguration"/> for registering storage implementations.</param>
     /// <returns>The same <see cref="IHybridFileStorageConfiguration"/> instance for fluent chaining.</returns>
     IHybridFileStorageConfiguration ConfigureStorage(
-        Action<IServiceProvider, IHybridFileStorageContainerConfiguration> configure);
+        Action<IServiceProvider, HybridFileStorageContainerConfiguration> configure);
 
     /// <summary>
     /// Enables automatic logging of file storage operations through registered interceptors.

@@ -1,5 +1,4 @@
 ﻿using Sa.HybridFileStorage.Domain;
-using System.Globalization;
 using System.Runtime.CompilerServices;
 
 
@@ -117,8 +116,6 @@ internal sealed class FileSystemStorage(
                 Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
             });
 
-            if (fs == null || fs == Stream.Null) return false;
-
             await loadStream(fs, cancellationToken).ConfigureAwait(false);
             return true;
         }
@@ -220,35 +217,14 @@ internal sealed class FileSystemStorage(
         if (!CanProcess(fileId))
             return Task.FromResult<FileMetadata?>(null);
 
-        //parse: "storageType://basket/tenant/filename"
-        ReadOnlySpan<char> span = fileId.AsSpan();
-        int schemeEnd = span.IndexOf(SchemeSeparator.AsSpan());
-        if (schemeEnd == -1)
-            return Task.FromResult<FileMetadata?>(null);
-
-        var pathPart = span[(schemeEnd + SchemeSeparator.Length)..];
-
-        // "tenantId/filename"
-        int slashIndex = pathPart.IndexOf('/');
-        if (slashIndex == -1)
-            return Task.FromResult<FileMetadata?>(null);
-
-        var scopeSpan = pathPart[..slashIndex];
-
-        var nextSpan = pathPart[(slashIndex + 1)..];
-        slashIndex = nextSpan.IndexOf('/');
-
-        var tenantSpan = nextSpan[..slashIndex];
-        var fileNameSpan = nextSpan[(slashIndex + 1)..];
-
-        if (!int.TryParse(tenantSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int tenantId))
+        if (!FileIdParser.TryParse(fileId, out var basket, out var tenantId, out _, out var fileName))
             return Task.FromResult<FileMetadata?>(null);
 
         var metadata = new FileMetadata
         {
             StorageType = StorageType,
-            Basket = scopeSpan.ToString(),
-            FileName = fileNameSpan.ToString(),
+            Basket = basket,
+            FileName = fileName,
             TenantId = tenantId
         };
 

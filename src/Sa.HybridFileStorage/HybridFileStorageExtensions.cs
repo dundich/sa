@@ -1,13 +1,7 @@
 ﻿using Sa.HybridFileStorage.Domain;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.HybridFileStorage;
-
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 
 /// <summary>
 /// Provides extension methods for common file storage operations on <see cref="IHybridFileStorage"/>.
@@ -184,20 +178,27 @@ public static class HybridFileStorageExtensions
             }
             catch (Exception ex)
             {
-                // Блокировка для безопасного изменения списков и атомарного отчета о прогрессе
+                // Lock only for adding to failed list and incrementing counter
+                int failedIdx;
+                int completedCount;
                 lock (lockObj)
                 {
                     failed.Add(new BatchError(fileId, ex, index));
                     completed++;
-
-                    progress?.Report(new BatchOperationProgress(
-                        fileList.Count,
-                        completed,
-                        succeeded.Count,
-                        failed.Count,
-                        fileId,
-                        ex));
+                    failedIdx = failed.Count - 1;
+                    completedCount = completed;
                 }
+
+                // Progress.Report outside lock to avoid blocking other threads during user callback
+                var reportedError = failed[failedIdx];
+                progress?.Report(new BatchOperationProgress(
+                    fileList.Count,
+                    completedCount,
+                    succeeded.Count,
+                    failed.Count,
+                    reportedError.FileId,
+                    reportedError.Exception));
+
                 return null;
             }
         }
@@ -231,18 +232,21 @@ public static class HybridFileStorageExtensions
 
                 if (result is not null)
                 {
+                    BatchOperationProgress progressSnapshot;
                     lock (lockObj)
                     {
                         succeeded.Add(result);
                         completed++;
-
-                        progress?.Report(new BatchOperationProgress(
+                        progressSnapshot = new BatchOperationProgress(
                             fileList.Count,
                             completed,
                             succeeded.Count,
                             failed.Count,
-                            fileId));
+                            fileId);
                     }
+
+                    // Report outside lock to avoid blocking other threads during user callback
+                    progress?.Report(progressSnapshot);
                 }
             });
 

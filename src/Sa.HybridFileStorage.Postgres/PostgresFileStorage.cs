@@ -50,7 +50,7 @@ internal sealed class PostgresFileStorage(
         = $"{options.SchemaName}.\"{Sanitize(options.TableName)}\"";
 
     private readonly string _schemePrefix
-        = $"{options.StorageType}{FileIdParser.SchemeSeparator}{options.TableName}/";
+        = $"{options.StorageType}{FileIdParser.SchemeSeparator}{Sanitize(basket)}/";
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -75,8 +75,8 @@ internal sealed class PostgresFileStorage(
     {
         var fileSpan = fileId.AsSpan();
 
-        if (!string.IsNullOrWhiteSpace(fileId)
-            && fileSpan.StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal)) return false;
+        if (string.IsNullOrWhiteSpace(fileId)
+            || !fileSpan.StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal)) return false;
 
         int schemeEnd = fileSpan.IndexOf(FileIdParser.SchemeSeparator.AsSpan());
         if (schemeEnd == -1) return false;

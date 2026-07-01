@@ -1,5 +1,6 @@
 ﻿using Sa.Classes;
 using Sa.Data.S3;
+using Sa.HybridFileStorage;
 using Sa.HybridFileStorage.Domain;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -146,28 +147,14 @@ internal sealed class S3FileStorage(
     {
         if (!CanProcess(fileId)) return null;
 
-        var filePath = GetFilePath(fileId);
-        ReadOnlySpan<char> pathSpan = filePath.AsSpan();
-
-        // Парсинг пути: "scope/tenantId/filename"
-        int firstSlash = pathSpan.IndexOf('/');
-        if (firstSlash == -1) return null;
-
-        var afterScope = pathSpan[(firstSlash + 1)..];
-        int secondSlash = afterScope.IndexOf('/');
-        if (secondSlash == -1) return null;
-
-        var tenantSpan = afterScope[..secondSlash];
-        var fileNameSpan = afterScope[(secondSlash + 1)..];
-
-        if (!int.TryParse(tenantSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int tenantId))
+        if (!FileIdParser.TryParse(fileId, out var basket, out var tenantId, out _, out var fileName))
             return null;
 
         return new FileMetadata
         {
-            Basket = Basket,
+            Basket = basket,
             StorageType = StorageType,
-            FileName = fileNameSpan.ToString(),
+            FileName = fileName,
             TenantId = tenantId
         };
     }
