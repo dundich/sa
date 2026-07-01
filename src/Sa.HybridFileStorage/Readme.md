@@ -6,6 +6,7 @@ Hybrid file storage abstraction with automatic provider failover. Unifies multip
 
 ## Table of Contents
 
+- [Virtual Folders (Baskets) Concept](#virtual-folders-baskets-concept)
 - [Supported Storage Providers](#supported-storage-providers)
 - [Key Features](#key-features)
 - [File ID Format](#file-id-format)
@@ -25,6 +26,64 @@ Hybrid file storage abstraction with automatic provider failover. Unifies multip
 - [Domain Types](#domain-types)
 - [Exceptions](#exceptions)
 - [Project Structure](#project-structure)
+
+---
+
+## Virtual Folders (Baskets) Concept
+
+**Sa.HybridFileStorage** operates on the idea of **virtual folders** — called **baskets**. A basket is a logical, string-named scope that sits above physical storage backends. From your application's perspective, you work with simple folder names like `"drafts"`, `"documents"`, or `"archive"`. Behind each basket name lies a storage provider (or a list of providers) that organise data differently.
+
+### How baskets map to storage
+
+Each basket is backed by one or more `IFileStorage` providers. The same basket name can be served by different physical systems, and you can combine multiple providers for redundancy or tiered storage:
+
+| Basket name | Physical backend | Organisation | Example File ID |
+|-------------|-------------------|--------------|-----------------|
+| `drafts` | **FileSystem** (`fs://`) | Plain directory tree on disk | `fs://drafts/42/notes.txt` |
+| `documents` | **PostgreSQL** (`pg://`) | Relational table with date partitioning | `pg://documents/42/1751347200/contract.pdf` |
+| `archive` | **S3 / MinIO** (`s3://`) | Cloud bucket with flat namespace | `s3://archive/42/old-report.zip` |
+
+Behind every basket may hide **a single storage or a list of stores** — the hybrid layer manages failover transparently. You never need to know which physical system holds your file; you only reference it by its File ID.
+
+### Configuring baskets to backends
+
+Register each basket → provider mapping explicitly. One provider binds to exactly one basket:
+
+```csharp
+builder.Services.AddSaHybridFileStorage(cfg => cfg
+    // Basket "drafts" → local filesystem
+    .ConfigureStorage((sp, c) => c.AddStorage(new FileSystemStorage(
+        new FileSystemStorageSettings { BasePath = @"C:\data\drafts", Basket = "drafts" })))
+
+    // Basket "documents" → PostgreSQL with auto-partitioning
+    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(dataSource, new PostgresFileStorageOptions
+    {
+        PartOptions = new() { Basket = "documents" },
+        StorageOptions = new() { SchemaName = "files", TableName = "files" }
+    })))
+
+    // Basket "archive" → S3 cloud storage
+    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(s3Client, new S3FileStorageOptions
+    {
+        Endpoint = "http://minio:9000",
+        Bucket = "company-archive",
+        Basket = "archive"
+    }))));
+```
+
+Once configured, all CRUD operations use basket names — not provider specifics:
+
+```csharp
+// Upload to the "drafts" virtual folder — goes to the filesystem automatically
+var result = await storage.UploadAsync("drafts", input, stream, ct);
+// File ID: fs://drafts/42/my-notes.txt
+
+// Download from "documents" — routed to PostgreSQL transparently
+await storage.DownloadAsync(result.FileId, processStream, ct);
+
+// Copy from "drafts" to "archive" — crosses FS → S3 boundary seamlessly
+await storage.CopyToBasketAsync(result.FileId, "archive", ct);
+```
 
 ---
 
