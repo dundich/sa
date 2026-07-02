@@ -38,10 +38,15 @@ internal sealed class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBui
         return this;
     }
 
-    public IJobErrorHandlingBuilder ThenStopJob()
+    public IJobErrorHandlingBuilder ThenAbortJob()
     {
         ThenAction = ErrorHandlingAction.AbortJob;
         return this;
+    }
+
+    public IJobErrorHandlingBuilder ThenStopJob()
+    {
+        return ThenAbortJob();
     }
 
     public IJobErrorHandlingBuilder ThenStopAllJobs()

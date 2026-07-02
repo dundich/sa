@@ -68,7 +68,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         _scalingStrategy = options.ReaderScalingStrategy;
         _getItemDisplayName = options.GetItemDisplayName ?? (item => $"{item}");
-        _handleItemFaulted = options.HandleItemFaulted ?? ((_, ex) => SaExecutionErrorStrategy.ShutdownQueue);
+        _handleItemFaulted = options.HandleItemFaulted ?? ((_, _) => SaExecutionErrorStrategy.ShutdownQueue);
 
         _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(_queueCapacity)
         {
@@ -111,10 +111,10 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         if (!IsEnabled) ThrowHelper.QueueStopped();
 
         var wi = new WorkItem(input, cancellationToken);
-        MarkActive();
 
         try
         {
+            MarkActive();
             await _queue.Writer.WriteAsync(wi, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -125,6 +125,8 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             {
                 ThrowHelper.QueueStopped();
             }
+
+            throw;
         }
     }
 
@@ -350,6 +352,9 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             _readerCount--;
             _concurrency = _readerCount;
         }
+
+        // Освобождаем CTS после удаления из списка
+        cts.Dispose();
     }
 
     private async Task<bool> ExecuteItemAsync(WorkItem item, CancellationToken ct)
@@ -376,19 +381,19 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
         catch (Exception ex)
         {
-            var dislpayItem = _getItemDisplayName(item.Input);
+            var displayItem = _getItemDisplayName(item.Input);
 
             SaExecutionErrorStrategy errorStrategy = SaExecutionErrorStrategy.ShutdownQueue;
             try
             {
                 OnStatusChanged(item.Input, SaWorkStatus.Faulted, ex);
-                LogItemExecutionFailed(_logger, dislpayItem, ex);
+                LogItemExecutionFailed(_logger, displayItem, ex);
 
                 errorStrategy = _handleItemFaulted(item.Input, ex);
             }
             catch (Exception callbackEx)
             {
-                LogItemHandlerFailed(_logger, dislpayItem, callbackEx);
+                LogItemHandlerFailed(_logger, displayItem, callbackEx);
             }
 
             return errorStrategy switch
@@ -506,7 +511,10 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                 tasks = [.. _taskReaders];
             }
 
-            Task.WhenAll(tasks).GetAwaiter().GetResult();
+            // Use synchronous wait only here — we already exited the async context.
+            // Readers are guaranteed to terminate because _shutdownCts is cancelled
+            // and the channel writer is completed.
+            Task.WaitAll(tasks, TimeSpan.FromSeconds(30));
 
             ClearRemainingItems();
         }
@@ -525,6 +533,15 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             err ??= ThrowHelper.QueueShutdownException;
             OnStatusChanged(item.Input, SaWorkStatus.Faulted, err);
             MarkInactive();
+        }
+
+        // Drain any orphaned task counters — if items were enqueued but not yet
+        // counted (race between Enqueue and Shutdown), decrement to prevent
+        // IsIdle() from returning false forever.
+        lock (_wiSync)
+        {
+            if (_taskCount > 0)
+                _taskCount = 0;
         }
     }
 

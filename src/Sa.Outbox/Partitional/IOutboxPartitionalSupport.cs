@@ -28,5 +28,11 @@ public interface IOutboxPartitionalSupport
     /// <returns>A task representing the asynchronous operation, containing a read-only collection of <see cref="OutboxTenantPartPair"/>.</returns>
     Task<IReadOnlyCollection<OutboxTenantPartPair>> GetMsgParts(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Asynchronously retrieves a collection of tenant-part pairs for scheduled tasks.
+    /// Similar to <see cref="GetMsgParts"/> but used specifically for task-level partition resolution.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token to signal the operation's cancellation.</param>
+    /// <returns>A task representing the asynchronous operation, containing a read-only collection of <see cref="OutboxTenantPartPair"/>.</returns>
     Task<IReadOnlyCollection<OutboxTenantPartPair>> GetTaskParts(CancellationToken cancellationToken);
 }

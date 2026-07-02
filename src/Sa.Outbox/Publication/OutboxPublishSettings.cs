@@ -1,14 +1,13 @@
 ﻿namespace Sa.Outbox.Publication;
 
 /// <summary>
-/// Settings for publishing messages from the Outbox.
+/// Immutable settings for publishing messages from the Outbox.
 /// </summary>
-public sealed class OutboxPublishSettings
+public sealed record OutboxPublishSettings(int MaxBatchSize = 64)
 {
     /// <summary>
-    /// The maximum batch size of messages to be sent at once.
-    /// Default value: 16.
-    /// for array pool size: 16, 32, 64, 128, 256, 512, 1024, 2048, 4096
+    /// Creates a copy with a new <see cref="MaxBatchSize"/>.
     /// </summary>
-    public int MaxBatchSize { get; internal set; } = 64;
+    public OutboxPublishSettings WithMaxBatchSize(int batchSize)
+        => this with { MaxBatchSize = batchSize };
 }

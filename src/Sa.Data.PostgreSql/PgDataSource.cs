@@ -1,4 +1,5 @@
 ﻿using Npgsql;
+using System.Data;
 
 namespace Sa.Data.PostgreSql;
 
@@ -28,7 +29,7 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
     {
         if (_dataSource.IsValueCreated)
         {
-            await _dataSource.Value.DisposeAsync();
+            await _dataSource.Value.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -37,10 +38,30 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
         Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write,
         CancellationToken cancellationToken = default)
     {
-        using NpgsqlConnection db = await OpenDbConnection(cancellationToken);
-        using NpgsqlBinaryImporter writer = await db.BeginBinaryImportAsync(sql, cancellationToken);
-        ulong result = await write(writer, cancellationToken);
+        await using NpgsqlConnection db = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlBinaryImporter writer = await db.BeginBinaryImportAsync(sql, cancellationToken).ConfigureAwait(false);
+        ulong result = await write(writer, cancellationToken).ConfigureAwait(false);
         return result;
+    }
+
+    public async Task ExecuteTransactionAsync(
+        Func<NpgsqlTransaction, CancellationToken, Task> action,
+        IsolationLevel isolationLevel = IsolationLevel.Unspecified,
+        CancellationToken cancellationToken = default)
+    {
+        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(isolationLevel, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await action(transaction, cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task<int> ExecuteNonQuery(
@@ -48,10 +69,10 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
         Action<NpgsqlCommand>? initCommand,
         CancellationToken cancellationToken = default)
     {
-        using NpgsqlConnection connection = await OpenDbConnection(cancellationToken);
-        using NpgsqlCommand cmd = new(sql, connection);
+        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlCommand cmd = new(sql, connection);
         initCommand?.Invoke(cmd);
-        return await cmd.ExecuteNonQueryAsync(cancellationToken);
+        return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<object?> ExecuteScalar(
@@ -59,10 +80,10 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
         Action<NpgsqlCommand>? initCommand,
         CancellationToken cancellationToken = default)
     {
-        using NpgsqlConnection connection = await OpenDbConnection(cancellationToken);
-        using NpgsqlCommand cmd = new(sql, connection);
+        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlCommand cmd = new(sql, connection);
         initCommand?.Invoke(cmd);
-        return await cmd.ExecuteScalarAsync(cancellationToken);
+        return await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<int> ExecuteReader(
@@ -73,11 +94,11 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
     {
         int rowCount = 0;
 
-        using NpgsqlConnection connection = await OpenDbConnection(cancellationToken);
-        using NpgsqlCommand cmd = new(sql, connection);
+        using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlCommand cmd = new(sql, connection);
         initCommand?.Invoke(cmd);
-        using NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken) && !cancellationToken.IsCancellationRequested)
+        await using NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false) && !cancellationToken.IsCancellationRequested)
         {
             read(reader, rowCount);
             rowCount++;

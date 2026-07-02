@@ -126,27 +126,51 @@ public enum DeliveryStatusCode
 
 public static class DeliveryStatusCodeExtensions
 {
+    /// <summary>
+    /// Indicates whether the status code represents a pending message that has not yet been processed.
+    /// </summary>
     public static bool IsPending(this DeliveryStatusCode statusCode) =>
         statusCode == DeliveryStatusCode.Pending;
 
+    /// <summary>
+    /// Indicates whether the status code represents a message currently being processed.
+    /// </summary>
     public static bool IsProcessing(this DeliveryStatusCode statusCode) =>
         statusCode == DeliveryStatusCode.Processing;
 
+    /// <summary>
+    /// Indicates whether the status code represents a postponed message (will be retried later).
+    /// </summary>
     public static bool IsPostponed(this DeliveryStatusCode statusCode) =>
         statusCode == DeliveryStatusCode.Postpone;
 
+    /// <summary>
+    /// Indicates whether the status code represents a retryable error (attempt counter will be incremented).
+    /// </summary>
     public static bool IsRetry(this DeliveryStatusCode statusCode) =>
         statusCode == DeliveryStatusCode.Retry;
 
+    /// <summary>
+    /// Indicates whether the status code represents a successful outcome (HTTP 2xx – 3xx range, excluding redirects).
+    /// </summary>
     public static bool IsSuccess(this DeliveryStatusCode statusCode) =>
         statusCode >= DeliveryStatusCode.Ok && statusCode <= DeliveryStatusCode.Aborted;
 
+    /// <summary>
+    /// Indicates whether the status code represents an aborted processing attempt (user or system intervention).
+    /// </summary>
     public static bool IsAborted(this DeliveryStatusCode statusCode) =>
         statusCode == DeliveryStatusCode.Aborted;
 
+    /// <summary>
+    /// Indicates whether the status code represents a warning-level issue (recoverable, processing continues).
+    /// </summary>
     public static bool IsWarning(this DeliveryStatusCode statusCode) =>
         statusCode >= DeliveryStatusCode.Warn && statusCode < DeliveryStatusCode.Error;
 
+    /// <summary>
+    /// Indicates whether the status code represents an error-level issue (permanent failure or max retries exceeded).
+    /// </summary>
     public static bool IsError(this DeliveryStatusCode statusCode) =>
         statusCode >= DeliveryStatusCode.Error;
 }

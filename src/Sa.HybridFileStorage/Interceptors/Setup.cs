@@ -2,16 +2,24 @@
 
 internal static class Setup
 {
-    internal static IInterceptorContainer AddLoggingInterceptor(
+    /// <summary>
+    /// Adds all logging interceptors (upload, download, delete) to the container.
+    /// </summary>
+    internal static IInterceptorContainer AddLoggingInterceptors(
         this IInterceptorContainer container,
-        LoggingInterceptor? loggingInterceptor = null)
+        UploadLoggingInterceptor? uploadInterceptor = null,
+        DownloadLoggingInterceptor? downloadInterceptor = null,
+        DeleteLoggingInterceptor? deleteInterceptor = null)
     {
-        if (loggingInterceptor != null)
-        {
-            container.AddDeleteInterceptor(loggingInterceptor);
-            container.AddDownloadInterceptor(loggingInterceptor);
-            container.AddUploadInterceptor(loggingInterceptor);
-        }
+        if (uploadInterceptor != null)
+            container.AddUploadInterceptor(uploadInterceptor);
+
+        if (downloadInterceptor != null)
+            container.AddDownloadInterceptor(downloadInterceptor);
+
+        if (deleteInterceptor != null)
+            container.AddDeleteInterceptor(deleteInterceptor);
+
         return container;
     }
 }

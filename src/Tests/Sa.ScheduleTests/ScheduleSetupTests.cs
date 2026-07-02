@@ -46,12 +46,13 @@ public sealed class ScheduleSetupTests(ScheduleSetupTests.Fixture fixture)
     [Fact]
     public async Task Check_ExecuteCounterJob()
     {
-        int i = await Sub.Start(CancellationToken.None);
+        int started = await Sub.Start(CancellationToken.None);
 
-        Assert.NotEqual(0, i);
+        Assert.Equal(1, started);
 
         await Task.Delay(300, TestContext.Current.CancellationToken);
 
-        Assert.True(Fixture.Count > 0);
+        // Job should have executed multiple times (100ms interval, 300ms runtime)
+        Assert.InRange(Fixture.Count, 2, 10);
     }
 }

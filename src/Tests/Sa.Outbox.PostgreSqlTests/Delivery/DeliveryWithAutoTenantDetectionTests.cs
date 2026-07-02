@@ -16,7 +16,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
     class TestConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
@@ -50,12 +50,11 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
                     .WithDeliveries(b => b
                         .AddDelivery<TestConsumer, TestMessage>("test_auto_detect", (_, s) =>
                         {
-                            s.ConsumeSettings
-                                .WithNoBatchingWindow()
+                            s.WithBatchingWindow(TimeSpan.Zero)
                                 .WithNoLockDuration()
                                 ;
 
-                            OutboxSettings = s;
+                            OutboxSettings = s.Build();
                         })
                     )
                 )
@@ -70,7 +69,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
                 .AddSingleton<IOutboxTenantDetector, TenantStubDetector>();
         }
 
-        public ConsumerGroupSettings OutboxSettings { get; set; } = default!;
+        public OutboxConsumerSettings OutboxSettings { get; set; } = default!;
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }

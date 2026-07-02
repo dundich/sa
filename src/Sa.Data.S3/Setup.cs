@@ -19,9 +19,9 @@ public static class Setup
             })
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler()
             {
-                PooledConnectionLifetime = TimeSpan.FromMinutes(15)
+                PooledConnectionLifetime = settings.ConnectionPoolLifetime
             })
-            .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
+            .SetHandlerLifetime(settings.HandlerLifetime)
             .AddStandardResilienceHandler(options =>
             {
                 options.TotalRequestTimeout.Timeout = settings.TotalRequestTimeout;

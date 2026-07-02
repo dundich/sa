@@ -1,17 +1,49 @@
-﻿using System.IO.Pipelines;
+﻿using System.Buffers;
+using System.IO.Pipelines;
 
 namespace Sa.Media;
 
 internal static class PipeReaderExtensions
 {
-    public static async ValueTask SkipAsync(this PipeReader reader, long count, CancellationToken ct = default)
+    /// <summary>
+    /// Пропускает указанное количество байт в PipeReader, эффективно обрабатывая многосегментные последовательности.
+    /// </summary>
+    public static async ValueTask<long> SkipAsync(this PipeReader reader, long count, CancellationToken ct = default)
     {
-        while (count > 0)
+        long remaining = count;
+        while (remaining > 0)
         {
-            ReadResult result = await reader.ReadAsync(ct);
-            SequencePosition consumed = result.Buffer.GetPosition(Math.Min(count, result.Buffer.Length));
-            reader.AdvanceTo(consumed);
-            count -= result.Buffer.Length;
+            ReadResult result = await reader.ReadAsync(ct).ConfigureAwait(false);
+            if (result.Buffer.IsEmpty && result.IsCompleted)
+                break; // Недостаточно данных
+
+            var toConsume = Math.Min(remaining, result.Buffer.Length);
+            var consumed = result.Buffer.GetPosition(toConsume);
+            reader.AdvanceTo(consumed, consumed);
+            remaining -= toConsume;
+        }
+        return count - remaining;
+    }
+
+    /// <summary>
+    /// Эффективно пропускает данные, продвигая Buffer полностью когда возможно.
+    /// Минимизирует количество вызовов AdvanceTo.
+    /// </summary>
+    public static async ValueTask SkipFullSegmentsAsync(this PipeReader reader, long count, CancellationToken ct = default)
+    {
+        long remaining = count;
+        while (remaining > 0)
+        {
+            ReadResult result = await reader.ReadAsync(ct).ConfigureAwait(false);
+            if (result.Buffer.IsEmpty && result.IsCompleted)
+                return;
+
+            var toConsume = Math.Min(remaining, result.Buffer.Length);
+            var consumed = result.Buffer.GetPosition(toConsume);
+
+            // Продвигаем Buffer до consumed, frontier тоже
+            reader.AdvanceTo(consumed, consumed);
+            remaining -= toConsume;
         }
     }
 }

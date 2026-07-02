@@ -6,8 +6,7 @@ namespace Sa.Outbox.PostgreSql.Commands;
 internal sealed class SelectMsgTypeCommand(
     IPgDataSource dataSource,
     SqlOutboxBuilder sql,
-    NpqsqlOutboxReader outboxReader
-    ) : ISelectMsgTypeCommand
+    NpgsqlOutboxReader outboxReader) : ISelectMsgTypeCommand
 {
     public async Task<IReadOnlyCollection<(long id, string typeName)>> Execute(CancellationToken cancellationToken)
     {

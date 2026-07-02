@@ -12,7 +12,9 @@ internal static class XmlStreamReader
             : buffer[..written].ToString();
     }
 
+#pragma warning disable S3776
     private static int ReadTo(Stream stream, ReadOnlySpan<char> elementName, ref Span<char> valueBuffer)
+#pragma warning restore S3776
     {
         var expectedIndex = 0;
         var propertyLength = elementName.Length;

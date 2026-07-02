@@ -21,7 +21,7 @@ internal sealed class PostgresFileStorage(
 
     private const string InsertSql =
         """
-        INSERT INTO {0} (id, name, file_ext, data, size, tenant_id, basket, created_at) 
+        INSERT INTO {0} (id, name, file_ext, data, size, tenant_id, basket, created_at)
         VALUES (@id, @name, @file_ext, @data, @size, @tenant_id, @basket, @created_at)
         ON CONFLICT (id, tenant_id, basket, created_at) DO UPDATE SET
            data = EXCLUDED.data,
@@ -50,7 +50,7 @@ internal sealed class PostgresFileStorage(
         = $"{options.SchemaName}.\"{Sanitize(options.TableName)}\"";
 
     private readonly string _schemePrefix
-        = $"{options.StorageType}{FileIdParser.SchemeSeparator}{options.TableName}/";
+        = $"{options.StorageType}{FileIdParser.SchemeSeparator}{Sanitize(basket)}/";
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -75,8 +75,8 @@ internal sealed class PostgresFileStorage(
     {
         var fileSpan = fileId.AsSpan();
 
-        if (!string.IsNullOrWhiteSpace(fileId)
-            && fileSpan.StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal)) return false;
+        if (string.IsNullOrWhiteSpace(fileId)
+            || !fileSpan.StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal)) return false;
 
         int schemeEnd = fileSpan.IndexOf(FileIdParser.SchemeSeparator.AsSpan());
         if (schemeEnd == -1) return false;
@@ -96,6 +96,9 @@ internal sealed class PostgresFileStorage(
         CancellationToken cancellationToken)
     {
         EnsureWritable();
+        ArgumentNullException.ThrowIfNull(fileStream);
+
+        metadata.Validate();
 
         DateTimeOffset createdAtDay = _timeProvider.GetUtcNow().Date;
         long createdAt = createdAtDay.ToUnixTimeSeconds();
@@ -105,22 +108,24 @@ internal sealed class PostgresFileStorage(
             _qualifiedTableName,
             createdAtDay,
             [metadata.TenantId, _partName],
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         string fileId = FileIdParser.FormatToFileId(
             StorageType, _partName, metadata.TenantId, createdAtDay, metadata.FileName);
 
         string fileExtension = FileIdParser.GetFileExtension(metadata.FileName);
 
+        // If stream isn't seekable, copy into a recyclable MemoryStream first
         Stream ms = fileStream;
+        bool ownsMs = false;
 
-        if (!fileStream.CanSeek) //  fileStream is not MemoryStream ms)
+        if (!fileStream.CanSeek)
         {
             ms = streamManager.GetStream();
-            await fileStream.CopyToAsync(ms, cancellationToken);
+            await fileStream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+            ownsMs = true;
         }
-
-        if (fileStream.CanSeek) //  fileStream is not MemoryStream ms)
+        else
         {
             ms.Position = 0;
         }
@@ -139,13 +144,14 @@ internal sealed class PostgresFileStorage(
                 , new NpgsqlParameter<int>("tenant_id", metadata.TenantId)
                 , new NpgsqlParameter<string>("basket", _partName)
                 , new NpgsqlParameter<long>("created_at", createdAt)
-            ], cancellationToken);
+            ], cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            if (ms != fileStream)
+            // Only dispose the buffer we allocated — never dispose the caller's stream
+            if (ownsMs)
             {
-                await ms.DisposeAsync();
+                await ms.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -155,6 +161,11 @@ internal sealed class PostgresFileStorage(
     public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
+
+
+        if (!CanProcess(fileId))
+            return false;
+
 
         if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
         {
@@ -170,7 +181,7 @@ internal sealed class PostgresFileStorage(
             new NpgsqlParameter<string>("basket", _partName),
             new NpgsqlParameter<long>("timestamp", timestamp),
             new NpgsqlParameter<string>("id", fileId)
-        ], cancellationToken);
+        ], cancellationToken).ConfigureAwait(false);
 
         return rowsAffected > 0;
     }
@@ -180,6 +191,11 @@ internal sealed class PostgresFileStorage(
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken)
     {
+
+
+        if (!CanProcess(fileId))
+            return false;
+
         if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
         {
             return false;
@@ -189,15 +205,15 @@ internal sealed class PostgresFileStorage(
 
         int rowsAffected = await dataSource.ExecuteReader(sql, async (reader, i) =>
         {
-            using var fs = await reader.GetStreamAsync(0, cancellationToken);
-            await loadStream(fs, cancellationToken);
+            using var fs = await reader.GetStreamAsync(0, cancellationToken).ConfigureAwait(false);
+            await loadStream(fs, cancellationToken).ConfigureAwait(false);
         },
         [
             new NpgsqlParameter<int>("tenant_id", tenantId),
             new NpgsqlParameter<string>("basket", _partName),
             new NpgsqlParameter<long>("timestamp", timestamp),
             new NpgsqlParameter<string>("id", fileId)
-        ], cancellationToken);
+        ], cancellationToken).ConfigureAwait(false);
 
         return rowsAffected > 0;
     }

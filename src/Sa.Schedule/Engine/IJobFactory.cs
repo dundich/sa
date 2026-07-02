@@ -2,5 +2,5 @@
 
 internal interface IJobFactory
 {
-    IJobScheduler CreateJobSchedule(IJobSettings settings);
+    IJobScheduler? CreateJobSchedule(IJobSettings settings);
 }

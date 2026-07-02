@@ -20,11 +20,11 @@ internal sealed partial class PartRepository(
 
     public async Task<int> ExecuteDDL(string sql, CancellationToken cancellationToken)
     {
-        await _migrationSemaphore.WaitAsync(cancellationToken);
+        await _migrationSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             return await PgRetryStrategy.ExecuteWithRetry(
-                async t => await dataSource.ExecuteNonQuery(sql, t),
+                async t => await dataSource.ExecuteNonQuery(sql, t).ConfigureAwait(false),
                 cancellationToken: cancellationToken);
         }
         finally
@@ -42,7 +42,7 @@ internal sealed partial class PartRepository(
         ISqlTableBuilder builder = sqlBuilder[tableName] ?? throw new KeyNotFoundException(tableName);
         string sql = builder.CreateSql(date, partValues);
 
-        return await ExecuteDDL(sql, cancellationToken);
+        return await ExecuteDDL(sql, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<int> Migrate(
@@ -55,9 +55,9 @@ internal sealed partial class PartRepository(
 
         int i = 0;
 
-        await foreach (string sql in sqlBuilder.MigrateSql(dates, resolve))
+        await foreach (string sql in sqlBuilder.MigrateSql(dates, resolve).ConfigureAwait(false))
         {
-            await ExecuteDDL(sql, cancellationToken);
+            await ExecuteDDL(sql, cancellationToken).ConfigureAwait(false);
             i++;
         }
         return i;
@@ -77,7 +77,7 @@ internal sealed partial class PartRepository(
 
                 if (supMigration != null)
                 {
-                    return await supMigration.GetParts(cancellationToken);
+                    return await supMigration.GetParts(cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
@@ -91,7 +91,7 @@ internal sealed partial class PartRepository(
 
             return [];
 
-        }, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
 
         return i;
     }
@@ -104,10 +104,10 @@ internal sealed partial class PartRepository(
         string sql = sqlBuilder.SelectPartsFromDateSql(tableName);
         long unixTime = fromDate.ToUniversalTime().StartOfDay().ToUnixTimeSeconds();
 
-        return await GetPartsFormDateWithRetry(sql, unixTime, cancellationToken);
+        return await GetPartsFromDateWithRetry(sql, unixTime, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<List<PartByRangeInfo>> GetPartsFormDateWithRetry(
+    private async Task<List<PartByRangeInfo>> GetPartsFromDateWithRetry(
         string sql, long unixTime, CancellationToken cancellationToken)
     {
         return await PgRetryStrategy.ExecuteWithRetry(
@@ -118,7 +118,7 @@ internal sealed partial class PartRepository(
                     return await dataSource.ExecuteReaderList(
                         sql,
                         ReadPartInfo,
-                        [new NpgsqlParameter<long>("from_date", unixTime)], t);
+                        [new NpgsqlParameter<long>("from_date", unixTime)], t).ConfigureAwait(false);
                 }
                 catch (PostgresException ex) when (UndefinedTable(ex))
                 {
@@ -141,7 +141,7 @@ internal sealed partial class PartRepository(
                 sql
                 , ReadPartInfo
                 , [new NpgsqlParameter<long>("to_date", toDate.ToUnixTimeSeconds())]
-                , cancellationToken);
+                , cancellationToken).ConfigureAwait(false);
         }
         catch (PostgresException ex) when (UndefinedTable(ex))
         {
@@ -153,7 +153,7 @@ internal sealed partial class PartRepository(
         string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
     {
         int droppedCount = 0;
-        List<PartByRangeInfo> list = await GetPartsToDate(tableName, toDate, cancellationToken);
+        List<PartByRangeInfo> list = await GetPartsToDate(tableName, toDate, cancellationToken).ConfigureAwait(false);
 
         LogStartingToDrop(tableName, toDate);
 
@@ -166,7 +166,7 @@ internal sealed partial class PartRepository(
                 string sql = settings.DropPartSql(part.Id);
                 try
                 {
-                    await ExecuteDDL(sql, cancellationToken);
+                    await ExecuteDDL(sql, cancellationToken).ConfigureAwait(false);
                     droppedCount++;
                     LogSuccessfullyDropped(part.Id, part.RootTableName);
                 }
@@ -202,32 +202,10 @@ internal sealed partial class PartRepository(
     }
 
     private static bool CanRetryByError(Exception ex, int _ = 0)
-    {
-        if (ex is PostgresException err)
-        {
-            if (err.IsTransient) return true;
-
-            return err.SqlState switch
-            {
-                PostgresErrorCodes.ConnectionException
-                 or PostgresErrorCodes.ConnectionFailure
-                 or PostgresErrorCodes.DeadlockDetected
-                 or PostgresErrorCodes.CannotConnectNow
-                   => true, //continue
+        => PgErrorCodes.CanRetryByError(ex);
 
 
-                _ => false, // abort
-            };
-        }
-
-        return true;
-    }
-
-
-    private static bool UndefinedTable(PostgresException ex) =>
-        ex.SqlState == PostgresErrorCodes.UndefinedTable
-        || ex.SqlState == PostgresErrorCodes.InvalidSchemaName
-        ;
+    private static bool UndefinedTable(PostgresException ex) => PgErrorCodes.IsUndefinedTable(ex);
 
     public void Dispose()
     {

@@ -23,7 +23,7 @@ public interface IJobScheduler: IDisposable, IAsyncDisposable
     int ActiveTasks { get; }
 
     /// <summary>
-    /// 
+    /// Consume instance count
     /// </summary>
     int ConcurrencyLimit { get; set; }
 

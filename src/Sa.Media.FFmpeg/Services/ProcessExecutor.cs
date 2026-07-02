@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System.Text;
 
 namespace Sa.Media.FFmpeg.Services;
@@ -6,8 +7,14 @@ namespace Sa.Media.FFmpeg.Services;
 internal interface IProcessExecutor
 {
     /// <summary>
-    /// Executes a process with real-time output handling
+    /// Executes a process with real-time output handling via data received events.
     /// </summary>
+    /// <param name="startInfo">Process start configuration.</param>
+    /// <param name="outputDataReceived">Callback for stdout lines. If <c>null</c>, stdout is not redirected.</param>
+    /// <param name="errorDataReceived">Callback for stderr lines. If <c>null</c>, stderr is not redirected.</param>
+    /// <param name="timeout">Operation timeout. Use <c>null</c> for no timeout.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The process exit code.</returns>
     Task<int> ExecuteAsync(
         ProcessStartInfo startInfo
         , Action<string>? outputDataReceived = null
@@ -17,7 +24,8 @@ internal interface IProcessExecutor
 
 
     /// <summary>
-    /// Executes a process and returns complete output
+    /// Executes a process and collects all output into a <see cref="ProcessExecutionResult"/>.
+    /// Throws <see cref="ProcessExecutionResultException"/> if exit code is non-zero.
     /// </summary>
     async Task<ProcessExecutionResult> ExecuteWithResultAsync(
         ProcessStartInfo startInfo
@@ -47,9 +55,15 @@ internal interface IProcessExecutor
     }
 
     /// <summary>
-    /// Executes stdout as a stream.
-    /// Stderr is captured and checked on completion
+    /// Executes a process and streams stdout through a callback. Stderr is collected and checked on completion.
+    /// The input stream is copied to stdin asynchronously, then stdin is closed automatically.
     /// </summary>
+    /// <param name="startInfo">Process start configuration.</param>
+    /// <param name="inputStream">Readable stream to copy to stdin.</param>
+    /// <param name="onOutput">Callback that receives the stdout stream. Must read until EOF.</param>
+    /// <param name="timeout">Operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="ProcessExecutionException">Thrown when FFmpeg returns a non-zero exit code.</exception>
     Task ExecuteStdOutAsync(
         ProcessStartInfo startInfo
         , Stream inputStream
@@ -63,7 +77,7 @@ internal interface IProcessExecutor
 
 
 
-internal sealed class ProcessExecutor : IProcessExecutor
+internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) : IProcessExecutor
 {
     public async Task<int> ExecuteAsync(
         ProcessStartInfo startInfo
@@ -94,7 +108,7 @@ internal sealed class ProcessExecutor : IProcessExecutor
         return exitCode;
     }
 
-    private static async Task<int> ExecuteProcessWithHandlersAsync(
+    private async Task<int> ExecuteProcessWithHandlersAsync(
         Process process,
         Action<string>? outputDataReceived,
         Action<string>? errorDataReceived,
@@ -324,13 +338,18 @@ internal sealed class ProcessExecutor : IProcessExecutor
             await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
             process.StandardInput.Close();
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
+            // Cancellation — close stdin to unblock FFmpeg
             process.StandardInput.Close();
         }
         catch (IOException)
         {
             process.StandardInput.Close();
+        }
+        catch (ObjectDisposedException)
+        {
+            // StandardInput may be disposed if process has exited
         }
         catch (Exception ex)
         {
@@ -339,7 +358,7 @@ internal sealed class ProcessExecutor : IProcessExecutor
         }
     }
 
-    private static int SafeDisposeProcess(Process process)
+    private int SafeDisposeProcess(Process process)
     {
         int exitCode = -1;
 
@@ -389,16 +408,16 @@ internal sealed class ProcessExecutor : IProcessExecutor
             }
             else
             {
-                Console.WriteLine("Process did not terminate after Kill()");
+                logger?.LogWarning("Process did not terminate after Kill()");
             }
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            Console.WriteLine("Process is invalid or already disposed.");
+            logger?.LogWarning(ex, "Process is invalid or already disposed.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Unexpected error during process termination: {ex.Message}");
+            logger?.LogError(ex, "Unexpected error during process termination");
         }
         finally
         {
@@ -408,7 +427,7 @@ internal sealed class ProcessExecutor : IProcessExecutor
             }
             catch
             {
-                // skeep
+                // skip
             }
         }
 

@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Sa.HybridFileStorage.PostgresTests;
 
-public class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
+public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fixture)
     : IClassFixture<PostgresFileStorageTests.Fixture>
 {
     private const string DataContent = "Hello, World!";

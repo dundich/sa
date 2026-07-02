@@ -2,7 +2,7 @@
 
 namespace Sa.MediaTests;
 
-public class TimeRangeExpanderTests
+public sealed class TimeRangeExpanderTests
 {
     #region Helper Methods
 
@@ -39,12 +39,6 @@ public class TimeRangeExpanderTests
                 AssertTimeRangesEqual(expected[i][j], actual[i][j]);
             }
         }
-    }
-
-    private static void AssertApproxEqual(long expected, long actual, long tolerance = 1)
-    {
-        var diff = Math.Abs(expected - actual);
-        Assert.True(diff <= tolerance);
     }
 
     #endregion

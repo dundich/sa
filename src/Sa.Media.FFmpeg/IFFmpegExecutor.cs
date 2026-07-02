@@ -38,16 +38,33 @@ public interface IFFMpegExecutor
     /// </summary>
     /// <param name="inputFileName">Path to the input audio file.</param>
     /// <param name="outputFileName">Path to the output file.</param>
-    /// <param name="outputSampleRate">Optional target sample rate.</param>
-    /// <param name="outputChannelCount">Optional number of output channels.</param>
+    /// <param name="outputSampleRate">Optional target sample rate. Use <c>null</c> to preserve the original rate.</param>
+    /// <param name="outputChannelCount">Optional number of output channels. Use <c>null</c> to preserve the original channel count.</param>
     /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
-    /// <returns>Stdout for log</returns>
+    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
     Task<string> ConvertToPcmS16Le(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
         ushort? outputChannelCount = null,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Converts an audio file to PCM S16 LE format, preserving the original sample rate and channel count.
+    /// </summary>
+    /// <param name="inputFileName">Path to the input audio file.</param>
+    /// <param name="outputFileName">Path to the output file.</param>
+    /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
+    Task<string> ConvertToPcmS16LePreservingFormat(
+        string inputFileName,
+        string outputFileName,
         bool isOverwrite = true,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);

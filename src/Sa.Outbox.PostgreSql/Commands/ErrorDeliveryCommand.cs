@@ -66,7 +66,8 @@ internal sealed class ErrorDeliveryCommand(
 
         foreach (var message in messages)
         {
-            if (message.Exception == null || result.ContainsKey(message.Exception)) break;
+            // Пропускаем сообщения без исключения и уже добавленные дубликаты
+            if (message.Exception == null || result.ContainsKey(message.Exception)) continue;
 
             result[message.Exception]
                 = new ErrorInfo(

@@ -10,7 +10,7 @@ public class DeliveryBatchingWindowTests(DeliveryBatchingWindowTests.Fixture fix
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
@@ -30,14 +30,14 @@ public class DeliveryBatchingWindowTests(DeliveryBatchingWindowTests.Fixture fix
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test3", (_, s) =>
                         {
-                            s.ConsumeSettings.WithBatchingWindow(TimeSpan.FromMinutes(3));
-                            OutboxSettings = s;
+                            s.WithBatchingWindow(TimeSpan.FromMinutes(3));
+                            OutboxSettings = s.Build();
                         })
                 )
             );
         }
 
-        public ConsumerGroupSettings OutboxSettings { get; set; } = default!;
+        public OutboxConsumerSettings OutboxSettings { get; set; } = default!;
 
         public IOutboxMessagePublisher Publisher => ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
     }
@@ -71,7 +71,7 @@ public class DeliveryBatchingWindowTests(DeliveryBatchingWindowTests.Fixture fix
         Assert.Equal(0, result);
 
 
-        fixture.OutboxSettings.ConsumeSettings.WithNoBatchingWindow();
+        fixture.OutboxSettings = fixture.OutboxSettings with { BatchingWindow = TimeSpan.Zero };
 
         result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
         Assert.True(result > 0);

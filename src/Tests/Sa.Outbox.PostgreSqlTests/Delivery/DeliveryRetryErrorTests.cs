@@ -15,7 +15,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         private static readonly TestException s_err = new("test same error");
 
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
@@ -39,13 +39,12 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<TestMessageConsumer, TestMessage>("test4", (_, s) =>
                         {
-                            s.ConsumeSettings
+                            s.WithBatchingWindow(TimeSpan.Zero)
                                 .WithNoLockDuration()
                                 .WithLockRenewal(TimeSpan.FromMinutes(10))
-                                .WithMaxDeliveryAttempts(MaxDeliveryAttempts)
-                                .WithNoBatchingWindow();
+                                .WithMaxDeliveryAttempts(MaxDeliveryAttempts);
 
-                            OutboxSettings = s;
+                            OutboxSettings = s.Build();
                         })
                     )
                 );
@@ -55,7 +54,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
 
         public const int MaxDeliveryAttempts = 2;
 
-        public ConsumerGroupSettings OutboxSettings { get; private set; } = default!;
+        public OutboxConsumerSettings OutboxSettings { get; private set; } = default!;
     }
 
 

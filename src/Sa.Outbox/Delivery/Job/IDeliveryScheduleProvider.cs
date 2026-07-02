@@ -2,10 +2,10 @@
 
 namespace Sa.Outbox.Delivery.Job;
 
+/// <summary>
+/// Manages job scheduling
+/// </summary>
 public interface IDeliveryScheduleProvider
 {
     IJobScheduler GetJob(Guid jobId);
-
-    int GetInstanceCount(Guid jobId) => GetJob(jobId).ConcurrencyLimit;
-    void SetInstanceCount(Guid jobId, int count) => GetJob(jobId).ConcurrencyLimit = count;
 }

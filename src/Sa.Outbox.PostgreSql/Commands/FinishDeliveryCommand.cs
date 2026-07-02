@@ -65,7 +65,7 @@ internal sealed class FinishDeliveryCommand(
         var result = context.DeliveryResult;
 
         var message = GetErrorMessage(context.Exception, result.Message, errors);
-        var lockExpiresOn = (result.CreatedAt + context.PostponeAt).ToUnixTimeSeconds();
+        var lockExpiresOn = (result.CreatedAt + context.PostponeDelay).ToUnixTimeSeconds();
         var errorId = GetErrorId(context.Exception, errors);
 
         cmd

@@ -1,5 +1,4 @@
 ﻿using Sa.Extensions;
-using Sa.Outbox.Exceptions;
 using System.Runtime.CompilerServices;
 
 namespace Sa.Outbox.Delivery;
@@ -7,13 +6,18 @@ namespace Sa.Outbox.Delivery;
 /// <summary>
 /// Delivers a batch of messages with error handling and retry mechanisms
 /// </summary>
-internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDeliveryCourier
+internal sealed class DeliveryCourier(
+    IDeliveryLifetimeInvoker processor,
+     IRetryStrategy? retryStrategy = null) : IDeliveryCourier
 {
+
+    private readonly IRetryStrategy _retryStrategy = retryStrategy ?? ExponentialBackoffRetryStrategy.Shared;
+
     /// <summary>
     /// Asynchronous method to deliver messages
     /// </summary>
     public async ValueTask<int> Deliver<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
@@ -22,27 +26,30 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
 
         try
         {
-            await processor.ConsumeInScope(settings, filter, messages, cancellationToken);
+            await processor.ConsumeInScope(settings, filter, messages, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {
             HandleError(ex, messages.Span);
         }
 
-        return PostHandle(messages.Span, settings.ConsumeSettings.MaxDeliveryAttempts);
+        return PostHandle(messages.Span, settings.MaxDeliveryAttempts);
     }
 
 
     // Method to handle errors during message delivery
-    private static void HandleError<TMessage>(Exception error, ReadOnlySpan<IOutboxContextOperations<TMessage>> messages)
+    private void HandleError<TMessage>(Exception error, ReadOnlySpan<IOutboxContextOperations<TMessage>> messages)
     {
-        foreach (IOutboxContextOperations<TMessage> item in messages)
+        foreach (IOutboxContextOperations<TMessage> message in messages)
         {
-            if (item.DeliveryResult.Code.IsPending())
+            if (message.DeliveryResult.Code.IsPending())
             {
-                item.Warn(
-                    error ?? UnknownDeliveryException,
-                    postpone: RetryStrategy.CalculateBackoff());
+                var attempt = message.DeliveryInfo.Attempt + 1;
+                var backoff = _retryStrategy.GetBackoff(attempt);
+
+                message.Warn(
+                    error,
+                    postpone: backoff);
             }
         }
     }
@@ -79,20 +86,4 @@ internal sealed class DeliveryCourier(IDeliveryLifetimeInvoker processor) : IDel
     private static bool IsAttemptsError(IOutboxContext message, int maxDeliveryAttempts)
         => message.DeliveryResult.Code.IsWarning()
             && message.DeliveryInfo.Attempt + 1 > maxDeliveryAttempts;
-
-
-    /// <summary>
-    /// todos: customization
-    /// Static class to generate random time spans for retry delays
-    /// </summary>
-    static class RetryStrategy
-    {
-        /// <summary>
-        /// Method to generate a random TimeSpan between 10 and 45 minutes
-        /// </summary>
-        public static TimeSpan CalculateBackoff()
-            => TimeSpan.FromSeconds(Random.Shared.Next(60 * 10, 60 * 45));
-    }
-
-    private readonly static DeliveryException UnknownDeliveryException = new("Unknown delivery error.", null, DeliveryStatusCode.Warn);
 }

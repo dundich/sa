@@ -1,4 +1,6 @@
-﻿namespace Sa.Schedule.Settings;
+﻿using Sa.Schedule.Engine;
+
+namespace Sa.Schedule.Settings;
 
 internal sealed class JobBuilder(JobSettings settings) : IJobBuilder
 {
@@ -77,6 +79,12 @@ internal sealed class JobBuilder(JobSettings settings) : IJobBuilder
     public IJobBuilder Disabled()
     {
         settings.Properties.SetDisabled();
+        return this;
+    }
+
+    public IJobBuilder WithCron(string cronExpression, string? name = null)
+    {
+        settings.Properties.WithTiming(CronTiming.Every(cronExpression, name));
         return this;
     }
 }

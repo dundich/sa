@@ -27,7 +27,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         public static int TotalProcessed = 0;
 
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
             CancellationToken cancellationToken)
@@ -105,17 +105,13 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
                         .AddDeliveryScoped<ParallelTestConsumer, TestMessage>(
                             "parallel_test_group",
-                            (_, settings) =>
+                            (_, b) =>
                             {
-                                settings.ScheduleSettings
-                                    .WithInterval(TimeSpan.FromMilliseconds(500))
-                                    .WithInitialDelay(TimeSpan.Zero);
-
-                                settings.ConsumeSettings
-                                    .WithNoBatchingWindow()
-                                    .WithTenantParallelProcessing(3) // 3 Parallel
-                                    .WithTenantTimeout(TimeSpan.FromSeconds(10))
-                                    .WithMaxBatchSize(10);
+                                b.WithInterval(TimeSpan.FromMilliseconds(500))
+                                 .WithNoBatchingWindow()
+                                 .WithPerTenantMaxDegreeOfParallelism(3)
+                                 .WithPerTenantTimeout(TimeSpan.FromSeconds(10))
+                                 .WithMaxBatchSize(10);
                             })
                     )
                 )

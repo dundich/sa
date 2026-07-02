@@ -2,12 +2,13 @@
 
 using Microsoft.Extensions.Configuration;
 using Sa.Data.PostgreSql;
-using System.Threading;
+
 
 /// <summary>
 /// Configuration provider that loads settings from a PostgreSQL database.
 /// </summary>
-public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions options) : ConfigurationProvider
+public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions options)
+    : ConfigurationProvider
 {
     /// <summary>
     /// Loads configuration from PostgreSQL database.
@@ -15,16 +16,16 @@ public sealed class DatabaseConfigurationProvider(PostgreSqlConfigurationOptions
     public override void Load()
     {
         PgRetryStrategy
-           .ExecuteWithRetry(async _ => await LoadAsync(options))
+           .ExecuteWithRetry(async _ => await LoadAsync())
            .AsTask()
            .GetAwaiter()
            .GetResult();
     }
 
     /// <summary>
-    /// Loads configuration from PostgreSQL database asynchronously.
+    /// Asynchronously loads configuration from PostgreSQL database.
     /// </summary>
-    private async Task<int> LoadAsync(PostgreSqlConfigurationOptions options)
+    private async Task<int> LoadAsync()
     {
         try
         {

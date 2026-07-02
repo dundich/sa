@@ -16,16 +16,16 @@ public interface IJobErrorHandlingBuilder
     IJobErrorHandlingBuilder ThenCloseApplication();
 
     /// <summary>
+    /// Specifies that the current job should be aborted (stopped) if an error occurs.
+    /// </summary>
+    /// <returns>The current IJobErrorHandlingBuilder instance.</returns>
+    IJobErrorHandlingBuilder ThenAbortJob();
+
+    /// <summary>
     /// Specifies that all jobs should be stopped if an error occurs.
     /// </summary>
     /// <returns>The current IJobErrorHandlingBuilder instance.</returns>
     IJobErrorHandlingBuilder ThenStopAllJobs();
-
-    /// <summary>
-    /// Specifies that the current job should be stopped if an error occurs.
-    /// </summary>
-    /// <returns>The current IJobErrorHandlingBuilder instance.</returns>
-    IJobErrorHandlingBuilder ThenStopJob();
 
     /// <summary>
     /// Specifies a custom error suppression policy.

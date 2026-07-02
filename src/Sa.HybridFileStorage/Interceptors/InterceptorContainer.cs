@@ -35,7 +35,7 @@ internal sealed class InterceptorContainer : IInterceptorContainer
     {
         foreach (var interceptor in _uploadInterceptors)
         {
-            if (!await interceptor.CanUploadAsync(storage, input, fileStream, cancellationToken))
+            if (!await interceptor.CanUploadAsync(storage, input, fileStream, cancellationToken).ConfigureAwait(false))
             {
                 return false;
             }
@@ -50,7 +50,7 @@ internal sealed class InterceptorContainer : IInterceptorContainer
     {
         foreach (var interceptor in _uploadInterceptors)
         {
-            await interceptor.AfterUploadAsync(storage, result, cancellationToken);
+            await interceptor.AfterUploadAsync(storage, result, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -61,7 +61,7 @@ internal sealed class InterceptorContainer : IInterceptorContainer
     {
         foreach (var interceptor in _uploadInterceptors)
         {
-            await interceptor.OnUploadErrorAsync(storage, exception, cancellationToken);
+            await interceptor.OnUploadErrorAsync(storage, exception, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -73,7 +73,7 @@ internal sealed class InterceptorContainer : IInterceptorContainer
     {
         foreach (var interceptor in _downloadInterceptors)
         {
-            if (!await interceptor.CanDownloadAsync(storage, fileId, loadStream, cancellationToken))
+            if (!await interceptor.CanDownloadAsync(storage, fileId, loadStream, cancellationToken).ConfigureAwait(false))
             {
                 return false;
             }
@@ -89,7 +89,7 @@ internal sealed class InterceptorContainer : IInterceptorContainer
     {
         foreach (var interceptor in _downloadInterceptors)
         {
-            await interceptor.AfterDownloadAsync(storage, fileId, success, cancellationToken);
+            await interceptor.AfterDownloadAsync(storage, fileId, success, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -101,7 +101,7 @@ internal sealed class InterceptorContainer : IInterceptorContainer
     {
         foreach (var interceptor in _downloadInterceptors)
         {
-            await interceptor.OnDownloadErrorAsync(storage, fileId, exception, cancellationToken);
+            await interceptor.OnDownloadErrorAsync(storage, fileId, exception, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -112,7 +112,7 @@ internal sealed class InterceptorContainer : IInterceptorContainer
     {
         foreach (var interceptor in _deleteInterceptors)
         {
-            if (!await interceptor.CanDeleteAsync(storage, fileId, cancellationToken))
+            if (!await interceptor.CanDeleteAsync(storage, fileId, cancellationToken).ConfigureAwait(false))
             {
                 return false;
             }
@@ -128,7 +128,7 @@ internal sealed class InterceptorContainer : IInterceptorContainer
     {
         foreach (var interceptor in _deleteInterceptors)
         {
-            await interceptor.AfterDeleteAsync(storage, fileId, success, cancellationToken);
+            await interceptor.AfterDeleteAsync(storage, fileId, success, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -140,7 +140,7 @@ internal sealed class InterceptorContainer : IInterceptorContainer
     {
         foreach (var interceptor in _deleteInterceptors)
         {
-            await interceptor.OnDeleteErrorAsync(storage, fileId, exception, cancellationToken);
+            await interceptor.OnDeleteErrorAsync(storage, fileId, exception, cancellationToken).ConfigureAwait(false);
         }
     }
 }

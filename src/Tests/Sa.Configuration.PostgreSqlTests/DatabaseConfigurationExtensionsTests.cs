@@ -81,7 +81,7 @@ public sealed class DatabaseConfigurationExtensionsTests(DatabaseConfigurationEx
         var optionsEx = new PostgreSqlConfigurationOptions(
                 fixture.ConnectionString,
                 "SELECT key, value FROM configuration_ex where client_id = @client_id",
-                [new("client_id", 1)]);
+                new NpgsqlParameter("client_id", 1));
 
         builder.AddSaPostgreSqlConfiguration(optionsEx);
 

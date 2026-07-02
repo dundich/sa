@@ -6,7 +6,7 @@ namespace Sa.Data.S3;
 /// <summary>
 /// Функции управления бакетом
 /// </summary>
-public partial class S3BucketClient : IBucketOperations
+public sealed partial class S3BucketClient : IBucketOperations
 {
     public async Task<bool> CreateBucket(CancellationToken ct)
     {
@@ -32,6 +32,21 @@ public partial class S3BucketClient : IBucketOperations
 
     public async Task<bool> DeleteBucket(CancellationToken ct)
     {
+        return await DeleteBucket(forceDelete: false, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Удаляет бакет. Если forceDelete=true — сначала удаляет все объекты из бакета.
+    /// </summary>
+    /// <param name="forceDelete">Если true, предварительно удалит все объекты в бакете</param>
+    /// <param name="ct">Токен отмены операции</param>
+    public async Task<bool> DeleteBucket(bool forceDelete, CancellationToken ct)
+    {
+        if (forceDelete)
+        {
+            await DeleteAllObjects(ct).ConfigureAwait(false);
+        }
+
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Delete))
         {
@@ -49,6 +64,29 @@ public partial class S3BucketClient : IBucketOperations
             default:
                 Errors.UnexpectedResult(response);
                 return false;
+        }
+    }
+
+    private async Task DeleteAllObjects(CancellationToken ct)
+    {
+        var prefixes = new List<string>();
+        await foreach (var key in List(null, ct).ConfigureAwait(false))
+        {
+            prefixes.Add(key);
+        }
+
+        // S3 SelectObjectCancel требует удаления по ключам, не по prefix
+        // Перечитаем всё по ключам и удалим
+        foreach (var key in prefixes)
+        {
+            try
+            {
+                await DeleteFile(key, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Ignore individual delete failures during force cleanup
+            }
         }
     }
 

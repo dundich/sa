@@ -103,7 +103,7 @@ public sealed class S3Upload : IDisposable
         }
 
         var partId = await _client.MultipartPutPart(
-            _encodedFileName, UploadId, _partCount + 1, data, length, ct);
+            _encodedFileName, UploadId, _partCount + 1, data, length, ct).ConfigureAwait(false);
 
         if (string.IsNullOrEmpty(partId))
         {

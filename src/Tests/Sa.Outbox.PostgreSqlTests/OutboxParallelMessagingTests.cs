@@ -54,7 +54,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     class SomeMessageConsumer1 : IConsumer<SomeMessage1>
     {
         public ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage1>> messages,
             CancellationToken cancellationToken)
@@ -67,7 +67,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
     class SomeMessageConsumer2 : IConsumer<SomeMessage2>
     {
         public ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage2>> messages,
             CancellationToken cancellationToken)
@@ -88,21 +88,15 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                         .AddMetadata<SomeMessage1>(SomeMessage1.PartName)
                         .AddMetadata<SomeMessage2>(SomeMessage2.PartName))
                     .WithDeliveries(builder => builder
-                        .AddDeliveryScoped<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, settings) =>
+                        .AddDeliveryScoped<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, b) =>
                         {
-                            settings.ScheduleSettings
-                                .WithInterval(TimeSpan.FromMilliseconds(500))
-                                .WithInitialDelay(TimeSpan.Zero);
-
-                            settings.ConsumeSettings.WithMaxBatchSize(1024);
+                            b.WithInterval(TimeSpan.FromMilliseconds(500))
+                             .WithMaxBatchSize(1024);
                         })
-                        .AddDelivery<SomeMessageConsumer2, SomeMessage2>("test7_1", (_, settings) =>
+                        .AddDelivery<SomeMessageConsumer2, SomeMessage2>("test7_1", (_, b) =>
                         {
-                            settings.ScheduleSettings
-                                .WithInterval(TimeSpan.FromMilliseconds(500))
-                                .WithInitialDelay(TimeSpan.Zero);
-
-                            settings.ConsumeSettings.WithMaxBatchSize(1024);
+                            b.WithInterval(TimeSpan.FromMilliseconds(500))
+                             .WithMaxBatchSize(1024);
                         })
                     )
                     .WithPublishSettings((_, b) => b.WithMaxBatchSize(1024))

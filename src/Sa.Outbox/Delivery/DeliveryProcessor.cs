@@ -10,16 +10,26 @@ internal sealed class DeliveryProcessor(
     IDeliveryTenant processor,
     ITenantProvider tenantProvider) : IDeliveryProcessor
 {
+    /// <summary>
+    /// Delay when consumer group is paused — avoids busy-waiting on repeated polls.
+    /// </summary>
+    private static readonly TimeSpan PausedPollDelay = TimeSpan.FromSeconds(5);
+
     public async Task<long> ProcessMessages<TMessage>(
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
-        var consumeSettings = settings.ConsumeSettings;
+        if (settings.Paused)
+        {
+            // Consumer group is paused — do not poll.
+            await Task.Delay(PausedPollDelay, cancellationToken).ConfigureAwait(false);
+            return 0;
+        }
 
-        int batchSize = consumeSettings.MaxBatchSize;
+        int batchSize = settings.MaxBatchSize;
         if (batchSize == 0) return 0;
 
-        int[] tenantIds = await tenantProvider.GetTenantIds(cancellationToken);
+        int[] tenantIds = await tenantProvider.GetTenantIds(cancellationToken).ConfigureAwait(false);
         if (tenantIds.Length == 0) return 0;
 
         long totalProcessed = 0;
@@ -28,12 +38,20 @@ internal sealed class DeliveryProcessor(
         bool continueProcessing;
         do
         {
-            if (iterations > 0 && consumeSettings.IterationDelay > TimeSpan.Zero)
+            // Re-check Paused on each iteration — a runtime Pause() should interrupt
+            // the greedy loop, not wait for all pending messages to drain.
+            if (settings.Paused)
             {
-                await Task.Delay(consumeSettings.IterationDelay, cancellationToken);
+                await Task.Delay(PausedPollDelay, cancellationToken).ConfigureAwait(false);
+                return totalProcessed;
             }
 
-            int sentCount = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken);
+            if (iterations > 0 && settings.IterationDelay > TimeSpan.Zero)
+            {
+                await Task.Delay(settings.IterationDelay, cancellationToken).ConfigureAwait(false);
+            }
+
+            int sentCount = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false);
 
             totalProcessed += sentCount;
             iterations++;
@@ -41,7 +59,7 @@ internal sealed class DeliveryProcessor(
             continueProcessing = ShouldContinueProcessing(
                 sentCount,
                 iterations,
-                consumeSettings,
+                settings,
                 cancellationToken);
         }
         while (continueProcessing);
@@ -52,7 +70,7 @@ internal sealed class DeliveryProcessor(
     private static bool ShouldContinueProcessing(
         int lastBatchSize,
         int iterations,
-        ConsumeSettings settings,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
         if (cancellationToken.IsCancellationRequested)
@@ -69,23 +87,23 @@ internal sealed class DeliveryProcessor(
 
     private async Task<int> ProcessForEachTenant<TMessage>(
         int[] tenantIds,
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
-        return (settings.ConsumeSettings.PerTenantMaxDegreeOfParallelism == 1)
-            ? await ProcessTenantsSequential<TMessage>(tenantIds, settings, cancellationToken)
-            : await ProcessTenantsParallel<TMessage>(tenantIds, settings, cancellationToken);
+        return (settings.PerTenantMaxDegreeOfParallelism == 1)
+            ? await ProcessTenantsSequential<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false)
+            : await ProcessTenantsParallel<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<int> ProcessTenantsSequential<TMessage>(
         int[] tenantIds,
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
         int count = 0;
         foreach (int tenantId in tenantIds)
         {
-            count += await ProcessInTenant<TMessage>(tenantId, settings, cancellationToken);
+            count += await ProcessInTenant<TMessage>(tenantId, settings, cancellationToken).ConfigureAwait(false);
         }
 
         return count;
@@ -93,12 +111,14 @@ internal sealed class DeliveryProcessor(
 
     public async Task<int> ProcessTenantsParallel<TMessage>(
         int[] tenantIds,
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
         var parallelOptions = new ParallelOptions
         {
-            MaxDegreeOfParallelism = settings.ConsumeSettings.PerTenantMaxDegreeOfParallelism,
+            MaxDegreeOfParallelism = settings.PerTenantMaxDegreeOfParallelism == -1
+                ? Environment.ProcessorCount
+                : settings.PerTenantMaxDegreeOfParallelism,
             CancellationToken = cancellationToken
         };
 
@@ -111,9 +131,9 @@ internal sealed class DeliveryProcessor(
                 parallelOptions,
                 async (tenantId, ct) =>
                 {
-                    int processed = await ProcessInTenant<TMessage>(tenantId, settings, cancellationToken);
+                    int processed = await ProcessInTenant<TMessage>(tenantId, settings, ct).ConfigureAwait(false);
                     Interlocked.Add(ref totalCount, processed);
-                });
+                }).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -125,18 +145,18 @@ internal sealed class DeliveryProcessor(
 
     private async Task<int> ProcessInTenant<TMessage>(
         int tenantId,
-        ConsumerGroupSettings settings,
+        OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
         using var tenantCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (settings.ConsumeSettings.PerTenantTimeout > TimeSpan.Zero)
+        if (settings.PerTenantTimeout > TimeSpan.Zero)
         {
-            tenantCts.CancelAfter(settings.ConsumeSettings.PerTenantTimeout);
+            tenantCts.CancelAfter(settings.PerTenantTimeout);
         }
 
         try
         {
-            return await processor.ProcessInTenant<TMessage>(tenantId, settings, tenantCts.Token);
+            return await processor.ProcessInTenant<TMessage>(tenantId, settings, tenantCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

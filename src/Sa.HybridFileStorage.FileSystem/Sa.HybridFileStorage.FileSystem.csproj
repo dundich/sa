@@ -3,9 +3,14 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.9.1</Version>
+    <Version>0.10.0</Version>
     <Description>File storage management</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sa.HybridFileStorage.FileSystemTests" />
+    <InternalsVisibleTo Include="Sa.HybridFileStorageTests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />

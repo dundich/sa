@@ -4,15 +4,14 @@ internal sealed class PartCleanupService(
     IPartRepository repository
     , PartCleanupScheduleSettings settings
     , ISqlBuilder sqlBuilder
-    , TimeProvider? timeProvider = null
-) : IPartCleanupService
+    , TimeProvider? timeProvider = null) : IPartCleanupService
 {
     public async Task<int> Clean(DateTimeOffset toDate, CancellationToken cancellationToken)
     {
         int cnt = 0;
         foreach (string tableName in sqlBuilder.Tables.Select(c => c.FullName))
         {
-            cnt += await repository.DropPartsToDate(tableName, toDate, cancellationToken);
+            cnt += await repository.DropPartsToDate(tableName, toDate, cancellationToken).ConfigureAwait(false);
         }
         return cnt;
     }

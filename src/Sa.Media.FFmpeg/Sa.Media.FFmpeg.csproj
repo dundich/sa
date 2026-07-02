@@ -3,7 +3,7 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.9.1</Version>
+        <Version>0.10.0</Version>
         <Description>FFmpeg wrapper</Description>
         <GeneratePathProperty>true</GeneratePathProperty>
         <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64</RuntimeIdentifiers>

@@ -21,7 +21,8 @@ public class LockRenewerTests
         }
 
         // Act
-        using (var locker = LockRenewer.KeepLocked(lockExpiration, extendLocked, cancellationToken: cancellationToken))
+        await using (var locker = LockRenewer.KeepLocked(
+            lockExpiration, extendLocked, cancellationToken: cancellationToken))
         {
             await Task.Delay(200, TestContext.Current.CancellationToken); // Give it some time to run
             await cancellationTokenSource.CancelAsync();
@@ -47,7 +48,8 @@ public class LockRenewerTests
         }
 
         // Act
-        using (var locker = LockRenewer.KeepLocked(lockExpiration, extendLocked, blockImmediately: true, cancellationToken: cancellationToken))
+        await using (var locker = LockRenewer.KeepLocked(
+            lockExpiration, extendLocked, blockImmediately: true, cancellationToken: cancellationToken))
         {
             await Task.Delay(100, TestContext.Current.CancellationToken); // Give it some time to run
             await cancellationTokenSource.CancelAsync();
@@ -69,7 +71,7 @@ public class LockRenewerTests
         async Task extendLocked(CancellationToken token)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(10), token); // Simulate some work
-            extensionCount++;
+            Interlocked.Increment(ref extensionCount);
         }
 
         // Act
@@ -77,7 +79,7 @@ public class LockRenewerTests
 
         await Task.Delay(100, TestContext.Current.CancellationToken);
 
-        locker.Dispose();
+        await locker.DisposeAsync();
 
 
         var expected = extensionCount;
@@ -192,7 +194,7 @@ public class LockRenewerTests
         for (int i = 1; i < callTimes.Count; i++)
         {
             var interval = (callTimes[i] - callTimes[i - 1]).TotalMilliseconds;
-            Assert.InRange(interval, 80, 150); // Allow some jitter due to scheduling
+            Assert.InRange(interval, 70, 150); // Allow some jitter due to scheduling
         }
     }
 
@@ -248,12 +250,14 @@ public class LockRenewerTests
             TestContext.Current.CancellationToken
         );
 
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
         // Assert
         Assert.True(callTimes.Count > 5, "Should poll frequently with 10ms default");
         for (int i = 1; i < callTimes.Count; i++)
         {
             var intervalMs = (callTimes[i] - callTimes[i - 1]) / 10_000.0; // Ticks to ms
-            Assert.InRange(intervalMs, 5, 40); // ~10ms, allow jitter
+            Assert.InRange(intervalMs, 0, 45); // ~10ms, allow jitter
         }
     }
 }

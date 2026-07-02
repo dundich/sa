@@ -1,6 +1,4 @@
 ﻿using Sa.Extensions;
-using Sa.Outbox.Delivery;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 
@@ -19,12 +17,6 @@ public sealed class PgOutboxConsumeSettings
         _offsets[consumerGroupId] = Guid.CreateVersion7(offset).ToMinGuidV7();
         return this;
     }
-
-    public PgOutboxConsumeSettings WithMinOffset<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer>(Guid offset)
-        => WithMinOffset(IDeliveryBuilder.GetConsumerGroupName<TConsumer>(), offset);
-
-    public PgOutboxConsumeSettings WithMinOffset<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer>(DateTimeOffset offset)
-        => WithMinOffset(IDeliveryBuilder.GetConsumerGroupName<TConsumer>(), offset);
 
     public Guid GetMinOffset(string consumerGroupId)
     {

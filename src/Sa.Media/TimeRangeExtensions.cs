@@ -28,40 +28,13 @@ public static class TimeRangeExpander
             => MergeCloseRanges(ranges, thresholdMillesecods);
 
 
-    internal ref struct PooledList<T>(int capacity)
-    {
-        private T[] _array = ArrayPool<T>.Shared.Rent(capacity);
-        private int _count = 0;
-
-        public void Add(T item)
-        {
-            if (_count >= capacity)
-                throw new InvalidOperationException("Capacity exceeded");
-
-            _array[_count++] = item;
-        }
-
-        public readonly T[] ToArray()
-        {
-            var result = new T[_count];
-            Array.Copy(_array, result, _count);
-            return result;
-        }
-
-        public void Dispose()
-        {
-            if (_array != null)
-            {
-                ArrayPool<T>.Shared.Return(_array);
-                _array = null!;
-            }
-        }
-    }
-
-
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+#pragma warning disable S3776
+#pragma warning disable S2368
     public static TimeRange[][] ExpandTimeRanges(
+#pragma warning restore S2368
+#pragma warning restore S3776
         TimeRange[][] chunks,
         int thresholdMillesecods = 300,
         int gapMilliseconds = 0)

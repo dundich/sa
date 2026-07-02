@@ -69,7 +69,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
     public ITableBuilder WithFillFactor(int fillFactor)
     {
-        _fillFactor = Math.Max(100, fillFactor);
+        _fillFactor = Math.Clamp(fillFactor, 10, 100);
         return this;
     }
 
@@ -155,13 +155,13 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
             if (getPartValues != null)
             {
-                StrOrNum[][] partItems = await getPartValues(cancellationToken);
+                StrOrNum[][] partItems = await getPartValues(cancellationToken).ConfigureAwait(false);
                 result.AddRange(partItems);
             }
 
             if (original != null)
             {
-                StrOrNum[][] partItems = await original.GetParts(cancellationToken);
+                StrOrNum[][] partItems = await original.GetParts(cancellationToken).ConfigureAwait(false);
                 result.AddRange(partItems);
             }
 

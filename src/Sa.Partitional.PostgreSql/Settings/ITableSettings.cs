@@ -1,78 +1,82 @@
 ﻿namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
-/// for managing database table configurations
+/// Immutable configuration of a single partitioned PostgreSQL table.
+/// Produced by <see cref="ITableBuilder.Build"/> and consumed by migration, repository, and cleanup services.
 /// </summary>
 public interface ITableSettings
 {
     /// <summary>
-    /// Gets the full name of the table, including schema.
+    /// Gets the fully qualified table name including schema (e.g. <c>"public.events"</c>).
     /// </summary>
     string FullName { get; }
 
     /// <summary>
-    /// Gets the name of the database schema where the table resides.
+    /// Gets the PostgreSQL schema name (e.g. <c>"public"</c> or <c>"outbox"</c>).
     /// </summary>
     string DatabaseSchemaName { get; }
 
     /// <summary>
-    /// Gets the actual name of the table in the database.
+    /// Gets the raw table name without schema prefix (e.g. <c>"events"</c>).
     /// </summary>
     string DatabaseTableName { get; }
 
     /// <summary>
-    /// Gets the name of the primary key field for the table.
+    /// Gets the column name used as the primary-key / row identifier.
     /// </summary>
     string IdFieldName { get; }
 
     /// <summary>
-    /// Gets an array of field names that are part of the table.
+    /// Gets all column definitions declared for this table (primary key + custom fields).
     /// </summary>
     string[] Fields { get; }
 
     /// <summary>
-    /// Gets an array of field names used for partitioning the table by list.
+    /// Gets the column names used for list partitioning. Empty when the table uses range partitioning.
     /// </summary>
     string[] PartByListFieldNames { get; }
 
     /// <summary>
-    /// Gets the name of the field used for range partitioning.
-    /// Typically a date or numeric field.
+    /// Gets the column name used for range partitioning (typically a <c>timestamptz</c> column).
+    /// Empty when the table uses list partitioning.
     /// </summary>
     string PartByRangeFieldName { get; }
 
     /// <summary>
-    /// Gets the type of partitioning being used (e.g., list, range).
+    /// Gets the partitioning strategy — day, month, or year for range; <c>null</c> for list partitioning.
     /// </summary>
     PgPartBy PartBy { get; }
 
     /// <summary>
-    /// Gets an instance that supports migration for partitioned tables.
+    /// Gets the migration support that supplies list-partition values at runtime.
+    /// Null when the table uses range partitioning or has no dynamic migration.
     /// </summary>
     IPartTableMigrationSupport Migration { get; }
 
     /// <summary>
-    /// Gets the SQL separator used in partitioning queries.
+    /// Gets the separator between schema and table name in generated partition identifiers (default: <c>_</c>).
     /// </summary>
     string SqlPartSeparator { get; }
 
     /// <summary>
-    /// Gets a function that returns additional SQL to be executed after the root SQL statement.
+    /// Gets an optional callback that produces extra SQL to append after the root <c>CREATE TABLE</c> statement.
     /// </summary>
     Func<string>? PostRootSql { get; }
 
     /// <summary>
-    /// Gets a function that returns SQL for defining primary key constraints.
+    /// Gets an optional callback that produces custom constraint SQL (e.g. additional <c>CHECK</c> clauses).
     /// </summary>
     Func<string>? ConstraintPkSql { get; }
 
     /// <summary>
-    /// WITH (fillfactor = ?);
+    /// Gets the <c>fillfactor</c> storage parameter for <c>CREATE TABLE</c> / <c>ALTER TABLE</c> commands.
+    /// When <c>null</c>, PostgreSQL uses its default (100).
     /// </summary>
     int? FillFactor { get; }
 
     /// <summary>
-    /// outbox__part$
+    /// Gets the suffix appended to child/partition table names (default: <c>__part</c>).
+    /// For example, root table <c>"events"</c> with date 2026-06-26 becomes <c>"events__part__y2026m06d26"</c>.
     /// </summary>
     string PartTablePostfix { get; }
 }

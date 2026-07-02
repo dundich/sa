@@ -83,15 +83,20 @@ internal static class SampleConverter
     }
 
     /// <summary>
-    /// Конвертирует 24-битный signed PCM (упакован в 3 байта) в double [-1.0, 1.0]
+    /// Конвертирует 24-битный signed PCM (упакован в 3 байта, little-endian) в double [-1.0, 1.0]
     /// </summary>
     public static double Convert24BitToDouble(ReadOnlySpan<byte> source)
     {
         if (source.Length < 3) throw new ArgumentException("Not enough data for 24-bit sample", nameof(source));
 
-        // Читаем 3 байта и расширяем до int с учётом знака
-        int value = (source[0] << 8) | (source[1] << 16) | (source[2] << 24);
-        return (value >> 8) / (double)(1 << 23); // 24 бита → [-8388608..8388607]
+        // 24-bit little-endian: байты [0]=LSB, [1], [2]=MSB
+        int value = source[0] | (source[1] << 8) | (source[2] << 16);
+
+        // Знаковое расширение: если бит знака установлен — расширить до int
+        if ((source[2] & 0x80) != 0)
+            value |= ~0xFFFFFF;
+
+        return value / (double)(1 << 23); // 24 бита → [-8388608..8388607]
     }
 
     /// <summary>

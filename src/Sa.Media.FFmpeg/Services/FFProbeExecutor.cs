@@ -39,8 +39,12 @@ internal sealed class FFProbeExecutor(
                 Size: metaDataInfo?.Format?.Size.StrToInt()
             );
         }
-        catch
+        catch (JsonException jsonEx)
         {
+            logger?.LogWarning(
+                jsonEx,
+                "Failed to deserialize FFprobe JSON output for '{FilePath}'. Returning empty metadata.",
+                filePath);
             return MediaMetadata.Empty;
         }
     }

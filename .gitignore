@@ -802,3 +802,8 @@ src/.vscode/
 /src/Sa.Media.FFmpeg/build/build.*/
 
 *.lscache
+
+# ai
+.qwen/
+.agents/
+/.github/skills

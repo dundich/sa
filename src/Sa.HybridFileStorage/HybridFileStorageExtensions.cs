@@ -3,8 +3,21 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.HybridFileStorage;
 
+/// <summary>
+/// Provides extension methods for common file storage operations on <see cref="IHybridFileStorage"/>.
+/// </summary>
 public static class HybridFileStorageExtensions
 {
+    /// <summary>
+    /// Copies a file from the local filesystem into the hybrid file storage.
+    /// </summary>
+    /// <param name="storage">The hybrid file storage instance.</param>
+    /// <param name="filePath">The path to the local file to upload.</param>
+    /// <param name="basket">The target basket (container) name.</param>
+    /// <param name="input">Metadata about the file being uploaded.</param>
+    /// <param name="bufferSize">The size of the buffer used when reading the file. Defaults to 81920 bytes.</param>
+    /// <param name="ct">A cancellation token to cancel the operation if needed.</param>
+    /// <returns>A <see cref="StorageResult"/> containing the result of the upload operation.</returns>
     public static async Task<StorageResult> CopyFromFileAsync(
         this IHybridFileStorage storage,
         string filePath,
@@ -13,7 +26,11 @@ public static class HybridFileStorageExtensions
         int bufferSize = 81920,
         CancellationToken ct = default)
     {
-        // копируем файл в хранилище
+        ArgumentNullException.ThrowIfNull(storage);
+        ArgumentNullException.ThrowIfNull(filePath);
+        ArgumentNullException.ThrowIfNull(basket);
+        ArgumentNullException.ThrowIfNull(input);
+
         await using var fs = new FileStream(filePath, new FileStreamOptions
         {
             Mode = FileMode.Open,
@@ -27,9 +44,21 @@ public static class HybridFileStorageExtensions
             basket: basket,
             input: input,
             fileStream: fs,
-            cancellationToken: ct);
+            cancellationToken: ct)
+            .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Copies a file from one storage scope (basket) to another within the hybrid file storage system.
+    /// </summary>
+    /// <param name="storage">The hybrid file storage instance.</param>
+    /// <param name="fileId">The unique identifier of the source file.</param>
+    /// <param name="basket">The target basket (container) name.</param>
+    /// <param name="configure">An optional callback to customize the upload metadata based on the source file's metadata.</param>
+    /// <param name="ct">A cancellation token to cancel the operation if needed.</param>
+    /// <returns>A <see cref="StorageResult"/> containing the result of the upload operation in the target basket.</returns>
+    /// <exception cref="FileNotFoundException">Thrown when the source file does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the file is already in the target scope.</exception>
     public static async Task<StorageResult> CopyToBasketAsync(
         this IHybridFileStorage storage,
         string fileId,
@@ -37,7 +66,12 @@ public static class HybridFileStorageExtensions
         Func<FileMetadata, UploadFileInput>? configure = null,
         CancellationToken ct = default)
     {
-        var metadata = await storage.GetMetadataAsync(fileId, ct);
+        ArgumentNullException.ThrowIfNull(storage);
+        ArgumentNullException.ThrowIfNull(fileId);
+        ArgumentNullException.ThrowIfNull(basket);
+
+        var metadata = await storage.GetMetadataAsync(fileId, ct)
+            .ConfigureAwait(false);
 
         if (metadata is null)
         {
@@ -66,9 +100,11 @@ public static class HybridFileStorageExtensions
                     basket,
                     uploadInput,
                     sourceStream,
-                    downloadCt);
+                    downloadCt)
+                    .ConfigureAwait(false);
             },
-            ct);
+            ct)
+            .ConfigureAwait(false);
 
         if (!downloaded)
         {
@@ -78,16 +114,16 @@ public static class HybridFileStorageExtensions
         return result;
     }
 
-
-    [DoesNotReturn]
-    static void ThrowFileAlreadyInTargetScope() =>
-        throw new InvalidOperationException("File already in target scope");
-
-    [DoesNotReturn]
-    static void ThrowSourceFileNotFound(string fileId) =>
-        throw new FileNotFoundException($"Source file not found: {fileId}");
-
-
+    /// <summary>
+    /// Copies multiple files from various storage scopes to a target basket in parallel.
+    /// </summary>
+    /// <param name="storage">The hybrid file storage instance.</param>
+    /// <param name="fileIds">The collection of file IDs to copy.</param>
+    /// <param name="basket">The target basket (container) name.</param>
+    /// <param name="configure">An optional callback to customize the upload metadata based on each source file's metadata.</param>
+    /// <param name="options">Optional settings controlling parallelism, timeout, error handling, and progress reporting.</param>
+    /// <param name="cancellationToken">A cancellation token to cancel the entire batch operation.</param>
+    /// <returns>A <see cref="BatchResult{T}"/> containing lists of succeeded results and failed errors.</returns>
     public static async Task<BatchResult<StorageResult>> CopyToScopeBatchAsync(
         this IHybridFileStorage storage,
         IEnumerable<string> fileIds,
@@ -96,6 +132,9 @@ public static class HybridFileStorageExtensions
         BatchOptions? options = default,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(storage);
+        ArgumentNullException.ThrowIfNull(fileIds);
+        ArgumentNullException.ThrowIfNull(basket);
 
         var opts = options ?? new BatchOptions();
         var fileList = fileIds as IList<string> ?? [.. fileIds];
@@ -114,39 +153,55 @@ public static class HybridFileStorageExtensions
         var progress = opts.Progress;
         int completed = 0;
 
+        // Объект для синхронизации доступа к общим коллекциям и счетчикам
+        Lock lockObj = new ();
 
-        async Task<StorageResult?> ProcessFileAsync(string fileId, int index)
+        async Task<StorageResult?> ProcessFileAsync(string fileId, int index, CancellationToken ct)
         {
             try
             {
+                // Используем ct от делегата, а не внешний cancellationToken
                 using var cts = opts.OperationTimeout > TimeSpan.Zero
-                    ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+                    ? CancellationTokenSource.CreateLinkedTokenSource(ct)
                     : null;
 
                 cts?.CancelAfter(opts.OperationTimeout);
 
-                var ct = cts?.Token ?? cancellationToken;
+                var operationCt = cts?.Token ?? ct;
 
                 return await storage.CopyToBasketAsync(
                     fileId,
                     basket,
                     configure,
-                    ct: ct);
+                    ct: operationCt)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                failed.Add(new BatchError(fileId, ex, index));
+                // Lock only for adding to failed list and incrementing counter
+                int failedIdx;
+                int completedCount;
+                lock (lockObj)
+                {
+                    failed.Add(new BatchError(fileId, ex, index));
+                    completed++;
+                    failedIdx = failed.Count - 1;
+                    completedCount = completed;
+                }
+
+                // Progress.Report outside lock to avoid blocking other threads during user callback
+                var reportedError = failed[failedIdx];
                 progress?.Report(new BatchOperationProgress(
                     fileList.Count,
-                    Interlocked.Increment(ref completed),
+                    completedCount,
                     succeeded.Count,
                     failed.Count,
-                    fileId,
-                    ex));
+                    reportedError.FileId,
+                    reportedError.Exception));
+
                 return null;
             }
         }
-
 
         var parallelOptions = new ParallelOptions
         {
@@ -154,35 +209,46 @@ public static class HybridFileStorageExtensions
             MaxDegreeOfParallelism = opts.MaxDegreeOfParallelism
         };
 
-        await Parallel.ForEachAsync(fileList.Select((id, idx) => (id, idx)), parallelOptions, async (item, ct) =>
-        {
-            var (fileId, index) = item;
-
-            if (!opts.ContinueOnError && failed.Count > 0)
+        await Parallel.ForEachAsync(
+            fileList.Select((id, idx) => (id, idx)),
+            parallelOptions,
+            async (item, ct) =>
             {
-                return;
-            }
+                var (fileId, index) = item;
 
-            var result = await ProcessFileAsync(fileId, index);
-
-            if (result is not null)
-            {
-                lock (succeeded)
+                bool hasFailed;
+                lock (lockObj)
                 {
-                    succeeded.Add(result);
+                    hasFailed = failed.Count > 0;
                 }
-            }
 
-            if (result is not null)
-            {
-                progress?.Report(new BatchOperationProgress(
-                    fileList.Count,
-                    Interlocked.Increment(ref completed),
-                    succeeded.Count,
-                    failed.Count,
-                    fileId));
-            }
-        });
+                if (!opts.ContinueOnError && hasFailed)
+                {
+                    return;
+                }
+
+                var result = await ProcessFileAsync(fileId, index, ct)
+                    .ConfigureAwait(false);
+
+                if (result is not null)
+                {
+                    BatchOperationProgress progressSnapshot;
+                    lock (lockObj)
+                    {
+                        succeeded.Add(result);
+                        completed++;
+                        progressSnapshot = new BatchOperationProgress(
+                            fileList.Count,
+                            completed,
+                            succeeded.Count,
+                            failed.Count,
+                            fileId);
+                    }
+
+                    // Report outside lock to avoid blocking other threads during user callback
+                    progress?.Report(progressSnapshot);
+                }
+            });
 
         return new BatchResult<StorageResult>
         {
@@ -190,4 +256,12 @@ public static class HybridFileStorageExtensions
             Failed = failed.AsReadOnly()
         };
     }
+
+    [DoesNotReturn]
+    static void ThrowFileAlreadyInTargetScope() =>
+        throw new InvalidOperationException("File already in target scope");
+
+    [DoesNotReturn]
+    static void ThrowSourceFileNotFound(string fileId) =>
+        throw new FileNotFoundException($"Source file not found: {fileId}");
 }

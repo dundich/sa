@@ -4,7 +4,7 @@ namespace Sa.Classes;
 
 internal static class LockRenewer
 {
-    public static IDisposable KeepLocked(
+    public static IAsyncDisposable KeepLocked(
         TimeSpan lockExpiration,
         Func<CancellationToken, Task> extendLocked,
         bool blockImmediately = false,
@@ -31,17 +31,22 @@ internal static class LockRenewer
             }
         }, cancellationToken);
 
-        IDisposable keeper = new DisposableTimer(timer, task);
-
-        return keeper;
+        return new DisposableTimer(timer, task);
     }
 
-    private sealed class DisposableTimer(PeriodicTimer timer, Task task) : IDisposable
+    private sealed class DisposableTimer(PeriodicTimer Timer, Task Task) : IDisposable, IAsyncDisposable
     {
         public void Dispose()
         {
-            timer.Dispose();
-            task.Wait(); // Ожидание завершения задачи перед освобождением ресурсов
+            Timer.Dispose();
+            // Fire-and-forget wait — avoids blocking the caller on task completion
+            _ = Task.ContinueWith(_ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            Timer.Dispose();
+            await Task.ConfigureAwait(false);
         }
     }
 
@@ -54,6 +59,7 @@ internal static class LockRenewer
     {
         var interval = pollInterval ?? TimeSpan.FromMilliseconds(10);
         var sw = Stopwatch.StartNew();
+        var timer = new PeriodicTimer(interval);
 
         try
         {
@@ -65,10 +71,10 @@ internal static class LockRenewer
                     return true;
                 }
 
-                await Task.Delay(interval, cancellationToken);
+                await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException ex) when (ex.CancellationToken == cancellationToken)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             /* ignore */
         }

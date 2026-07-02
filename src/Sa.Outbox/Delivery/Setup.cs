@@ -30,9 +30,11 @@ internal static class Setup
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
-        configure?.Invoke(new DeliveryBuilder(services));
+        // DeliverySnapshot теперь собирает настройки из AddDeliveryJob через статический регистр
+        services.TryAddSingleton<IDeliverySnapshot, DeliverySnapshot>();
+        services.TryAddSingleton<IOutboxConsumerManager, OutboxConsumerManager>();
 
-        services.TryAddSingleton<IDelivarySnapshot, DelivarySnapshot>();
+        configure?.Invoke(new DeliveryBuilder(services));
 
         return services;
     }

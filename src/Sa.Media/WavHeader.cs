@@ -72,8 +72,10 @@ public sealed class WavHeader
         if (SampleRate == 0)
             throw new InvalidDataException("Sample rate is zero");
 
+#pragma warning disable S3236
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(BlockAlign, nameof(BlockAlign));
         ArgumentOutOfRangeException.ThrowIfNegative(DataSize, nameof(DataSize));
+#pragma warning restore S3236
     }
 
     public double GetDurationInSeconds(long? fileSize = default)
@@ -122,11 +124,14 @@ public sealed class WavHeader
             _ => AudioFormat.ToString()
         };
 
+        var isStereo = IsStereo ? "(Stereo)" : "";
+        var stereoOrMono = IsMono ? "(Mono)" : isStereo;
+
         return $$"""
     [WAV Header]
     
     Format:         {{format}}
-    Channels:       {{NumChannels}} {{(IsMono ? "(Mono)" : IsStereo ? "(Stereo)" : "")}}
+    Channels:       {{NumChannels}} {{(stereoOrMono)}}
     Sample Rate:    {{SampleRate:N0}} Hz
     Bit Depth:      {{BitsPerSample}}-bit
     Byte Rate:      {{GetBytesPerSecond():N0}} bytes/sec
@@ -154,7 +159,7 @@ public sealed class WavHeader
 
         long dataEnd = HasDataSize
             ? dataOffset + DataSize
-            : (fileSize ?? (long)TimeSpan.MaxValue.TotalSeconds * bytesPerSecond);//  throw new InvalidOperationException("fileSize required for streaming data"));        
+            : (fileSize ?? (long)TimeSpan.MaxValue.TotalSeconds * bytesPerSecond);
 
 
         long fromOffset = dataOffset + (long)(range.From.TotalSeconds * bytesPerSecond);

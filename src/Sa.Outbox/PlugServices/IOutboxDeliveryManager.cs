@@ -2,7 +2,8 @@
 
 
 /// <summary>
-/// needed External implementation
+/// Manages outbox message delivery lifecycle including exclusive rent, return (acknowledge), and lock extension.
+/// External implementations must provide the actual persistence and concurrency logic.
 /// </summary>
 public interface IOutboxDeliveryManager
 {

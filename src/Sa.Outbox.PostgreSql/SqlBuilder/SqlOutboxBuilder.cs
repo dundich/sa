@@ -14,6 +14,17 @@ internal sealed class SqlOutboxBuilder(
 {
     internal PgOutboxTableSettings Settings => settings;
 
+    /// <summary>
+    /// Delivery status codes that are eligible for processing (Pending + all recoverable states).
+    /// Must match the IN clause in SqlLockAndSelect.
+    /// </summary>
+    private static string LockAndSelectStatusCodes =>
+        $"{(int)DeliveryStatusCode.Pending}," +
+        $"{(int)DeliveryStatusCode.Processing}," +
+        $"{(int)DeliveryStatusCode.Postpone}," +
+        $"{(int)DeliveryStatusCode.Retry}," +
+        $"{(int)DeliveryStatusCode.Warn}";
+
 
     public string SqlBulkMsgCopy =
 $"""
@@ -47,11 +58,7 @@ WITH locked_tasks AS (
     AND t.{settings.TaskQueue.Fields.ConsumerGroup} = {SqlParam.ConsumerGroupId}
     AND t.{settings.TaskQueue.Fields.TaskCreatedAt} >= {SqlParam.FromDate}
     AND t.{settings.TaskQueue.Fields.DeliveryStatusCode} IN (
-      {(int)DeliveryStatusCode.Pending},
-      {(int)DeliveryStatusCode.Processing},
-      {(int)DeliveryStatusCode.Postpone},
-      {(int)DeliveryStatusCode.Retry},
-      {(int)DeliveryStatusCode.Warn}
+      {LockAndSelectStatusCodes}
     )
     AND t.{settings.TaskQueue.Fields.TaskLockExpiresOn} < {SqlParam.ToDate}
     AND t.{settings.TaskQueue.Fields.MsgPart} = {SqlParam.MsgPart}
@@ -135,7 +142,7 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTypeTableName()}
     public string SqlSelectType = $"SELECT * FROM {settings.GetQualifiedTypeTableName()}";
 
 
-    public string SqlSelectTetant =
+    public string SqlSelectTenant =
 $"""
 WITH ranked AS (
   SELECT

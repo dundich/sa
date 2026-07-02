@@ -14,8 +14,7 @@ internal sealed class StartDeliveryCommand(
     , SqlOutboxBuilder sql
     , IOutboxMessageSerializer serializer
     , IOutboxTypeResolver hashResolver
-    , NpqsqlOutboxReader outboxReader
-) : IStartDeliveryCommand
+    , NpgsqlOutboxReader outboxReader) : IStartDeliveryCommand
 {
 
     public async Task<int> ExecuteFill<TMessage>(

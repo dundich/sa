@@ -40,7 +40,19 @@ public sealed class PgOutboxTableSettings
 
         public string TableName { get; set; } = $"{Defaults.DatabaseTableName}{Suffix}";
 
-        public int FillFactor { get; set; } = 100;
+        public int FillFactor
+        {
+            get => _fillFactor;
+            set
+            {
+                if (value < 1 || value > 100)
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value), value,
+                        "FillFactor must be between 1 and 100 (PostgreSQL constraint).");
+                _fillFactor = value;
+            }
+        }
+        int _fillFactor = 100;
 
         public TableFields Fields { get; } = new();
 
@@ -76,7 +88,19 @@ public sealed class PgOutboxTableSettings
     {
         public string TableName { get; set; } = Defaults.DatabaseTableName;
 
-        public int FillFactor { get; set; } = 65;
+        public int FillFactor
+        {
+            get => _fillFactor;
+            set
+            {
+                if (value < 1 || value > 100)
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value), value,
+                        "FillFactor must be between 1 and 100 (PostgreSQL constraint).");
+                _fillFactor = value;
+            }
+        }
+        int _fillFactor = 65;
 
         public TableFields Fields { get; } = new();
 
@@ -136,7 +160,19 @@ public sealed class PgOutboxTableSettings
     {
         public const string Suffix = "__log$";
 
-        public int FillFactor { get; set; } = 100;
+        public int FillFactor
+        {
+            get => _fillFactor;
+            set
+            {
+                if (value < 1 || value > 100)
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value), value,
+                        "FillFactor must be between 1 and 100 (PostgreSQL constraint).");
+                _fillFactor = value;
+            }
+        }
+        int _fillFactor = 100;
 
         public string TableName { get; set; } = $"{Defaults.DatabaseTableName}{Suffix}";
 
@@ -182,7 +218,19 @@ public sealed class PgOutboxTableSettings
     {
         public const string Suffix = "__error$";
 
-        public int FillFactor { get; set; } = 100;
+        public int FillFactor
+        {
+            get => _fillFactor;
+            set
+            {
+                if (value < 1 || value > 100)
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value), value,
+                        "FillFactor must be between 1 and 100 (PostgreSQL constraint).");
+                _fillFactor = value;
+            }
+        }
+        int _fillFactor = 100;
 
         public string TableName { get; set; } = $"{Defaults.DatabaseTableName}{Suffix}";
 

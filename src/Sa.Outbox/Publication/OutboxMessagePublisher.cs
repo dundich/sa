@@ -1,6 +1,6 @@
-﻿using Sa.Classes;
-using Sa.Outbox.Metadata;
+﻿using Sa.Outbox.Metadata;
 using Sa.Outbox.PlugServices;
+using System.Buffers;
 
 namespace Sa.Outbox.Publication;
 
@@ -12,10 +12,11 @@ internal sealed class OutboxMessagePublisher(
 {
     public async ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
-        int tenantId = 0,
+        int tenantId,
         CancellationToken cancellationToken = default)
     {
         if (messages.Count == 0) return 0;
+
         return await Send(messages, tenantId, cancellationToken);
     }
 
@@ -39,7 +40,7 @@ internal sealed class OutboxMessagePublisher(
                 ? maxBatchSize
                 : messages.Count - start;
 
-            OutboxMessage<TMessage>[] payloads = DefaultArrayPool.Shared.Rent<OutboxMessage<TMessage>>(len);
+            OutboxMessage<TMessage>[] payloads = ArrayPool<OutboxMessage<TMessage>>.Shared.Rent(len);
             Span<OutboxMessage<TMessage>> payloadsSpan = payloads;
 
             try
@@ -63,7 +64,7 @@ internal sealed class OutboxMessagePublisher(
             }
             finally
             {
-                DefaultArrayPool.Shared.Return(payloads);
+                ArrayPool<OutboxMessage<TMessage>>.Shared.Return(payloads);
             }
 
             start += len;

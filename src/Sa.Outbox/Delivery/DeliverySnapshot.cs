@@ -1,0 +1,55 @@
+﻿using Sa.Outbox.Delivery.Job;
+using Sa.Outbox.Metadata;
+using Sa.Schedule;
+
+namespace Sa.Outbox.Delivery;
+
+internal sealed class DeliverySnapshot(
+    IScheduleSettings scheduleSettings,
+    IOutboxMessageMetadataProvider metadataProvider) : IDeliverySnapshot
+{
+
+    private readonly Lazy<IJobSettings[]> _lazyJobs = new(() => [.. scheduleSettings.GetJobSettings()]);
+
+
+    private readonly Lazy<string[]> _lazyParts = new(() =>
+    {
+        Type baseType = typeof(DeliveryJob<>);
+        string[] parts = [.. scheduleSettings.GetJobSettings()
+            .Select(c => GetMessageTypeIfInheritsFromDeliveryJob(c.JobType, baseType))
+            .Where(mt => mt != null)
+            .Cast<Type>()
+            .Select(mt => metadataProvider.GetMetadata(mt).PartName)
+            .Distinct()];
+
+        return parts;
+    });
+
+    private readonly Lazy<OutboxConsumerSettings[]> _lazyDeliveries = new(() =>
+    {
+        OutboxConsumerSettings[] settings = [.. scheduleSettings.GetJobSettings()
+            .Select(c => c.Properties.GetConsumerGroupSettings())
+            .Where(mt => mt != null)
+            .Cast<OutboxConsumerSettings>()];
+
+        return settings;
+    });
+
+
+    private static Type? GetMessageTypeIfInheritsFromDeliveryJob(Type jobType, Type baseType)
+    {
+        if (!baseType.IsGenericTypeDefinition) return null;
+
+        if (jobType.IsGenericType && jobType.GetGenericTypeDefinition() == baseType)
+            return jobType.GenericTypeArguments[0];
+
+        return jobType.BaseType != null
+            ? GetMessageTypeIfInheritsFromDeliveryJob(jobType.BaseType, baseType)
+            : null;
+    }
+
+
+    public string[] Parts => _lazyParts.Value;
+    public IJobSettings[] JobSettings => _lazyJobs.Value;
+    public OutboxConsumerSettings[] ConsumerSettings => _lazyDeliveries.Value;
+}

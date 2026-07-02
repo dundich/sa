@@ -21,7 +21,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
         public static int Counter;
 
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
             CancellationToken cancellationToken)
@@ -36,7 +36,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
         public static int Counter;
 
         public async ValueTask Consume(
-            ConsumerGroupSettings settings,
+            OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
             CancellationToken cancellationToken)
@@ -55,23 +55,15 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
                     .WithTenants((_, s) => s.WithTenantIds(1, 2))
                     .WithDeliveries(deliveryBuilder => deliveryBuilder
 
-                        .AddDeliveryScoped<SomeMessageConsumerGr1, SomeMessage>("test_gr1", (_, settings) =>
+                        .AddDeliveryScoped<SomeMessageConsumerGr1, SomeMessage>("test_gr1", (_, b) =>
                         {
-                            settings.ScheduleSettings
-                                .WithInterval(TimeSpan.FromMilliseconds(100))
-                                .WithInitialDelay(TimeSpan.Zero);
-
-                            settings.ConsumeSettings
-                                .WithNoBatchingWindow();
+                            b.WithInterval(TimeSpan.FromMilliseconds(100))
+                             .WithNoBatchingWindow();
                         })
-                        .AddDelivery<SomeMessageConsumerGr2, SomeMessage>("test_gr2", (_, settings) =>
+                        .AddDelivery<SomeMessageConsumerGr2, SomeMessage>("test_gr2", (_, b) =>
                         {
-                            settings.ScheduleSettings
-                                .WithInterval(TimeSpan.FromMilliseconds(100))
-                                .WithInitialDelay(TimeSpan.Zero);
-
-                            settings.ConsumeSettings
-                                .WithNoBatchingWindow();
+                            b.WithInterval(TimeSpan.FromMilliseconds(100))
+                             .WithNoBatchingWindow();
                         })
                     )
                 )

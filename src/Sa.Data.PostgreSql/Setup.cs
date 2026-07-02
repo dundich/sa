@@ -28,7 +28,7 @@ public static class Setup
 
             return new PgDataSource(settings);
         });
-        services.TryAddSingleton<IPgDistributedLock, PgDistributedLock>();
+
         return services;
     }
 }

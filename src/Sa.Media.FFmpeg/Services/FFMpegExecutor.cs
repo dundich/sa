@@ -117,4 +117,21 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string QuotePath(string path) => $"\"{path}\"";
+
+    public async Task<string> ConvertToPcmS16LePreservingFormat(
+        string inputFileName,
+        string outputFileName,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await ConvertToPcmS16Le(
+            inputFileName,
+            outputFileName,
+            outputSampleRate: null,
+            outputChannelCount: null,
+            isOverwrite,
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+    }
 }

@@ -3,16 +3,16 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.9.1</Version>
+        <Version>0.10.0</Version>
         <Description>Execute jobs on a schedule</Description>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-        <NoWarn>1701;1702;CS8602;</NoWarn>
+        <NoWarn>1701;1702;</NoWarn>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-        <NoWarn>1701;1702;CS8602;</NoWarn>
+        <NoWarn>1701;1702;</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

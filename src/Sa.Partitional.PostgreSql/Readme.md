@@ -1,207 +1,263 @@
 # Sa.Partitional.PostgreSql
 
-A library designed for managing table partitioning in PostgreSQL
-to improve performance and manageability with large volumes of data.
+Declarative PostgreSQL table partitioning library for .NET 10 — supports **range** (day / month / year) and **list** partitioning with automated migration, cleanup scheduling, and in-memory caching.
 
-## Capabilities
+---
 
-- Declaratively describe a time-partitioned table (by day, month, year).
-- Define partitions based on lists of keys for strings or numbers.
-- Schedule migrations for creating new partitions.
-- Schedule the removal of old partitions.
-- Manage partitions.
+## Overview
 
-## Features
+Large PostgreSQL tables lose performance as they grow. This library automates the full partition lifecycle:
 
-- Since the maximum length of a table name is 63 characters, it is important to consider the naming when creating partitions.
-- All tables have a final time interval section represented by a column of type `int64` in Unix timestamp format (in seconds).
-- Old partitions are deleted using `DROP`.
+1. **Declare** partitioned tables declaratively via a fluent builder.
+2. **Migrate** — automatically create missing partitions before data arrives.
+3. **Cache** — keep partition metadata in memory to avoid repeated catalog queries.
+4. **Clean up** — drop old partitions past a configurable retention window.
 
-## Configuration Example
+Everything wires into ASP.NET Core `IServiceCollection` through a single extension method.
+
+---
+
+## Quick Start
 
 ```csharp
-
-public static class PartitioningSetup
+builder.Services.AddSaPartitional((sp, builder) =>
 {
-    public static IServiceCollection AddPartitioning(this IServiceCollection services)
+    builder.AddSchema("public", schema =>
     {
-        services.AddSaPartitional((sp, builder) =>
-        {
-            builder.AddSchema("public", schema =>
-            {
-                // Configure the 'customer' table
-                schema.AddTable("customer",
-                    "id INT NOT NULL",
-                    "country TEXT NOT NULL",
-                    "city TEXT NOT NULL"
-                )
-                // Separate partitions in tables
-                .WithPartSeparator("_")
-                // Partition by 'country' and 'city' (if PartByRange is not specified, defaults to daily)
-                .PartByList("country", "city") 
-                // Migration of partitions for each tenant by city
-                .AddMigration("RU", ["Moscow", "Samara"])
-                .AddMigration("USA", ["Alabama", "New York"])
-                .AddMigration("FR", ["Paris", "Lyon", "Bordeaux"]);
-            });
-        })
-        // Schedule for creating new partitions
-        .AddPartMigrationSchedule((sp, opts) =>
-        {
-            opts.AsJob = true;
-            opts.ExecutionInterval = TimeSpan.FromHour(12);
-            opts.ForwardDays = 2;
-        })
-        // Schedule for removing old partitions
-        .AddPartCleanupSchedule((sp, opts) =>
-        {
-            opts.AsJob = true;
-            opts.DropPartsAfterRetention = TimeSpan.FromDays(21);
-        })
-        ;
-
-        return services;
-    }
-}
-
+        // Range-partitioned table (daily by default)
+        schema.CreateTable("events")
+            .PartByRange(PgPartBy.Day)
+            .WithFillFactor(90);
+    });
+})
+// Pre-create future partitions as a background job
+.AddPartMigrationSchedule((sp, opts) => opts.AsBackgroundJob = true)
+// Drop partitions older than 30 days
+.AddPartCleanupSchedule((sp, opts) => opts.AsBackgroundJob = true);
 ```
 
-### Migration Result
+---
 
-For the example above, the migration will result in two tables:
+## Supported Strategies
 
-`customer` - *data table* 
+| Strategy | Description | Example |
+|---|---|---|
+| **Range** | Partitions by time intervals — day, month, or year | `events_y2026m06d26`, `events_y2026m07` |
+| **List** | Partitions by discrete key values (strings or numbers) | `orders_RU`, `orders_USA` |
 
-|id|country|city|created_at|
-|--|-------|----|----------|
-|||||
+Both strategies can be combined hierarchically: a list-partitioned root can have range-partitioned children.
 
- 
-`customer_$part` - *partition tracking table (fragment)*
+---
 
-|id|root|part_values|part_by|from_date|to_date|
-|--|----|-----------|-------|---------|-------|
-|public."customer_RU_Samara_y2025m01d08"|public.customer|["s:RU","s:Samara"]|Day|1736294400|1736380800|
-|public."customer_RU_Samara_y2025m01d09"|public.customer|["s:RU","s:Samara"]|Day|1736380800|1736467200|
-|public."customer_USA_Alabama_y2025m01d08"|public.customer|["s:USA","s:Alabama"]|Day|1736294400|1736380800|
+## Fluent Builder API
 
-
-#### Final DDL
-
-```sql
-
-CREATE TABLE public."customer_$part" (
-	id text NOT NULL,
-	root text NOT NULL,
-	part_values text NOT NULL,
-	part_by text NOT NULL,
-	from_date int8 NOT NULL,
-	to_date int8 NOT NULL,
-	CONSTRAINT "customer_$part_pkey" PRIMARY KEY (id)
-);
-
-
-CREATE TABLE public.customer (
-	id int4 NOT NULL,
-	country text NOT NULL,
-	city text NOT NULL,
-	created_at int8 NOT NULL,
-	CONSTRAINT pk_customer PRIMARY KEY (id, country, city, created_at)
-)
-PARTITION BY LIST (country);
-
--- Partitions
-
-CREATE TABLE public."customer_FR" PARTITION OF public.customer FOR VALUES IN ('FR')
-PARTITION BY LIST (city);
-
--- Partitions
-
-CREATE TABLE public."customer_FR_Bordeaux" PARTITION OF public."customer_FR" FOR VALUES IN ('Bordeaux')
-PARTITION BY RANGE (created_at);
-
--- Partitions
-
-CREATE TABLE public."customer_FR_Bordeaux_y2025m01d08" PARTITION OF public."customer_FR_Bordeaux"  FOR VALUES FROM ('1736294400') TO ('1736380800');
-CREATE TABLE public."customer_FR_Bordeaux_y2025m01d09" PARTITION OF public."customer_FR_Bordeaux"  FOR VALUES FROM ('1736380800') TO ('1736467200');
-
-
-CREATE TABLE public."customer_FR_Lyon" PARTITION OF public."customer_FR" FOR VALUES IN ('Lyon')
-PARTITION BY RANGE (created_at);
-
--- Partitions
-
-CREATE TABLE public."customer_FR_Lyon_y2025m01d08" PARTITION OF public."customer_FR_Lyon"  FOR VALUES FROM ('1736294400') TO ('1736380800');
-CREATE TABLE public."customer_FR_Lyon_y2025m01d09" PARTITION OF public."customer_FR_Lyon"  FOR VALUES FROM ('1736380800') TO ('1736467200');
-
-
-CREATE TABLE public."customer_FR_Paris" PARTITION OF public."customer_FR" FOR VALUES IN ('Paris')
-PARTITION BY RANGE (created_at);
-
--- Partitions
-
-CREATE TABLE public."customer_FR_Paris_y2025m01d08" PARTITION OF public."customer_FR_Paris"  FOR VALUES FROM ('1736294400') TO ('1736380800');
-CREATE TABLE public."customer_FR_Paris_y2025m01d09" PARTITION OF public."customer_FR_Paris"  FOR VALUES FROM ('1736380800') TO ('1736467200');
-
--- RU
-
-CREATE TABLE public."customer_RU" PARTITION OF public.customer FOR VALUES IN ('RU')
-PARTITION BY LIST (city);
-
-CREATE TABLE public."customer_RU_Moscow" PARTITION OF public."customer_RU" FOR VALUES IN ('Moscow')
-PARTITION BY RANGE (created_at);
-
-CREATE TABLE public."customer_RU_Moscow_y2025m01d08" PARTITION OF public."customer_RU_Moscow"  FOR VALUES FROM ('1736294400') TO ('1736380800');
-CREATE TAB...
-
--- USA
-
-...
-```
-
-
-
-## PartByRange 
-
-Used to define intervals for data partitioning—splitting data into parts by days, months, or years.
+### Schema + Table Declaration
 
 ```csharp
-/// <summary>
-/// Enumerates the possible partitional ranges for a PostgreSQL database.
-/// </summary>
-public enum PartByRange
+services.AddSaPartitional((sp, builder) =>
 {
-    Day,
-    Month,
-    Year
-}
+    builder.AddSchema("outbox", schema =>
+    {
+        // Range-partitioned by day
+        schema.CreateTable("messages")
+            .AddFields("tenant_id varchar(50) NOT NULL")
+            .PartByRange(PgPartBy.Day, "created_at")
+            .WithFillFactor(80);
+
+        // List-partitioned by tenant
+        schema.CreateTable("orders")
+            .AddFields("region varchar(10) NOT NULL")
+            .PartByList("region")
+            .AddMigration("EU", "US", "APAC");
+    });
+});
 ```
-*By default, the `created_at` column is used with daily partitioning.*
 
+### ITableBuilder Methods
 
-## IPartitionManager
+| Method | Description |
+|--------|-------------|
+| `AddFields(params string[])` | Column definitions (e.g., `"tenant_id varchar(50) NOT NULL"`) |
+| `PartByRange(PgPartBy, fieldName?)` | Range partitioning strategy (Day/Month/Year) |
+| `PartByList(params string[])` | List partitioning on column(s) |
+| `TimestampAs(fieldName)` | Override timestamp column name (default: `created_at`) |
+| `WithPartSeparator(string)` | Separator between parts in names (default: `"__"`) |
+| `WithFillFactor(int)` | PostgreSQL fill factor storage parameter |
+| `WithPartTablePostfix(string)` | Suffix for cache/partition tables (default: `"__part"`) |
+| `AddPostSql(Func<string>)` | Extra SQL after CREATE TABLE |
+| `AddConstraintPkSql(Func<string>)` | Custom CHECK / PK constraint SQL |
+| `AddMigration(IPartTableMigrationSupport)` | Provide custom migration values |
+| `AddMigration(Func<CancellationToken, Task<StrOrNum[][]>>)` | Async factory for migration values |
+| `AddMigration(params StrOrNum[])` | Inline list partition values |
+| `AddMigration(StrOrNum parent, StrOrNum[] childs)` | Hierarchical migration (parent + children) |
+| `Build()` | Finalize table settings |
 
-Interface for managing partitions in the database.
+---
+
+## Key Types
+
+### IPartitionManager
+
+Main entry point for programmatic partition management:
 
 ```csharp
 public interface IPartitionManager
 {
-    /// <summary>
-    /// Migrates the existing partitions in the database.
-    /// This method may be used to reorganize or update partitions based on the current state of the data.
-    /// </summary>
-    Task<int> Migrate(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Migrates partitions for specific dates.
-    /// This method allows for targeted migration of partitions based on the provided date range.
-    /// </summary>
-    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Ensures that the specified partitions exist for a given table and date.
-    /// This method checks if the specified partitions are present and creates them if they are not.
-    /// </summary>
-    ValueTask<bool> EnsureParts(string tableName, DateTimeOffset date, Classes.StrOrNum[] partValues, CancellationToken cancellationToken = default);
+    Task<int> Migrate(CancellationToken ct = default);
+    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken ct = default);
+    Task<bool> EnsureParts(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken ct = default);
 }
 ```
+
+- `Migrate()` — pre-create all missing partitions for today + forward window
+- `Migrate(dates[])` — pre-create for specific dates only
+- `EnsureParts()` — guarantee a specific partition exists (creates it if missing)
+
+### PgPartBy
+
+Partitioning strategy enum with three predefined values:
+
+| Value | Format Pattern | Example Name | Range |
+|-------|---------------|--------------|-------|
+| `PgPartBy.Day` | `yYYYYmmDD` | `events_y2026m06d26` | StartOfDay → +1 day |
+| `PgPartBy.Month` | `yYYYYmm` | `events_y2026m07` | StartOfMonth → +1 month |
+| `PgPartBy.Year` | `yYYYY` | `events_y2026` | StartOfYear → +1 year |
+
+Additional factory methods:
+```csharp
+PgPartBy.FromRange(PartByRange.Day);   // from PartByRange enum
+PgPartBy.FromPartName("root");         // from partition name string
+```
+
+### StrOrNum
+
+Discriminated union for list partition keys — supports both string and numeric values:
+
+```csharp
+// Implicit conversions
+StrOrNum s = "tenant_a";     // → ChoiceStr
+StrOrNum n = 42L;            // → ChoiceNum
+
+// Pattern matching
+result.Match(
+    onChoiceStr: v => Console.WriteLine($"String: {v}"),
+    onChoiceNum: v => Console.WriteLine($"Number: {v}")
+);
+
+// Formatting
+s.ToFmtString();             // "s:tenant_a"
+StrOrNum.FromFmtStr("n:42"); // → ChoiceNum(42)
+```
+
+Supported implicit conversions: `string`, `int`, `long`, `short`.
+
+---
+
+## Schedule Settings
+
+### MigrationScheduleSettings
+
+Controls automatic pre-creation of future partitions:
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `ForwardDays` | `2` | Days ahead to pre-create partitions |
+| `AsBackgroundJob` | `false` | Run as hosted service |
+| `MigrationJobName` | `"Migration job"` | Job name identifier |
+| `ExecutionInterval` | `~4h + jitter` | Interval between migrations |
+| `WaitMigrationTimeout` | `3 sec` | Semaphore wait timeout |
+
+### PartCleanupScheduleSettings
+
+Controls automatic dropping of old partitions:
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `DropPartsAfterRetention` | `30 days` | Age threshold for deletion |
+| `AsBackgroundJob` | `false` | Run as hosted service |
+| `ExecutionInterval` | `~4h + jitter` | Interval between cleanups |
+| `InitialDelay` | `1 min` | Delay before first run |
+
+### PartCacheSettings
+
+In-memory partition metadata cache:
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `CachedFromDate` | `1 day` | How far ahead to preload partitions |
+
+---
+
+## Naming Conventions
+
+Partitions follow predictable naming patterns (separator defaults to `"__"`):
+
+| Component | Pattern | Example |
+|-----------|---------|---------|
+| Range (day) | `{table}{sep}y{YYYY}m{MM}d{DD}` | `events__part__y2026m06d26` |
+| Range (month) | `{table}{sep}y{YYYY}m{MM}` | `events__part__y2026m07` |
+| Range (year) | `{table}{sep}y{YYYY}` | `events__part__y2026` |
+| List (nested) | `{table}{sep}{val1}_{val2}...` | `orders__part__EU_EU_1` |
+| Cache table | `{table}{postfix}` | `events__part` |
+
+**Constraints:**
+- Identifiers must not exceed 63 characters (PostgreSQL limit).
+- Schemas are auto-created via `CREATE SCHEMA IF NOT EXISTS`.
+- Child partitions use `PARTITION OF parent FOR VALUES FROM (...) TO (...)` (range) or `FOR VALUES IN (...)` (list).
+- After each range partition is created, a cache table tracks boundaries via `INSERT ... ON CONFLICT (id) DO NOTHING`.
+
+---
+
+## Architecture
+
+```
+┌─────────────────────┐
+│  IPartitionManager  │  ← Public entry point
+├─────────────────────┤
+│  IMigrationService  │  ← Pre-create future partitions
+│  IPartCleanupService│  ← Drop old partitions
+├─────────────────────┤
+│  IPartRepository    │  ← DDL execution (CREATE/DROP PARTITION)
+│  ISqlBuilder        │  ← SQL template generation
+│  IPartCache         │  ← In-memory metadata cache
+├─────────────────────┤
+│  MigrationJob       │  ← IJob wrapper for Sa.Schedule
+│  PartCleanupJob     │  ← IJob wrapper for Sa.Schedule
+└─────────────────────┘
+```
+
+---
+
+## Dependencies
+
+- `Sa.Data.PostgreSql` — Npgsql client wrapper with retry strategy
+- `Sa.Schedule` — Background job scheduling infrastructure
+
+---
+
+## Project Layout
+
+```
+src/Sa.Partitional.PostgreSql/
+├── Setup.cs                        # Main DI entrypoint AddSaPartitional()
+├── IPartitionManager.cs            # Public partition management API
+├── PgPartBy.cs                     # Partitioning strategy enum
+├── Classes/
+│   ├── StrOrNum.cs                 # Discriminated union (string | long)
+│   └── Enumeration.cs              # Type-safe base enum pattern
+├── Configuration/                  # Fluent builder API
+│   ├── IPartConfiguration.cs
+│   └── Builder/                    # ISettingsBuilder, ISchemaBuilder, ITableBuilder
+├── Settings/                       # ITableSettings, ITableSettingsStorage
+├── Cache/                          # In-memory cache: PartCache, PartCacheSettings
+├── Migration/                      # Pre-creation: IMigrationService, MigrationJob
+├── Cleaning/                       # Old-partition removal: IPartCleanupService, PartCleanupJob
+├── Partitional/                    # DDL repo: IPartRepository, PartByRangeInfo
+└── SqlBuilder/                     # SQL templates: ISqlBuilder, SqlTemplate.cs
+```
+
+---
+
+## License
+
+MIT

@@ -6,6 +6,6 @@ internal sealed class MigrationJob(IMigrationService service) : IJob
 {
     public async Task Execute(IJobContext context, CancellationToken cancellationToken)
     {
-        await service.Migrate(cancellationToken);
+        await service.Migrate(cancellationToken).ConfigureAwait(false);
     }
 }
