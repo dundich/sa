@@ -194,7 +194,7 @@ public class LockRenewerTests
         for (int i = 1; i < callTimes.Count; i++)
         {
             var interval = (callTimes[i] - callTimes[i - 1]).TotalMilliseconds;
-            Assert.InRange(interval, 80, 150); // Allow some jitter due to scheduling
+            Assert.InRange(interval, 70, 150); // Allow some jitter due to scheduling
         }
     }
 

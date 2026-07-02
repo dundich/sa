@@ -53,7 +53,7 @@ internal static partial class StringExtensions
             // No whitespace found — just trim and return
             return isTrimmed ? str.Trim() : str;
         }
-  
+
         // Slow path: span-based normalization — allocates one new string, avoids StringBuilder heap churn
         Span<char> dest = stackalloc char[len];
         int w = 0;

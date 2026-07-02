@@ -1,6 +1,6 @@
-﻿using Sa.Classes;
-using Sa.Outbox.Metadata;
+﻿using Sa.Outbox.Metadata;
 using Sa.Outbox.PlugServices;
+using System.Buffers;
 
 namespace Sa.Outbox.Publication;
 
@@ -40,7 +40,7 @@ internal sealed class OutboxMessagePublisher(
                 ? maxBatchSize
                 : messages.Count - start;
 
-            OutboxMessage<TMessage>[] payloads = DefaultArrayPool.Shared.Rent<OutboxMessage<TMessage>>(len);
+            OutboxMessage<TMessage>[] payloads = ArrayPool<OutboxMessage<TMessage>>.Shared.Rent(len);
             Span<OutboxMessage<TMessage>> payloadsSpan = payloads;
 
             try
@@ -64,7 +64,7 @@ internal sealed class OutboxMessagePublisher(
             }
             finally
             {
-                DefaultArrayPool.Shared.Return(payloads);
+                ArrayPool<OutboxMessage<TMessage>>.Shared.Return(payloads);
             }
 
             start += len;

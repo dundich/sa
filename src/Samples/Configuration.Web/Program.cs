@@ -41,15 +41,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
 });
 
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
 
 var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
 
 
 var todosApi = app.MapGroup("/settings");
@@ -65,10 +58,13 @@ todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
 
 app.Run();
 
+#pragma warning disable S3903
 public sealed record Settings(string Key, string? Value);
+
 
 [JsonSerializable(typeof(Settings[]))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 
 }
+#pragma warning restore S3903

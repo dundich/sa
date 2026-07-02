@@ -46,7 +46,7 @@ internal static class LockRenewer
         public async ValueTask DisposeAsync()
         {
             Timer.Dispose();
-            await Task;
+            await Task.ConfigureAwait(false);
         }
     }
 

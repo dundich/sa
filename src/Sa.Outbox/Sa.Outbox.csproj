@@ -10,7 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Sa\Classes\IArrayPool.cs" Link="AsLink\IArrayPool.cs" />
     <Compile Include="..\Sa\Classes\LockRenewer.cs" Link="AsLink\LockRenewer.cs" />
     <Compile Include="..\Sa\Classes\MurmurHash3.cs" Link="AsLink\MurmurHash3.cs" />
     <Compile Include="..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
