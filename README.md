@@ -8,13 +8,9 @@ Reusable infrastructure libraries for distributed .NET 10 systems — **Native A
 
 ### [Sa](src/Sa) — Shared Utilities
 
-Common building blocks consumed by other packages via `<Compile Include="..." Link="..."/>`:
+Core utility library consumed by other packages via `<Compile Include="..." Link="..."/>`. Targets **.NET 10.0**, **Native AOT compatible**, zero external dependencies.
 
-- `LockRenewer` — automatic lock extension with configurable renewal interval
-- `MurmurHash3` — compact hash for type identification and partitioning
-- `Retry` — retry helpers with exponential backoff
-- `ResetLazy<T>` — lazily-evaluated, resettable cached value
-- Extension methods: `DateTimeExtensions`, `EnumerableExtensions`, `ExceptionExtensions`, `SpanExtensions`, `StringExtensions`, `NumericExtensions`, `StrToExtensions`, `GuidExtensions`
+See [full API reference](src/Sa/Readme.md).
 
 ---
 
