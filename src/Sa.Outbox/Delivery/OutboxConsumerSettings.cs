@@ -61,13 +61,14 @@ public sealed record OutboxConsumerSettings(
 
     /// <summary>
     /// Lock duration for record processing (lock TTL).
+    /// Must be greater than TimeSpan.Zero.
     /// The record is locked from other consumers for this period.
     /// </summary>
     TimeSpan LockDuration,
 
     /// <summary>
     /// Lock renewal interval.
-    /// Must be less than LockDuration.
+    /// Must be less than LockDuration and greater than or equal to TimeSpan.Zero.
     /// </summary>
     TimeSpan LockRenewal,
 
@@ -109,7 +110,10 @@ public sealed record OutboxConsumerSettings(
     /// Settings version. Incremented on every change for change detection.
     /// Used for optimistic locking and notifying subscribers.
     /// </summary>
-    int Version)
+    int Version,
+
+    // User tag
+    object? Tag = null)
 {
     /// <summary>
     /// Validates all settings and returns a list of error messages.
@@ -124,54 +128,67 @@ public sealed record OutboxConsumerSettings(
         if (string.IsNullOrWhiteSpace(ConsumerGroupId))
             errors.Add("ConsumerGroupId cannot be null or empty.");
 
-        if (Interval.Ticks < 0)
-            errors.Add($"Interval must be >= TimeSpan.Zero, got {Interval}.");
+        // TimeSpans: non-negative (>= Zero)
+        CheckTsNonNeg(nameof(Interval), Interval);
+        CheckTsNonNeg(nameof(InitialDelay), InitialDelay);
+        CheckTsNonNeg(nameof(IterationDelay), IterationDelay);
+        CheckTsNonNeg(nameof(LockDuration), LockDuration);
+        CheckTsNonNeg(nameof(LockRenewal), LockRenewal);
+        CheckTsNonNeg(nameof(BatchingWindow), BatchingWindow);
+        CheckTsNonNeg(nameof(PerTenantTimeout), PerTenantTimeout);
 
-        if (InitialDelay.Ticks < 0)
-            errors.Add($"InitialDelay must be >= TimeSpan.Zero, got {InitialDelay}.");
+        // TimeSpans: strictly positive (> Zero)
+        CheckTsPos(nameof(LookbackInterval), LookbackInterval);
 
-        if (ConcurrencyLimit <= 0)
-            errors.Add($"ConcurrencyLimit must be > 0, got {ConcurrencyLimit}.");
+        // Integers: non-negative (>= 0)
+        CheckIntNonNeg(nameof(ConcurrencyLimit), ConcurrencyLimit);
+        CheckIntNonNeg(nameof(RetryCountOnError), RetryCountOnError);
 
-        if (MaxConcurrency <= 0)
-            errors.Add($"MaxConcurrency must be > 0, got {MaxConcurrency}.");
+        // Integers: strictly positive (> 0)
+        CheckIntPos(nameof(MaxBatchSize), MaxBatchSize);
+        CheckIntPos(nameof(MaxConcurrency), MaxConcurrency);
+        CheckIntPos(nameof(MaxDeliveryAttempts), MaxDeliveryAttempts);
 
-        if (RetryCountOnError < 0)
-            errors.Add($"RetryCountOnError must be >= 0, got {RetryCountOnError}.");
+        // Special: >= -1
+        CheckIntGeMinus1(nameof(MaxProcessingIterations), MaxProcessingIterations);
 
-        if (MaxBatchSize <= 0)
-            errors.Add($"MaxBatchSize must be > 0, got {MaxBatchSize}.");
-
-        if (MaxProcessingIterations < -1)
-            errors.Add($"MaxProcessingIterations must be >= -1, got {MaxProcessingIterations}.");
-
-        if (IterationDelay.Ticks < 0)
-            errors.Add($"IterationDelay must be >= TimeSpan.Zero, got {IterationDelay}.");
-
-        if (LockDuration <= TimeSpan.Zero)
-            errors.Add($"LockDuration must be > TimeSpan.Zero, got {LockDuration}.");
+        // Cross-field validations
+        if (PerTenantMaxDegreeOfParallelism == 0)
+            errors.Add(
+                "PerTenantMaxDegreeOfParallelism cannot be 0. Use 1 for sequential or > 1 for parallel.");
 
         if (LockRenewal >= LockDuration)
             errors.Add($"LockRenewal ({LockRenewal}) must be less than LockDuration ({LockDuration}).");
 
-        if (LockRenewal.Ticks < 0)
-            errors.Add($"LockRenewal must be >= TimeSpan.Zero, got {LockRenewal}.");
+        void CheckTsNonNeg(string name, TimeSpan ts)
+        {
+            if (ts.Ticks < 0)
+                errors.Add($"{name} must be >= TimeSpan.Zero, got {ts}.");
+        }
 
-        if (LookbackInterval.Ticks <= 0)
-            errors.Add($"LookbackInterval must be > TimeSpan.Zero, got {LookbackInterval}.");
+        void CheckTsPos(string name, TimeSpan ts)
+        {
+            if (ts <= TimeSpan.Zero)
+                errors.Add($"{name} must be > TimeSpan.Zero, got {ts}.");
+        }
 
-        if (MaxDeliveryAttempts <= 0)
-            errors.Add($"MaxDeliveryAttempts must be > 0, got {MaxDeliveryAttempts}.");
+        void CheckIntNonNeg(string name, int value)
+        {
+            if (value < 0)
+                errors.Add($"{name} must be >= 0, got {value}.");
+        }
 
-        if (BatchingWindow.Ticks < 0)
-            errors.Add($"BatchingWindow must be >= TimeSpan.Zero, got {BatchingWindow}.");
+        void CheckIntPos(string name, int value)
+        {
+            if (value <= 0)
+                errors.Add($"{name} must be > 0, got {value}.");
+        }
 
-        if (PerTenantTimeout.Ticks < 0)
-            errors.Add($"PerTenantTimeout must be >= TimeSpan.Zero, got {PerTenantTimeout}.");
-
-        if (PerTenantMaxDegreeOfParallelism == 0)
-            errors.Add(
-                "PerTenantMaxDegreeOfParallelism cannot be 0. Use 1 for sequential or > 1 for parallel.");
+        void CheckIntGeMinus1(string name, int value)
+        {
+            if (value < -1)
+                errors.Add($"{name} must be >= -1, got {value}.");
+        }
 
         return errors;
     }
@@ -191,6 +208,6 @@ public sealed record OutboxConsumerSettings(
 
     /// <inheritdoc/>
     public override string ToString()
-        => $"{ConsumerGroupId} interval={Interval}, batchSize={MaxBatchSize}, " +
+        => $"{ConsumerGroupId} v{Version} interval={Interval}, batchSize={MaxBatchSize}, " +
            $"parallelism={PerTenantMaxDegreeOfParallelism}, paused={Paused}";
 }

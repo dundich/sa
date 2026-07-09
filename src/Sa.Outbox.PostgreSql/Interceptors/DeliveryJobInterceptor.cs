@@ -1,10 +1,9 @@
-﻿using Sa.Outbox.Delivery.Job;
-using Sa.Partitional.PostgreSql;
+﻿using Sa.Partitional.PostgreSql;
 using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSql.Interceptors;
 
-internal sealed class DeliveryJobInterceptor(IMigrationService migrationService) : IOutboxJobInterceptor
+internal sealed class DeliveryJobInterceptor(IMigrationService migrationService) : IOutboxDeliveryJobInterceptor
 {
     public async Task OnHandle(
         IJobContext context,

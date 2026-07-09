@@ -6,6 +6,7 @@ namespace Sa.Outbox.Delivery;
 
 internal sealed class DeliverySnapshot(
     IScheduleSettings scheduleSettings,
+    IOutboxConsumerManager consumerManager,
     IOutboxMessageMetadataProvider metadataProvider) : IDeliverySnapshot
 {
 
@@ -27,11 +28,11 @@ internal sealed class DeliverySnapshot(
 
     private readonly Lazy<OutboxConsumerSettings[]> _lazyDeliveries = new(() =>
     {
-        OutboxConsumerSettings[] settings = [.. scheduleSettings.GetJobSettings()
-            .Select(c => c.Properties.GetConsumerGroupSettings())
-            .Where(mt => mt != null)
-            .Cast<OutboxConsumerSettings>()];
-
+        OutboxConsumerSettings[] settings = [.. consumerManager
+                .GetAllConsumerGroupIds()
+                .Select(groupId => consumerManager.Get(groupId))
+                .Where(s => s != null)
+                .Cast<OutboxConsumerSettings>()];
         return settings;
     });
 

@@ -2,13 +2,13 @@
 
 namespace Sa.Outbox.Delivery.Job;
 
-internal sealed class OutboxJobInterceptor(IEnumerable<IOutboxJobInterceptor> interceptors)
+internal sealed class DeliveryJobInterceptor(IEnumerable<IOutboxDeliveryJobInterceptor> interceptors)
     : IJobInterceptor
 {
     public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
     {
         bool hasInterceptors = false;
-        foreach (IOutboxJobInterceptor item in interceptors)
+        foreach (IOutboxDeliveryJobInterceptor item in interceptors)
         {
             hasInterceptors = true;
             await item.OnHandle(context, next, key, cancellationToken);

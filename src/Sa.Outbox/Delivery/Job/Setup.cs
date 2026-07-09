@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Schedule;
 using System.Diagnostics.CodeAnalysis;
 
@@ -33,7 +32,7 @@ internal static class Setup
         // Allow caller to tweak settings via fluent builder
         configure?.Invoke(default!, builder);
 
-        var settings = builder.Build();
+        OutboxConsumerSettings settings = builder.Build();
 
         Registered<TConsumer, TMessage>(services, isSingleton, settings.ConsumerGroupId);
 
@@ -43,10 +42,12 @@ internal static class Setup
 
             builder.AddJob<DeliveryJob<TMessage>>((sp, jobBuilder) =>
             {
+                var manager = sp.GetRequiredService<IOutboxConsumerManager>();
+                manager.TryRegister(settings.ConsumerGroupId, settings);
+
                 jobBuilder
                     .EveryTime(settings.Interval)
                     .WithInitialDelay(settings.InitialDelay)
-                    .WithTag(settings)
                     .WithConcurrencyLimit(settings.ConcurrencyLimit)
                     .WithMaxConcurrency(settings.MaxConcurrency)
                     .WithName(settings.ConsumerGroupId)
@@ -55,13 +56,12 @@ internal static class Setup
                         .ThenCloseApplication())
                     ;
 
+
             }, jobId);
 
 
-            builder.AddInterceptor<OutboxJobInterceptor>();
+            builder.AddInterceptor<DeliveryJobInterceptor>();
         });
-
-        services.TryAddSingleton<IDeliveryScheduleProvider, DeliveryScheduleProvider>();
 
         return services;
     }

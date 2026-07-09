@@ -24,6 +24,7 @@ public sealed class OutboxConsumerSettingsBuilder
     private TimeSpan? _perTenantTimeout;
     private int? _perTenantMaxDegreeOfParallelism;
     private bool? _paused;
+    private object? _tag;
 
     // ── Bootstrap: build from scratch ─────────────────────────
 
@@ -52,7 +53,8 @@ public sealed class OutboxConsumerSettingsBuilder
             _perTenantTimeout ?? OutboxDefaults.PerTenantTimeout,
             _perTenantMaxDegreeOfParallelism ?? OutboxDefaults.PerTenantMaxDegreeOfParallelism,
             _paused ?? OutboxDefaults.Paused,
-            0);
+            0,
+            _tag);
     }
 
 
@@ -110,7 +112,7 @@ public sealed class OutboxConsumerSettingsBuilder
     /// </summary>
     public OutboxConsumerSettingsBuilder WithConcurrencyLimit(int concurrencyLimit)
     {
-        if (concurrencyLimit <= 0) throw new ArgumentException("ConcurrencyLimit must be > 0.", nameof(concurrencyLimit));
+        if (concurrencyLimit < 0) throw new ArgumentException("ConcurrencyLimit must be > 0.", nameof(concurrencyLimit));
         _concurrencyLimit = concurrencyLimit;
         return this;
     }
@@ -203,7 +205,8 @@ public sealed class OutboxConsumerSettingsBuilder
     public OutboxConsumerSettingsBuilder WithNoLockDuration() => WithLockDuration(TimeSpan.Zero);
 
     /// <summary>
-    /// Sets the lock renewal time. Must be less than <see cref="LockDuration"/>.
+    /// Sets the lock renewal time. Must be less than <see cref="WithLockDuration(TimeSpan)"/> value.
+    /// Cross-field validation is performed at <see cref="Build"/> time.
     /// </summary>
     public OutboxConsumerSettingsBuilder WithLockRenewal(TimeSpan lockRenewal)
     {
@@ -270,12 +273,12 @@ public sealed class OutboxConsumerSettingsBuilder
     /// <summary>
     /// Configures sequential processing (no parallelism).
     /// </summary>
-    public OutboxConsumerSettingsBuilder WithSequentialProcessing() => WithPerTenantMaxDegreeOfParallelism(1);
+    public OutboxConsumerSettingsBuilder WithTenantSequentialProcessing() => WithPerTenantMaxDegreeOfParallelism(1);
 
     /// <summary>
     /// Configures parallel processing using all available processors.
     /// </summary>
-    public OutboxConsumerSettingsBuilder WithMaxParallelism() => WithPerTenantMaxDegreeOfParallelism(-1);
+    public OutboxConsumerSettingsBuilder WithTenantMaxParallelism() => WithPerTenantMaxDegreeOfParallelism(-1);
 
     // Lifecycle
 
@@ -292,4 +295,14 @@ public sealed class OutboxConsumerSettingsBuilder
     /// Convenience overload to explicitly set resumed state.
     /// </summary>
     public OutboxConsumerSettingsBuilder Resumed() => Paused(false);
+
+
+    /// <summary>
+    /// Sets user custom tag.
+    /// </summary>
+    public OutboxConsumerSettingsBuilder WithTag(object tag)
+    {
+        _tag = tag;
+        return this;
+    }
 }
