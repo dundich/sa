@@ -119,9 +119,7 @@ public sealed record OutboxConsumerSettings(
     /// Validates all settings and returns a list of error messages.
     /// Empty list means valid.
     /// </summary>
-#pragma warning disable S3776
     public List<string> Validate()
-#pragma warning restore S3776
     {
         var errors = new List<string>();
 
