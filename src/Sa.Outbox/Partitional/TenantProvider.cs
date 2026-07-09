@@ -17,12 +17,12 @@ internal sealed class TenantProvider(
     private async ValueTask<int[]> GetFromPlugService(CancellationToken cancellationToken)
     {
         if (detector == null || !detector.CanDetect) return [];
-        return await detector.GetTenantIds(cancellationToken);
+        return await detector.GetTenantIds(cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask<int[]> GetFromExternalSettings(CancellationToken cancellationToken)
     {
         if (settings?.GetTenantIds == null) return [];
-        return await settings.GetTenantIds(cancellationToken);
+        return await settings.GetTenantIds(cancellationToken).ConfigureAwait(false);
     }
 }

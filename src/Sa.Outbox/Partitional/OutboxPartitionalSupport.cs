@@ -9,25 +9,25 @@ internal sealed class OutboxPartitionalSupport(
 {
     public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetMsgParts(CancellationToken cancellationToken)
     {
-        return await GetPairs(snapshot?.Parts ?? [], cancellationToken);
+        return await GetPairs(snapshot?.Parts ?? [], cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetTaskParts(CancellationToken cancellationToken)
     {
-        return await GetPairs(snapshot?.GetConsumeGroupIds() ?? [], cancellationToken);
+        return await GetPairs(snapshot?.GetConsumeGroupIds() ?? [], cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
     {
         if (tenantProvider == null) return [];
 
-        return await tenantProvider.GetTenantIds(cancellationToken);
+        return await tenantProvider.GetTenantIds(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPairs(
         IEnumerable<string> parts, CancellationToken cancellationToken)
     {
-        int[] tenantIds = await GetTenantIds(cancellationToken);
+        int[] tenantIds = await GetTenantIds(cancellationToken).ConfigureAwait(false);
         if (tenantIds.Length == 0) return [];
 
         List<OutboxTenantPartPair> result = [];

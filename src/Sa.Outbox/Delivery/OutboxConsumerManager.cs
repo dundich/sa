@@ -1,5 +1,7 @@
 ﻿namespace Sa.Outbox.Delivery;
 
+using System.Diagnostics;
+
 /// <summary>
 /// Thread-safe manager for runtime control of outbox consumer group settings.
 /// Uses atomic immutable snapshots — no mutation during active delivery, no race conditions.
@@ -179,9 +181,10 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
             {
                 listener(newSettings);
             }
-            catch
+            catch (Exception ex)
             {
-                // Subscriber errors should not break the settings pipeline
+                Debug.WriteLine(
+                    $"[OutboxConsumerManager] Listener error for '{consumerGroupId}': {ex.Message}");
             }
         }
     }

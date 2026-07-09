@@ -39,9 +39,9 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
     {
-        await using AsyncServiceScope scope = serviceProvider.CreateAsyncScope();
+        await using var scope = serviceProvider.CreateAsyncScope();
         IConsumer<TMessage> consumer = GetConsumer<TMessage>(scope.ServiceProvider, settings.ConsumerGroupId);
-        await ProcessMessages(consumer, settings, filter, messages, cancellationToken);
+        await ProcessMessages(consumer, settings, filter, messages, cancellationToken).ConfigureAwait(false);
     }
 
     private static IConsumer<TMessage> GetConsumer<TMessage>(IServiceProvider sp, string key)
@@ -54,7 +54,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
     {
-        await consumer.Consume(settings, filter, messages, cancellationToken);
+        await consumer.Consume(settings, filter, messages, cancellationToken).ConfigureAwait(false);
     }
 
     private IConsumer<TMessage> GetOrCreateSingletonConsumer<TMessage>(
