@@ -44,6 +44,7 @@ internal sealed class CronTiming : IJobTiming
 
         // Hour
         PopulateFlags(fields[1], _hourFlags, 0, 23);
+        BuildNextTable(_hourFlags, _nextHour, 0, 23);
 
         // Day-of-month (no jump table needed, only flags)
         PopulateFlags(fields[2], _domFlags, 1, 31);
