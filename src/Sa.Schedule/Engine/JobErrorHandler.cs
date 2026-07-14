@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Sa.Schedule.Engine;
 
-internal sealed partial class JobErrorHandler(
+internal sealed class JobErrorHandler(
     IScheduleSettings settings,
     IHostApplicationLifetime? lifetime,
     ILogger<JobErrorHandler>? logger) : IJobErrorHandler
@@ -25,7 +25,7 @@ internal sealed partial class JobErrorHandler(
         switch (context.Settings.ErrorHandling.ThenAction)
         {
             case ErrorHandlingAction.AbortJob:
-                LogAbortJob(context.JobName, exception.Message);
+                logger?.LogAbortJob(context.JobName, exception.ToString());
                 break;
 
             case ErrorHandlingAction.CloseApplication:
@@ -33,20 +33,20 @@ internal sealed partial class JobErrorHandler(
                 break;
 
             case ErrorHandlingAction.StopAllJobs:
-                StopAllJobs(context.JobName, context);
+                StopAllJobs(context.JobName, exception, context);
                 break;
 
             default:
-                LogUnknownJobError(exception, context.JobName);
+                logger?.LogUnknownJobError(context.JobName, exception.ToString());
                 break;
         }
 
         throw context.LastError ?? exception;
     }
 
-    private void StopAllJobs(string jobName, IJobContext context)
+    private void StopAllJobs(string jobName, Exception exception, IJobContext context)
     {
-        LogStopAllJobs(jobName, context.LastError?.ToString() ?? string.Empty);
+        logger?.LogStopAllJobs(jobName, exception.ToString());
 
         var scheduler = context.ServiceProvider.GetService<IScheduler>();
         scheduler?.Stop();
@@ -54,7 +54,7 @@ internal sealed partial class JobErrorHandler(
 
     private void CloseApplication(string jobName, Exception exception)
     {
-        LogCloseApplication(jobName, exception.ToString());
+        logger?.LogCloseApplication(jobName, error: exception.ToString());
 
         if (lifetime == null) return;
 
@@ -64,49 +64,4 @@ internal sealed partial class JobErrorHandler(
             hostAppLifetime.StopApplication();
         }
     }
-
-    [LoggerMessage(
-        EventId = 501,
-        Level = LogLevel.Error,
-        Message = "[{JobName}] Unknown error")]
-    partial void LogUnknownJobError(Exception exception, string jobName);
-
-
-    [LoggerMessage(
-        EventId = 502,
-        Level = LogLevel.Error,
-        Message = """
-************
-JOB: {JobName}
-ERROR: The job will be aborted, the reason is an error:
-{Error}
-************
-""")]
-    partial void LogAbortJob(string jobName, string error);
-
-
-    [LoggerMessage(
-        EventId = 504,
-        Level = LogLevel.Error,
-        Message = """
-************
-JOB: {JobName}
-ERROR: The application will be closed, the reason is an error:
-{Error}
-************
-""")]
-    partial void LogCloseApplication(string jobName, string error);
-
-
-    [LoggerMessage(
-        EventId = 503,
-        Level = LogLevel.Error,
-        Message = """
-************
-JOB: {JobName}
-ERROR: The all jobs will be stopped, the reason is an error:
-{Error}
-************
-""")]
-    partial void LogStopAllJobs(string jobName, string error);
 }

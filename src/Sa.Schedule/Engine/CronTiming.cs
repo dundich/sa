@@ -1,6 +1,4 @@
-﻿using System.Linq;
-
-namespace Sa.Schedule.Engine;
+﻿namespace Sa.Schedule.Engine;
 
 using System;
 using System.Collections.Generic;
@@ -27,7 +25,7 @@ internal sealed class CronTiming : IJobTiming
 
     // First valid value in each field (used as default when jumping)
     private readonly int _firstMinute;
-    private readonly int _firstHour;
+
     private readonly int _firstMonth;
 
     private readonly bool _dowWildcard;
@@ -46,7 +44,6 @@ internal sealed class CronTiming : IJobTiming
 
         // Hour
         PopulateFlags(fields[1], _hourFlags, 0, 23);
-        _firstHour = BuildNextTable(_hourFlags, _nextHour, 0, 23);
 
         // Day-of-month (no jump table needed, only flags)
         PopulateFlags(fields[2], _domFlags, 1, 31);
