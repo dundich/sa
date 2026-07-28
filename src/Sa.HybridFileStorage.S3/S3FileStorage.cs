@@ -1,8 +1,6 @@
 ﻿using Sa.Classes;
 using Sa.Data.S3;
-using Sa.HybridFileStorage;
 using Sa.HybridFileStorage.Domain;
-using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace Sa.HybridFileStorage.S3;
@@ -24,7 +22,7 @@ internal sealed class S3FileStorage(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     // Async lazy initialization for bucket ensure — prevents concurrent CreateBucket calls
-    private volatile Task _ensureBucketTask;
+    private volatile Task? _ensureBucketTask;
 
     public string StorageType => _storageType;
     public bool IsReadOnly => _isReadOnly;
