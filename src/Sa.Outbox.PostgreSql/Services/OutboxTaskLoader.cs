@@ -6,6 +6,7 @@ using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Commands;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
+using Sa.Outbox.PostgreSql.TypeResolve;
 using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Services;
@@ -17,6 +18,7 @@ internal sealed partial class OutboxTaskLoader(
     IPgDataSource pg,
     SqlOutboxBuilder sql,
     PgOutboxConsumeSettings consumeSettings,
+    IOutboxTypeResolver hashResolver,
     ILogger<OutboxTaskLoader>? logger = null) : IOutboxTaskLoader
 {
 
@@ -93,6 +95,8 @@ internal sealed partial class OutboxTaskLoader(
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
     {
+        long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
+
         await using var command = new NpgsqlCommand(sql.SqlLoadConsumerGroup, conn, tx);
 
         command
@@ -104,6 +108,7 @@ internal sealed partial class OutboxTaskLoader(
             .AddParamNowDate(filter.NowDate)
             .AddParamFromDate(filter.FromDate)
             .AddParamToDate(filter.ToDate)
+            .AddParamTypeId(typeCode)
             ;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

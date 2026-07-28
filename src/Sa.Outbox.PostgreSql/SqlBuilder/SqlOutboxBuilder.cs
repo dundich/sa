@@ -26,7 +26,7 @@ internal sealed class SqlOutboxBuilder(
         $"{(int)DeliveryStatusCode.Warn}";
 
 
-    public string SqlBulkMsgCopy =
+    public readonly string SqlBulkMsgCopy =
 $"""
 COPY {settings.GetQualifiedMsgTableName()} (
   {settings.Message.Fields.MsgId},
@@ -44,7 +44,7 @@ FROM STDIN (FORMAT BINARY)
 
 
 
-    public string SqlLockAndSelect =
+    public readonly string SqlLockAndSelect =
 $"""
 WITH locked_tasks AS (
   SELECT 
@@ -111,7 +111,7 @@ ORDER BY ut.{settings.TaskQueue.Fields.TaskId}
 """;
 
 
-    public string SqlExtendDelivery =
+    public readonly string SqlExtendDelivery =
 $"""
 UPDATE {settings.GetQualifiedTaskTableName()}
 SET {settings.TaskQueue.Fields.TaskLockExpiresOn}={SqlParam.LockExpiresOn}
@@ -127,7 +127,7 @@ WHERE
 """;
 
 
-    public string SqlCreateTypeTable =
+    public readonly string SqlCreateTypeTable =
 $"""
 CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTypeTableName()}
 (
@@ -139,10 +139,10 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTypeTableName()}
 """;
 
 
-    public string SqlSelectType = $"SELECT * FROM {settings.GetQualifiedTypeTableName()}";
+    public readonly string SqlSelectType = $"SELECT * FROM {settings.GetQualifiedTypeTableName()}";
 
 
-    public string SqlSelectTenant =
+    public readonly string SqlSelectTenant =
 $"""
 WITH ranked AS (
   SELECT
@@ -154,7 +154,7 @@ SELECT {settings.Message.Fields.TenantId} FROM ranked WHERE rn = 1;
 """;
 
 
-    public string SqlInsertType =
+    public readonly string SqlInsertType =
 $"""
 INSERT INTO {settings.GetQualifiedTypeTableName()} 
   ({settings.Type.Fields.TypeId},{settings.Type.Fields.TypeName})
@@ -165,7 +165,7 @@ ON CONFLICT DO NOTHING
 """;
 
 
-    public string SqlCreateOffsetTable =
+    public readonly string SqlCreateOffsetTable =
 $"""
 CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
 (
@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
 """;
 
 
-    public string SqlInsertOffset =
+    public readonly string SqlInsertOffset =
 $"""
 INSERT INTO {settings.GetQualifiedOffsetTableName()} 
   ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId},{settings.Offset.Fields.GroupOffset})
@@ -190,7 +190,7 @@ ON CONFLICT ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.Tena
 """;
 
 
-    public string SqlSelectOffset =
+    public readonly string SqlSelectOffset =
 $"""
 SELECT {settings.Offset.Fields.GroupOffset}
 FROM {settings.GetQualifiedOffsetTableName()}
@@ -201,7 +201,7 @@ WHERE
 """;
 
 
-    public string SqlUpdateOffset = $"""
+    public readonly string SqlUpdateOffset = $"""
 UPDATE {settings.GetQualifiedOffsetTableName()}
 SET 
   {settings.Offset.Fields.GroupOffset}={SqlParam.Offset},
@@ -213,7 +213,7 @@ WHERE
 """;
 
 
-    public string SqlInitOffset = $"""
+    public readonly string SqlInitOffset = $"""
 INSERT INTO {settings.GetQualifiedOffsetTableName()} 
   ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId},{settings.Offset.Fields.GroupOffset})
 VALUES 
@@ -223,10 +223,10 @@ ON CONFLICT ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.Tena
 """;
 
 
-    public string SqlLockOffset = $"SELECT pg_advisory_xact_lock({SqlParam.LockOffset});";
+    public readonly string SqlLockOffset = $"SELECT pg_advisory_xact_lock({SqlParam.LockOffset});";
 
 
-    public string SqlLoadConsumerGroup = $"""
+    public readonly string SqlLoadConsumerGroup = $"""
 WITH inserted_rows AS(
   INSERT INTO {settings.GetQualifiedTaskTableName()}
     ({settings.TaskQueue.Fields.ConsumerGroup},
@@ -253,13 +253,15 @@ WITH inserted_rows AS(
     AND {settings.Message.Fields.MsgCreatedAt}>={SqlParam.FromDate}
     AND {settings.Message.Fields.MsgCreatedAt}<={SqlParam.ToDate}
     AND {settings.Message.Fields.MsgId}>{SqlParam.Offset}
+    AND {settings.Message.Fields.MsgPayloadType}={SqlParam.TypeId}
   ORDER BY {settings.Message.Fields.MsgId}
   LIMIT {SqlParam.Limit}
   RETURNING {settings.Message.Fields.MsgId}
 )
 SELECT
-  COUNT(*) as copied_rows,
-  (SELECT {settings.Message.Fields.MsgId} FROM inserted_rows ORDER BY {settings.Message.Fields.MsgId} DESC LIMIT 1) as max_id
+  COUNT(*) AS copied_rows,
+  (SELECT {settings.Message.Fields.MsgId} FROM inserted_rows
+    ORDER BY {settings.Message.Fields.MsgId} DESC LIMIT 1) AS max_id
 FROM inserted_rows
 ;
 """;
