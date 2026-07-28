@@ -30,5 +30,5 @@ internal sealed class FilterFactory(IOutboxMessageMetadataProvider metadata)
     }
 
     private static string GenerateTransactId()
-        => $"{Environment.MachineName}-{Random.Shared.Next(0, 100000)}";
+        => $"{Environment.MachineName}-{Guid.CreateVersion7():N}";
 }
