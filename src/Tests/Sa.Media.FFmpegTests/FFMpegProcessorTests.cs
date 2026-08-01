@@ -271,6 +271,90 @@ public sealed class FFMpegProcessorTests
         Assert.Equal(origSampleRate, outSampleRate);
     }
 
+    [Theory]
+    [InlineData("./data/input.wav")]
+    public async Task ConvertToPcmS32Le_ShouldProduceValidFloat32File(string inputPath)
+    {
+        // Arrange
+        string outputPath = "./data/output_pcmf32le.wav";
+
+        if (File.Exists(outputPath))
+            File.Delete(outputPath);
+
+        // Act
+        await Processor.ConvertToPcmS32Le(
+            inputFileName: inputPath,
+            outputFileName: outputPath,
+            outputSampleRate: 48000,
+            outputChannelCount: 2,
+            isOverwrite: true,
+            cancellationToken: CancellationToken);
+
+        // Assert
+        Assert.True(File.Exists(outputPath));
+        Assert.True(new FileInfo(outputPath).Length > 0);
+
+        var ffprobe = CreateFFProbeExecutor();
+        var (channels, sampleRate) = await ffprobe.GetChannelsAndSampleRate(outputPath, cancellationToken: CancellationToken);
+
+        Assert.Equal(2, channels);
+        Assert.Equal(48000, sampleRate);
+    }
+
+    [Theory]
+    [InlineData("./data/input.wav")]
+    public async Task ConvertToPcmF32LeRaw_ShouldProduceValidRawFile(string inputPath)
+    {
+        // Arrange
+        string outputPath = "./data/output_rawf32le.f32le";
+
+        if (File.Exists(outputPath))
+            File.Delete(outputPath);
+
+        // Act
+        await Processor.ConvertToPcmF32LeRaw(
+            inputFileName: inputPath,
+            outputFileName: outputPath,
+            outputSampleRate: 48000,
+            outputChannelCount: 2,
+            isOverwrite: true,
+            cancellationToken: CancellationToken);
+
+        // Assert
+        Assert.True(File.Exists(outputPath));
+        var fileInfo = new FileInfo(outputPath);
+        Assert.True(fileInfo.Length > 0);
+
+        // Raw f32le: each sample = 4 bytes (float), 2 channels => 8 bytes per frame
+        // duration ≈ file.Length / (4 * 2 * 48000)
+        Assert.True(fileInfo.Length % (4 * 2) == 0, "Raw f32le file size should be divisible by (4 bytes × 2 channels)");
+    }
+
+    [Theory]
+    [InlineData("./data/input.mp3")]
+    public async Task ConvertToPcmF32LeRaw_Stream_ShouldProduceData(string testFilePath)
+    {
+        // Arrange
+        var ext = Path.GetExtension(testFilePath).TrimStart('.');
+
+        using var inputStream = File.OpenRead(testFilePath);
+
+        // Act
+        var rawBytes = new MemoryStream();
+        await Processor.ConvertToPcmF32LeRaw(inputStream, ext,
+            async (outStream, _) =>
+            {
+                await outStream.CopyToAsync(rawBytes, CancellationToken);
+            },
+            outputSampleRate: 16000,
+            outputChannelCount: 1,
+            cancellationToken: CancellationToken);
+
+        // Assert
+        Assert.True(rawBytes.Length > 0, "Raw f32le stream should produce data");
+        Assert.True(rawBytes.Length % 4 == 0, "Raw f32le bytes should be divisible by 4 (float size)");
+    }
+
     private static IFFProbeExecutor CreateFFProbeExecutor()
     {
         return IFFProbeExecutor.Default;

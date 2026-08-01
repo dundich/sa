@@ -1,12 +1,13 @@
 ﻿namespace Sa.Media.FFmpeg;
 
 /// <summary>
-/// Interface for splitting multi-channel PCM S16 LE audio into individual mono channel files.
+/// Interface for splitting stereo PCM S16 LE audio into individual mono channel files.
 /// </summary>
 public interface IPcmS16LeChannelManipulator
 {
     /// <summary>
-    /// Splits a multi-channel PCM S16 LE audio file into separate mono files for each channel.
+    /// Splits a stereo PCM S16 LE audio file into separate mono files (one per channel).
+    /// Only stereo inputs are supported; non-stereo files throw <see cref="NotSupportedException"/>.
     /// </summary>
     /// <param name="inputFileName">Path to the input audio file.</param>
     /// <param name="outputFileName">Base path for the output files. Channel files will be named using this base plus a suffix.</param>

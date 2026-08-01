@@ -18,7 +18,7 @@ if [ ! -f "$FFMPEG_TARBALL" ]
 then
     echo "Downloading FFmpeg $FFMPEG_TARBALL_URL"
     curl -s -L -O "$FFMPEG_TARBALL_URL"
-    
+
     # Проверяем что файл скачался корректно
     if [ ! -f "$FFMPEG_TARBALL" ]; then
         echo "ERROR: Failed to download $FFMPEG_TARBALL"
@@ -116,7 +116,8 @@ FFMPEG_CONFIGURE_FLAGS+=(
 
 
 # Убедиться, что pkg-config найдет нужные .pc файлы
-export PKG_CONFIG_PATH="/usr/lib/pkgconfig"
+## export PKG_CONFIG_PATH="/usr/lib/pkgconfig"
+export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig"
 echo "[+] PKG_CONFIG_PATH = $PKG_CONFIG_PATH"
 
 

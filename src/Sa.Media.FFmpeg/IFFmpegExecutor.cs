@@ -16,21 +16,21 @@ public interface IFFMpegExecutor
     /// Gets the version of FFmpeg by executing the <c>ffmpeg -version</c> command.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A string containing the FFmpeg version output.</returns>
+    /// <returns>A string containing the FFmpeg version output (standard output).</returns>
     Task<string> GetVersion(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets a list of supported formats by executing the <c>ffmpeg -formats</c> command.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A string containing the list of supported formats.</returns>
+    /// <returns>A string containing the list of supported formats (standard output).</returns>
     Task<string> GetFormats(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets a list of supported codecs by executing the <c>ffmpeg -codecs</c> command.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A string containing the list of supported codecs.</returns>
+    /// <returns>A string containing the list of supported codecs (standard output).</returns>
     Task<string> GetCodecs(CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -53,25 +53,9 @@ public interface IFFMpegExecutor
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Converts an audio file to PCM S16 LE format, preserving the original sample rate and channel count.
-    /// </summary>
-    /// <param name="inputFileName">Path to the input audio file.</param>
-    /// <param name="outputFileName">Path to the output file.</param>
-    /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
-    /// <param name="timeout">Optional override for the operation timeout.</param>
-    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
-    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
-    Task<string> ConvertToPcmS16LePreservingFormat(
-        string inputFileName,
-        string outputFileName,
-        bool isOverwrite = true,
-        TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default);
-
 
     /// <summary>
-    /// Converts the input audio stream to PCM S16 LE (16-bit signed integer, little-endian) 
+    /// Converts the input audio stream to PCM S16 LE (16-bit signed integer, little-endian)
     /// </summary>
     /// <param name="inputStream">Input audio stream (must be readable).</param>
     /// <param name="inputFormat">Input format (e.g. "mp3", "wav", "flac").</param>
@@ -92,13 +76,155 @@ public interface IFFMpegExecutor
             CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Converts an audio file to MP3 format.
+    /// Converts an audio file to PCM S16 LE format, preserving the original sample rate and channel count.
+    /// </summary>
+    /// <param name="inputFileName">Path to the input audio file.</param>
+    /// <param name="outputFileName">Path to the output file.</param>
+    /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
+    Task<string> ConvertToPcmS16LePreservingFormat(
+        string inputFileName,
+        string outputFileName,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    /// Converts an audio file to raw PCM S16 LE format (16-bit signed integer, little-endian, no WAV header).
+    /// </summary>
+    /// <param name="inputFileName">Path to the input audio file.</param>
+    /// <param name="outputFileName">Path to the output file.</param>
+    /// <param name="outputSampleRate">Optional target sample rate. Use <c>null</c> to preserve the original rate.</param>
+    /// <param name="outputChannelCount">Optional number of output channels. Use <c>null</c> to preserve the original channel count.</param>
+    /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
+    Task<string> ConvertToPcmS16LeRaw(
+        string inputFileName,
+        string outputFileName,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    /// Converts the input audio stream to raw PCM S16 LE (16-bit signed integer, little-endian) binary data.
+    /// </summary>
+    /// <param name="inputStream">Input audio stream (must be readable).</param>
+    /// <param name="inputFormat">Input format (e.g. "mp3", "wav", "flac").</param>
+    /// <param name="onOutput">A callback that receives the resulting raw s16le binary stream.</param>
+    /// <param name="outputSampleRate">Target sample rate (default: 16000 Hz). Use null to preserve original.</param>
+    /// <param name="outputChannelCount">Number of output channels (e.g. 1 for mono). Use null to preserve original layout.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous conversion operation.</returns>
+    /// <exception cref="ProcessStartException">Thrown when FFmpeg process fails to start.</exception>
+    /// <exception cref="ProcessExecutionException">Thrown when FFmpeg returns a non-zero exit code (e.g. unsupported format, decoding error).</exception>
+    /// <exception cref="ArgumentException">Thrown if required parameters are invalid (e.g. null stream, empty format).</exception>
+    Task ConvertToPcmS16LeRaw(
+        Stream inputStream,
+        string inputFormat,
+        Func<Stream, CancellationToken, Task> onOutput,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    /// Converts an audio file to PCM S32 LE WAV format (32-bit signed integer, little-endian).
+    /// </summary>
+    /// <param name="inputFileName">Path to the input audio file.</param>
+    /// <param name="outputFileName">Path to the output file.</param>
+    /// <param name="outputSampleRate">Optional target sample rate. Use <c>null</c> to preserve the original rate.</param>
+    /// <param name="outputChannelCount">Optional number of output channels. Use <c>null</c> to preserve the original channel count.</param>
+    /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
+    Task<string> ConvertToPcmS32Le(
+        string inputFileName,
+        string outputFileName,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    /// Converts an audio file to PCM F32 LE WAV format (32-bit IEEE float, little-endian).
+    /// </summary>
+    /// <param name="inputFileName">Path to the input audio file.</param>
+    /// <param name="outputFileName">Path to the output file.</param>
+    /// <param name="outputSampleRate">Optional target sample rate. Use <c>null</c> to preserve the original rate.</param>
+    /// <param name="outputChannelCount">Optional number of output channels. Use <c>null</c> to preserve the original channel count.</param>
+    /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
+    Task<string> ConvertToPcmF32Le(
+        string inputFileName,
+        string outputFileName,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    /// Converts an audio file to raw PCM F32 LE (32-bit IEEE float, little-endian) binary data.
+    /// </summary>
+    /// <param name="inputFileName">Path to the input audio file.</param>
+    /// <param name="outputFileName">Path to the output file.</param>
+    /// <param name="outputSampleRate">Optional target sample rate. Use <c>null</c> to preserve the original rate.</param>
+    /// <param name="outputChannelCount">Optional number of output channels. Use <c>null</c> to preserve the original channel count.</param>
+    /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
+    Task<string> ConvertToPcmF32LeRaw(
+        string inputFileName,
+        string outputFileName,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null,
+        bool isOverwrite = true,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    /// Converts the input audio stream to raw PCM F32 LE (32-bit IEEE float, little-endian) binary data.
+    /// </summary>
+    /// <param name="inputStream">Input audio stream (must be readable).</param>
+    /// <param name="inputFormat">Input format (e.g. "mp3", "wav", "flac").</param>
+    /// <param name="onOutput">A callback that receives the resulting raw f32le binary stream.</param>
+    /// <param name="outputSampleRate">Target sample rate (default: 16000 Hz). Use null to preserve original.</param>
+    /// <param name="outputChannelCount">Number of output channels (e.g. 1 for mono). Use null to preserve original layout.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous conversion operation.</returns>
+    Task ConvertToPcmF32LeRaw(
+        Stream inputStream,
+        string inputFormat,
+        Func<Stream, CancellationToken, Task> onOutput,
+        int? outputSampleRate = 16000,
+        ushort? outputChannelCount = null,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    /// Converts an audio file to MP3 format (16 kHz, 128 kbps, libmp3lame on Linux).
     /// </summary>
     /// <param name="inputFileName">Path to the input audio file.</param>
     /// <param name="outputFileName">Path to the output file.</param>
     /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
-    /// <returns>Stdout for log</returns>
+    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
     Task<string> ConvertToMp3(
         string inputFileName,
         string outputFileName,
@@ -107,14 +233,14 @@ public interface IFFMpegExecutor
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Converts an audio file to OGG format (Vorbis or Opus codec).
+    /// Converts an audio file to OGG format (Vorbis codec; Opus on Linux only).
     /// </summary>
     /// <param name="inputFileName">Path to the input audio file.</param>
     /// <param name="outputFileName">Path to the output file.</param>
-    /// <param name="isLibopus">If true, uses the Opus codec; otherwise uses Vorbis.</param>
+    /// <param name="isLibopus">If true, uses the Opus codec (Linux only); otherwise uses Vorbis.</param>
     /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
-    /// <returns>Stdout for log</returns>
+    /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
     Task<string> ConvertToOgg(
         string inputFileName,
         string outputFileName,

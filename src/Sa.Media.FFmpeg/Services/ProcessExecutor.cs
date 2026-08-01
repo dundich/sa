@@ -276,7 +276,14 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
             }
             finally
             {
-                await stdoutStream.DisposeAsync();
+                try
+                {
+                    await stdoutStream.DisposeAsync();
+                }
+                catch (IOException)
+                {
+                    // FFprobe may have closed stdout before we finish reading — benign
+                }
             }
             await Task.WhenAll(backgroundTasks).ConfigureAwait(false);
         }
@@ -334,7 +341,7 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
                                  .ConfigureAwait(false);
             }
 
-            // Завершаем запись
+            // Завершаем запись — FFprobe may have already closed stdin pipe
             await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
             process.StandardInput.Close();
         }
@@ -345,16 +352,12 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
         }
         catch (IOException)
         {
-            process.StandardInput.Close();
+            // Pipe closed by reader (FFprobe) or copy failed — benign
+            try { process.StandardInput.Close(); } catch { /* skip */ }
         }
         catch (ObjectDisposedException)
         {
             // StandardInput may be disposed if process has exited
-        }
-        catch (Exception ex)
-        {
-            process.StandardInput.Close();
-            throw new IOException("Failed to write input stream to process stdin.", ex);
         }
     }
 

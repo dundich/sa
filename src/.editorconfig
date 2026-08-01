@@ -21,3 +21,5 @@ csharp_style_namespace_declarations = file_scoped:suggestion
 [*.{json,xml,yml,yaml,html,css,js,ts,props}]
 indent_size = 2
 charset = utf-8
+
+

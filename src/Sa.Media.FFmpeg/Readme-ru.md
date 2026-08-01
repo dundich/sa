@@ -7,7 +7,7 @@
 ## Возможности
 
 - 🎵 **Извлечение метаданных** — длительность, битрейт, формат, частота дискретизации, каналы через `ffprobe`
-- 🔊 **Конвертация аудио** — PCM S16 LE WAV, MP3, OGG Vorbis/Opus
+- 🔊 **Конвертация аудио** — PCM S16 LE WAV, PCM S32 LE WAV, сырой PCM S16 LE/F32 LE бинарник, MP3, OGG Vorbis/Opus
 - 🎛️ **Манипуляция каналами** — разделение стерео на монофайлы, объединение двух моно в стерео
 - 📦 **Встроенные бинарники FFmpeg** — Windows x64/arm64, Linux x64/arm64, macOS x64 (fallback на linux-x64)
 - 💉 **Поддержка DI** — стандартная интеграция с `IServiceCollection` и конфигурацией опций
@@ -24,7 +24,10 @@ using Sa.Media.FFmpeg;
 
 // Извлечение метаданных
 var meta = await IFFProbeExecutor.Default.GetMetaInfo("input.mp3");
-Console.WriteLine($"Duration: {meta.Duration}s, Channels: {meta.Channels}");
+Console.WriteLine($"Duration: {meta.Duration}s, Format: {meta.FormatName}");
+
+// Получение каналов и частоты отдельно
+var (channels, sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRate("input.mp3");
 
 // Конвертация аудио
 await IFFMpegExecutor.Default.ConvertToPcmS16Le(
@@ -33,15 +36,46 @@ await IFFMpegExecutor.Default.ConvertToPcmS16Le(
     outputSampleRate: 16000,
     outputChannelCount: 1);
 
-// Получение поддерживаемых форматов/кодеков
+// PCM S32 LE WAV конвертация
+await IFFMpegExecutor.Default.ConvertToPcmS32Le(
+    "input.mp3",
+    "output_s32le.wav",
+    outputSampleRate: 48000,
+    outputChannelCount: 2);
+
+// Сырой float32 LE бинарник
+await IFFMpegExecutor.Default.ConvertToPcmF32LeRaw(
+    "input.mp3",
+    "output_raw.f32le",
+    outputSampleRate: 48000,
+    outputChannelCount: 2);
+
+// Конвертация с сохранением исходного формата
+await IFFMpegExecutor.Default.ConvertToPcmS16LePreservingFormat(
+    "input.mp3",
+    "output_preserved.wav");
+
+// Сырой PCM S16 LE бинарник (без WAV-заголовка)
+await IFFMpegExecutor.Default.ConvertToPcmS16LeRaw(
+    "input.mp3",
+    "output_raw.s16le",
+    outputSampleRate: 16000,
+    outputChannelCount: 1);
+
+// Получение версии FFmpeg / форматов / кодеков
+var version = await IFFMpegExecutor.Default.GetVersion();
 var formats = await IFFMpegExecutor.Default.GetFormats();
 var codecs  = await IFFMpegExecutor.Default.GetCodecs();
 ```
 
 ### Разделение каналов (стерео → монофайлы)
 
+Решите через DI (класс внутренний):
+
 ```csharp
-var splitter = new PcmS16LeChannelManipulator();
+// После вызова builder.Services.AddSaFFMpeg(...):
+var services = builder.Services.BuildServiceProvider();
+var splitter = services.GetRequiredService<IPcmS16LeChannelManipulator>();
 
 var resultFiles = await splitter.SplitAsync(
     inputFileName: "stereo.mp3",
@@ -57,7 +91,7 @@ var resultFiles = await splitter.SplitAsync(
 ### Объединение каналов (моно → стерео)
 
 ```csharp
-var merger = new PcmS16LeChannelManipulator();
+var merger = services.GetRequiredService<IPcmS16LeChannelManipulator>();
 
 var joined = await merger.JoinAsync(
     leftFileName: "left.wav",
@@ -85,6 +119,29 @@ await IFFMpegExecutor.Default.ConvertToPcmS16Le(
     },
     outputSampleRate: 16000,
     outputChannelCount: 1);
+```
+
+### Сырая потоковая конвертация
+
+```csharp
+await using var inputStream = File.OpenRead("input.mp3");
+
+await IFFMpegExecutor.Default.ConvertToPcmF32LeRaw(
+    inputStream,
+    inputFormat: "mp3",
+    onOutput: async (rawStream, ct) =>
+    {
+        // Читаем сырой f32le бинарник — каждый float занимает 4 байта
+        var buffer = new byte[4096];
+        while (true)
+        {
+            var read = await rawStream.ReadAsync(buffer, ct);
+            if (read == 0) break;
+            // Обработка сырых float32 сэмплов...
+        }
+    },
+    outputSampleRate: 48000,
+    outputChannelCount: 2);
 ```
 
 ---
@@ -128,6 +185,10 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 |----------|---------|-------|-----------|
 | Любой, поддерживаемый FFmpeg | **PCM S16 LE WAV** | `ConvertToPcmS16Le()` | Настраиваемая частота (по умолч. 16 кГц), кол-во каналов |
 | Любой | **PCM S16 LE WAV** | `ConvertToPcmS16LePreservingFormat()` | Сохраняет исходную частоту и каналы |
+| Любой | **Сырой PCM S16 LE бинарник** | `ConvertToPcmS16LeRaw()` | Без WAV-заголовка, настраиваемая частота/каналы |
+| Любой | **PCM S32 LE WAV** | `ConvertToPcmS32Le()` | 32-bit signed integer, настраиваемая частота/каналы |
+| Любой | **PCM F32 LE WAV** | `ConvertToPcmF32Le()` | 32-bit IEEE float, настраиваемая частота/каналы |
+| Любой | **Сырой PCM F32 LE бинарник** | `ConvertToPcmF32LeRaw()` | 32-bit IEEE float, без WAV-заголовка |
 | Любой | **MP3** | `ConvertToMp3()` | 16 кГц, 128 kbps, libmp3lame |
 | Любой | **OGG Vorbis** | `ConvertToOgg(isLibopus: false)` | Стандартный Vorbis |
 | Любой | **OGG Opus** | `ConvertToOgg(isLibopus: true)` | Кодек Opus (только Linux) |
@@ -160,8 +221,14 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 | `GetFormats()` | `Task<string>` | Все поддерживаемые форматы |
 | `GetCodecs()` | `Task<string>` | Все поддерживаемые кодеки |
 | `ConvertToPcmS16Le(file, file, ...)` | `Task<string>` | Конвертация в WAV-файл |
-| `ConvertToPcmS16LePreservingFormat(file, file, ...)` | `Task<string>` | Конвертация с сохранением формата |
 | `ConvertToPcmS16Le(stream, func, ...)` | `Task` | Потоковая конвертация |
+| `ConvertToPcmS16LePreservingFormat(file, file, ...)` | `Task<string>` | Конвертация с сохранением формата |
+| `ConvertToPcmS16LeRaw(file, file, ...)` | `Task<string>` | Конвертация в сырой s16le бинарный файл |
+| `ConvertToPcmS16LeRaw(stream, func, ...)` | `Task` | Потоковая конвертация в сырой s16le |
+| `ConvertToPcmS32Le(file, file, ...)` | `Task<string>` | Конвертация в WAV (PCM S32 LE) |
+| `ConvertToPcmF32Le(file, file, ...)` | `Task<string>` | Конвертация в WAV (PCM F32 LE) |
+| `ConvertToPcmF32LeRaw(file, file, ...)` | `Task<string>` | Конвертация в сырой f32le бинарный файл |
+| `ConvertToPcmF32LeRaw(stream, func, ...)` | `Task` | Потоковая конвертация в сырой f32le |
 | `ConvertToMp3(file, file, ...)` | `Task<string>` | Конвертация в MP3 |
 | `ConvertToOgg(file, file, ...)` | `Task<string>` | Конвертация в OGG (Vorbis или Opus) |
 

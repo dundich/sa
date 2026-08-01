@@ -19,7 +19,9 @@ static class Constants
     public static string FFprobeExecutableFileName { get; } = IsOsWindows ? FFprobeFileNameWin : FFprobeFileNameLinux;
 
 
+    public const string CleanBannerFlags = "-hide_banner -loglevel error";
+
     public const string CleanWavOutputFlags = "-map_metadata -1 -write_bext 0 -bitexact -fflags +bitexact";
 
-    public const string CleanBannerFlags = "-hide_banner -loglevel error";
+    public const int StringBuilderInitialCapacity = 512;
 }

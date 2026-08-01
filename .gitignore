@@ -807,3 +807,4 @@ src/.vscode/
 .qwen/
 .agents/
 /.github/skills
+/src/Sa.Media.FFmpeg/sa/native/

@@ -3,12 +3,12 @@
 # apt-get install -y build-essential autoconf automake libtool pkg-config libopus-dev libasound2-dev libvorbis-dev libogg-dev libmp3lame-dev libflac-dev libsoxr-dev wget
 
 
-FFMPEG_VERSION=7.1.2
+FFMPEG_VERSION=7.1.5
 FFMPEG_TARBALL=ffmpeg-$FFMPEG_VERSION.tar.gz
 FFMPEG_TARBALL_URL=http://ffmpeg.org/releases/$FFMPEG_TARBALL
 
 FFMPEG_CONFIGURE_FLAGS=(
- 
+
     --disable-shared
     --enable-static
     --enable-pic
@@ -17,14 +17,9 @@ FFMPEG_CONFIGURE_FLAGS=(
     --disable-doc
     --disable-debug
 
-
+      # Отключение ненужных тяжелых модулей
     --disable-avdevice
     --disable-swscale
-
-    --disable-programs
-    --enable-ffmpeg
-    --enable-ffprobe
-
     --disable-network
     --disable-muxers
     --disable-demuxers
@@ -34,8 +29,6 @@ FFMPEG_CONFIGURE_FLAGS=(
     --disable-iconv
     --disable-libxcb
     --disable-bsfs
-
-
     --disable-indevs
     --disable-outdevs
     --disable-hwaccels
@@ -43,14 +36,21 @@ FFMPEG_CONFIGURE_FLAGS=(
     --disable-videotoolbox
     --disable-audiotoolbox
 
-
+     # Лицензирование
     --enable-gpl
-    --enable-nonfree
+    # --enable-nonfree
     --enable-version3
 
+    # Управление утилитами
+    --disable-programs
+    --enable-ffmpeg
+    --enable-ffprobe
+
+    # Аудио-фильтры и ресемплер
     --disable-filters
+    --enable-swresample
     --enable-filter=aresample
-    --enable-filter=channelsplit 
+    --enable-filter=channelsplit
     --enable-filter=copy
     --enable-filter=aformat
     --enable-filter=anull
@@ -59,28 +59,36 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-filter=null
     --enable-filter=setpts
     --enable-filter=trim
-    --enable-filter=pan 
+    --enable-filter=pan
     --enable-filter=showinfo
     --enable-filter=concat
     --enable-filter=amerge
     --enable-filter=join
-    
-    --enable-swresample
 
+    # Протоколы работы с данными
     --disable-protocols
     --enable-protocol=file
     --enable-protocol=pipe
 
+     # Мультиплексоры (Форматы контейнеров для ЗАПИСИ)
     --disable-muxers
+    --enable-muxer=rawvideo
     --enable-muxer=mp3
-    --enable-muxer=mp4  
+    --enable-muxer=mp4
     --enable-muxer=ac3
     --enable-muxer=flac
     --enable-muxer=wav
     --enable-muxer=ogg
+    --enable-muxer=pcm_f32le
+    --enable-muxer=pcm_s16le
+    --enable-muxer=pcm_s32le
+    --enable-muxer=pcm_s8
+    --enable-muxer=pcm_u8
 
-
+   # Демультиплексоры (Форматы контейнеров для ЧТЕНИЯ)
+    # Исправлено: имена raw-форматов теперь указаны без "pcm_"
     --disable-demuxers
+    --enable-demuxer=rawvideo
     --enable-demuxer=aac
     --enable-demuxer=ac3
     --enable-demuxer=avi
@@ -178,7 +186,8 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-decoder=pcm_u24le
     --enable-decoder=pcm_u32be
     --enable-decoder=pcm_u32le
-    
+
+   # Парсеры данных
     --disable-parsers
     --enable-parser=aac
     --enable-parser=ac3

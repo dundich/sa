@@ -22,7 +22,7 @@ public interface IFFRawExecutor
     /// Executes a command with the specified arguments asynchronously.
     /// </summary>
     /// <param name="commandArguments">The command-line arguments to pass to the executable.</param>
-    /// <param name="captureErrorOutput">If true, captures stderr output; otherwise ignores it.</param>
+    /// <param name="captureErrorOutput">If true, captures stderr output; otherwise still captures it into the result but does not throw on non-zero exit code.</param>
     /// <param name="timeout">Optional timeout for the execution. If not provided, uses <see cref="DefaultTimeout"/>.</param>
     /// <param name="cancellationToken">A token that can be used to cancel the execution.</param>
     /// <returns>A task that represents the asynchronous execution result.</returns>
@@ -39,7 +39,7 @@ public interface IFFRawExecutor
     /// Joins the arguments into a single string using space as a separator.
     /// </summary>
     /// <param name="commandArguments">An enumerable collection of command-line arguments.</param>
-    /// <param name="captureErrorOutput">If true, captures stderr output; otherwise ignores it.</param>
+    /// <param name="captureErrorOutput">If true, captures stderr output; otherwise still captures it into the result but does not throw on non-zero exit code.</param>
     /// <param name="timeout">Optional timeout for the execution. If not provided, uses <see cref="DefaultTimeout"/>.</param>
     /// <param name="cancellationToken">A token that can be used to cancel the execution.</param>
     /// <returns>A task that represents the asynchronous execution result.</returns>
