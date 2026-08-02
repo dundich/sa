@@ -67,7 +67,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         b.Append(" -f ");
         b.Append(inputFormat);
         b.Append(" -i pipe:0 ");
-        b.Append("-acodec pcm_s16le -sample_fmt s16 ");
+        b.Append(" -acodec pcm_s16le -sample_fmt s16 ");
 
         if (outputChannelCount.HasValue)
         {
@@ -104,7 +104,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         b.Append(" -i \"");
         b.Append(inputFileName);
         b.Append('"');
-        b.Append(" -c:a pcm_s16le");
+        b.Append(" -c:a pcm_s16le ");
 
         if (outputSampleRate.HasValue)
         {
@@ -153,14 +153,14 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         b.Append(" -i \"");
         b.Append(inputFileName);
         b.Append('"');
-        b.Append(" -f mp3 -map 0:a:0");
+        b.Append(" -f mp3 -map 0:a:0 ");
 
         if (Constants.IsOsLinux)
         {
             b.Append(" -c:a libmp3lame ");
         }
 
-        b.Append("-ar 16000 -b:a 128k ");
+        b.Append(" -ar 16000 -b:a 128k ");
         b.Append('"');
         b.Append(outputFileName);
         b.Append('"');
@@ -187,14 +187,14 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         using var b = new ValueStringBuilder(Constants.StringBuilderInitialCapacity);
         if (isOverwrite)
         {
-            b.Append("-y ");
+            b.Append(" -y ");
         }
 
         b.Append(Constants.CleanBannerFlags);
         b.Append(" -i \"");
         b.Append(inputFileName);
         b.Append('"');
-        b.Append(" -f ogg -map 0:a:0");
+        b.Append(" -f ogg -map 0:a:0 ");
 
         if (Constants.IsOsLinux)
         {
@@ -280,14 +280,14 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         using var b = new ValueStringBuilder(Constants.StringBuilderInitialCapacity);
         if (isOverwrite)
         {
-            b.Append("-y ");
+            b.Append(" -y ");
         }
 
         b.Append(Constants.CleanBannerFlags);
         b.Append(" -i \"");
         b.Append(inputFileName);
         b.Append('"');
-        b.Append(" -c:a pcm_s16le");
+        b.Append(" -c:a pcm_s16le ");
 
         if (outputSampleRate.HasValue)
         {
@@ -318,7 +318,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         b.Append(" -f ");
         b.Append(inputFormat);
         b.Append(" -i pipe:0 ");
-        b.Append("-c:a pcm_s16le ");
+        b.Append(" -c:a pcm_s16le ");
 
         if (outputChannelCount.HasValue)
         {
@@ -332,7 +332,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
             b.Append(outputSampleRate.Value);
         }
 
-        b.Append(" -f s16le pipe:1");
+        b.Append(" -f s16le pipe:1 ");
 
         return b.ToString();
     }
@@ -364,14 +364,14 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         using var b = new ValueStringBuilder(Constants.StringBuilderInitialCapacity);
         if (isOverwrite)
         {
-            b.Append("-y ");
+            b.Append(" -y ");
         }
 
         b.Append(Constants.CleanBannerFlags);
         b.Append(" -i \"");
         b.Append(inputFileName);
         b.Append('"');
-        b.Append(" -c:a pcm_s32le");
+        b.Append(" -c:a pcm_s32le ");
 
         if (outputSampleRate.HasValue)
         {
@@ -419,14 +419,14 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         using var b = new ValueStringBuilder(Constants.StringBuilderInitialCapacity);
         if (isOverwrite)
         {
-            b.Append("-y ");
+            b.Append(" -y ");
         }
 
         b.Append(Constants.CleanBannerFlags);
         b.Append(" -i \"");
         b.Append(inputFileName);
         b.Append('"');
-        b.Append(" -c:a pcm_f32le");
+        b.Append(" -c:a pcm_f32le ");
 
         if (outputSampleRate.HasValue)
         {
@@ -493,14 +493,14 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         using var b = new ValueStringBuilder(Constants.StringBuilderInitialCapacity);
         if (isOverwrite)
         {
-            b.Append("-y ");
+            b.Append(" -y ");
         }
 
         b.Append(Constants.CleanBannerFlags);
         b.Append(" -i \"");
         b.Append(inputFileName);
         b.Append('"');
-        b.Append(" -c:a pcm_f32le");
+        b.Append(" -c:a pcm_f32le ");
 
         if (outputSampleRate.HasValue)
         {
@@ -531,7 +531,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         b.Append(" -f ");
         b.Append(inputFormat);
         b.Append(" -i pipe:0 ");
-        b.Append("-c:a pcm_f32le ");
+        b.Append(" -c:a pcm_f32le ");
 
         if (outputChannelCount.HasValue)
         {
@@ -545,7 +545,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
             b.Append(outputSampleRate.Value);
         }
 
-        b.Append(" -f f32le pipe:1");
+        b.Append(" -f f32le pipe:1 ");
 
         return b.ToString();
     }
