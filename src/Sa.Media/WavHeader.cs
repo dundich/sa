@@ -87,6 +87,10 @@ public sealed class WavHeader
             ? fileSize.Value - DataOffset
             : DataSize;
 
+        // Потоковые/некорректные данные не должны давать отрицательную длительность.
+        if (dataSize < 0)
+            return 0;
+
         long bytesPerChannel = dataSize / NumChannels;
         long samplesPerChannel = bytesPerChannel / (BitsPerSample / 8);
         return samplesPerChannel / (double)SampleRate;

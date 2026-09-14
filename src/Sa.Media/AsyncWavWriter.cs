@@ -255,18 +255,20 @@ internal sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
     /// </summary>
     private void CorrectHeader()
     {
-        if (_stream.CanSeek)
-        {
-            _stream.Position = 4;
-            Span<byte> chunkSizeBuffer = stackalloc byte[4];
-            BinaryPrimitives.WriteUInt32LittleEndian(chunkSizeBuffer, (uint)(_dataSize + 36));
-            _stream.Write(chunkSizeBuffer);
+        // Если поток не поддерживает перемотку, мы не можем перезаписать заголовок RIFF/data —
+        // иначе WAV-файл получится нечитемым. Падаем сразу, а не молча теряем данные.
+        if (!_stream.CanSeek)
+            throw new NotSupportedException("Seekable stream is required to finalize the WAV header.");
 
-            _stream.Position = 40;
-            Span<byte> dataSizeBuffer = stackalloc byte[4];
-            BinaryPrimitives.WriteUInt32LittleEndian(dataSizeBuffer, (uint)_dataSize);
-            _stream.Write(dataSizeBuffer);
-        }
+        _stream.Position = 4;
+        Span<byte> chunkSizeBuffer = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(chunkSizeBuffer, (uint)(_dataSize + 36));
+        _stream.Write(chunkSizeBuffer);
+
+        _stream.Position = 40;
+        Span<byte> dataSizeBuffer = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(dataSizeBuffer, (uint)_dataSize);
+        _stream.Write(dataSizeBuffer);
     }
 
     private static void WriteBytes(Span<byte> buffer, ref int offset, string value)

@@ -113,14 +113,20 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
 
         try
         {
-            while (true)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 ReadResult result = await _reader.ReadAsync(cancellationToken).ConfigureAwait(false);
                 ReadOnlySequence<byte> sequence = result.Buffer;
 
+                // Защита от голодания PipeReader: пустой буфер + завершение потока — стоп,
+                // чтобы не зациклиться, если заголовок читался ReadAtLeastAsync малыми пучками.
+                if (sequence.IsEmpty && result.IsCompleted)
+                    yield break;
+
                 SequencePosition consumed = sequence.Start;
+                bool advancedSomething = false;
                 bool success = false;
                 try
                 {
@@ -147,6 +153,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
                         currentOffset += blockAlign;
                         sequence = sequence.Slice(blockAlign);
                         consumed = sequence.Start;
+                        advancedSomething = true;
                     }
 
                     success = true;
@@ -163,7 +170,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
                     }
                 }
 
-                if (result.IsCompleted || currentOffset >= cutTo)
+                if (!advancedSomething && result.IsCompleted)
                     yield break;
             }
         }
