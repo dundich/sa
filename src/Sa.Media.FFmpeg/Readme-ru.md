@@ -333,7 +333,7 @@ src/Sa.Media.FFmpeg/
 ├── IFFMpegExecutor.cs           # Интерфейс конвертации аудио
 ├── IFFProbeExecutor.cs          # Интерфейс извлечения метаданных
 ├── IFFRawExecutor.cs            # Низкоуровневое выполнение процессов
-├── IFFMpegExecutorFactory.cs    # Фабрика создания экzekторов
+├── IFFMpegExecutorFactory.cs    # Фабрика создания экторов
 ├── IFFMpegLocator.cs            # Поиск бинарников
 ├── IPcmS16LeChannelManipulator.cs # Операции split/join
 ├── FFMpegOptions.cs             # Опции конфигурации
