@@ -67,6 +67,9 @@ internal sealed class FFMpegLocator : IFFMpegLocator
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return;
 
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            throw new FileNotFoundException($"Cannot set executable bit on missing file: {path}", path);
+
         using var process = Process.Start(new ProcessStartInfo
         {
             FileName = "chmod",
@@ -75,10 +78,17 @@ internal sealed class FFMpegLocator : IFFMpegLocator
             CreateNoWindow = true
         });
 
-        process?.WaitForExit();
+        if (process is null)
+            throw new InvalidOperationException("Failed to start chmod to make file executable.");
 
-        if (process?.ExitCode != 0)
-            throw new InvalidOperationException($"Failed to make file executable: {path}");
+        if (!process.WaitForExit(5000))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException($"Timeout waiting for chmod to complete on '{path}'.");
+        }
+
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"Failed to make file executable ({path}, exit={process.ExitCode}).");
     }
 
     private static IEnumerable<string> GetCommonSearchPaths()

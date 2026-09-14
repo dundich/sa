@@ -381,7 +381,7 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
             process.StandardOutput?.Close();
 
             // graceful shutdown
-            if (process.WaitForExit(500))
+            if (process.WaitForExit(Constants.ShutdownGracePeriodMs))
             {
                 exitCode = process.ExitCode;
                 return exitCode;
@@ -409,7 +409,7 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
                 return exitCode;
             }
 
-            if (process.WaitForExit(2000))
+            if (process.WaitForExit(Constants.ShutdownKillTimeoutMs))
             {
                 exitCode = process.ExitCode;
             }

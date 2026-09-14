@@ -155,7 +155,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         b.Append('"');
         b.Append(" -f mp3 -map 0:a:0 ");
 
-        if (Constants.IsOsLinux)
+        if (!Constants.IsOsWindows)
         {
             b.Append(" -c:a libmp3lame ");
         }
@@ -196,7 +196,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor) : IFFMpegExecutor
         b.Append('"');
         b.Append(" -f ogg -map 0:a:0 ");
 
-        if (Constants.IsOsLinux)
+        if (!Constants.IsOsWindows)
         {
             b.Append(' ');
             b.Append(isLibopus ? "-c:a libopus" : "-c:a libvorbis");
