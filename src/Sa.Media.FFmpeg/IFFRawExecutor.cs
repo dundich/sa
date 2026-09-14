@@ -22,13 +22,13 @@ public interface IFFRawExecutor
     /// Executes a command with the specified arguments asynchronously.
     /// </summary>
     /// <param name="commandArguments">The command-line arguments to pass to the executable.</param>
-    /// <param name="captureErrorOutput">If true, captures stderr output; otherwise still captures it into the result but does not throw on non-zero exit code.</param>
+    /// <param name="throwOnError">If true, throws <see cref="ProcessExecutionResultException"/> when the process exits with a non-zero code. If false, the result is always returned regardless of exit code.</param>
     /// <param name="timeout">Optional timeout for the execution. If not provided, uses <see cref="DefaultTimeout"/>.</param>
     /// <param name="cancellationToken">A token that can be used to cancel the execution.</param>
     /// <returns>A task that represents the asynchronous execution result.</returns>
     Task<ProcessExecutionResult> ExecuteAsync(
         string commandArguments,
-        bool captureErrorOutput = false,
+        bool throwOnError = false,
         TimeSpan? timeout = null,
         Action<ProcessStartInfo>? configure = null,
         CancellationToken cancellationToken = default);
@@ -39,17 +39,17 @@ public interface IFFRawExecutor
     /// Joins the arguments into a single string using space as a separator.
     /// </summary>
     /// <param name="commandArguments">An enumerable collection of command-line arguments.</param>
-    /// <param name="captureErrorOutput">If true, captures stderr output; otherwise still captures it into the result but does not throw on non-zero exit code.</param>
+    /// <param name="throwOnError">If true, throws <see cref="ProcessExecutionResultException"/> when the process exits with a non-zero code. If false, the result is always returned regardless of exit code.</param>
     /// <param name="timeout">Optional timeout for the execution. If not provided, uses <see cref="DefaultTimeout"/>.</param>
     /// <param name="cancellationToken">A token that can be used to cancel the execution.</param>
     /// <returns>A task that represents the asynchronous execution result.</returns>
     Task<ProcessExecutionResult> ExecuteAsync(
         IEnumerable<string> commandArguments,
-        bool captureErrorOutput = false,
+        bool throwOnError = false,
         TimeSpan? timeout = null,
         Action<ProcessStartInfo>? configure = null,
         CancellationToken cancellationToken = default)
-        => ExecuteAsync(string.Join(" ", commandArguments), captureErrorOutput, timeout, configure, cancellationToken);
+        => ExecuteAsync(string.Join(" ", commandArguments), throwOnError, timeout, configure, cancellationToken);
 
 
     /// <summary>

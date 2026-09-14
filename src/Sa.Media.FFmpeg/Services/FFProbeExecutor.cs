@@ -13,7 +13,11 @@ internal sealed class FFProbeExecutor(
     {
         var result = await executor.ExecuteAsync(
             $"-v error -show_entries stream=channels,sample_rate -of default=nw=1 \"{filePath}\"",
+            throwOnError: true,
             cancellationToken: cancellationToken);
+
+        if (result.ExitCode != 0)
+            throw new ProcessExecutionException(result.ExitCode, result.StandardError);
 
         string output = result.StandardOutput;
 

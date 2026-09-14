@@ -29,7 +29,7 @@ internal sealed class FFRawExecutor(
 
     public Task<ProcessExecutionResult> ExecuteAsync(
         string commandArguments,
-        bool captureErrorOutput = false,
+        bool throwOnError = false,
         TimeSpan? timeout = null,
         Action<ProcessStartInfo>? configure = null,
         CancellationToken cancellationToken = default)
@@ -39,7 +39,7 @@ internal sealed class FFRawExecutor(
 
         return executor.ExecuteWithResultAsync(
             psi,
-            captureErrorOutput,
+            throwOnError,
             timeout ?? DefaultTimeout,
             cancellationToken);
     }

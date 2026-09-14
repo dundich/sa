@@ -21,7 +21,7 @@ internal interface IProcessExecutor
     /// </summary>
     async Task<ProcessExecutionResult> ExecuteWithResultAsync(
         ProcessStartInfo startInfo
-        , bool captureErrorOutput = true
+        , bool throwOnError = true
         , TimeSpan? timeout = null
         , CancellationToken cancellationToken = default)
     {
@@ -41,7 +41,7 @@ internal interface IProcessExecutor
             StandardOutput: output.ToString(),
             StandardError: error.ToString());
 
-        if (result.ExitCode == 0 || captureErrorOutput) return result;
+        if (result.ExitCode == 0 || !throwOnError) return result;
 
         throw new ProcessExecutionResultException(result);
     }

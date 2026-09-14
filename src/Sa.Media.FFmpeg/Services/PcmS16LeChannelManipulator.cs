@@ -63,7 +63,7 @@ internal sealed class PcmS16LeChannelManipulator(
 
         _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
-            captureErrorOutput: false,
+            throwOnError: false,
             timeout: timeout,
             cancellationToken: cancellationToken);
 
@@ -88,7 +88,7 @@ internal sealed class PcmS16LeChannelManipulator(
 
         _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
-            captureErrorOutput: false,
+            throwOnError: false,
             timeout: timeout,
             cancellationToken: cancellationToken);
 

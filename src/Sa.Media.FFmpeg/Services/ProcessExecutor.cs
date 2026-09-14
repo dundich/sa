@@ -25,11 +25,15 @@ internal interface IProcessExecutor
 
     /// <summary>
     /// Executes a process and collects all output into a <see cref="ProcessExecutionResult"/>.
-    /// Throws <see cref="ProcessExecutionResultException"/> if exit code is non-zero.
+    /// Throws <see cref="ProcessExecutionResultException"/> if exit code is non-zero and <paramref name="throwOnError"/> is true.
     /// </summary>
+    /// <param name="startInfo">Process start configuration.</param>
+    /// <param name="throwOnError">If true, throws <see cref="ProcessExecutionResultException"/> on non-zero exit code. If false, the result is always returned.</param>
+    /// <param name="timeout">Operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     async Task<ProcessExecutionResult> ExecuteWithResultAsync(
         ProcessStartInfo startInfo
-        , bool captureErrorOutput = true
+        , bool throwOnError = true
         , TimeSpan? timeout = null
         , CancellationToken cancellationToken = default)
     {
@@ -49,7 +53,7 @@ internal interface IProcessExecutor
             StandardOutput: output.ToString(),
             StandardError: error.ToString());
 
-        if (result.ExitCode == 0 || captureErrorOutput) return result;
+        if (result.ExitCode == 0 || !throwOnError) return result;
 
         throw new ProcessExecutionResultException(result);
     }
