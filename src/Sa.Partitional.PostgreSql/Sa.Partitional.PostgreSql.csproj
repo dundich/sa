@@ -7,11 +7,7 @@
 		<Description>For managing table partitioning in PostgreSQL</Description>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-		<NoWarn>1701;1702;CS8602;</NoWarn>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+	<PropertyGroup>
 		<NoWarn>1701;1702;CS8602;</NoWarn>
 	</PropertyGroup>
 
