@@ -417,8 +417,8 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         manager.Apply(group, s => s with { MaxBatchSize = 32 });
 
         // Subscriber should have received the updated settings
-        Assert.Single(capturedSettings);
-        Assert.Equal(32, capturedSettings[0].MaxBatchSize);
+        var item = Assert.Single(capturedSettings);
+        Assert.Equal(32, item.MaxBatchSize);
         Assert.Equal(group, capturedSettings[0].ConsumerGroupId);
     }
 

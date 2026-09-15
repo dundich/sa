@@ -361,8 +361,8 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Single(recordedAttempts);
-        Assert.Equal(1, recordedAttempts[0]); // attempt 0 + 1 = 1
+        var item = Assert.Single(recordedAttempts);
+        Assert.Equal(1, item); // attempt 0 + 1 = 1
         Assert.Equal(TimeSpan.FromSeconds(5), ctx.PostponeDelay);
     }
 

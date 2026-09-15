@@ -1,4 +1,7 @@
-﻿namespace Sa.Media.Echo.Tests;
+﻿using Sa.Media.Echo;
+
+
+namespace Sa.MediaTests.Echo;
 
 public class CrossFeedSeparatorIntegrationTests
 {
@@ -10,19 +13,19 @@ public class CrossFeedSeparatorIntegrationTests
     [Fact]
     public async Task Execute_linearMode_producesValidWav()
     {
-        var separator = new CrossFeedSeparator();
         var inputPath = DataPath(WavFileName);
         var outputPath = Path.GetTempFileName() + ".wav";
 
         try
         {
-            await separator.Execute(new AudioSeparationOptions(
+            await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
                 InputPath: inputPath,
-                SeparationMode: "linear",
                 OutputPath: outputPath,
+                Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed,
                 DominanceThresholdDb: 6.0,
                 SpectralMaskPower: 4.0,
-                MaskFloor: 0.01), TestContext.Current.CancellationToken);
+                MaskFloor: 0.01),
+                TestContext.Current.CancellationToken);
 
             Assert.True(File.Exists(outputPath), "Output WAV file should exist");
             ValidateWavFile(outputPath, expectedChannels: 2);
@@ -37,16 +40,15 @@ public class CrossFeedSeparatorIntegrationTests
     [Fact]
     public async Task Execute_aggressiveMode_producesValidWav()
     {
-        var separator = new CrossFeedSeparator();
         var inputPath = DataPath(WavFileName);
         var outputPath = Path.GetTempFileName() + ".wav";
 
         try
         {
-            await separator.Execute(new AudioSeparationOptions(
+            await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
                 InputPath: inputPath,
-                SeparationMode: "aggressive",
                 OutputPath: outputPath,
+                Processing: CrossFeedSeparator.ProcessingMode.Aggressive,
                 DominanceThresholdDb: 6.0,
                 SpectralMaskPower: 4.0,
                 MaskFloor: 0.01), TestContext.Current.CancellationToken);
@@ -62,15 +64,15 @@ public class CrossFeedSeparatorIntegrationTests
     }
 
     [Theory]
-    [InlineData("/nonexistent/path/audio.mp3", "linear")]
-    public async Task Execute_nonexistentInput_throwsFileNotFoundException(string inputPath, string mode)
+    [InlineData("/nonexistent/path/audio.mp3")]
+    public async Task Execute_nonexistentInput_throwsFileNotFoundException(string inputPath)
     {
-        var separator = new CrossFeedSeparator();
+
         await Assert.ThrowsAsync<FileNotFoundException>(() =>
-            separator.Execute(new AudioSeparationOptions(
+            CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
                 InputPath: inputPath,
-                SeparationMode: mode,
                 OutputPath: null!,
+                Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed,
                 DominanceThresholdDb: 6.0,
                 SpectralMaskPower: 4.0,
                 MaskFloor: 0.01), TestContext.Current.CancellationToken));
@@ -79,14 +81,13 @@ public class CrossFeedSeparatorIntegrationTests
     [Fact]
     public async Task Execute_invalidSpectralMaskPower_throwsArgumentException()
     {
-        var separator = new CrossFeedSeparator();
         var inputPath = DataPath(WavFileName);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            separator.Execute(new AudioSeparationOptions(
+            CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
                 InputPath: inputPath,
-                SeparationMode: "linear",
                 OutputPath: Path.GetTempFileName() + ".wav",
+                Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed,
                 DominanceThresholdDb: 6.0,
                 SpectralMaskPower: 0,
                 MaskFloor: 0.01), TestContext.Current.CancellationToken));
@@ -95,23 +96,22 @@ public class CrossFeedSeparatorIntegrationTests
     [Fact]
     public async Task Execute_invalidMaskFloor_throwsArgumentException()
     {
-        var separator = new CrossFeedSeparator();
         var inputPath = DataPath(WavFileName);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            separator.Execute(new AudioSeparationOptions(
+            CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
                 InputPath: inputPath,
-                SeparationMode: "linear",
                 OutputPath: Path.GetTempFileName() + ".wav",
+                Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed,
                 DominanceThresholdDb: 6.0,
                 SpectralMaskPower: 4.0,
                 MaskFloor: -0.5), TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            separator.Execute(new AudioSeparationOptions(
+            CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
                 InputPath: inputPath,
-                SeparationMode: "linear",
                 OutputPath: Path.GetTempFileName() + ".wav",
+                Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed,
                 DominanceThresholdDb: 6.0,
                 SpectralMaskPower: 4.0,
                 MaskFloor: 1.5), TestContext.Current.CancellationToken));
@@ -120,7 +120,6 @@ public class CrossFeedSeparatorIntegrationTests
     [Fact]
     public async Task Execute_autoOutputPath_generatesWavInSameDirectory()
     {
-        var separator = new CrossFeedSeparator();
         var inputPath = DataPath(WavFileName);
         var expectedOutput = Path.Combine(
             Path.GetDirectoryName(inputPath)!,
@@ -128,10 +127,10 @@ public class CrossFeedSeparatorIntegrationTests
 
         try
         {
-            await separator.Execute(new AudioSeparationOptions(
+            await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
                 InputPath: inputPath,
-                SeparationMode: "linear",
                 OutputPath: null,
+                Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed,
                 DominanceThresholdDb: 6.0,
                 SpectralMaskPower: 4.0,
                 MaskFloor: 0.01), TestContext.Current.CancellationToken);
@@ -153,15 +152,15 @@ public class CrossFeedSeparatorIntegrationTests
 
         // RIFF header
         var riff = reader.ReadChars(4);
-        Assert.Equal(new[] { 'R', 'I', 'F', 'F' }, riff);
+        Assert.Equal(['R', 'I', 'F', 'F'], riff);
 
         _ = reader.ReadInt32(); // file size - 8
         var wave = reader.ReadChars(4);
-        Assert.Equal(new[] { 'W', 'A', 'V', 'E' }, wave);
+        Assert.Equal(['W', 'A', 'V', 'E'], wave);
 
         // fmt chunk
         var fmt = reader.ReadChars(4);
-        Assert.Equal(new[] { 'f', 'm', 't', ' ' }, fmt);
+        Assert.Equal(['f', 'm', 't', ' '], fmt);
         _ = reader.ReadInt32(); // chunk size (16)
         var audioFormat = reader.ReadInt16();
         Assert.Equal(1, audioFormat); // PCM
@@ -176,7 +175,7 @@ public class CrossFeedSeparatorIntegrationTests
 
         // data chunk
         var data = reader.ReadChars(4);
-        Assert.Equal(new[] { 'd', 'a', 't', 'a' }, data);
+        Assert.Equal(['d', 'a', 't', 'a'], data);
         int dataSize = reader.ReadInt32();
         Assert.True(dataSize > 0, "WAV data chunk should not be empty");
     }

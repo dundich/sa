@@ -55,13 +55,7 @@ internal sealed class BinaryPipeReader(PipeReader reader)
 
     private static void CopyTo(ReadOnlySequence<byte> seq, Span<byte> destination)
     {
-        int copied = 0;
-        foreach (var segment in seq)
-        {
-            int toCopy = Math.Min(segment.Length, destination.Length - copied);
-            segment.Span[..toCopy].CopyTo(destination[copied..]);
-            copied += toCopy;
-            if (copied >= destination.Length) break;
-        }
+        seq.Slice(0, Math.Min(seq.Length, destination.Length))
+            .CopyTo(destination);
     }
 }

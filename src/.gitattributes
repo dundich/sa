@@ -1,5 +1,6 @@
 # Auto detect text files and perform LF normalization
-*        text=auto
+*        text=lf
+*        text eol=lf
 
 *.cs     text diff=csharp
 *.java   text diff=java
@@ -9,7 +10,6 @@
 *.sql    text
 
 *.csproj text merge=union
-*.sln    text merge=union eol=crlf
 
 *.docx   diff=astextplain
 *.DOCX   diff=astextplain
@@ -21,3 +21,5 @@
 relative/path/*.txt text eol=lf
 
 Sa.Media.FFmpeg/build/*.sh text eol=lf
+
+

@@ -1,282 +1,140 @@
 ﻿using System.Buffers;
 using System.Buffers.Binary;
-using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace Sa.Media;
 
-internal sealed class AsyncWavWriter : IDisposable, IAsyncDisposable
+
+internal static class AsyncWavWriter
 {
-    private readonly Stream _stream;
-    private readonly uint _sampleRate;
-    private readonly ushort _bitsPerSample;
-    private readonly ushort _numChannels;
-    private readonly bool _leaveOpen;
-    private long _dataSize = 0;
-
-    private readonly IMemoryOwner<byte> _bufferOwner;
-    private Memory<byte> _currentBuffer;
-    private int _currentBufferSize;
-
-    public AsyncWavWriter(
+    public static async Task WriteToPcm16Le(
         Stream stream,
-        uint sampleRate,
-        ushort bitsPerSample = 16,
-        ushort numChannels = 1,
-        bool leaveOpen = false)
+        int sampleRate,
+        IAsyncEnumerable<float> audio,
+        CancellationToken cancellationToken = default)
     {
-        _stream = stream ?? throw new ArgumentNullException(nameof(stream));
-        if (!_stream.CanWrite)
-            throw new ArgumentException("Stream must be writable", nameof(stream));
+        const int channels = 2;
+        const int bitsPerSample = 16;
+        const int bytesPerSample = bitsPerSample / 8;
+        short blockAlign = channels * bytesPerSample;
+        int byteRate = sampleRate * blockAlign;
 
-        _sampleRate = sampleRate;
-        _bitsPerSample = bitsPerSample;
-        _numChannels = numChannels;
-        _leaveOpen = leaveOpen;
+        // Длину заранее не знаем, поэтому размеры в заголовке придётся патчить.
+        if (!stream.CanSeek)
+            throw new ArgumentException(
+                "Для записи WAV из IAsyncEnumerable нужен seekable Stream (например, FileStream).",
+                nameof(stream));
 
-        _bufferOwner = MemoryPool<byte>.Shared.Rent(8192);
-        _currentBuffer = _bufferOwner.Memory;
-        _currentBufferSize = 0;
+        long headerStart = stream.Position;
 
-        WriteHeader(); // пишем заголовок с нулевым размером данных
-    }
+        // ---------- Заголовок (44 байта) с плейсхолдерами ----------
+        var header = new byte[44];
+        var h = header.AsSpan();
+        WriteAscii(h, 0, "RIFF");
+        BinaryPrimitives.WriteInt32LittleEndian(h.Slice(4, 4), 0);   // ← патч потом
+        WriteAscii(h, 8, "WAVE");
+        WriteAscii(h, 12, "fmt ");
+        BinaryPrimitives.WriteInt32LittleEndian(h.Slice(16, 4), 16);
+        BinaryPrimitives.WriteInt16LittleEndian(h.Slice(20, 2), 1);
+        BinaryPrimitives.WriteInt16LittleEndian(h.Slice(22, 2), channels);
+        BinaryPrimitives.WriteInt32LittleEndian(h.Slice(24, 4), sampleRate);
+        BinaryPrimitives.WriteInt32LittleEndian(h.Slice(28, 4), byteRate);
+        BinaryPrimitives.WriteInt16LittleEndian(h.Slice(32, 2), blockAlign);
+        BinaryPrimitives.WriteInt16LittleEndian(h.Slice(34, 2), bitsPerSample);
+        WriteAscii(h, 36, "data");
+        BinaryPrimitives.WriteInt32LittleEndian(h.Slice(40, 4), 0);   // ← патч потом
 
-    /// <summary>
-    /// Пишет WAV заголовок с заглушкой на размер данных
-    /// </summary>
-    private void WriteHeader()
-    {
-        Span<byte> header = stackalloc byte[44]; // стандартный WAV заголовок
-        int offset = 0;
+        await stream.WriteAsync(header, cancellationToken).ConfigureAwait(false);
 
-        // RIFF Header
-        WriteBytes(header, ref offset, "RIFF");
-        BinaryPrimitives.WriteUInt32LittleEndian(header, 0); // chunkSize (заглушка)
-        offset += 4;
-        WriteBytes(header, ref offset, "WAVE");
+        // ---------- Данные ----------
+        const int floatBufSize = 8192;                 // чётное, interleaved L/R
+        const int byteBufSize = floatBufSize * 2;     // 2 байта на сэмпл
 
-        // fmt Subchunk
-        WriteBytes(header, ref offset, "fmt ");
-        BinaryPrimitives.WriteUInt32LittleEndian(header[offset..], 16); // subchunk1Size
-        offset += 4;
-        BinaryPrimitives.WriteUInt16LittleEndian(header[offset..], 1); // audioFormat: PCM
-        offset += 2;
-        BinaryPrimitives.WriteUInt16LittleEndian(header[offset..], _numChannels);
-        offset += 2;
-        BinaryPrimitives.WriteUInt32LittleEndian(header[offset..], _sampleRate);
-        offset += 4;
-        BinaryPrimitives.WriteUInt32LittleEndian(header[offset..], (uint)(_sampleRate * _numChannels * (_bitsPerSample / 8))); // byteRate
-        offset += 4;
-        BinaryPrimitives.WriteUInt16LittleEndian(header[offset..], (ushort)(_numChannels * (_bitsPerSample / 8))); // blockAlign
-        offset += 2;
-        BinaryPrimitives.WriteUInt16LittleEndian(header[offset..], _bitsPerSample); // bitsPerSample
-        offset += 2;
+        var floatBuf = ArrayPool<float>.Shared.Rent(floatBufSize);
+        var byteBuf = ArrayPool<byte>.Shared.Rent(byteBufSize);
 
-        // data Subchunk
-        WriteBytes(header, ref offset, "data");
+        long totalDataBytes = 0;
+        int floatCount = 0;
 
-        BinaryPrimitives.WriteUInt32LittleEndian(header[offset..], 0); // subchunk2Size (заглушка)
-        offset += 4;
-
-        _stream.Write(header);
-    }
-
-    ///// <summary>
-    ///// Асинхронно записывает блок нормализованных семплов по каналам
-    ///// Каждый элемент samples — семплы для одного канала
-    ///// Все ReadOnlyMemory должны быть одинаковой длины
-    ///// </summary>
-    public async ValueTask WriteSamplesAsync(ReadOnlyMemory<double> interleavedSamples, CancellationToken cancellationToken = default)
-    {
-        if (MemoryMarshal.TryGetArray(interleavedSamples, out var segment))
-        {
-            await WriteSamplesAsync(segment.Array!, segment.Offset, segment.Count, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        // Данные не в backing-массиве — копируем в локальный буфер
-        var localBuffer = ArrayPool<double>.Shared.Rent(interleavedSamples.Length);
         try
         {
-            interleavedSamples.Span.CopyTo(localBuffer);
-            await WriteSamplesAsync(localBuffer, 0, interleavedSamples.Length, cancellationToken).ConfigureAwait(false);
+            await foreach (var sample in audio
+                .WithCancellation(cancellationToken)
+                .ConfigureAwait(false))
+            {
+                if (floatCount == floatBufSize)
+                {
+                    int written = FloatToPcm16(floatBuf.AsSpan(0, floatCount), byteBuf);
+                    await stream.WriteAsync(
+                        byteBuf.AsMemory(0, written),
+                        cancellationToken).ConfigureAwait(false);
+                    totalDataBytes += written;
+                    floatCount = 0;
+                }
+                floatBuf[floatCount++] = sample;
+            }
+
+            // Остаток. Если нечётное число сэмплов — последний L/R-пару отбрасываем.
+            int even = floatCount & ~1;
+            if (even > 0)
+            {
+                int written = FloatToPcm16(floatBuf.AsSpan(0, even), byteBuf);
+                await stream.WriteAsync(
+                    byteBuf.AsMemory(0, written),
+                    cancellationToken).ConfigureAwait(false);
+                totalDataBytes += written;
+            }
         }
         finally
         {
-            ArrayPool<double>.Shared.Return(localBuffer);
+            ArrayPool<float>.Shared.Return(floatBuf);
+            ArrayPool<byte>.Shared.Return(byteBuf);
         }
+
+        // ---------- Патч размеров ----------
+        long endPos = stream.Position;
+
+        Span<byte> tmp = stackalloc byte[4];
+
+        stream.Position = headerStart + 4;
+        BinaryPrimitives.WriteInt32LittleEndian(tmp, (int)(36 + totalDataBytes));
+        stream.Write(tmp);
+
+        stream.Position = headerStart + 40;
+        BinaryPrimitives.WriteInt32LittleEndian(tmp, (int)totalDataBytes);
+        stream.Write(tmp);
+
+        stream.Position = endPos;
     }
 
-    private async Task WriteSamplesAsync(double[] samples, int offset, int count, CancellationToken cancellationToken)
+    private static int FloatToPcm16(ReadOnlySpan<float> src, Span<byte> dst)
     {
-        for (int i = offset; i < count; i++)
+        int pairs = src.Length >> 1;
+        int o = 0;
+        for (int i = 0; i < pairs; i++)
         {
-            WriteSampleCore(samples[i]);
-            if (_currentBufferSize >= _currentBuffer.Length)
-                await FlushBufferAsync(cancellationToken).ConfigureAwait(false);
+            int l = ClampToInt16(src[i * 2]);
+            int r = ClampToInt16(src[i * 2 + 1]);
+            dst[o++] = (byte)l;
+            dst[o++] = (byte)(l >> 8);
+            dst[o++] = (byte)r;
+            dst[o++] = (byte)(r >> 8);
         }
+        return o;
     }
 
-    private void WriteSampleCore(double sample)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int ClampToInt16(float v)
     {
-        switch (_bitsPerSample)
-        {
-            case 8:
-                WriteSample8Bit(sample);
-                break;
-            case 16:
-                WriteSample16Bit(sample);
-                break;
-            case 24:
-                WriteSample24Bit(sample);
-                break;
-            case 32:
-                WriteSample32Bit(sample);
-                break;
-            case 64:
-                WriteSample64Bit(sample);
-                break;
-            default:
-                throw new NotSupportedException($"Unsupported BitsPerSample: {_bitsPerSample}");
-        }
+        // Сохраняем поведение оригинала: Math.Clamp(v, -1, 1) * 32767.
+        if (v > 1f) v = 1f;
+        else if (v < -1f) v = -1f;
+        return (int)(v * 32767f);
     }
 
-    private void WriteSample8Bit(double value)
+    private static void WriteAscii(Span<byte> dst, int offset, string ascii)
     {
-        byte b = (byte)((value + 1.0) * byte.MaxValue / 2.0);
-        _currentBuffer.Span[_currentBufferSize] = b;
-        _currentBufferSize += sizeof(byte);
-        _dataSize += sizeof(byte);
+        for (int i = 0; i < ascii.Length; i++)
+            dst[offset + i] = (byte)ascii[i];
     }
-
-    private void WriteSample16Bit(double value)
-    {
-        short s = (short)(value * short.MaxValue);
-        BinaryPrimitives.WriteInt16LittleEndian(_currentBuffer.Span[_currentBufferSize..], s);
-        _currentBufferSize += sizeof(short);
-        _dataSize += sizeof(short);
-    }
-
-    private void WriteSample24Bit(double value)
-    {
-        // Защита от невалидных входных значений
-        if (double.IsNaN(value) || double.IsInfinity(value))
-            value = 0.0;
-
-        // Корректный масштаб для 24 бит
-        const double max24Bit = 8388607.0; // 2^23 - 1
-        double scaled = value * max24Bit;
-
-        // Клиппинг
-        if (scaled > max24Bit) scaled = max24Bit;
-        else if (scaled < -max24Bit - 1) scaled = -max24Bit - 1;
-
-        int i = (int)scaled;
-
-        // Проверка доступного места (если не гарантировано снаружи)
-        if (_currentBufferSize + 3 > _currentBuffer.Span.Length)
-            throw new InvalidOperationException("Buffer overflow");
-
-        var span = _currentBuffer.Span[_currentBufferSize..];
-        span[0] = (byte)(i & 0xFF);        // младший байт
-        span[1] = (byte)((i >> 8) & 0xFF); // средний
-        span[2] = (byte)((i >> 16) & 0xFF);// старший (little-endian)
-        _currentBufferSize += 3;
-        _dataSize += 3;
-    }
-
-    private void WriteSample32Bit(double value)
-    {
-        int i = (int)(value * int.MaxValue);
-        BinaryPrimitives.WriteInt32LittleEndian(_currentBuffer.Span[_currentBufferSize..], i);
-        _currentBufferSize += sizeof(int);
-        _dataSize += sizeof(int);
-    }
-
-    private void WriteSample64Bit(double value)
-    {
-        MemoryMarshal.Write(_currentBuffer.Span[_currentBufferSize..], in value);
-        _currentBufferSize += sizeof(double);
-        _dataSize += sizeof(double);
-    }
-
-    private async Task FlushBufferAsync(CancellationToken cancellationToken)
-    {
-        if (_currentBufferSize == 0) return;
-
-        await _stream.WriteAsync(_currentBuffer[.._currentBufferSize], cancellationToken).ConfigureAwait(false);
-        _currentBufferSize = 0;
-    }
-
-    public async Task CloseAsync(CancellationToken cancellationToken = default)
-    {
-        await FlushBufferAsync(cancellationToken).ConfigureAwait(false);
-        CorrectHeader();
-
-        if (!_leaveOpen)
-            await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        await CloseAsync().ConfigureAwait(false);
-        _bufferOwner.Dispose();
-        if (!_leaveOpen)
-            await _stream.DisposeAsync().ConfigureAwait(false);
-    }
-
-    public void Dispose()
-    {
-        Close();
-        _bufferOwner.Dispose();
-        if (!_leaveOpen)
-            _stream.Dispose();
-    }
-
-    public void Close()
-    {
-        FlushBuffer();
-        CorrectHeader();
-
-        if (!_leaveOpen)
-            _stream.Flush();
-    }
-
-    private void FlushBuffer()
-    {
-        if (_currentBufferSize > 0)
-        {
-            _stream.Write(_currentBuffer.Span[.._currentBufferSize]);
-            _currentBufferSize = 0;
-        }
-    }
-
-    /// <summary>
-    /// Обновляет заголовок с реальным размером данных
-    /// </summary>
-    private void CorrectHeader()
-    {
-        // Если поток не поддерживает перемотку, мы не можем перезаписать заголовок RIFF/data —
-        // иначе WAV-файл получится нечитемым. Падаем сразу, а не молча теряем данные.
-        if (!_stream.CanSeek)
-            throw new NotSupportedException("Seekable stream is required to finalize the WAV header.");
-
-        _stream.Position = 4;
-        Span<byte> chunkSizeBuffer = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(chunkSizeBuffer, (uint)(_dataSize + 36));
-        _stream.Write(chunkSizeBuffer);
-
-        _stream.Position = 40;
-        Span<byte> dataSizeBuffer = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(dataSizeBuffer, (uint)_dataSize);
-        _stream.Write(dataSizeBuffer);
-    }
-
-    private static void WriteBytes(Span<byte> buffer, ref int offset, string value)
-    {
-        foreach (var ch in value)
-        {
-            buffer[offset++] = (byte)ch;
-        }
-    }
-
 }

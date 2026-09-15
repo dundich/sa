@@ -7,7 +7,7 @@
 /// <param name="Sample">сэпмл</param>
 /// <param name="Position">Абсолютное cмещение сэпмла с учетом header size</param>
 /// <param name="IsEof">флаг последний сэпмл</param>
-public sealed record AudioPacket(
+public readonly record struct AudioPacket(
     int ChannelId,
     ReadOnlyMemory<byte> Sample,
     long Position,
