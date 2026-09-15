@@ -74,6 +74,22 @@ internal static class WavHeaderReader
         return header;
     }
 
+    public static async Task<WavHeader> ReadHeader(
+        string filePath,
+        CancellationToken cancellationToken = default)
+    {
+        await using Stream stream = File.OpenRead(filePath);
+        PipeReader pipe = PipeReader.Create(stream);
+        try
+        {
+            return await ReadHeaderAsync(pipe, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await pipe.CompleteAsync().ConfigureAwait(false);
+        }
+    }
+
 
     private static async Task<(long, uint dataSize)> FindDataChunkAsync(
         BinaryPipeReader reader, CancellationToken cancellationToken = default)

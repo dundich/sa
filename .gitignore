@@ -808,3 +808,6 @@ src/.vscode/
 .agents/
 /.github/skills
 /src/Sa.Media.FFmpeg/sa/native/
+/src/Tests/Sa.MediaTests/data/pcm_s16le.wav
+/src/Sa.Media/Echo/output.wav
+src/Sa.Media/Echo/data/pcm_s16le.wav
