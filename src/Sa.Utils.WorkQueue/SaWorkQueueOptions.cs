@@ -1,7 +1,5 @@
 ﻿namespace Sa.Utils.WorkQueue;
 
-using System.Threading.Channels;
-
 public sealed record SaWorkQueueOptions<TInput>(
     ISaWork<TInput> Processor,
     int? QueueCapacity = null,
@@ -10,9 +8,9 @@ public sealed record SaWorkQueueOptions<TInput>(
     bool? SingleWriter = false,
     Func<TInput, Exception, SaExecutionErrorStrategy>? HandleItemFaulted = null,
     Action<TInput, SaWorkStatus, Exception?>? StatusChanged = null,
-    BoundedChannelFullMode FullMode = BoundedChannelFullMode.Wait,
     SaReaderScalingStrategy ReaderScalingStrategy = SaReaderScalingStrategy.Lifo,
-    Func<TInput, string>? GetItemDisplayName = null)
+    Func<TInput, string>? GetItemDisplayName = null,
+    TimeSpan? ShutdownTimeout = null)
 {
     /// <summary>Creates a new options instance with the specified queue capacity.</summary>
     /// <param name="capacity">Must be at least 1.</param>
@@ -47,10 +45,6 @@ public sealed record SaWorkQueueOptions<TInput>(
     public SaWorkQueueOptions<TInput> WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy> cb)
         => this with { HandleItemFaulted = cb };
 
-    /// <summary>Sets the behaviour when the queue is full.</summary>
-    public SaWorkQueueOptions<TInput> WithFullMode(BoundedChannelFullMode mode)
-        => this with { FullMode = mode };
-
     /// <summary>Sets the strategy for assigning items to readers.</summary>
     public SaWorkQueueOptions<TInput> WithReaderScalingStrategy(SaReaderScalingStrategy strategy)
         => this with { ReaderScalingStrategy = strategy };
@@ -58,6 +52,14 @@ public sealed record SaWorkQueueOptions<TInput>(
     /// <summary>Sets a function to obtain a display name for each work item (e.g., for logging).</summary>
     public SaWorkQueueOptions<TInput> WithItemDisplayName(Func<TInput, string> toString)
         => this with { GetItemDisplayName = toString };
+
+    /// <summary>Sets the maximum time to wait for readers during synchronous shutdown or force-cancel.</summary>
+    /// <param name="timeout">Must be positive. If not set, defaults to 30 seconds.</param>
+    public SaWorkQueueOptions<TInput> WithShutdownTimeout(TimeSpan timeout)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
+        return this with { ShutdownTimeout = timeout };
+    }
 
 
     /// <summary>Creates options from a delegate that processes a single item.</summary>

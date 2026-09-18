@@ -36,6 +36,7 @@
     <Project Path="Samples/Partitional.ConsoleApp/Partitional.ConsoleApp.csproj" />
     <Project Path="Samples/PgOutbox.ConsoleApp/PgOutbox.ConsoleApp.csproj" />
     <Project Path="Samples/Schedule.Console/Schedule.Console.csproj" />
+    <Project Path="Samples/WorkQueue.Console/WorkQueue.Console.csproj" />
   </Folder>
   <Folder Name="/Schedule/">
     <Project Path="Sa.Schedule/Sa.Schedule.csproj" />

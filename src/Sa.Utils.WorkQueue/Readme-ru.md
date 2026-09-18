@@ -4,11 +4,74 @@
 
 ---
 
+
+# 📄 Архитектурное описание: `SaWorkQueue<TInput>`
+
+## 1. Общее назначение
+`SaWorkQueue<TInput>` — это высокопроизводительная, потокобезопасная очередь фоновой обработки задач, построенная на базе паттерна **Producer-Consumer** с использованием `System.Threading.Channels`. Класс предназначен для асинхронного выполнения задач (`ISaWork<TInput>`) с динамическим управлением пулом рабочих потоков (читателей), обработкой ошибок и отслеживанием состояния простоя.
+
+## 2. Ключевые архитектурные принципы
+
+### А. Динамическая емкость пула (`ConcurrencyLimit`)
+* **Семантика:** Свойство `ConcurrencyLimit` отражает **текущую фактическую емкость пула** (количество физически существующих и готовых к работе читателей), а не просто статическую "целевую настройку".
+* **Поведение при сбоях:** Если читатель завершается (например, из-за стратегии `SaExecutionErrorStrategy.StopReader` или вызова `ForceCancelReaders`), значение `ConcurrencyLimit` **уменьшается** атомарно (`Interlocked.Decrement`). Это гарантирует, что свойство всегда отражает реальное доступное количество рабочих единиц.
+* **Восстановление:** Если читатель завершился (стратегия `StopReader`, `ForceCancelReaders`, краш), ёмкость пула уменьшается. Для восстановления установите `ConcurrencyLimit` в целевое значение — сеттер запустит недостающих читателей.
+
+### Б. Точный учет задач (`_taskCount` и `IsIdle`)
+* **Единственный источник истины:** Метод `IsIdle()` опирается **исключительно** на значение `volatile int _taskCount == 0`.
+* **Почему так:** Проверка `_queue.Reader.Count` подвержена состояниям гонки (race conditions) между моментом извлечения задачи из канала и моментом начала её выполнения. Счетчик `_taskCount` инкрементируется в `MarkActive()` *до* записи в канал и декрементируется в `MarkInactive()` *после* завершения обработки, что дает 100% точный сигнал о простое через `TaskCompletionSource` (`_idleTcs`).
+* **Защита от отрицательных значений:** `MarkInactive()` содержит проверку `if (_taskCount > 0)`, чтобы предотвратить уход счетчика в минус при гонке между `Enqueue` и `Shutdown`.
+
+### В. Детерминированная принудительная остановка (`ForceCancelReaders`)
+* Методы `ForceCancelReaders` и `ForceCancelReadersAsync` не просто отправляют сигнал отмены (`Cancel()`), но и **гарантированно ожидают** физического завершения задач читателей (`Task.WaitAll` / `Task.WhenAll`).
+* Это критически важно: только после этого ожидания гарантируется, что `_readerCount` и `_concurrency` уже корректно обновлены методами `RemoveReader`, и последующие операции (например, изменение `ConcurrencyLimit`) работают с актуальным состоянием.
+
+## 3. Основные компоненты
+
+| Компонент | Назначение |
+| :--- | :--- |
+| `Channel<WorkItem> _queue` | Потоконебезопасный буфер для передачи задач от производителей к потребителям. Настроен на `SingleReader = false` (множественные потребители). |
+| `_readerCount` / `_taskReaders` | Отслеживают фактическое количество запущенных циклов обработки (`ReaderLoopAsync`). |
+| `_concurrency` | Атомарное поле, хранящее текущую емкость пула. Синхронизировано с `_readerCount` при штатной работе, но управляется через `Interlocked` при аварийном завершении. |
+| `_taskCount` / `_idleTcs` | Механизм эффективного ожидания простоя очереди без активного опроса (polling). |
+| `_state` (`QueueState`) | Конечный автомат состояний: `Active` (0), `Shutdown` (1), `Disposed` (2). Управляется через `Interlocked.CompareExchange`. |
+
+## 4. Обработка ошибок и стратегии (`SaExecutionErrorStrategy`)
+
+При исключении в `ISaWork<TInput>.Execute` срабатывает делегат `_handleItemFaulted`, который возвращает одну из стратегий:
+1. **`Continue`**: Задача помечается как `Faulted`, но читатель продолжает брать следующие задачи из канала.
+2. **`StopReader`**: Задача помечается как `Faulted`, текущий читатель завершает свой цикл (`return false`), вызывая `RemoveReader`. **Емкость пула (`ConcurrencyLimit`) уменьшается на 1.** Остальные читатели продолжают работу.
+3. **`ShutdownQueue`**: Инициируется асинхронное завершение работы всей очереди (`ShutdownAsync`), все новые задачи будут отвергнуты.
+
+## 5. Жизненный цикл и завершение работы
+
+* **Graceful Shutdown (`Shutdown` / `ShutdownAsync`)**:
+  1. Переводит состояние в `Shutdown`.
+  2. Отменяет `_shutdownCts` (сигнал читателям завершиться после текущей задачи).
+  3. Закрывает канал для записи (`TryComplete()`).
+  4. Ожидает завершения всех задач читателей (`WaitForReadersToCompleteAsync`).
+  5. Очищает оставшиеся в канале задачи (`ClearRemainingItems`), помечая их как `Faulted` и сбрасывая `_taskCount` в 0 для корректного `IsIdle()`.
+* **Dispose**: Гарантирует вызов `Shutdown` и освобождение `_shutdownCts`. Повторные вызовы безопасны (идемпотентны).
+
+## 6. 🤖 Критические правила для AI-Агентов (⚠️ ВАЖНО)
+
+Эти правила ОБЯЗАТЕЛЬНО соблюдать при модификации этого кода:
+
+1. **НИКОГДА** не использовать прямое присваивание `_concurrency = _readerCount;`. Изменение ёмкости пула при удалении читателя выполняется через декремент `_concurrency` внутри `RemoveReader` (под `_readersSync`), чтобы избежать состояний гонки.
+2. **НИКОГДА** не полагаться на `_queue.Reader.Count` для определения `IsIdle()`. Использовать только `_taskCount == 0`.
+3. При добавлении новых методов принудительного прерывания всегда добавляйте ожидание завершения `Task` (`Task.WhenAll`), чтобы состояние счетчиков успело синхронизироваться.
+4. Сеттер `ConcurrencyLimit` вычисляет дельту от фактического числа живых читателей (`_readerCount - _pendingRemovals`), а не от `_readerCount` — это исключает «лишние» спавны/отмены для уже отменённых читателей.
+5. `RemoveReader` вызывается в `finally` блока `ReaderLoopAsync`, который выполняется **после** `MarkInactive()` (в finally `ExecuteItemAsync`). Это означает, что `WaitForIdleAsync` может вернуть управление до завершения `RemoveReader`. Не считайте, что `_concurrency` полностью обновлён сразу после `WaitForIdleAsync`.
+6. Все мутации списков читателей (`_ctsReaders`, `_taskReaders`, `_pendingRemovals`, `_intentionalRemovals`, `_forceCancelled`) должны выполняться под `lock (_readersSync)`.
+7. Все мутации счётчиков задач (`_taskCount`, `_idleTcs`) должны выполняться под `lock (_wiSync)`.
+
+---
+
 ## Возможности
 
 | Возможность | Описание |
 |-------------|----------|
-| **Ограниченная очередь** | Back-pressure через `BoundedChannel` — переполнение обрабатывается по `Wait`, `DropWrite` или `DropOldest` |
+| **Ограниченная очередь** | Back-pressure через `BoundedChannel` — при переполнении вызывающий блокируется (`Wait`) |
 | **Динамический параллелизм** | Изменяйте `ConcurrencyLimit` на лету — читатели адаптируются автоматически |
 | **Стратегии масштабирования** | `Lifo` • `Fifo` • `RoundRobin` • `Random` — выберите подход к замене читателей при ресайзе |
 | **DI-интеграция** | `AddSaWorkQueue<TProcessor, TInput>` с полной поддержкой конфигурации |
@@ -43,7 +106,6 @@ builder.Services.AddSaWorkQueue<OrderWork, OrderInput>((sp, opts) =>
         .WithQueueCapacity(100)
         .WithMaxConcurrency(16)
         .WithReaderScalingStrategy(SaReaderScalingStrategy.RoundRobin)
-        .WithFullMode(BoundedChannelFullMode.DropOldestWhenFull)
         .WithStatusCallback((input, status, ex) =>
         {
             // logger.LogDebug("Заказ {Id} → {Status}", input.OrderId, status);
@@ -80,11 +142,11 @@ SaWorkQueueOptions<TInput>.Create(processor)
     .WithQueueCapacity(int)                       // Ёмкость канала (по умолч.: равно лимиту)
     .WithMaxConcurrency(int)                      // Абсолютный потолок читателей (по умолч.: кол-во ядер)
     .WithSingleWriter(bool)                       // Оптимизация для однопользовательских сценариев
-    .WithFullMode(BoundedChannelFullMode)          // Wait | DropOldest | DropNewest | DropWrite
     .WithReaderScalingStrategy(enum)              // Lifo | Fifo | RoundRobin | Random
     .WithStatusCallback(Action<TInput, SaWorkStatus, Exception?>)
     .WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy>)
     .WithItemDisplayName(Func<TInput, string>)    // Пользовательское имя элемента для логирования
+    .WithShutdownTimeout(TimeSpan)                 // Макс. ожидание читателей при shutdown/force-cancel (по умолч.: 30с)
 ```
 
 ### Создание опций
@@ -122,8 +184,8 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(async (input, ct) => {
 | `WaitForIdleAsync(ct)` | Метод | Дождаться завершения всех задач |
 | `ShutdownAsync()` | Метод | Корректное завершение (финиш активных + очистка) |
 | `Shutdown()` | Метод | Синхронное завершение |
-| `ForceCancelReaders()` | Метод | Аварийная остановка всех читателей |
-| `ForceCancelReadersAsync()` | Метод | Асинхронная аварийная остановка |
+| `ForceCancelReaders()` | Метод | Аварийная остановка всех читателей (ограниченное ожидание) |
+| `ForceCancelReadersAsync(timeout, ct)` | Метод | Асинхронная аварийная остановка с опциональным таймаутом |
 | `IsIdle()` | Свойство | `true`, если нет ожидающих/активных задач |
 | `IsEnabled` | Свойство | `true`, пока очередь активна |
 | `QueueTasks` | Свойство | Всего задач в обработке + в очереди |
@@ -155,7 +217,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(async (input, ct) => {
 | Стратегия | Поведение |
 |-----------|----------|
 | `Continue` | Пометить элемент как Faulted, продолжить обработку остальных |
-| `StopReader` | Пометить элемент как Faulted, остановить текущего читателя (автоматически заменится) |
+| `StopReader` | Пометить элемент как Faulted, остановить текущего читателя (ёмкость уменьшается; восстановите через `ConcurrencyLimit = X`) |
 | `ShutdownQueue` | Пометить элемент как Faulted, инициировать полное завершение очереди |
 
 По умолчанию: `ShutdownQueue` — ошибка элемента запускает shutdown. Для отказоустойчивых пайплайнов переопределите на `Continue` или `StopReader`.
@@ -170,5 +232,5 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(async (input, ct) => {
 4. **Потокобезопасность**: все публичные члены потокобезопасны. Изменение `ConcurrencyLimit` на лету корректирует число читателей без потери ожидающих элементов.
 5. **Идемпотентное завершение**: `ShutdownAsync`, `Shutdown`, `Dispose`, `DisposeAsync` безопасны для многократного вызова.
 6. **`ConcurrencyLimit = 0`**: приостанавливает всю обработку (убивает всех читателей). Верните положительное значение для возобновления.
-7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: аварийная остановка — мгновенно отменяет все reader-задачи. После вызова восстановите параллелизм установкой `ConcurrencyLimit = X` для запуска новых читателей.
-8. **Back-pressure**: при заполненной очереди поведение зависит от `FullMode` — `Wait` блокирует вызывающего, `DropOldest` удаляет самый старый элемент, `DropNewest` отбрасывает входящий, `DropWrite` завершает вызов enqueue ошибкой.
+7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: аварийная остановка — мгновенно отменяет все reader-задачи. Синхронная версия ожидает до `ShutdownTimeout` (по умолч. 30с) завершения читателей; асинхронная принимает опциональный `TimeSpan? timeout`. После вызова восстановите параллелизм установкой `ConcurrencyLimit = X` для запуска новых читателей.
+8. **Делегатная регистрация**: `AddSaWorkQueue<TInput>(configureOptions)` принимает фабрику, возвращающую `SaWorkQueueOptions<TInput>`, позволяя регистрировать очередь без класса `ISaWork<TInput>`.

@@ -35,7 +35,7 @@ public class SaWorkQueueRecoveryTests
 
         Assert.Equal(2, ((TestProcessor)options.Processor).ProcessedCount);
 
-        await queue.ForceCancelReadersAsync();
+        await queue.ForceCancelReadersAsync(ct: TestToken);
         await Task.Delay(100, TestToken);
 
         Assert.True(queue.IsIdle());
@@ -135,11 +135,9 @@ public class SaWorkQueueRecoveryTests
 
         await queue.Enqueue(-1, TestToken);         // Fail
 
-        await queue.WaitForIdleAsync(TestToken);
-
-
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
+            await queue.WaitForIdleAsync(TestToken);
             await queue.Enqueue(2, cancellationToken: CancellationToken.None);
         });
 

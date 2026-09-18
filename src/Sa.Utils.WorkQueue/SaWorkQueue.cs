@@ -19,7 +19,6 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     private readonly Lock _wiSync = new();
     private readonly Lock _readersSync = new();
-    private readonly Lock _cbSync = new();
 
     private readonly ILogger? _logger;
     private readonly ISaWork<TInput> _processor;
@@ -32,26 +31,35 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     private readonly int _maxConcurrency;
     private readonly int _queueCapacity;
 
+    // Current concurrency limit, set by the user.
     private volatile int _concurrency;
-    /// <summary>
-    /// 0: Active, 1: Shutdown, 2: Disposed
-    /// </summary>
-    private volatile QueueState _state;
+    // 0: Active, 1: Shutdown, 2: Disposed
+    private QueueState _state;
 
     private volatile Exception? _shutdownError = null;
 
-    // список ожидающих задач
     private volatile int _taskCount;
     private TaskCompletionSource _idleTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private volatile int _readerCount;
+    private int _readerCount;
+
+    // Readers cancelled PLANNED (limit decrease). Only under _readersSync.
+    private readonly HashSet<CancellationTokenSource> _intentionalRemovals = [];
+
+    // Readers cancelled via ForceCancelReaders. Only under _readersSync.
+    private readonly HashSet<CancellationTokenSource> _forceCancelled = [];
+
+    // Cancelled but not yet completed (reap). Only under _readersSync.
+    // Live readers = _readerCount - _pendingRemovals.
+    private int _pendingRemovals;
 
     private readonly List<CancellationTokenSource> _ctsReaders = [];
     private readonly List<Task> _taskReaders = [];
 
     private readonly SaReaderScalingStrategy _scalingStrategy;
-    private int _lastRemovedIndex = -1; // Для RoundRobin
+    private int _lastRemovedIndex = -1; // For RoundRobin
 
+    private readonly TimeSpan _shutdownTimeout;
 
     public SaWorkQueue(SaWorkQueueOptions<TInput> options, ILogger<SaWorkQueue<TInput>>? logger = null)
     {
@@ -59,7 +67,6 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         _logger = logger;
         _processor = options.Processor;
-
         _statusChanged = options.StatusChanged;
 
         _maxConcurrency = options.MaxConcurrency > 0 ? options.MaxConcurrency.Value : Environment.ProcessorCount;
@@ -69,13 +76,14 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         _scalingStrategy = options.ReaderScalingStrategy;
         _getItemDisplayName = options.GetItemDisplayName ?? (item => $"{item}");
         _handleItemFaulted = options.HandleItemFaulted ?? ((_, _) => SaExecutionErrorStrategy.ShutdownQueue);
+        _shutdownTimeout = options.ShutdownTimeout ?? TimeSpan.FromSeconds(30);
 
         _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(_queueCapacity)
         {
             AllowSynchronousContinuations = false,
             SingleReader = false,
             SingleWriter = options.SingleWriter ?? false,
-            FullMode = options.FullMode
+            FullMode = BoundedChannelFullMode.Wait
         });
 
         SpawnReaders(_concurrency);
@@ -85,7 +93,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public int QueueTasks => _taskCount;
 
-    public bool IsIdle() => QueueTasks == 0 && _queue.Reader.Count == 0;
+    public bool IsIdle() => _taskCount == 0;
 
     public int MaxConcurrency => _maxConcurrency;
     public int QueueCapacity => _queueCapacity;
@@ -97,10 +105,30 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         set
         {
             var newLimit = Math.Clamp(value, 0, _maxConcurrency);
-            var oldLimit = Interlocked.Exchange(ref _concurrency, newLimit);
-            if (newLimit != oldLimit && IsEnabled)
+
+            // The entire limit-change and reader-adjustment process is atomic and
+            // protected from races with dying readers.
+            lock (_readersSync)
             {
-                AdjustReaders(newLimit);
+                _concurrency = newLimit;
+
+                if (IsEnabled)
+                {
+                    var live = _readerCount - _pendingRemovals;
+                    var delta = newLimit - live;
+
+                    if (delta > 0)
+                    {
+                        for (var i = 0; i < delta; i++)
+                        {
+                            StartReaderUnderLock();
+                        }
+                    }
+                    else if (delta < 0)
+                    {
+                        CancelReadersUnderLock(-delta);
+                    }
+                }
             }
         }
     }
@@ -121,7 +149,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         {
             MarkInactive();
 
-            if (ex is ChannelClosedException)
+            if (ex is ChannelClosedException or InvalidOperationException)
             {
                 ThrowHelper.QueueStopped();
             }
@@ -134,71 +162,162 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     {
         ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
-            _shutdownCts.Token,
-            cancellationToken);
-
-        while (!IsIdle())
+        while (true)
         {
             TaskCompletionSource tcs;
-            lock (_wiSync) { tcs = _idleTcs; }
+            lock (_wiSync)
+            {
+                if (_taskCount == 0) return;
+                tcs = _idleTcs;
+            }
+
+            // Work is still queued but the effective concurrency is 0: no readers
+            // exist, so the queue can never drain on its own. Skip the wait and
+            // return immediately instead of blocking forever for an idle state
+            // that cannot be reached while paused.
+            if (_concurrency == 0)
+            {
+                return;
+            }
+
             try
             {
-                await tcs.Task.WaitAsync(cts.Token).ConfigureAwait(false);
+                await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException ex)
             {
-                // ignore
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException("Idle wait was cancelled by the user.", ex, cancellationToken);
+                }
             }
         }
     }
 
-
-    /// <summary>
-    /// Forcefully cancels all readers without waiting.
-    /// Use only in emergency situations (e.g., when hanging).
-    /// </summary>
     public void ForceCancelReaders()
     {
         if (!IsEnabled) return;
 
+        Task[] tasks;
         CancellationTokenSource[] readers;
 
         lock (_readersSync)
         {
             readers = [.. _ctsReaders.Where(c => !c.IsCancellationRequested)];
+            tasks = [.. _taskReaders];
         }
 
         foreach (var reader in readers)
         {
-            try { reader.Cancel(); } catch (ObjectDisposedException) { /* ignored */ }
+            try
+            {
+                reader.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                continue; // already reaped by RemoveReader
+            }
+
+            // Request cancellation and record it in the same critical section,
+            // checking the reader is still tracked so a CTS that a concurrent
+            // RemoveReader already reaped is not double-counted in
+            // _pendingRemovals nor re-added to _forceCancelled.
+            lock (_readersSync)
+            {
+                if (!_ctsReaders.Contains(reader))
+                    continue;
+                _forceCancelled.Add(reader);
+                _pendingRemovals++;
+            }
         }
 
-        lock (_wiSync)
+        if (tasks.Length > 0)
         {
-            _idleTcs.TrySetResult();
+            // Bounded wait: a processor that ignores cancellation
+            // must not block the calling thread indefinitely.
+            Task.WaitAll(tasks, _shutdownTimeout);
         }
+
+        DrainAndResetIdle();
     }
 
-    public async Task ForceCancelReadersAsync()
+    public async Task ForceCancelReadersAsync(TimeSpan? timeout = null, CancellationToken ct = default)
     {
         if (!IsEnabled) return;
 
+        Task[] tasks;
         CancellationTokenSource[] readers;
 
         lock (_readersSync)
         {
             readers = [.. _ctsReaders.Where(c => !c.IsCancellationRequested)];
+            tasks = [.. _taskReaders];
         }
 
         foreach (var reader in readers)
         {
-            try { await reader.CancelAsync(); } catch (ObjectDisposedException) { /* ignored */ }
+            try
+            {
+                reader.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                continue; // already reaped by RemoveReader
+            }
+
+            // Same critical-section discipline as the sync overload: guard
+            // against a CTS that a concurrent RemoveReader already reaped being
+            // double-counted in _pendingRemovals / re-added to _forceCancelled.
+            lock (_readersSync)
+            {
+                if (!_ctsReaders.Contains(reader))
+                    continue;
+                _forceCancelled.Add(reader);
+                _pendingRemovals++;
+            }
+        }
+
+        if (tasks.Length > 0)
+        {
+            if (timeout is { } t)
+                await Task.WhenAll(tasks).WaitAsync(t, ct).ConfigureAwait(false);
+            else
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+        }
+
+        DrainAndResetIdle();
+    }
+
+    /// <summary>
+    /// Drains any items left in the channel, resets <c>_taskCount</c> to zero,
+    /// and resolves the idle TCS. Used by emergency stop so that
+    /// <see cref="IsIdle"/> and <see cref="QueueTasks"/> stay honest.
+    /// </summary>
+    private void DrainAndResetIdle()
+    {
+        while (_queue.Reader.TryRead(out var item))
+        {
+            // An item with a cancelled caller token already received
+            // Aborted status — don't report it again.
+            if (item.CancellationToken.IsCancellationRequested)
+            {
+                continue;
+            }
+
+            // A fresh exception per item so observers can distinguish which
+            // work item was dropped by shutdown (the previous shared singleton
+            // made every dropped item reference-identical).
+            OnStatusChanged(item.Input, SaWorkStatus.Faulted, ThrowHelper.QueueShutdownException());
+            MarkInactive();
         }
 
         lock (_wiSync)
         {
-            _idleTcs.TrySetResult();
+            if (_taskCount > 0)
+            {
+                _taskCount = 0;
+                _idleTcs.TrySetResult();
+            }
         }
     }
 
@@ -223,83 +342,66 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         _readerCount++;
     }
 
-    private void AdjustReaders(int target)
+    // Called ONLY under lock (_readersSync).
+    // Selects readers only among live (non-cancelled) ones and marks
+    // planned removal on a specific CTS — not a global counter.
+    private void CancelReadersUnderLock(int toCancel)
     {
-        if (!IsEnabled) return;
-
-        lock (_readersSync)
+        var liveReaders = new List<CancellationTokenSource>();
+        foreach (var cts in _ctsReaders)
         {
-            int current = _readerCount;
-            var delta = target - current;
-            if (delta > 0)
+            if (!cts.IsCancellationRequested)
             {
-                for (int i = 0; i < delta; i++)
-                {
-                    StartReaderUnderLock();
-                }
-            }
-            else if (delta < 0)
-            {
-                var total = _ctsReaders.Count;
-                if (total == 0) return;
-                var toCancel = Math.Min(-delta, total);
-
-                var cancellationSources = SelectCancellationSources(toCancel, total);
-                foreach (var cts in cancellationSources)
-                {
-                    cts.Cancel();
-                }
+                liveReaders.Add(cts);
             }
         }
-    }
 
-    private List<CancellationTokenSource> SelectCancellationSources(int toCancel, int total)
-    {
-        var list = new List<CancellationTokenSource>(toCancel);
+        var total = liveReaders.Count;
+        if (total == 0) return;
 
-        IEnumerable<int> indices = _scalingStrategy switch
+        toCancel = Math.Min(toCancel, total);
+
+        int[] indices = _scalingStrategy switch
         {
-            SaReaderScalingStrategy.Lifo => Enumerable.Range(total - toCancel, toCancel),
-            SaReaderScalingStrategy.Fifo => Enumerable.Range(0, toCancel),
-            SaReaderScalingStrategy.RoundRobin => GetRoundRobinIndices(total, toCancel),
-            SaReaderScalingStrategy.Random => GetRandomIndices(total, toCancel),
-            _ => Enumerable.Range(total - toCancel, toCancel)
+            SaReaderScalingStrategy.Lifo => [.. Enumerable.Range(total - toCancel, toCancel)],
+            SaReaderScalingStrategy.Fifo => [.. Enumerable.Range(0, toCancel)],
+            SaReaderScalingStrategy.RoundRobin => RoundRobinIndices(total, toCancel),
+            SaReaderScalingStrategy.Random => RandomIndices(total, toCancel),
+            _ => [.. Enumerable.Range(total - toCancel, toCancel)]
         };
 
-        foreach (var idx in indices.Where(c => c < total))
+        foreach (var idx in indices)
         {
-            list.Add(_ctsReaders[idx]);
+            var cts = liveReaders[idx];
+            _intentionalRemovals.Add(cts);
+            _pendingRemovals++;
+            cts.Cancel();
         }
-
-        return list;
     }
 
-    private IEnumerable<int> GetRoundRobinIndices(int totalCount, int toCancel)
+    private int[] RoundRobinIndices(int totalCount, int toCancel)
     {
-        if (totalCount == 0) yield break;
         var start = (_lastRemovedIndex + 1) % totalCount;
+        var indices = new int[toCancel];
         for (var i = 0; i < toCancel; i++)
         {
-            yield return (start + i) % totalCount;
+            indices[i] = (start + i) % totalCount;
         }
+
         _lastRemovedIndex = (start + toCancel - 1) % totalCount;
+        return indices;
     }
 
-    private static IEnumerable<int> GetRandomIndices(int totalCount, int toCancel)
+    private static int[] RandomIndices(int totalCount, int toCancel)
     {
-        if (toCancel >= totalCount)
+        var indices = new int[toCancel];
+        var rng = Random.Shared;
+        for (var i = 0; i < toCancel; i++)
         {
-            for (var i = 0; i < totalCount; i++) yield return i;
-            yield break;
+            var j = i + rng.Next(totalCount - i);
+            (indices[i], indices[j]) = (indices[j], indices[i]);
         }
-
-        var selected = new HashSet<int>(toCancel);
-        while (selected.Count < toCancel)
-        {
-            selected.Add(Random.Shared.Next(0, totalCount));
-        }
-
-        foreach (var idx in selected) yield return idx;
+        return indices;
     }
 
     private async Task ReaderLoopAsync(CancellationTokenSource cts)
@@ -327,16 +429,14 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                 using var ctsExec = CancellationTokenSource.CreateLinkedTokenSource(
                     cts.Token, item.CancellationToken);
 
-
                 isContinue = await ExecuteItemAsync(item, ctsExec.Token).ConfigureAwait(false);
                 if (!isContinue) break;
-
             }
         }
         catch (Exception ex)
         {
             LogReaderError(_logger, ex);
-            await ShutdownAsync();
+            _ = ShutdownAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -346,15 +446,51 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     private void RemoveReader(CancellationTokenSource cts)
     {
+        bool intentional;
+        bool tracked;
         lock (_readersSync)
         {
-            _ctsReaders.Remove(cts);
+            var idx = _ctsReaders.IndexOf(cts);
+            if (idx >= 0)
+            {
+                // Both lists are kept in parallel order by StartReaderUnderLock;
+                // remove at the same index so completed Tasks are not retained
+                // (previously _taskReaders grew without bound -> memory leak).
+                _ctsReaders.RemoveAt(idx);
+                if (idx < _taskReaders.Count)
+                {
+                    _taskReaders.RemoveAt(idx);
+                }
+            }
+
             _readerCount--;
-            _concurrency = _readerCount;
+
+            // Planned removal (limit decrease): _concurrency is already
+            // set by the setter, no need to decrement it again.
+            intentional = _intentionalRemovals.Remove(cts);
+
+            // Was this CTS's cancellation tracked (planned or ForceCancel)?
+            tracked = intentional || _forceCancelled.Remove(cts);
+            if (tracked)
+            {
+                _pendingRemovals--;
+            }
+
+            // Unplanned termination (StopReader, crash, ForceCancel):
+            // pool capacity decreases; recovery is via manually
+            // setting ConcurrencyLimit.
+            if (!intentional && _concurrency > 0)
+            {
+                _concurrency--;
+            }
         }
 
-        // Освобождаем CTS после удаления из списка
         cts.Dispose();
+
+        if (IsEnabled && !intentional && !tracked)
+        {
+            LogReaderLost(_logger, _concurrency);
+        }
     }
 
     private async Task<bool> ExecuteItemAsync(WorkItem item, CancellationToken ct)
@@ -413,7 +549,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     private bool HandleShutdownOnError(Exception ex)
     {
         _shutdownError = ex;
-        _ = ShutdownAsync();
+        _ = ShutdownAsync().ConfigureAwait(false);
         return false;
     }
 
@@ -436,9 +572,13 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         TaskCompletionSource? tcs = null;
         lock (_wiSync)
         {
-            if (--_taskCount == 0)
+            if (_taskCount > 0)
             {
-                tcs = _idleTcs;
+                _taskCount--;
+                if (_taskCount == 0)
+                {
+                    tcs = _idleTcs;
+                }
             }
         }
         tcs?.TrySetResult();
@@ -446,19 +586,20 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     private void OnStatusChanged(TInput item, SaWorkStatus status, Exception? error = null)
     {
-        if (_statusChanged is null) return;
+        var callback = _statusChanged;
+        if (callback is null) return;
 
         Exception? handlerEx = null;
-        lock (_cbSync)
+        try
         {
-            try
-            {
-                _statusChanged(item, status, error);
-            }
-            catch (Exception ex)
-            {
-                handlerEx = ex;
-            }
+            // Called without lock: a slow handler must not block
+            // other readers. Callback instances may be invoked
+            // concurrently from different readers.
+            callback(item, status, error);
+        }
+        catch (Exception ex)
+        {
+            handlerEx = ex;
         }
 
         if (handlerEx is not null)
@@ -476,7 +617,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         {
             await _shutdownCts.CancelAsync().ConfigureAwait(false);
             _queue.Writer.TryComplete();
-            await WaitForReadersToCompleteAsync();
+            await WaitForReadersToCompleteAsync().ConfigureAwait(false);
             ClearRemainingItems();
         }
         catch (Exception ex)
@@ -511,10 +652,16 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                 tasks = [.. _taskReaders];
             }
 
-            // Use synchronous wait only here — we already exited the async context.
-            // Readers are guaranteed to terminate because _shutdownCts is cancelled
-            // and the channel writer is completed.
-            Task.WaitAll(tasks, TimeSpan.FromSeconds(30));
+            if (tasks.Length > 0 && !Task.WaitAll(tasks, _shutdownTimeout))
+            {
+                // Readers did not finish in time. Still drain what is left so the
+                // queue is left consistent: the channel is emptied, _taskCount is
+                // reset and _idleTcs resolved, keeping IsIdle()/WaitForIdleAsync
+                // honest. ShutdownAsync always drains — mirror that here.
+                LogShutdownError(_logger, new TimeoutException($"Readers did not complete within {_shutdownTimeout.TotalSeconds:F0} seconds during synchronous shutdown."));
+                ClearRemainingItems();
+                return;
+            }
 
             ClearRemainingItems();
         }
@@ -526,22 +673,29 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     private void ClearRemainingItems()
     {
-        OperationCanceledException? err = null;
-
         while (_queue.Reader.TryRead(out var item))
         {
-            err ??= ThrowHelper.QueueShutdownException;
-            OnStatusChanged(item.Input, SaWorkStatus.Faulted, err);
+            // An item with a cancelled caller token already received
+            // Aborted status — don't report it again.
+            if (item.CancellationToken.IsCancellationRequested)
+            {
+                continue;
+            }
+
+            // A fresh exception per item so observers can distinguish which
+            // work item was dropped by shutdown (the previous shared singleton
+            // made every dropped item reference-identical).
+            OnStatusChanged(item.Input, SaWorkStatus.Faulted, ThrowHelper.QueueShutdownException());
             MarkInactive();
         }
 
-        // Drain any orphaned task counters — if items were enqueued but not yet
-        // counted (race between Enqueue and Shutdown), decrement to prevent
-        // IsIdle() from returning false forever.
         lock (_wiSync)
         {
             if (_taskCount > 0)
+            {
                 _taskCount = 0;
+                _idleTcs.TrySetResult();
+            }
         }
     }
 
@@ -568,7 +722,6 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         CompleteDispose();
     }
 
-
     #region Logging Definitions (Source Generator)
 
     private static partial class LogMessages
@@ -590,6 +743,15 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Error during shutdown")]
         public static partial void ShutdownError(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 7, Level = LogLevel.Warning,
+            Message = "Reader terminated unexpectedly. Effective concurrency is now {Concurrency}. Set ConcurrencyLimit to restore readers.")]
+        public static partial void ReaderLost(ILogger logger, int concurrency);
+    }
+
+    private static void LogReaderLost(ILogger? logger, int concurrency)
+    {
+        if (logger is not null) LogMessages.ReaderLost(logger, concurrency);
     }
 
     private static void LogItemCancelled(ILogger? logger, string item, Exception ex)
@@ -625,10 +787,10 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     #endregion
 }
 
-
 internal static class ThrowHelper
 {
     public static void QueueStopped() => throw new InvalidOperationException("Queue has been stopped.");
-    public static OperationCanceledException QueueShutdownException { get; }
-        = new OperationCanceledException("Queue shutdown");
+
+    public static OperationCanceledException QueueShutdownException()
+        => new("Queue was shut down; this work item was dropped without being processed.");
 }

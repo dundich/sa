@@ -2,7 +2,7 @@
 
 const string wavPath = @"src\Tests\Sa.MediaTests\data\pcm_s16le.wav";
 
-string outputPath = Path.GetTempFileName()! + ".wav";
+string outputPath = Path.GetRandomFileName() + ".wav";
 
 if (!File.Exists(wavPath))
 {
