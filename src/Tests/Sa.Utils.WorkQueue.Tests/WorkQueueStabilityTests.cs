@@ -293,4 +293,46 @@ public sealed class WorkQueueStabilityTests
             "WaitForIdleAsync did not return within 500ms while paused; expected an immediate skip.");
         await wait;
     }
+
+    [Fact]
+    public async Task Enqueue_AfterPause_IsAcceptedButWaitsUntilLimitRestored()
+    {
+        var processor = new CountingProcessor();
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(1));
+
+        // Bring the queue to a steady state first.
+        await queue.Enqueue(1, TestToken);
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.Equal(1, processor.Processed);
+
+        // Pause: the only reader is cancelled, but the queue stays Active
+        // (pause is not a shutdown).
+        queue.ConcurrencyLimit = 0;
+        await Task.Delay(50, TestToken);
+        Assert.True(queue.IsEnabled, "Pause must not disable the queue");
+
+        // Enqueue while paused: accepted (state Active, channel open),
+        // but no reader exists, so the item just sits in the channel.
+        await queue.Enqueue(2, TestToken);
+
+        Assert.Equal(1, queue.QueueTasks);
+        Assert.False(queue.IsIdle());
+
+        await Task.Delay(200, TestToken);
+        Assert.Equal(1, processor.Processed);
+
+        // WaitForIdleAsync must not block for an idle state no reader can reach.
+        var wait = queue.WaitForIdleAsync(TestToken);
+        var done = await Task.WhenAny(wait, Task.Delay(500, TestToken));
+        Assert.True(ReferenceEquals(done, wait),
+            "WaitForIdleAsync did not return within 500ms while paused; expected an immediate skip.");
+        await wait;
+
+        // Restore the limit: a reader is spawned and the pending item is processed.
+        queue.ConcurrencyLimit = 1;
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.Equal(2, processor.Processed);
+    }
 }

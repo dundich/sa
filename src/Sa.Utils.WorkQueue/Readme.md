@@ -40,15 +40,15 @@ High-performance async task queue for .NET with bounded capacity, dynamic concur
 
 ### C. Deterministic Forced Stop (`ForceCancelReaders`)
 * The `ForceCancelReaders` and `ForceCancelReadersAsync` methods don't just send a cancellation signal (`Cancel()`), but **guaranteedly wait** for the physical completion of reader tasks (`Task.WaitAll` / `Task.WhenAll`).
-* This is critical: only after this wait is it guaranteed that `_readerCount` and `_concurrency` have been correctly updated by `RemoveReader`, and subsequent operations (e.g., changing `ConcurrencyLimit`) work with the current state.
+* This is critical: only after this wait is it guaranteed that `_ctsReaders.Count` and `_concurrency` have been correctly updated by `RemoveReader`, and subsequent operations (e.g., changing `ConcurrencyLimit`) work with the current state.
 
 ## 3. Main Components
 
 | Component | Purpose |
 | :--- | :--- |
 | `Channel<WorkItem> _queue` | Thread-safe buffer for passing tasks from producers to consumers. Configured with `SingleReader = false` (multiple consumers). |
-| `_readerCount` / `_taskReaders` | Track the actual number of started processing loops (`ReaderLoopAsync`). |
-| `_concurrency` | Volatile field storing the current pool capacity. Synced with `_readerCount` during normal operation, managed under `_readersSync` on abnormal termination. |
+| `_ctsReaders` / `_taskReaders` | Track the actual number of started processing loops (`ReaderLoopAsync`). |
+| `_concurrency` | Volatile field storing the current pool capacity. Synced with `_ctsReaders.Count` during normal operation, managed under `_readersSync` on abnormal termination. |
 | `_taskCount` / `_idleTcs` | Efficient idle-wait mechanism without active polling. |
 | `_state` (`QueueState`) | State machine: `Active` (0), `Shutdown` (1), `Disposed` (2). Managed via `Interlocked.CompareExchange`. |
 
@@ -66,17 +66,17 @@ On exception in `ISaWork<TInput>.Execute`, the `_handleItemFaulted` delegate fir
   2. Cancels `_shutdownCts` (signal to readers to finish after their current task).
   3. Closes the channel for writing (`TryComplete()`).
   4. Waits for all reader tasks to complete (`WaitForReadersToCompleteAsync`).
-  5. Clears remaining items in the channel (`ClearRemainingItems`), marking them as `Faulted` and resetting `_taskCount` to 0 for correct `IsIdle()`.
+  5. Clears remaining items in the channel (`DrainAndResetIdle`), marking them as `Faulted` and resetting `_taskCount` to 0 for correct `IsIdle()`.
 * **Dispose**: Guarantees `Shutdown` is called and `_shutdownCts` is released. Repeated calls are safe (idempotent).
 
 ## 6. 🤖 Critical Rules for AI Agents (⚠️ IMPORTANT)
 
 These rules MUST be followed when modifying this code:
 
-1. **NEVER** use direct assignment `_concurrency = _readerCount`. Pool capacity change on reader removal is done via `_concurrency--` inside `RemoveReader` (under `_readersSync`) to avoid race conditions.
+1. **NEVER** use direct assignment `_concurrency = _ctsReaders.Count`. Pool capacity change on reader removal is done via `_concurrency--` inside `RemoveReader` (under `_readersSync`) to avoid race conditions.
 2. **NEVER** rely on `_queue.Reader.Count` to determine `IsIdle()`. Use only `_taskCount == 0`.
 3. When adding new forced-interruption methods, always include a wait for task completion (`Task.WhenAll`) so that counter state has time to synchronize.
-4. The `ConcurrencyLimit` setter computes delta from the actual live reader count (`_readerCount - _pendingRemovals`), not from `_readerCount` — this prevents spurious spawns/cancels for already-cancelled readers.
+4. The `ConcurrencyLimit` setter computes delta from the actual live reader count (`_ctsReaders.Count - _pendingRemovals`), not from the configured `_concurrency` — this prevents spurious spawns/cancels for already-cancelled readers.
 5. `RemoveReader` is called in the `finally` of `ReaderLoopAsync`, which executes **after** `MarkInactive()` (in `ExecuteItemAsync`'s finally). This means `WaitForIdleAsync` may return before `RemoveReader` completes. Do not assume `_concurrency` is fully updated immediately after `WaitForIdleAsync` returns.
 6. All reader-list mutations (`_ctsReaders`, `_taskReaders`, `_pendingRemovals`, `_intentionalRemovals`, `_forceCancelled`) must happen under `lock (_readersSync)`.
 7. All task-count mutations (`_taskCount`, `_idleTcs`) must happen under `lock (_wiSync)`.
