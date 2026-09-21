@@ -167,14 +167,15 @@ public sealed class WorkQueueStabilityTests
         var queue = new SaWorkQueue<int>(
             SaWorkQueueOptions<int>.Create(processor)
                 .WithConcurrencyLimit(1)
-                .WithQueueCapacity(1));
+                .WithQueueCapacity(1)
+                .WithShutdownTimeout(TimeSpan.FromSeconds(1)));
 
         await queue.Enqueue(1, TestToken);
 
 #pragma warning disable xUnit1051
         var shutdownTask = Task.Run(() => queue.Shutdown());
 #pragma warning restore xUnit1051
-        var completed = await Task.WhenAny(shutdownTask, Task.Delay(TimeSpan.FromSeconds(35), TestToken));
+        var completed = await Task.WhenAny(shutdownTask, Task.Delay(TimeSpan.FromSeconds(5), TestToken));
         Assert.True(completed == shutdownTask, "Sync shutdown should complete within timeout");
         queue.Dispose();
     }
