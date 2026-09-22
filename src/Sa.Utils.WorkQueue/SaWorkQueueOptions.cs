@@ -8,7 +8,7 @@ public sealed record SaWorkQueueOptions<TInput>(
     bool? SingleWriter = false,
     Func<TInput, Exception, SaExecutionErrorStrategy>? HandleItemFaulted = null,
     Action<TInput, SaWorkStatus, Exception?>? StatusChanged = null,
-    SaReaderScalingStrategy ReaderScalingStrategy = SaReaderScalingStrategy.Lifo,
+    SaReaderCancellationOrder ReaderCancellationOrder = SaReaderCancellationOrder.Lifo,
     Func<TInput, string>? GetItemDisplayName = null,
     TimeSpan? ShutdownTimeout = null,
     SaReaderCancelMode ReaderCancelMode = SaReaderCancelMode.Hard)
@@ -46,9 +46,9 @@ public sealed record SaWorkQueueOptions<TInput>(
     public SaWorkQueueOptions<TInput> WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy> cb)
         => this with { HandleItemFaulted = cb };
 
-    /// <summary>Sets the strategy for assigning items to readers.</summary>
-    public SaWorkQueueOptions<TInput> WithReaderScalingStrategy(SaReaderScalingStrategy strategy)
-        => this with { ReaderScalingStrategy = strategy };
+    /// <summary>Sets the order in which readers are cancelled when the concurrency limit decreases.</summary>
+    public SaWorkQueueOptions<TInput> WithReaderCancellationOrder(SaReaderCancellationOrder order)
+        => this with { ReaderCancellationOrder = order };
 
     /// <summary>
     /// Sets how readers are cancelled when the concurrency limit decreases or the queue is paused.

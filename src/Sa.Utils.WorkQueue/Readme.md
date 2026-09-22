@@ -113,7 +113,7 @@ builder.Services.AddSaWorkQueue<OrderWork, OrderInput>((sp, opts) =>
         .WithConcurrencyLimit(4)
         .WithQueueCapacity(100)
         .WithMaxConcurrency(16)
-        .WithReaderScalingStrategy(SaReaderScalingStrategy.RoundRobin)
+        .WithReaderCancellationOrder(SaReaderCancellationOrder.RoundRobin)
         .WithStatusCallback((input, status, ex) =>
         {
             // logger.LogDebug("Order {Id} → {Status}", input.OrderId, status);
@@ -148,7 +148,7 @@ SaWorkQueueOptions<TInput>.Create(processor)
     .WithQueueCapacity(int)                       // Channel capacity (default: equals limit)
     .WithMaxConcurrency(int)                      // Absolute ceiling of readers (default: CPU count)
     .WithSingleWriter(bool)                       // Optimisation for single-writer scenarios
-    .WithReaderScalingStrategy(enum)              // Lifo | Fifo | RoundRobin | Random
+    .WithReaderCancellationOrder(enum)             // Lifo | Fifo | RoundRobin | Random
     .WithReaderCancelMode(enum)                   // Hard | Soft — in-flight work on reader removal
     .WithStatusCallback(Action<TInput, SaWorkStatus, Exception?>)
     .WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy>)

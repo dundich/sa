@@ -59,7 +59,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     private readonly List<CancellationTokenSource> _ctsWorks = [];
     private readonly List<Task> _taskReaders = [];
 
-    private readonly SaReaderScalingStrategy _scalingStrategy;
+    private readonly SaReaderCancellationOrder _cancellationOrder;
     private readonly SaReaderCancelMode _cancelMode;
     private int _lastRemovedIndex = -1; // For RoundRobin
 
@@ -84,7 +84,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         _concurrency = Math.Clamp(options.ConcurrencyLimit ?? Environment.ProcessorCount, 0, _maxConcurrency);
         _queueCapacity = options.QueueCapacity ?? _maxConcurrency;
 
-        _scalingStrategy = options.ReaderScalingStrategy;
+        _cancellationOrder = options.ReaderCancellationOrder;
         _cancelMode = options.ReaderCancelMode;
         _getItemDisplayName = options.GetItemDisplayName ?? (item => $"{item}");
         _handleItemFaulted = options.HandleItemFaulted ?? ((_, _) => SaExecutionErrorStrategy.ShutdownQueue);
@@ -374,12 +374,12 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         toCancel = Math.Min(toCancel, total);
 
-        int[] indices = _scalingStrategy switch
+        int[] indices = _cancellationOrder switch
         {
-            SaReaderScalingStrategy.Lifo => [.. Enumerable.Range(total - toCancel, toCancel)],
-            SaReaderScalingStrategy.Fifo => [.. Enumerable.Range(0, toCancel)],
-            SaReaderScalingStrategy.RoundRobin => RoundRobinIndices(total, toCancel),
-            SaReaderScalingStrategy.Random => RandomIndices(total, toCancel),
+            SaReaderCancellationOrder.Lifo => [.. Enumerable.Range(total - toCancel, toCancel)],
+            SaReaderCancellationOrder.Fifo => [.. Enumerable.Range(0, toCancel)],
+            SaReaderCancellationOrder.RoundRobin => RoundRobinIndices(total, toCancel),
+            SaReaderCancellationOrder.Random => RandomIndices(total, toCancel),
             _ => [.. Enumerable.Range(total - toCancel, toCancel)]
         };
 

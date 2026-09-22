@@ -27,7 +27,7 @@ public interface ISaWorkQueue<in TInput> : IDisposable, IAsyncDisposable
     /// <summary>
     /// Gets or sets the current number of concurrent reader tasks.
     /// Increasing the value spawns new readers; decreasing cancels excess readers
-    /// (selected by the configured <see cref="SaReaderScalingStrategy"/>).
+    /// (selected by the configured <see cref="SaReaderCancellationOrder"/>).
     /// Set to <c>0</c> to pause all processing.
     /// </summary>
     /// <remarks>

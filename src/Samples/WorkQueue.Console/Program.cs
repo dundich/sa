@@ -10,7 +10,7 @@ using var queue = new SaWorkQueue<int>(
         .Create(processor)
         .WithConcurrencyLimit(3)
         .WithMaxConcurrency(8)
-        .WithReaderScalingStrategy(SaReaderScalingStrategy.Lifo)
+        .WithReaderCancellationOrder(SaReaderCancellationOrder.Lifo)
         .WithStatusCallback((item, status, _) =>
         {
             if (status is SaWorkStatus.Running or SaWorkStatus.Completed)

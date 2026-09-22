@@ -1,6 +1,6 @@
 ﻿namespace Sa.Utils.WorkQueue;
 
-public enum SaReaderScalingStrategy
+public enum SaReaderCancellationOrder
 {
     /// <summary>
     /// Cancel the most recent readers (LIFO).
