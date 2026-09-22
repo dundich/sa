@@ -2,6 +2,7 @@
 $root = [System.IO.Path]::GetFullPath("$PSScriptRoot\..")
 
 $sln_file = "$root\src\Sa.slnx"
+$src_dir = "$root\src"
 $sln_platform = "Any CPU"
 $config = "Release"
 $dist_folder = "$root\dist"
@@ -72,15 +73,22 @@ function Build() {
 }
 
 function Test() {
-	_Step "Runnint tests"
+	_Step "Running tests"
+	# `dotnet test` picks the MTP runner from src/global.json, which is only
+	# discovered from src/ (or below). Run it with cwd=src or it fails with
+	# "VSTest target is no longer supported on .NET 10 SDK".
+	Push-Location $src_dir
 	& dotnet test $sln_file -v $msbuild_verbosity
 	_AssertExec
+	Pop-Location
 }
 
 function TestCi() {
-	_Step "Runnint tests (skipping tests requiring local infrastructure)"
+	_Step "Running tests (skipping tests requiring local infrastructure)"
+	Push-Location $src_dir
 	& dotnet test $sln_file --filter "Category!=Local"
 	_AssertExec
+	Pop-Location
 }
 
 function NuPack() {
