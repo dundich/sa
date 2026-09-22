@@ -33,8 +33,11 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     // Current concurrency limit, set by the user.
     private volatile int _concurrency;
-    // 0: Active, 1: Shutdown, 2: Disposed
-    private QueueState _state;
+    // Underlying int of <see cref="QueueState"/>. Written only through
+    // Interlocked, read only through Volatile.Read, so the state is observed
+    // consistently across threads (a plain field read would not be volatile
+    // on non-x86 architectures).
+    private int _state;
 
     private volatile Exception? _shutdownError = null;
 
@@ -103,7 +106,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         SpawnReaders(_concurrency);
     }
 
-    public bool IsEnabled => _state == QueueState.Active;
+    public bool IsEnabled => Volatile.Read(ref _state) == (int)QueueState.Active;
 
     public int QueueTasks => _taskCount;
 
@@ -153,7 +156,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public async ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _state) == (int)QueueState.Disposed, this);
         if (!IsEnabled) ThrowHelper.QueueStopped();
 
         var wi = new WorkItem(input, cancellationToken);
@@ -218,7 +221,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public async ValueTask<int> EnqueueMany(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _state) == (int)QueueState.Disposed, this);
         if (!IsEnabled) ThrowHelper.QueueStopped();
 
         var accepted = 0;
@@ -271,7 +274,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public bool TryEnqueue(TInput input)
     {
-        ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _state) == (int)QueueState.Disposed, this);
         if (!IsEnabled) ThrowHelper.QueueStopped();
 
         var wi = new WorkItem(input, default);
@@ -298,7 +301,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _state) == (int)QueueState.Disposed, this);
 
         while (true)
         {
@@ -435,10 +438,14 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     {
         while (_queue.Reader.TryRead(out var item))
         {
-            // An item with a cancelled caller token already received
-            // Aborted status — don't report it again.
             if (item.CancellationToken.IsCancellationRequested)
             {
+                // The caller cancelled its own token before any reader reached
+                // this item, so it was never reported — a reader picking it up
+                // would have reported Aborted, so report it here to keep the
+                // "every accepted item gets a terminal status" contract.
+                OnStatusChanged(item.Input, SaWorkStatus.Aborted, ThrowHelper.CallerCancelledException());
+                MarkInactive();
                 continue;
             }
 
@@ -449,9 +456,21 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             MarkInactive();
         }
 
+        // Only zero the pending count when every reader task has actually
+        // completed. A reader that survived the shutdown/force-cancel timeout
+        // still holds an active item; zeroing would make IsIdle()/QueueTasks
+        // claim idle while work is in flight (that reader's later
+        // MarkInactive is a guarded no-op and could not restore the count).
+        // Its MarkInactive will bring the count to zero when it finishes.
+        bool allReadersDone;
+        lock (_readersSync)
+        {
+            allReadersDone = _taskReaders.All(t => t.IsCompleted);
+        }
+
         lock (_wiSync)
         {
-            if (_taskCount > 0)
+            if (allReadersDone && _taskCount > 0)
             {
                 _taskCount = 0;
                 _idleTcs.TrySetResult();
@@ -533,17 +552,19 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     private static int[] RandomIndices(int totalCount, int toCancel)
     {
-        // Pick `toCancel` distinct indices uniformly at random. Using a set
-        // keeps the intent explicit (choose unique indices) and avoids shuffling
-        // the full range when only a handful are needed.
-        var indices = new HashSet<int>();
+        // Partial Fisher–Yates over the first `toCancel` positions:
+        // O(toCancel) with guaranteed-distinct, uniform result. Rejection
+        // sampling (draw until distinct) degrades toward O(n^2) when
+        // toCancel is close to totalCount.
+        var indices = new int[toCancel];
         var rng = Random.Shared;
-        while (indices.Count < toCancel)
+        for (var i = 0; i < toCancel; i++)
         {
-            indices.Add(rng.Next(totalCount));
+            var j = i + rng.Next(totalCount - i);
+            (indices[i], indices[j]) = (indices[j], indices[i]);
         }
 
-        return [.. indices];
+        return indices;
     }
 
     private async Task ReaderLoopAsync(CancellationTokenSource cts, CancellationTokenSource ctsWork)
@@ -566,17 +587,20 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                     break;
                 }
 
-                bool isContinue = false;
-
                 // Soft mode: the work token is linked to the per-reader work CTS
                 // (not the loop CTS), so a planned removal / pause does not
                 // interrupt the in-flight item. Both CTSs are linked to
                 // _shutdownCts, so shutdown stays hard in every mode.
                 var workParent = _cancelMode == SaReaderCancelMode.Soft ? ctsWork : cts;
-                using var ctsExec = CancellationTokenSource.CreateLinkedTokenSource(
-                    workParent.Token, item.CancellationToken);
 
-                isContinue = await ExecuteItemAsync(item, ctsExec.Token).ConfigureAwait(false);
+                // A linked token source is only needed when the caller's token
+                // can actually fire; a default/None token can't be cancelled,
+                // so skip the per-item allocation on that common path.
+                using var ctsExec = item.CancellationToken.CanBeCanceled
+                    ? CancellationTokenSource.CreateLinkedTokenSource(workParent.Token, item.CancellationToken)
+                    : null;
+
+                var isContinue = await ExecuteItemAsync(item, ctsExec?.Token ?? workParent.Token).ConfigureAwait(false);
                 if (!isContinue) break;
             }
         }
@@ -770,7 +794,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public async Task ShutdownAsync()
     {
-        if (Interlocked.CompareExchange(ref _state, QueueState.Shutdown, QueueState.Active) != QueueState.Active)
+        if (Interlocked.CompareExchange(ref _state, (int)QueueState.Shutdown, (int)QueueState.Active) != (int)QueueState.Active)
             return;
 
         try
@@ -788,7 +812,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public void Shutdown()
     {
-        if (Interlocked.CompareExchange(ref _state, QueueState.Shutdown, QueueState.Active) != QueueState.Active)
+        if (Interlocked.CompareExchange(ref _state, (int)QueueState.Shutdown, (int)QueueState.Active) != (int)QueueState.Active)
             return;
 
         try
@@ -860,7 +884,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     private void CompleteDispose()
     {
-        if (Interlocked.Exchange(ref _state, QueueState.Disposed) != QueueState.Disposed)
+        if (Interlocked.Exchange(ref _state, (int)QueueState.Disposed) != (int)QueueState.Disposed)
         {
             _shutdownCts.Dispose();
         }

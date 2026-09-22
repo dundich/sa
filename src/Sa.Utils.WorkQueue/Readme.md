@@ -76,7 +76,7 @@ All parameters are immutable record fields with fluent `With*` methods on `SaWor
 ```csharp
 SaWorkQueueOptions<TInput>.Create(processor)
     .WithConcurrencyLimit(int)                    // Concurrency limit (default: CPU count)
-    .WithQueueCapacity(int)                       // Channel capacity (default: equals limit)
+    .WithQueueCapacity(int)                       // Channel capacity (default: equals MaxConcurrency)
     .WithMaxConcurrency(int)                      // Absolute ceiling of readers (default: CPU count)
     .WithSingleWriter(bool)                       // Optimisation for single-writer scenarios
     .WithReaderCancellationOrder(enum)             // Lifo | Fifo | RoundRobin | Random
@@ -247,12 +247,12 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 | `Enqueue(input, ct)` | Method | Add a task; returns `false` only in `Skip` mode when the buffer is full |
 | `TryEnqueue(input)` | Method | Non-blocking enqueue; returns `false` when the buffer is full (strategy-independent) |
 | `EnqueueMany(inputs, ct)` | Method | Batch enqueue; returns the number of items accepted (each item honors the configured strategy) |
-| `WaitForIdleAsync(ct)` | Method | Wait until all tasks complete |
-| `ShutdownAsync()` | Method | Graceful shutdown (finish active + drain) |
-| `Shutdown()` | Method | Synchronous shutdown |
+| `WaitForIdleAsync(ct)` | Method | Wait until all tasks complete (returns immediately if paused, `ConcurrencyLimit = 0`) |
+| `ShutdownAsync()` | Method | Cancellation shutdown: cancels all readers (in-flight work is interrupted, not finished), waits for readers bounded by `ShutdownTimeout`, drains the rest of the buffer as `Faulted` |
+| `Shutdown()` | Method | Synchronous shutdown (blocks the calling thread) |
 | `ForceCancelReaders()` | Method | Emergency stop of all readers (bounded wait) |
 | `ForceCancelReadersAsync(timeout, ct)` | Method | Async emergency stop with optional timeout |
-| `IsIdle()` | Property | `true` if no pending/active tasks |
+| `IsIdle()` | Method | `true` if no pending/active tasks |
 | `IsEnabled` | Property | `true` while queue is active |
 | `QueueTasks` | Property | Total tasks in progress + queued |
 | `ConcurrencyLimit` | Property | Current parallelism limit (mutable) |

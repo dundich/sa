@@ -23,7 +23,11 @@ public sealed record SaWorkQueueOptions<TInput>(
     }
 
     /// <summary>Sets the concurrency limit (number of parallel processors).</summary>
-    /// <param name="limit">0 means unlimited, otherwise must be positive.</param>
+    /// <param name="limit">
+    /// <c>0</c> pauses all processing (no readers); otherwise must be positive.
+    /// Values above <see cref="MaxConcurrency"/> are clamped to it.
+    /// Use <c>null</c> (the default) for the automatic limit (processor count).
+    /// </param>
     public SaWorkQueueOptions<TInput> WithConcurrencyLimit(int limit)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 0);
@@ -43,7 +47,11 @@ public sealed record SaWorkQueueOptions<TInput>(
     public SaWorkQueueOptions<TInput> WithStatusCallback(Action<TInput, SaWorkStatus, Exception?> cb)
         => this with { StatusChanged = cb };
 
-    /// <summary>Sets a callback that decides the error handling strategy when an item fails.</summary>
+    /// <summary>
+    /// Sets a callback that decides the error handling strategy when an item fails.
+    /// When not set, every failure shuts the queue down
+    /// (<see cref="SaExecutionErrorStrategy.ShutdownQueue"/>).
+    /// </summary>
     public SaWorkQueueOptions<TInput> WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy> cb)
         => this with { HandleItemFaulted = cb };
 

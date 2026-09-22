@@ -38,8 +38,8 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// finishes its current item before exiting (<see cref="SaWorkStatus.Completed"/>); in the
     /// default <see cref="SaReaderCancelMode.Hard"/> mode the in-flight item is interrupted
     /// (<see cref="SaWorkStatus.Cancelled"/>) and dropped.
+    /// Values outside <c>[0, MaxConcurrency]</c> are clamped to that range.
     /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException">If the value exceeds <see cref="MaxConcurrency"/> (it is clamped).</exception>
     int ConcurrencyLimit { get; set; }
 
     /// <summary>
@@ -94,6 +94,7 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <exception cref="SaWorkQueueFullException">If the buffer is full and the strategy is <see cref="SaEnqueueStrategy.Throw"/>.</exception>
     /// <exception cref="InvalidOperationException">If the queue has been shut down.</exception>
     /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled while waiting for buffer space (<see cref="SaEnqueueStrategy.Wait"/> only).</exception>
     ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -156,8 +157,10 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     Task WaitForIdleAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gracefully shuts down the queue: cancels all readers, completes the channel,
-    /// waits for in-flight items to finish, and drains remaining items (reporting them as <see cref="SaWorkStatus.Faulted"/>).
+    /// Shuts down the queue: cancels all readers (in-flight work is interrupted, not finished),
+    /// completes the channel, waits for the readers to exit (bounded by the shutdown timeout),
+    /// and drains the remaining buffer items (reporting them as <see cref="SaWorkStatus.Faulted"/>,
+    /// or <see cref="SaWorkStatus.Aborted"/> when the caller's token was already cancelled).
     /// Subsequent calls to <see cref="Enqueue"/> will throw <see cref="InvalidOperationException"/>.
     /// This method is idempotent.
     /// </summary>
@@ -165,13 +168,15 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Synchronously shuts down the queue. Behaves identically to <see cref="ShutdownAsync"/>
-    /// but blocks the calling thread until all readers complete (with a 30-second timeout).
+    /// but blocks the calling thread while waiting for the readers to exit
+    /// (bounded by the shutdown timeout, default 30 s).
     /// This method is idempotent.
     /// </summary>
     void Shutdown();
 
     /// <summary>
-    /// Emergency stop: immediately cancels all reader tasks and waits for them to terminate (30-second timeout).
+    /// Emergency stop: immediately cancels all reader tasks and waits for them to terminate
+    /// (bounded by the shutdown timeout, default 30 s).
     /// The queue remains active — set <see cref="ConcurrencyLimit"/> to a positive value to spawn replacement readers.
     /// This method is idempotent.
     /// </summary>
@@ -188,7 +193,8 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="timeout">Optional maximum time to wait for readers to terminate. If <see langword="null"/>, waits indefinitely.</param>
     /// <param name="cancellationToken">Token to cancel the wait.</param>
-    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled or <paramref name="timeout"/> elapses.</exception>
+    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled.</exception>
+    /// <exception cref="TimeoutException">If <paramref name="timeout"/> elapses before all readers terminate.</exception>
     /// <remarks>
     /// Always interrupts in-flight work (<see cref="SaWorkStatus.Cancelled"/>) even when the queue
     /// is configured with <see cref="SaReaderCancelMode.Soft"/>.

@@ -76,7 +76,7 @@ public class OrderService(ISaWorkQueue<OrderInput> queue)
 ```csharp
 SaWorkQueueOptions<TInput>.Create(processor)
     .WithConcurrencyLimit(int)                    // Параллельных читателей (по умолч.: кол-во ядер)
-    .WithQueueCapacity(int)                       // Ёмкость канала (по умолч.: равно лимиту)
+    .WithQueueCapacity(int)                       // Ёмкость канала (по умолч.: равно MaxConcurrency)
     .WithMaxConcurrency(int)                      // Абсолютный потолок читателей (по умолч.: кол-во ядер)
     .WithSingleWriter(bool)                       // Оптимизация для сценариев с одним писателем
     .WithReaderCancellationOrder(enum)             // Lifo | Fifo | RoundRobin | Random
@@ -247,12 +247,12 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 | `Enqueue(input, ct)` | Метод | Добавить задачу; возвращает `false` только в режиме `Skip` при полном буфере |
 | `TryEnqueue(input)` | Метод | Неблокирующий enqueue; возвращает `false` при полном буфере (не зависит от стратегии) |
 | `EnqueueMany(inputs, ct)` | Метод | Пакетный enqueue; возвращает число принятых элементов (каждый ведёт себя согласно стратегии) |
-| `WaitForIdleAsync(ct)` | Метод | Дождаться завершения всех задач |
-| `ShutdownAsync()` | Метод | Корректное завершение (финиш активных + очистка) |
-| `Shutdown()` | Метод | Синхронное завершение |
+| `WaitForIdleAsync(ct)` | Метод | Дождаться завершения всех задач (немедленно, если очередь на паузе, `ConcurrencyLimit = 0`) |
+| `ShutdownAsync()` | Метод | Завершение через отмену: отменяет всех читателей (in-flight работа прерывается, а не доделывается), ожидает читателей с ограничением `ShutdownTimeout`, дренаж остатка буфера как `Faulted` |
+| `Shutdown()` | Метод | Синхронное завершение (блокирует вызвающий поток) |
 | `ForceCancelReaders()` | Метод | Аварийная остановка всех читателей (ограниченное ожидание) |
 | `ForceCancelReadersAsync(timeout, ct)` | Метод | Асинхронная аварийная остановка с опциональным таймаутом |
-| `IsIdle()` | Свойство | `true`, если нет ожидающих/активных задач |
+| `IsIdle()` | Метод | `true`, если нет ожидающих/активных задач |
 | `IsEnabled` | Свойство | `true`, пока очередь активна |
 | `QueueTasks` | Свойство | Всего задач в обработке + в очереди |
 | `ConcurrencyLimit` | Свойство | Текущий лимит параллелизма (изменяемый) |

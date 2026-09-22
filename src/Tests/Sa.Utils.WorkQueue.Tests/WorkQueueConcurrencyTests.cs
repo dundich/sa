@@ -407,9 +407,10 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
                     }
                 }
             }
-            catch (Exception e)
+            catch (OperationCanceledException)
             {
-                Console.WriteLine(e);
+                // The helper loop was cancelled by the test token: stop quietly.
+                // Any other exception propagates to WhenAll and fails the test.
             }
         }, cts.Token);
     }

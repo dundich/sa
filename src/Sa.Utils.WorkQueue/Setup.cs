@@ -49,22 +49,36 @@ public static class Setup
     }
 
 
+    /// <summary>Creates a work queue from a processor with a fixed concurrency.</summary>
+    /// <param name="processor">The processor that executes each work item.</param>
+    /// <param name="concurrency">
+    /// The number of parallel readers. <c>null</c> (default) means automatic
+    /// (processor count); <c>0</c> starts the queue paused (no readers);
+    /// values above the automatic max are clamped to it.
+    /// </param>
     public static ISaWorkQueue<TInput> CreateSimple<TInput>(
         this ISaWork<TInput> processor,
-        int concurrency = -1)
+        int? concurrency = null)
     {
         var options = SaWorkQueueOptions<TInput>.Create(processor)
-            .WithConcurrencyLimit(concurrency > 0 ? concurrency : Environment.ProcessorCount);
+            .WithConcurrencyLimit(concurrency ?? Environment.ProcessorCount);
 
         return new SaWorkQueue<TInput>(options);
     }
 
+    /// <summary>Creates a work queue from a processing delegate with a fixed concurrency.</summary>
+    /// <param name="process">Async delegate that receives the item and a cancellation token.</param>
+    /// <param name="concurrency">
+    /// The number of parallel readers. <c>null</c> (default) means automatic
+    /// (processor count); <c>0</c> starts the queue paused (no readers);
+    /// values above the automatic max are clamped to it.
+    /// </param>
     public static ISaWorkQueue<TInput> CreateSimple<TInput>(
         Func<TInput, CancellationToken, Task> process,
-        int concurrency = -1)
+        int? concurrency = null)
     {
         var options = SaWorkQueueOptions<TInput>.Create(process)
-            .WithConcurrencyLimit(concurrency > 0 ? concurrency : Environment.ProcessorCount);
+            .WithConcurrencyLimit(concurrency ?? Environment.ProcessorCount);
 
         return new SaWorkQueue<TInput>(options);
     }
