@@ -1,4 +1,6 @@
-﻿namespace Sa.Utils.WorkQueue.Tests;
+﻿using System.Collections.Concurrent;
+
+namespace Sa.Utils.WorkQueue.Tests;
 
 public sealed class WorkQueueStabilityTests
 {
@@ -335,5 +337,128 @@ public sealed class WorkQueueStabilityTests
         queue.ConcurrencyLimit = 1;
         await queue.WaitForIdleAsync(TestToken);
         Assert.Equal(2, processor.Processed);
+    }
+
+    [Fact]
+    public async Task Pause_SoftMode_InFlightItemCompletesAndQueuedItemSurvives()
+    {
+        var processor = new BlockingProcessor();
+        var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(1)
+                .WithReaderCancelMode(SaReaderCancelMode.Soft)
+                .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
+
+        await queue.Enqueue(1, TestToken);
+        await Task.Delay(50, TestToken); // Reader picks up item 1 and blocks on the gate
+        await queue.Enqueue(2, TestToken); // Item 2 stays in the channel
+
+        queue.ConcurrencyLimit = 0; // Pause: soft mode must not cancel the in-flight item
+        await Task.Delay(50, TestToken);
+
+        processor.Gate.SetResult(); // Release the in-flight item
+        await Task.Delay(50, TestToken);
+
+        Assert.Equal(1, processor.Processed); // The in-flight item completed
+        Assert.Equal(1, queue.QueueTasks); // Item 2 is still in the queue
+
+        Assert.DoesNotContain(statuses,
+            s => s.Item == 2 && s.Status is SaWorkStatus.Cancelled or SaWorkStatus.Faulted);
+
+        queue.ConcurrencyLimit = 1; // Resume: a new reader picks up item 2
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.Equal(2, processor.Processed);
+        Assert.Contains(statuses, s => s.Item == 2 && s.Status == SaWorkStatus.Completed);
+    }
+
+    [Fact]
+    public async Task DecreaseLimit_SoftMode_InFlightItemsComplete()
+    {
+        var processor = new BlockingProcessor();
+        var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(2)
+                .WithReaderCancelMode(SaReaderCancelMode.Soft)
+                .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
+
+        await queue.Enqueue(1, TestToken);
+        await queue.Enqueue(2, TestToken);
+        await Task.Delay(50, TestToken); // Both readers block on the shared gate
+        await queue.Enqueue(3, TestToken); // Item 3 stays in the channel
+
+        queue.ConcurrencyLimit = 1; // One reader is removed softly — its in-flight item survives
+        await Task.Delay(50, TestToken);
+
+        processor.Gate.SetResult(); // Both in-flight items complete
+        await Task.Delay(50, TestToken);
+
+        // The removed reader's in-flight item completed (not cancelled). The
+        // surviving reader may have already picked up item 3 from the channel,
+        // so only assert on statuses, not on the exact processed count.
+        Assert.Contains(statuses, s => s.Item == 1 && s.Status == SaWorkStatus.Completed);
+        Assert.Contains(statuses, s => s.Item == 2 && s.Status == SaWorkStatus.Completed);
+        Assert.DoesNotContain(statuses, s => s.Status == SaWorkStatus.Cancelled);
+
+        queue.ConcurrencyLimit = 2; // Restore capacity
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.Equal(3, processor.Processed);
+        Assert.Contains(statuses, s => s.Item == 3 && s.Status == SaWorkStatus.Completed);
+    }
+
+    [Fact]
+    public async Task Shutdown_SoftMode_StillCancelsInFlightWork()
+    {
+        var processor = new BlockingProcessor();
+        var cancelled = 0;
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(1)
+                .WithReaderCancelMode(SaReaderCancelMode.Soft)
+                .WithStatusCallback((_, status, _) =>
+                {
+                    if (status == SaWorkStatus.Cancelled)
+                        Interlocked.Increment(ref cancelled);
+                }));
+
+        await queue.Enqueue(1, TestToken);
+        await Task.Delay(50, TestToken); // Reader blocks on the gate
+
+        await queue.ShutdownAsync();
+
+        Assert.False(queue.IsEnabled);
+        Assert.Equal(1, cancelled); // Soft mode must not protect against shutdown
+        Assert.Equal(0, processor.Processed);
+    }
+
+    [Fact]
+    public async Task ForceCancel_SoftMode_RemainsHard()
+    {
+        var processor = new BlockingProcessor();
+        var cancelled = 0;
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(2)
+                .WithReaderCancelMode(SaReaderCancelMode.Soft)
+                .WithStatusCallback((_, status, _) =>
+                {
+                    if (status == SaWorkStatus.Cancelled)
+                        Interlocked.Increment(ref cancelled);
+                }));
+
+        await queue.Enqueue(1, TestToken);
+        await queue.Enqueue(2, TestToken);
+        await Task.Delay(50, TestToken); // Both readers block on the shared gate
+
+        await queue.ForceCancelReadersAsync(ct: TestToken);
+
+        Assert.Equal(0, queue.ConcurrencyLimit);
+        Assert.Equal(2, cancelled); // Force cancel stays hard even in soft mode
+        Assert.Equal(0, processor.Processed);
     }
 }

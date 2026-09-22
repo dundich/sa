@@ -11,6 +11,7 @@ High-performance async task queue for .NET with bounded capacity, dynamic concur
 | **Concurrency limiting** | Control the number of simultaneously executing tasks via `ConcurrencyLimit` |
 | **Dynamic scaling** | Change the limit at runtime: `queue.ConcurrencyLimit = newLimit` |
 | **Scaling strategies** | `Lifo` • `Fifo` • `RoundRobin` • `Random` — choose the one that fits your scenario |
+| **Cancel modes** | `Hard` (default) or `Soft` — how in-flight work is treated when readers are removed at runtime |
 | **DI integration** | Registration via `AddSaWorkQueue<TProcessor, TInput>` or delegate-based `AddSaWorkQueue<TInput>` |
 | **Zero-allocation logging** | `[LoggerMessage]` source generator for `ILogger` |
 | **Safe shutdown** | `ShutdownAsync`, `DisposeAsync` — idempotent and thread-safe |
@@ -42,12 +43,18 @@ High-performance async task queue for .NET with bounded capacity, dynamic concur
 * The `ForceCancelReaders` and `ForceCancelReadersAsync` methods don't just send a cancellation signal (`Cancel()`), but **guaranteedly wait** for the physical completion of reader tasks (`Task.WaitAll` / `Task.WhenAll`).
 * This is critical: only after this wait is it guaranteed that `_ctsReaders.Count` and `_concurrency` have been correctly updated by `RemoveReader`, and subsequent operations (e.g., changing `ConcurrencyLimit`) work with the current state.
 
+### D. Reader Cancel Modes (`SaReaderCancelMode`)
+* Each reader has two CTSs, both linked to `_shutdownCts`: a **loop CTS** (item acquisition, loop gate) and a **work CTS** (the token handed to `ISaWork<TInput>.Execute`).
+* **`Hard` (default):** the work token is linked to the loop CTS — cancelling a reader immediately cancels its in-flight item (`Cancelled`).
+* **`Soft`:** the work token is linked to the work CTS instead — a limit decrease or pause (`ConcurrencyLimit = 0`) removes the reader **without** interrupting the in-flight item, which finishes normally (`Completed`); items still in the channel stay queued for remaining or replacement readers.
+* **Escalation paths stay hard in both modes:** `ForceCancelReaders(Async)` additionally cancels the per-reader work CTS, and `Shutdown`/`Dispose` cancel `_shutdownCts` — in-flight work is always interrupted there (bounded by `ShutdownTimeout`).
+
 ## 3. Main Components
 
 | Component | Purpose |
 | :--- | :--- |
 | `Channel<WorkItem> _queue` | Thread-safe buffer for passing tasks from producers to consumers. Configured with `SingleReader = false` (multiple consumers). |
-| `_ctsReaders` / `_taskReaders` | Track the actual number of started processing loops (`ReaderLoopAsync`). |
+| `_ctsReaders` / `_ctsWorks` / `_taskReaders` | Track the actual number of started processing loops (`ReaderLoopAsync`): loop CTS, work CTS (Soft mode / Force escalation), and the reader task. Kept in parallel order. |
 | `_concurrency` | Volatile field storing the current pool capacity. Synced with `_ctsReaders.Count` during normal operation, managed under `_readersSync` on abnormal termination. |
 | `_taskCount` / `_idleTcs` | Efficient idle-wait mechanism without active polling. |
 | `_state` (`QueueState`) | State machine: `Active` (0), `Shutdown` (1), `Disposed` (2). Managed via `Interlocked.CompareExchange`. |
@@ -78,7 +85,7 @@ These rules MUST be followed when modifying this code:
 3. When adding new forced-interruption methods, always include a wait for task completion (`Task.WhenAll`) so that counter state has time to synchronize.
 4. The `ConcurrencyLimit` setter computes delta from the actual live reader count (`_ctsReaders.Count - _pendingRemovals`), not from the configured `_concurrency` — this prevents spurious spawns/cancels for already-cancelled readers.
 5. `RemoveReader` is called in the `finally` of `ReaderLoopAsync`, which executes **after** `MarkInactive()` (in `ExecuteItemAsync`'s finally). This means `WaitForIdleAsync` may return before `RemoveReader` completes. Do not assume `_concurrency` is fully updated immediately after `WaitForIdleAsync` returns.
-6. All reader-list mutations (`_ctsReaders`, `_taskReaders`, `_pendingRemovals`, `_intentionalRemovals`, `_forceCancelled`) must happen under `lock (_readersSync)`.
+6. All reader-list mutations (`_ctsReaders`, `_ctsWorks`, `_taskReaders`, `_pendingRemovals`, `_intentionalRemovals`, `_forceCancelled`) must happen under `lock (_readersSync)`. The three parallel lists are removed at the same index in `RemoveReader` — never desynchronise them.
 7. All task-count mutations (`_taskCount`, `_idleTcs`) must happen under `lock (_wiSync)`.
 
 ---
@@ -142,6 +149,7 @@ SaWorkQueueOptions<TInput>.Create(processor)
     .WithMaxConcurrency(int)                      // Absolute ceiling of readers (default: CPU count)
     .WithSingleWriter(bool)                       // Optimisation for single-writer scenarios
     .WithReaderScalingStrategy(enum)              // Lifo | Fifo | RoundRobin | Random
+    .WithReaderCancelMode(enum)                   // Hard | Soft — in-flight work on reader removal
     .WithStatusCallback(Action<TInput, SaWorkStatus, Exception?>)
     .WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy>)
     .WithItemDisplayName(Func<TInput, string>)    // Custom display name for logging
@@ -172,6 +180,19 @@ Applied when decreasing `ConcurrencyLimit` at runtime — determines which reade
 | `Fifo` | Cancels the oldest readers | Resource rotation, even lifetime distribution |
 | `RoundRobin` | Cyclic reader cancellation | Stable workers, balanced load |
 | `Random` | Random reader cancellation | Testing, avoiding patterns |
+
+---
+
+## Reader Cancel Modes
+
+Controls how in-flight work is treated when readers are removed at runtime (limit decrease, or pause via `ConcurrencyLimit = 0`). Configured via `.WithReaderCancelMode(...)`:
+
+| Mode | Behaviour | Best for |
+|------|-----------|----------|
+| `Hard` (default) | The in-flight item is cancelled immediately (`Cancelled`) and dropped | Fast stop, work that is cheap to interrupt |
+| `Soft` | The removed reader finishes its current item (`Completed`) before exiting; items still in the channel stay queued | Expensive-to-interrupt work (I/O, third-party calls, long computations) |
+
+`ForceCancelReaders` / `ForceCancelReadersAsync` and `Shutdown` / `ShutdownAsync` **always** interrupt in-flight work regardless of the mode.
 
 ---
 
@@ -230,6 +251,6 @@ Default: `ShutdownQueue` — an item fault triggers a shutdown. For fault-tolera
 3. **Cancellation**: each `Enqueue` accepts a `CancellationToken`. Items distinguish caller-initiated cancellation (`Aborted`) from system cancellation (`Cancelled`).
 4. **Thread safety**: all public members are thread-safe. Changing `ConcurrencyLimit` at runtime adjusts reader count without losing queued items.
 5. **Idempotent shutdown**: `ShutdownAsync`, `Shutdown`, `Dispose`, `DisposeAsync` are safe to call multiple times.
-6. **`ConcurrencyLimit = 0`**: pauses all processing (kills all readers). Restore a positive value to resume.
+6. **`ConcurrencyLimit = 0`**: pauses all processing (cancels all readers; in `Soft` mode the in-flight items are allowed to finish first). Restore a positive value to resume.
 7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: emergency stop — immediately cancels all reader tasks. The sync variant waits up to `ShutdownTimeout` (default 30s) for readers to terminate; the async variant accepts an optional `TimeSpan? timeout`. After calling, restore concurrency by setting `ConcurrencyLimit = X` to spawn replacement readers.
 8. **Delegate-based registration**: `AddSaWorkQueue<TInput>(configureOptions)` accepts a factory returning `SaWorkQueueOptions<TInput>`, allowing registration without an `ISaWork<TInput>` class.

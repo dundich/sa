@@ -52,9 +52,15 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     private int _pendingRemovals;
 
     private readonly List<CancellationTokenSource> _ctsReaders = [];
+    // Work tokens per reader, kept in parallel order with _ctsReaders.
+    // In Soft mode the work token is linked to this CTS (not the loop CTS),
+    // so a planned removal / pause does not interrupt the in-flight item;
+    // Force cancel uses it to escalate to a hard cancel.
+    private readonly List<CancellationTokenSource> _ctsWorks = [];
     private readonly List<Task> _taskReaders = [];
 
     private readonly SaReaderScalingStrategy _scalingStrategy;
+    private readonly SaReaderCancelMode _cancelMode;
     private int _lastRemovedIndex = -1; // For RoundRobin
 
     private readonly TimeSpan _shutdownTimeout;
@@ -79,6 +85,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         _queueCapacity = options.QueueCapacity ?? _maxConcurrency;
 
         _scalingStrategy = options.ReaderScalingStrategy;
+        _cancelMode = options.ReaderCancelMode;
         _getItemDisplayName = options.GetItemDisplayName ?? (item => $"{item}");
         _handleItemFaulted = options.HandleItemFaulted ?? ((_, _) => SaExecutionErrorStrategy.ShutdownQueue);
         _shutdownTimeout = options.ShutdownTimeout ?? TimeSpan.FromSeconds(30);
@@ -241,23 +248,40 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     private Task[] CancelAndTrackReaders()
     {
         Task[] tasks;
-        CancellationTokenSource[] readers;
+        List<(CancellationTokenSource cts, CancellationTokenSource work)> readers;
 
         lock (_readersSync)
         {
-            readers = [.. _ctsReaders.Where(c => !c.IsCancellationRequested)];
+            readers = [.. _ctsReaders
+                .Select((cts, i) => (cts: cts, work: _ctsWorks[i]))
+                .Where(p => !p.cts.IsCancellationRequested)];
             tasks = [.. _taskReaders];
         }
 
-        foreach (var reader in readers)
+        foreach (var (cts, work) in readers)
         {
             try
             {
-                reader.Cancel();
+                cts.Cancel();
             }
             catch (ObjectDisposedException)
             {
                 continue; // already reaped by RemoveReader
+            }
+
+            // Force cancel is always hard, even in Soft mode: also cancel the
+            // per-reader work CTS so an in-flight item is interrupted
+            // immediately instead of finishing.
+            if (_cancelMode == SaReaderCancelMode.Soft)
+            {
+                try
+                {
+                    work.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // already reaped by RemoveReader
+                }
             }
 
             // Request cancellation and record it in the same critical section,
@@ -266,9 +290,9 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             // _pendingRemovals nor re-added to _forceCancelled.
             lock (_readersSync)
             {
-                if (!_ctsReaders.Contains(reader))
+                if (!_ctsReaders.Contains(cts))
                     continue;
-                _forceCancelled.Add(reader);
+                _forceCancelled.Add(cts);
                 _pendingRemovals++;
             }
         }
@@ -323,9 +347,11 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     private void StartReaderUnderLock()
     {
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token);
-        var task = ReaderLoopAsync(cts);
+        var ctsWork = CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token);
+        var task = ReaderLoopAsync(cts, ctsWork);
 
         _ctsReaders.Add(cts);
+        _ctsWorks.Add(ctsWork);
         _taskReaders.Add(task);
     }
 
@@ -394,7 +420,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         return indices.ToArray();
     }
 
-    private async Task ReaderLoopAsync(CancellationTokenSource cts)
+    private async Task ReaderLoopAsync(CancellationTokenSource cts, CancellationTokenSource ctsWork)
     {
         try
         {
@@ -416,8 +442,13 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
                 bool isContinue = false;
 
+                // Soft mode: the work token is linked to the per-reader work CTS
+                // (not the loop CTS), so a planned removal / pause does not
+                // interrupt the in-flight item. Both CTSs are linked to
+                // _shutdownCts, so shutdown stays hard in every mode.
+                var workParent = _cancelMode == SaReaderCancelMode.Soft ? ctsWork : cts;
                 using var ctsExec = CancellationTokenSource.CreateLinkedTokenSource(
-                    cts.Token, item.CancellationToken);
+                    workParent.Token, item.CancellationToken);
 
                 isContinue = await ExecuteItemAsync(item, ctsExec.Token).ConfigureAwait(false);
                 if (!isContinue) break;
@@ -445,15 +476,22 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     {
         bool intentional;
         bool tracked;
+        CancellationTokenSource? work = null;
         lock (_readersSync)
         {
             var idx = _ctsReaders.IndexOf(cts);
             if (idx >= 0)
             {
-                // Both lists are kept in parallel order by StartReaderUnderLock;
-                // remove at the same index so completed Tasks are not retained
-                // (previously _taskReaders grew without bound -> memory leak).
+                // All three lists are kept in parallel order by
+                // StartReaderUnderLock; remove at the same index so completed
+                // Tasks are not retained (previously _taskReaders grew without
+                // bound -> memory leak).
                 _ctsReaders.RemoveAt(idx);
+                if (idx < _ctsWorks.Count)
+                {
+                    work = _ctsWorks[idx];
+                    _ctsWorks.RemoveAt(idx);
+                }
                 if (idx < _taskReaders.Count)
                 {
                     _taskReaders.RemoveAt(idx);
@@ -481,6 +519,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
 
         cts.Dispose();
+        work?.Dispose();
 
         if (IsEnabled && !intentional && !tracked)
         {

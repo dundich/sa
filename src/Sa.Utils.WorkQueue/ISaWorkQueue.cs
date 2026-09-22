@@ -34,6 +34,10 @@ public interface ISaWorkQueue<in TInput> : IDisposable, IAsyncDisposable
     /// While the limit is <c>0</c> and items are still queued, <see cref="WaitForIdleAsync"/>
     /// skips the wait and returns immediately: with no readers the queue can never
     /// drain on its own. Raise the limit above <c>0</c> (or shut the queue down) to make progress.
+    /// When the queue is created with <see cref="SaReaderCancelMode.Soft"/>, a removed reader
+    /// finishes its current item before exiting (<see cref="SaWorkStatus.Completed"/>); in the
+    /// default <see cref="SaReaderCancelMode.Hard"/> mode the in-flight item is interrupted
+    /// (<see cref="SaWorkStatus.Cancelled"/>) and dropped.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">If the value exceeds <see cref="MaxConcurrency"/> (it is clamped).</exception>
     int ConcurrencyLimit { get; set; }
@@ -99,6 +103,10 @@ public interface ISaWorkQueue<in TInput> : IDisposable, IAsyncDisposable
     /// The queue remains active — set <see cref="ConcurrencyLimit"/> to a positive value to spawn replacement readers.
     /// This method is idempotent.
     /// </summary>
+    /// <remarks>
+    /// Always interrupts in-flight work (<see cref="SaWorkStatus.Cancelled"/>) even when the queue
+    /// is configured with <see cref="SaReaderCancelMode.Soft"/>.
+    /// </remarks>
     void ForceCancelReaders();
 
     /// <summary>
@@ -109,5 +117,9 @@ public interface ISaWorkQueue<in TInput> : IDisposable, IAsyncDisposable
     /// <param name="timeout">Optional maximum time to wait for readers to terminate. If <see langword="null"/>, waits indefinitely.</param>
     /// <param name="cancellationToken">Token to cancel the wait.</param>
     /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled or <paramref name="timeout"/> elapses.</exception>
+    /// <remarks>
+    /// Always interrupts in-flight work (<see cref="SaWorkStatus.Cancelled"/>) even when the queue
+    /// is configured with <see cref="SaReaderCancelMode.Soft"/>.
+    /// </remarks>
     Task ForceCancelReadersAsync(TimeSpan? timeout = null, CancellationToken ct = default);
 }

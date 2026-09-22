@@ -26,12 +26,18 @@
 * Методы `ForceCancelReaders` и `ForceCancelReadersAsync` не просто отправляют сигнал отмены (`Cancel()`), но и **гарантированно ожидают** физического завершения задач читателей (`Task.WaitAll` / `Task.WhenAll`).
 * Это критически важно: только после этого ожидания гарантируется, что `_ctsReaders.Count` и `_concurrency` уже корректно обновлены методами `RemoveReader`, и последующие операции (например, изменение `ConcurrencyLimit`) работают с актуальным состоянием.
 
+### Г. Режимы отмены читателей (`SaReaderCancelMode`)
+* У каждого читателя два CTS, оба линкованы на `_shutdownCts`: **loop CTS** (получение items, gate цикла) и **work CTS** (токен, передаваемый в `ISaWork<TInput>.Execute`).
+* **`Hard` (по умолчанию):** work-токен линкован на loop CTS — отмена читателя немедленно отменяет его текущий item (`Cancelled`).
+* **`Soft`:** work-токен линкован на work CTS — при уменьшении лимита или паузе (`ConcurrencyLimit = 0`) читатель удаляется **без прерывания** текущего item: он доделывается штатно (`Completed`), а оставшиеся в канале элементы продолжают ждать оставшихся или новых читателей.
+* **Пути эскалации всегда жёсткие в обоих режимах:** `ForceCancelReaders(Async)` дополнительно отменяет work CTS читателя, а `Shutdown`/`Dispose` отменяют `_shutdownCts` — in-flight работа там всегда прерывается (с ограничением `ShutdownTimeout`).
+
 ## 3. Основные компоненты
 
 | Компонент | Назначение |
 | :--- | :--- |
 | `Channel<WorkItem> _queue` | Потоконебезопасный буфер для передачи задач от производителей к потребителям. Настроен на `SingleReader = false` (множественные потребители). |
-| `_ctsReaders` / `_taskReaders` | Отслеживают фактическое количество запущенных циклов обработки (`ReaderLoopAsync`). |
+| `_ctsReaders` / `_ctsWorks` / `_taskReaders` | Отслеживают фактическое количество запущенных циклов обработки (`ReaderLoopAsync`): loop CTS, work CTS (Soft-режим / эскалация Force) и задача читателя. Хранятся в параллельном порядке. |
 | `_concurrency` | Атомарное поле, хранящее текущую емкость пула. Синхронизировано с `_ctsReaders.Count` при штатной работе, но управляется через `Interlocked` при аварийном завершении. |
 | `_taskCount` / `_idleTcs` | Механизм эффективного ожидания простоя очереди без активного опроса (polling). |
 | `_state` (`QueueState`) | Конечный автомат состояний: `Active` (0), `Shutdown` (1), `Disposed` (2). Управляется через `Interlocked.CompareExchange`. |
@@ -62,7 +68,7 @@
 3. При добавлении новых методов принудительного прерывания всегда добавляйте ожидание завершения `Task` (`Task.WhenAll`), чтобы состояние счетчиков успело синхронизироваться.
 4. Сеттер `ConcurrencyLimit` вычисляет дельту от фактического числа живых читателей (`_ctsReaders.Count - _pendingRemovals`), а не от настроенного `_concurrency` — это исключает «лишние» спавны/отмены для уже отменённых читателей.
 5. `RemoveReader` вызывается в `finally` блока `ReaderLoopAsync`, который выполняется **после** `MarkInactive()` (в finally `ExecuteItemAsync`). Это означает, что `WaitForIdleAsync` может вернуть управление до завершения `RemoveReader`. Не считайте, что `_concurrency` полностью обновлён сразу после `WaitForIdleAsync`.
-6. Все мутации списков читателей (`_ctsReaders`, `_taskReaders`, `_pendingRemovals`, `_intentionalRemovals`, `_forceCancelled`) должны выполняться под `lock (_readersSync)`.
+6. Все мутации списков читателей (`_ctsReaders`, `_ctsWorks`, `_taskReaders`, `_pendingRemovals`, `_intentionalRemovals`, `_forceCancelled`) должны выполняться под `lock (_readersSync)`. Три параллельных списка удаляются в `RemoveReader` по одному индексу — не рассинхронизируйте их.
 7. Все мутации счётчиков задач (`_taskCount`, `_idleTcs`) должны выполняться под `lock (_wiSync)`.
 
 ---
@@ -74,6 +80,7 @@
 | **Ограниченная очередь** | Back-pressure через `BoundedChannel` — при переполнении вызывающий блокируется (`Wait`) |
 | **Динамический параллелизм** | Изменяйте `ConcurrencyLimit` на лету — читатели адаптируются автоматически |
 | **Стратегии масштабирования** | `Lifo` • `Fifo` • `RoundRobin` • `Random` — выберите подход к замене читателей при ресайзе |
+| **Режимы отмены** | `Hard` (по умолчанию) или `Soft` — как обрабатывается in-flight работа при удалении читателей |
 | **DI-интеграция** | `AddSaWorkQueue<TProcessor, TInput>` с полной поддержкой конфигурации |
 | **Логирование без аллокаций** | `[LoggerMessage]` source generator для `ILogger` |
 | **Корректное завершение** | `ShutdownAsync`, `DisposeAsync` — идемпотентно и потокобезопасно |
@@ -143,6 +150,7 @@ SaWorkQueueOptions<TInput>.Create(processor)
     .WithMaxConcurrency(int)                      // Абсолютный потолок читателей (по умолч.: кол-во ядер)
     .WithSingleWriter(bool)                       // Оптимизация для однопользовательских сценариев
     .WithReaderScalingStrategy(enum)              // Lifo | Fifo | RoundRobin | Random
+    .WithReaderCancelMode(enum)                   // Hard | Soft — in-flight работа при удалении читателя
     .WithStatusCallback(Action<TInput, SaWorkStatus, Exception?>)
     .WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy>)
     .WithItemDisplayName(Func<TInput, string>)    // Пользовательское имя элемента для логирования
@@ -173,6 +181,19 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(async (input, ct) => {
 | `Fifo` | Отменяет самых старых читателей | Ресурсная ротация, равномерное время жизни |
 | `RoundRobin` | Циклический обход читателей | Стабильные воркеры, сбалансированная нагрузка |
 | `Random` | Случайный выбор читателей | Тестирование, избегание паттернов |
+
+---
+
+## Режимы отмены читателей
+
+Управляют судьбой in-flight работы при удалении читателей на лету (уменьшение лимита, или пауза через `ConcurrencyLimit = 0`). Настраивается через `.WithReaderCancelMode(...)`:
+
+| Режим | Поведение | Лучше всего для |
+|-------|----------|-----------------|
+| `Hard` (по умолчанию) | Текущий item немедленно отменяется (`Cancelled`) и теряется | Быстрая остановка, дёшево прерываемая работа |
+| `Soft` | Удаляемый читатель доделывает текущий item (`Completed`) перед выходом; оставшиеся в канале элементы продолжают ждать | Дорогая в прерывании работа (I/O, вызовы сторонних API, длительные вычисления) |
+
+`ForceCancelReaders` / `ForceCancelReadersAsync` и `Shutdown` / `ShutdownAsync` **всегда** прерывают in-flight работу независимо от режима.
 
 ---
 
@@ -231,6 +252,6 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(async (input, ct) => {
 3. **Отмена**: каждый `Enqueue` принимает `CancellationToken`. Элементы различают отмену вызывающей стороной (`Aborted`) и системную отмену (`Cancelled`).
 4. **Потокобезопасность**: все публичные члены потокобезопасны. Изменение `ConcurrencyLimit` на лету корректирует число читателей без потери ожидающих элементов.
 5. **Идемпотентное завершение**: `ShutdownAsync`, `Shutdown`, `Dispose`, `DisposeAsync` безопасны для многократного вызова.
-6. **`ConcurrencyLimit = 0`**: приостанавливает всю обработку (убивает всех читателей). Верните положительное значение для возобновления.
+6. **`ConcurrencyLimit = 0`**: приостанавливает всю обработку (отменяет всех читателей; в `Soft`-режиме текущие items сначала доделываются). Верните положительное значение для возобновления.
 7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: аварийная остановка — мгновенно отменяет все reader-задачи. Синхронная версия ожидает до `ShutdownTimeout` (по умолч. 30с) завершения читателей; асинхронная принимает опциональный `TimeSpan? timeout`. После вызова восстановите параллелизм установкой `ConcurrencyLimit = X` для запуска новых читателей.
 8. **Делегатная регистрация**: `AddSaWorkQueue<TInput>(configureOptions)` принимает фабрику, возвращающую `SaWorkQueueOptions<TInput>`, позволяя регистрировать очередь без класса `ISaWork<TInput>`.

@@ -10,7 +10,8 @@ public sealed record SaWorkQueueOptions<TInput>(
     Action<TInput, SaWorkStatus, Exception?>? StatusChanged = null,
     SaReaderScalingStrategy ReaderScalingStrategy = SaReaderScalingStrategy.Lifo,
     Func<TInput, string>? GetItemDisplayName = null,
-    TimeSpan? ShutdownTimeout = null)
+    TimeSpan? ShutdownTimeout = null,
+    SaReaderCancelMode ReaderCancelMode = SaReaderCancelMode.Hard)
 {
     /// <summary>Creates a new options instance with the specified queue capacity.</summary>
     /// <param name="capacity">Must be at least 1.</param>
@@ -48,6 +49,19 @@ public sealed record SaWorkQueueOptions<TInput>(
     /// <summary>Sets the strategy for assigning items to readers.</summary>
     public SaWorkQueueOptions<TInput> WithReaderScalingStrategy(SaReaderScalingStrategy strategy)
         => this with { ReaderScalingStrategy = strategy };
+
+    /// <summary>
+    /// Sets how readers are cancelled when the concurrency limit decreases or the queue is paused.
+    /// </summary>
+    /// <param name="mode">
+    /// <see cref="SaReaderCancelMode.Hard"/> (default) interrupts the in-flight item immediately;
+    /// <see cref="SaReaderCancelMode.Soft"/> lets the in-flight item finish before the reader exits.
+    /// </param>
+    /// <remarks>
+    /// Force cancel and shutdown always interrupt in-flight work regardless of the mode.
+    /// </remarks>
+    public SaWorkQueueOptions<TInput> WithReaderCancelMode(SaReaderCancelMode mode)
+        => this with { ReaderCancelMode = mode };
 
     /// <summary>Sets a function to obtain a display name for each work item (e.g., for logging).</summary>
     public SaWorkQueueOptions<TInput> WithItemDisplayName(Func<TInput, string> toString)
