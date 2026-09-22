@@ -6,12 +6,13 @@ public sealed record SaWorkQueueOptions<TInput>(
     int? ConcurrencyLimit = null,
     int? MaxConcurrency = null,
     bool? SingleWriter = false,
+    SaEnqueueStrategy EnqueueStrategy = SaEnqueueStrategy.Wait,
+    SaReaderCancelMode ReaderCancelMode = SaReaderCancelMode.Hard,
+    SaReaderCancellationOrder ReaderCancellationOrder = SaReaderCancellationOrder.Lifo,
     Func<TInput, Exception, SaExecutionErrorStrategy>? HandleItemFaulted = null,
     Action<TInput, SaWorkStatus, Exception?>? StatusChanged = null,
-    SaReaderCancellationOrder ReaderCancellationOrder = SaReaderCancellationOrder.Lifo,
     Func<TInput, string>? GetItemDisplayName = null,
-    TimeSpan? ShutdownTimeout = null,
-    SaReaderCancelMode ReaderCancelMode = SaReaderCancelMode.Hard)
+    TimeSpan? ShutdownTimeout = null)
 {
     /// <summary>Creates a new options instance with the specified queue capacity.</summary>
     /// <param name="capacity">Must be at least 1.</param>
@@ -62,6 +63,18 @@ public sealed record SaWorkQueueOptions<TInput>(
     /// </remarks>
     public SaWorkQueueOptions<TInput> WithReaderCancelMode(SaReaderCancelMode mode)
         => this with { ReaderCancelMode = mode };
+
+    /// <summary>
+    /// Sets the strategy applied when the queue buffer is full.
+    /// </summary>
+    /// <param name="strategy">
+    /// <see cref="SaEnqueueStrategy.Wait"/> (default) blocks <c>Enqueue</c> until space is available;
+    /// <see cref="SaEnqueueStrategy.Skip"/> drops the item and <c>Enqueue</c> returns <see langword="false"/>;
+    /// <see cref="SaEnqueueStrategy.Throw"/> throws <see cref="SaWorkQueueFullException"/>.
+    /// A stopped or disposed queue always throws regardless of the strategy.
+    /// </param>
+    public SaWorkQueueOptions<TInput> WithEnqueueStrategy(SaEnqueueStrategy strategy)
+        => this with { EnqueueStrategy = strategy };
 
     /// <summary>Sets a function to obtain a display name for each work item (e.g., for logging).</summary>
     public SaWorkQueueOptions<TInput> WithItemDisplayName(Func<TInput, string> toString)

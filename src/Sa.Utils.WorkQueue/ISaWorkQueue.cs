@@ -5,7 +5,7 @@
 /// Provides back-pressure, dynamic concurrency scaling, and per-item error strategies.
 /// </summary>
 /// <typeparam name="TInput">The type of work item processed by the queue.</typeparam>
-public interface ISaWorkQueue<in TInput> : IDisposable, IAsyncDisposable
+public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Gets whether the queue is active and accepting new items.
@@ -50,9 +50,21 @@ public interface ISaWorkQueue<in TInput> : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Gets the capacity of the bounded channel.
-    /// When the queue is full, <see cref="Enqueue"/> blocks until space is available.
+    /// When the queue is full, <see cref="Enqueue"/> behaves according to the configured
+    /// <see cref="SaEnqueueStrategy"/>.
     /// </summary>
     int QueueCapacity { get; }
+
+    /// <summary>
+    /// Gets the number of free slots in the bounded channel buffer.
+    /// </summary>
+    /// <remarks>
+    /// Informational value: how many items can be accepted before the buffer is full
+    /// and the configured <see cref="SaEnqueueStrategy"/> kicks in.
+    /// Items already picked up by readers are not counted;
+    /// see <see cref="QueueTasks"/> for queued plus in-flight work.
+    /// </remarks>
+    int AvailableCapacity { get; }
 
     /// <summary>
     /// Gets the exception that triggered an automatic shutdown (via <see cref="SaExecutionErrorStrategy.ShutdownQueue"/>),
@@ -62,16 +74,76 @@ public interface ISaWorkQueue<in TInput> : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Adds a work item to the queue.
-    /// If the queue is full, the call blocks until space is available.
+    /// When the buffer is full, the call behaves according to the configured
+    /// <see cref="SaEnqueueStrategy"/>:
+    /// <see cref="SaEnqueueStrategy.Wait"/> (default) blocks until space is available,
+    /// <see cref="SaEnqueueStrategy.Skip"/> drops the item,
+    /// <see cref="SaEnqueueStrategy.Throw"/> throws <see cref="SaWorkQueueFullException"/>.
     /// </summary>
     /// <param name="input">The work item to process.</param>
     /// <param name="cancellationToken">
     /// Token for caller-initiated cancellation. If this token is cancelled while the item is being processed,
     /// the item is reported as <see cref="SaWorkStatus.Aborted"/> and the reader continues to the next item.
     /// </param>
+    /// <returns>
+    /// <see langword="true" /> if the item was accepted into the buffer;
+    /// <see langword="false" /> only when the queue is configured with <see cref="SaEnqueueStrategy.Skip"/>
+    /// and the buffer is full (the item is dropped and reported as <see cref="SaWorkStatus.Skipped"/>
+    /// via the status callback).
+    /// </returns>
+    /// <exception cref="SaWorkQueueFullException">If the buffer is full and the strategy is <see cref="SaEnqueueStrategy.Throw"/>.</exception>
     /// <exception cref="InvalidOperationException">If the queue has been shut down.</exception>
     /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
-    ValueTask Enqueue(TInput input, CancellationToken cancellationToken = default);
+    ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempts to add a work item to the queue without blocking.
+    /// Unlike <see cref="Enqueue(TInput, CancellationToken)"/>, this method never honors
+    /// the configured <see cref="SaEnqueueStrategy"/>: it performs a single non-blocking
+    /// try-write and returns <see langword="false" /> when the buffer is full.
+    /// </summary>
+    /// <param name="input">The work item to process.</param>
+    /// <returns>
+    /// <see langword="true" /> if the item was accepted into the buffer;
+    /// <see langword="false" /> if the buffer is full (the item is dropped and reported as
+    /// <see cref="SaWorkStatus.Skipped"/> via the status callback).
+    /// </returns>
+    /// <exception cref="InvalidOperationException">If the queue has been shut down.</exception>
+    /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
+    /// <remarks>
+    /// Intended for hot paths where the caller cannot block or await:
+    /// it offers the same "drop when full" outcome as <see cref="SaEnqueueStrategy.Skip"/>
+    /// regardless of the configured strategy, without any asynchronous machinery.
+    /// </remarks>
+    bool TryEnqueue(TInput input);
+
+    /// <summary>
+    /// Adds multiple work items to the queue in a single call, returning the number of items accepted.
+    /// When the bounded buffer is full, each item behaves according to the configured
+    /// <see cref="SaEnqueueStrategy"/>:
+    /// <see cref="SaEnqueueStrategy.Wait"/> (default) blocks until space is available, so all items
+    /// are eventually accepted;
+    /// <see cref="SaEnqueueStrategy.Skip"/> drops the items that no longer fit and reports each of them
+    /// as <see cref="SaWorkStatus.Skipped"/> via the status callback;
+    /// <see cref="SaEnqueueStrategy.Throw"/> throws <see cref="SaWorkQueueFullException"/> as soon as
+    /// the buffer becomes full, after the preceding items have been accepted.
+    /// </summary>
+    /// <param name="inputs">The work items to process, in the order they are enqueued.</param>
+    /// <param name="cancellationToken">
+    /// Token for caller-initiated cancellation. All enqueued items share this token, so cancelling it
+    /// aborts every not-yet-completed item from this batch (<see cref="SaWorkStatus.Aborted"/>).
+    /// </param>
+    /// <returns>
+    /// The number of items accepted into the buffer
+    /// (equal to the number of enumerated items unless some were dropped by <see cref="SaEnqueueStrategy.Skip"/>
+    /// or the call terminated early).
+    /// </returns>
+    /// <exception cref="SaWorkQueueFullException">If the buffer is full and the strategy is <see cref="SaEnqueueStrategy.Throw"/>
+    /// (carries <see cref="SaWorkQueueFullException.AcceptedCount"/> and <see cref="SaWorkQueueFullException.TotalCount"/>).</exception>
+    /// <exception cref="InvalidOperationException">If the queue has been shut down.</exception>
+    /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled while waiting for space.</exception>
+    ValueTask<int> EnqueueMany(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Asynchronously waits until all currently queued and in-progress tasks have completed.

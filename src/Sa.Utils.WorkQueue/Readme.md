@@ -6,79 +6,22 @@ High-performance async task queue for .NET with bounded capacity, dynamic concur
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
-| **Concurrency limiting** | Control the number of simultaneously executing tasks via `ConcurrencyLimit` |
-| **Dynamic scaling** | Change the limit at runtime: `queue.ConcurrencyLimit = newLimit` |
-| **Scaling strategies** | `Lifo` • `Fifo` • `RoundRobin` • `Random` — choose the one that fits your scenario |
-| **Cancel modes** | `Hard` (default) or `Soft` — how in-flight work is treated when readers are removed at runtime |
-| **DI integration** | Registration via `AddSaWorkQueue<TProcessor, TInput>` or delegate-based `AddSaWorkQueue<TInput>` |
-| **Zero-allocation logging** | `[LoggerMessage]` source generator for `ILogger` |
-| **Safe shutdown** | `ShutdownAsync`, `DisposeAsync` — idempotent and thread-safe |
-| **Error strategies** | Per-item fault handling: `Continue`, `StopReader`, or `ShutdownQueue` |
-| **Status callbacks** | Track item lifecycle: `Running` → `Completed` / `Faulted` / `Cancelled` / `Aborted` |
-| **Back-pressure** | `BoundedChannel` — writers block (`Wait`) while the queue is full |
+| Feature | Description | Details |
+|---------|-------------|---------|
+| **Concurrency limiting** | Control the number of simultaneously executing tasks via `ConcurrencyLimit` | [Concurrency & Scaling](#concurrency--scaling) |
+| **Dynamic scaling** | Change the limit at runtime: `queue.ConcurrencyLimit = newLimit` | [Concurrency & Scaling](#concurrency--scaling) |
+| **Back-pressure** | `BoundedChannel` — `Enqueue` strategy when the buffer is full: `Wait` (default, blocks) • `Skip` (returns `false`) • `Throw` (`SaWorkQueueFullException`); plus non-blocking `TryEnqueue` and batch `EnqueueMany` | [Enqueue Strategies](#enqueue-strategies) |
+| **Reader cancellation order** | `Lifo` • `Fifo` • `RoundRobin` • `Random` — choose which readers are cancelled when the limit is decreased | [Reader Cancellation Order](#reader-cancellation-order) |
+| **Cancel modes** | `Hard` (default) or `Soft` — how in-flight work is treated when readers are removed at runtime | [Reader Cancel Modes](#reader-cancel-modes) |
+| **DI integration** | Registration via `AddSaWorkQueue<TProcessor, TInput>` or delegate-based `AddSaWorkQueue<TInput>` | [Quick Start](#quick-start) |
+| **Zero-allocation logging** | `[LoggerMessage]` source generator for `ILogger` | — |
+| **Safe shutdown** | `ShutdownAsync`, `DisposeAsync` — idempotent and thread-safe | [Important Notes](#-important-notes) |
+| **Error strategies** | Per-item fault handling: `Continue`, `StopReader`, or `ShutdownQueue` | [Error Strategies](#error-strategies) |
+| **Status callbacks** | Track item lifecycle: `Running` → `Completed` / `Faulted` / `Cancelled` / `Aborted` / `Skipped` | [Status Lifecycle](#status-lifecycle) |
 
 ---
 
-# 📄 Architectural Description: `SaWorkQueue<TInput>`
-
-## 1. General Purpose
-
-`SaWorkQueue<TInput>` is a high-performance, thread-safe background task processing queue built on the **Producer-Consumer** pattern using `System.Threading.Channels`. The class is designed for async task execution (`ISaWork<TInput>`) with dynamic management of the worker thread pool (readers), error handling, and idle-state tracking.
-
-## 2. Key Architectural Principles
-
-### A. Dynamic Pool Capacity (`ConcurrencyLimit`)
-* **Semantics:** The `ConcurrencyLimit` property reflects the **current actual pool capacity** (the number of physically existing and ready-to-work readers), not just a static "target setting."
-* **Behavior on failure:** If a reader terminates (e.g., due to `SaExecutionErrorStrategy.StopReader` or a `ForceCancelReaders` call), the `ConcurrencyLimit` value **decreases** atomically. This guarantees the property always reflects the real number of available worker units.
-* **Recovery:** If a reader has terminated (strategy `StopReader`, `ForceCancelReaders`, crash), the pool capacity decreases. To recover, set `ConcurrencyLimit` to the target value — the setter will spawn the missing readers.
-
-### B. Precise Task Accounting (`_taskCount` and `IsIdle`)
-* **Single source of truth:** The `IsIdle()` method relies **exclusively** on the value `volatile int _taskCount == 0`.
-* **Why:** Checking `_queue.Reader.Count` is subject to race conditions between the moment a task is dequeued from the channel and the moment its execution begins. The `_taskCount` counter is incremented in `MarkActive()` *before* writing to the channel and decremented in `MarkInactive()` *after* processing completes, providing a 100% accurate idle signal via `TaskCompletionSource` (`_idleTcs`).
-* **Negative-value protection:** `MarkInactive()` contains a `if (_taskCount > 0)` check to prevent the counter from going negative during a race between `Enqueue` and `Shutdown`.
-
-### C. Deterministic Forced Stop (`ForceCancelReaders`)
-* The `ForceCancelReaders` and `ForceCancelReadersAsync` methods don't just send a cancellation signal (`Cancel()`), but **guaranteedly wait** for the physical completion of reader tasks (`Task.WaitAll` / `Task.WhenAll`).
-* This is critical: only after this wait is it guaranteed that `_ctsReaders.Count` and `_concurrency` have been correctly updated by `RemoveReader`, and subsequent operations (e.g., changing `ConcurrencyLimit`) work with the current state.
-
-### D. Reader Cancel Modes (`SaReaderCancelMode`)
-* Each reader has two CTSs, both linked to `_shutdownCts`: a **loop CTS** (item acquisition, loop gate) and a **work CTS** (the token handed to `ISaWork<TInput>.Execute`).
-* **`Hard` (default):** the work token is linked to the loop CTS — cancelling a reader immediately cancels its in-flight item (`Cancelled`).
-* **`Soft`:** the work token is linked to the work CTS instead — a limit decrease or pause (`ConcurrencyLimit = 0`) removes the reader **without** interrupting the in-flight item, which finishes normally (`Completed`); items still in the channel stay queued for remaining or replacement readers.
-* **Escalation paths stay hard in both modes:** `ForceCancelReaders(Async)` additionally cancels the per-reader work CTS, and `Shutdown`/`Dispose` cancel `_shutdownCts` — in-flight work is always interrupted there (bounded by `ShutdownTimeout`).
-
-## 3. Main Components
-
-| Component | Purpose |
-| :--- | :--- |
-| `Channel<WorkItem> _queue` | Thread-safe buffer for passing tasks from producers to consumers. Configured with `SingleReader = false` (multiple consumers). |
-| `_ctsReaders` / `_ctsWorks` / `_taskReaders` | Track the actual number of started processing loops (`ReaderLoopAsync`): loop CTS, work CTS (Soft mode / Force escalation), and the reader task. Kept in parallel order. |
-| `_concurrency` | Volatile field storing the current pool capacity. Synced with `_ctsReaders.Count` during normal operation, managed under `_readersSync` on abnormal termination. |
-| `_taskCount` / `_idleTcs` | Efficient idle-wait mechanism without active polling. |
-| `_state` (`QueueState`) | State machine: `Active` (0), `Shutdown` (1), `Disposed` (2). Managed via `Interlocked.CompareExchange`. |
-
-## 4. Error Handling and Strategies (`SaExecutionErrorStrategy`)
-
-On exception in `ISaWork<TInput>.Execute`, the `_handleItemFaulted` delegate fires, returning one of:
-1. **`Continue`**: The item is marked as `Faulted`, but the reader continues pulling the next tasks from the channel.
-2. **`StopReader`**: The item is marked as `Faulted`, the current reader terminates its loop (`return false`), triggering `RemoveReader`. **Pool capacity (`ConcurrencyLimit`) decreases by 1.** Other readers continue working.
-3. **`ShutdownQueue`**: Asynchronous termination of the entire queue is initiated (`ShutdownAsync`), all new tasks will be rejected.
-
-## 5. Lifecycle and Shutdown
-
-* **Graceful Shutdown (`Shutdown` / `ShutdownAsync`)**:
-  1. Transitions state to `Shutdown`.
-  2. Cancels `_shutdownCts` (signal to readers to finish after their current task).
-  3. Closes the channel for writing (`TryComplete()`).
-  4. Waits for all reader tasks to complete (`WaitForReadersToCompleteAsync`).
-  5. Clears remaining items in the channel (`DrainAndResetIdle`), marking them as `Faulted` and resetting `_taskCount` to 0 for correct `IsIdle()`.
-* **Dispose**: Guarantees `Shutdown` is called and `_shutdownCts` is released. Repeated calls are safe (idempotent).
-
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ### 1️⃣ Implement your task processor
 
@@ -126,9 +69,9 @@ public class OrderService(ISaWorkQueue<OrderInput> queue)
 
 ---
 
-## ⚙️ `SaWorkQueueOptions<TInput>` Configuration
+## Configuration
 
-All parameters are immutable record fields with fluent `With*` methods:
+All parameters are immutable record fields with fluent `With*` methods on `SaWorkQueueOptions<TInput>`:
 
 ```csharp
 SaWorkQueueOptions<TInput>.Create(processor)
@@ -138,6 +81,7 @@ SaWorkQueueOptions<TInput>.Create(processor)
     .WithSingleWriter(bool)                       // Optimisation for single-writer scenarios
     .WithReaderCancellationOrder(enum)             // Lifo | Fifo | RoundRobin | Random
     .WithReaderCancelMode(enum)                   // Hard | Soft — in-flight work on reader removal
+    .WithEnqueueStrategy(enum)                    // Wait | Skip | Throw — behaviour when the buffer is full
     .WithStatusCallback(Action<TInput, SaWorkStatus, Exception?>)
     .WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy>)
     .WithItemDisplayName(Func<TInput, string>)    // Custom display name for logging
@@ -158,13 +102,41 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(async (input, ct) => {
 
 ---
 
-## Reader Scaling Strategies
+## Concurrency & Scaling
 
-Applied when decreasing `ConcurrencyLimit` at runtime — determines which readers to cancel:
+The queue runs up to `ConcurrencyLimit` readers concurrently (default: CPU count), never exceeding `MaxConcurrency`. The limit is mutable at runtime — readers are spawned or cancelled as needed, and queued items are not affected.
+
+```csharp
+// Configure
+var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
+    .WithConcurrencyLimit(4)      // readers to start with
+    .WithMaxConcurrency(16);      // ceiling for runtime scaling
+    .WithQueueCapacity(100);      // bounded buffer size
+```
+
+```csharp
+// Scale at runtime
+queue.ConcurrencyLimit = 8;  // spawn more readers
+queue.ConcurrencyLimit = 4;  // cancel readers (per the configured cancellation order)
+queue.ConcurrencyLimit = 0;  // pause processing; set a positive value to resume
+```
+
+When a reader terminates on its own (error strategy `StopReader`, `ForceCancelReaders`), `ConcurrencyLimit` decreases accordingly — set it back to the target value to restore the pool.
+
+---
+
+## Reader Cancellation Order
+
+Determines which readers to cancel when `ConcurrencyLimit` is decreased at runtime (default: `Lifo`).
+
+```csharp
+var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
+    .WithReaderCancellationOrder(SaReaderCancellationOrder.RoundRobin);
+```
 
 | Strategy | Behaviour | Best for |
 |----------|-----------|----------|
-| `Lifo` | Cancels the most recently created readers | CPU-bound tasks, cache locality |
+| `Lifo` (default) | Cancels the most recently created readers | CPU-bound tasks, cache locality |
 | `Fifo` | Cancels the oldest readers | Resource rotation, even lifetime distribution |
 | `RoundRobin` | Cyclic reader cancellation | Stable workers, balanced load |
 | `Random` | Random reader cancellation | Testing, avoiding patterns |
@@ -173,7 +145,12 @@ Applied when decreasing `ConcurrencyLimit` at runtime — determines which reade
 
 ## Reader Cancel Modes
 
-Controls how in-flight work is treated when readers are removed at runtime (limit decrease, or pause via `ConcurrencyLimit = 0`). Configured via `.WithReaderCancelMode(...)`:
+Controls how in-flight work is treated when readers are removed at runtime (limit decrease, or pause via `ConcurrencyLimit = 0`).
+
+```csharp
+var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
+    .WithReaderCancelMode(SaReaderCancelMode.Soft);
+```
 
 | Mode | Behaviour | Best for |
 |------|-----------|----------|
@@ -184,11 +161,92 @@ Controls how in-flight work is treated when readers are removed at runtime (limi
 
 ---
 
-## 🔑 `ISaWorkQueue<TInput>` API
+## Enqueue Strategies
+
+`Enqueue` returns `ValueTask<bool>` and behaves according to the configured `SaEnqueueStrategy` when the bounded buffer is full:
+
+```csharp
+var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
+    .WithEnqueueStrategy(SaEnqueueStrategy.Wait);   // Wait | Skip | Throw
+```
+
+| Strategy | Behaviour when the buffer is full | Best for |
+|----------|-----------------------------------|----------|
+| `Wait` (default) | Blocks until space is available, then returns `true` | Producers that should apply back-pressure |
+| `Skip` | Drops the item and returns `false` (not counted in `QueueTasks`; reported as `Skipped`) | Fire-and-forget producers: metrics, telemetry, logs |
+| `Throw` | Throws `SaWorkQueueFullException` (carries `QueueCapacity`, `QueuedCount`, and the item's display name) | Producers that must react explicitly to overload |
+
+```csharp
+var accepted = await queue.Enqueue(input, ct);
+if (!accepted)
+{
+    // Skip mode: the buffer was full, the item was dropped (reported as Skipped)
+}
+
+// Free slots before the buffer is full (informational)
+int free = queue.AvailableCapacity;
+```
+
+A **stopped or disposed** queue always throws (`InvalidOperationException` / `ObjectDisposedException`) regardless of the strategy. Since `Enqueue` is async, the exception is carried by the returned `ValueTask` — observe it with `await`.
+
+`TryEnqueue(input)` is a non-blocking variant that never honors the strategy: it performs a single try-write — `true` when the item is accepted, `false` when the buffer is full (the item is dropped, not counted, and reported as `Skipped`). Use it on hot paths where the caller cannot block or `await`. A stopped or disposed queue still throws — synchronously this time.
+
+`EnqueueMany(inputs, ct)` adds several items in a single call and returns the number accepted (`ValueTask<int>`). Each item honors the configured strategy: `Wait` blocks until space is available, so all items are eventually accepted; `Skip` drops the items that no longer fit, reporting each of them as `Skipped`; `Throw` throws `SaWorkQueueFullException` as soon as the buffer becomes full, carrying `AcceptedCount` and `TotalCount`. Items accepted before a `Throw` failure remain in the queue.
+
+---
+
+## Error Strategies
+
+Controls what happens when `ISaWork<TInput>.Execute` throws.
+
+```csharp
+var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
+    .WithHandleItemFaulted((input, ex) =>
+        ex is OutOfMemoryException
+            ? SaExecutionErrorStrategy.ShutdownQueue
+            : SaExecutionErrorStrategy.Continue);
+```
+
+| Strategy | Behaviour |
+|----------|----------|
+| `Continue` | Mark item as `Faulted`, continue processing remaining items |
+| `StopReader` | Mark item as `Faulted`, stop current reader (capacity decreases; restore via `ConcurrencyLimit = X`) |
+| `ShutdownQueue` (default) | Mark item as `Faulted`, trigger full queue shutdown |
+
+For fault-tolerant pipelines, override the default to `Continue` or `StopReader`.
+
+---
+
+## Status Lifecycle
+
+Each item flows through statuses communicated via the `StatusChanged` callback:
+
+```csharp
+var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
+    .WithStatusCallback((input, status, ex) =>
+    {
+        // e.g. logger.LogDebug("Order {Id} → {Status}", input.OrderId, status);
+    });
+```
+
+| Status | Meaning |
+|--------|---------|
+| `Running` | Item is being processed |
+| `Completed` | Finished successfully |
+| `Faulted` | Unhandled error occurred |
+| `Cancelled` | Cancelled by system (shutdown, timeout) |
+| `Aborted` | Cancelled explicitly by caller's token |
+| `Skipped` | Not accepted because the buffer was full (`Skip` strategy, `TryEnqueue`, or `EnqueueMany`); the item was never processed |
+
+---
+
+## API — `ISaWorkQueue<TInput>`
 
 | Member | Kind | Description |
 |--------|------|-------------|
-| `Enqueue(input, ct)` | Method | Add a task (non-blocking if there is room) |
+| `Enqueue(input, ct)` | Method | Add a task; returns `false` only in `Skip` mode when the buffer is full |
+| `TryEnqueue(input)` | Method | Non-blocking enqueue; returns `false` when the buffer is full (strategy-independent) |
+| `EnqueueMany(inputs, ct)` | Method | Batch enqueue; returns the number of items accepted (each item honors the configured strategy) |
 | `WaitForIdleAsync(ct)` | Method | Wait until all tasks complete |
 | `ShutdownAsync()` | Method | Graceful shutdown (finish active + drain) |
 | `Shutdown()` | Method | Synchronous shutdown |
@@ -200,48 +258,23 @@ Controls how in-flight work is treated when readers are removed at runtime (limi
 | `ConcurrencyLimit` | Property | Current parallelism limit (mutable) |
 | `MaxConcurrency` | Property | Absolute ceiling |
 | `QueueCapacity` | Property | Bounded channel capacity |
+| `AvailableCapacity` | Property | Free slots in the buffer (informational) |
 | `ShutdownError` | Property | Exception that triggered shutdown, if any |
-
----
-
-## Status Lifecycle
-
-Each item flows through statuses communicated via the `StatusChanged` callback:
-
-| Status | Meaning |
-|--------|---------|
-| `Running` | Item is being processed |
-| `Completed` | Finished successfully |
-| `Faulted` | Unhandled error occurred |
-| `Cancelled` | Cancelled by system (shutdown, timeout) |
-| `Aborted` | Cancelled explicitly by caller's token |
-
----
-
-## Error Strategies
-
-Configured via `.WithHandleItemFaulted(...)`:
-
-| Strategy | Behaviour |
-|----------|----------|
-| `Continue` | Mark item as Faulted, continue processing remaining items |
-| `StopReader` | Mark item as Faulted, stop current reader (capacity decreases; restore via `ConcurrencyLimit = X`) |
-| `ShutdownQueue` | Mark item as Faulted, trigger full queue shutdown |
-
-Default: `ShutdownQueue` — an item fault triggers a shutdown. For fault-tolerant pipelines, override to `Continue` or `StopReader`.
 
 ---
 
 ## ⚠️ Important Notes
 
 1. **Lifecycle**: registered as `Singleton`. Do not use `Scoped`/`Transient`.
-2. **`StatusChanged` callback**: invoked synchronously a thread-pool thread. Avoid long-running operations inside. Handler exceptions are logged but not propagated.
+2. **`StatusChanged` callback**: invoked synchronously on a thread-pool thread. Avoid long-running operations inside. Handler exceptions are logged but not propagated.
 3. **Cancellation**: each `Enqueue` accepts a `CancellationToken`. Items distinguish caller-initiated cancellation (`Aborted`) from system cancellation (`Cancelled`).
 4. **Thread safety**: all public members are thread-safe. Changing `ConcurrencyLimit` at runtime adjusts reader count without losing queued items.
 5. **Idempotent shutdown**: `ShutdownAsync`, `Shutdown`, `Dispose`, `DisposeAsync` are safe to call multiple times.
 6. **`ConcurrencyLimit = 0`**: pauses all processing (cancels all readers; in `Soft` mode the in-flight items are allowed to finish first). Restore a positive value to resume.
 7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: emergency stop — immediately cancels all reader tasks. The sync variant waits up to `ShutdownTimeout` (default 30s) for readers to terminate; the async variant accepts an optional `TimeSpan? timeout`. After calling, restore concurrency by setting `ConcurrencyLimit = X` to spawn replacement readers.
 8. **Delegate-based registration**: `AddSaWorkQueue<TInput>(configureOptions)` accepts a factory returning `SaWorkQueueOptions<TInput>`, allowing registration without an `ISaWork<TInput>` class.
+9. **`Enqueue` return value**: `ValueTask<bool>` — `false` only in `Skip` mode with a full buffer (the item is dropped and reported as `Skipped` via `StatusChanged`). A stopped/disposed queue always throws; the exception is carried by the `ValueTask` and surfaced by `await`.
+10. **`AvailableCapacity`**: informational only — free slots in the buffer. It does not affect `IsIdle()`.
 
 ---
 

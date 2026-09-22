@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using System.Threading;
 using System.Threading.Channels;
 
-public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
+public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 {
     private sealed record WorkItem(TInput Input, CancellationToken CancellationToken);
 
@@ -61,6 +61,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     private readonly SaReaderCancellationOrder _cancellationOrder;
     private readonly SaReaderCancelMode _cancelMode;
+    private readonly SaEnqueueStrategy _enqueueStrategy;
     private int _lastRemovedIndex = -1; // For RoundRobin
 
     private readonly TimeSpan _shutdownTimeout;
@@ -86,6 +87,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         _cancellationOrder = options.ReaderCancellationOrder;
         _cancelMode = options.ReaderCancelMode;
+        _enqueueStrategy = options.EnqueueStrategy;
         _getItemDisplayName = options.GetItemDisplayName ?? (item => $"{item}");
         _handleItemFaulted = options.HandleItemFaulted ?? ((_, _) => SaExecutionErrorStrategy.ShutdownQueue);
         _shutdownTimeout = options.ShutdownTimeout ?? TimeSpan.FromSeconds(30);
@@ -109,6 +111,10 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public int MaxConcurrency => _maxConcurrency;
     public int QueueCapacity => _queueCapacity;
+
+    public int AvailableCapacity
+        => _queueCapacity - (_queue.Reader.CanCount ? _queue.Reader.Count : 0);
+
     public Exception? ShutdownError => _shutdownError;
 
     public int ConcurrencyLimit
@@ -145,29 +151,149 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
     }
 
-    public async ValueTask Enqueue(TInput input, CancellationToken cancellationToken = default)
+    public async ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
         if (!IsEnabled) ThrowHelper.QueueStopped();
 
         var wi = new WorkItem(input, cancellationToken);
 
-        try
+        if (_enqueueStrategy == SaEnqueueStrategy.Wait)
         {
             MarkActive();
+            await WriteAsyncBalanced(wi, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        MarkActive();
+
+        if (_queue.Writer.TryWrite(wi))
+        {
+            return true;
+        }
+
+        MarkInactive();
+
+        // Shutdown raced with us and completed the writer: report
+        // "stopped" rather than "full".
+        if (!IsEnabled)
+        {
+            ThrowHelper.QueueStopped();
+        }
+
+        if (_enqueueStrategy == SaEnqueueStrategy.Throw)
+        {
+            throw new SaWorkQueueFullException(_queueCapacity, _queue.Reader.Count, _getItemDisplayName(input));
+        }
+
+        OnStatusChanged(input, SaWorkStatus.Skipped);
+        return false;
+    }
+
+    /// <summary>
+    /// Waits for space in the bounded channel and writes <paramref name="wi"/>.
+    /// The caller must have already marked the item active; on failure the pending
+    /// count is balanced with <see cref="MarkInactive"/> and the exception is rethrown
+    /// (writer-completed faults are mapped to "queue stopped").
+    /// </summary>
+    private async ValueTask<bool> WriteAsyncBalanced(WorkItem wi, CancellationToken cancellationToken)
+    {
+        try
+        {
             await _queue.Writer.WriteAsync(wi, cancellationToken).ConfigureAwait(false);
+            return true;
         }
         catch (Exception ex)
         {
             MarkInactive();
 
-            if (ex is ChannelClosedException or InvalidOperationException)
+            if (ex is ChannelClosedException or IOException or InvalidOperationException)
             {
                 ThrowHelper.QueueStopped();
             }
 
             throw;
         }
+    }
+
+    public async ValueTask<int> EnqueueMany(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
+        if (!IsEnabled) ThrowHelper.QueueStopped();
+
+        var accepted = 0;
+        var attempted = 0;
+
+        foreach (var input in inputs)
+        {
+            attempted++;
+            var wi = new WorkItem(input, cancellationToken);
+
+            MarkActive();
+
+            bool ok;
+            if (_enqueueStrategy == SaEnqueueStrategy.Wait)
+            {
+                ok = await WriteAsyncBalanced(wi, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                ok = _queue.Writer.TryWrite(wi);
+            }
+
+            if (ok)
+            {
+                accepted++;
+                continue;
+            }
+
+            // Only reachable for the non-Wait path: WriteAsyncBalanced either
+            // returned true or already balanced the count and rethrew.
+            MarkInactive();
+
+            // Shutdown raced with us and completed the writer: report
+            // "stopped" rather than "full".
+            if (!IsEnabled)
+            {
+                ThrowHelper.QueueStopped();
+            }
+
+            if (_enqueueStrategy == SaEnqueueStrategy.Throw)
+            {
+                throw new SaWorkQueueFullException(_queueCapacity, _queue.Reader.Count, accepted, attempted);
+            }
+
+            OnStatusChanged(input, SaWorkStatus.Skipped);
+        }
+
+        return accepted;
+    }
+
+    public bool TryEnqueue(TInput input)
+    {
+        ObjectDisposedException.ThrowIf(_state == QueueState.Disposed, this);
+        if (!IsEnabled) ThrowHelper.QueueStopped();
+
+        var wi = new WorkItem(input, default);
+
+        MarkActive();
+
+        if (_queue.Writer.TryWrite(wi))
+        {
+            return true;
+        }
+
+        MarkInactive();
+
+        // Shutdown raced with us and completed the writer: report
+        // "stopped" rather than "full".
+        if (!IsEnabled)
+        {
+            ThrowHelper.QueueStopped();
+        }
+
+        OnStatusChanged(input, SaWorkStatus.Skipped);
+        return false;
     }
 
     public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
@@ -417,7 +543,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             indices.Add(rng.Next(totalCount));
         }
 
-        return indices.ToArray();
+        return [.. indices];
     }
 
     private async Task ReaderLoopAsync(CancellationTokenSource cts, CancellationTokenSource ctsWork)
@@ -463,7 +589,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
         catch (Exception ex)
         {
-            LogReaderError(_logger, ex);
+            SaWorkQueueLogMessages.LogReaderError(_logger, ex);
             _ = ShutdownAsync().ConfigureAwait(false);
         }
         finally
@@ -523,7 +649,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         if (IsEnabled && !intentional && !tracked)
         {
-            LogReaderLost(_logger, _concurrency);
+            SaWorkQueueLogMessages.LogReaderLost(_logger, _concurrency);
         }
     }
 
@@ -540,13 +666,13 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         catch (OperationCanceledException ex) when (item.CancellationToken.IsCancellationRequested)
         {
             OnStatusChanged(item.Input, SaWorkStatus.Aborted);
-            LogItemAborted(_logger, _getItemDisplayName(item.Input), ex);
+            SaWorkQueueLogMessages.LogItemAborted(_logger, _getItemDisplayName(item.Input), ex);
             return true;
         }
         catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
         {
             OnStatusChanged(item.Input, SaWorkStatus.Cancelled);
-            LogItemCancelled(_logger, _getItemDisplayName(item.Input), ex);
+            SaWorkQueueLogMessages.LogItemCancelled(_logger, _getItemDisplayName(item.Input), ex);
             return false;
         }
         catch (Exception ex)
@@ -557,13 +683,13 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             try
             {
                 OnStatusChanged(item.Input, SaWorkStatus.Faulted, ex);
-                LogItemExecutionFailed(_logger, displayItem, ex);
+                SaWorkQueueLogMessages.LogItemExecutionFailed(_logger, displayItem, ex);
 
                 errorStrategy = _handleItemFaulted(item.Input, ex);
             }
             catch (Exception callbackEx)
             {
-                LogItemHandlerFailed(_logger, displayItem, callbackEx);
+                SaWorkQueueLogMessages.LogItemHandlerFailed(_logger, displayItem, callbackEx);
             }
 
             return errorStrategy switch
@@ -638,7 +764,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         if (handlerEx is not null)
         {
-            LogItemHandlerFailed(_logger, _getItemDisplayName(item), handlerEx);
+            SaWorkQueueLogMessages.LogItemHandlerFailed(_logger, _getItemDisplayName(item), handlerEx);
         }
     }
 
@@ -656,7 +782,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
         catch (Exception ex)
         {
-            LogShutdownError(_logger, ex);
+            SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
         }
     }
 
@@ -674,7 +800,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
         catch (Exception ex)
         {
-            LogShutdownError(_logger, ex);
+            SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
         }
     }
 
@@ -704,7 +830,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
         catch (TimeoutException)
         {
-            LogShutdownError(_logger, ThrowHelper.ReadersTimeout(asynchronous: true, _shutdownTimeout.TotalSeconds));
+            SaWorkQueueLogMessages.LogShutdownError(_logger, ThrowHelper.ReadersTimeout(asynchronous: true, _shutdownTimeout.TotalSeconds));
         }
     }
 
@@ -728,7 +854,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         if (!Task.WaitAll(tasks, _shutdownTimeout))
         {
-            LogShutdownError(_logger, ThrowHelper.ReadersTimeout(asynchronous: false, _shutdownTimeout.TotalSeconds));
+            SaWorkQueueLogMessages.LogShutdownError(_logger, ThrowHelper.ReadersTimeout(asynchronous: false, _shutdownTimeout.TotalSeconds));
         }
     }
 
@@ -809,78 +935,4 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
     }
 
-    #region Logging Definitions (Source Generator)
-
-    private static partial class LogMessages
-    {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "[{Item}] processing was cancelled")]
-        public static partial void ItemCancelled(ILogger logger, string item, Exception exception);
-
-        [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "[{Item}] processing was aborted")]
-        public static partial void ItemAborted(ILogger logger, string item, Exception exception);
-
-        [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "[{Item}] execution failed")]
-        public static partial void ItemExecutionFailed(ILogger logger, string item, Exception exception);
-
-        [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "[{Item}] event handler failed for work item")]
-        public static partial void ItemHandlerFailed(ILogger logger, string item, Exception exception);
-
-        [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "ReaderTask error")]
-        public static partial void ReaderError(ILogger logger, Exception exception);
-
-        [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Error during shutdown")]
-        public static partial void ShutdownError(ILogger logger, Exception exception);
-
-        [LoggerMessage(EventId = 7, Level = LogLevel.Warning,
-            Message = "Reader terminated unexpectedly. Effective concurrency is now {Concurrency}. Set ConcurrencyLimit to restore readers.")]
-        public static partial void ReaderLost(ILogger logger, int concurrency);
-    }
-
-    private static void LogReaderLost(ILogger? logger, int concurrency)
-    {
-        if (logger is not null) LogMessages.ReaderLost(logger, concurrency);
-    }
-
-    private static void LogItemCancelled(ILogger? logger, string item, Exception ex)
-    {
-        if (logger is not null) LogMessages.ItemCancelled(logger, item, ex);
-    }
-
-    private static void LogItemAborted(ILogger? logger, string item, Exception ex)
-    {
-        if (logger is not null) LogMessages.ItemAborted(logger, item, ex);
-    }
-
-    private static void LogItemExecutionFailed(ILogger? logger, string item, Exception ex)
-    {
-        if (logger is not null) LogMessages.ItemExecutionFailed(logger, item, ex);
-    }
-
-    private static void LogItemHandlerFailed(ILogger? logger, string item, Exception ex)
-    {
-        if (logger is not null) LogMessages.ItemHandlerFailed(logger, item, ex);
-    }
-
-    private static void LogReaderError(ILogger? logger, Exception ex)
-    {
-        if (logger is not null) LogMessages.ReaderError(logger, ex);
-    }
-
-    private static void LogShutdownError(ILogger? logger, Exception ex)
-    {
-        if (logger is not null) LogMessages.ShutdownError(logger, ex);
-    }
-
-    #endregion
-}
-
-internal static class ThrowHelper
-{
-    public static void QueueStopped() => throw new InvalidOperationException("Queue has been stopped.");
-
-    public static OperationCanceledException QueueShutdownException()
-        => new("Queue was shut down; this work item was dropped without being processed.");
-
-    public static TimeoutException ReadersTimeout(bool asynchronous, double seconds)
-        => new($"Readers did not complete within {seconds:F0} seconds during {(asynchronous ? "asynchronous" : "synchronous")} shutdown.");
 }

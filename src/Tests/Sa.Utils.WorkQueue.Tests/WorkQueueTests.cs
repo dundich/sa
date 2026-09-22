@@ -1,4 +1,6 @@
-﻿namespace Sa.Utils.WorkQueue.Tests;
+﻿using System.Collections.Concurrent;
+
+namespace Sa.Utils.WorkQueue.Tests;
 
 public class WorkQueueTests
 {
@@ -189,7 +191,7 @@ public class WorkQueueTests
     [Fact]
     public async Task ShutdownAsync_StopsProcessing()
     {
-        List<SaWorkStatus> errors = [];
+        ConcurrentBag<SaWorkStatus> errors = [];
 
         // Arrange
         var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(300));
