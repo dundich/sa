@@ -76,18 +76,6 @@ On exception in `ISaWork<TInput>.Execute`, the `_handleItemFaulted` delegate fir
   5. Clears remaining items in the channel (`DrainAndResetIdle`), marking them as `Faulted` and resetting `_taskCount` to 0 for correct `IsIdle()`.
 * **Dispose**: Guarantees `Shutdown` is called and `_shutdownCts` is released. Repeated calls are safe (idempotent).
 
-## 6. 🤖 Critical Rules for AI Agents (⚠️ IMPORTANT)
-
-These rules MUST be followed when modifying this code:
-
-1. **NEVER** use direct assignment `_concurrency = _ctsReaders.Count`. Pool capacity change on reader removal is done via `_concurrency--` inside `RemoveReader` (under `_readersSync`) to avoid race conditions.
-2. **NEVER** rely on `_queue.Reader.Count` to determine `IsIdle()`. Use only `_taskCount == 0`.
-3. When adding new forced-interruption methods, always include a wait for task completion (`Task.WhenAll`) so that counter state has time to synchronize.
-4. The `ConcurrencyLimit` setter computes delta from the actual live reader count (`_ctsReaders.Count - _pendingRemovals`), not from the configured `_concurrency` — this prevents spurious spawns/cancels for already-cancelled readers.
-5. `RemoveReader` is called in the `finally` of `ReaderLoopAsync`, which executes **after** `MarkInactive()` (in `ExecuteItemAsync`'s finally). This means `WaitForIdleAsync` may return before `RemoveReader` completes. Do not assume `_concurrency` is fully updated immediately after `WaitForIdleAsync` returns.
-6. All reader-list mutations (`_ctsReaders`, `_ctsWorks`, `_taskReaders`, `_pendingRemovals`, `_intentionalRemovals`, `_forceCancelled`) must happen under `lock (_readersSync)`. The three parallel lists are removed at the same index in `RemoveReader` — never desynchronise them.
-7. All task-count mutations (`_taskCount`, `_idleTcs`) must happen under `lock (_wiSync)`.
-
 ---
 
 ## 🚀 Quick Start
@@ -254,3 +242,17 @@ Default: `ShutdownQueue` — an item fault triggers a shutdown. For fault-tolera
 6. **`ConcurrencyLimit = 0`**: pauses all processing (cancels all readers; in `Soft` mode the in-flight items are allowed to finish first). Restore a positive value to resume.
 7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: emergency stop — immediately cancels all reader tasks. The sync variant waits up to `ShutdownTimeout` (default 30s) for readers to terminate; the async variant accepts an optional `TimeSpan? timeout`. After calling, restore concurrency by setting `ConcurrencyLimit = X` to spawn replacement readers.
 8. **Delegate-based registration**: `AddSaWorkQueue<TInput>(configureOptions)` accepts a factory returning `SaWorkQueueOptions<TInput>`, allowing registration without an `ISaWork<TInput>` class.
+
+---
+
+## 🤖 Critical Rules for AI Agents (⚠️ IMPORTANT)
+
+These rules MUST be followed when modifying this code:
+
+1. **NEVER** use direct assignment `_concurrency = _ctsReaders.Count`. Pool capacity change on reader removal is done via `_concurrency--` inside `RemoveReader` (under `_readersSync`) to avoid race conditions.
+2. **NEVER** rely on `_queue.Reader.Count` to determine `IsIdle()`. Use only `_taskCount == 0`.
+3. When adding new forced-interruption methods, always include a wait for task completion (`Task.WhenAll`) so that counter state has time to synchronize.
+4. The `ConcurrencyLimit` setter computes delta from the actual live reader count (`_ctsReaders.Count - _pendingRemovals`), not from the configured `_concurrency` — this prevents spurious spawns/cancels for already-cancelled readers.
+5. `RemoveReader` is called in the `finally` of `ReaderLoopAsync`, which executes **after** `MarkInactive()` (in `ExecuteItemAsync`'s finally). This means `WaitForIdleAsync` may return before `RemoveReader` completes. Do not assume `_concurrency` is fully updated immediately after `WaitForIdleAsync` returns.
+6. All reader-list mutations (`_ctsReaders`, `_ctsWorks`, `_taskReaders`, `_pendingRemovals`, `_intentionalRemovals`, `_forceCancelled`) must happen under `lock (_readersSync)`. The three parallel lists are removed at the same index in `RemoveReader` — never desynchronise them.
+7. All task-count mutations (`_taskCount`, `_idleTcs`) must happen under `lock (_wiSync)`.
