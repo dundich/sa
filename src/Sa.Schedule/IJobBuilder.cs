@@ -119,18 +119,11 @@ public interface IJobBuilder
     IJobBuilder WithConcurrencyLimit(int limit);
 
     /// <summary>
-    /// Sets the maximum concurrency limit for the job.
+    /// Sets the maximum number of slots pre-allocated for the job.
     /// </summary>
-    /// <param name="limit">The maximum concurrency limit.</param>
+    /// <param name="limit">The maximum concurrency.</param>
     /// <returns>The current builder instance.</returns>
     IJobBuilder WithMaxConcurrency(int limit);
-
-    /// <summary>
-    /// Sets the maximum concurrency limit for the job (alias for <see cref="WithMaxConcurrency"/>).
-    /// </summary>
-    /// <param name="limit">The maximum concurrency limit.</param>
-    /// <returns>The current builder instance.</returns>
-    IJobBuilder WithMaxConcurrencyLimit(int limit) => WithMaxConcurrency(limit);
 
 
     /// <summary>

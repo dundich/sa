@@ -45,7 +45,7 @@ internal sealed class JobProperties : IJobProperties
         return this;
     }
 
-    public JobProperties SetDisabled()
+    public JobProperties Disable()
     {
         Disabled = true;
         return this;
@@ -76,7 +76,7 @@ internal sealed class JobProperties : IJobProperties
         return this;
     }
 
-    public JobProperties WithMaxConcurrencyLimit(int limit)
+    public JobProperties WithMaxConcurrency(int limit)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         MaxConcurrency = limit;

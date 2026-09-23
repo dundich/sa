@@ -11,13 +11,17 @@ internal sealed class JobScheduler : IJobScheduler
     private readonly Lock _lock = new();
 
     private CancellationTokenSource _stoppingTokenSource = new();
-    private CancellationToken _originalToken;
 
     private bool? _started = false;
 
     private bool _disposed;
 
-    private readonly SaWorkQueue<IJobController> _jobs;
+    // The user-requested concurrency limit (initially the configured one).
+    // The queue itself tracks the effective limit; this copy is used to
+    // restore readers after they are force-cancelled.
+    private volatile int _limit;
+
+    private readonly SaWorkQueue<IJobController> _queue;
 
     private readonly Func<int, IJobController> _createController;
 
@@ -39,32 +43,33 @@ internal sealed class JobScheduler : IJobScheduler
 
         JobId = settings.JobId;
 
-        var concurrency = Math.Max(0, settings.Properties.ConcurrencyLimit ?? 1);
-        var maxConcurrency = Math.Max(1, settings.Properties.MaxConcurrency ?? concurrency);
+        int maxConcurrency = settings.Properties.MaxConcurrency.GetValueOrDefault(1);
+        maxConcurrency = Math.Clamp(maxConcurrency, 1, int.MaxValue);
 
-        concurrency = Math.Clamp(concurrency, 0, maxConcurrency);
+        _limit = Math.Clamp(settings.Properties.ConcurrencyLimit.GetValueOrDefault(1), 0, maxConcurrency);
 
-        _jobs = new SaWorkQueue<IJobController>(SaWorkQueueOptions<IJobController>.Create(CreateJob)
+        _queue = new SaWorkQueue<IJobController>(
+            SaWorkQueueOptions<IJobController>.Create(RunJob)
             .WithQueueCapacity(maxConcurrency)
             .WithMaxConcurrency(maxConcurrency)
-            .WithConcurrencyLimit(concurrency)
+            .WithConcurrencyLimit(_limit)
             .WithSingleWriter(true)
+            // An unexpected fault must not kill the queue (the default
+            // ShutdownQueue is irreversible); a dead slot is dropped instead
+            // and the next Start() restores the reader pool.
+            .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.StopReader)
         );
     }
-
-    private Task CreateJob(IJobController controller, CancellationToken ct)
-        => _runner.Run(controller, ct);
 
     public Guid JobId { get; }
 
     public int ConcurrencyLimit
     {
-        get => _jobs.ConcurrencyLimit;
+        get => _queue.ConcurrencyLimit;
         set
         {
-            if (_jobs.ConcurrencyLimit == value) return;
-
-            _jobs.ConcurrencyLimit = value;
+            _limit = Math.Clamp(value, 0, _queue.MaxConcurrency);
+            _queue.ConcurrencyLimit = _limit;
             RefreshConcurrency();
         }
     }
@@ -81,7 +86,12 @@ internal sealed class JobScheduler : IJobScheduler
     }
 
 
-    public int ActiveTasks => _jobs.QueueTasks;
+    /// <summary>
+    /// The number of tasks currently in the queue buffer
+    /// (up to <see cref="Sa.Utils.WorkQueue.ISaWorkQueue{TInput}.MaxConcurrency"/>
+    /// while the job is running, 0 otherwise).
+    /// </summary>
+    public int QueueTasks => _queue.QueueTasks;
 
     public IChangeToken StartChangeToken()
     {
@@ -109,49 +119,62 @@ internal sealed class JobScheduler : IJobScheduler
             _stoppingTokenSource.Cancel();
             _stoppingTokenSource.Dispose();
 
-            _originalToken = cancellationToken;
             _stoppingTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
             stoppingToken = _stoppingTokenSource.Token;
         }
 
-        var maxCapacity = _jobs.MaxConcurrency;
+        List<IJobController> controllers = new(capacity: _queue.MaxConcurrency);
 
-        List<IJobController> controllers = new(capacity: maxCapacity);
+        bool success = false;
 
         try
         {
-            await _jobs.WaitForIdleAsync(_originalToken);
+            // Re-spawn readers lost by a previous abort/force-cancel
+            // (setting the same value is a no-op when the pool is healthy).
+            _queue.ConcurrencyLimit = _limit;
 
-            for (var i = 0; i < maxCapacity; i++)
+            await _queue.WaitForIdleAsync(cancellationToken);
+
+            for (var i = 0; i < _queue.MaxConcurrency; i++)
             {
                 IJobController controller = _createController(i);
                 controller.Pause();
                 controllers.Add(controller);
-                await _jobs.Enqueue(controller, stoppingToken);
+                await _queue.Enqueue(controller, stoppingToken);
             }
+
+            success = true;
         }
         catch (OperationCanceledException)
         {
-            // Shutdown requested during startup — dispose already-enqueued controllers
-            foreach (var controller in controllers)
-            {
-                controller.Shutdown();
-            }
-            return false;
+            // Shutdown requested during startup
+        }
+        catch (ObjectDisposedException)
+        {
+            // The scheduler (or its queue) was disposed while starting
         }
         finally
         {
             lock (_lock)
             {
+                _started = success;
                 _jobControllers = controllers;
-                _started = true;
+            }
+
+            if (!success)
+            {
+                // Dispose already-created (possibly enqueued) controllers
+                foreach (var controller in controllers)
+                {
+                    controller.Shutdown();
+                }
             }
         }
 
         RefreshConcurrency();
 
-        return true;
+        return success;
     }
 
     private void RefreshConcurrency()
@@ -163,7 +186,7 @@ internal sealed class JobScheduler : IJobScheduler
             controllers = _jobControllers;
         }
 
-        int limit = _jobs.ConcurrencyLimit;
+        int limit = _queue.ConcurrencyLimit;
 
         for (int i = 0; i < controllers.Count; i++)
         {
@@ -178,34 +201,85 @@ internal sealed class JobScheduler : IJobScheduler
         }
     }
 
+    /// <summary>
+    /// Processes a job slot on a queue reader: runs the slot's loop until it exits.
+    /// </summary>
+    private async Task RunJob(IJobController controller, CancellationToken ct)
+    {
+        bool aborted = await _runner.Run(controller, ct);
+
+        if (aborted)
+        {
+            AbortJob();
+        }
+    }
+
+    /// <summary>
+    /// Stops the whole job after its error handling requested an abort:
+    /// interrupts the running iterations, force-cancels all readers, and marks
+    /// the job as stopped. The queue stays active, so the job can be started
+    /// again with <see cref="Start"/>.
+    /// </summary>
+    private void AbortJob()
+    {
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _started = false;
+        }
+
+        try
+        {
+            _stoppingTokenSource.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // ignore
+        }
+
+        // Fire and forget: this runs on a queue reader thread, and
+        // ForceCancelReadersAsync waits for every reader — including this one —
+        // so it must not be awaited here.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _queue.ForceCancelReadersAsync();
+            }
+            catch
+            {
+                // The queue may already be disposed
+            }
+        });
+    }
+
     public async Task Stop()
     {
-        if (_disposed) return;
+        CancellationTokenSource stoppingTokenSource;
+
         lock (_lock)
         {
             if (_disposed || !_started.GetValueOrDefault()) return;
 
-            _stoppingTokenSource.Cancel();
+            stoppingTokenSource = _stoppingTokenSource;
+            stoppingTokenSource.Cancel();
             _started = false;
         }
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
-            _originalToken, CancellationToken.None);
-        timeoutCts.CancelAfter(DefaultShutdownTimeout);
+        using var timeoutCts = new CancellationTokenSource(DefaultShutdownTimeout);
 
         try
         {
-            await _jobs.WaitForIdleAsync(timeoutCts.Token);
+            await _queue.WaitForIdleAsync(timeoutCts.Token);
         }
         catch (OperationCanceledException)
         {
-            // Timeout or original cancellation — log but don't block forever
+            // Timeout or cancellation — jobs didn't finish within the shutdown timeout
         }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
         CancellationTokenSource ctsStopping;
 
         lock (_lock)
@@ -224,22 +298,56 @@ internal sealed class JobScheduler : IJobScheduler
             // ignore
         }
 
-        _jobs.Dispose();
+        ShutdownControllers();
+
+        _queue.Dispose();
 
         ctsStopping.Dispose();
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        CancellationTokenSource ctsStopping;
+
         lock (_lock)
         {
             if (_disposed) return;
             _disposed = true;
+            ctsStopping = _stoppingTokenSource;
         }
 
-        await _jobs.DisposeAsync();
+        // Cancelling wakes slots parked on the pause gate and interrupts
+        // running iterations; without it the controllers would never be
+        // released (and their DI scopes would leak).
+        try
+        {
+            ctsStopping.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // ignore
+        }
 
-        _stoppingTokenSource.Dispose();
+        ShutdownControllers();
+
+        await _queue.DisposeAsync();
+
+        ctsStopping.Dispose();
+    }
+
+    private void ShutdownControllers()
+    {
+        IReadOnlyList<IJobController> controllers;
+
+        lock (_lock)
+        {
+            controllers = _jobControllers;
+        }
+
+        foreach (var controller in controllers)
+        {
+            // Idempotent — the queue shutdown may have already done it.
+            controller.Shutdown();
+        }
     }
 }

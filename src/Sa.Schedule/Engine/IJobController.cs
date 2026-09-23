@@ -4,8 +4,7 @@
 internal enum CanJobExecuteResult
 {
     Ok,
-    Abort,
-    Skip
+    Abort
 }
 
 /// <summary>
@@ -20,6 +19,12 @@ internal interface IJobController
     void Shutdown();
 
     bool IsPaused { get; }
+
+    /// <summary>
+    /// True when the job was aborted because its error handling requested it
+    /// (retries exhausted and the configured action was applied).
+    /// </summary>
+    bool AbortedByError { get; }
 
     void Pause();
 

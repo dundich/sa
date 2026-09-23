@@ -7,10 +7,9 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
 
     public IScheduleSettings Settings => settings;
 
-    public IReadOnlyCollection<IJobScheduler> Schedules { get; } = [.. settings
+    public IReadOnlyCollection<IJobScheduler> Jobs { get; } = [.. settings
         .GetJobSettings()
-        .Select(factory.CreateJobSchedule)
-        .OfType<IJobScheduler>()];
+        .Select(factory.CreateJobSchedule)];
 
     /// <summary>
     /// Start all jobs
@@ -18,8 +17,7 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
     public async Task<int> Start(CancellationToken cancellationToken)
     {
         var results = await Task.WhenAll(
-            Schedules
-                .Where(s => s.ConcurrencyLimit >= 0)
+            Jobs
                 .Select(c => c.Start(cancellationToken)));
         return results.Count(r => r);
     }
@@ -27,7 +25,7 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
     public async Task<int> Restart(CancellationToken cancellationToken)
     {
         var results = await Task
-            .WhenAll(Schedules
+            .WhenAll(Jobs
                 .Where(c => c.IsStarted)
                 .Select(c => Task.Run(async () =>
                 {
@@ -41,7 +39,7 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
 
     public async Task Stop()
     {
-        await Task.WhenAll(Schedules.Select(c => c.Stop()));
+        await Task.WhenAll(Jobs.Select(c => c.Stop()));
     }
 
     public void Dispose()
@@ -50,7 +48,7 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
         {
             _disposed = true;
 
-            foreach (var job in Schedules)
+            foreach (var job in Jobs)
             {
                 job.Dispose();
             }
@@ -63,7 +61,7 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
         {
             _disposed = true;
             await Stop();
-            foreach (var job in Schedules)
+            foreach (var job in Jobs)
             {
                 await job.DisposeAsync();
             }

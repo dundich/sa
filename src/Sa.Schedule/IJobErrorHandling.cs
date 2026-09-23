@@ -11,9 +11,11 @@ public interface IJobErrorHandling
     ErrorHandlingAction ThenAction { get; }
 
     /// <summary>
-    /// Gets the number of retry attempts.
+    /// Gets the configured number of retry attempts, or
+    /// <see langword="null"/> when not set
+    /// (the default retry count applies at execution time).
     /// </summary>
-    int RetryCount { get; }
+    int? RetryCount { get; }
 
     /// <summary>
     /// Gets a function that determines whether to suppress an error.
@@ -26,7 +28,7 @@ public interface IJobErrorHandling
     bool HasSuppressError => SuppressError != null;
 
     /// <summary>
-    /// Gets a value indicating whether retry attempts are enabled.
+    /// Gets a value indicating whether a retry count was configured.
     /// </summary>
-    bool HasRetryAttempts => RetryCount > 0;
+    bool HasRetryAttempts => RetryCount.HasValue;
 }

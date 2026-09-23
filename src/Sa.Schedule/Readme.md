@@ -113,6 +113,10 @@ minute hour day-of-month month day-of-week
 - `-` — range (e.g., `1-5`)
 - `/` — step values (e.g., `*/5`, `1-20/3`)
 
+**Notes:**
+- Day-of-month + day-of-week: when both fields are restricted (neither is `*`), the job runs when **either** field matches — standard vixie-cron OR semantics (e.g., `0 0 1 * 1` — 1st of the month or any Monday).
+- Search horizon: the next occurrence is searched within a 28-year window (the full Gregorian day-of-week cycle), so every satisfiable expression is guaranteed to match — e.g., `0 0 29 2 *` (Feb 29) fires in 2032 and the job keeps running. A truly impossible date (e.g., `0 0 30 2 *` — Feb 30) never matches, and `GetNextOccurrence` returns null.
+
 **Examples:**
 
 ```csharp
