@@ -18,15 +18,20 @@ internal sealed partial class JobController(
 
     private readonly JobContext _context = new(settings);
 
-    // Pause gate: the flag is the single source of truth and is only read
+    // Pause gate: _isPaused is the single source of truth and is only read
     // and written under _pauseSync, so the "am I paused" decision is atomic
-    // with respect to Pause/Resume. Waiters then block on _resumeSignal
-    // (set = running, reset = paused) with token-based cancellation.
-    private readonly object _pauseSync = new();
-    private readonly ManualResetEventSlim _resumeSignal = new(true);
+    // with respect to Pause/Resume. While paused, _pauseWaiters holds the
+    // TaskCompletionSource that WaitIfPaused awaits — the await YIELDS
+    // instead of blocking the calling thread: a reader is spawned
+    // synchronously by the queue (StartReaderUnderLock, under the queue's
+    // reader lock) and runs the loop on the caller's thread until the first
+    // real yield, so a thread-blocking gate would deadlock the very call
+    // that Resumes the controller next.
+    private readonly Lock _pauseSync = new();
+    private volatile bool _isPaused;
+    private volatile TaskCompletionSource<bool>? _pauseWaiters;
 
     private volatile bool _disposed;
-    private volatile bool _isPaused;
     private volatile bool _abortedByError;
     private volatile JobExecutor? _executor;
     private readonly CancellationTokenSource _shutdownCts = new();
@@ -59,7 +64,7 @@ internal sealed partial class JobController(
             if (_isPaused) return;
 
             _isPaused = true;
-            _resumeSignal.Reset();
+            _pauseWaiters = new(TaskCreationOptions.RunContinuationsAsynchronously);
         }
     }
 
@@ -72,28 +77,50 @@ internal sealed partial class JobController(
             if (!_isPaused) return;
 
             _isPaused = false;
-            _resumeSignal.Set();
+            var waiters = _pauseWaiters;
+            _pauseWaiters = null;
+            waiters?.TrySetResult(true);
         }
     }
 
-    public ValueTask WaitIfPaused(CancellationToken cancellationToken)
+    public async ValueTask WaitIfPaused(CancellationToken cancellationToken)
     {
-        if (_disposed) return ValueTask.CompletedTask;
-
-        bool paused;
-        lock (_pauseSync)
+        while (true)
         {
-            paused = _isPaused;
+            if (_disposed) throw new OperationCanceledException(cancellationToken);
+
+            bool paused;
+            TaskCompletionSource<bool>? waiters;
+
+            lock (_pauseSync)
+            {
+                paused = _isPaused;
+                waiters = _pauseWaiters;
+            }
+
+            if (!paused) return;
+
+            // (paused, no waiters) is only reachable after Shutdown tore the
+            // gate down — same exit as a cancelled wait.
+            if (waiters is null) throw new OperationCanceledException(cancellationToken);
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _shutdownCts.Token);
+
+            try
+            {
+                await waiters.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // WaitAsync throws TaskCanceledException (a subclass) —
+                // normalize to the plain OCE the caller's loop expects.
+                throw new OperationCanceledException(cancellationToken);
+            }
+
+            // Woken by a resume — re-check the state: the job may have been
+            // re-paused (or shut down) while we were waiting.
         }
-
-        if (!paused) return ValueTask.CompletedTask;
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken, _shutdownCts.Token);
-
-        _resumeSignal.Wait(cts.Token);
-
-        return ValueTask.CompletedTask;
     }
 
     public void Start()
@@ -115,14 +142,20 @@ internal sealed partial class JobController(
         _disposed = true;
         _shutdownCts.Cancel();
 
-        // Wake any waiter parked on the pause gate so it can exit
-        // (its linked token is cancelled by _shutdownCts above).
-        _resumeSignal.Set();
+        // Complete the pause gate so a waiter parked on it can exit;
+        // waiters that observe the _shutdownCts cancellation first
+        // leave via the linked-token OCE instead.
+        TaskCompletionSource<bool>? waiters;
+        lock (_pauseSync)
+        {
+            waiters = _pauseWaiters;
+            _pauseWaiters = null;
+        }
+        waiters?.TrySetResult(true);
 
         _context.ServiceProvider = NullJobServices.Instance;
         _executor?.Dispose();
         _shutdownCts.Dispose();
-        _resumeSignal.Dispose();
     }
 
     public async ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken)

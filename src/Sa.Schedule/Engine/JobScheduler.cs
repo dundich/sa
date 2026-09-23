@@ -31,6 +31,10 @@ internal sealed class JobScheduler : IJobScheduler
 
     private static readonly TimeSpan DefaultShutdownTimeout = TimeSpan.FromSeconds(30);
 
+    // How long Stop waits for running iterations to finish before giving up;
+    // the same value bounds the queue's wait for readers on shutdown/force-cancel.
+    private readonly TimeSpan _shutdownTimeout;
+
 
     public JobScheduler(
         IJobSettings settings,
@@ -43,6 +47,8 @@ internal sealed class JobScheduler : IJobScheduler
 
         JobId = settings.JobId;
 
+        _shutdownTimeout = settings.Properties.ShutdownTimeout ?? DefaultShutdownTimeout;
+
         int maxConcurrency = settings.Properties.MaxConcurrency.GetValueOrDefault(1);
         maxConcurrency = Math.Clamp(maxConcurrency, 1, int.MaxValue);
 
@@ -54,6 +60,7 @@ internal sealed class JobScheduler : IJobScheduler
             .WithMaxConcurrency(maxConcurrency)
             .WithConcurrencyLimit(_limit)
             .WithSingleWriter(true)
+            .WithShutdownTimeout(_shutdownTimeout)
             // An unexpected fault must not kill the queue (the default
             // ShutdownQueue is irreversible); a dead slot is dropped instead
             // and the next Start() restores the reader pool.
@@ -266,7 +273,7 @@ internal sealed class JobScheduler : IJobScheduler
             _started = false;
         }
 
-        using var timeoutCts = new CancellationTokenSource(DefaultShutdownTimeout);
+        using var timeoutCts = new CancellationTokenSource(_shutdownTimeout);
 
         try
         {

@@ -88,11 +88,12 @@ b.AddJob((context, ct) =>
 | `.EveryHours(int)` | Утилита для часов |
 | `.EveryDays(int)` | Утилита для дней |
 | `.OnceIn(TimeSpan)` | Выполнить один раз после задержки |
-| `.Cron(string, string?)` | Расписание через cron-выражение (минута час деньМесяца месяц деньНедели) |
+| `.WithCron(string, string?)` | Расписание через cron-выражение (минута час деньМесяца месяц деньНедели) |
 | `.WithContextStackSize(int)` | Хранить N предыдущих контекстов в стеке для отладки |
 | `.WithTag(object)` | Прикрепить произвольные метаданные |
 | `.WithConcurrencyLimit(int)` | Количество одновременных выполнений |
 | `.WithMaxConcurrency(int)` | Максимальное количество зарезервированных слотов |
+| `.WithShutdownTimeout(TimeSpan)` | Как долго `Stop`/shutdown ждёт завершения выполняющихся итераций (по умолчанию 30 сек) |
 | `.Disabled()` | Зарегистрировать, но не запускать |
 | `.Merge(IJobProperties)` | Объединить с другой конфигурацией |
 | `.ConfigureErrorHandling(Action<IJobErrorHandlingBuilder>)` | Политика восстановления после ошибок |
@@ -118,37 +119,37 @@ b.AddJob((context, ct) =>
 ```csharp
 // Каждый день в 9:00 AM
 b.AddJob<DailyReport>()
- .Cron("0 9 * * *")
+ .WithCron("0 9 * * *")
  .WithName("Daily report");
 
 // Каждые 2 часа в минуту 0
 b.AddJob<HourlySync>()
- .Cron("0 */2 * * *")
+ .WithCron("0 */2 * * *")
  .WithName("Hourly sync");
 
 // Будни (Пн-Пт) в 14:30
 b.AddJob<WeekdayCleanup>()
- .Cron("30 14 * * 1-5")
+ .WithCron("30 14 * * 1-5")
  .WithName("Weekday cleanup");
 
 // Первое число каждого месяца в полночь
-b.AddJob[MonthlyBackup]()
- .Cron("0 0 1 * *")
+b.AddJob<MonthlyBackup>()
+ .WithCron("0 0 1 * *")
  .WithName("Monthly backup");
 
 // Понедельник, Среда, Пятница в 6:00 AM
-b.AddJob[TriWeeklyTask]()
- .Cron("0 6 * * 1,3,5")
+b.AddJob<TriWeeklyTask>()
+ .WithCron("0 6 * * 1,3,5")
  .WithName("Tri-weekly task");
 
 // Каждые 15 минут
-b.AddJob[HealthCheck]()
- .Cron("*/15 * * * *")
+b.AddJob<HealthCheck>()
+ .WithCron("*/15 * * * *")
  .WithName("Health check");
 
 // Комбинация диапазона и шага: каждый 3-й час с 9 до 17
-b.AddJob[BusinessMetrics]()
- .Cron("0 9-17/3 * * 1-5")
+b.AddJob<BusinessMetrics>()
+ .WithCron("0 9-17/3 * * 1-5")
  .WithName("Business metrics");
 ```
 
@@ -156,18 +157,18 @@ b.AddJob[BusinessMetrics]()
 
 ```csharp
 // Последний день месяца (приблизительно — используйте 28-31 и позвольте cron отфильтровать)
-b.AddJob[EndOfMonthReport]()
- .Cron("0 0 28-31 * *")
+b.AddJob<EndOfMonthReport>()
+ .WithCron("0 0 28-31 * *")
  .WithName("End of month report");
 
 // Только високосный год (29 февраля)
-b.AddJob[LeapYearTask]()
- .Cron("0 0 29 2 *")
+b.AddJob<LeapYearTask>()
+ .WithCron("0 0 29 2 *")
  .WithName("Leap year task");
 
 // Несколько дней недели (Пн, Ср, Пт в 9:00 и 17:00)
-b.AddJob[PeakMonitor]()
- .Cron("0 9,17 * * 1,3,5")
+b.AddJob<PeakMonitor>()
+ .WithCron("0 9,17 * * 1,3,5")
  .WithName("Peak monitoring");
 ```
 
@@ -262,7 +263,7 @@ public class LoggingInterceptor : IJobInterceptor
 b.AddInterceptor<LoggingInterceptor>();
 ```
 
-Можно зарегистрировать несколько перехватчиков — они применяются в порядке LIFO (последний добавленный = внешняя обёртка).
+Можно зарегистрировать несколько перехватчиков — первый зарегистрированный становится внешней обёрткой, последний добавленный — внутренней (ближайшей к задаче); `OnHandle` вызывается в порядке регистрации.
 
 ---
 
@@ -300,10 +301,10 @@ public class Controller
 | Член | Описание |
 |------|----------|
 | `Settings` | Настройки на весь план |
-| `Schedules` | Коллекция `IJobScheduler` |
+| `Jobs` | Коллекция `IJobScheduler` |
 | `Start(ct)` | Запустить все незаблокированные задачи |
 | `Restart(ct)` | Остановить + перезапустить все запущенные задачи |
-| `Stop()` | Корректная остановка с таймаутом 30 сек |
+| `Stop()` | Корректная остановка; ждёт завершения выполняющихся итераций до таймаута shutdown каждой задачи (по умолчанию 30 сек) |
 | `GetSchedule(id)` | Найти конкретный планировщик задач |
 
 ### IJobScheduler
@@ -312,7 +313,7 @@ public class Controller
 |------|----------|
 | `JobId` | Уникальный идентификатор |
 | `IsStarted` | Запущена ли задача в данный момент |
-| `ActiveTasks` | Ожидающие задачи в очереди |
+| `QueueTasks` | Задачи в буфере очереди (зарезервированные слоты во время работы, 0 когда остановлена) |
 | `ConcurrencyLimit` | Получить/установить активный параллелизм |
 | `StartChangeToken()` | Отслеживать изменения состояния start/stop |
 | `Start(ct)` | Запустить эту задачу |
@@ -333,7 +334,7 @@ Scheduler (IScheduler → управляет IReadOnlyCollection<IJobScheduler>)
     ↓
 JobScheduler (один на каждую IJob, работает на базе SaWorkQueue)
     ↓
-JobController (предзарезервированные слоты, пауза/возобновление через SemaphoreSlim)
+JobController (предзарезервированные слоты, пауза/возобновление через gate на TaskCompletionSource)
     ↓
 JobExecutor (DI-scoped + цепочка перехватчиков)
     ↓
@@ -349,7 +350,7 @@ IJob.Execute(...)
 3. **Устанавливайте `ConcurrencyLimit` appropriately** — не перегружайте downstream-системы
 4. **Используйте `DoSuppressError` для транзитных сбоев** — не падайте на восстанавливаемых ошибках
 5. **Добавляйте перехватчики для сквозных задач** — логирование, метрики, распределённый трейсинг
-6. **Мониторьте через `IJobScheduler.IsStarted` и `ActiveTasks`** — интегрируйте с health checks
+6. **Мониторьте через `IJobScheduler.IsStarted` и `QueueTasks`** — интегрируйте с health checks
 7. **Используйте `OnceIn(TimeSpan)` для миграционных задач** — выполнить один раз после задержки деплоя
 8. **Отключайте задачи вместо удаления** — полезно для feature flags и постепенного rollout
 

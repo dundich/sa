@@ -76,6 +76,12 @@ internal sealed class JobBuilder(JobSettings settings) : IJobBuilder
         return this;
     }
 
+    public IJobBuilder WithShutdownTimeout(TimeSpan timeout)
+    {
+        settings.Properties.WithShutdownTimeout(timeout);
+        return this;
+    }
+
     public IJobBuilder Disabled()
     {
         settings.Properties.Disable();

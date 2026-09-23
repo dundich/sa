@@ -94,7 +94,7 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
     {
         int rowCount = 0;
 
-        using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
         await using NpgsqlCommand cmd = new(sql, connection);
         initCommand?.Invoke(cmd);
         await using NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);

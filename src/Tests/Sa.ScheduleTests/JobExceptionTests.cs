@@ -50,12 +50,12 @@ public class JobExceptionTests
     {
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
         var context = CreateContext(settings);
-        context.CompetedIterations = 10;
+        context.CompletedIterations = 10;
 
         var innerEx = new Exception("error");
         var jobException = new JobException(context, innerEx);
 
-        Assert.Equal(10UL, jobException.ContextSnapshot.CompetedIterations);
+        Assert.Equal(10UL, jobException.ContextSnapshot.CompletedIterations);
     }
 
     [Fact]
@@ -90,15 +90,16 @@ public class JobExceptionTests
     {
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
         var context = CreateContext(settings);
-        // LastError is a JobException, its .Message format is "[JobName] job error"
+        // LastError is a JobException wrapping the real failure
         context.LastError = new JobException(context, new Exception("inner"));
 
         var outerEx = new Exception("new error");
         var jobException = new JobException(context, outerEx);
 
-        // LastErrorMessage reads LastError.Message which is the JobException's formatted message
-        Assert.NotNull(jobException.ContextSnapshot.LastErrorMessage);
-        Assert.Contains("job error", jobException.ContextSnapshot.LastErrorMessage!);
+        // LastErrorMessage reads the underlying error message
+        // (LastError.InnerException.Message), not the JobException's own
+        // formatted "[JobName] job error" message.
+        Assert.Equal("inner", jobException.ContextSnapshot.LastErrorMessage);
     }
 
     [Fact]
@@ -107,9 +108,9 @@ public class JobExceptionTests
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
         var context = CreateContext(settings);
         var stack = context;
-        stack.Stack.Enqueue(stack.Clone());
-        stack.Stack.Enqueue(stack.Clone());
-        stack.Stack.Enqueue(stack.Clone());
+        stack.Stack.Enqueue(stack.ToSnapshot());
+        stack.Stack.Enqueue(stack.ToSnapshot());
+        stack.Stack.Enqueue(stack.ToSnapshot());
 
         var innerEx = new Exception("error");
         var jobException = new JobException(context, innerEx);

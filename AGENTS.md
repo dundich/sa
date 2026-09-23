@@ -11,16 +11,15 @@ A monorepo of independent **Native AOT** .NET libraries (`Sa.*`) for distributed
 
 ## Commands
 
+
+
 | Goal | Command |
 |------|---------|
 | Build solution | `dotnet build src/Sa.slnx -c Release`  ·  or `.\build\do_build.ps1` (clean+restore+build) |
 | Run **one** test project | `dotnet run --project src/Tests/<Name>`  |
 | Run **all** tests | `dotnet test src/Sa.slnx` **run from inside `src/`**  ·  or `.\build\do_test.ps1` |
 | CI-style test run (skip local-infra) | `dotnet test src/Sa.slnx --filter "Category!=Local"` |
-| Package all libs → `dist/` | `.\build\do_package.ps1`  |
-| Push to local / prod registry | `.\build\do_push_local.ps1` / `.\build\do_push_prod.ps1` |
 
-The `.\build\do_*.ps1` scripts are thin wrappers around `build/tasks.ps1` (functions: `Build`, `Test`, `TestCi`, `Package`, `NuPush`, `NuPushEx`).
 
 ### ⚠️ `dotnet test` only works from inside `src/`
 `src/global.json` sets `"test": { "runner": "Microsoft.Testing.Platform" }`. This file is only discovered when the current directory is `src/` or below. **Running `dotnet test <project>` from the repo root fails** with:
@@ -56,7 +55,4 @@ Dependency graph (who references whom): `Sa.Utils.WorkQueue` → `Sa.Schedule` �
 
 ## NuGet / packaging quirks
 - `src/nuget.config` sets the global package cache to **`src/.packages`** (not the default `~/.nuget/packages`) and maps `Sa.*` to a local feed `./nupkgs` (nuget.org for everything else).
-- `do_push_local.ps1` expects a local feed: `dotnet nuget add source "C:\source\nuget" --name "local"` (see `build/readme.md`). Output artifacts land in `dist/` (gitignored).
 
-## CI
-`.github/workflows/dotnet.yml` (push/PR to `main`, ubuntu) pins **.NET 9.0.x** while the code targets **net10.0**, and the Test step is **commented out**. Don't assume CI validates the test suite — verify the workflow before relying on it.

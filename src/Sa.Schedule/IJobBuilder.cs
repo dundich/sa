@@ -125,6 +125,15 @@ public interface IJobBuilder
     /// <returns>The current builder instance.</returns>
     IJobBuilder WithMaxConcurrency(int limit);
 
+    /// <summary>
+    /// Sets the maximum time <see cref="IJobScheduler.Stop"/> waits for
+    /// running iterations to finish before giving up.
+    /// Also bounds the queue's own wait for readers during shutdown/force-cancel.
+    /// </summary>
+    /// <param name="timeout">Must be positive. If not set, defaults to 30 seconds.</param>
+    /// <returns>The current builder instance.</returns>
+    IJobBuilder WithShutdownTimeout(TimeSpan timeout);
+
 
     /// <summary>
     /// Merges the specified job properties into the current job configuration.

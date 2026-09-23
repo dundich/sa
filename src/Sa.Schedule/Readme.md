@@ -88,11 +88,12 @@ b.AddJob((context, ct) =>
 | `.EveryHours(int)` | Convenience alias for hours |
 | `.EveryDays(int)` | Convenience alias for days |
 | `.OnceIn(TimeSpan)` | Run once after a delay |
-| `.Cron(string, string?)` | Schedule using cron expression (minute hour dayOfMonth month dayOfWeek) |
+| `.WithCron(string, string?)` | Schedule using cron expression (minute hour dayOfMonth month dayOfWeek) |
 | `.WithContextStackSize(int)` | Keep N previous contexts on a stack for debugging |
 | `.WithTag(object)` | Attach arbitrary metadata |
 | `.WithConcurrencyLimit(int)` | Number of concurrent executions |
 | `.WithMaxConcurrency(int)` | Maximum slots allocated |
+| `.WithShutdownTimeout(TimeSpan)` | How long `Stop`/shutdown waits for running iterations to finish (default 30s) |
 | `.Disabled()` | Register but don't start |
 | `.Merge(IJobProperties)` | Merge another configuration |
 | `.ConfigureErrorHandling(Action<IJobErrorHandlingBuilder>)` | Error recovery policy |
@@ -122,37 +123,37 @@ minute hour day-of-month month day-of-week
 ```csharp
 // Every day at 9:00 AM
 b.AddJob<DailyReport>()
- .Cron("0 9 * * *")
+ .WithCron("0 9 * * *")
  .WithName("Daily report");
 
 // Every 2 hours at minute 0
 b.AddJob<HourlySync>()
- .Cron("0 */2 * * *")
+ .WithCron("0 */2 * * *")
  .WithName("Hourly sync");
 
 // Weekdays (Mon-Fri) at 2:30 PM
 b.AddJob<WeekdayCleanup>()
- .Cron("30 14 * * 1-5")
+ .WithCron("30 14 * * 1-5")
  .WithName("Weekday cleanup");
 
 // First day of every month at midnight
-b.AddJob[MonthlyBackup]()
- .Cron("0 0 1 * *")
+b.AddJob<MonthlyBackup>()
+ .WithCron("0 0 1 * *")
  .WithName("Monthly backup");
 
 // Every Monday, Wednesday, Friday at 6:00 AM
-b.AddJob[TriWeeklyTask]()
- .Cron("0 6 * * 1,3,5")
+b.AddJob<TriWeeklyTask>()
+ .WithCron("0 6 * * 1,3,5")
  .WithName("Tri-weekly task");
 
 // Every 15 minutes
-b.AddJob[HealthCheck]()
- .Cron("*/15 * * * *")
+b.AddJob<HealthCheck>()
+ .WithCron("*/15 * * * *")
  .WithName("Health check");
 
 // Combined range and step: every 3rd hour from 9 AM to 5 PM
-b.AddJob[BusinessMetrics]()
- .Cron("0 9-17/3 * * 1-5")
+b.AddJob<BusinessMetrics>()
+ .WithCron("0 9-17/3 * * 1-5")
  .WithName("Business metrics");
 ```
 
@@ -160,18 +161,18 @@ b.AddJob[BusinessMetrics]()
 
 ```csharp
 // Last day of month (approximate — use 28-31 and let cron filter)
-b.AddJob[EndOfMonthReport]()
- .Cron("0 0 28-31 * *")
+b.AddJob<EndOfMonthReport>()
+ .WithCron("0 0 28-31 * *")
  .WithName("End of month report");
 
 // Leap year only (Feb 29)
-b.AddJob[LeapYearTask]()
- .Cron("0 0 29 2 *")
+b.AddJob<LeapYearTask>()
+ .WithCron("0 0 29 2 *")
  .WithName("Leap year task");
 
 // Multiple days of week (Mon, Wed, Fri at 9:00 and 17:00)
-b.AddJob[PeakMonitor]()
- .Cron("0 9,17 * * 1,3,5")
+b.AddJob<PeakMonitor>()
+ .WithCron("0 9,17 * * 1,3,5")
  .WithName("Peak monitoring");
 ```
 
@@ -266,7 +267,7 @@ public class LoggingInterceptor : IJobInterceptor
 b.AddInterceptor<LoggingInterceptor>();
 ```
 
-Multiple interceptors can be registered — they apply in LIFO order (last added = outermost wrapper).
+Multiple interceptors can be registered — the first registered is the outermost wrapper, the last registered the innermost (closest to the job): `OnHandle` runs in registration order.
 
 ---
 
@@ -304,10 +305,10 @@ public class Controller
 | Member | Description |
 |---|---|
 | `Settings` | Schedule-wide settings |
-| `Schedules` | Collection of `IJobScheduler` |
+| `Jobs` | Collection of `IJobScheduler` |
 | `Start(ct)` | Start all non-disabled jobs |
 | `Restart(ct)` | Stop + restart all started jobs |
-| `Stop()` | Graceful stop with 30s timeout |
+| `Stop()` | Graceful stop; waits for running iterations up to each job's shutdown timeout (default 30s) |
 | `GetSchedule(id)` | Find a specific job scheduler |
 
 ### IJobScheduler
@@ -316,7 +317,7 @@ public class Controller
 |---|---|
 | `JobId` | Unique identifier |
 | `IsStarted` | Whether the job is currently running |
-| `ActiveTasks` | Pending tasks in queue |
+| `QueueTasks` | Tasks in the queue buffer (the pre-allocated slots while running, 0 when stopped) |
 | `ConcurrencyLimit` | Get/set active concurrency |
 | `StartChangeToken()` | Track start/stop state changes |
 | `Start(ct)` | Start this job |
@@ -337,7 +338,7 @@ Scheduler (IScheduler → manages IReadOnlyCollection<IJobScheduler>)
     ↓
 JobScheduler (one per IJob, backed by SaWorkQueue)
     ↓
-JobController (pre-allocated slots, pause/resume via SemaphoreSlim)
+JobController (pre-allocated slots, pause/resume via task-completion gate)
     ↓
 JobExecutor (DI scope + interceptor chain)
     ↓
@@ -353,7 +354,7 @@ IJob.Execute(...)
 3. **Set `ConcurrencyLimit` appropriately** — avoid overwhelming downstream systems
 4. **Use `DoSuppressError` for transient failures** — don't crash on recoverable errors
 5. **Add interceptors for cross-cutting concerns** — logging, metrics, distributed tracing
-6. **Monitor via `IJobScheduler.IsStarted` and `ActiveTasks`** — integrate with health checks
+6. **Monitor via `IJobScheduler.IsStarted` and `QueueTasks`** — integrate with health checks
 7. **Use `OnceIn(TimeSpan)` for migration jobs** — run once after deployment delay
 8. **Disable jobs instead of removing** — useful for feature flags and gradual rollout
 

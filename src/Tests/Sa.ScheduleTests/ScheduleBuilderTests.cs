@@ -213,8 +213,9 @@ public class ScheduleBuilderTests
 
         // Default error handling action is CloseApplication
         Assert.Equal(ErrorHandlingAction.CloseApplication, jobSettings.ErrorHandling.ThenAction);
-        // Default retry count is 0 (not set unless IfErrorRetry is called)
-        Assert.Equal(0, jobSettings.ErrorHandling.RetryCount);
+        // Retry count is not set unless IfErrorRetry is called
+        // (the built-in default of 2 retries applies at execution time)
+        Assert.Null(jobSettings.ErrorHandling.RetryCount);
     }
 
     [Fact]
