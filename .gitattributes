@@ -1,0 +1,3 @@
+# Normalize all text files to LF line endings (working tree and index).
+# Binaries are auto-detected by text=auto and left untouched.
+* text=auto eol=lf
