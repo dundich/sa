@@ -1,3 +1,9 @@
 # Normalize all text files to LF line endings (working tree and index).
 # Binaries are auto-detected by text=auto and left untouched.
 * text=auto eol=lf
+
+# Media/test data are binary; never apply CRLF conversion to them
+*.zip binary
+*.mp3 binary
+*.wav binary
+*.ogg binary
