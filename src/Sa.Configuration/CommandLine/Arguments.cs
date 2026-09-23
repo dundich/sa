@@ -29,7 +29,7 @@ public sealed partial class Arguments
     /// Initializes a new instance of the <see cref="Arguments"/> class.
     /// </summary>
     /// <param name="args">The command-line arguments to parse.</param>
-    public Arguments(params IReadOnlyList<string> args)
+    public Arguments(params string[] args)
     {
         var pairs = SplitToPairs(args);
 
@@ -78,7 +78,7 @@ public sealed partial class Arguments
 
         foreach (var part in parts)
         {
-            if (part.StartsWith('-'))
+            if (IsFlag(part))
             {
                 // Add the previous parameter to the result if it exists
                 Add(result, currentParam);
@@ -99,6 +99,40 @@ public sealed partial class Arguments
         return result;
     }
 
+    /// <summary>
+    /// Determines whether the token is a flag (parameter name) rather than a value.
+    /// A token that starts with one or two dashes followed immediately by a digit
+    /// (e.g. <c>-1</c>, <c>--1</c>, <c>-1.5</c>) is treated as a value, not a flag,
+    /// so that negative numbers can be passed as parameter values.
+    /// </summary>
+    private static bool IsFlag(string part)
+    {
+        if (!part.StartsWith('-'))
+            return false;
+
+        int index = 0;
+        while (index < part.Length && part[index] == '-')
+        {
+            index++;
+        }
+
+        // More than two leading dashes is not a flag.
+        if (index > 2)
+            return false;
+
+        // Dashes immediately followed by a digit (or '-'/'.' then a digit) mean a negative number value.
+        if (index < part.Length)
+        {
+            char next = part[index];
+            if (char.IsDigit(next))
+                return false;
+            if ((next == '-' || next == '.') && index + 1 < part.Length && char.IsDigit(part[index + 1]))
+                return false;
+        }
+
+        return true;
+    }
+
     private static void Add(List<string> result, string? currentParam)
     {
         if (currentParam == null) return;
@@ -116,20 +150,14 @@ public sealed partial class Arguments
     }
 
     /// <summary>
-    /// Gets a boolean value indicating whether the parameter is present.
-    /// </summary>
-    /// <param name="param">The parameter name to check.</param>
-    /// <returns>true if the parameter is present; otherwise false.</returns>
-    public bool IsPresent(string param)
-    {
-        return Contains(param) && _parameters[param] != null;
-    }
-
-    /// <summary>
-    /// Gets a parameter value as a boolean, defaulting to null if not found or invalid.
+    /// Gets a parameter value as a boolean.
     /// </summary>
     /// <param name="param">The parameter name.</param>
-    /// <returns>true if the parameter is present and has a truthy value; otherwise null.</returns>
+    /// <returns>
+    /// <see langword="null"/> if the parameter is absent;
+    /// <see langword="true"/> if its value is truthy ("true"/"1"/"yes"/"on");
+    /// <see langword="false"/> if present but not truthy.
+    /// </returns>
     public bool? GetBool(string param)
     {
         if (!Contains(param)) return default;

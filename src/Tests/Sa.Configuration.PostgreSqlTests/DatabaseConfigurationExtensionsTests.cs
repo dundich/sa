@@ -6,6 +6,7 @@ using Sa.Data.PostgreSql.Fixture;
 namespace Sa.Configuration.PostgreSqlTests;
 
 
+[Trait("Category", "Local")]
 public sealed class DatabaseConfigurationExtensionsTests(DatabaseConfigurationExtensionsTests.Fixture fixture)
     : IClassFixture<DatabaseConfigurationExtensionsTests.Fixture>
 {

@@ -7,10 +7,11 @@
 ## Возможности
 
 - **Автоматическая подстановка секретов**: плейсхолдеры `{{key}}` заменяются реальными значениями из файлов, переменных окружения или аргументов командной строки
-- **Защита от циклов**: встроенная защита от бесконечной рекурсии при разрешении плейсхолдеров
-- **Опциональные плейсхолдеры**: `{{?key}}` — если секрет не найден, возвращается `null` вместо исключения
-- **Цепочка хранилищ**: несколько источников секретов с приоритетным порядком
-- **Парсер аргументов**: поддерживает форматы `--key value`, `--key=value`, `-flag`
+- **Нормализация значений**: значения секретов обрезаются; обрамляющие кавычки (`'`, `"`, `` ` ``) удаляются
+- **Защита от циклов**: вложенные плейсхолдеры разрешаются до глубины 3; циклические ссылки бросают `InvalidOperationException`
+- **Опциональные плейсхолдеры**: `{{?key}}` — если секрет не найден, вся строка становится `null` вместо исключения
+- **Цепочка хранилищ**: несколько источников секретов с LIFO-приоритетом (последнее добавленное побеждает); `AddStore` потокобезопасен
+- **Парсер аргументов**: поддерживает форматы `--key value`, `--key=value`, `-flag`; отрицательные числа считаются значениями; обрамляющие кавычки удаляются
 - **Среды разработки**: автоматическая загрузка `secrets.{Environment}.txt` (Development/Staging/Production)
 
 ---
@@ -77,16 +78,16 @@ var pgConn = app.Configuration["sa:pg:connection"];
 
 ## Приоритет секретов
 
-Секреты ищутся в порядке убывания приоритета:
+Секреты используют LIFO-приоритет — последнее добавленное хранилище побеждает. Цепочка по умолчанию разрешается в таком порядке:
 
-| # | Источник | Пример файла |
-|---|----------|-------------|
-| 1 | Базовый файл секретов | `secrets.txt` |
-| 2 | Файл конкретной среды | `secrets.Development.txt` |
-| 3 | Переменные окружения | `SA_PG_PASSWORD=...` |
-| 4 | Аргументы командной строки | `--sa_pg_password=...` |
+| # | Источник | Пример |
+|---|----------|--------|
+| 1 | Аргументы командной строки | `--sa_pg_password=...` |
+| 2 | Переменные окружения | `SA_PG_PASSWORD=...` |
+| 3 | Файл конкретной среды | `secrets.Development.txt` |
+| 4 | Базовый файл секретов | `secrets.txt` |
 
-Первый источник, имеющий значение, побеждает. Это позволяет переопределять секреты для каждой среды.
+Первый источник со значением побеждает — командная строка может переопределить всё, переменные окружения переопределяют файлы, и т.д.
 
 ---
 
@@ -100,7 +101,9 @@ var pgConn = app.Configuration["sa:pg:connection"];
 }
 ```
 
-Если `feature_flag` не найден ни в одном хранилище, возвращается `null`.
+Если `feature_flag` не найден ни в одном хранилище, вся строка становится `null`.
+
+В цепочке конфигурации (`AddSaConfiguration` / `AddSaPostSecretProcessing`) любой отсутствующий секрет — включая обычный `{{key}}` — даёт `null` для этого значения вместо исключения.
 
 ---
 
@@ -126,17 +129,17 @@ var app = builder.Build();
 
 ---
 
-## Аргументы — Парсер командной строки
+## Аргументы
 
 ```csharp
 using Sa.Configuration.CommandLine;
 
-// some.exe --config_db /share/data.db --debug
+// some.exe --config_db /share/data.db --debug --port -5
 var args = new Arguments(args);
 
 string? configDb = args["config_db"];       // → "/share/data.db"
 bool?   debug    = args.GetBool("debug");   // → true
-int?    port     = args.GetInt("port");     // → null
+int?    port     = args.GetInt("port");     // → -5
 TimeSpan? timeout = args.GetTimeSpan("timeout");
 ```
 
@@ -147,7 +150,8 @@ TimeSpan? timeout = args.GetTimeSpan("timeout");
 --key=value
 -key value
 -key=value
--flag          → flag=true (булев флаг)
+-flag            → flag=true (булев флаг)
+--key -5         → значение "-5" (отрицательные числа никогда не считаются флагами)
 ```
 
 Типизированные методы возвращают `null`, когда параметр отсутствует или невалиден:
@@ -160,122 +164,33 @@ TimeSpan? timeout = args.GetTimeSpan("timeout");
 | `GetLong()` | `long?` | то же самое |
 | `GetTimeSpan()` | `TimeSpan?` | `TimeSpan.TryParse(..., InvariantCulture)` |
 
-Дополнительные методы:
-
-| Метод | Возвращаемый тип | Описание |
-|-------|-----------------|---------|
-| `Contains(param)` | `bool` | Проверяет наличие параметра |
-| `IsPresent(param)` | `bool` | Параметр существует И имеет непустое значение |
+`args.Contains("key")` проверяет наличие параметра; `args.Parameters` даёт доступ к полному словарю разобранных параметров.
 
 ---
 
-## Секреты — Управление секретами
+## Секреты
 
-### Создание по умолчанию
+Используйте `Secrets` напрямую, когда нужны секреты вне `IConfiguration`:
 
 ```csharp
 using Sa.Configuration.SecretStore;
 
-// Стандартная цепочка: File → File.Env → EnvVar → CommandLine
+// Цепочка по умолчанию (LIFO): CLI-аргументы → ENV-переменные → secrets.{Env}.txt → secrets.txt
 var secrets = Secrets.CreateDefault();
-```
 
-### Пользовательская цепочка
-
-```csharp
-var secrets = new Secrets(
-    new FileSecretStore("my-secrets.txt"),
-    new EnvironmentVariableSecretStore(),
-    new InMemorySecretStore(new Dictionary<string, string?> {
-        { "override_key", "override_value" }
-    })
-);
-```
-
-### Добавление на лету
-
-```csharp
-secrets.AddStore(new FileSecretStore("additional-secrets.txt"));
-```
-
-### Подстановка плейсхолдеров
-
-```csharp
-string template = "Server={{host}};Password={{password}}";
-string result = secrets.PopulateSecrets(template);
-// → "Server=localhost;Password=s3cret!"
-```
-
-### Получение одного секрета
-
-```csharp
+string? result   = secrets.PopulateSecrets("Server={{host}};Pwd={{sa_pg_password}}");
 string? password = secrets.GetSecret("sa_pg_password");
 ```
 
-### Определение имени среды
+Пользовательская цепочка — любое `ISecretStore` (`FileSecretStore`, `EnvironmentVariableSecretStore`, `CommandLineArgsSecretStore`, `InMemorySecretStore`):
 
 ```csharp
-string env = Secrets.GetEnvironmentName();
-// → "Development", "Staging", "Production" и т.д.
+var secrets = new Secrets(new FileSecretStore("my-secrets.txt"));
+secrets.AddStore(new InMemorySecretStore().AddSecret("override_key", "override_value"));
+// LIFO: новое хранилище имеет наивысший приоритет
 ```
 
----
-
-## Публичный API
-
-### Пространство имён `Sa.Configuration`
-
-| Тип | Назначение |
-|-----|-----------|
-| `Setup.AddSaConfiguration()` | Главная точка входа: подключение аргументов + обработка секретов |
-
-### Пространство имён `Sa.Configuration.CommandLine`
-
-| Тип | Назначение |
-|-----|-----------|
-| `Arguments` | Парсер аргументов командной строки |
-| `Arguments.CreateDefault()` | Создаёт из `Environment.GetCommandLineArgs()` |
-| `Setup.AddSaCommandLine()` | Метод-расширение для `IConfigurationBuilder` |
-
-### Пространство имён `Sa.Configuration.SecretStore`
-
-| Тип | Назначение |
-|-----|-----------|
-| `Secrets` | Основной класс управления секретами, реализует `ISecretService` |
-| `Secrets.CreateDefault()` | Стандартная цепочка хранилищ |
-| `Secrets.GetEnvironmentName()` | Определяет среду (`DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT`) |
-| `SecretOptions` | Опции для `CreateDefault()`: `FileName`, `Args`, `EnvironmentName` |
-| `ISecretService` | Интерфейс: `PopulateSecrets()` + `GetSecret()` |
-| `ISecretStore` | Интерфейс: `GetSecret(string key)` |
-| `Setup.AddSaPostSecretProcessing()` | Метод-расширение: применяет `ISecretService` к конфигу ПОСЛЕ загрузки других источников |
-
-### Хранилища секретов (`Sa.Configuration.SecretStore.Stories`)
-
-| Класс | Описание |
-|-------|---------|
-| `FileSecretStore` | Загружает `key=value` из текстового файла (пропускает комментарии `#`) |
-| `EnvironmentVariableSecretStore` | Читает из `Environment.GetEnvironmentVariable()` |
-| `CommandLineArgsSecretStore` | Берёт секреты из `Arguments` |
-| `InMemorySecretStore` | Словарь в памяти, fluent `.AddSecret()` |
-
----
-
-## Как это работает
-
-```
-┌──────────────────────────────────────────────────────┐
-│ 1. appsettings.json содержит:                        │
-│    "connection": "Host={{sa_pg_host}};Password={{...}}"│
-├──────────────────────────────────────────────────────┤
-│ 2. secrets.txt содержит:                             │
-│    sa_pg_host=localhost                              │
-│    sa_pg_password=s3cret!                            │
-├──────────────────────────────────────────────────────┤
-│ 3. AddSaPostSecretProcessing подставляет плейсхолдеры:│
-│    IConfiguration["sa:pg:connection"]                │
-│    → "Host=localhost;Password=s3cret!;..."           │
-└──────────────────────────────────────────────────────┘
-```
+`Secrets.CreateDefault(new SecretOptions { FileName = "app-secrets.txt", EnvironmentName = "Staging" })` настраивает имя базового файла и среду. `Secrets.GetEnvironmentName()` определяет её из `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` / `environment`, по умолчанию — `Production`.
 
 ---
 

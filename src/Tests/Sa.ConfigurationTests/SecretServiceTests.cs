@@ -275,4 +275,70 @@ public class SecretServiceTests
         Assert.Contains("Maximum replacement depth", exception.Message);
     }
 
+    [Fact]
+    public void PopulateSecrets_WithGrowingCycle_ThrowsInvalidOperationException()
+    {
+        // The secret value contains its own placeholder plus a growing prefix:
+        // "value={{a}}" -> "value=x{{a}}" -> "value=xx{{a}}" -> ...
+        // The placeholder shifts to a new index on every pass, so a
+        // position-based guard alone would loop forever; only a depth-based
+        // guard stops it.
+        var secrets = new Dictionary<string, string?>
+        {
+            { "a", "x{{a}}" }
+        };
+        var secretStore = new InMemorySecretStore(secrets);
+        var secretService = new SecretService(secretStore);
+
+        string input = "value={{a}}";
+
+        // Act & Assert
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            secretService.PopulateSecrets(input));
+
+        Assert.Contains("Maximum replacement depth", exception.Message);
+        Assert.Contains("'a'", exception.Message);
+    }
+
+    [Fact]
+    public void PopulateSecrets_WithTwoSecretShiftCycle_ThrowsInvalidOperationException()
+    {
+        // Two secrets referencing each other with growing prefixes:
+        // the placeholder alternates between them and keeps moving.
+        var secrets = new Dictionary<string, string?>
+        {
+            { "a", "x{{b}}" },
+            { "b", "y{{a}}" }
+        };
+        var secretStore = new InMemorySecretStore(secrets);
+        var secretService = new SecretService(secretStore);
+
+        string input = "value={{a}}";
+
+        // Act & Assert
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            secretService.PopulateSecrets(input));
+
+        Assert.Contains("Maximum replacement depth", exception.Message);
+    }
+
+    [Fact]
+    public void PopulateSecrets_NestedSecrets_ResolveWithinDepthLimit()
+    {
+        // Legitimate nesting must keep working: outer -> inner -> plain value.
+        var secrets = new Dictionary<string, string?>
+        {
+            { "outer", "{{inner}} x" },
+            { "inner", "VALUE" }
+        };
+        var secretStore = new InMemorySecretStore(secrets);
+        var secretService = new SecretService(secretStore);
+
+        // Act
+        var result = secretService.PopulateSecrets("o={{outer}}");
+
+        // Assert
+        Assert.Equal("o=VALUE x", result);
+    }
+
 }

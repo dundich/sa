@@ -8,7 +8,7 @@ namespace Sa.Configuration.SecretStore;
 /// <summary>
 /// The Secrets class simplifies the management of sensitive information in your application
 /// </summary>
-public sealed class Secrets(params IReadOnlyCollection<ISecretStore> stores) : ISecretService
+public sealed class Secrets(params ISecretStore[] stores) : ISecretService
 {
     public const string DefaultFileName = "secrets.txt";
 
@@ -21,10 +21,15 @@ public sealed class Secrets(params IReadOnlyCollection<ISecretStore> stores) : I
 
     public static Secrets CreateDefault(SecretOptions? options = null)
     {
-        options ??= new SecretOptions();
+        options ??= new();
 
-        var filename = options.FileName ?? DefaultFileName;
-        var environmentName = options.EnvironmentName ?? GetEnvironmentName();
+        var filename = string.IsNullOrWhiteSpace(options.FileName)
+            ? DefaultFileName
+            : options.FileName;
+        var environmentName = string.IsNullOrWhiteSpace(options.EnvironmentName)
+            ? GetEnvironmentName()
+            : options.EnvironmentName;
+        var args = options.Args ?? Environment.GetCommandLineArgs();
 
         string prefixName = Path.GetFileNameWithoutExtension(filename);
         string extName = Path.GetExtension(filename);
@@ -33,7 +38,7 @@ public sealed class Secrets(params IReadOnlyCollection<ISecretStore> stores) : I
             new FileSecretStore(filename),
             new FileSecretStore($"{prefixName}.{environmentName}{extName}"),
             new EnvironmentVariableSecretStore(),
-            new CommandLineArgsSecretStore(options.Args)
+            new CommandLineArgsSecretStore(args)
         );
     }
 

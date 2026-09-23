@@ -5,19 +5,10 @@ A dynamic configuration source for .NET that loads settings from PostgreSQL. Cha
 ## Features
 
 - **Live configuration**: values are stored in the database and can be changed at runtime
-- **Parameterized SQL queries**: supports `@named_parameters` via `NpgsqlParameter`
+- **Parameterized SQL queries**: supports `@named_parameters` via `NpgsqlParameter` — parameters are cloned on every load, so one options instance is reusable
 - **Automatic retry**: built-in retry strategy (`PgRetryStrategy`) with detection of Npgsql transient errors
 - **Key/value trimming**: whitespace is automatically trimmed from both keys and values
-- **Safe NULL handling**: `NULL` in DB → `null` in config; empty string → `string.Empty`
-
-## Public API
-
-| Type | Purpose |
-|------|---------|
-| `PostgreSqlConfigurationOptions` | Immutable record: `ConnectionString`, `SelectSql`, `Parameters` |
-| `DatabaseConfigurationSource` | `IConfigurationSource` implementation |
-| `DatabaseConfigurationProvider` | `ConfigurationProvider` that loads key-value pairs from DB |
-| `Setup.AddSaPostgreSqlConfiguration()` | Extension method for `IConfigurationBuilder` |
+- **Empty-value skipping**: keys or values that are `NULL`, empty, or whitespace-only are not added to the configuration
 
 ## Quick Start
 
@@ -62,14 +53,17 @@ When rows in the `app_settings` table change, the application can pick up new va
 provider.Reload();  // DatabaseConfigurationProvider implements IConfigurationProvider
 ```
 
+`Reload()` replaces the full set of keys: rows removed from the database disappear from the configuration, and new rows appear.
+
 ## Load Behavior
 
 | Scenario | Result |
 |----------|--------|
 | Key is empty or whitespace only | Skipped |
-| Value is `NULL` in DB | Stored as `null` |
-| Value is an empty string in DB | Stored as `string.Empty` |
-| Connection error | `InvalidOperationException` with the original exception as `InnerException` |
+| Value is `NULL` in DB | Skipped — the key is not added to the configuration |
+| Value is an empty string or whitespace only | Skipped — the key is not added to the configuration |
+| Key or value has surrounding whitespace | Trimmed |
+| Connection/query error | `InvalidOperationException` with the original exception as `InnerException` |
 
 ## Table Schema
 
@@ -85,21 +79,15 @@ CREATE TABLE app_settings (
 INSERT INTO app_settings (key, value) VALUES
     ('theme',      'dark'),
     ('language',   'en'),
-    ('debug_mode', '');   -- empty string
+    ('debug_mode', '');   -- skipped: not added to the configuration
 ```
 
 ## Dependencies
 
 - `Microsoft.Extensions.Configuration`
-- `Sa.Data.PostgreSql` (Npgsql wrapper with PgRetryStrategy and IPgDataSource)
+- `Npgsql` (`NpgsqlParameter` is part of the public API)
+- `Sa.Data.PostgreSql` (Npgsql wrapper with `PgRetryStrategy` and `IPgDataSource`)
 
-## Project Layout
+## License
 
-```
-src/Sa.Configuration.PostgreSql/
-├── PostgreSqlConfigurationOptions.cs   # Options record
-├── DatabaseConfigurationSource.cs      # IConfigurationSource
-├── DatabaseConfigurationProvider.cs    # ConfigurationProvider + retry
-├── Setup.cs                            # Extension method AddSaPostgreSqlConfiguration()
-└── Readme.md                           # ← you are here
-```
+MIT

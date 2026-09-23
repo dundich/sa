@@ -5,7 +5,7 @@ internal sealed class ChainedSecrets : ISecretService, ISecretStore
     private readonly ChainedSecretStore _store;
     private readonly SecretService _service;
 
-    public ChainedSecrets(IReadOnlyCollection<ISecretStore> stores)
+    public ChainedSecrets(ISecretStore[] stores)
     {
         _store = new ChainedSecretStore(stores);
         _service = new SecretService(_store);

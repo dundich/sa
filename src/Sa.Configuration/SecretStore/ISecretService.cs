@@ -3,4 +3,6 @@
 public interface ISecretService
 {
     string? PopulateSecrets(string? inputString, bool returnNullIfSecretNotFound = false);
+
+    string? GetSecret(string key);
 }

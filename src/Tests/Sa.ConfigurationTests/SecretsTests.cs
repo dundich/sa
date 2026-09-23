@@ -102,4 +102,18 @@ public sealed class SecretsTests(SecretsTests.Fixture fixture) : IClassFixture<S
 
         Assert.Equal("API Key: my_api_key, Host Key: host_key", config["SimpleKey"]);
     }
+
+    [Fact]
+    public void Ctor_WithoutStores_DoesNotThrow_AndPassesPlainStringThrough()
+    {
+        // Act
+        var sub = new Secrets();
+
+        // Assert
+        Assert.Equal("plain value", sub.PopulateSecrets("plain value"));
+        Assert.Null(sub.PopulateSecrets("{{missing}}", returnNullIfSecretNotFound: true));
+
+        var exception = Assert.Throws<ArgumentException>(() => sub.PopulateSecrets("{{missing}}"));
+        Assert.Contains("missing", exception.Message);
+    }
 }

@@ -2,6 +2,8 @@
 
 Парсинг и потребление аргументов командной строки в .NET-приложениях через простой dictionary-like API. Поддерживает форматы `--flag=value`, `--flag value`, короткие опции (`-x`) и типизированные геттеры.
 
+Токены, похожие на отрицательные числа (например, `-5`, `--1.5`), считаются **значениями**, а не флагами.
+
 > **Важно:** парсер удаляет ведущие тире из имён параметров. При обращении к значению используйте ключ **без** лидирующих `-` или `--`.  
 > Пример: `--config_db` в CLI → `args["config_db"]` в коде. `-v` в CLI → `args["v"]` в коде.
 
@@ -16,14 +18,14 @@ var args = new Arguments(args);
 // Доступ через индексатор (возвращает null, если ключ отсутствует) — ключи без ведущих тире
 string? db    = args["config_db"];
 string? file  = args["config_file"];
-bool    debug = args.IsPresent("debug");   // true если флаг присутствует и истинен
+bool?   debug = args.GetBool("debug");     // true/1/yes/on → true; null если флаг отсутствует
 
 // Типизированные помощники (возвращают nullable, null при отсутствии/невалидности)
 int?     port    = args.GetInt("port");
 float?   timeout = args.GetFloat("timeout");
-long     offset  = args.GetLong("offset");
-TimeSpan ttl     = args.GetTimeSpan("ttl");
-bool     verbose = args.GetBool("v");       // "true"/"1"/"yes"/"on" → true
+long?    offset  = args.GetLong("offset");
+TimeSpan? ttl    = args.GetTimeSpan("ttl");
+bool?    verbose = args.GetBool("v");      // "true"/"1"/"yes"/"on" → true
 ```
 
 ### Минимальное консольное приложение
@@ -35,7 +37,7 @@ var arguments = new Arguments(args);
 
 Console.WriteLine($"БД:    {arguments["db"]    ?? "(по умолчанию)"}");
 Console.WriteLine($"Порт:  {arguments.GetInt("port")    ?? 5432}");
-Console.WriteLine($"Debug: {arguments.IsPresent("debug")}");
+Console.WriteLine($"Debug: {arguments.GetBool("debug") == true}");
 Console.WriteLine($"TTL:   {arguments.GetTimeSpan("ttl") ?? TimeSpan.Zero}");
 ```
 
@@ -66,6 +68,7 @@ TTL:   00:05:00
 | Короткое равно | `-k=v` | `"k"` | `"v"` |
 | Булев флаг | `--debug` | `"debug"` | `"true"` |
 | Значение в кавычках | `--name "hello world"` | `"name"` | `"hello world"` |
+| Отрицательное значение | `--offset -5` | `"offset"` | `"-5"` |
 
 ---
 
@@ -74,7 +77,7 @@ TTL:   00:05:00
 ### Конструктор
 
 ```csharp
-public Arguments(params IReadOnlyList<string> args)
+public Arguments(params string[] args)
 ```
 
 Создаёт экземпляр из списка строк аргументов.
@@ -88,7 +91,7 @@ public static Arguments CreateDefault(string[]? args = null)
 Шорткат, который использует `Environment.GetCommandLineArgs()` когда `args` равен null.
 
 ```csharp
-var args = Arguments.CreateDefault();   // читает Process.GetCurrentProcess().CommandLine
+var args = Arguments.CreateDefault();   // использует Environment.GetCommandLineArgs()
 ```
 
 ### Индексатор
@@ -103,14 +106,11 @@ public string? this[string param] { get; }
 var db = args["database"];   // null если --database никогда не передавали
 ```
 
-### Contains / IsPresent
+### Contains
 
 ```csharp
 public bool Contains(string param)           // true если ключ существует (даже если значение пустое)
-public bool IsPresent(string param)          // true если ключ существует И значение не null
 ```
-
-`IsPresent` различает отсутствующий флаг и присутствующий, но пустой.
 
 ### Типизированные геттеры
 
@@ -205,4 +205,6 @@ dotnet run -- -d --db=prod -p 3306 --ttl 30s
 | `--flag=` (пустое) | `"flag"` | `""` |
 | `--flag "quoted value"` | `"flag"` | `"quoted value"` |
 | `-short=value` | `"short"` | `"value"` |
+| `--key -5` | `"key"` | `"-5"` |
+| `-1`, `--1`, `-1.5`, `-1.5` (токен после флага) | добавляется к предыдущему ключу | отрицательное число |
 | Неизвестный формат | Игнорируется молча | — |

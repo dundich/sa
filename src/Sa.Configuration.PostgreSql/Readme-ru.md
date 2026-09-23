@@ -7,21 +7,10 @@
 ## Возможности
 
 - **Живая конфигурация**: значения хранятся в БД и могут быть изменены во время выполнения
-- **Параметризированные SQL-запросы**: поддержка `@named_parameters` через `NpgsqlParameter`
+- **Параметризированные SQL-запросы**: поддержка `@named_parameters` через `NpgsqlParameter` — параметры клонируются при каждой загрузке, поэтому один экземпляр options переиспользуем
 - **Автоматические повторы**: встроенная стратегия повторов (`PgRetryStrategy`) с детекцией транзитных ошибок Npgsql
 - **Обрезка ключей/значений**: пробелы автоматически обрезаются и у ключей, и у значений
-- **Безопасная обработка NULL**: `NULL` в БД → `null` в конфиге; пустая строка → `string.Empty`
-
----
-
-## Публичный API
-
-| Тип | Назначение |
-|-----|-----------|
-| `PostgreSqlConfigurationOptions` | Immutable record: `ConnectionString`, `SelectSql`, `Parameters` |
-| `DatabaseConfigurationSource` | Реализация `IConfigurationSource` |
-| `DatabaseConfigurationProvider` | `ConfigurationProvider`, загружающий пары ключ-значение из БД |
-| `Setup.AddSaPostgreSqlConfiguration()` | Метод-расширение для `IConfigurationBuilder` |
+- **Пропуск пустых значений**: ключи или значения, равные `NULL`, пустые или состоящие только из пробелов, не добавляются в конфигурацию
 
 ---
 
@@ -72,6 +61,8 @@ builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOp
 provider.Reload();  // DatabaseConfigurationProvider реализует IConfigurationProvider
 ```
 
+`Reload()` заменяет весь набор ключей: удалённые из БД строки исчезают из конфигурации, новые появляются.
+
 ---
 
 ## Поведение загрузки
@@ -79,9 +70,10 @@ provider.Reload();  // DatabaseConfigurationProvider реализует IConfigu
 | Сценарий | Результат |
 |----------|----------|
 | Ключ пустой или состоит только из пробелов | Пропускается |
-| Значение `NULL` в БД | Сохраняется как `null` |
-| Значение пустая строка в БД | Сохраняется как `string.Empty` |
-| Ошибка подключения | `InvalidOperationException` с оригинальным исключением как `InnerException` |
+| Значение `NULL` в БД | Пропускается — ключ не добавляется в конфигурацию |
+| Значение пустая строка или только пробелы | Пропускается — ключ не добавляется в конфигурацию |
+| Ключ или значение имеют пробелы по краям | Обрезаются |
+| Ошибка подключения/запроса | `InvalidOperationException` с оригинальным исключением как `InnerException` |
 
 ---
 
@@ -99,7 +91,7 @@ CREATE TABLE app_settings (
 INSERT INTO app_settings (key, value) VALUES
     ('theme',      'dark'),
     ('language',   'en'),
-    ('debug_mode', '');   -- пустая строка
+    ('debug_mode', '');   -- пропускается: не добавляется в конфигурацию
 ```
 
 ---
@@ -107,20 +99,8 @@ INSERT INTO app_settings (key, value) VALUES
 ## Зависимости
 
 - `Microsoft.Extensions.Configuration`
-- `Sa.Data.PostgreSql` (обёртка Npgsql с PgRetryStrategy и IPgDataSource)
-
----
-
-## Структура проекта
-
-```
-src/Sa.Configuration.PostgreSql/
-├── PostgreSqlConfigurationOptions.cs   # Record опций
-├── DatabaseConfigurationSource.cs      # IConfigurationSource
-├── DatabaseConfigurationProvider.cs    # ConfigurationProvider + повторы
-├── Setup.cs                            # Метод-расширение AddSaPostgreSqlConfiguration()
-└── Readme.md                           # ← вы здесь
-```
+- `Npgsql` (`NpgsqlParameter` входит в публичный API)
+- `Sa.Data.PostgreSql` (обёртка Npgsql с `PgRetryStrategy` и `IPgDataSource`)
 
 ---
 
