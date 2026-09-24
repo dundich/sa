@@ -285,16 +285,9 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
 
         await publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
 
-        // Process first batch. Use the authoritative return value of
-        // ProcessMessages (number of messages actually delivered by this call)
-        // rather than the shared static counter, so concurrent sibling tests
-        // publishing to the same Postgres container cannot perturb the result.
+        // Process first batch — read settings from manager so we always get the latest snapshot
         long firstBatchCount = await fixture.Sub.ProcessMessages<TestMessage>(
             fixture.SettingsForTestGroup, TestContext.Current.CancellationToken);
-        // Under parallel load sibling tests publish to the same tenant 1 and the
-        // greedy ProcessMessages drains every pending row, so the first batch can
-        // exceed totalMessages. We only require that at least one of our
-        // messages was delivered; exact sizing is not the point of this test.
         Assert.True(firstBatchCount > 0,
             $"Первый батч должен быть непустым, получено {firstBatchCount}");
 
@@ -305,20 +298,27 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
             await publisher.Publish(extraMessages, m => m.TenantId, TestContext.Current.CancellationToken);
         }
 
-        // Pause
+        // Give any in-flight polling cycle a chance to settle before pausing
+        await Task.Delay(200, TestContext.Current.CancellationToken);
+
+        // Pause and re-read settings from the manager — the authoritative snapshot includes Paused=true
         manager.Pause(group);
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+        var pausedSettings = manager.Get(group) ?? fixture.SettingsForTestGroup;
+        Assert.True(pausedSettings.Paused, "Settings retrieved from manager must reflect Paused state");
+
+        // Small delay to ensure the pause is visible before the next poll
+        await Task.Delay(100, TestContext.Current.CancellationToken);
 
         // Should NOT process more while paused — ProcessMessages must return 0
         // while the group is paused, regardless of any pending rows.
         long pausedCount = await fixture.Sub.ProcessMessages<TestMessage>(
-            fixture.SettingsForTestGroup, TestContext.Current.CancellationToken);
+            pausedSettings, TestContext.Current.CancellationToken);
         Assert.Equal(0, pausedCount);
 
         // Resume
         manager.Resume(group);
 
-        // Process remaining — read updated settings from manager
+        // Process remaining — read updated settings from manager after resume
         var resumedSettings = manager.Get(group) ?? fixture.SettingsForTestGroup;
         long remainingCount = await fixture.Sub.ProcessMessages<TestMessage>(
             resumedSettings, TestContext.Current.CancellationToken);
