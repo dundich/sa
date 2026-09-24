@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    WSL / Linux build shim.
+
+    NuGet derives the Visual Studio "fallback package folders" from the
+    %ProgramFiles(x86)% environment variable, e.g.
+    "C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages".
+    On WSL/Linux that Windows-style path does not exist natively, so the
+    ResolvePackageAssets / GetRestoreSettingsTask throws MSB4018
+    ("Unable to find fallback package folder …") whenever a project needs
+    fallback resolution (typically PublishAOT / analyzer-heavy projects).
+
+    We point the fallback root at a real, existing directory so the resolver
+    never touches the bogus Windows path. This only takes effect off Windows,
+    keeping Windows developers' behavior unchanged.
+  -->
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+    <RestoreFallbackFolders>$(MSBuildThisFileDirectory).nuget/fallback</RestoreFallbackFolders>
+  </PropertyGroup>
+
+</Project>

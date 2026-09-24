@@ -285,10 +285,18 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
 
         await publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
 
-        // Process first batch
-        await fixture.Sub.ProcessMessages<TestMessage>(fixture.SettingsForTestGroup, TestContext.Current.CancellationToken);
-        int firstBatchCount = CountingMessageConsumer.TotalMessagesConsumed;
-        Assert.True(firstBatchCount > 0 && firstBatchCount <= totalMessages);
+        // Process first batch. Use the authoritative return value of
+        // ProcessMessages (number of messages actually delivered by this call)
+        // rather than the shared static counter, so concurrent sibling tests
+        // publishing to the same Postgres container cannot perturb the result.
+        long firstBatchCount = await fixture.Sub.ProcessMessages<TestMessage>(
+            fixture.SettingsForTestGroup, TestContext.Current.CancellationToken);
+        // Under parallel load sibling tests publish to the same tenant 1 and the
+        // greedy ProcessMessages drains every pending row, so the first batch can
+        // exceed totalMessages. We only require that at least one of our
+        // messages was delivered; exact sizing is not the point of this test.
+        Assert.True(firstBatchCount > 0,
+            $"Первый батч должен быть непустым, получено {firstBatchCount}");
 
         // Если первое ProcessMessages обработало все сообщения — публикуем ещё для проверки Pause/Resume
         if (firstBatchCount >= totalMessages)
@@ -301,17 +309,20 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         manager.Pause(group);
         await Task.Delay(300, TestContext.Current.CancellationToken);
 
-        // Should NOT process more while paused
-        int beforeResume = CountingMessageConsumer.TotalMessagesConsumed;
-        Assert.Equal(firstBatchCount, beforeResume);
+        // Should NOT process more while paused — ProcessMessages must return 0
+        // while the group is paused, regardless of any pending rows.
+        long pausedCount = await fixture.Sub.ProcessMessages<TestMessage>(
+            fixture.SettingsForTestGroup, TestContext.Current.CancellationToken);
+        Assert.Equal(0, pausedCount);
 
         // Resume
         manager.Resume(group);
 
         // Process remaining — read updated settings from manager
         var resumedSettings = manager.Get(group) ?? fixture.SettingsForTestGroup;
-        await fixture.Sub.ProcessMessages<TestMessage>(resumedSettings, TestContext.Current.CancellationToken);
-        Assert.True(CountingMessageConsumer.TotalMessagesConsumed > firstBatchCount,
+        long remainingCount = await fixture.Sub.ProcessMessages<TestMessage>(
+            resumedSettings, TestContext.Current.CancellationToken);
+        Assert.True(remainingCount > 0,
             "После Resume должны обработаться дополнительные сообщения");
     }
 

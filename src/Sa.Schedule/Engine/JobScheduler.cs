@@ -328,7 +328,7 @@ internal sealed class JobScheduler : IJobScheduler
         // released (and their DI scopes would leak).
         try
         {
-            ctsStopping.Cancel();
+            await ctsStopping.CancelAsync();
         }
         catch (ObjectDisposedException)
         {

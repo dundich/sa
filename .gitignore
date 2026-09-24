@@ -810,3 +810,5 @@ src/.vscode/
 /src/Tests/Sa.MediaTests/data/pcm_s16le.wav
 /src/Sa.Media/Echo/output.wav
 src/Sa.Media/Echo/data/pcm_s16le.wav
+/src/.nuget
+/src/.localpilot
