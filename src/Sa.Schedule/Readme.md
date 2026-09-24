@@ -1,6 +1,19 @@
 # Sa.Schedule
 
-The **Sa.Schedule** library provides a robust, production-ready framework for configuring and executing scheduled tasks in .NET applications. It supports periodic jobs, one-shot executions, dynamic concurrency control, error recovery strategies, interceptors, and graceful shutdown.
+A .NET task scheduler — periodic and one-shot jobs, dynamic concurrency control, error recovery strategies, interceptors, and graceful shutdown.
+
+---
+
+## Features
+
+- **[Periodic & one-shot jobs](#defining-jobs)** — `EveryMinutes`, `EveryHours`, `RunOnce`, etc.
+- **[Cron scheduling](#cron-scheduling)** — standard 5-field expressions.
+- **[Dynamic concurrency](#concurrency-model)** — change `ConcurrencyLimit` on the fly.
+- **[Error recovery policies](#error-handling)** — retry, suppress errors, stop individual job or the whole app.
+- **[Interceptors](#interceptors)** — chain-of-responsibility for logging, metrics, tracing.
+- **[Lambda jobs](#lambda-jobs)** — anonymous delegates without dedicated classes.
+- **[Graceful shutdown](#runtime-management)** — configurable timeout for running iterations.
+- **[Scoped services](#defining-jobs)** — DbContext, IDbConnection, etc. resolved in a DI scope per execution.
 
 ---
 
@@ -102,78 +115,12 @@ b.AddJob((context, ct) =>
 
 ## Cron Scheduling
 
-Use cron expressions for precise scheduling control. The format follows standard 5-field cron:
-
-```
-minute hour day-of-month month day-of-week
-```
-
-**Supported features:**
-- `*` — wildcard (any value)
-- `,` — comma-separated list (e.g., `1,15,30`)
-- `-` — range (e.g., `1-5`)
-- `/` — step values (e.g., `*/5`, `1-20/3`)
-
-**Notes:**
-- Day-of-month + day-of-week: when both fields are restricted (neither is `*`), the job runs when **either** field matches — standard vixie-cron OR semantics (e.g., `0 0 1 * 1` — 1st of the month or any Monday).
-- Search horizon: the next occurrence is searched within a 28-year window (the full Gregorian day-of-week cycle), so every satisfiable expression is guaranteed to match — e.g., `0 0 29 2 *` (Feb 29) fires in 2032 and the job keeps running. A truly impossible date (e.g., `0 0 30 2 *` — Feb 30) never matches, and `GetNextOccurrence` returns null.
-
-**Examples:**
+5-field expression: `minute hour day-of-month month day-of-week`. Supports `*`, `,`, `-`, `/`.
 
 ```csharp
-// Every day at 9:00 AM
-b.AddJob<DailyReport>()
- .WithCron("0 9 * * *")
- .WithName("Daily report");
-
-// Every 2 hours at minute 0
-b.AddJob<HourlySync>()
- .WithCron("0 */2 * * *")
- .WithName("Hourly sync");
-
-// Weekdays (Mon-Fri) at 2:30 PM
-b.AddJob<WeekdayCleanup>()
- .WithCron("30 14 * * 1-5")
- .WithName("Weekday cleanup");
-
-// First day of every month at midnight
-b.AddJob<MonthlyBackup>()
- .WithCron("0 0 1 * *")
- .WithName("Monthly backup");
-
-// Every Monday, Wednesday, Friday at 6:00 AM
-b.AddJob<TriWeeklyTask>()
- .WithCron("0 6 * * 1,3,5")
- .WithName("Tri-weekly task");
-
-// Every 15 minutes
-b.AddJob<HealthCheck>()
- .WithCron("*/15 * * * *")
- .WithName("Health check");
-
-// Combined range and step: every 3rd hour from 9 AM to 5 PM
-b.AddJob<BusinessMetrics>()
- .WithCron("0 9-17/3 * * 1-5")
- .WithName("Business metrics");
-```
-
-**Advanced examples:**
-
-```csharp
-// Last day of month (approximate — use 28-31 and let cron filter)
-b.AddJob<EndOfMonthReport>()
- .WithCron("0 0 28-31 * *")
- .WithName("End of month report");
-
-// Leap year only (Feb 29)
-b.AddJob<LeapYearTask>()
- .WithCron("0 0 29 2 *")
- .WithName("Leap year task");
-
-// Multiple days of week (Mon, Wed, Fri at 9:00 and 17:00)
-b.AddJob<PeakMonitor>()
- .WithCron("0 9,17 * * 1,3,5")
- .WithName("Peak monitoring");
+b.AddJob<DailyReport>().WithCron("0 9 * * *");       // Every day at 9:00 AM
+b.AddJob<HealthCheck>().WithCron("*/15 * * * *");    // Every 15 minutes
+b.AddJob<WeekdayCleanup>().WithCron("30 14 * * 1-5"); // Weekdays at 2:30 PM
 ```
 
 ---
@@ -322,28 +269,6 @@ public class Controller
 | `StartChangeToken()` | Track start/stop state changes |
 | `Start(ct)` | Start this job |
 | `Stop()` | Stop with timeout |
-
----
-
-## Architecture
-
-```
-DI Setup (Setup.cs + ScheduleBuilder.cs)
-    ↓
-Configuration (JobSettings, JobProperties, JobErrorHandling)
-    ↓
-Factory (JobFactory → creates IJobScheduler)
-    ↓
-Scheduler (IScheduler → manages IReadOnlyCollection<IJobScheduler>)
-    ↓
-JobScheduler (one per IJob, backed by SaWorkQueue)
-    ↓
-JobController (pre-allocated slots, pause/resume via task-completion gate)
-    ↓
-JobExecutor (DI scope + interceptor chain)
-    ↓
-IJob.Execute(...)
-```
 
 ---
 

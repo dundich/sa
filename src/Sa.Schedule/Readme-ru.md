@@ -1,6 +1,19 @@
 # Sa.Schedule
 
-Библиотека **Sa.Schedule** — надёжная, готовая к продакшену платформа для настройки и выполнения запланированных задач в .NET приложениях. Поддерживает периодические задачи, однократные выполнения, динамический контроль параллелизма, стратегии восстановления после ошибок, перехватчики и корректное завершение работы.
+Планировщик задач для .NET — периодические и однократные задачи, динамический контроль параллелизма, стратегии восстановления, перехватчики, корректное завершение.
+
+---
+
+## Возможности
+
+- **[Периодические и однократные задачи](#определение-задач-jobs)** — `EveryMinutes`, `EveryHours`, `RunOnce` и т.д.
+- **[Cron-расписание](#cron-расписание)** — стандартные 5-полевые выражения.
+- **[Динамический параллелизм](#модель-параллелизма)** — меняйте `ConcurrencyLimit` на лету.
+- **[Стратегии восстановления](#обработка-ошибок)** — retry, подавление ошибок, остановка конкретной задачи или всего приложения.
+- **[Перехватчики](#перехватчики-interceptors)** — chain-of-responsibility для логирования, метрик, трейсинга.
+- **[Lambda-задачи](#lambda-задачи)** — анонимные делегаты без отдельных классов.
+- **[Корректное завершение](#управление-во-время-выполнения)** — graceful shutdown с настраиваемым таймаутом.
+- **[Scoped-сервисы](#определение-задач-jobs)** — DbContext, IDbConnection и прочее автоматически разрешаются в DI-scope при каждом выполнении.
 
 ---
 
@@ -102,74 +115,12 @@ b.AddJob((context, ct) =>
 
 ## Cron-расписание
 
-Используйте cron-выражения для точного контроля расписания. Формат следует стандартному 5-полевому cron:
-
-```
-минута час деньМесяца месяц деньНедели
-```
-
-**Поддерживаемые возможности:**
-- `*` — wildcard (любое значение)
-- `,` — список через запятую (например, `1,15,30`)
-- `-` — диапазон (например, `1-5`)
-- `/` — шаг (например, `*/5`, `1-20/3`)
-
-**Примеры:**
+5-полевое выражение: `минута час деньМесяца месяц деньНедели`. Поддерживаются `*`, `,`, `-`, `/`.
 
 ```csharp
-// Каждый день в 9:00 AM
-b.AddJob<DailyReport>()
- .WithCron("0 9 * * *")
- .WithName("Daily report");
-
-// Каждые 2 часа в минуту 0
-b.AddJob<HourlySync>()
- .WithCron("0 */2 * * *")
- .WithName("Hourly sync");
-
-// Будни (Пн-Пт) в 14:30
-b.AddJob<WeekdayCleanup>()
- .WithCron("30 14 * * 1-5")
- .WithName("Weekday cleanup");
-
-// Первое число каждого месяца в полночь
-b.AddJob<MonthlyBackup>()
- .WithCron("0 0 1 * *")
- .WithName("Monthly backup");
-
-// Понедельник, Среда, Пятница в 6:00 AM
-b.AddJob<TriWeeklyTask>()
- .WithCron("0 6 * * 1,3,5")
- .WithName("Tri-weekly task");
-
-// Каждые 15 минут
-b.AddJob<HealthCheck>()
- .WithCron("*/15 * * * *")
- .WithName("Health check");
-
-// Комбинация диапазона и шага: каждый 3-й час с 9 до 17
-b.AddJob<BusinessMetrics>()
- .WithCron("0 9-17/3 * * 1-5")
- .WithName("Business metrics");
-```
-
-**Продвинутые примеры:**
-
-```csharp
-// Последний день месяца (приблизительно — используйте 28-31 и позвольте cron отфильтровать)
-b.AddJob<EndOfMonthReport>()
- .WithCron("0 0 28-31 * *")
- .WithName("End of month report");
-
-// Только високосный год (29 февраля)
-b.AddJob<LeapYearTask>()
- .WithCron("0 0 29 2 *")
- .WithName("Leap year task");
-
-// Несколько дней недели (Пн, Ср, Пт в 9:00 и 17:00)
-b.AddJob<PeakMonitor>()
- .WithCron("0 9,17 * * 1,3,5")
- .WithName("Peak monitoring");
+b.AddJob<DailyReport>().WithCron("0 9 * * *");       // Каждый день в 9:00
+b.AddJob<HealthCheck>().WithCron("*/15 * * * *");    // Каждые 15 минут
+b.AddJob<WeekdayCleanup>().WithCron("30 14 * * 1-5"); // Будни в 14:30
 ```
 
 ---
@@ -318,28 +269,6 @@ public class Controller
 | `StartChangeToken()` | Отслеживать изменения состояния start/stop |
 | `Start(ct)` | Запустить эту задачу |
 | `Stop()` | Остановить с таймаутом |
-
----
-
-## Архитектура
-
-```
-DI Setup (Setup.cs + ScheduleBuilder.cs)
-    ↓
-Configuration (JobSettings, JobProperties, JobErrorHandling)
-    ↓
-Factory (JobFactory → создаёт IJobScheduler)
-    ↓
-Scheduler (IScheduler → управляет IReadOnlyCollection<IJobScheduler>)
-    ↓
-JobScheduler (один на каждую IJob, работает на базе SaWorkQueue)
-    ↓
-JobController (предзарезервированные слоты, пауза/возобновление через gate на TaskCompletionSource)
-    ↓
-JobExecutor (DI-scoped + цепочка перехватчиков)
-    ↓
-IJob.Execute(...)
-```
 
 ---
 
