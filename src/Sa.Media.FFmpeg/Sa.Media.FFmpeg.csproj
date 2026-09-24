@@ -16,8 +16,8 @@
         <_FfmpegCurrentRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_FfmpegCurrentRid>
         <_FfmpegCurrentRid Condition="'$(_FfmpegCurrentRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_FfmpegCurrentRid>
 
-        <!-- если macOS x64, принудительно ставим linux-x64 -->
-        <_FfmpegCurrentRid Condition="'$(_FfmpegCurrentRid)' == 'osx-x64'">linux-x64</_FfmpegCurrentRid>
+        <!-- Если не Windows — приводим к linux-x64 -->
+        <_FfmpegCurrentRid Condition="'$(_FfmpegCurrentRid)' != 'win-x64' AND $(_FfmpegCurrentRid) != 'win-arm64'">linux-x64</_FfmpegCurrentRid>
     </PropertyGroup>
 
     <!-- 🔹 ZIP-архивы как исходники -->
@@ -63,11 +63,11 @@
     <Target Name="IncludeExtractedFfmpegFiles" AfterTargets="ExtractFfmpegLocally" BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths">
 
         <ItemGroup Condition="Exists('$(FfmpegLocalExtractDir)')">
-             <!--Находим все файлы в папке распаковки--> 
+             <!--Находим все файлы в папке распаковки-->
             <_ExtractedFfmpegFiles Include="$(FfmpegLocalExtractDir)\**\*" />
         </ItemGroup>
 
-         <!--Добавляем как Content с копированием - это работает для ProjectReference--> 
+         <!--Добавляем как Content с копированием - это работает для ProjectReference-->
         <ItemGroup Condition="'@(_ExtractedFfmpegFiles)' != ''">
             <Content Include="@(_ExtractedFfmpegFiles)" Link="sa\native\%(RecursiveDir)%(FileName)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="false" Visible="false" />
         </ItemGroup>

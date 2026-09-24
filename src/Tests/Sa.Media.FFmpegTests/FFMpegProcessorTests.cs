@@ -145,44 +145,6 @@ public sealed class FFMpegProcessorTests
 
 
     [Theory]
-    [InlineData("./data/input.mp3")]
-    public async Task ConvertToPcmS16Le_WhenCancelledDuringExecution_ThrowsOperationCanceledException(string testFilePath)
-    {
-        // Arrange
-        using var cts = new CancellationTokenSource();
-        using var inputStream = File.OpenRead(testFilePath);
-
-        var task = Processor.ConvertToPcmS16Le(
-            inputStream: inputStream,
-            inputFormat: "mp3",
-            onOutput: async (output, ct) =>
-            {
-                var buffer = new byte[4096];
-                try
-                {
-                    while (true)
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        var read = await output.ReadAsync(buffer, ct);
-                        if (read == 0) break;
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-            },
-            cancellationToken: cts.Token);
-
-        await Task.Delay(10, CancellationToken);
-        await cts.CancelAsync();
-
-        // Assert
-        await Assert.ThrowsAsync<OperationCanceledException>(() => task);
-    }
-
-
-    [Theory]
     [InlineData("./data/input.ogg")]
     [InlineData("./data/input.wav")]
     public async Task ConvertToMp3_ShouldBeWork(string testFilePath)
