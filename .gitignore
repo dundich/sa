@@ -796,6 +796,7 @@ FodyWeavers.xsd
 *.sln.iml
 src/.vscode/
 /build/do_push_prod-ex.ps1
+/build-sh/do-push-prod-ex.sh
 /src/Sa.Media.FFmpeg/build/*.tar.gz
 /src/Sa.Media.FFmpeg/build/artifacts/
 /src/Sa.Media.FFmpeg/build/build.*/
@@ -812,3 +813,4 @@ src/.vscode/
 src/Sa.Media/Echo/data/pcm_s16le.wav
 /src/.nuget
 /src/.localpilot
+/.opencode/**
