@@ -55,20 +55,28 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
     .ConfigureStorage((sp, c) => c.AddStorage(new FileSystemStorage(
         new FileSystemStorageSettings { BasePath = @"C:\data\drafts", Basket = "drafts" })))
 
-    // Basket "documents" → PostgreSQL with auto-partitioning
-    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(dataSource, new PostgresFileStorageOptions
-    {
-        PartOptions = new() { Basket = "documents" },
-        StorageOptions = new() { SchemaName = "files", TableName = "files" }
-    })))
+    // Basket "documents" → PostgreSQL with auto-partitioning.
+    // Dependencies (IPgDataSource, IPartitionManager, RecyclableMemoryStreamManager)
+    // are resolved from DI during registration.
+    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(
+        sp.GetRequiredService<IPgDataSource>(),
+        sp.GetRequiredService<IPartitionManager>(),
+        sp.GetRequiredService<RecyclableMemoryStreamManager>(),
+        new PostgresFileStorageOptions
+        {
+            Basket = "documents",
+            TableName = "files"
+        })))
 
     // Basket "archive" → S3 cloud storage
-    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(s3Client, new S3FileStorageOptions
-    {
-        Endpoint = "http://minio:9000",
-        Bucket = "company-archive",
-        Basket = "archive"
-    }))));
+    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(
+        sp.GetRequiredService<IS3BucketClient>(),
+        new S3FileStorageOptions
+        {
+            Endpoint = "http://minio:9000",
+            Bucket = "company-archive",
+            Basket = "archive"
+        }))));
 ```
 
 Once configured, all CRUD operations use basket names — not provider specifics:
@@ -506,16 +514,18 @@ builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
 
 ### PostgresFileStorageOptions
 
+Flat options (no nested `PartOptions`/`CleanupOptions`/`StorageOptions`):
+
 | Property | Description | Default |
 |----------|-------------|---------|
-| `StorageOptions.SchemaName` | PostgreSQL schema | `"public"` |
-| `StorageOptions.TableName` | Table for file data | `"files"` |
-| `StorageOptions.StorageType` | Scheme prefix in File ID | `"pg"` |
-| `PartOptions.Basket` | Scope/container name | `"share"` |
-| `PartOptions.PgPartBy` | Partitioning granularity | `PgPartBy.Day` |
-| `PartOptions.MigrationScheduleForwardDays` | Days ahead to pre-create partitions | `2` |
-| `CleanupOptions.ExpireDays` | Auto-cleanup threshold (days) | `365 * 3` |
-| `StorageOptions.IsReadOnly` | Prevent writes | `false` |
+| `SchemaName` | PostgreSQL schema (auto-detected from search_path if not set) | `"public"` |
+| `TableName` | Table for file data | `"files"` |
+| `StorageType` | Scheme prefix in File ID | `"pg"` |
+| `Basket` | Scope/container name | `"share"` |
+| `PgPartBy` | Partitioning granularity | `PgPartBy.Day` |
+| `MigrationScheduleForwardDays` | Days ahead to pre-create partitions | `2` |
+| `ExpireDays` | Auto-cleanup threshold (days) | `365 * 3` |
+| `IsReadOnly` | Prevent writes | `false` |
 
 ### InMemoryFileStorageOptions
 

@@ -37,7 +37,29 @@ public static class Setup
         options ??= new(string.Empty);
 
         services.AddSingleton<IFileStorage, InMemoryFileStorage>(
-            sp => new InMemoryFileStorage(options, sp.GetService<TimeProvider>()));
+            sp => new InMemoryFileStorage(options, sp.GetService<TimeProvider>() ?? TimeProvider.System));
         return services;
+    }
+
+    /// <summary>
+    /// Registers the in-memory file storage provider as part of the hybrid file storage configuration
+    /// pipeline, enabling it to participate in the hybrid container and its interceptors.
+    /// </summary>
+    /// <param name="configuration">The hybrid file storage configuration pipeline.</param>
+    /// <param name="options">Optional configuration options for the in-memory storage. If <c>null</c>, a default instance is used.</param>
+    /// <returns>The same <see cref="IHybridFileStorageConfiguration"/> instance for fluent chaining.</returns>
+    public static IHybridFileStorageConfiguration AddSaInMemoryFileStorage(
+        this IHybridFileStorageConfiguration configuration,
+        InMemoryFileStorageOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        options ??= new(string.Empty);
+
+        return configuration.ConfigureStorage((sp, container) =>
+        {
+            var storage = new InMemoryFileStorage(options, sp.GetService<TimeProvider>() ?? TimeProvider.System);
+            container.AddStorage(storage);
+        });
     }
 }

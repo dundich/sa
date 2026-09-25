@@ -14,8 +14,7 @@ internal sealed class PostgresFileStorage(
     IPgDataSource dataSource,
     IPartitionManager partManager,
     RecyclableMemoryStreamManager streamManager,
-    StorageOptions options,
-    string basket,
+    PostgresFileStorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
 
@@ -44,13 +43,13 @@ internal sealed class PostgresFileStorage(
         """;
 
     private readonly string _partName
-        = string.IsNullOrWhiteSpace(basket) ? "share" : Sanitize(basket);
+        = string.IsNullOrWhiteSpace(options.Basket) ? "share" : Sanitize(options.Basket);
 
     private readonly string _qualifiedTableName
         = $"{options.SchemaName}.\"{Sanitize(options.TableName)}\"";
 
     private readonly string _schemePrefix
-        = $"{options.StorageType}{FileIdParser.SchemeSeparator}{Sanitize(basket)}/";
+        = $"{options.StorageType}{FileIdParser.SchemeSeparator}{Sanitize(options.Basket)}/";
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -58,7 +57,7 @@ internal sealed class PostgresFileStorage(
 
     public bool IsReadOnly => options.IsReadOnly;
 
-    public string Basket => basket;
+    public string Basket => options.Basket;
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

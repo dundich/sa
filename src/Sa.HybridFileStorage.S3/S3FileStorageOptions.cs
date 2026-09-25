@@ -13,7 +13,12 @@ public sealed class S3FileStorageOptions
     /// <summary>
     /// Gets or sets the basket (container) name. Defaults to <c>"share"</c>.
     /// </summary>
-    public string Basket { get; init; } = "share";
+    public string Basket { get; init; } = DefaultBasket;
+
+    /// <summary>
+    /// Gets the default basket (container) name shared across file storage providers.
+    /// </summary>
+    public const string DefaultBasket = "share";
 
     /// <summary>
     /// Gets or sets the S3-compatible endpoint URL (e.g., <c>http://localhost:9000</c>).
@@ -36,9 +41,9 @@ public sealed class S3FileStorageOptions
     public required string Bucket { get; init; }
 
     /// <summary>
-    /// Gets or sets the AWS region. Defaults to <c>"eu-central-1"</c>.
+    /// Gets or sets the AWS region. Defaults to <see cref="Defaults.DefaultRegion"/> (<c>"eu-central-1"</c>).
     /// </summary>
-    public string Region { get; init; } = "eu-central-1";
+    public string Region { get; init; } = Defaults.DefaultRegion;
 
     /// <summary>
     /// Gets or sets a value indicating whether this storage is read-only. Defaults to <c>false</c>.

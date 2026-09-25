@@ -18,6 +18,8 @@ public static class Setup
         this IServiceCollection services,
         FileSystemStorageSettings options)
     {
+        options.Validate();
+
         services.AddSingleton<IFileStorage>(sp
             => new FileSystemStorage(options, sp.GetService<TimeProvider>()));
         return services;
@@ -33,20 +35,24 @@ public static class Setup
         this IServiceCollection services,
         Action<IServiceProvider, FileSystemStorageOptions> configure)
     {
-        services.AddSingleton<IFileStorage>(sp =>
-        {
-            FileSystemStorageOptions options = new();
-            configure.Invoke(sp, options);
-            options.Validate();
+        ArgumentNullException.ThrowIfNull(configure);
 
-            return new FileSystemStorage(new FileSystemStorageSettings
+        // Fail fast: validate options at registration time rather than lazily at first resolve.
+        // A throwaway provider lets the callback resolve dependencies it may need, while keeping
+        // the original services collection untouched until everything is known to be valid.
+        var probe = new ServiceCollection().BuildServiceProvider();
+        FileSystemStorageOptions options = new();
+        configure.Invoke(probe, options);
+        options.Validate();
+
+        services.AddSingleton<IFileStorage>(sp =>
+            new FileSystemStorage(new FileSystemStorageSettings
             {
                 BasePath = options.BasePath,
                 IsReadOnly = options.IsReadOnly,
                 Basket = options.Basket,
                 StorageType = options.StorageType,
-            }, sp.GetService<TimeProvider>());
-        });
+            }, sp.GetService<TimeProvider>() ?? TimeProvider.System));
 
         return services;
     }

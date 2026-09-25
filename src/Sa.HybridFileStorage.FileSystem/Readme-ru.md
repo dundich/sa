@@ -209,7 +209,7 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 | `StorageType` | Префикс схемы в File ID | `"fs"` |
 | `IsReadOnly` | Запрет операций записи/удаления | `false` |
 
-Вызовите `options.Validate()` после конфигурации для проверки обязательных полей.
+Валидация обязательных полей выполняется автоматически в момент регистрации провайдера (fail-fast) — вызов `options.Validate()` вручную не требуется.
 
 ---
 

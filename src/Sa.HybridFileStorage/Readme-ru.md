@@ -55,20 +55,28 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
     .ConfigureStorage((sp, c) => c.AddStorage(new FileSystemStorage(
         new FileSystemStorageSettings { BasePath = @"C:\data\черновик", Basket = "черновик" })))
 
-    // Корзина "документы" → PostgreSQL с авто-партиционированием
-    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(dataSource, new PostgresFileStorageOptions
-    {
-        PartOptions = new() { Basket = "документы" },
-        StorageOptions = new() { SchemaName = "files", TableName = "files" }
-    })))
+    // Корзина "документы" → PostgreSQL с авто-партиционированием.
+    // Зависимости (IPgDataSource, IPartitionManager, RecyclableMemoryStreamManager)
+    // резолвятся из DI в момент регистрации.
+    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(
+        sp.GetRequiredService<IPgDataSource>(),
+        sp.GetRequiredService<IPartitionManager>(),
+        sp.GetRequiredService<RecyclableMemoryStreamManager>(),
+        new PostgresFileStorageOptions
+        {
+            Basket = "документы",
+            TableName = "files"
+        })))
 
     // Корзина "архив" → S3 облачное хранилище
-    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(s3Client, new S3FileStorageOptions
-    {
-        Endpoint = "http://minio:9000",
-        Bucket = "company-archive",
-        Basket = "архив"
-    }))));
+    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(
+        sp.GetRequiredService<IS3BucketClient>(),
+        new S3FileStorageOptions
+        {
+            Endpoint = "http://minio:9000",
+            Bucket = "company-archive",
+            Basket = "архив"
+        }))));
 ```
 
 После настройки все CRUD-операции работают с именами корзин, а не спецификой провайдеров:
@@ -506,16 +514,18 @@ builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
 
 ### PostgresFileStorageOptions
 
+Опции плоские (без вложенных `PartOptions`/`CleanupOptions`/`StorageOptions`):
+
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
-| `StorageOptions.SchemaName` | Схема PostgreSQL | `"public"` |
-| `StorageOptions.TableName` | Таблица для данных файлов | `"files"` |
-| `StorageOptions.StorageType` | Префикс схемы в File ID | `"pg"` |
-| `PartOptions.Basket` | Имя контейнера | `"share"` |
-| `PartOptions.PgPartBy` | Гранулярность партиционирования | `PgPartBy.Day` |
-| `PartOptions.MigrationScheduleForwardDays` | Дней заранее для предсоздания партиций | `2` |
-| `CleanupOptions.ExpireDays` | Порог автоочистки (дней) | `365 * 3` |
-| `StorageOptions.IsReadOnly` | Запрет записи | `false` |
+| `SchemaName` | Схема PostgreSQL (автоопределяется из search_path, если не задано) | `"public"` |
+| `TableName` | Таблица для данных файлов | `"files"` |
+| `StorageType` | Префикс схемы в File ID | `"pg"` |
+| `Basket` | Имя контейнера | `"share"` |
+| `PgPartBy` | Гранулярность партиционирования | `PgPartBy.Day` |
+| `MigrationScheduleForwardDays` | Дней заранее для предсоздания партиций | `2` |
+| `ExpireDays` | Порог автоочистки (дней) | `365 * 3` |
+| `IsReadOnly` | Запрет записи | `false` |
 
 ### InMemoryFileStorageOptions
 

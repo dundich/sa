@@ -61,12 +61,6 @@ public sealed record FileSystemStorageOptions
             throw new ValidationException($"Invalid BasePath format: {BasePath}. {ex.Message}");
         }
 
-        if (string.IsNullOrWhiteSpace(Basket))
-        {
-            throw new ValidationException("Basket cannot be empty.");
-        }
-
-
         if (Basket.Length > 63 || Basket.Length < 3)
         {
             throw new ValidationException($"Basket exceeds maximum length of 63 characters.");
@@ -77,12 +71,6 @@ public sealed record FileSystemStorageOptions
             throw new ValidationException("Basket must start with a letter or underscore.");
         }
 
-
-        if (string.IsNullOrWhiteSpace(Basket))
-        {
-            throw new ValidationException("Basket cannot be empty.");
-        }
-
         if (string.IsNullOrWhiteSpace(StorageType))
         {
             throw new ValidationException("StorageType cannot be empty.");
@@ -90,7 +78,7 @@ public sealed record FileSystemStorageOptions
 
         if (StorageType.Length > 10)
         {
-            throw new ValidationException($"StorageType exceeds maximum length of 63 characters.");
+            throw new ValidationException($"StorageType exceeds maximum length of 10 characters.");
         }
     }
 }

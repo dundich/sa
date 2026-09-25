@@ -58,50 +58,34 @@ dotnet add package Sa.HybridFileStorage.Postgres
 
 ## Быстрый старт
 
-### Без DI
-
-```csharp
-using Sa.HybridFileStorage.Postgres;
-using Sa.HybridFileStorage.Domain;
-
-// Регистрация через fluent builder
-builder.Services.AddSaPostgreSqlFileStorage(cfg => cfg
-    .AddDataSource(ds => ds
-        .WithConnectionString("Host=localhost;Database=mydb;Username=postgres;Password=password")
-        .WithSearchPath("public"))
-    .WithSchemaName("public")
-    .WithTableName("files")
-    .WithStorageType("pg")
-    .ConfigureOptions((sp, options) =>
-    {
-        // Настройка партиционирования
-        options.PartOptions.Basket = "files";
-        options.PartOptions.PgPartBy = PgPartBy.Day;
-        options.PartOptions.MigrationScheduleForwardDays = 2;
-
-        // Настройка очистки
-        options.CleanupOptions.ExpireDays = 365 * 3;  // 3 года
-    }));
-```
-
 ### С DI
 
 ```csharp
 using Sa.HybridFileStorage.Postgres;
 
-builder.Services.AddSaPostgreSqlFileStorage(cfg => cfg
+// Регистрация провайдера через опции.
+// Имя схемы автоопределяется из connection search_path, если не задано явно.
+builder.Services.AddSaPostgreSqlFileStorage(opts =>
+{
+    opts.TableName = "files";
+    opts.Basket = "files";
+    opts.PgPartBy = PgPartBy.Day;
+    opts.MigrationScheduleForwardDays = 2;
+    opts.ExpireDays = 365 * 3;
+});
+
+// Если нужно сначала настроить DataSource — используйте chained-перегрузку,
+// которая возвращает IPartConfiguration для цепочки настройки подключения:
+builder.Services
+    .AddSaPostgreSqlFileStorageChained(opts => opts.TableName = "files")
     .AddDataSource(ds => ds
-        .WithConnectionString("Host=db.example.com;Database=app;Username=app_user;Password=secret")
-        .WithSearchPath("storage"))
-    .WithTableName("binary_data")
-    .WithSchemaName("storage")
-    .ConfigureOptions((sp, opts) =>
-    {
-        opts.PartOptions.Basket = "attachments";
-        opts.PartOptions.PgPartBy = PgPartBy.Month;
-        opts.CleanupOptions.ExpireDays = 730;  // 2 года
-    }));
+        .WithConnectionString("Host=localhost;Database=mydb;Username=postgres;Password=password")
+        .WithSearchPath("public"));
 ```
+
+> **Примечание:** `AddSaPostgreSqlFileStorage` (обычная) и `AddSaPostgreSqlFileStorageChained`
+> выполняют одинаковую регистрацию. Отличие — `Chained` возвращает `IPartConfiguration`,
+> чтобы можно было настроить `IPgDataSource` после.
 
 ---
 
@@ -219,10 +203,7 @@ CREATE TABLE public.files (
 Новые партиции создаются заранее (по умолчанию: за 2 дня) через фоновое задание:
 
 ```csharp
-.ConfigureOptions((sp, opts) =>
-{
-    opts.PartOptions.MigrationScheduleForwardDays = 2;
-})
+opts.MigrationScheduleForwardDays = 2;
 ```
 
 ### Расписание очистки
@@ -230,10 +211,7 @@ CREATE TABLE public.files (
 Старые партиции за пределами периода удержания удаляются через фоновое задание:
 
 ```csharp
-.ConfigureOptions((sp, opts) =>
-{
-    opts.CleanupOptions.ExpireDays = 365 * 3;  // удалять партиции старше 3 лет
-})
+opts.ExpireDays = 365 * 3;  // удалять партиции старше 3 лет
 ```
 
 ---
@@ -244,8 +222,8 @@ CREATE TABLE public.files (
 
 | Задание | Назначение | Конфигурация |
 |---------|-----------|-------------|
-| **Миграция** | Заранее создавать будущие партиции | `forwardDays`, `asBackgroundJob` |
-| **Очистка** | Удалять старые партиции после истечения срока | `dropPartsAfterRetention` (TimeSpan) |
+| **Миграция** | Заранее создавать будущие партиции | `ForwardDays`, `AsBackgroundJob` |
+| **Очистка** | Удалять старые партиции после истечения срока | `DropPartsAfterRetention` (TimeSpan) |
 
 Оба работают как фоновые hosted-сервисы и используют общий пул подключений PostgreSQL.
 
@@ -255,27 +233,26 @@ CREATE TABLE public.files (
 
 ### PostgresFileStorageOptions
 
+Опции плоские (без вложенных `PartOptions`/`CleanupOptions`/`StorageOptions`):
+
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
-| `StorageOptions.SchemaName` | Схема PostgreSQL | `"public"` |
-| `StorageOptions.TableName` | Имя таблицы для данных файлов | `"files"` |
-| `StorageOptions.StorageType` | Префикс схемы в File ID | `"pg"` |
-| `StorageOptions.IsReadOnly` | Запрет операций записи/удаления | `false` |
-| `PartOptions.Basket` | Имя контейнера (ключ list-партиции) | `"share"` |
-| `PartOptions.PgPartBy` | Гранулярность range-партиционирования | `PgPartBy.Day` |
-| `PartOptions.MigrationScheduleForwardDays` | Дней заранее для предсоздания партиций | `2` |
-| `CleanupOptions.ExpireDays` | Период удержания перед удалением партиции (дни) | `365 * 3` |
+| `SchemaName` | Схема PostgreSQL (автоопределяется из search_path, если не задано) | `"public"` |
+| `TableName` | Имя таблицы для данных файлов | `"files"` |
+| `StorageType` | Префикс схемы в File ID | `"pg"` |
+| `IsReadOnly` | Запрет операций записи/удаления | `false` |
+| `Basket` | Имя контейнера (ключ list-партиции) | `"share"` |
+| `PgPartBy` | Гранулярность range-партиционирования | `PgPartBy.Day` |
+| `MigrationScheduleForwardDays` | Дней заранее для предсоздания партиций | `2` |
+| `ExpireDays` | Период удержания перед удалением партиции (дни) | `365 * 3` |
 
-### IPostgresFileStorageConfiguration (fluent builder)
+### Chained-регистрация
+
+`AddSaPostgreSqlFileStorageChained` возвращает `IPartConfiguration`, чтобы можно было настроить `IPgDataSource` после:
 
 | Метод | Описание |
 |-------|----------|
 | `AddDataSource(Action<IPgDataSourceSettingsBuilder>?)` | Настроить подключение PostgreSQL |
-| `WithSchemaName(string)` | Переопределить имя схемы |
-| `WithTableName(string)` | Переопределить имя таблицы |
-| `WithStorageType(string)` | Переопределить идентификатор типа хранилища |
-| `AsReadOnly()` | Пометить как read-only |
-| `ConfigureOptions(Action<IServiceProvider, PostgresFileStorageOptions>)` | Поздняя кастомизация |
 
 ---
 
