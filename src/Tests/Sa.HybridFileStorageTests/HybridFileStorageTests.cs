@@ -66,7 +66,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "test.bin", TenantId = 2 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(string.Empty, input, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync("share", input, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.NotEmpty(result.FileId);
@@ -92,7 +92,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "some.bin", TenantId = 1 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(string.Empty, input, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync("share", input, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal(InMemoryFileStorage.DefaultStorageType, result.StorageType);

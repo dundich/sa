@@ -138,7 +138,7 @@ public sealed class FailoverTests : IAsyncLifetime
         // Upload a file
         var input = new UploadFileInput { FileName = "downloadable.txt", TenantId = 1 };
         using var stream = FixtureHelper.GetByteStream();
-        var result = await storage.UploadAsync(string.Empty, input, stream, _cts.Token);
+        var result = await storage.UploadAsync("share", input, stream, _cts.Token);
 
         // Act — download should find and retrieve from the correct storage
         byte[]? downloadedData = null;

@@ -211,6 +211,8 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 
 Метод расширения `AddSaS3FileStorage` автоматически регистрирует `IS3BucketClient` через `AddSaS3BucketClient`.
 
+Регистрация идемпотентна: повторный вызов с тем же целевым бакетом (endpoint, bucket, credentials, region) — no-op, а вызов с другими параметрами бросает `InvalidOperationException`. Общий `IS3BucketClient` регистрируется first-wins, поэтому вторая storage с другим бакетом молча писала бы в чужой бакет.
+
 ---
 
 ## Лицензия

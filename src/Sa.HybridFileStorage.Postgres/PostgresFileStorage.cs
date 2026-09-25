@@ -46,7 +46,7 @@ internal sealed class PostgresFileStorage(
         = string.IsNullOrWhiteSpace(options.Basket) ? "share" : Sanitize(options.Basket);
 
     private readonly string _qualifiedTableName
-        = $"{options.SchemaName}.\"{Sanitize(options.TableName)}\"";
+        = $"{(options.SchemaName ?? "public")}.\"{Sanitize(options.TableName)}\"";
 
     private readonly string _schemePrefix
         = $"{options.StorageType}{FileIdParser.SchemeSeparator}{Sanitize(options.Basket)}/";

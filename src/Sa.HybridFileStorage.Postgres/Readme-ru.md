@@ -86,6 +86,8 @@ builder.Services
 > **Примечание:** `AddSaPostgreSqlFileStorage` (обычная) и `AddSaPostgreSqlFileStorageChained`
 > выполняют одинаковую регистрацию. Отличие — `Chained` возвращает `IPartConfiguration`,
 > чтобы можно было настроить `IPgDataSource` после.
+>
+> Повторная регистрация идемпотентна: равные опции — no-op, конфликтующие — `InvalidOperationException`.
 
 ---
 
@@ -237,7 +239,7 @@ opts.ExpireDays = 365 * 3;  // удалять партиции старше 3 л
 
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
-| `SchemaName` | Схема PostgreSQL (автоопределяется из search_path, если не задано) | `"public"` |
+| `SchemaName` | Схема PostgreSQL (`null` = автоопределение из connection search_path, fallback `"public"`) | `null` |
 | `TableName` | Имя таблицы для данных файлов | `"files"` |
 | `StorageType` | Префикс схемы в File ID | `"pg"` |
 | `IsReadOnly` | Запрет операций записи/удаления | `false` |

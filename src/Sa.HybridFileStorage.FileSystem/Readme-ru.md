@@ -116,6 +116,8 @@ builder.Services.AddSaFileSystemFileStorage((sp, options) =>
 });
 ```
 
+> **Примечание:** валидация выполняется в момент регистрации (fail-fast). `IServiceProvider` в callback варианта 2 — одноразовая «пробная» сборка из пустого service collection: host-сервисы (`IConfiguration` и т.п.) в нём отсутствуют, внешние значения лучше захватывать замыканием.
+
 ---
 
 ## Примеры CRUD

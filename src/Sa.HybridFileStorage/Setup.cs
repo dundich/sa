@@ -34,7 +34,7 @@ public static class Setup
         this IServiceCollection services,
         InMemoryFileStorageOptions? options = null)
     {
-        options ??= new(string.Empty);
+        options ??= new();
 
         services.AddSingleton<IFileStorage, InMemoryFileStorage>(
             sp => new InMemoryFileStorage(options, sp.GetService<TimeProvider>() ?? TimeProvider.System));
@@ -54,7 +54,7 @@ public static class Setup
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        options ??= new(string.Empty);
+        options ??= new();
 
         return configuration.ConfigureStorage((sp, container) =>
         {

@@ -79,6 +79,8 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
         }))));
 ```
 
+Несколько вызовов `ConfigureStorage` накапливаются: каждый вызов регистрирует дополнительные storage в контейнере, поэтому в одной цепочке `AddSaHybridFileStorage` можно повесить несколько корзин.
+
 После настройки все CRUD-операции работают с именами корзин, а не спецификой провайдеров:
 
 ```csharp
@@ -532,7 +534,7 @@ builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
 | `Basket` | Имя контейнера | `"share"` |
-| `MaxSizeBytes` | Лимит в байтах (`0` = без лимита) | `0` |
+| `MaxSizeBytes` | Лимит в байтах (`0` = без лимита) | `1 GB` |
 | `IsReadOnly` | Запрет записи | `false` |
 
 ---

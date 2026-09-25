@@ -79,6 +79,8 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
         }))));
 ```
 
+Multiple `ConfigureStorage` calls accumulate: each call registers additional storages into the container, so several baskets can be wired in a single `AddSaHybridFileStorage` chain.
+
 Once configured, all CRUD operations use basket names — not provider specifics:
 
 ```csharp
@@ -532,7 +534,7 @@ Flat options (no nested `PartOptions`/`CleanupOptions`/`StorageOptions`):
 | Property | Description | Default |
 |----------|-------------|---------|
 | `Basket` | Scope/container name | `"share"` |
-| `MaxSizeBytes` | Total byte limit (`0` = unlimited) | `0` |
+| `MaxSizeBytes` | Total byte limit (`0` = unlimited) | `1 GB` |
 | `IsReadOnly` | Prevent writes | `false` |
 
 ---

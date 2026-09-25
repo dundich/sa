@@ -21,7 +21,7 @@ public static class Setup
         options.Validate();
 
         services.AddSingleton<IFileStorage>(sp
-            => new FileSystemStorage(options, sp.GetService<TimeProvider>()));
+            => new FileSystemStorage(options, sp.GetService<TimeProvider>() ?? TimeProvider.System));
         return services;
     }
 
@@ -29,7 +29,9 @@ public static class Setup
     /// Registers the filesystem file storage provider using a mutable options builder with fluent configuration.
     /// </summary>
     /// <param name="services">The service collection to add the services to.</param>
-    /// <param name="configure">An action that receives an <see cref="IServiceProvider"/> and a <see cref="FileSystemStorageOptions"/> instance for fluent configuration.</param>
+    /// <param name="configure">An action that receives an <see cref="IServiceProvider"/> and a <see cref="FileSystemStorageOptions"/> instance for fluent configuration.
+    /// The provider is a throwaway probe built from an empty service collection: it does not contain host services
+    /// (such as <c>IConfiguration</c>), so capture any external values in a closure instead of resolving them from the provider.</param>
     /// <returns>The same <see cref="IServiceCollection"/> instance with the service added.</returns>
     public static IServiceCollection AddSaFileSystemFileStorage(
         this IServiceCollection services,
@@ -40,7 +42,7 @@ public static class Setup
         // Fail fast: validate options at registration time rather than lazily at first resolve.
         // A throwaway provider lets the callback resolve dependencies it may need, while keeping
         // the original services collection untouched until everything is known to be valid.
-        var probe = new ServiceCollection().BuildServiceProvider();
+        using var probe = new ServiceCollection().BuildServiceProvider();
         FileSystemStorageOptions options = new();
         configure.Invoke(probe, options);
         options.Validate();

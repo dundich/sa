@@ -70,7 +70,7 @@ public sealed class InterceptorTests : IAsyncLifetime
         // Upload and delete
         var input = new UploadFileInput { FileName = "notify.txt", TenantId = 1 };
         using var stream = FixtureHelper.GetByteStream();
-        var result = await storage.UploadAsync(string.Empty, input, stream, _cts.Token);
+        var result = await storage.UploadAsync("share", input, stream, _cts.Token);
 
         // Act
         await storage.DeleteAsync(result.FileId, _cts.Token);
@@ -103,7 +103,7 @@ public sealed class InterceptorTests : IAsyncLifetime
         // Act
         var input = new UploadFileInput { FileName = "chain.txt", TenantId = 1 };
         using var stream = FixtureHelper.GetByteStream();
-        await storage.UploadAsync(string.Empty, input, stream, _cts.Token);
+        await storage.UploadAsync("share", input, stream, _cts.Token);
 
         // Assert
         Assert.True(canUploadCalled);
@@ -160,7 +160,7 @@ public sealed class InterceptorTests : IAsyncLifetime
         // Upload a file
         var input = new UploadFileInput { FileName = "protected.txt", TenantId = 1 };
         using var stream = FixtureHelper.GetByteStream();
-        var result = await storage.UploadAsync(string.Empty, input, stream, _cts.Token);
+        var result = await storage.UploadAsync("share", input, stream, _cts.Token);
 
         // Act — delete intercepted: interceptor blocks the only storage → NoAvailableException
         var ex = await Assert.ThrowsAsync<HybridFileStorageNoAvailableException>(() =>

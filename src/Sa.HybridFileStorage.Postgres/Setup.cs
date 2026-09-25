@@ -22,7 +22,10 @@ public static class Setup
         this IServiceCollection services,
         Action<PostgresFileStorageOptions>? configureOptions = null)
     {
-        RegisterCore(services, configureOptions);
+        var options = new PostgresFileStorageOptions();
+        configureOptions?.Invoke(options);
+
+        RegisterCore(services, options);
         return services;
     }
 
@@ -37,20 +40,58 @@ public static class Setup
         this IServiceCollection services,
         Action<PostgresFileStorageOptions>? configureOptions = null)
     {
-        return RegisterCore(services, configureOptions);
+        var options = new PostgresFileStorageOptions();
+        configureOptions?.Invoke(options);
+
+        return RegisterCore(services, options);
     }
 
     /// <summary>
-    /// Performs the shared registration logic for both <see cref="AddSaPostgreSqlFileStorage"/> and
-    /// <see cref="AddSaPostgreSqlFileStorageChained"/>, returning the partition configuration so callers
-    /// can optionally chain DataSource configuration.
+    /// Registers the PostgreSQL file storage provider with the specified service collection.
+    /// </summary>
+    /// <param name="services">The service collection to add the services to.</param>
+    /// <param name="options">Configuration options for the PostgreSQL storage provider.</param>
+    /// <returns>The same <see cref="IServiceCollection"/> instance with the services added.</returns>
+    public static IServiceCollection AddSaPostgreSqlFileStorage(
+        this IServiceCollection services,
+        PostgresFileStorageOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        RegisterCore(services, options.Copy());
+        return services;
+    }
+
+    /// <summary>
+    /// Performs the shared registration logic for all <see cref="AddSaPostgreSqlFileStorage"/> overloads.
+    /// Registration is idempotent: a second call with equal options returns the existing partition
+    /// configuration, while a call with different options throws <see cref="InvalidOperationException"/>
+    /// instead of silently duplicating the partitioning setup, schedules, and <see cref="IFileStorage"/>
+    /// (which would become ambiguous to resolve).
     /// </summary>
     private static IPartConfiguration RegisterCore(
         IServiceCollection services,
-        Action<PostgresFileStorageOptions>? configureOptions)
+        PostgresFileStorageOptions options)
     {
-        var options = new PostgresFileStorageOptions();
-        configureOptions?.Invoke(options);
+        // Snapshot the options before anything runs: the schema is auto-detected lazily
+        // (mutating the instance) when the settings builder resolves, so the stored state
+        // must reflect the user's original configuration for idempotency comparison.
+        var snapshot = options.Copy();
+
+        // Idempotency guard: compare against the snapshot of the previous registration.
+        var existing = services.FirstOrDefault(d => d.ServiceType == typeof(RegistrationMarker))
+            ?.ImplementationInstance as RegistrationMarker;
+        if (existing is not null)
+        {
+            if (existing.Options == options)
+            {
+                return existing.Configuration;
+            }
+
+            throw new InvalidOperationException(
+                "AddSaPostgreSqlFileStorage has already been registered with different options. " +
+                "Register the PostgreSQL file storage provider only once per service collection.");
+        }
 
         // Trim quotes from table name if accidentally included
         options.TableName = options.TableName.Trim('"');
@@ -61,9 +102,15 @@ public static class Setup
         // 2. Partitioning setup + DataSource configuration
         IPartConfiguration partConfig = services.AddSaPartitional((sp, builder) =>
         {
-            var dataSource = sp.GetRequiredService<IPgDataSource>();
-            // Auto-detect schema from connection search_path
-            options.SchemaName = dataSource.GetSearchPath();
+            // Auto-detect schema from the connection search_path only when the user did not set one explicitly.
+            // The first schema of a comma-separated search path is the effective one for table resolution.
+            if (options.SchemaName is null)
+            {
+                var searchPath = sp.GetRequiredService<IPgDataSource>().GetSearchPath();
+                options.SchemaName = string.IsNullOrWhiteSpace(searchPath)
+                    ? "public"
+                    : searchPath.Split(',')[0].Trim();
+            }
 
             builder.AddSchema(options.SchemaName, schema =>
             {
@@ -102,29 +149,30 @@ public static class Setup
             options: options,
             timeProvider: sp.GetService<TimeProvider>() ?? TimeProvider.System));
 
+        services.AddSingleton(new RegistrationMarker(snapshot, partConfig));
+
         return partConfig;
     }
+}
+
+/// <summary>
+/// Sentinel marker holding the registration state of the PostgreSQL file storage provider.
+/// Ensures the partitioning setup, schedules, and <see cref="IFileStorage"/> are registered exactly once
+/// and lets a conflicting second registration fail fast.
+/// </summary>
+internal sealed class RegistrationMarker(
+    PostgresFileStorageOptions options,
+    IPartConfiguration configuration)
+{
+    /// <summary>
+    /// Gets a snapshot of the options the provider was registered with (taken before any
+    /// resolution-time mutation, so it reflects the user's original configuration).
+    /// </summary>
+    public PostgresFileStorageOptions Options { get; } = options ?? throw new ArgumentNullException(nameof(options));
 
     /// <summary>
-    /// Registers the PostgreSQL file storage provider with the specified service collection.
+    /// Gets the partition configuration produced by the registration.
+    /// Returned by an idempotent re-registration with equal options.
     /// </summary>
-    /// <param name="services">The service collection to add the services to.</param>
-    /// <param name="options">Configuration options for the PostgreSQL storage provider.</param>
-    /// <returns>The same <see cref="IServiceCollection"/> instance with the services added.</returns>
-    public static IServiceCollection AddSaPostgreSqlFileStorage(
-        this IServiceCollection services,
-        PostgresFileStorageOptions options)
-    {
-        return services.AddSaPostgreSqlFileStorage(opts =>
-        {
-            opts.SchemaName = options.SchemaName;
-            opts.TableName = options.TableName;
-            opts.StorageType = options.StorageType;
-            opts.IsReadOnly = options.IsReadOnly;
-            opts.Basket = options.Basket;
-            opts.ExpireDays = options.ExpireDays;
-            opts.MigrationScheduleForwardDays = options.MigrationScheduleForwardDays;
-            opts.PgPartBy = options.PgPartBy;
-        });
-    }
+    public IPartConfiguration Configuration { get; } = configuration ?? throw new ArgumentNullException(nameof(configuration));
 }

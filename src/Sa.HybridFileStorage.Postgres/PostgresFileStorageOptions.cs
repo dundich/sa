@@ -5,12 +5,14 @@ namespace Sa.HybridFileStorage.Postgres;
 /// <summary>
 /// Configuration options for the PostgreSQL file storage provider.
 /// </summary>
-public sealed class PostgresFileStorageOptions
+public sealed record PostgresFileStorageOptions
 {
     /// <summary>
-    /// Gets or sets the database schema name. Defaults to <c>"public"</c>.
+    /// Gets or sets the database schema name.
+    /// When <c>null</c> (default), the schema is auto-detected from the connection's
+    /// <c>Search Path</c> at startup, falling back to <c>"public"</c>.
     /// </summary>
-    public string SchemaName { get; set; } = "public";
+    public string? SchemaName { get; set; }
 
     /// <summary>
     /// Gets or sets the database table name for storing file metadata. Defaults to <c>"files"</c>.
@@ -46,4 +48,22 @@ public sealed class PostgresFileStorageOptions
     /// Gets or sets the partitioning granularity (day, month, or year). Defaults to <see cref="PgPartBy.Day"/>.
     /// </summary>
     public PgPartBy PgPartBy { get; set; } = PgPartBy.Day;
+
+    /// <summary>
+    /// Creates a copy of these options with identical values.
+    /// </summary>
+    internal PostgresFileStorageOptions Copy()
+    {
+        return new()
+        {
+            SchemaName = SchemaName,
+            TableName = TableName,
+            StorageType = StorageType,
+            IsReadOnly = IsReadOnly,
+            Basket = Basket,
+            ExpireDays = ExpireDays,
+            MigrationScheduleForwardDays = MigrationScheduleForwardDays,
+            PgPartBy = PgPartBy,
+        };
+    }
 }
