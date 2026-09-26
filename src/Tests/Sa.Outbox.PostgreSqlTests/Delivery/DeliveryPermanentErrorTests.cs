@@ -74,11 +74,14 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
 
         var result = await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
 
-        Assert.Equal(0, result);
+        // Both messages were handled, even though both ended in a permanent error — the count is
+        // handled messages, not successes.
+        Assert.Equal(2, result);
 
         var sql = $"select count(*) from {_tableSettings.Error.TableName}";
         int errCount = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
 
+        // One row, not two: both messages carry the same exception instance, so they de-duplicate.
         Assert.Equal(1, errCount);
     }
 }

@@ -37,6 +37,13 @@ internal sealed class PartCache(
             return await cached.ConfigureAwait(false);
         }
 
+        // Faulted (or cancelled) entry must not be reused: it would rethrow the
+        // original exception to every future caller until process restart.
+        if (cached?.IsFaulted == true || cached?.IsCanceled == true)
+        {
+            _cache.TryRemove(tableName, out _);
+        }
+
         return await _cache.GetOrAdd(tableName, SelectPartsInDb, cancellationToken).ConfigureAwait(false);
     }
 

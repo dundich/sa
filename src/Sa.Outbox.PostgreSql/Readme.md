@@ -156,7 +156,7 @@ Where inside `AddSaOutbox`:
 | `WithLockDuration(span)` | 10 с | TTL блокировки сообщения |
 | `WithLockRenewal(span)` | 3 с | Период продления блокировки |
 | `WithLookbackInterval(span)` | 7 дн | История поиска необработанных |
-| `WithBatchingWindow(span)` | 0 с | Окно агрегации сообщений |
+| `WithBatchingWindow(span)` | 3 с | Окно агрегации сообщений |
 | `WithNoBatchingWindow()` | — | Взять всё доступное сейчас |
 | `WithConcurrencyLimit(n)` | 1 | Одновременных задач |
 | `WithMaxConcurrency(n)` | 1 | Макс. параллельных процессоров |

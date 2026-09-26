@@ -25,6 +25,18 @@ internal sealed class OutboxContext<TMessage>(
     public TimeSpan PostponeDelay { get; private set; } = TimeSpan.Zero;
     public Exception? Exception { get; private set; }
 
+    /// <summary>
+    /// Defers the message without consuming a delivery attempt — the attempt counter is incremented
+    /// for every other status, but never for <see cref="DeliveryStatusCode.Postpone"/>.
+    /// </summary>
+    /// <remarks>
+    /// This is intentional: postponement is governed by the consumer, which decides when and whether
+    /// to give up. Consequently <c>MaxDeliveryAttempts</c> does not apply here — a consumer that
+    /// postpones forever keeps the message alive forever, and the dead-lettering decision is its own
+    /// responsibility (it must eventually call <c>Error</c>/<c>Error5xx</c> or start failing).
+    /// The delay is applied as the lease extension (<c>lock_expires_on = created_at + delay</c>), so
+    /// the task cannot be re-rented before the delay elapses.
+    /// </remarks>
     public void Postpone(TimeSpan postponeDelay, string? message = null)
         => SetDeliveryStatus(DeliveryStatusCode.Postpone, message, null, postponeDelay);
 

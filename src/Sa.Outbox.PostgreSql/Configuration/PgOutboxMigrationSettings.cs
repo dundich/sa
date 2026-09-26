@@ -20,8 +20,13 @@ public sealed class PgOutboxMigrationSettings
     /// <summary>
     /// Gets or sets the interval at which the migration job will be executed.
     /// Default is set to every 6 hours, with a random additional delay of up to 59 minutes.
+    /// The jitter is computed at construction time so each instance gets a unique offset.
     /// </summary>
-    public TimeSpan ExecutionInterval { get; set; } = TimeSpan
-        .FromHours(6)
-        .Add(TimeSpan.FromMinutes(Random.Shared.Next(1, 59)));
+    public TimeSpan ExecutionInterval { get; set; }
+
+    public PgOutboxMigrationSettings()
+    {
+        ExecutionInterval = TimeSpan.FromHours(6)
+            .Add(TimeSpan.FromMinutes(Random.Shared.Next(1, 59)));
+    }
 }

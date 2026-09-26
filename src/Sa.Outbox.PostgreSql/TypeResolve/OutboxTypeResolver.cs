@@ -7,7 +7,7 @@ internal sealed class OutboxTypeResolver(
     IOutboxTypeCache cache,
     IOutboxMsgTypeRepository repository) : IOutboxTypeResolver
 {
-    private int _triggered = 0;
+    private readonly SemaphoreSlim _insertLock = new(1, 1);
 
     public async Task<long> GetHashCode(string typeName, CancellationToken cancellationToken)
     {
@@ -18,16 +18,19 @@ internal sealed class OutboxTypeResolver(
 
         code = typeName.GetMurmurHash3();
 
-        if (Interlocked.CompareExchange(ref _triggered, 1, 0) == 1) return code;
-
+        await _insertLock.WaitAsync(cancellationToken);
         try
         {
+            // Double-check after acquiring the lock — another thread may have inserted it already.
+            long existing = await cache.GetCode(typeName, cancellationToken);
+            if (existing != 0) return existing;
+
             await repository.Insert(code, typeName, cancellationToken);
             await cache.Reset(cancellationToken);
         }
         finally
         {
-            Interlocked.CompareExchange(ref _triggered, 0, 1);
+            _insertLock.Release();
         }
 
         return code;

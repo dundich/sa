@@ -14,7 +14,6 @@ High-performance async task queue for .NET with bounded capacity, dynamic concur
 | **Reader cancellation order** | `Lifo` • `Fifo` • `RoundRobin` • `Random` — choose which readers are cancelled when the limit is decreased | [Reader Cancellation Order](#reader-cancellation-order) |
 | **Cancel modes** | `Hard` (default) or `Soft` — how in-flight work is treated when readers are removed at runtime | [Reader Cancel Modes](#reader-cancel-modes) |
 | **DI integration** | Registration via `AddSaWorkQueue<TProcessor, TInput>` or delegate-based `AddSaWorkQueue<TInput>` | [Quick Start](#quick-start) |
-| **Zero-allocation logging** | `[LoggerMessage]` source generator for `ILogger` | — |
 | **Safe shutdown** | `ShutdownAsync`, `DisposeAsync` — idempotent and thread-safe | [Important Notes](#-important-notes) |
 | **Error strategies** | Per-item fault handling: `Continue`, `StopReader`, or `ShutdownQueue` | [Error Strategies](#error-strategies) |
 | **Status callbacks** | Track item lifecycle: `Running` → `Completed` / `Faulted` / `Cancelled` / `Aborted` / `Skipped` | [Status Lifecycle](#status-lifecycle) |

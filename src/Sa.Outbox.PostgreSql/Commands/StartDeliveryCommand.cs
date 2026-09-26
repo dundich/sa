@@ -26,7 +26,7 @@ internal sealed class StartDeliveryCommand(
 
         int batchSize = writeBuffer.Length;
         long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
-        var lockOn = filter.ToDate + lockDuration;
+        var lockOn = filter.NowDate + lockDuration;
 
 
         return await dataSource.ExecuteReader(sql.SqlLockAndSelect

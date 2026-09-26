@@ -52,6 +52,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
                         {
                             s.WithBatchingWindow(TimeSpan.Zero)
                                 .WithNoLockDuration()
+                                .WithLockRenewal(TimeSpan.FromMilliseconds(10))
                                 ;
 
                             OutboxSettings = s.Build();

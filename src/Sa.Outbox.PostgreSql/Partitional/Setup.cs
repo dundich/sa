@@ -16,7 +16,7 @@ internal static class Setup
         _ = services.AddSaPartitional((sp, builder) =>
         {
             SqlOutboxBuilder sql = sp.GetRequiredService<SqlOutboxBuilder>();
-            var tableSettings = sql.Settings;
+            var tableSettings = sql.TableSettings;
 
             builder.AddSchema(tableSettings.DatabaseSchemaName, schema =>
             {

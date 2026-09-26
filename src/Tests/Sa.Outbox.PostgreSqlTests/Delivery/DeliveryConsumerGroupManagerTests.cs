@@ -98,6 +98,12 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
 
     public class Fixture : OutboxPostgreSqlFixture<IDeliveryProcessor>
     {
+        /// <summary>Минимальный валидный TTL блокировки: задача освобождается почти сразу.</summary>
+        public static readonly TimeSpan TestLockDuration = OutboxConsumerSettingsBuilder.NoLockDuration;
+
+        /// <summary>Период продления блокировки — строго меньше <see cref="TestLockDuration"/>.</summary>
+        public static readonly TimeSpan TestLockRenewal = TimeSpan.FromMilliseconds(10);
+
         public OutboxConsumerSettings SettingsForTestGroup = default!;
         /// <summary>Реальное (санитизированное) имя группы для CountingMessageConsumer.</summary>
         public string CountingGroupId => SettingsForTestGroup.ConsumerGroupId;
@@ -134,8 +140,8 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                     MaxBatchSize: 1,
                     MaxProcessingIterations: -1,
                     IterationDelay: TimeSpan.Zero,
-                    LockDuration: TimeSpan.FromMinutes(5),
-                    LockRenewal: TimeSpan.FromMinutes(5),
+                    LockDuration: TestLockDuration,
+                    LockRenewal: TestLockRenewal,
                     LookbackInterval: TimeSpan.FromDays(7),
                     MaxDeliveryAttempts: 3,
                     BatchingWindow: TimeSpan.Zero,
@@ -161,7 +167,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                             b.WithInterval(TimeSpan.FromMilliseconds(200))
                              .WithMaxBatchSize(4)
                              .WithNoLockDuration()
-                             .WithLockRenewal(TimeSpan.FromMinutes(5))
+                             .WithLockRenewal(TestLockRenewal)
                              .WithNoBatchingWindow();
 
                             SettingsForTestGroup = b.Build();
@@ -171,7 +177,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                             b.WithInterval(TimeSpan.FromMilliseconds(200))
                              .WithMaxBatchSize(1)
                              .WithNoLockDuration()
-                             .WithLockRenewal(TimeSpan.FromMinutes(5))
+                             .WithLockRenewal(TestLockRenewal)
                              .WithNoBatchingWindow();
                         })
                     )

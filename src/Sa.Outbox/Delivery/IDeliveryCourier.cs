@@ -14,7 +14,10 @@ internal interface IDeliveryCourier
     /// <param name="filter">Criteria used to select which messages are eligible for delivery.</param>
     /// <param name="messages">Read-only memory containing context operations for each message.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>The number of messages successfully delivered.</returns>
+    /// <returns>
+    /// The number of messages handled, whatever final status each one ended up in — a message that
+    /// was postponed for retry or dead-lettered still counts as handled.
+    /// </returns>
     ValueTask<int> Deliver<TMessage>(
         OutboxConsumerSettings settings,
         OutboxMessageFilter filter,

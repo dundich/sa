@@ -1,8 +1,8 @@
 ﻿using Sa.Extensions;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 using System.Collections.ObjectModel;
-using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Services.Plug;
 
@@ -72,9 +72,12 @@ internal sealed class OutboxDeliveryManager(
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
     {
+        // Only permanent failures (5xx, including ErrorMaxAttempts) belong in __error$.
+        // Retryable warnings (400) would pollute the error log and set task.error_id for
+        // transient failures.
         IOutboxContextOperations<TMessage>[] errs = messages
             .Span
-            .SelectWhere(m => m, m => m.Exception != null);
+            .SelectWhere(m => m, m => m.Exception != null && m.DeliveryResult.Code.IsError());
 
         if (errs.Length == 0)
             return ReadOnlyDictionary<Exception, ErrorInfo>.Empty;

@@ -8,6 +8,11 @@ $config = "Release"
 $dist_folder = "$root\dist"
 $msbuild_verbosity = "n"
 
+# How many test assemblies `dotnet test` may run at the same time. Most test assemblies here start
+# Testcontainers (PostgreSQL/Minio), so the default "all of them" means dozens of live database
+# containers and the machine runs out of memory. Override per machine: $env:SA_TEST_PARALLELISM=6
+$max_parallel_test_modules = if ($env:SA_TEST_PARALLELISM) { $env:SA_TEST_PARALLELISM } else { 2 }
+
 $projects = @(
 	"Sa.Utils.WorkQueue",
 
@@ -77,16 +82,45 @@ function Test() {
 	# `dotnet test` picks the MTP runner from src/global.json, which is only
 	# discovered from src/ (or below). Run it with cwd=src or it fails with
 	# "VSTest target is no longer supported on .NET 10 SDK".
+	#
+	# --max-parallel-test-modules caps how many test assemblies run at once. Without it every
+	# assembly starts at the same time, and since most of them boot a Testcontainers PostgreSQL
+	# that is a dozen concurrent databases on a 16 GB machine.
+	#
+	# That switch is only honoured while `dotnet test` stays on the MTP driver. Build and restore
+	# are therefore split out explicitly and the test run is fully offline:
+	#  * the switch must precede --solution, otherwise the SDK forwards it to MSBuild;
+	#  * an implicit restore (or -v, or --filter) likewise drops back to the MSBuild driver.
+	# In all those cases the run dies with "MSBUILD : error MSB1001: Unknown switch".
+	# MSBUILDDISABLENODEREUSE additionally stops a warm MSBuild worker node from swallowing the
+	# switch, which otherwise happens whenever a build ran earlier in the same session.
+	# Side benefit: NuGet stays off the critical path, because a restore can stall behind a proxy.
+	#
+	# Restore only when there is no package cache yet, so a warm checkout never touches the network.
+	# If a new package version shows up in Directory.Packages.props the build below fails with a
+	# NuGet "run a restore" error — that is the signal to run .\build\do_build.ps1.
+	if (-not (Test-Path "$root\src\.packages")) {
+		NuRestore
+	}
+
 	Push-Location $src_dir
-	& dotnet test $sln_file -v $msbuild_verbosity
+	& dotnet build $sln_file -c $config --no-restore -v $msbuild_verbosity
+	_AssertExec
+
+	$env:MSBUILDDISABLENODEREUSE = "1"
+	& dotnet test --max-parallel-test-modules $max_parallel_test_modules --solution $sln_file -c $config --no-build --no-restore
 	_AssertExec
 	Pop-Location
 }
 
 function TestCi() {
 	_Step "Running tests (skipping tests requiring local infrastructure)"
+	# No --max-parallel-test-modules here: --filter is translated into an MSBuild
+	# VSTestTestCaseFilter property, which puts `dotnet test` back on the MSBuild driver where the
+	# MTP module-parallelism switch is not recognised (MSB1001). CI runners are expected to have
+	# enough resources; per-assembly concurrency is capped by src/Tests/xunit.runner.json anyway.
 	Push-Location $src_dir
-	& dotnet test $sln_file --filter "Category!=Local"
+	& dotnet test --solution $sln_file --filter "Category!=Local"
 	_AssertExec
 	Pop-Location
 }

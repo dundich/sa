@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Delivery;
+using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.Tests;
 
@@ -52,7 +52,7 @@ public class DeliveryCourierTests
     #region Processor succeeds — all messages OK
 
     [Fact]
-    public async Task Deliver_ProcessorSucceeds_AllMessagesOk_ReturnsSuccessCount()
+    public async Task Deliver_ProcessorSucceeds_AllMessagesOk_ReturnsMessageCount()
     {
         var ctx1 = new FakeOutboxContext<TestMessage>(payloadId: "msg-1");
         var ctx2 = new FakeOutboxContext<TestMessage>(payloadId: "msg-2");
@@ -115,10 +115,56 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Equal(0, result);
+        Assert.Equal(1, result);
         Assert.Equal(DeliveryStatusCode.Warn, ctx.DeliveryResult.Code);
         Assert.Same(testException, ctx.Exception);
         Assert.Equal(TimeSpan.FromSeconds(5), ctx.PostponeDelay);
+    }
+
+    [Fact]
+    public async Task Deliver_ProcessorThrows_BelowMaxAttempts_StaysWarn()
+    {
+        // attempt(2) + 1 = 3, not > max(3) → still retryable
+        var ctx = new FakeOutboxContext<TestMessage>(payloadId: "msg-retry", attempt: 2);
+        var messages = ToMessages(ctx);
+
+        var processor = new FakeDeliveryLifetimeInvoker(
+            _ => Task.FromException(new InvalidOperationException("processor broke")));
+
+        var courier = new DeliveryCourier(processor, new FakeRetryStrategy(_ => TimeSpan.FromSeconds(5)));
+
+        var result = await courier.Deliver(
+            CreateSettings(maxDeliveryAttempts: 3),
+            CreateFilter(),
+            messages,
+            CancellationToken.None);
+
+        Assert.Equal(1, result);
+        Assert.Equal(DeliveryStatusCode.Warn, ctx.DeliveryResult.Code);
+    }
+
+    [Fact]
+    public async Task Deliver_ProcessorThrows_ExceedingMaxAttempts_GoesToDlq()
+    {
+        // Real flow regression guard: the consumer throws → HandleError marks the message Warn
+        // → PostHandle must still see it and route it to the DLQ instead of retrying forever.
+        var ctx = new FakeOutboxContext<TestMessage>(payloadId: "msg-dlq", attempt: 3);
+        var messages = ToMessages(ctx);
+
+        var processor = new FakeDeliveryLifetimeInvoker(
+            _ => Task.FromException(new InvalidOperationException("processor broke")));
+
+        var courier = new DeliveryCourier(processor, new FakeRetryStrategy(_ => TimeSpan.FromSeconds(5)));
+
+        var result = await courier.Deliver(
+            CreateSettings(maxDeliveryAttempts: 3),
+            CreateFilter(),
+            messages,
+            CancellationToken.None);
+
+        Assert.Equal(1, result);
+        Assert.Equal(DeliveryStatusCode.MaximumAttemptsError, ctx.DeliveryResult.Code);
+        Assert.NotNull(ctx.Exception);
     }
 
     [Fact]
@@ -148,7 +194,7 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Equal(0, result);
+        Assert.Equal(3, result);
         Assert.Equal(DeliveryStatusCode.Warn, ctx1.DeliveryResult.Code);
         Assert.Equal(DeliveryStatusCode.Warn, ctx2.DeliveryResult.Code);
         Assert.Equal(DeliveryStatusCode.Warn, ctx3.DeliveryResult.Code);
@@ -178,7 +224,7 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Equal(0, result);
+        Assert.Equal(1, result);
         Assert.Equal(DeliveryStatusCode.Warn, ctx.DeliveryResult.Code);
         Assert.NotNull(ctx.Exception);
         Assert.True(ctx.PostponeDelay > TimeSpan.Zero);
@@ -207,7 +253,7 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Equal(0, result);
+        Assert.Equal(1, result);
         Assert.NotEqual(DeliveryStatusCode.MaximumAttemptsError, ctx.DeliveryResult.Code);
         Assert.NotEqual(DeliveryStatusCode.Ok, ctx.DeliveryResult.Code);
     }
@@ -230,12 +276,12 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Equal(0, result);
+        Assert.Equal(1, result);
         Assert.Equal(DeliveryStatusCode.MaximumAttemptsError, ctx.DeliveryResult.Code);
     }
 
     [Fact]
-    public async Task Deliver_AlreadySuccess_Skipped()
+    public async Task Deliver_AlreadySuccess_LeftUntouched()
     {
         var ctx = new FakeOutboxContext<TestMessage>(
             payloadId: "msg-done",
@@ -252,8 +298,99 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Equal(0, result);
+        // The count reports messages handled, so a status already set by the consumer is neither
+        // re-decided nor excluded from the total.
+        Assert.Equal(1, result);
         Assert.Equal(DeliveryStatusCode.Ok, ctx.DeliveryResult.Code);
+    }
+
+    [Theory]
+    [InlineData(DeliveryStatusCode.Created)]
+    [InlineData(DeliveryStatusCode.Accepted)]
+    [InlineData(DeliveryStatusCode.NoContent)]
+    [InlineData(DeliveryStatusCode.Aborted)]
+    [InlineData(DeliveryStatusCode.MovedPermanently)]
+    [InlineData(DeliveryStatusCode.Warn)]
+    [InlineData(DeliveryStatusCode.Error)]
+    [InlineData(DeliveryStatusCode.Processing)]
+    public async Task Deliver_ConsumerSetStatus_IsLeftUntouchedAndCounted(
+        DeliveryStatusCode status)
+    {
+        var ctx = new FakeOutboxContext<TestMessage>(
+            payloadId: "msg-status",
+            attempt: 0,
+            initialStatus: status);
+        var messages = ToMessages(ctx);
+
+        var processor = new FakeDeliveryLifetimeInvoker(_ => Task.CompletedTask);
+        var courier = new DeliveryCourier(processor);
+
+        var result = await courier.Deliver(
+            CreateSettings(maxDeliveryAttempts: 10),
+            CreateFilter(),
+            messages,
+            CancellationToken.None);
+
+        // Whatever the consumer decided, PostHandle must not overwrite it…
+        Assert.Equal(status, ctx.DeliveryResult.Code);
+
+        // …and the message still counts as handled.
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
+    public async Task Deliver_PendingMessage_BecomesOkAndIsCounted()
+    {
+        var ctx = new FakeOutboxContext<TestMessage>(
+            payloadId: "msg-pending",
+            attempt: 0,
+            initialStatus: DeliveryStatusCode.Pending);
+        var messages = ToMessages(ctx);
+
+        var processor = new FakeDeliveryLifetimeInvoker(_ => Task.CompletedTask);
+        var courier = new DeliveryCourier(processor);
+
+        var result = await courier.Deliver(
+            CreateSettings(maxDeliveryAttempts: 10),
+            CreateFilter(),
+            messages,
+            CancellationToken.None);
+
+        // The consumer never touched it → implicit success.
+        Assert.Equal(DeliveryStatusCode.Ok, ctx.DeliveryResult.Code);
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
+    public async Task Deliver_ReportsMessageCount_RegardlessOfOutcome()
+    {
+        // A batch that is entirely retried still counts every message: a success tally would report
+        // 0 here and the greedy loop would read it as an empty queue.
+        var ctxWarn = new FakeOutboxContext<TestMessage>(payloadId: "warn", attempt: 0);
+        var ctxDlq = new FakeOutboxContext<TestMessage>(payloadId: "dlq", attempt: 3);
+        var ctxOk = new FakeOutboxContext<TestMessage>(
+            payloadId: "ok",
+            attempt: 0,
+            initialStatus: DeliveryStatusCode.Ok);
+
+        var messages = ToMessages(ctxWarn, ctxDlq, ctxOk);
+
+        var processor = new FakeDeliveryLifetimeInvoker(
+            _ => Task.FromException(new InvalidOperationException("processor broke")));
+
+        var courier = new DeliveryCourier(processor, new FakeRetryStrategy(_ => TimeSpan.FromSeconds(5)));
+
+        var result = await courier.Deliver(
+            CreateSettings(maxDeliveryAttempts: 3),
+            CreateFilter(),
+            messages,
+            CancellationToken.None);
+
+        Assert.Equal(DeliveryStatusCode.Warn, ctxWarn.DeliveryResult.Code);
+        Assert.Equal(DeliveryStatusCode.MaximumAttemptsError, ctxDlq.DeliveryResult.Code);
+        Assert.Equal(DeliveryStatusCode.Ok, ctxOk.DeliveryResult.Code);
+
+        Assert.Equal(3, result);
     }
 
     [Fact]
@@ -274,7 +411,7 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Equal(0, result);
+        Assert.Equal(1, result);
     }
 
     #endregion
@@ -282,7 +419,7 @@ public class DeliveryCourierTests
     #region Mixed batch — some succeed, some fail
 
     [Fact]
-    public async Task Deliver_MixedBatch_ProcessorSucceeds_PartialSuccess()
+    public async Task Deliver_MixedBatch_ProcessorSucceeds_AllBecomeOk()
     {
         var ctxOk = new FakeOutboxContext<TestMessage>(payloadId: "msg-ok", attempt: 0);
         var ctxDone = new FakeOutboxContext<TestMessage>(
@@ -305,8 +442,8 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        // msg-ok and msg-pending become Ok (2 successes), msg-done stays Ok but not counted
-        Assert.Equal(2, result);
+        // msg-ok and msg-pending become Ok; msg-done was already Ok → all three are handled
+        Assert.Equal(3, result);
         Assert.Equal(DeliveryStatusCode.Ok, ctxOk.DeliveryResult.Code);
         Assert.Equal(DeliveryStatusCode.Ok, ctxDone.DeliveryResult.Code);
         Assert.Equal(DeliveryStatusCode.Ok, ctxPending.DeliveryResult.Code);
@@ -334,7 +471,7 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Equal(0, result);
+        Assert.Equal(1, result);
     }
 
     [Fact]
@@ -390,7 +527,7 @@ public class DeliveryCourierTests
             messages,
             cts.Token);
 
-        Assert.Equal(0, result);
+        Assert.Equal(1, result);
         Assert.Equal(DeliveryStatusCode.Warn, ctx.DeliveryResult.Code);
     }
 
@@ -417,7 +554,7 @@ public class DeliveryCourierTests
             messages,
             CancellationToken.None);
 
-        Assert.Equal(0, result);
+        Assert.Equal(1, result);
         Assert.Equal(TimeSpan.FromSeconds(1), ctx.PostponeDelay);
     }
 

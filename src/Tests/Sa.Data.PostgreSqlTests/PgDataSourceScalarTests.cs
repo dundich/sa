@@ -51,7 +51,11 @@ public class PgDataSourceScalarTests(PgDataSourceFixture fixture) : IClassFixtur
     [Fact()]
     public async Task ExecuteScalar_Typed_NumericAggregation()
     {
+        // Creates the table itself instead of relying on ExecuteScalar_ReturnsNull_ForEmptyResult to
+        // have done it: xUnit does not order tests within a class, so the sibling may run later.
         await fixture.DataSource.ExecuteNonQuery("""
+            CREATE TABLE IF NOT EXISTS empty_table (id int);
+            DELETE FROM empty_table;
             INSERT INTO empty_table (id) VALUES (1), (2), (3);
             """, cancellationToken: TestContext.Current.CancellationToken);
 

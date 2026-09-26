@@ -13,6 +13,20 @@
     <NoWarn>1591;1701;1702;IDE1006;S3776</NoWarn>
   </PropertyGroup>
 
+  <!--
+    Shared xUnit runner config. xUnit treats every test class as its own collection and runs
+    collections in parallel; in this repo most of those classes spin up a Testcontainers
+    PostgreSQL (or Minio) instance in their fixture, so an unbounded default starts a dozen
+    database containers at once and exhausts RAM on a normal dev machine.
+    `maxParallelThreads` caps how many collections execute at the same time, which caps the number
+    of live containers per test assembly. Raise it (or delete the file) on beefier machines / CI.
+  -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)xunit.runner.json"
+          Link="xunit.runner.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Configuration" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />

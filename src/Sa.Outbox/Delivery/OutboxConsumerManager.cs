@@ -20,6 +20,8 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
 
         ArgumentNullException.ThrowIfNull(settings);
 
+        settings.ThrowIfInvalid();
+
         lock (_lock)
         {
             if (_settings.ContainsKey(consumerGroupId))
@@ -59,6 +61,9 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
             // Perform transformation outside the lock to avoid holding it during
             // potentially expensive validation or copying operations.
             newSettings = transform(existing);
+
+            newSettings.ThrowIfInvalid();
+
             _settings[consumerGroupId] = newSettings;
         }
 
@@ -138,6 +143,9 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
     {
         lock (_lock)
         {
+            // Must be a copy: returning the live KeyCollection would let the caller observe
+            // concurrent Register/Unregister mutations (and throw on enumeration) long after
+            // the lock has been released.
             return _settings.Keys.ToList().AsReadOnly();
         }
     }

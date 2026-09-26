@@ -13,6 +13,13 @@ SLN_FILE="$ROOT/src/Sa.slnx"
 SRC_DIR="$ROOT/src"
 DIST_FOLDER="$ROOT/dist"
 MSBUILD_VERBOSITY="n"
+CONFIG="Release"
+
+# How many test assemblies `dotnet test` may run at the same time. Most test assemblies here start
+# Testcontainers (PostgreSQL/Minio), so the default "all of them at once" means dozens of live
+# database containers and the machine runs out of memory. Override per machine:
+#   SA_TEST_PARALLELISM=6 ./build-sh/do-test.sh
+MAX_PARALLEL_TEST_MODULES="${SA_TEST_PARALLELISM:-2}"
 
 # List of projects to package (order mirrors tasks.ps1)
 PROJECTS=(
@@ -64,7 +71,7 @@ nu_restore() {
 
 _msbuild() {
   _step "$1 solution"
-  dotnet build "$SLN_FILE" -c Release -v "$MSBUILD_VERBOSITY" || { _assert_exec; return; }
+  dotnet build "$SLN_FILE" -c "$CONFIG" -v "$MSBUILD_VERBOSITY" || { _assert_exec; return; }
   _assert_exec
 }
 
@@ -83,15 +90,49 @@ build() {
 
 test_run() {
   _step "Running tests"
-  # `dotnet test` picks the MTP runner from src/global.json, which is only
-  # discovered from src/ (or below). Run it with cwd=src or it fails with
-  # "VSTest target is no longer supported on .NET 10 SDK".
-  ( cd "$SRC_DIR" && dotnet test "$SLN_FILE" -v "$MSBUILD_VERBOSITY" ) || { _assert_exec; return; }
+
+  # `dotnet test` picks the MTP runner from src/global.json, which is only discovered when the cwd
+  # is src/ (or below). Everything below therefore runs from $SRC_DIR; from anywhere else it fails
+  # with "VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK".
+  #
+  # --max-parallel-test-modules caps how many test assemblies run at once. Without it every
+  # assembly starts simultaneously, and since most of them boot a Testcontainers PostgreSQL that is
+  # a dozen-plus concurrent databases on a normal dev machine.
+  #
+  # That switch is only honoured while `dotnet test` stays on the MTP driver, and several
+  # ordinary-looking arguments knock it off onto the MSBuild driver, where the switch is not
+  # recognised and the run dies with "MSBUILD : error MSB1001: Unknown switch":
+  #   * it must come BEFORE --solution (argument order is significant);
+  #   * an implicit restore appends -restore  -> build/restore are split out below;
+  #   * -v and --filter do the same (--filter becomes the MSBuild property VSTestTestCaseFilter).
+  # MSBUILDDISABLENODEREUSE=1 additionally stops a warm MSBuild worker node from swallowing the
+  # switch, which otherwise happens whenever a build ran earlier in the same session.
+  #
+  # Restoring only when there is no package cache keeps NuGet off the critical path — a restore can
+  # stall behind a proxy. If a new package version lands in src/Directory.Packages.props the build
+  # fails with a NuGet "run a restore" error; run ./build-sh/do-build.sh.
+  if [[ ! -d "$ROOT/src/.packages" ]]; then
+    nu_restore
+  fi
+
+  (
+    cd "$SRC_DIR" || exit 1
+    dotnet build "$SLN_FILE" -c "$CONFIG" --no-restore -v "$MSBUILD_VERBOSITY" || exit 1
+    MSBUILDDISABLENODEREUSE=1 dotnet test \
+      --max-parallel-test-modules "$MAX_PARALLEL_TEST_MODULES" \
+      --solution "$SLN_FILE" \
+      -c "$CONFIG" \
+      --no-build --no-restore
+  ) || { _assert_exec; return; }
   _assert_exec
 }
 
 test_ci() {
   _step "Running tests (skipping tests requiring local infrastructure)"
+  # No --max-parallel-test-modules here: --filter is translated into an MSBuild VSTestTestCaseFilter
+  # property, which puts `dotnet test` back on the MSBuild driver where the MTP module-parallelism
+  # switch is not recognised (MSB1001). CI runners are expected to have enough resources; the
+  # per-assembly concurrency is capped by src/Tests/xunit.runner.json anyway.
   ( cd "$SRC_DIR" && dotnet test "$SLN_FILE" --filter "Category!=Local" ) || { _assert_exec; return; }
   _assert_exec
 }

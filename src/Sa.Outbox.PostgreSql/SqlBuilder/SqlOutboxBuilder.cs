@@ -12,13 +12,9 @@ internal sealed class SqlOutboxBuilder(
     PgOutboxTableSettings settings,
     ObjectPool<StringBuilder> objectPool)
 {
-    internal PgOutboxTableSettings Settings => settings;
+    internal PgOutboxTableSettings TableSettings => settings;
 
-    /// <summary>
-    /// Delivery status codes that are eligible for processing (Pending + all recoverable states).
-    /// Must match the IN clause in SqlLockAndSelect.
-    /// </summary>
-    private static string LockAndSelectStatusCodes =>
+    private static readonly string LockAndSelectStatusCodes =
         $"{(int)DeliveryStatusCode.Pending}," +
         $"{(int)DeliveryStatusCode.Processing}," +
         $"{(int)DeliveryStatusCode.Postpone}," +
@@ -44,10 +40,15 @@ FROM STDIN (FORMAT BINARY)
 
 
 
+    // NB: the WHERE of `locked_tasks` must stay in sync with the WHERE of the final
+    // SELECT ... JOIN. If a row is locked + flipped to Processing here but filtered out
+    // there, the task is stranded in Processing with no delivery record and no payload
+    // handed to the consumer. `msg_created_at` is denormalized in the task table, so the
+    // message-side predicate can be mirrored here.
     public readonly string SqlLockAndSelect =
 $"""
 WITH locked_tasks AS (
-  SELECT 
+  SELECT
     t.{settings.TaskQueue.Fields.TaskId},
     t.{settings.TaskQueue.Fields.TenantId},
     t.{settings.TaskQueue.Fields.ConsumerGroup},
@@ -57,6 +58,7 @@ WITH locked_tasks AS (
     t.{settings.TaskQueue.Fields.TenantId} = {SqlParam.TenantId}
     AND t.{settings.TaskQueue.Fields.ConsumerGroup} = {SqlParam.ConsumerGroupId}
     AND t.{settings.TaskQueue.Fields.TaskCreatedAt} >= {SqlParam.FromDate}
+    AND t.{settings.TaskQueue.Fields.MsgCreatedAt} >= {SqlParam.FromDate}
     AND t.{settings.TaskQueue.Fields.DeliveryStatusCode} IN (
       {LockAndSelectStatusCodes}
     )
@@ -74,11 +76,11 @@ updated_tasks AS (
     {settings.TaskQueue.Fields.TaskTransactId} = {SqlParam.TransactId},
     {settings.TaskQueue.Fields.TaskLockExpiresOn} = {SqlParam.LockExpiresOn}
   FROM locked_tasks nt
-  WHERE 
-    t.{settings.TaskQueue.Fields.TaskId} = nt.{settings.TaskQueue.Fields.TaskId} 
+  WHERE
+    t.{settings.TaskQueue.Fields.TaskId} = nt.{settings.TaskQueue.Fields.TaskId}
     AND t.{settings.TaskQueue.Fields.TenantId} = nt.{settings.TaskQueue.Fields.TenantId}
     AND t.{settings.TaskQueue.Fields.ConsumerGroup} = nt.{settings.TaskQueue.Fields.ConsumerGroup}
-  RETURNING 
+  RETURNING
     t.{settings.TaskQueue.Fields.TaskId},
     t.{settings.TaskQueue.Fields.TenantId},
     t.{settings.TaskQueue.Fields.ConsumerGroup},
@@ -95,13 +97,13 @@ updated_tasks AS (
     t.{settings.TaskQueue.Fields.ErrorId},
     t.{settings.TaskQueue.Fields.TaskCreatedAt}
 )
-SELECT 
+SELECT
   ut.*,
   m.{settings.Message.Fields.MsgPayload}
 FROM updated_tasks ut
 INNER JOIN {settings.GetQualifiedMsgTableName()} m
   ON ut.{settings.TaskQueue.Fields.MsgId} = m.{settings.Message.Fields.MsgId}
-WHERE 
+WHERE
   m.{settings.Message.Fields.TenantId} = {SqlParam.TenantId}
   AND m.{settings.Message.Fields.MsgPart} = {SqlParam.MsgPart}
   AND m.{settings.Message.Fields.MsgCreatedAt}>={SqlParam.FromDate}
@@ -115,13 +117,13 @@ ORDER BY ut.{settings.TaskQueue.Fields.TaskId}
 $"""
 UPDATE {settings.GetQualifiedTaskTableName()}
 SET {settings.TaskQueue.Fields.TaskLockExpiresOn}={SqlParam.LockExpiresOn}
-WHERE 
+WHERE
   {settings.TaskQueue.Fields.TenantId}={SqlParam.TenantId}
   AND {settings.TaskQueue.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId}
   AND {settings.TaskQueue.Fields.TaskCreatedAt}>={SqlParam.FromDate}
   AND {settings.TaskQueue.Fields.DeliveryStatusCode}={(int)DeliveryStatusCode.Processing}
   AND {settings.TaskQueue.Fields.TaskTransactId}={SqlParam.TransactId}
-  AND {settings.Message.Fields.MsgPayloadType}={SqlParam.TypeId}
+  AND {settings.TaskQueue.Fields.MsgPayloadType}={SqlParam.TypeId}
   AND {settings.TaskQueue.Fields.TaskLockExpiresOn}>{SqlParam.NowDate}
 ;
 """;
@@ -156,7 +158,7 @@ SELECT {settings.Message.Fields.TenantId} FROM ranked WHERE rn = 1;
 
     public readonly string SqlInsertType =
 $"""
-INSERT INTO {settings.GetQualifiedTypeTableName()} 
+INSERT INTO {settings.GetQualifiedTypeTableName()}
   ({settings.Type.Fields.TypeId},{settings.Type.Fields.TypeName})
 VALUES
   ({SqlParam.TypeId},{SqlParam.TypeName})
@@ -181,9 +183,9 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
 
     public readonly string SqlInsertOffset =
 $"""
-INSERT INTO {settings.GetQualifiedOffsetTableName()} 
+INSERT INTO {settings.GetQualifiedOffsetTableName()}
   ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId},{settings.Offset.Fields.GroupOffset})
-VALUES 
+VALUES
   ({SqlParam.ConsumerGroupId},{SqlParam.TenantId},{SqlParam.Offset})
 ON CONFLICT ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId}) DO NOTHING;
 ;
@@ -203,10 +205,10 @@ WHERE
 
     public readonly string SqlUpdateOffset = $"""
 UPDATE {settings.GetQualifiedOffsetTableName()}
-SET 
+SET
   {settings.Offset.Fields.GroupOffset}={SqlParam.Offset},
   {settings.Offset.Fields.GroupUpdatedAt}=NOW()
-WHERE 
+WHERE
   {settings.Offset.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId}
   AND {settings.Offset.Fields.TenantId}={SqlParam.TenantId}
 ;
@@ -214,16 +216,16 @@ WHERE
 
 
     public readonly string SqlInitOffset = $"""
-INSERT INTO {settings.GetQualifiedOffsetTableName()} 
+INSERT INTO {settings.GetQualifiedOffsetTableName()}
   ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId},{settings.Offset.Fields.GroupOffset})
-VALUES 
+VALUES
   ({SqlParam.ConsumerGroupId},{SqlParam.TenantId},{SqlParam.Offset})
 ON CONFLICT ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId}) DO NOTHING
 ;
 """;
 
 
-    public readonly string SqlLockOffset = $"SELECT pg_advisory_xact_lock({SqlParam.LockOffset});";
+    public readonly string SqlLockOffset = $"SELECT pg_advisory_xact_lock(@lck_id);";
 
 
     public readonly string SqlLoadConsumerGroup = $"""
@@ -271,7 +273,7 @@ FROM inserted_rows
 
     private string SqlError(PgOutboxTableSettings settings, int count) =>
 $"""
-INSERT INTO {settings.GetQualifiedErrorTableName()} 
+INSERT INTO {settings.GetQualifiedErrorTableName()}
   ({settings.Error.Fields.ErrorId},{settings.Error.Fields.ErrorType},{settings.Error.Fields.ErrorMessage},{settings.Error.Fields.ErrorCreatedAt})
 VALUES
 {BuildErrorInsertValues(count)}
@@ -284,14 +286,9 @@ ON CONFLICT DO NOTHING
         var sb = objectPool.Get();
         try
         {
-
             for (int i = 0; i < count; i++)
             {
-                if (i > 0)
-                {
-                    sb.Append(',');
-                    sb.Append('\n');
-                }
+                if (i > 0) sb.Append(",\n");
 
                 sb.Append('(')
                   .Append(SqlParam.ErrorId).Append(i)
@@ -313,6 +310,12 @@ ON CONFLICT DO NOTHING
     }
 
 
+    // NB: the `delivery_attempt` CASE below deliberately exempts `Postpone` (103) from the attempt
+    // counter. Deferral is fully consumer-governed: the consumer decides when — and whether — to give
+    // up, so `MaxDeliveryAttempts` applies to failures (Warn), not to postponements. A consumer that
+    // postpones indefinitely owns the dead-lettering decision itself: it must eventually call
+    // Error/Error5xx (terminal) or start failing, at which point MaxDeliveryAttempts takes over.
+    // This is a design decision, not an oversight — do not "fix" it by incrementing for 103 as well.
     public string SqlFinishDelivery(int count) => SqlFinishDelivery(settings, count);
 
 
@@ -343,7 +346,7 @@ UPDATE {settings.GetQualifiedTaskTableName()} task
 SET
   {settings.TaskQueue.Fields.DeliveryId}=inserted.{settings.Delivery.Fields.DeliveryId}
   , {settings.TaskQueue.Fields.DeliveryAttempt}=task.{settings.TaskQueue.Fields.DeliveryAttempt}
-    + CASE WHEN {(int)DeliveryStatusCode.Postpone}<>inserted.{settings.Delivery.Fields.DeliveryStatusCode} 
+    + CASE WHEN {(int)DeliveryStatusCode.Postpone}<>inserted.{settings.Delivery.Fields.DeliveryStatusCode}
         THEN 1
         ELSE 0
       END
@@ -352,9 +355,9 @@ SET
   , {settings.TaskQueue.Fields.DeliveryStatusMessage}=inserted.{settings.Delivery.Fields.DeliveryStatusMessage}
   , {settings.TaskQueue.Fields.DeliveryCreatedAt}=inserted.{settings.Delivery.Fields.DeliveryCreatedAt}
   , {settings.TaskQueue.Fields.TaskLockExpiresOn}=inserted.{settings.Delivery.Fields.TaskLockExpiresOn}
-FROM 
+FROM
   inserted
-WHERE 
+WHERE
   task.{settings.TaskQueue.Fields.TenantId}={SqlParam.TenantId}
   AND task.{settings.TaskQueue.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId}
   AND task.{settings.TaskQueue.Fields.TaskId}=inserted.{settings.Delivery.Fields.TaskId}

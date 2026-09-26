@@ -61,14 +61,16 @@ public sealed record OutboxConsumerSettings(
 
     /// <summary>
     /// Lock duration for record processing (lock TTL).
-    /// Must be greater than TimeSpan.Zero.
+    /// Must be greater than TimeSpan.Zero — a task without a TTL would never become
+    /// re-rentable after a worker crash.
     /// The record is locked from other consumers for this period.
     /// </summary>
     TimeSpan LockDuration,
 
     /// <summary>
     /// Lock renewal interval.
-    /// Must be less than LockDuration and greater than or equal to TimeSpan.Zero.
+    /// Must be greater than TimeSpan.Zero (zero would break the renewal timer) and
+    /// less than LockDuration.
     /// </summary>
     TimeSpan LockRenewal,
 
@@ -130,12 +132,12 @@ public sealed record OutboxConsumerSettings(
         CheckTsNonNeg(nameof(Interval), Interval);
         CheckTsNonNeg(nameof(InitialDelay), InitialDelay);
         CheckTsNonNeg(nameof(IterationDelay), IterationDelay);
-        CheckTsNonNeg(nameof(LockDuration), LockDuration);
         CheckTsNonNeg(nameof(LockRenewal), LockRenewal);
         CheckTsNonNeg(nameof(BatchingWindow), BatchingWindow);
         CheckTsNonNeg(nameof(PerTenantTimeout), PerTenantTimeout);
 
         // TimeSpans: strictly positive (> Zero)
+        CheckTsPos(nameof(LockDuration), LockDuration);
         CheckTsPos(nameof(LookbackInterval), LookbackInterval);
 
         // Integers: non-negative (>= 0)
@@ -155,8 +157,9 @@ public sealed record OutboxConsumerSettings(
             errors.Add(
                 "PerTenantMaxDegreeOfParallelism cannot be 0. Use 1 for sequential or > 1 for parallel.");
 
-        if (LockRenewal >= LockDuration)
-            errors.Add($"LockRenewal ({LockRenewal}) must be less than LockDuration ({LockDuration}).");
+        if (LockRenewal <= TimeSpan.Zero || LockRenewal >= LockDuration)
+            errors.Add(
+                $"LockRenewal ({LockRenewal}) must be greater than TimeSpan.Zero and less than LockDuration ({LockDuration}).");
 
         void CheckTsNonNeg(string name, TimeSpan ts)
         {

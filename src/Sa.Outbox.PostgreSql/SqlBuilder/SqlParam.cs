@@ -1,5 +1,11 @@
 ﻿namespace Sa.Outbox.PostgreSql.SqlBuilder;
 
+/// <summary>
+/// Named constants for every SQL parameter placeholder used across the SqlBuilder templates.
+/// Each constant is a short mnemonic alias (e.g. <c>@tnt</c> for tenant id) that is injected
+/// into interpolated SQL strings at construction time and later resolved to real values by
+/// Npgsql parameter-adding extension methods.
+/// </summary>
 internal static class SqlParam
 {
     public const string TenantId = "@tnt";

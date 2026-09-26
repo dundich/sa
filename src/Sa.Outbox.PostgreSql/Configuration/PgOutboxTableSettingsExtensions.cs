@@ -3,46 +3,73 @@
 public static class PgOutboxTableSettingsExtensions
 {
     /// <summary>
+    /// Escapes a PostgreSQL identifier by wrapping it in double quotes and doubling any internal quotes.
+    /// Throws <see cref="ArgumentException"/> if the identifier contains characters that cannot be safely escaped
+    /// (newline, backslash, or unpaired quote).
+    /// </summary>
+    public static string EscapeIdentifier(this string identifier)
+    {
+        if (string.IsNullOrEmpty(identifier))
+            throw new ArgumentException("Identifier cannot be null or empty.", nameof(identifier));
+
+        // PostgreSQL identifiers must not contain newline or backslash even inside quotes.
+        if (identifier.IndexOfAny(['\n', '\r', '\\']) >= 0)
+            throw new ArgumentException(
+                $"Identifier '{identifier}' contains characters that cannot be safely quoted.",
+                nameof(identifier));
+
+        var sb = new System.Text.StringBuilder(identifier.Length + 4);
+        sb.Append('"');
+        foreach (char c in identifier)
+        {
+            sb.Append(c == '"' ? "''" : c.ToString());
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Gets the fully qualified name of the Outbox table, including the schema.
+    /// Names are safely quoted to prevent SQL injection.
     /// </summary>
     /// <returns>The qualified name of the Outbox table.</returns>
     public static string GetQualifiedMsgTableName(this PgOutboxTableSettings settings)
-        => $@"{settings.DatabaseSchemaName}.""{settings.Message.TableName}""";
+        => $"{settings.DatabaseSchemaName.EscapeIdentifier()}.{settings.Message.TableName.EscapeIdentifier()}";
 
     /// <summary>
     /// Gets the fully qualified name of the delivery table, including the schema.
     /// </summary>
     /// <returns>The qualified name of the delivery table.</returns>
     public static string GetQualifiedDeliveryTableName(this PgOutboxTableSettings settings)
-        => $@"{settings.DatabaseSchemaName}.""{settings.Delivery.TableName}""";
+        => $"{settings.DatabaseSchemaName.EscapeIdentifier()}.{settings.Delivery.TableName.EscapeIdentifier()}";
 
     /// <summary>
     /// Gets the fully qualified name of the type table, including the schema.
     /// </summary>
     /// <returns>The qualified name of the type table.</returns>
     public static string GetQualifiedTypeTableName(this PgOutboxTableSettings settings)
-        => $@"{settings.DatabaseSchemaName}.""{settings.Type.TableName}""";
+        => $"{settings.DatabaseSchemaName.EscapeIdentifier()}.{settings.Type.TableName.EscapeIdentifier()}";
 
     /// <summary>
     /// Gets the fully qualified name of the offset table, including the schema.
     /// </summary>
     /// <returns>The qualified name of the offset table.</returns>
     public static string GetQualifiedOffsetTableName(this PgOutboxTableSettings settings)
-        => $@"{settings.DatabaseSchemaName}.""{settings.Offset.TableName}""";
+        => $"{settings.DatabaseSchemaName.EscapeIdentifier()}.{settings.Offset.TableName.EscapeIdentifier()}";
 
     /// <summary>
     /// Gets the fully qualified name of the error table, including the schema.
     /// </summary>
     /// <returns>The qualified name of the error table.</returns>
     public static string GetQualifiedErrorTableName(this PgOutboxTableSettings settings)
-        => $@"{settings.DatabaseSchemaName}.""{settings.Error.TableName}""";
+        => $"{settings.DatabaseSchemaName.EscapeIdentifier()}.{settings.Error.TableName.EscapeIdentifier()}";
 
     /// <summary>
     /// Gets the fully qualified name of the task table, including the schema.
     /// </summary>
     /// <returns>The qualified name of the task table.</returns>
     public static string GetQualifiedTaskTableName(this PgOutboxTableSettings settings)
-        => $@"{settings.DatabaseSchemaName}.""{settings.TaskQueue.TableName}""";
+        => $"{settings.DatabaseSchemaName.EscapeIdentifier()}.{settings.TaskQueue.TableName.EscapeIdentifier()}";
 
     /// <summary>
     /// Configures all table names based on a single base table name.
