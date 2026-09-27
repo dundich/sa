@@ -37,14 +37,12 @@ jobs:
       run: ./build-sh/do-build.sh
 
     # Full suite — Docker is available on ubuntu-latest for the Testcontainers fixtures.
-    # Exit code 8 means "a module discovered no tests": the three fixture projects under
-    # src/Tests/Fixtures are part of the solution and run as empty modules (see AGENTS.md).
-    # Ignore 8 — test failures (2) and infrastructure errors (10) stay fatal.
+    # The exit code is the run's verdict: fixture projects under src/Tests/Fixtures are
+    # excluded from test-module discovery (IsTestingPlatformApplication=false in their
+    # .csproj), so no empty module can end the run with MTP exit code 8 (see AGENTS.md).
     - name: Test (full suite)
       if: runner.os == 'Linux'
       shell: bash
-      env:
-        TESTINGPLATFORM_EXITCODE_IGNORE: 8
       run: ./build-sh/do-test.sh
 
     # windows-latest has no Docker, so the Testcontainers suites cannot run there: this leg
