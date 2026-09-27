@@ -4,6 +4,12 @@ namespace Sa.Utils.WorkQueue;
 /// Thrown by <see cref="ISaWorkQueue{TInput}.Enqueue"/> or <see cref="ISaWorkQueue{TInput}.EnqueueMany"/>
 /// when the queue buffer is full and the queue is configured with <see cref="SaEnqueueStrategy.Throw"/>.
 /// </summary>
+/// <remarks>
+/// The details (<see cref="QueueCapacity"/>, <see cref="QueuedCount"/>, <see cref="ItemDisplayName"/>,
+/// <see cref="AcceptedCount"/>, <see cref="TotalCount"/>) are populated only when the queue itself
+/// raises the exception. An instance created through the public constructors carries a custom or
+/// default message and no queue details — do not read the numeric properties as "the buffer was empty".
+/// </remarks>
 public class SaWorkQueueFullException : Exception
 {
     /// <summary>Initializes a new instance with the default message.</summary>
@@ -36,16 +42,16 @@ public class SaWorkQueueFullException : Exception
     }
 
     /// <summary>Gets the capacity of the queue buffer.</summary>
-    public int QueueCapacity { get; private set; }
+    public int QueueCapacity { get; init; }
 
     /// <summary>Gets the number of items in the buffer when the failure was raised (equal to <see cref="QueueCapacity"/> when full).</summary>
-    public int QueuedCount { get; private set; }
+    public int QueuedCount { get; init; }
 
     /// <summary>Gets the display name of the item that could not be enqueued (single-item <see cref="ISaWorkQueue{TInput}.Enqueue"/> only).</summary>
-    public string? ItemDisplayName { get; private set; }
+    public string? ItemDisplayName { get; init; }
 
     /// <summary>Gets the number of items accepted before the buffer became full (<see cref="ISaWorkQueue{TInput}.EnqueueMany"/> only).</summary>
-    public int? AcceptedCount { get; private set; }
+    public int? AcceptedCount { get; init; }
 
     /// <summary>
     /// Gets the total number of items attempted when the failure was raised
@@ -53,5 +59,5 @@ public class SaWorkQueueFullException : Exception
     /// <see cref="AcceptedCount"/> plus the item that could not be enqueued; items later in
     /// the collection were never enumerated.
     /// </summary>
-    public int? TotalCount { get; private set; }
+    public int? TotalCount { get; init; }
 }

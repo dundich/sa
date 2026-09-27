@@ -17,8 +17,8 @@ public enum SaEnqueueStrategy
     /// </summary>
     /// <remarks>
     /// Useful for fire-and-forget producers (metrics, telemetry, logs) where back-pressure is unacceptable.
-    /// Dropped items are not reported via the status callback and are not counted in
-    /// <see cref="ISaWorkQueue{TInput}.QueueTasks"/>.
+    /// Dropped items are reported as <see cref="SaWorkStatus.Skipped"/> via the status callback
+    /// and are not counted in <see cref="ISaWorkQueue{TInput}.QueueTasks"/>.
     /// </remarks>
     Skip = 1,
 

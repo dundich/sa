@@ -45,6 +45,22 @@ public sealed class WorkQueueStabilityTests
         }
     }
 
+    private sealed class GateIgnoringProcessor : ISaWork<int>
+    {
+        // Unlike GateProcessor, this one never observes ct: it models a
+        // processor that stays stuck in its work long after its reader was
+        // cancelled, so the reader's finally block runs late.
+        public readonly TaskCompletionSource Gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _processed;
+        public int Processed => Volatile.Read(ref _processed);
+
+        public async Task Execute(int input, CancellationToken ct)
+        {
+            await Gate.Task;
+            Interlocked.Increment(ref _processed);
+        }
+    }
+
     [Fact]
     public async Task WaitForIdle_DuringShutdown_CompletesNormally()
     {
@@ -460,5 +476,165 @@ public sealed class WorkQueueStabilityTests
         Assert.Equal(0, queue.ConcurrencyLimit);
         Assert.Equal(2, cancelled); // Force cancel stays hard even in soft mode
         Assert.Equal(0, processor.Processed);
+    }
+
+    [Fact]
+    public async Task ForceCancelReaders_RacingLimitReArm_DyingReadersDoNotEatNewLimit()
+    {
+        // The JobScheduler pattern: an emergency stop is fired from a background
+        // task while the main path re-arms the limit. The in-flight work ignores
+        // cancellation, so the cancelled readers are still alive (their finally
+        // has not run) at re-arm time — and it was exactly that late finally
+        // that used to decrement the freshly assigned limit to 0.
+        var processor = new GateIgnoringProcessor();
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(4)
+                .WithMaxConcurrency(4)
+                .WithShutdownTimeout(TimeSpan.FromSeconds(5)));
+
+        for (var i = 1; i <= 4; i++)
+        {
+            await queue.Enqueue(i, TestToken);
+        }
+        await Task.Delay(100, TestToken); // all four readers are stuck in the work
+
+        var cancel = Task.Run(async () =>
+        {
+            try
+            {
+                await queue.ForceCancelReadersAsync(timeout: TimeSpan.FromMilliseconds(300), ct: TestToken);
+            }
+            catch (TimeoutException)
+            {
+                // Expected: the stuck readers do not finish within the bounded wait.
+            }
+        }, TestToken);
+        await Task.Delay(150, TestToken); // the force-cancel accounting has landed
+
+        // Re-arm while the cancelled readers are still dying.
+        queue.ConcurrencyLimit = 4;
+        await Task.Delay(200, TestToken); // let the dying readers reach their finally
+
+        processor.Gate.TrySetResult(); // release the stuck work
+        await cancel;
+
+        // The four dying readers must not eat the limit the caller just set.
+        Assert.Equal(4, queue.ConcurrencyLimit);
+
+        // And the pool must be usable again: the restored readers process new work.
+        await queue.Enqueue(5, TestToken);
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.True(queue.IsIdle());
+        // The four stuck items completed once the gate opened (the processor
+        // ignores cancellation), plus the new item 5.
+        Assert.Equal(5, processor.Processed);
+    }
+
+    [Fact]
+    public async Task WaitForIdle_FailIfPaused_ThrowsWhenExplicitlyPausedWithPendingWork()
+    {
+        var processor = new BlockingProcessor();
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor).WithConcurrencyLimit(1));
+
+        await queue.Enqueue(1, TestToken);
+        await Task.Delay(50, TestToken); // reader picks up item 1 and blocks on the gate
+        await queue.Enqueue(2, TestToken); // item 2 stays in the channel
+
+        queue.ConcurrencyLimit = 0; // explicit pause
+        await Task.Delay(50, TestToken);
+
+        // failIfPaused turns the silent no-progress into an error for callers
+        // that must not proceed without progress.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => queue.WaitForIdleAsync(TestToken, failIfPaused: true));
+
+        // The default keeps the old behavior: return immediately, no throw.
+        var wait = queue.WaitForIdleAsync(TestToken);
+        var completed = await Task.WhenAny(wait, Task.Delay(500, TestToken));
+        Assert.True(ReferenceEquals(completed, wait),
+            "WaitForIdleAsync must return immediately while paused");
+        await wait;
+
+        // Resume: a real wait happens again and must not throw.
+        processor.Gate.TrySetResult(); // item 2's replacement reader must not block
+        queue.ConcurrencyLimit = 1;
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.True(queue.IsIdle());
+        // Only item 2 completed; item 1 was cancelled by the pause.
+        Assert.Equal(1, processor.Processed);
+    }
+
+    [Fact]
+    public async Task WaitForIdle_FailIfPaused_IdleQueue_ReturnsImmediately()
+    {
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(new CountingProcessor()).WithConcurrencyLimit(1));
+
+        // No work at all: the wait returns immediately regardless of the flag.
+        await queue.WaitForIdleAsync(TestToken, failIfPaused: true);
+
+        // Paused but still idle: there is no pending work to complain about.
+        queue.ConcurrencyLimit = 0;
+        await queue.WaitForIdleAsync(TestToken, failIfPaused: true);
+
+        Assert.True(queue.IsIdle());
+    }
+
+    [Fact]
+    public async Task WaitForIdle_NoReaders_AfterForceCancel_ReturnsInsteadOfHanging()
+    {
+        // The pool can also become empty without an explicit pause: every reader
+        // force-cancelled (or lost to a fault) and nobody re-arms it. The queue
+        // is Active and accepts items, but no reader can ever drain them — the
+        // wait must report the state instead of blocking forever.
+        var processor = new CountingProcessor();
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(2)
+                .WithMaxConcurrency(4));
+
+        await queue.ForceCancelReadersAsync(ct: TestToken);
+        await queue.Enqueue(1, TestToken); // accepted, but no readers can drain it
+
+        var wait = queue.WaitForIdleAsync(TestToken);
+        var completed = await Task.WhenAny(wait, Task.Delay(500, TestToken));
+        Assert.True(ReferenceEquals(completed, wait),
+            "WaitForIdleAsync must not block while the queue has no live readers");
+        await wait;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => queue.WaitForIdleAsync(TestToken, failIfPaused: true));
+
+        // Re-arming the limit restores the real wait and the pool.
+        queue.ConcurrencyLimit = 2;
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.True(queue.IsIdle());
+        Assert.Equal(1, processor.Processed);
+    }
+
+    [Fact]
+    public async Task WaitForIdle_PausedAtConstruction_ReturnsInsteadOfHanging()
+    {
+        // A queue created already paused never spawns readers; pending items
+        // can never be processed, so the wait must not hang for them.
+        var processor = new CountingProcessor();
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor).WithConcurrencyLimit(0));
+
+        await queue.Enqueue(1, TestToken); // accepted, no readers ever
+
+        var wait = queue.WaitForIdleAsync(TestToken);
+        var completed = await Task.WhenAny(wait, Task.Delay(500, TestToken));
+        Assert.True(ReferenceEquals(completed, wait));
+        await wait;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => queue.WaitForIdleAsync(TestToken, failIfPaused: true));
+
+        queue.ConcurrencyLimit = 1;
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.Equal(1, processor.Processed);
     }
 }

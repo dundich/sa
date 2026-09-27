@@ -1,5 +1,16 @@
 ﻿namespace Sa.Utils.WorkQueue;
 
+/// <summary>
+/// Immutable options for <see cref="SaWorkQueue{TInput}"/>.
+/// </summary>
+/// <remarks>
+/// The <c>With*</c> methods validate eagerly and are the preferred way to build options.
+/// The primary constructor is public, so its arguments bypass those guards: the queue
+/// constructor re-validates everything (<c>ConcurrencyLimit</c> must not be negative,
+/// <c>QueueCapacity</c> must be at least 1, <c>ShutdownTimeout</c> must be positive) and throws
+/// <see cref="ArgumentOutOfRangeException"/> before creating the channel. Either way, an invalid
+/// value fails the same way.
+/// </remarks>
 public sealed record SaWorkQueueOptions<TInput>(
     ISaWork<TInput> Processor,
     int? QueueCapacity = null,
@@ -100,10 +111,17 @@ public sealed record SaWorkQueueOptions<TInput>(
     /// <summary>Creates options from a delegate that processes a single item.</summary>
     /// <param name="process">Async delegate that receives the item and a cancellation token.</param>
     public static SaWorkQueueOptions<TInput> Create(Func<TInput, CancellationToken, Task> process)
-        => new(new DelegatingWork(process));
+    {
+        ArgumentNullException.ThrowIfNull(process);
+        return new(new DelegatingWork(process));
+    }
 
     /// <summary>Creates options from an <see cref="ISaWork{TInput}"/> processor.</summary>
-    public static SaWorkQueueOptions<TInput> Create(ISaWork<TInput> processor) => new(processor);
+    public static SaWorkQueueOptions<TInput> Create(ISaWork<TInput> processor)
+    {
+        ArgumentNullException.ThrowIfNull(processor);
+        return new(processor);
+    }
 
     // Helper adapter from delegate to ISaWork
     private sealed class DelegatingWork(Func<TInput, CancellationToken, Task> process) : ISaWork<TInput>

@@ -148,13 +148,26 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Asynchronously waits until all currently queued and in-progress tasks have completed.
-    /// Returns immediately if the queue is already idle, or if it is paused
-    /// (<see cref="ConcurrencyLimit"/> is <c>0</c>) with pending items that no reader can process.
+    /// Returns immediately if the queue is already idle, or if it is explicitly paused
+    /// (<see cref="ConcurrencyLimit"/> was set to <c>0</c>) with pending items that no reader can process.
     /// </summary>
     /// <param name="cancellationToken">Token to cancel the wait. The wait can be resumed by calling again.</param>
+    /// <param name="failIfPaused">
+    /// When <see langword="true" /> and the queue is explicitly paused with pending items, throws
+    /// <see cref="InvalidOperationException"/> instead of returning. Use it when continuing without
+    /// progress is an error for the caller (for example, a "stop and wait for completion" path);
+    /// leave it <see langword="false" /> to treat a paused queue as "not idle, and never will be".
+    /// An emergency reader loss (<see cref="ForceCancelReaders"/>, a <see cref="SaExecutionErrorStrategy.StopReader"/>
+    /// fault) is <em>not</em> a pause: the wait keeps waiting, and replacement readers can still drain the queue.
+    /// </param>
     /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled.</exception>
+    /// <exception cref="InvalidOperationException">If the queue is explicitly paused and <paramref name="failIfPaused"/> is <see langword="true" />.</exception>
     /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
-    Task WaitForIdleAsync(CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// An idle queue returns immediately regardless of <paramref name="failIfPaused"/> —
+    /// only pending work combined with an explicit pause is reported.
+    /// </remarks>
+    Task WaitForIdleAsync(CancellationToken cancellationToken = default, bool failIfPaused = false);
 
     /// <summary>
     /// Shuts down the queue: cancels all readers (in-flight work is interrupted, not finished),
@@ -164,6 +177,12 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// Subsequent calls to <see cref="Enqueue"/> will throw <see cref="InvalidOperationException"/>.
     /// This method is idempotent.
     /// </summary>
+    /// <remarks>
+    /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/>: the calling reader is
+    /// one of the tasks being awaited, so the call blocks for the full
+    /// <see cref="SaWorkQueueOptions{TInput}.ShutdownTimeout"/> (30 s by default) and only then
+    /// returns. Hand the work off to a background task instead (see <c>JobScheduler.AbortJob</c>).
+    /// </remarks>
     Task ShutdownAsync();
 
     /// <summary>
@@ -172,6 +191,10 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// (bounded by the shutdown timeout, default 30 s).
     /// This method is idempotent.
     /// </summary>
+    /// <remarks>
+    /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/> — see
+    /// <see cref="ShutdownAsync"/> for why, and use a background task instead.
+    /// </remarks>
     void Shutdown();
 
     /// <summary>
@@ -183,6 +206,9 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <remarks>
     /// Always interrupts in-flight work (<see cref="SaWorkStatus.Cancelled"/>) even when the queue
     /// is configured with <see cref="SaReaderCancelMode.Soft"/>.
+    /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/>: the calling reader is
+    /// one of the tasks being awaited, so the call blocks for the full
+    /// <see cref="SaWorkQueueOptions{TInput}.ShutdownTimeout"/>. Use a background task instead.
     /// </remarks>
     void ForceCancelReaders();
 
@@ -198,6 +224,9 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <remarks>
     /// Always interrupts in-flight work (<see cref="SaWorkStatus.Cancelled"/>) even when the queue
     /// is configured with <see cref="SaReaderCancelMode.Soft"/>.
+    /// Never <c>await</c> this from inside <see cref="ISaWork{TInput}.Execute"/> without first
+    /// hopping to a background task: the calling reader is one of the tasks being awaited,
+    /// so the await can never complete on its own.
     /// </remarks>
     Task ForceCancelReadersAsync(TimeSpan? timeout = null, CancellationToken ct = default);
 }

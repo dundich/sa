@@ -33,6 +33,11 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     // Current concurrency limit, set by the user.
     private volatile int _concurrency;
+    // True only while the limit is explicitly 0. Distinguishes an intentional
+    // pause from an emergency reader loss (where the effective limit also drops
+    // to 0 but the queue was never paused), so WaitForIdleAsync can tell
+    // "nobody will ever drain this" from "the pool is temporarily gone".
+    private volatile bool _paused;
     // Underlying int of <see cref="QueueState"/>. Written only through
     // Interlocked, read only through Volatile.Read, so the state is observed
     // consistently across threads (a plain field read would not be volatile
@@ -78,7 +83,30 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public SaWorkQueue(SaWorkQueueOptions<TInput> options, ILogger<SaWorkQueue<TInput>>? logger = null)
     {
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(options.Processor);
+
+        // The options record has a public primary constructor, so the guards of the
+        // With* builders can be bypassed entirely. Validate once here, before the
+        // channel is created, so an invalid value fails the same way regardless of
+        // how the options were assembled.
+        if (options.ConcurrencyLimit < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ConcurrencyLimit), options.ConcurrencyLimit, "Concurrency limit must be 0 (paused) or positive.");
+        }
+
+        if (options.QueueCapacity is < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.QueueCapacity), options.QueueCapacity, "Queue capacity must be at least 1.");
+        }
+
+        if (options.ShutdownTimeout is { } shutdownTimeout && shutdownTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ShutdownTimeout), shutdownTimeout, "Shutdown timeout must be positive.");
+        }
 
         _logger = logger;
         _processor = options.Processor;
@@ -86,6 +114,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         _maxConcurrency = options.MaxConcurrency > 0 ? options.MaxConcurrency.Value : Environment.ProcessorCount;
         _concurrency = Math.Clamp(options.ConcurrencyLimit ?? Environment.ProcessorCount, 0, _maxConcurrency);
+        _paused = _concurrency == 0;
         _queueCapacity = options.QueueCapacity ?? _maxConcurrency;
 
         _cancellationOrder = options.ReaderCancellationOrder;
@@ -132,6 +161,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             lock (_readersSync)
             {
                 _concurrency = newLimit;
+                _paused = newLimit == 0;
 
                 if (IsEnabled)
                 {
@@ -299,7 +329,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         return false;
     }
 
-    public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
+    public async Task WaitForIdleAsync(CancellationToken cancellationToken = default, bool failIfPaused = false)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _state) == (int)QueueState.Disposed, this);
 
@@ -312,12 +342,24 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                 tcs = _idleTcs;
             }
 
-            // Work is still queued but the effective concurrency is 0: no readers
-            // exist, so the queue can never drain on its own. Skip the wait and
-            // return immediately instead of blocking forever for an idle state
-            // that cannot be reached while paused.
-            if (_concurrency == 0)
+            // Work is still pending and the queue is explicitly paused: no readers
+            // exist, so it can never drain on its own. Returning immediately is
+            // the default (the caller asked "is it idle?", and the honest answer
+            // is "no, and it never will be"); failIfPaused turns the silent
+            // no-progress into an error for callers that must not proceed.
+            if (_paused)
             {
+                if (failIfPaused) ThrowHelper.QueuePaused();
+                return;
+            }
+
+            // Same deadlock, different cause: the queue is active but the reader
+            // pool is empty — every reader was force-cancelled or lost to a
+            // fault, and nothing re-arms it. Waiting would block forever, so
+            // report the state instead of hanging.
+            if (IsEnabled && !HasLiveReaders())
+            {
+                if (failIfPaused) ThrowHelper.QueueHasNoReaders();
                 return;
             }
 
@@ -335,6 +377,18 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
     }
 
+    /// <summary>
+    /// Whether any reader is still alive: tracked minus the ones already
+    /// cancelled and not yet reaped.
+    /// </summary>
+    private bool HasLiveReaders()
+    {
+        lock (_readersSync)
+        {
+            return _ctsReaders.Count - _pendingRemovals > 0;
+        }
+    }
+
     public void ForceCancelReaders()
     {
         if (!IsEnabled) return;
@@ -348,7 +402,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             Task.WaitAll(tasks, _shutdownTimeout);
         }
 
-        DrainAndResetIdle();
+        DrainAndResetIdle(SaWorkDrainReason.ForceCancel);
     }
 
     public async Task ForceCancelReadersAsync(TimeSpan? timeout = null, CancellationToken ct = default)
@@ -365,7 +419,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                 await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
-        DrainAndResetIdle();
+        DrainAndResetIdle(SaWorkDrainReason.ForceCancel);
     }
 
     /// <summary>
@@ -389,6 +443,29 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         foreach (var (cts, work) in readers)
         {
+            // Account for the removal first, in a single critical section, and
+            // only then signal: this makes the accounting atomic and idempotent
+            // (a reader already planned-removed by a ConcurrencyLimit change, or
+            // already force-cancelled by a concurrent call, is skipped instead
+            // of being counted twice in _pendingRemovals).
+            lock (_readersSync)
+            {
+                if (!_ctsReaders.Contains(cts)) continue;              // already reaped by RemoveReader
+                if (cts.IsCancellationRequested) continue;             // shutdown or another path
+                if (_intentionalRemovals.Contains(cts)) continue;       // planned removal, already accounted for
+                if (!_forceCancelled.Add(cts)) continue;               // already force-cancelled
+
+                _pendingRemovals++;
+
+                // Release the slot now, not when the reader's finally block runs
+                // later: a ConcurrencyLimit assignment in between must not be
+                // eaten by the decrement of a reader that is already gone.
+                if (_concurrency > 0)
+                {
+                    _concurrency--;
+                }
+            }
+
             try
             {
                 cts.Cancel();
@@ -412,18 +489,6 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                     // already reaped by RemoveReader
                 }
             }
-
-            // Request cancellation and record it in the same critical section,
-            // checking the reader is still tracked so a CTS that a concurrent
-            // RemoveReader already reaped is not double-counted in
-            // _pendingRemovals nor re-added to _forceCancelled.
-            lock (_readersSync)
-            {
-                if (!_ctsReaders.Contains(cts))
-                    continue;
-                _forceCancelled.Add(cts);
-                _pendingRemovals++;
-            }
         }
 
         return tasks;
@@ -431,10 +496,16 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     /// <summary>
     /// Drains any items left in the channel, resets <c>_taskCount</c> to zero,
-    /// and resolves the idle TCS. Used by emergency stop so that
+    /// and resolves the idle TCS. Used by shutdown and emergency stop so that
     /// <see cref="IsIdle"/> and <see cref="QueueTasks"/> stay honest.
     /// </summary>
-    private void DrainAndResetIdle()
+    /// <param name="reason">
+    /// Why the items are being dropped. The status stays <see cref="SaWorkStatus.Faulted"/>
+    /// in both cases (consumers already treat it as an error), but the exception text
+    /// must match the cause: a force-cancel does not shut the queue down, and saying
+    /// so would be misleading.
+    /// </param>
+    private void DrainAndResetIdle(SaWorkDrainReason reason)
     {
         while (_queue.Reader.TryRead(out var item))
         {
@@ -452,7 +523,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             // A fresh exception per item so observers can distinguish which
             // work item was dropped by shutdown (the previous shared singleton
             // made every dropped item reference-identical).
-            OnStatusChanged(item.Input, SaWorkStatus.Faulted, ThrowHelper.QueueShutdownException());
+            OnStatusChanged(item.Input, SaWorkStatus.Faulted, ThrowHelper.DroppedException(reason));
             MarkInactive();
         }
 
@@ -552,19 +623,26 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     private static int[] RandomIndices(int totalCount, int toCancel)
     {
-        // Partial Fisher–Yates over the first `toCancel` positions:
-        // O(toCancel) with guaranteed-distinct, uniform result. Rejection
-        // sampling (draw until distinct) degrades toward O(n^2) when
-        // toCancel is close to totalCount.
-        var indices = new int[toCancel];
+        // Partial Fisher–Yates: the swap source must be able to address any of
+        // the `totalCount` live readers, so the buffer is full-sized and only the
+        // first `toCancel` positions are returned. O(totalCount) time and space,
+        // with a guaranteed-distinct, uniform result. Rejection sampling (draw
+        // until distinct) would degrade toward O(n^2) when toCancel approaches
+        // totalCount.
+        var buffer = new int[totalCount];
+        for (var i = 0; i < totalCount; i++)
+        {
+            buffer[i] = i;
+        }
+
         var rng = Random.Shared;
         for (var i = 0; i < toCancel; i++)
         {
             var j = i + rng.Next(totalCount - i);
-            (indices[i], indices[j]) = (indices[j], indices[i]);
+            (buffer[i], buffer[j]) = (buffer[j], buffer[i]);
         }
 
-        return indices;
+        return buffer[..toCancel];
     }
 
     private async Task ReaderLoopAsync(CancellationTokenSource cts, CancellationTokenSource ctsWork)
@@ -659,10 +737,16 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                 _pendingRemovals--;
             }
 
-            // Unplanned termination (StopReader, crash, ForceCancel):
-            // pool capacity decreases; recovery is via manually
+            // Unplanned termination (StopReader, crash): the pool really did
+            // lose a slot, so capacity decreases; recovery is via manually
             // setting ConcurrencyLimit.
-            if (!intentional && _concurrency > 0)
+            //
+            // A tracked reader (planned removal or force-cancel) is NOT counted
+            // here: the setter already lowered _concurrency for a planned
+            // removal, and CancelAndTrackReaders already lowered it for a
+            // force-cancel. Decrementing again would let readers that are still
+            // dying eat a limit the caller set after they were cancelled.
+            if (!intentional && !tracked && _concurrency > 0)
             {
                 _concurrency--;
             }
@@ -800,13 +884,32 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         try
         {
             await _shutdownCts.CancelAsync().ConfigureAwait(false);
-            _queue.Writer.TryComplete();
-            await WaitForReadersToCompleteAsync().ConfigureAwait(false);
-            DrainAndResetIdle();
         }
         catch (Exception ex)
         {
             SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+        }
+
+        // The writer must be completed and the buffer drained even if the
+        // cancellation above faulted (a callback registered by a caller on a
+        // linked token, or a CTS disposed by a racing Dispose). Skipping this
+        // would leave a queue that reports Shutdown while its channel is still
+        // open: buffered items are never reported, _taskCount never reaches 0,
+        // IsIdle() stays false forever, and a producer parked in WriteAsync
+        // (SaEnqueueStrategy.Wait) never completes.
+        _queue.Writer.TryComplete();
+
+        try
+        {
+            await WaitForReadersToCompleteAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+        }
+        finally
+        {
+            DrainAndResetIdle(SaWorkDrainReason.Shutdown);
         }
     }
 
@@ -818,13 +921,27 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         try
         {
             _shutdownCts.Cancel();
-            _queue.Writer.TryComplete();
-            WaitForReadersToComplete();
-            DrainAndResetIdle();
         }
         catch (Exception ex)
         {
             SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+        }
+
+        // See ShutdownAsync: the writer is closed and the buffer drained even if
+        // the cancellation threw.
+        _queue.Writer.TryComplete();
+
+        try
+        {
+            WaitForReadersToComplete();
+        }
+        catch (Exception ex)
+        {
+            SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+        }
+        finally
+        {
+            DrainAndResetIdle(SaWorkDrainReason.Shutdown);
         }
     }
 
