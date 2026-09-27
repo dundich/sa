@@ -27,7 +27,7 @@ public sealed record PgPartBy(
     public static readonly PgPartBy Day = new(
         PartByRange: PartByRange.Day
         , GetRange: static date => date.ToUniversalTime().StartOfDay().RangeTo(date => date.AddDays(1), false)
-        , Fmt: static ts => $"y{ts.Year:0000}m{ts.Month:00}d{ts.Day:00}"
+        , Fmt: static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}d{u.Day:00}")
         , ParseFmt: static str => StrToDate(str, PartByRange.Day)
     );
 
@@ -37,7 +37,7 @@ public sealed record PgPartBy(
     public static readonly PgPartBy Month = new(
         PartByRange: PartByRange.Month
         , GetRange: static date => date.ToUniversalTime().StartOfMonth().RangeTo(date => date.AddMonths(1), false)
-        , Fmt: static ts => $"y{ts.Year:0000}m{ts.Month:00}"
+        , Fmt: static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}")
         , ParseFmt: static str => StrToDate(str, PartByRange.Month)
     );
 
@@ -47,9 +47,17 @@ public sealed record PgPartBy(
     public static readonly PgPartBy Year = new(
         PartByRange: PartByRange.Year
         , GetRange: static date => date.ToUniversalTime().StartOfYear().RangeTo(date => date.AddYears(1), false)
-        , Fmt: static ts => $"y{ts.Year:0000}"
+        , Fmt: static ts => UtcStamp(ts, static u => $"y{u.Year:0000}")
         , ParseFmt: static str => StrToDate(str, PartByRange.Year)
     );
+
+    /// <summary>
+    /// Renders the partition name from a date's <b>UTC</b> calendar parts, matching the UTC range
+    /// produced by <c>GetRange</c>. Using the caller's local parts here would name the partition
+    /// after one day while bounding it by another, and two hosts in different time zones could then
+    /// create two partitions for the same instant.
+    /// </summary>
+    private static string UtcStamp(DateTimeOffset date, Func<DateTimeOffset, string> format) => format(date.ToUniversalTime());
 
 
 
@@ -67,9 +75,9 @@ public sealed record PgPartBy(
     /// <summary>
     /// Resolves a <see cref="PgPartBy"/> instance from a partition name (e.g. <c>"root"</c>, <c>"day"</c>).
     /// </summary>
-    /// <param name="part">The display name of the partition kind.</param>
+    /// <param name="part">The display name of the partition kind; <c>null</c> or an unknown name falls back to <see cref="Part.Root"/>.</param>
     /// <returns>The corresponding <see cref="PgPartBy"/>.</returns>
-    public static PgPartBy FromPartName(string part)
+    public static PgPartBy FromPartName(string? part)
     {
         Part current = Part.TryFromName(part, out Part? item) ? item : Part.Root;
         return FromRange(current.PartBy);

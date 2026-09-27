@@ -1,11 +1,16 @@
-﻿using Sa.Schedule;
+﻿using Sa.Partitional.PostgreSql.Cache;
+using Sa.Schedule;
 
 namespace Sa.Partitional.PostgreSql.Cleaning;
 
-internal sealed class PartCleanupJob(IPartCleanupService cleaningService) : IJob
+internal sealed class PartCleanupJob(IPartCleanupService cleaningService, IPartCache cache) : IJob
 {
-    public Task Execute(IJobContext context, CancellationToken cancellationToken)
+    public async Task Execute(IJobContext context, CancellationToken cancellationToken)
     {
-        return cleaningService.Clean(cancellationToken);
+        await cleaningService.Clean(cancellationToken).ConfigureAwait(false);
+
+        // Dropped partitions are still listed in the snapshot, which would keep InCache
+        // reporting them as present. Unconditional for the same reason as MigrationJob.
+        await cache.RemoveCache().ConfigureAwait(false);
     }
 }

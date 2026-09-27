@@ -15,4 +15,11 @@ internal interface IPartCache
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default);
     Task RemoveCache(string tableName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Drops every cached snapshot, for use after a bulk change — a migration that created
+    /// partitions, or a cleanup that dropped them — which happened without going through
+    /// <see cref="EnsureCache"/> and therefore left the cache holding a stale view.
+    /// </summary>
+    Task RemoveCache();
 }

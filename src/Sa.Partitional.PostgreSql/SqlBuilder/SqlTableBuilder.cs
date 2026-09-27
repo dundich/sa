@@ -15,11 +15,13 @@ internal sealed class SqlTableBuilder(ITableSettings settings) : ISqlTableBuilde
 
     public string CreateSql(DateTimeOffset date, params StrOrNum[] partValues)
     {
+        // "O" (round-trip) keeps the annotating comment culture-independent, so the generated SQL
+        // is byte-identical on every machine.
         if (settings.PartByListFieldNames.Length != partValues.Length)
         {
             return
 $"""
--- {date}
+-- {date:O}
 {rootBuilder.CreateSql()}
 
 -- incomplete number of parts
@@ -30,7 +32,7 @@ $"""
 
         return
 $"""
--- {date}
+-- {date:O}
 {rootBuilder.CreateSql()}
 {partListBuilder.CreateSql(partValues)}
 {partRangeBuilder.CreateSql(date, partValues)}

@@ -33,8 +33,23 @@ public sealed class MigrationScheduleSettings
         .Add(TimeSpan.FromMinutes(Random.Shared.Next(1, 59)));
 
     /// <summary>
-    /// Gets or sets the maximum time to wait for an in-flight migration to complete before considering it timed out.
+    /// Gets or sets the maximum time to wait for the migration lock before the run is reported as
+    /// "not completed" (result <c>-1</c>). The next tick tries again.
     /// Default is 3 seconds.
     /// </summary>
     public TimeSpan WaitMigrationTimeout { get; set; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Gets or sets the deadline of a single migration run, counted from the moment the run
+    /// obtained the migration lock.
+    /// </summary>
+    /// <remarks>
+    /// The run is driven by its own token, not by the caller's: a started run is not interrupted by
+    /// the host shutting down, because the generated DDL is idempotent and finishing is cheaper than
+    /// restarting. Keep this value below the host shutdown timeout
+    /// (<c>HostOptions.ShutdownTimeout</c>, 30 s by default) so the run always ends before the
+    /// scheduler gives up draining it.
+    /// Default is 10 seconds.
+    /// </remarks>
+    public TimeSpan RunTimeout { get; set; } = TimeSpan.FromSeconds(10);
 }

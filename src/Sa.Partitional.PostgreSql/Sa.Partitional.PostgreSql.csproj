@@ -27,7 +27,6 @@
 	</ItemGroup>
 	<ItemGroup>
 		<Folder Include="AsLink\" />
-		<Folder Include="AsLink\" />
 	</ItemGroup>
 
 	<ItemGroup>

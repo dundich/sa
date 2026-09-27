@@ -54,7 +54,9 @@ public interface ITableSettings
     IPartTableMigrationSupport Migration { get; }
 
     /// <summary>
-    /// Gets the separator between schema and table name in generated partition identifiers (default: <c>_</c>).
+    /// Gets the separator placed between the table name and each partition key value in a generated
+    /// partition name (default: <c>__</c>). For example, root table <c>"events"</c> with the value
+    /// <c>"RU"</c> becomes <c>"events__RU"</c>.
     /// </summary>
     string SqlPartSeparator { get; }
 
@@ -64,19 +66,24 @@ public interface ITableSettings
     Func<string>? PostRootSql { get; }
 
     /// <summary>
-    /// Gets an optional callback that produces custom constraint SQL (e.g. additional <c>CHECK</c> clauses).
+    /// Gets an optional callback that produces the <b>name</b> of the generated primary-key constraint.
+    /// The <c>PRIMARY KEY</c> clause itself is composed by the library from the id column, the
+    /// list-partition columns, and the range column; <c>null</c> means <c>pk_{table}</c>.
     /// </summary>
     Func<string>? ConstraintPkSql { get; }
 
     /// <summary>
-    /// Gets the <c>fillfactor</c> storage parameter for <c>CREATE TABLE</c> / <c>ALTER TABLE</c> commands.
-    /// When <c>null</c>, PostgreSQL uses its default (100).
+    /// Gets the <c>fillfactor</c> storage parameter of the generated range partitions.
+    /// Applied to the date-range children only; the root table and the intermediate list partitions
+    /// are emitted without it. When <c>null</c> the clause is omitted and PostgreSQL uses its default (100).
     /// </summary>
     int? FillFactor { get; }
 
     /// <summary>
-    /// Gets the suffix appended to child/partition table names (default: <c>__part</c>).
-    /// For example, root table <c>"events"</c> with date 2026-06-26 becomes <c>"events__part__y2026m06d26"</c>.
+    /// Gets the postfix of the cache table that tracks the existing range partitions
+    /// (default: <c>part$</c>). The cache table name is <c>{table}{SqlPartSeparator}{PartTablePostfix}</c>,
+    /// so root table <c>"events"</c> is tracked in <c>"public"."events__part$"</c>. The postfix is not
+    /// part of the partition names themselves.
     /// </summary>
     string PartTablePostfix { get; }
 }

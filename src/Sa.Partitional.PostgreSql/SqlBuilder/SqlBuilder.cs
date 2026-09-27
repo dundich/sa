@@ -16,7 +16,7 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
     {
         foreach (string table in builders.Keys)
         {
-            SqlTableBuilder builder = builders[table] ?? throw new KeyNotFoundException(table);
+            SqlTableBuilder builder = builders[table];
 
             StrOrNum[][] parValues = await resolve(table).ConfigureAwait(false);
 
@@ -58,14 +58,29 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
         => (Find(tableName) ?? throw new KeyNotFoundException(tableName)).SelectPartsToDate;
 
     public string CreatePartSql(string tableName, DateTimeOffset date, StrOrNum[] partValues)
-        => (Find(tableName) ?? throw new KeyNotFoundException(tableName)).CreateSql(date);
+        => (Find(tableName) ?? throw new KeyNotFoundException(tableName)).CreateSql(date, partValues);
 
     #region privates
+    /// <summary>
+    /// Resolves a table name to its builder.
+    /// </summary>
+    /// <remarks>
+    /// A name that is already qualified (<c>schema.table</c>) is looked up as is. An unqualified name
+    /// is qualified with the <b>first</b> configured schema, so with several schemas declared the
+    /// resolution depends on declaration order - pass a qualified name when that matters. A name that
+    /// still does not match is scanned against the full names as a last resort, and a quoted name is
+    /// retried without its quotes.
+    /// </remarks>
     private ISqlTableBuilder? Find(string tableName)
     {
-        ISqlTableBuilder? item = tableName.Contains('.')
+        // An unqualified name is resolved against the first configured schema. With no schema
+        // configured at all there is nothing to qualify with - fall through to the full-name scan
+        // instead of throwing on Schemas.First().
+        string? defaultSchema = storage.Schemas.Count > 0 ? storage.Schemas.First() : null;
+
+        ISqlTableBuilder? item = tableName.Contains('.') || defaultSchema is null
             ? builders.GetValueOrDefault(tableName)
-            : builders.GetValueOrDefault(GetFullName(storage.Schemas.First(), tableName));
+            : builders.GetValueOrDefault(GetFullName(defaultSchema, tableName));
 
         item ??= builders.Values.FirstOrDefault(c => c.FullName == tableName);
 

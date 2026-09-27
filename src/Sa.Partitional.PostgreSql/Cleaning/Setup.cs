@@ -44,7 +44,12 @@ internal static class Setup
                 builder
                     .WithInitialDelay(settings.InitialDelay)
                     .EveryTime(settings.ExecutionInterval)
-                    .ConfigureErrorHandling(berr => berr.DoSuppressError(err => true))
+                    // M5: only the expected stop is suppressed. A real failure is retried, logged
+                    // and then aborts THIS job (the scheduler default would close the whole
+                    // application, which is not a sane reaction to a failing DROP).
+                    .ConfigureErrorHandling(berr => berr
+                        .DoSuppressError(err => err is OperationCanceledException or TimeoutException)
+                        .ThenAbortJob())
                 ;
 
                 if (!settings.AsBackgroundJob)

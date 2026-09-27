@@ -6,7 +6,9 @@
 public interface ISchemaBuilder
 {
     /// <summary>
-    /// Creates a new table definition builder using the schema's default column set (an auto-generated <c>id</c> column).
+    /// Creates an empty table definition builder. At least one column has to be added afterwards
+    /// (<see cref="AddTable"/> or <see cref="ITableBuilder.AddFields"/>) - the first declared column
+    /// becomes the primary key id column, and <see cref="Build"/> fails without it.
     /// </summary>
     /// <param name="tableName">The logical table name (without schema prefix).</param>
     /// <returns>A fluent <see cref="ITableBuilder"/> for further configuration.</returns>

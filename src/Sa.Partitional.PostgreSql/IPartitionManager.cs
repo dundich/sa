@@ -1,4 +1,4 @@
-﻿using Sa.Partitional.PostgreSql.Classes;
+using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql;
 
@@ -32,7 +32,7 @@ public interface IPartitionManager
     /// <param name="date">The date associated with the partition.</param>
     /// <param name="partValues">An array of values that define the partitions (could be strings or numbers).</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A value task representing the asynchronous operation, with a boolean result indicating whether the partitions were ensured successfully.</returns>
+    /// <returns>A task representing the asynchronous operation, with a boolean result indicating whether the partitions were ensured successfully.</returns>
     Task<bool> EnsureParts(
         string tableName,
         DateTimeOffset date,

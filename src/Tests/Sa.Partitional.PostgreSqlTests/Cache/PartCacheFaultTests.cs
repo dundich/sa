@@ -1,4 +1,4 @@
-using Npgsql;
+﻿using Npgsql;
 using Sa.Partitional.PostgreSql;
 using Sa.Partitional.PostgreSql.Cache;
 using Sa.Partitional.PostgreSql.Classes;
@@ -6,9 +6,11 @@ using Sa.Partitional.PostgreSql.Classes;
 namespace Sa.Partitional.PostgreSqlTests.Cache;
 
 /// <summary>
-/// Unit tests (no database) for <see cref="PartCache"/> faulted-task recovery:
-/// a faulted (or cancelled) cached task must be evicted so the next call
-/// re-queries the database instead of rethrowing the stale exception forever.
+/// Unit tests (no database) for <see cref="PartCache"/>:
+/// a faulted (or cancelled) cached task must be evicted so the next call re-queries the
+/// database instead of rethrowing the stale exception forever; a caller that walks away from a
+/// shared load must not cancel it for everybody else; concurrent callers must share one round-trip;
+/// and the snapshot must be reloaded once its TTL has passed.
 /// </summary>
 public class PartCacheFaultTests
 {
@@ -132,6 +134,118 @@ public class PartCacheFaultTests
         Assert.Equal(2, repository.GetPartsFromDateCalls);
     }
 
+    [Fact]
+    public async Task InCache_CancelledCaller_DoesNotPoisonTheSharedEntry()
+    {
+        FakePartRepository repository = new();
+
+        TaskCompletionSource gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.EnqueueGetParts(async token =>
+        {
+            // WaitAsync on the token the cache handed us: a repository that honours it (as Npgsql
+            // does) is what makes the difference visible.
+            await gate.Task.WaitAsync(token).ConfigureAwait(false);
+            return new List<PartByRangeInfo> { MatchingPart(repository) };
+        });
+
+        PartCache cache = CreateCache(repository);
+
+        using CancellationTokenSource cts = new();
+
+        // 1st caller starts the shared load and then gives up on it.
+        Task<bool> abandoned = cache.InCache(Table, ExpectedFrom, PartValues, cts.Token);
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandoned);
+        Assert.Equal(1, repository.GetPartsFromDateCalls);
+
+        // The load runs on its own token, so it is still pending rather than cancelled: the entry
+        // must survive. Before the fix the caller's token was handed to the cached task, which
+        // left a cancelled task in the cache that every later caller replayed.
+        Task<bool> second = cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
+
+        gate.SetResult();
+
+        Assert.True(await second);
+
+        // Still a single round-trip: the second caller joined the in-flight load.
+        Assert.Equal(1, repository.GetPartsFromDateCalls);
+    }
+
+    [Fact]
+    public async Task InCache_ConcurrentCallers_ShareOneDatabaseRoundTrip()
+    {
+        FakePartRepository repository = new();
+
+        TaskCompletionSource gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.EnqueueGetParts(async token =>
+        {
+            await gate.Task.WaitAsync(token).ConfigureAwait(false);
+            return new List<PartByRangeInfo> { MatchingPart(repository) };
+        });
+
+        PartCache cache = CreateCache(repository);
+
+        Task<bool>[] tasks =
+        [
+            .. Enumerable.Range(0, 16)
+                .Select(_ => cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken))
+        ];
+
+        gate.SetResult();
+
+        bool[] results = await Task.WhenAll(tasks);
+
+        Assert.All(results, actual => Assert.True(actual));
+        Assert.Equal(1, repository.GetPartsFromDateCalls);
+    }
+
+    [Fact]
+    public async Task InCache_WithinTtl_ReusesTheSnapshot_ThenReloadsAfterItExpires()
+    {
+        FakePartRepository repository = new();
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo> { MatchingPart(repository) }));
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo> { MatchingPart(repository) }));
+
+        MutableTimeProvider clock = new(FixedNow);
+        PartCache cache = new(repository, new FakeSqlBuilder(), Settings, clock);
+
+        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.Equal(1, repository.GetPartsFromDateCalls);
+
+        // Just inside the TTL: the snapshot is reused.
+        clock.Advance(Settings.CacheTtl - TimeSpan.FromSeconds(1));
+
+        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.Equal(1, repository.GetPartsFromDateCalls);
+
+        // Past the TTL: the next read re-queries.
+        clock.Advance(TimeSpan.FromSeconds(2));
+
+        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.Equal(2, repository.GetPartsFromDateCalls);
+    }
+
+    [Fact]
+    public async Task RemoveCache_All_ForcesTheNextReadToRequery()
+    {
+        FakePartRepository repository = new();
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo> { MatchingPart(repository) }));
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo> { MatchingPart(repository) }));
+
+        PartCache cache = CreateCache(repository);
+
+        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.Equal(1, repository.GetPartsFromDateCalls);
+
+        // This is what the migration and cleanup jobs call after they have changed partitions
+        // behind the cache's back.
+        await cache.RemoveCache();
+
+        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.Equal(2, repository.GetPartsFromDateCalls);
+    }
+
     private static PartCache CreateCache(FakePartRepository repository)
         => new(repository, new FakeSqlBuilder(), Settings, new FixedTimeProvider(FixedNow));
 
@@ -150,6 +264,19 @@ public class PartCacheFaultTests
     private sealed class FixedTimeProvider(DateTimeOffset fixedUtcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => fixedUtcNow;
+    }
+
+    /// <summary>
+    /// Clock the test can move forward, so the lazy <see cref="PartCacheSettings.CacheTtl"/>
+    /// deadline can be crossed on demand.
+    /// </summary>
+    private sealed class MutableTimeProvider(DateTimeOffset initialUtcNow) : TimeProvider
+    {
+        private DateTimeOffset _utcNow = initialUtcNow;
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+
+        public void Advance(TimeSpan delta) => _utcNow += delta;
     }
 }
 

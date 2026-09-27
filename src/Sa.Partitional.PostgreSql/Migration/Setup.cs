@@ -44,7 +44,16 @@ internal static class Setup
                 builder
                     .StartImmediate()
                     .EveryTime(migrationSettings.ExecutionInterval)
-                    .ConfigureErrorHandling(berr => berr.DoSuppressError(err => true))
+                    // A started run is bounded by its own RunTimeout, so the scheduler has to be
+                    // able to drain it: give it a little more than the run itself needs, and keep
+                    // both comfortably below the host shutdown timeout.
+                    .WithShutdownTimeout(migrationSettings.RunTimeout + TimeSpan.FromSeconds(5))
+                    // M5: only the expected stop is suppressed. A real failure (a name over the
+                    // 63-byte identifier limit, a broken table definition) is retried, logged and
+                    // then aborts THIS job - the scheduler default would close the application.
+                    .ConfigureErrorHandling(berr => berr
+                        .DoSuppressError(err => err is OperationCanceledException or TimeoutException)
+                        .ThenAbortJob())
                 ;
 
                 if (!migrationSettings.AsBackgroundJob)

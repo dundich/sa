@@ -1,4 +1,6 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -37,7 +39,9 @@ public abstract record StrOrNum
     /// <param name="Item">The <see cref="long"/> value.</param>
     public record ChoiceNum(long Item) : StrOrNum
     {
-        public override string ToString() => $"{Item}";
+        // Invariant on purpose: the rendered value ends up in table names and SQL literals, and a
+        // culture with a different negative sign (U+2212) or digits would corrupt both.
+        public override string ToString() => Item.ToString(CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -110,14 +114,21 @@ public abstract record StrOrNum
     /// <summary>
     /// Returns the contained value as a human-readable string.
     /// </summary>
-    public override string ToString() => Match(str => str, num => $"{num}");
+    public override string ToString() => Match(str => str, num => num.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>
     /// Returns a formatted serialisation string prefixed with the variant kind
     /// (<c>s:&lt;value&gt;</c> for string, <c>n:&lt;value&gt;</c> for number).
     /// This format is used by <see cref="FromFmtStr"/> and the JSON converter.
     /// </summary>
-    public string ToFmtString() => Match(str => $"s:{str}", num => $"n:{num}");
+    /// <remarks>
+    /// A string payload is escaped so the separator that joins several values into one field
+    /// (<c>,</c> in the cache table's <c>part_values</c>) can never appear unescaped inside it, and a
+    /// literal backslash is doubled to keep the escape reversible. Numbers need neither - the
+    /// invariant format contains neither character.
+    /// </remarks>
+    public string ToFmtString()
+        => Match(str => $"s:{EscapeFmt(str)}", num => $"n:{num.ToString(CultureInfo.InvariantCulture)}");
 
     /// <summary>
     /// Parses a formatted string produced by <see cref="ToFmtString"/> back into a <see cref="StrOrNum"/>.
@@ -125,25 +136,109 @@ public abstract record StrOrNum
     /// </summary>
     /// <param name="fmtInput">The formatted input string.</param>
     /// <returns>A <see cref="StrOrNum"/> instance matching the original value.</returns>
+    /// <remarks>A malformed <c>n:</c> number falls back to <see cref="ChoiceStr"/>, keeping the raw
+    /// text, instead of silently becoming the number 0. Callers that need to detect the corruption
+    /// use <see cref="TryFromFmtStr"/>.</remarks>
     public static StrOrNum FromFmtStr(string? fmtInput)
+        => TryFromFmtStr(fmtInput, out StrOrNum? result) ? result : new ChoiceStr(fmtInput ?? string.Empty);
+
+    /// <summary>
+    /// Strict counterpart of <see cref="FromFmtStr"/>: reports whether <paramref name="fmtInput"/>
+    /// is a well-formed formatted value instead of falling back.
+    /// </summary>
+    /// <param name="fmtInput">The formatted input string.</param>
+    /// <param name="result">The parsed value, or <see langword="null"/> when the input is malformed.</param>
+    /// <returns><see langword="true"/> when <paramref name="fmtInput"/> could be parsed.</returns>
+    public static bool TryFromFmtStr(string? fmtInput, [NotNullWhen(true)] out StrOrNum? result)
     {
-        if (string.IsNullOrEmpty(fmtInput)) return new ChoiceStr(string.Empty);
+        result = null;
+
+        if (fmtInput is null) return false;
 
         if (fmtInput.StartsWith("s:", StringComparison.Ordinal))
         {
-            return new ChoiceStr(fmtInput[2..]);
+            result = new ChoiceStr(UnescapeFmt(fmtInput.AsSpan()[2..]));
+            return true;
         }
-        else if (fmtInput.StartsWith("n:", StringComparison.Ordinal))
+
+        if (fmtInput.StartsWith("n:", StringComparison.Ordinal))
         {
-            return new ChoiceNum(StrToLong(fmtInput.AsSpan()[2..]) ?? 0);
+            if (StrToLong(fmtInput.AsSpan()[2..]) is not long num) return false;
+
+            result = new ChoiceNum(num);
+            return true;
         }
-        else
-        {
-            return new ChoiceStr(fmtInput);
-        }
+
+        result = new ChoiceStr(fmtInput);
+        return true;
     }
 
     private StrOrNum() { }
+
+    /// <summary>
+    /// Escapes the two characters that carry meaning in the formatted protocol: the backslash that
+    /// introduces an escape, and the comma that separates several values inside one field.
+    /// </summary>
+    private static string EscapeFmt(string value)
+    {
+        // Fast path: most partition values contain neither character.
+        if (!value.Contains(',', StringComparison.Ordinal) && !value.Contains('\\', StringComparison.Ordinal)) return value;
+
+        StringBuilder sb = new(value.Length + 8);
+        foreach (char c in value)
+        {
+            if (c is ',' or '\\') sb.Append('\\');
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Reverses <see cref="EscapeFmt"/> in a single pass. Two sequential replacements would be
+    /// wrong: the <c>\\</c> produced for a literal backslash would be re-read as an escape, so
+    /// <c>a\,b</c> would decode to <c>a\b</c>.
+    /// </summary>
+    private static string UnescapeFmt(ReadOnlySpan<char> value)
+    {
+        int escapeIndex = value.IndexOf('\\');
+        if (escapeIndex < 0) return value.ToString();
+
+        StringBuilder sb = new(value.Length);
+        sb.Append(value[..escapeIndex]);
+
+        for (int i = escapeIndex; i < value.Length; i++)
+        {
+            char c = value[i];
+
+            // A backslash is an escape only when something follows it that it can escape;
+            // a trailing lone backslash is a literal one.
+            if (c == '\\' && i + 1 < value.Length)
+            {
+                char next = value[i + 1];
+                if (next is ',' or '\\')
+                {
+                    sb.Append(next);
+                    i++;
+                    continue;
+                }
+            }
+
+            sb.Append(c);
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Reports whether the character at <paramref name="index"/> is preceded by an odd number of
+    /// backslashes, i.e. whether it is escaped and therefore not a value separator.
+    /// </summary>
+    internal static bool IsEscapedAt(ReadOnlySpan<char> text, int index)
+    {
+        int backslashes = 0;
+        for (int i = index - 1; i >= 0 && text[i] == '\\'; i--) backslashes++;
+        return (backslashes & 1) == 1;
+    }
 
     private static int? StrToInt(ReadOnlySpan<char> str) => int.TryParse(str, CultureInfo.InvariantCulture, out int result) ? result : null;
     private static short? StrToShort(ReadOnlySpan<char> str) => short.TryParse(str, CultureInfo.InvariantCulture, out short result) ? result : null;
@@ -168,7 +263,15 @@ public class StrOrNumConverter : JsonConverter<StrOrNum>
     /// Reads a JSON string and deserialises it into a <see cref="StrOrNum"/> via <see cref="StrOrNum.FromFmtStr"/>.
     /// </summary>
     public override StrOrNum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-      => StrOrNum.FromFmtStr(reader.GetString());
+    {
+        if (reader.TokenType is not (JsonTokenType.String or JsonTokenType.Null))
+        {
+            throw new JsonException(
+                $"Expected a JSON string in the 's:'/'n:' format for {typeToConvert.Name}, got {reader.TokenType}.");
+        }
+
+        return StrOrNum.FromFmtStr(reader.GetString());
+    }
 
     /// <summary>
     /// Writes a <see cref="StrOrNum"/> as a JSON string using <see cref="StrOrNum.ToFmtString"/>.
