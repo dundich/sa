@@ -1,83 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Diagnostics;
-using System.Text;
 
 namespace Sa.Media.FFmpeg.Services;
-
-internal interface IProcessExecutor
-{
-    /// <summary>
-    /// Executes a process with real-time output handling via data received events.
-    /// </summary>
-    /// <param name="startInfo">Process start configuration.</param>
-    /// <param name="outputDataReceived">Callback for stdout lines. If <c>null</c>, stdout is not redirected.</param>
-    /// <param name="errorDataReceived">Callback for stderr lines. If <c>null</c>, stderr is not redirected.</param>
-    /// <param name="timeout">Operation timeout. Use <c>null</c> for no timeout.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The process exit code.</returns>
-    Task<int> ExecuteAsync(
-        ProcessStartInfo startInfo
-        , Action<string>? outputDataReceived = null
-        , Action<string>? errorDataReceived = null
-        , TimeSpan? timeout = null
-        , CancellationToken cancellationToken = default);
-
-
-    /// <summary>
-    /// Executes a process and collects all output into a <see cref="ProcessExecutionResult"/>.
-    /// Throws <see cref="ProcessExecutionResultException"/> if exit code is non-zero and <paramref name="throwOnError"/> is true.
-    /// </summary>
-    /// <param name="startInfo">Process start configuration.</param>
-    /// <param name="throwOnError">If true, throws <see cref="ProcessExecutionResultException"/> on non-zero exit code. If false, the result is always returned.</param>
-    /// <param name="timeout">Operation timeout.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    async Task<ProcessExecutionResult> ExecuteWithResultAsync(
-        ProcessStartInfo startInfo
-        , bool throwOnError = true
-        , TimeSpan? timeout = null
-        , CancellationToken cancellationToken = default)
-    {
-        var output = new StringBuilder();
-        var error = new StringBuilder();
-
-        var exitcode = await ExecuteAsync(
-            startInfo
-            , s => output.AppendLine(s)
-            , e => error.AppendLine(e)
-            , timeout
-            , cancellationToken
-        ).ConfigureAwait(false);
-
-        var result = new ProcessExecutionResult(
-            exitcode,
-            StandardOutput: output.ToString(),
-            StandardError: error.ToString());
-
-        if (result.ExitCode == 0 || !throwOnError) return result;
-
-        throw new ProcessExecutionResultException(result);
-    }
-
-    /// <summary>
-    /// Executes a process and streams stdout through a callback. Stderr is collected and checked on completion.
-    /// The input stream is copied to stdin asynchronously, then stdin is closed automatically.
-    /// </summary>
-    /// <param name="startInfo">Process start configuration.</param>
-    /// <param name="inputStream">Readable stream to copy to stdin.</param>
-    /// <param name="onOutput">Callback that receives the stdout stream. Must read until EOF.</param>
-    /// <param name="timeout">Operation timeout.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="ProcessExecutionException">Thrown when FFmpeg returns a non-zero exit code.</exception>
-    Task ExecuteStdOutAsync(
-        ProcessStartInfo startInfo
-        , Stream inputStream
-        , Func<Stream, CancellationToken, Task> onOutput
-        , TimeSpan? timeout = null
-        , CancellationToken cancellationToken = default);
-
-
-    static IProcessExecutor Default { get; } = new ProcessExecutor();
-}
 
 
 
@@ -100,8 +24,9 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
 
         if (!process.Start())
         {
-            process.Dispose();
-            throw new ProcessStartException($"Failed to start process: '{startInfo.FileName}' with arguments '{startInfo.Arguments}'");
+            // process.Dispose() делает using-область; второй вызов ничего не добавит.
+            throw new ProcessStartException(
+                $"Failed to start process: '{startInfo.FileName}' with arguments '{startInfo.Arguments}'");
         }
 
 
@@ -125,13 +50,25 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
         {
             await Run(process, outputDataReceived, errorDataReceived, timeout, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            throw new ProcessTimeoutException("Process execution timed out");
+            // Отмена вызывающим кодом. Порядок catch-блоков обязателен: если бы проверка таймаута
+            // стояла первой, отмена пользователя превращалась бы в ProcessTimeoutException.
+            throw;
+        }
+        catch (OperationCanceledException oce)
+        {
+            // Ни CancellationToken вызывающего, ни... — отменился только наш таймаут.
+            throw new ProcessTimeoutException(
+                $"Process execution timed out after {Describe(timeout)}: " +
+                $"{Describe(process.StartInfo)}", oce);
         }
         catch (Exception ex)
         {
-            throw new ProcessExecutionException(process.ExitCode, "Process execution failed", ex);
+            throw new ProcessExecutionException(
+                process.HasExited ? process.ExitCode : -1,
+                $"Process execution failed: {Describe(process.StartInfo)}",
+                ex);
         }
         finally
         {
@@ -140,6 +77,11 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
 
         return exitCode;
     }
+
+    internal static string Describe(ProcessStartInfo startInfo) =>
+        string.IsNullOrEmpty(startInfo.Arguments) ? startInfo.FileName : $"{startInfo.FileName} {startInfo.Arguments}";
+
+    static string Describe(TimeSpan? timeout) => timeout is { } t ? t.ToString() : "(none)";
 
     private static async Task Run(
         Process process,
@@ -171,8 +113,9 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
             process.BeginErrorReadLine();
         }
 
-        using var timeoutCts = timeout.HasValue && timeout.Value != TimeSpan.Zero
-            ? new CancellationTokenSource(timeout.Value)
+        // null и TimeSpan.Zero означают «без таймаута» — одинаково во всех точках входа.
+        using var timeoutCts = timeout is { } t && t > TimeSpan.Zero
+            ? new CancellationTokenSource(t)
             : null;
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
@@ -182,19 +125,55 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
         var waitTask = process.WaitForExitAsync(linkedCts.Token);
 
         // Wait for all streams to finish reading
-        List<Task> outputTasks = [waitTask];
-
+        var readerTasks = new List<Task>();
         if (outputDataReceived != null)
         {
-            outputTasks.Add(outputCompletion.Task);
+            readerTasks.Add(outputCompletion.Task);
         }
 
         if (errorDataReceived != null)
         {
-            outputTasks.Add(errorCompletion.Task);
+            readerTasks.Add(errorCompletion.Task);
         }
 
-        await Task.WhenAll(outputTasks).ConfigureAwait(false);
+        var readersDone = readerTasks.Count > 0
+            ? Task.WhenAll(readerTasks)
+            : Task.CompletedTask;
+
+        // Собираем оба условия через WhenAny, а не WhenAll: читатели завершаются только тогда,
+        // когда процесс закрывает пайпы, а зависший процесс (то, что мы и ловим таймаутом)
+        // не закроет их никогда. WhenAll после отмены таймаута ждал бы до естественной смерти
+        // процесса — проверено: 2-секундный таймаут срывался через 30 секунд.
+        var completed = await Task.WhenAny(waitTask, readersDone).ConfigureAwait(false);
+        if (completed != waitTask)
+        {
+            // Читатели закончились первыми (процесс закрыл пайпы, но ещё жив): ждём выхода —
+            // он либо завершится, либо отменится таймаутом.
+            await waitTask.ConfigureAwait(false);
+            return;
+        }
+
+        await waitTask.ConfigureAwait(false); // пробрасывает сбой, в т.ч. OCE при отмене
+
+        if (!linkedCts.IsCancellationRequested)
+        {
+            // Нормальный выход: даём читателям донести последние буферизованные строки.
+            // Без этого процесс, у которого stderr не до конца прочитан (а FFmpeg на битом
+            // потоке пишет туда постоянно), не завершится: WaitForExit ждёт опустошения буферов.
+            await readersDone.ConfigureAwait(false);
+        }
+
+        // Освобождаем асинхронные reader'ы до возврата, иначе процесс держится за коллекторы
+        // событий ещё какое-то время после нашего Dispose().
+        if (outputDataReceived != null)
+        {
+            process.CancelOutputRead();
+        }
+
+        if (errorDataReceived != null)
+        {
+            process.CancelErrorRead();
+        }
     }
 
     private static void SetupErrorDataReceived(
@@ -250,17 +229,17 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
 
         if (!process.Start())
         {
-            process.Dispose();
             throw new ProcessStartException(
                 $"Failed to start process: '{startInfo.FileName}' with arguments '{startInfo.Arguments}'");
         }
 
-        StringBuilder stderrBuilder = new();
+        var stderrBuilder = new BoundedStringBuilder(IProcessExecutor.StandardErrorTailLimit);
         int exitCode;
         try
         {
-            using var timeoutCts = timeout.HasValue
-                ? new CancellationTokenSource(timeout.Value)
+            // null и TimeSpan.Zero означают «без таймаута» — как и в ExecuteAsync.
+            using var timeoutCts = timeout is { } t && t > TimeSpan.Zero
+                ? new CancellationTokenSource(t)
                 : null;
 
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
@@ -282,7 +261,7 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
             {
                 try
                 {
-                    await stdoutStream.DisposeAsync();
+                    await stdoutStream.DisposeAsync().ConfigureAwait(false);
                 }
                 catch (IOException)
                 {
@@ -291,6 +270,19 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
             }
             await Task.WhenAll(backgroundTasks).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException oce)
+        {
+            // stderr, накопленный до дедлайна, полезнее пустого сообщения: зависший процесс
+            // обычно застрял на ошибке, которую видно именно там.
+            throw new ProcessTimeoutException(
+                $"Process execution timed out after {Describe(timeout)}: {Describe(startInfo)}" +
+                (stderrBuilder.Length > 0 ? $"{Environment.NewLine}{stderrBuilder}" : ""),
+                oce);
+        }
         finally
         {
             exitCode = SafeDisposeProcess(process);
@@ -298,38 +290,49 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
 
         if (exitCode != 0)
         {
-            throw new ProcessExecutionException(exitCode, $"Process failed (exit={exitCode}): {stderrBuilder}");
+            throw new ProcessExecutionException(
+                exitCode,
+                $"Process failed (exit={exitCode}): {Describe(startInfo)}{Environment.NewLine}{stderrBuilder}");
         }
     }
 
 
     private static async Task ReadStandardErrorToBuilderAsync(
         Process process,
-        StringBuilder errorBuilder,
+        BoundedStringBuilder errorBuilder,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            string error = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(error))
+            var buffer = new char[4096];
+            while (true)
             {
-                errorBuilder.Append(error);
+                var read = await process.StandardError.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                if (read == 0) break;
+                // Строки короткие, аллокация ограничена; усечение делает BoundedStringBuilder.
+                foreach (var chunk in new string(buffer, 0, read).Split('\n'))
+                    if (chunk.Length > 0)
+                        errorBuilder.AppendLine(chunk.TrimEnd('\r'));
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             if (errorBuilder.Length == 0)
-                errorBuilder.Append("stderr: read interrupted (cancellation).");
+                errorBuilder.AppendLine("stderr: read interrupted (cancellation).");
         }
         catch (Exception ex)
         {
-            errorBuilder.Append($"stderr: read failed: {ex.Message}");
+            errorBuilder.AppendLine($"stderr: read failed: {ex.Message}");
         }
     }
 
     /// <summary>
     /// Асинхронно записывает входной поток в stdin процесса.
-    /// Автоматически закрывает stdin после завершения.
+    /// Закрывает stdin после завершения.
+    /// ВАЖНО: поток вызывающего НЕ закрывается и НЕ освобождается — он остаётся
+    /// ответственностью вызывающего. Раньше здесь стоял 'await using', из-за чего после
+    /// ConvertToPcmS16Le(stream, ...) повторное использование того же FileStream падало с
+    /// ObjectDisposedException.
     /// </summary>
     private static async Task WriteToStdInAsync(
         Process process,
@@ -339,11 +342,8 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
         try
         {
             // input to stdin
-            await using (inputStream.ConfigureAwait(false))
-            {
-                await inputStream.CopyToAsync(process.StandardInput.BaseStream, cancellationToken)
-                                 .ConfigureAwait(false);
-            }
+            await inputStream.CopyToAsync(process.StandardInput.BaseStream, cancellationToken)
+                             .ConfigureAwait(false);
 
             // Завершаем запись — FFprobe may have already closed stdin pipe
             await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -386,7 +386,6 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
                 exitCode = process.ExitCode;
                 return exitCode;
             }
-
             try
             {
                 process.Kill(entireProcessTree: true);
@@ -440,26 +439,4 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
 
         return exitCode;
     }
-}
-
-
-// Custom exceptions
-public sealed class ProcessExecutionException(int exitCode, string message, Exception? inner = null)
-    : Exception(message, inner)
-{
-    public int Exitcode => exitCode;
-}
-
-public sealed class ProcessExecutionResultException(ProcessExecutionResult result)
-    : Exception($"Process failed (exit={result.ExitCode}): {result.StandardError}")
-{
-    public ProcessExecutionResult Result { get; } = result;
-}
-
-public sealed class ProcessStartException(string message) : IOException(message)
-{
-}
-
-public sealed class ProcessTimeoutException(string message) : TimeoutException(message)
-{
 }

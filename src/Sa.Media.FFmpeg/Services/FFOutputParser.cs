@@ -2,14 +2,23 @@
 
 static class FFOutputParser
 {
+    /// <summary>
+    /// Разбирает вывод <c>ffprobe -show_entries stream=channels,sample_rate</c>.
+    /// <para>
+    /// ВНИМАНИЕ: вызывать только с <c>-select_streams a:0</c> (см. FFProbeExecutor). Без него
+    /// ffprobe печатает блок на каждый поток, и «последний выигрывает» молча возвращал параметры
+    /// чужой дорожки. Параметры, которых нет в выводе, остаются null — раньше они были 0, и
+    /// «0 каналов» неотличим от «каналы неизвестны».
+    /// </para>
+    /// </summary>
     public static (int? channels, int? sampleRate) ParseChannelsAndSampleRate(string str)
     {
+        ArgumentNullException.ThrowIfNull(str);
 
-        ReadOnlySpan<char> inputSpan = str.AsSpan();
-        int sampleRate = 0;
-        int channels = 0;
+        int? sampleRate = null;
+        int? channels = null;
 
-        foreach (ReadOnlySpan<char> line in inputSpan.EnumerateLines())
+        foreach (ReadOnlySpan<char> line in str.AsSpan().EnumerateLines())
         {
             var trimmed = line.Trim();
             if (trimmed.IsEmpty) continue;
@@ -19,11 +28,12 @@ static class FFOutputParser
 
             var key = trimmed[..equalIndex].Trim();
             var value = trimmed[(equalIndex + 1)..].Trim();
+            if (value.IsEmpty) continue;
 
             if (key.SequenceEqual("sample_rate".AsSpan()))
-                _ = int.TryParse(value, out sampleRate);
+                sampleRate = value.StrToInt();
             else if (key.SequenceEqual("channels".AsSpan()))
-                _ = int.TryParse(value, out channels);
+                channels = value.StrToInt();
         }
 
         return (channels, sampleRate);

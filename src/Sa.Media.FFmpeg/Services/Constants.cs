@@ -30,8 +30,18 @@ static class Constants
     public static string FFprobeExecutableFileName { get; } = IsOsWindows ? FFprobeFileNameWin : FFprobeFileNameLinux;
 
 
-    public const string CleanBannerFlags = "-hide_banner -loglevel error";
+    /// <summary>
+    /// Общие флаги для всех вызовов FFmpeg.
+    /// <list type="bullet">
+    /// <item><c>-nostdin</c> обязателен: без него FFmpeg читает stdin в интерактивном режиме и
+    /// на <c>isOverwrite: false</c> печатает <c>File '...' already exists. Overwrite? [y/N]</c>
+    /// и блокируется до ответа. У нас stdin перенаправлен из буфера вызывающего, поэтому
+    /// «ответа» не будет — процесс зависает до таймаута.</item>
+    /// </list>
+    /// </summary>
+    public const string CleanBannerFlags = "-nostdin -hide_banner -loglevel error";
 
+    /// <summary>Флаги, делающие WAV побайтово воспроизводимым (без LIST/INFO и с известным data-размером).</summary>
     public const string CleanWavOutputFlags = "-map_metadata -1 -write_bext 0 -bitexact -fflags +bitexact";
 
     public const int StringBuilderInitialCapacity = 512;

@@ -136,7 +136,7 @@ printf '%s\n' "${FFMPEG_CONFIGURE_FLAGS[@]}"
 ./configure "${FFMPEG_CONFIGURE_FLAGS[@]}" || (cat ffbuild/config.log && exit 1)
 
 echo "Building FFmpeg..."
-make
+make -j"$(nproc)"
 
 echo "Installing FFmpeg..."
 make install

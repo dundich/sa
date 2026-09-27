@@ -54,6 +54,8 @@ internal sealed class FFRawExecutor(
     {
         var psi = GetStartInfo(ExecutablePath, commandArguments);
         configure?.Invoke(psi);
-        return executor.ExecuteStdOutAsync(psi, inputStream, onOutput, timeout, cancellationToken);
+        // Раньше таймаут по умолчанию применялся только к файловым вызовам: потоковые операции
+        // висели вечно. Теперь поведение одинаковое.
+        return executor.ExecuteStdOutAsync(psi, inputStream, onOutput, timeout ?? DefaultTimeout, cancellationToken);
     }
 }

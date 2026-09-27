@@ -31,6 +31,7 @@ error: Testing with VSTest target is no longer supported by Microsoft.Testing.Pl
 ```
 
 - From `src/`: `dotnet test Tests/<Name>` ✅
+- From `src/`, single project with detail output (CI Windows leg): `dotnet test --project Tests/<Name> -c Release --no-build --no-restore -v n` ✅ — `-v` rejects a bare directory, so the target must be explicit; see *Test load is capped on purpose* below
 - From repo root: `dotnet run --project src/Tests/<Name>` ✅ (MTP exe; works from any cwd)
 - `./build-sh/do-test.sh` `cd`s into `src/` before `dotnet test`, so it works from any cwd.
 
@@ -46,15 +47,28 @@ Two independent caps, one per level:
 | Within an assembly | xUnit `maxParallelThreads: 2` — caps concurrently running test *collections* (one collection per class) | `src/Tests/xunit.runner.json`, copied to every test output by `src/Tests/Host.Test.Properties.xml` |
 | Across assemblies | `dotnet test --max-parallel-test-modules 2` | `build-sh/tasks.sh` → `test_run()`; override per machine with `SA_TEST_PARALLELISM=6 ./build-sh/do-test.sh` |
 
-Raise both on CI / beefier machines. `--max-parallel-test-modules` is only honoured while `dotnet test` stays on the MTP driver, and several ordinary-looking things quietly knock it off onto the MSBuild driver, where the switch is not recognised and the run dies with `MSBUILD : error MSB1001: Unknown switch`:
+Raise both on CI / beefier machines. `--max-parallel-test-modules` is only honoured while `dotnet test` stays on the MTP driver, and several ordinary-looking things quietly knock the invocation off that path — most of them die with `MSBUILD : error MSB1001: Unknown switch` once the switch is no longer consumed in leading position:
 
 - **`--solution` must come after it.** Argument order is significant; the switch is consumed only in leading position.
 - **No implicit restore.** `--no-restore` is required — otherwise `dotnet test` appends `-restore`. Combined with `--no-build` this keeps NuGet off the critical path entirely, which also avoids a restore stalling behind a proxy.
-- **No `-v`.** MSBuild verbosity also switches drivers. MTP takes verbosity from its own platform options.
+- **Verbosity: `-v n` is fine for a single-project run, fatal for the capped run.**
+  - ✅ `dotnet test --project Tests/<Name> -c Release --no-build --no-restore -v n`
+    stays on the MTP driver and prints the MTP summary (this is the CI shape on the Windows leg).
+    A failing test is named with its exception and stack, so a failure on an opaque runner is attributable.
+    (With `-v` present the CLI rejects a *bare directory* target — `error: Specifying a directory for 'dotnet test' should be via '--project' or '--solution'` — which is why the target is explicit here.)
+  - ❌ `dotnet test --max-parallel-test-modules N --solution Sa.slnx ... -v n`
+    is SDK-dependent — treat it as fatal. On 10.0.112 (verified 2026-09-27, `-v` in both last and leading position) the module cap is still consumed in leading position and the MTP driver runs the full solution; on other 10.0.x / .NET 11 SDKs the same `-v` reroutes the CLI to the MSBuild driver, where the module-cap switch is no longer consumed in leading position → `MSBUILD : error MSB1001: Unknown switch`. So `test_run()` passes no `-v` at all, and the CI legs never get it either — `-v n` is reserved for the single-project `--project` shape above.
+  - ⚠️ `--logger "console;verbosity=detailed"` is VSTest-only. On MTP it produces
+    `Zero tests ran` and exit code 5 (invalid command-line arguments, per the MTP exit-code table).
+    There is no VSTest-style logger for MTP — the runner's own console output already names each
+    failing test with exception and stack.
 - **No `--filter`.** It becomes the MSBuild property `VSTestTestCaseFilter`, with the same effect. That is why `test_ci()` passes `--filter` and no module cap. `testconfig.json` (`commandLineOptions`) is not an escape hatch here — the SDK's MTP build rejects `--config-file`.
 - **`MSBUILDDISABLENODEREUSE=1` when a build ran earlier in the same session.** A warm MSBuild worker node swallows the switch even when the command line is correct — the symptom is identical `MSB1001` on an invocation that worked moments before. `test_run()` sets it.
 
 `test_run()` therefore splits the work explicitly: `dotnet build --no-restore`, then `MSBUILDDISABLENODEREUSE=1 dotnet test --no-build --no-restore --max-parallel-test-modules N`. It restores first only when `src/.packages` is missing, so a warm checkout never touches the network. If a new package version lands in `src/Directory.Packages.props`, the build fails with a NuGet "run a restore" error — run `./build-sh/do-build.sh`. The CI workflow already uses the same restore-then-`--no-restore`-build split.
+
+### ⚠️ A full-solution run can end `Failed!` (exit 8) with every real test green
+Observed on SDK 10.0.112: `dotnet test --solution Sa.slnx` ends with `Test run summary: Failed!`, `error: 3`, exit code 8 (MTP: "the session discovered no tests") although **all** real test assemblies report `passed` and the summary's `failed:` is 0. The three fixture projects under `src/Tests/Fixtures/` (`Sa.Fixture`, `Sa.Data.PostgreSql.Fixture`, `Sa.Data.S3.Fixture`) are discovered as test modules and each reports `Zero tests ran`. Read the per-assembly `passed` lines and the summary's `failed:` count, not the top-line verdict. The .NET 11 SDK no longer fails the whole run on a single empty module; on .NET 10 the fix is `<IsTestingPlatformApplication>false</IsTestingPlatformApplication>` in the fixture `.csproj`s (they are referenced by test projects, not test modules themselves).
 
 ## MSBuild structure
 - Every library imports `src/Common.NuGet.Properties.xml` → `src/Common.Properties.xml`, which sets: `net10.0`, `PublishAot=true`, `IsAotCompatible=true`, `Nullable`, analyzers, SourceLink, `GeneratePackageOnBuild=true`, and shared refs (Logging.Abstractions, DI, SourceLink). Set `<Version>` + `<Description>` in each lib's own `.csproj`.

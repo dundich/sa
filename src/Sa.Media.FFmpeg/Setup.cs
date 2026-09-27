@@ -13,6 +13,7 @@ public static class Setup
         string? configSectionPath = null,
         Action<FFMpegOptions>? configure = null)
     {
+        ArgumentNullException.ThrowIfNull(services);
 
         var optsBuilder = services.AddOptions<FFMpegOptions>();
 
@@ -21,11 +22,28 @@ public static class Setup
 
         optsBuilder
             .Configure(configure ?? (_ => { }))
-            .PostConfigure(options => options.Validate())
+            // Явные проверки вместо ValidateDataAnnotations(): тот помечен
+            // RequiresUnreferencedCode (IL2026) и ломает Native AOT, ради которого эта сборка
+            // и существует. Набор атрибутов тут всё равно минимален.
+            // Сообщение Validate() не поддерживает подстановку значений (только {Key}),
+            // поэтому оно статическое.
+            .Validate(
+                static o => o.TimeoutSeconds is null or >= 0,
+                "FFMpegOptions:TimeoutSeconds must be non-negative or left unset.")
+            // Каталог создаёт фабрика (EnsureWritableDirectory), так что его отсутствие — не
+            // ошибка настройки; настоящая ошибка — путь, указывающий на *файл*, в этом случае
+            // CreateDirectory роняет непонятное IOException при первом resolve.
+            .Validate(
+                static o => o.WritableDirectory is null || !File.Exists(o.WritableDirectory),
+                "FFMpegOptions:WritableDirectory points to a file, not a directory. " +
+                "Leave the option unset to use the default, or point it at a directory (it is created if missing).")
             .ValidateOnStart();
 
-        services.TryAddTransient<IProcessExecutor, ProcessExecutor>();
-        services.TryAddTransient<IFFMpegLocator, FFMpegLocator>();
+        // Singleton, а не Transient: FFMpegLocator кэширует найденный путь, и пересоздавать его
+        // на каждый resolve — значит заново обходить диск. Оба объекта потокобезопасны
+        // (у ProcessExecutor состояние — только логгер).
+        services.TryAddSingleton<IProcessExecutor, ProcessExecutor>();
+        services.TryAddSingleton<IFFMpegLocator, FFMpegLocator>();
 
         services.TryAddSingleton<IPcmS16LeChannelManipulator, PcmS16LeChannelManipulator>();
 

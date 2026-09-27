@@ -149,6 +149,10 @@ public sealed class FFMpegProcessorTests
     [InlineData("./data/input.wav")]
     public async Task ConvertToMp3_ShouldBeWork(string testFilePath)
     {
+        // Команда явно называет энкодер libmp3lame; если его нет в сборке
+        // (win-x64 payload старше фикса кодеков) — тест пропускается, а не падает.
+        await CodecProbe.RequireEncoderAvailable("libmp3lame", CancellationToken);
+
         var fn = "./data/output.mp3";
         // Act
         await Processor.ConvertToMp3(
@@ -164,6 +168,10 @@ public sealed class FFMpegProcessorTests
     [InlineData("./data/input.wav")]
     public async Task ConvertToOgg_ShouldBeWork(string testFilePath)
     {
+        // isLibopus: false → команда явно называет энкодер libvorbis; если его нет
+        // в сборке (win-x64 payload старше фикса кодеков) — тест пропускается, а не падает.
+        await CodecProbe.RequireEncoderAvailable("libvorbis", CancellationToken);
+
         var fn = "./data/output.ogg_";
         // Act
         await Processor.ConvertToOgg(

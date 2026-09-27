@@ -23,18 +23,24 @@ internal sealed class PcmS16LeChannelManipulator(
         ArgumentNullException.ThrowIfNullOrWhiteSpace(inputFileName);
         ArgumentNullException.ThrowIfNullOrWhiteSpace(outputFileName);
 
+        // Суффикс подставляется в имя выходного файла, а значит попадает в командную строку.
+        FFmpegArgs.ValidateFileNameToken(channelSuffix, nameof(channelSuffix));
+
         // Получаем количество каналов из метаданных
-        var (channels, _) = await _ffprobe.GetChannelsAndSampleRate(inputFileName, cancellationToken);
+        var (channels, _) = await _ffprobe.GetChannelsAndSampleRate(inputFileName, cancellationToken)
+            .ConfigureAwait(false);
 
         if (!channels.HasValue || channels.Value <= 0)
-            throw new InvalidOperationException("Failed to determine the number of channels.");
+            throw new InvalidOperationException(
+                $"Failed to determine the number of audio channels in '{inputFileName}'.");
 
         if (channels > 2)
         {
-            throw new NotSupportedException("Only mono (1 channel) and stereo (2 channels) audio formats are supported.");
+            throw new NotSupportedException(
+                $"Only mono (1 channel) and stereo (2 channels) audio formats are supported, but '{inputFileName}' has {channels}.");
         }
 
-        var outFileExtension = Path.GetExtension(outputFileName) ?? ".wav";
+        var outFileExtension = Path.GetExtension(outputFileName) is { Length: > 0 } ext ? ext : ".wav";
         string outFilePrefix = Path.Combine(
             Path.GetDirectoryName(outputFileName) ?? string.Empty,
             Path.GetFileNameWithoutExtension(outputFileName));
@@ -49,7 +55,7 @@ internal sealed class PcmS16LeChannelManipulator(
                 1,
                 isOverwrite,
                 timeout,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             return [file0];
         }
 
@@ -61,11 +67,13 @@ internal sealed class PcmS16LeChannelManipulator(
 
         var cmd = BuildSplitCommand(inputFileName, files, outputSampleRate, isOverwrite);
 
+        // throwOnError: true — раньше ошибка FFmpeg проглатывалась, и метод возвращал пути к
+        // файлам, которых не существует. То же касается JoinAsync.
         _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
-            throwOnError: false,
+            throwOnError: true,
             timeout: timeout,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return files;
     }
@@ -84,13 +92,18 @@ internal sealed class PcmS16LeChannelManipulator(
         ArgumentNullException.ThrowIfNullOrWhiteSpace(rightFileName);
         ArgumentNullException.ThrowIfNullOrWhiteSpace(outputFileName);
 
+        if (!File.Exists(leftFileName))
+            throw new FileNotFoundException($"Left input file not found: '{leftFileName}'.", leftFileName);
+        if (!File.Exists(rightFileName))
+            throw new FileNotFoundException($"Right input file not found: '{rightFileName}'.", rightFileName);
+
         var cmd = BuildJoinCommand(leftFileName, rightFileName, outputFileName, outputSampleRate, isOverwrite);
 
         _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
-            throwOnError: false,
+            throwOnError: true,
             timeout: timeout,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return outputFileName;
     }
@@ -103,13 +116,16 @@ internal sealed class PcmS16LeChannelManipulator(
         int? outputSampleRate,
         bool isOverwrite)
     {
-        string over = isOverwrite ? "-y" : string.Empty;
-        var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
-
-        return $"{over} {Constants.CleanBannerFlags} -i \"{inputFileName}\" " +
-            $"-filter_complex \"[0:a]channelsplit=channel_layout=stereo[left][right]\" " +
-            $"-map \"[left]\"  -acodec pcm_s16le -ac 1 -sample_fmt s16 {sampleRate} -f wav \"{outputFiles[0]}\" " +
-            $"-map \"[right]\" -acodec pcm_s16le -ac 1 -sample_fmt s16 {sampleRate} -f wav \"{outputFiles[1]}\"";
+        var b = new ValueStringBuilder(Constants.StringBuilderInitialCapacity);
+        b.Append(Constants.CleanBannerFlags);
+        // Флаг перезаписи — после баннера, иначе он склеивается с ним в «-y-nostdin».
+        b.Append(isOverwrite ? " -y " : " -n ");
+        b.Append(" -i ");
+        FFmpegArgs.AppendQuoted(ref b, inputFileName);
+        b.Append(" -filter_complex \"[0:a]channelsplit=channel_layout=stereo[left][right]\" ");
+        b.Append($"-map \"[left]\" {WavOutput(outputSampleRate, outputFiles[0])} ");
+        b.Append($"-map \"[right]\" {WavOutput(outputSampleRate, outputFiles[1])}");
+        return b.ToString();
     }
 
     private static string BuildJoinCommand(
@@ -119,14 +135,34 @@ internal sealed class PcmS16LeChannelManipulator(
         int? outputSampleRate,
         bool isOverwrite)
     {
-        string over = isOverwrite ? "-y" : string.Empty;
-        var sampleRate = outputSampleRate.HasValue ? $"-ar {outputSampleRate}" : string.Empty;
-
-        return $"{over} {Constants.CleanBannerFlags} -i \"{leftFileName}\" -i \"{rightFileName}\" " +
-            $"-filter_complex \"[0:a][1:a]amerge=inputs=2[a]\" -map \"[a]\" -ac 2 " +
-            $"-acodec pcm_s16le -sample_fmt s16 {sampleRate} " +
-            $"-f wav {Constants.CleanWavOutputFlags} \"{outputFileName}\"";
+        var b = new ValueStringBuilder(Constants.StringBuilderInitialCapacity);
+        b.Append(Constants.CleanBannerFlags);
+        b.Append(isOverwrite ? " -y " : " -n ");
+        b.Append(" -i ");
+        FFmpegArgs.AppendQuoted(ref b, leftFileName);
+        b.Append(" -i ");
+        FFmpegArgs.AppendQuoted(ref b, rightFileName);
+        b.Append(" -filter_complex \"[0:a][1:a]amerge=inputs=2[a]\" -map \"[a]\" -ac 2 ");
+        b.Append($"-acodec pcm_s16le -sample_fmt s16 {SampleRate(outputSampleRate)} -f wav ");
+        b.Append(Constants.CleanWavOutputFlags);
+        b.Append(' ');
+        FFmpegArgs.AppendQuoted(ref b, outputFileName);
+        return b.ToString();
     }
+
+    /// <summary>
+    /// Общий кусок для обоих выходов SplitAsync.
+    /// Раньше здесь стоял «-f wav» без CleanWavOutputFlags, и на выходе получался WAV с
+    /// LIST/INFO и data-размером 0xFFFFFFFF — то есть не воспроизводимый побайтово файл,
+    /// в отличие от JoinAsync и всех ConvertToPcm*, которые эти флаги ставили.
+    /// </summary>
+    static string WavOutput(int? outputSampleRate, string outputFile)
+    {
+        var result = $"-acodec pcm_s16le -ac 1 -sample_fmt s16 {SampleRate(outputSampleRate)} -f wav {Constants.CleanWavOutputFlags} ";
+        return result + FFmpegArgs.Quote(outputFile);
+    }
+
+    static string SampleRate(int? outputSampleRate) => outputSampleRate is { } r ? $"-ar {r}" : string.Empty;
 
     #endregion
 }

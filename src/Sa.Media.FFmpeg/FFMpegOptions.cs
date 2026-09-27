@@ -1,49 +1,44 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿namespace Sa.Media.FFmpeg;
 
-namespace Sa.Media.FFmpeg;
-
+/// <summary>
+/// Настройки библиотеки. Биндиндятся из конфигурации через <c>AddSaFFMpeg("Section")</c> и
+/// валидируются при старте хоста.
+/// </summary>
 public sealed record FFMpegOptions
 {
     /// <summary>
-    /// Полный путь к исполняемому файлу ffmpeg/ffprobe. Если <c>null</c>, используется поиск через PATH или sa/native/.
+    /// Полный путь к исполняемому файлу ffmpeg. Если <c>null</c>, используется бандл
+    /// <c>sa/native</c> рядом с приложением, затем поиск в PATH.
+    /// Рядом с ним должен лежать ffprobe — иначе операции чтения метаданных упадут с
+    /// FileNotFoundException на первой попытке.
     /// </summary>
-    [StringLength(255)]
     public string? ExecutablePath { get; set; } = null;
 
     /// <summary>
-    /// Директория, в которую FFmpeg может записывать выходные файлы.
+    /// Каталог для временных и выходных файлов по умолчанию. Нужен там, где текущий рабочий
+    /// каталог процесса недоступен на запись — в Windows-службах, в контейнерах с read-only rootfs,
+    /// в системах, где CWD не задан. Создаётся, если отсутствует.
+    /// <c>null</c> — использовать каталог по умолчанию вызывающего кода.
     /// </summary>
-    [StringLength(255)]
     public string? WritableDirectory { get; set; } = null;
 
     /// <summary>
-    /// Таймаут выполнения команд в секундах. По умолчанию используется 5 минут (Constants.DefaultTimeout).
+    /// Таймаут выполнения команд, секунд. <c>null</c> или <c>0</c> — использовать
+    /// <see cref="Services.Constants.DefaultTimeout"/> (5 минут).
     /// </summary>
     public int? TimeoutSeconds { get; set; }
 
     /// <summary>
-    /// Вычисленный таймаут на основе <see cref="TimeoutSeconds"/>.
+    /// Вычисленный таймаут на основе <see cref="TimeoutSeconds"/>, либо <c>null</c> — «по умолчанию».
     /// </summary>
-    public TimeSpan? Timeout => TimeoutSeconds > 0
-        ? TimeSpan.FromSeconds(TimeoutSeconds.Value)
-        : null;
+    public TimeSpan? Timeout => TimeoutSeconds is > 0 ? TimeSpan.FromSeconds(TimeoutSeconds.Value) : null;
 
     /// <summary>
-    /// Валидирует параметры после десериализации.
+    /// Создаёт <see cref="WritableDirectory"/>, если он задан и ещё не существует.
     /// </summary>
-    /// <exception cref="DirectoryNotFoundException">Если WritableDirectory не существует.</exception>
-    /// <exception cref="ArgumentException">Если TimeoutSeconds отрицательный.</exception>
-    public void Validate()
+    public void EnsureWritableDirectory()
     {
-        if (WritableDirectory is not null && !Directory.Exists(WritableDirectory))
-        {
-            throw new DirectoryNotFoundException(
-                $"FFmpeg writable directory does not exist: {WritableDirectory}");
-        }
-
-        if (TimeoutSeconds.HasValue && TimeoutSeconds.Value < 0)
-        {
-            throw new ArgumentException("TimeoutSeconds must be non-negative", nameof(TimeoutSeconds));
-        }
+        if (!string.IsNullOrWhiteSpace(WritableDirectory))
+            Directory.CreateDirectory(WritableDirectory);
     }
 }

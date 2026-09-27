@@ -1,0 +1,45 @@
+<Project>
+
+    <!--
+      Single source of truth for "which bundled FFmpeg build does this RID need".
+
+      Exposes:
+        $(FfmpegSupportedRids)  - RIDs the NuGet package actually ships a payload for
+        $(_FfmpegCurrentRid)    - one of the above, or '' when this RID is not supported
+
+      Imported explicitly by Sa.Media.FFmpeg.csproj (library build) and by
+      buildTransitive/Sa.Media.FFmpeg.targets (consumer build). It is deliberately NOT named
+      Sa.Media.FFmpeg.props, so NuGet does not auto-import it: the answer depends on
+      $(RuntimeIdentifier), which is only final after the consumer's project body is evaluated.
+    -->
+
+    <PropertyGroup>
+        <FfmpegSupportedRids>win-x64;win-arm64;linux-x64</FfmpegSupportedRids>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <_FfmpegRequestedRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_FfmpegRequestedRid>
+        <_FfmpegRequestedRid Condition="'$(_FfmpegRequestedRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_FfmpegRequestedRid>
+
+        <!--
+          $(NETCoreSdkRuntimeIdentifier) is distro-qualified on Linux/macOS, e.g. ubuntu.24.04-x64
+          or osx.14-arm64, so it must be reduced to an architecture/OSType, not string-matched
+          against the payload folder names.
+        -->
+        <_FfmpegIsWindows Condition="$(_FfmpegRequestedRid.StartsWith('win')) == 'true'">true</_FfmpegIsWindows>
+        <_FfmpegIsWindows Condition="'$(_FfmpegIsWindows)' == ''">false</_FfmpegIsWindows>
+        <_FfmpegIsX64 Condition="$(_FfmpegRequestedRid.EndsWith('-x64')) == 'true'">true</_FfmpegIsX64>
+        <_FfmpegIsX64 Condition="'$(_FfmpegIsX64)' == ''">false</_FfmpegIsX64>
+
+        <_FfmpegCurrentRid Condition="'$(_FfmpegIsWindows)' == 'true' AND '$(_FfmpegIsX64)' == 'true'">win-x64</_FfmpegCurrentRid>
+        <_FfmpegCurrentRid Condition="'$(_FfmpegIsWindows)' == 'true'">win-arm64</_FfmpegCurrentRid>
+        <_FfmpegCurrentRid Condition="'$(_FfmpegIsWindows)' != 'true' AND '$(_FfmpegIsX64)' == 'true'">linux-x64</_FfmpegCurrentRid>
+
+        <!--
+          Anything else (linux-arm64, osx-x64, osx-arm64, ...) is left empty on purpose: silently
+          substituting the x64 build would hand an unusable binary to an arm64 host. Callers are
+          expected to warn and skip the extraction instead.
+        -->
+    </PropertyGroup>
+
+</Project>

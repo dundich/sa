@@ -1,97 +1,153 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
+﻿namespace Sa.Media.FFmpeg.Services;
 
-namespace Sa.Media.FFmpeg.Services;
+using System.Runtime.InteropServices;
 
 internal sealed class FFMpegLocator : IFFMpegLocator
 {
     const string PlatformFolder = "sa/native";
+
+    /// <summary>Каталог бандла относительно выходной папки приложения.</summary>
+    static string BundledDirectory => Path.Combine(AppContext.BaseDirectory, "sa", "native");
+
+    // Поиск диска не нужен: он идёт по фиксированным путям, а результат кэшируется, потому что
+    // и статические IFFMpegExecutor.Default, и DI-синглтоны зовут метод многократно.
+    readonly Lazy<string> _ffmpegPath;
+
+    public FFMpegLocator() =>
+        _ffmpegPath = new Lazy<string>(FindFFmpeg, LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
     /// Находит путь к ffmpeg-исполняемому файлу.
     /// </summary>
     public string FindFFmpegExecutablePath()
     {
-        var filePath = FindFFmpeg();
+        var filePath = _ffmpegPath.Value;
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        // Права трогаем ТОЛЬКО у собственного бандла. Раньше здесь вызывался chmod безусловно,
+        // и на машине с системным ffmpeg (/usr/bin/ffmpeg) попытка выставить ему бит
+        // завершалась TypeInitializationException — до того, как дело доходило до конвертации.
+        if (IsBundled(filePath))
         {
-            MakeFileExecutable(filePath);
-            var destDir = Path.GetDirectoryName(filePath);
-            MakeFileExecutable(Path.Combine(destDir!, Constants.FFprobeFileNameLinux));
+            EnsureExecutable(filePath);
+            EnsureExecutableIfExists(Sibling(filePath, Constants.FFprobeExecutableFileName));
         }
 
         return filePath;
     }
 
-    private static string FindFFmpeg()
+    /// <inheritdoc />
+    public string FindFFprobeExecutablePath(string ffmpegExecutablePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ffmpegExecutablePath);
+
+        var ffprobePath = Sibling(ffmpegExecutablePath, Constants.FFprobeExecutableFileName);
+
+        // Не требуем ffprobe при поиске ffmpeg: ffmpeg без ffprobe — валидная конфигурация,
+        // а обратное — нет. Раньше тут бросался FileNotFoundException на каждом запуске.
+        if (IsBundled(ffmpegExecutablePath))
+            EnsureExecutableIfExists(ffprobePath);
+
+        if (!File.Exists(ffprobePath))
+            throw new FileNotFoundException(
+                $"ffprobe was not found next to '{ffmpegExecutablePath}'. " +
+                "FFmpeg metadata/streaming APIs need it: install the full FFmpeg build " +
+                "(not a minimal one without ffprobe) or set FFMpegOptions.ExecutablePath to a " +
+                "directory containing both ffmpeg and ffprobe.",
+                ffprobePath);
+
+        return ffprobePath;
+    }
+
+    static string FindFFmpeg()
     {
         var executableName = Constants.FFmpegExecutableFileName;
-
         var appDir = AppContext.BaseDirectory;
 
-        // 1. current dir
+        // 1. текущий каталог приложения
         var fullPath = Path.Combine(appDir, executableName);
         if (File.Exists(fullPath))
             return fullPath;
 
-        // 2. (runtimes/native)
+        // 2. бандл, распакованный билдом (sa/native/ffmpeg)
         fullPath = Path.Combine(appDir, PlatformFolder, executableName);
         if (File.Exists(fullPath))
             return fullPath;
 
-        // 3. in system PATH
-        foreach (var dir in GetCommonSearchPaths())
+        // 3. системный ffmpeg из PATH
+        foreach (var candidate in GetCommonSearchPaths())
         {
             try
             {
-                var candidate = Path.Combine(dir, executableName);
-                if (File.Exists(candidate))
-                    return candidate;
+                var probe = Path.Combine(candidate, executableName);
+                if (File.Exists(probe))
+                    return probe;
             }
             catch
             {
-                // ignore error
+                // Нечитаемый элемент PATH — не повод прерывать поиск.
             }
         }
 
-        throw new InvalidOperationException($"ffmpeg not found.");
+        throw new FileNotFoundException(
+            $"ffmpeg not found. Searched: '{Path.Combine(appDir, executableName)}', " +
+            $"'{Path.Combine(appDir, PlatformFolder, executableName)}' and PATH. " +
+            "Install FFmpeg system-wide, or set FFMpegOptions:ExecutablePath to the ffmpeg binary. " +
+            "If you installed this NuGet package, the bundled binaries are extracted by the build " +
+            "into 'sa/native' — check the build log for [Sa.Media.FFmpeg] warnings.",
+            Constants.FFmpegExecutableFileName);
     }
-
 
     /// <summary>
-    /// Делает файл исполняемым (только для Linux/macOS).
+    /// Файл лежит в каталоге, который распаковывает билд этого пакета. Только такие файлы
+    /// безопасно модифицировать: они наши.
     /// </summary>
-    private static void MakeFileExecutable(string path)
+    internal static bool IsBundled(string path)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return;
-
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            throw new FileNotFoundException($"Cannot set executable bit on missing file: {path}", path);
-
-        using var process = Process.Start(new ProcessStartInfo
-        {
-            FileName = "chmod",
-            Arguments = $"u+x \"{path}\"",
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
-
-        if (process is null)
-            throw new InvalidOperationException("Failed to start chmod to make file executable.");
-
-        if (!process.WaitForExit(5000))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new TimeoutException($"Timeout waiting for chmod to complete on '{path}'.");
-        }
-
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException($"Failed to make file executable ({path}, exit={process.ExitCode}).");
+        var bundledDir = BundledDirectory;
+        var fullPath = Path.GetFullPath(path);
+        return Path.GetDirectoryName(fullPath) is { } dir
+               && string.Equals(dir, bundledDir, StringComparison.Ordinal);
     }
 
-    private static IEnumerable<string> GetCommonSearchPaths()
+    static string Sibling(string path, string fileName) =>
+        Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", fileName);
+
+    static void EnsureExecutableIfExists(string path)
+    {
+        if (File.Exists(path))
+            EnsureExecutable(path);
+    }
+
+    /// <summary>
+    /// Выставляет бит исполнения без запуска внешнего процесса: <c>chmod</c> может отсутствовать
+    /// в минимальном образе, а <see cref="File.SetUnixFileMode"/> — обычный системный вызов.
+    /// </summary>
+    internal static void EnsureExecutable(string path)
+    {
+        // Именно OperatingSystem.IsWindows(), а не Constants.IsOsWindows: только встроенные
+        // проверки распознаёт анализатор платформ (CA1416).
+        if (OperatingSystem.IsWindows() || !File.Exists(path))
+            return;
+
+        var mode = File.GetUnixFileMode(path);
+        if ((mode & UnixFileMode.UserExecute) != 0)
+            return;
+
+        try
+        {
+            File.SetUnixFileMode(path, mode | UnixFileMode.UserExecute);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            throw new IOException(
+                $"Cannot set the executable bit on the bundled FFmpeg binary '{path}'. " +
+                "If it sits on a filesystem mounted with 'noexec', move the app to a normal volume " +
+                "or point FFMpegOptions:ExecutablePath at your own ffmpeg.",
+                e);
+        }
+    }
+
+    static IEnumerable<string> GetCommonSearchPaths()
     {
         var paths = new List<string>();
 

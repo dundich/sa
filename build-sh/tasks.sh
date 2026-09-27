@@ -177,3 +177,6 @@ package() {
   build
   nu_pack
 }
+
+# Sourced late: it defines package_check, which needs the variables above.
+source "$SCRIPT_DIR/package-check.sh"
