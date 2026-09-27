@@ -107,16 +107,17 @@ builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
 });
 
 // Вариант 2: изменяемые опции с fluent builder
-builder.Services.AddSaFileSystemFileStorage((sp, options) =>
+builder.Services.AddSaFileSystemFileStorage(options =>
 {
     options.BasePath = @"C:\data\files";
     options.Basket = "documents";
     options.IsReadOnly = false;
     options.StorageType = "fs";
+    options.BufferSize = 256 * 1024;
 });
 ```
 
-> **Примечание:** валидация выполняется в момент регистрации (fail-fast). `IServiceProvider` в callback варианта 2 — одноразовая «пробная» сборка из пустого service collection: host-сервисы (`IConfiguration` и т.п.) в нём отсутствуют, внешние значения лучше захватывать замыканием.
+> **Примечание:** валидация выполняется в момент регистрации (fail-fast): пустой `BasePath`, некорректный `Basket` или неположительный `BufferSize` приводят к исключению там, а не при первой загрузке. Callback варианта 2 выполняется сразу, поэтому внешние значения нужно захватывать замыканием — контейнер на этом шаге ещё не собран, и host-сервисы (`IConfiguration` и т.п.) недоступны.
 
 ---
 
@@ -200,9 +201,9 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 | `IsReadOnly` | Запрет операций записи/удаления | `false` |
 | `BufferSize` | Размер буфера чтения/записи в байтах | `262144` (256 КБ) |
 
-### FileSystemStorageOptions (изменяемые, fluent builder)
+### FileSystemStorageOptions (неизменяемый record)
 
-Используется с перегрузкой `Action<IServiceProvider, FileSystemStorageOptions>`:
+Используется с перегрузкой `Action<FileSystemStorageOptions>`:
 
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
@@ -210,8 +211,31 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 | `Basket` | Имя контейнера | `"share"` |
 | `StorageType` | Префикс схемы в File ID | `"fs"` |
 | `IsReadOnly` | Запрет операций записи/удаления | `false` |
+| `BufferSize` | Размер буфера чтения/записи в байтах | `262144` (256 КБ) |
 
-Валидация обязательных полей выполняется автоматически в момент регистрации провайдера (fail-fast) — вызов `options.Validate()` вручную не требуется.
+```csharp
+builder.Services.AddSaFileSystemFileStorage(options =>
+{
+    options.BasePath = @"C:\data\files";
+    options.Basket = "documents";
+    options.BufferSize = 512 * 1024;
+});
+```
+
+Перегрузка конвертирует опции через `ToSettings()` и делегирует перегрузке с
+настройками, поэтому место маппинга между двумя типами ровно одно. Обе перегрузки
+валидируют опции сразу при регистрации: если опции невалидны, в коллекцию сервисов
+ничего не попадает. `FileSystemStorageSettings` и `FileSystemStorageOptions` — оба
+неизменяемые record'ы, при регистрации они копируются, поэтому последующие правки вашего
+экземпляра на зарегистрированный storage не влияют.
+
+| Требование | К чему относится |
+|------------|------------------|
+| `BasePath` не null и не пустой | к обоим типам |
+| `BasePath` — абсолютный путь, который можно создать | к обоим типам |
+| `StorageType` не длиннее 10 символов, без `:`, `/` и `\` | к обоим типам |
+| `Basket` 3–63 символа, начинается с буквы или `_`, без разделителя пути | к обоим типам |
+| `BasePath` без разделителя пути за пределами корня платформы | к обоим типам |
 
 ---
 
@@ -243,6 +267,40 @@ new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
 | IOException при удалении | Повторяется внутренне; возвращает `false`, если все повторы неудачны |
 | Попытка обхода пути | Выбрасывает `SecurityException` |
 | Неверный формат File ID | Выбрасывает `ArgumentException` |
+| Невалидные опции при регистрации | Выбрасывает `ArgumentException` до того, как что-либо зарегистрировано |
+
+---
+
+## Ломающие изменения
+
+### 0.12.0 -> 0.13.0
+
+**Удалена перегрузка `AddSaFileSystemFileStorage(Action<IServiceProvider, FileSystemStorageOptions>)`.**
+Она создавала одноразовый `new ServiceCollection().BuildServiceProvider()`, чтобы передать
+провайдер в колбэк, поэтому колбэк не мог resolve-ить `IConfiguration`,
+`IHostEnvironment` или любой сервис приложения. Shim-а не оставлено. Замена:
+
+```csharp
+// было
+builder.Services.AddSaFileSystemFileStorage((sp, options) =>
+{
+    options.BasePath = sp.GetRequiredService<IHostEnvironment>().ContentRootPath;
+});
+
+// стало
+builder.Services.AddSaFileSystemFileStorage(options =>
+{
+    options.BasePath = builder.Environment.ContentRootPath;
+});
+```
+
+**Опции валидируются на этапе регистрации**, а не при первом использовании. Невалидные
+`BasePath`, `StorageType` или `Basket` теперь приводят к `ArgumentException` прямо из
+вызова `Add...`, а не на первой загрузке файла.
+
+**`FileSystemStorageOptions` и `FileSystemStorageSettings` — неизменяемые record'ы**,
+и `BufferSize` присутствует в обоих. Старый изменяемый builder-копировал четыре поля из
+пяти, теряя `BufferSize`.
 
 ---
 

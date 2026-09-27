@@ -212,6 +212,53 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 | `Region` | AWS region for SigV4 signing | `"eu-central-1"` |
 | `StorageType` | Scheme prefix in File ID | `"s3"` |
 | `IsReadOnly` | Prevent write/delete operations | `false` |
+| `ClientSettings` | Transport tuning (`TotalRequestTimeout`, `HandlerLifetime`, `ConnectionPoolLifetime`, ...) | `null` — client defaults |
+
+`S3FileStorageOptions` is an immutable record, so a prepared instance can be reused across
+registrations; the registration copies it, so later edits to your instance do not affect the
+registered storage.
+
+### Options are validated at registration
+
+`AddSaS3FileStorage` throws before registering anything when:
+
+| Property | Requirement |
+|----------|-------------|
+| `Endpoint` | absolute `http(s)` URL, not blank |
+| `AccessKey`, `SecretKey`, `Bucket` | not null or blank |
+| `StorageType` | at most 10 characters, no `:`, `/` or `\` (it becomes the file ID scheme) |
+| `Basket` | 3-63 characters, starts with a letter or `_`, no path separator |
+
+`null` yields `ArgumentNullException`, blank yields `ArgumentException` — the BCL
+convention, and the reverse of what the provider used to do.
+
+### Idempotency
+
+Registration is idempotent. A repeated call against the same target (same `Endpoint`,
+`Bucket` and `Region`) is a no-op. A call that would point the same shared
+`IS3BucketClient` at a different target throws `InvalidOperationException`.
+
+A repeated call that only changes `Basket`, `StorageType`, `IsReadOnly` or the credentials
+also throws, because the shared client is registered first-wins and cannot be rebuilt: the
+second storage would silently write into the first one's basket. Credential and transport
+drift alone is not treated as a conflict, since neither can be applied anyway.
+
+---
+
+## Breaking changes
+
+### 0.12.0 -> 0.13.0
+
+**`Defaults` was renamed to `S3Defaults`.** The old name was too generic for a public type
+in the package namespace. It is a source-level break only; the values are unchanged
+(`DefaultRegion` = `"eu-central-1"`).
+
+**`S3FileStorageOptions` is now a `record` and is validated eagerly.** Options that used
+to be accepted and failed later — a blank `Endpoint`, a `StorageType` containing `/` that
+produced file IDs the provider itself could not parse — are rejected at registration.
+
+**`ClientSettings` was added** to expose the transport settings that
+`S3BucketClientSetupSettings` supports but `S3FileStorageOptions` previously hid.
 
 ---
 

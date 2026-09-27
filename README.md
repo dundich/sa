@@ -160,13 +160,27 @@ builder.Services.AddSaSchedule(builder => builder
 | **Built-in providers** | `InMemoryFileStorage` (testing), plus `FileSystem`, `S3`, `Postgres` in separate packages |
 
 ```csharp
-builder.Services.AddSaHybridFileStorage(cfg => cfg
-    .ConfigureStorage(sp => sp
-        .AddStorage(new FileSystemStorage("/data/uploads"))
-        .AddStorage(new S3Storage("s3-bucket"))));
+builder.Services
+    // Each provider has its own registration method and participates in the hybrid container.
+    .AddSaFileSystemFileStorage(options =>
+    {
+        options.BasePath = "/data/uploads";
+        options.Basket = "documents";
+    })
+    .AddSaS3FileStorage(new S3FileStorageOptions
+    {
+        Endpoint = "https://s3.example.com",
+        AccessKey = "…",
+        SecretKey = "…",
+        Bucket = "archive",
+        Basket = "documents"
+    })
+
+    // Then configure the hybrid layer itself — exactly once.
+    .AddSaHybridFileStorage(cfg => cfg.AddLogging());
 ```
 
-Providers: [`Sa.HybridFileStorage.FileSystem`](src/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Sa.HybridFileStorage.Postgres).
+Providers: [`Sa.HybridFileStorage.FileSystem`](src/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Sa.HybridFileStorage.Postgres). Each validates its options eagerly at registration; resolving `IHybridFileStorage` without any provider throws instead of failing later on every operation.
 
 ---
 

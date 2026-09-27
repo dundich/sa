@@ -60,53 +60,60 @@ This package depends on `Sa.Data.PostgreSql` and `Sa.Partitional.PostgreSql`.
 
 ## Quick Start
 
-### Without DI
-
-```csharp
-using Sa.HybridFileStorage.Postgres;
-using Sa.HybridFileStorage.Domain;
-
-// Configure via fluent builder
-var configurator = new PostgresFileStorageConfiguration(services);
-
-// Or register through DI extension
-builder.Services.AddSaPostgreSqlFileStorage(cfg => cfg
-    .AddDataSource(ds => ds
-        .WithConnectionString("Host=localhost;Database=mydb;Username=postgres;Password=password")
-        .WithSearchPath("public"))
-    .WithSchemaName("public")
-    .WithTableName("files")
-    .WithStorageType("pg")
-    .ConfigureOptions((sp, options) =>
-    {
-        // Customize partitioning
-        options.PartOptions.Basket = "files";
-        options.PartOptions.PgPartBy = PgPartBy.Day;
-        options.PartOptions.MigrationScheduleForwardDays = 2;
-
-        // Customize cleanup
-        options.CleanupOptions.ExpireDays = 365 * 3;  // 3 years
-    }));
-```
-
-### With DI
+The provider is registered with `AddSaPostgreSqlFileStorage`, and the data source is
+configured on the returned `IPartConfiguration`:
 
 ```csharp
 using Sa.HybridFileStorage.Postgres;
 
-builder.Services.AddSaPostgreSqlFileStorage(cfg => cfg
-    .AddDataSource(ds => ds
-        .WithConnectionString("Host=db.example.com;Database=app;Username=app_user;Password=secret")
-        .WithSearchPath("storage"))
-    .WithTableName("binary_data")
-    .WithSchemaName("storage")
-    .ConfigureOptions((sp, opts) =>
+builder.Services.AddSaPostgreSqlFileStorageChained(options =>
     {
-        opts.PartOptions.Basket = "attachments";
-        opts.PartOptions.PgPartBy = PgPartBy.Month;
-        opts.CleanupOptions.ExpireDays = 730;  // 2 years
-    }));
+        options.TableName = "files";
+        options.StorageType = "pg";
+        options.Basket = "share";
+        options.ExpireDays = 365 * 3;                // drop partitions after 3 years
+    })
+    .AddDataSource(ds => ds
+        .WithConnectionString("Host=localhost;Database=mydb;Username=postgres;Password=password"));
 ```
+
+When the data source is already registered by something else, use the non-chaining overload:
+
+```csharp
+builder.Services.AddSaPostgreSqlFileStorage(options =>
+{
+    options.TableName = "binary_data";
+    options.SchemaName = "storage";
+    options.PgPartBy = PgPartBy.Month;
+});
+```
+
+### Schema resolution
+
+`SchemaName` is optional. When left `null` the schema is resolved once at startup, in this
+order:
+
+1. the explicit `SchemaName`, if set;
+2. the first entry of the connection string's search path
+   (`...;Search Path=storage,public` → `storage`);
+3. `public`.
+
+`GetSearchPath()` parses the connection string, so no database round trip is involved.
+
+### Options are validated at registration
+
+`AddSaPostgreSqlFileStorage` throws `ArgumentException` before registering anything if:
+
+| Property | Requirement |
+|----------|-------------|
+| `TableName`, `SchemaName` | bare SQL identifier: `[A-Za-z_][A-Za-z0-9_]*`, at most 63 characters |
+| `StorageType` | at most 10 characters, no `:`, `/` or `\` (it becomes the file ID scheme) |
+| `Basket` | 3–63 characters, starts with a letter or `_`, no path separator |
+| `ExpireDays`, `MigrationScheduleForwardDays` | `>= 1` |
+
+`TableName` is used both for the DDL and for every query, so it is rejected rather than
+quietly rewritten — `"\"files\""` used to be silently trimmed, which produced a table the
+provider then failed to find.
 
 ---
 
@@ -199,13 +206,13 @@ The provider uses `Sa.Partitional.PostgreSql` to manage partitions:
 -- Auto-created table structure:
 CREATE TABLE public.files (
     id         TEXT NOT NULL,
-    name       TEXT NOT NULL,
-    size       INT NOT NULL,
-    file_ext   TEXT NOT NULL,
+    name       VARCHAR(512) NOT NULL,
+    size       BIGINT NOT NULL,
+    file_ext   VARCHAR(64) NOT NULL,
     tenant_id  INT NOT NULL,
-    basket     TEXT NOT NULL,
+    basket     VARCHAR(63) NOT NULL,
     data       BYTEA NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL  -- used for range partitioning
+    created_at BIGINT NOT NULL       -- range partitioning key, Unix seconds
 ) PARTITION BY RANGE (created_at);
 
 -- Each (tenant_id, basket) pair gets its own list partition within each date range
@@ -224,10 +231,7 @@ CREATE TABLE public.files (
 New partitions are pre-created in advance (default: 2 days ahead) via a background job:
 
 ```csharp
-.ConfigureOptions((sp, opts) =>
-{
-    opts.PartOptions.MigrationScheduleForwardDays = 2;
-})
+options.MigrationScheduleForwardDays = 2;
 ```
 
 ### Cleanup schedule
@@ -235,10 +239,7 @@ New partitions are pre-created in advance (default: 2 days ahead) via a backgrou
 Old partitions beyond the retention period are dropped via a background job:
 
 ```csharp
-.ConfigureOptions((sp, opts) =>
-{
-    opts.CleanupOptions.ExpireDays = 365 * 3;  // drop partitions older than 3 years
-})
+options.ExpireDays = 365 * 3;  // drop partitions older than 3 years
 ```
 
 ---
@@ -262,25 +263,35 @@ Both run as background hosted services and use the same PostgreSQL connection po
 
 | Property | Description | Default |
 |----------|-------------|---------|
-| `StorageOptions.SchemaName` | PostgreSQL schema | `"public"` |
-| `StorageOptions.TableName` | Table name for file data | `"files"` |
-| `StorageOptions.StorageType` | Scheme prefix in File ID | `"pg"` |
-| `StorageOptions.IsReadOnly` | Prevent write/delete operations | `false` |
-| `PartOptions.Basket` | Scope/container name (used as list partition key) | `"share"` |
-| `PartOptions.PgPartBy` | Range partitioning granularity | `PgPartBy.Day` |
-| `PartOptions.MigrationScheduleForwardDays` | Days ahead to pre-create partitions | `2` |
-| `CleanupOptions.ExpireDays` | Retention period before partition drop (days) | `365 * 3` |
+| `SchemaName` | PostgreSQL schema; `null` means auto-detect (see above) | `null` → search path / `public` |
+| `TableName` | Table name for file data | `"files"` |
+| `StorageType` | Scheme prefix in File ID | `"pg"` |
+| `Basket` | Scope/container name (used as list partition key) | `"share"` |
+| `IsReadOnly` | Prevent write/delete operations | `false` |
+| `PgPartBy` | Range partitioning granularity | `PgPartBy.Day` |
+| `MigrationScheduleForwardDays` | Days ahead to pre-create partitions | `2` |
+| `ExpireDays` | Retention period before partition drop (days) | `365 * 3` |
 
-### IPostgresFileStorageConfiguration (fluent builder)
+### Registration extensions
 
 | Method | Description |
 |--------|-------------|
-| `AddDataSource(Action<IPgDataSourceSettingsBuilder>?)` | Configure PostgreSQL connection |
-| `WithSchemaName(string)` | Override schema name |
-| `WithTableName(string)` | Override table name |
-| `WithStorageType(string)` | Override storage type identifier |
-| `AsReadOnly()` | Mark as read-only |
-| `ConfigureOptions(Action<IServiceProvider, PostgresFileStorageOptions>)` | Late-stage customization |
+| `AddSaPostgreSqlFileStorage(Action<PostgresFileStorageOptions>?)` | Register the provider; returns the service collection |
+| `AddSaPostgreSqlFileStorage(PostgresFileStorageOptions)` | Same, from a prepared instance (copied, not retained) |
+| `AddSaPostgreSqlFileStorageChained(Action<PostgresFileStorageOptions>?)` | Same, returns `IPartConfiguration` for `.AddDataSource(...)` |
+
+Registration is idempotent: a repeated call with equal options is a no-op, a call with
+different options throws `InvalidOperationException` rather than duplicating the
+partitioning setup, the schedules and the `IFileStorage`.
+
+### DI services
+
+| Service | Purpose |
+|---------|---------|
+| `IFileStorage` | The provider itself (singleton) |
+| `RecyclableMemoryStreamManager` | Buffering for non-seekable streams (singleton, shared) |
+| `IPartitionManager` | Partition maintenance, from `Sa.Partial.PostgreSql` |
+| `TimeProvider` | Defaults to `TimeProvider.System`; register your own to control `UploadedAt` |
 
 ---
 
@@ -289,7 +300,7 @@ Both run as background hosted services and use the same PostgreSQL connection po
 | Package | Purpose |
 |---------|---------|
 | `Sa.Data.PostgreSql` | Npgsql client (`IPgDataSource`) |
-| `Sa.Partitional.PostgreSql` | Declarative partition management (`IPartitionManager`) |
+| `Sa.Partial.PostgreSql` | Declarative partition management (`IPartitionManager`) |
 | `Microsoft.IO.RecyclableMemoryStream` | Efficient memory buffering for non-seekable streams |
 
 ---
@@ -301,13 +312,39 @@ The underlying table structure:
 | Column | Type | Purpose |
 |--------|------|---------|
 | `id` | `TEXT` | Canonical File ID (primary key part) |
-| `name` | `TEXT` | Original file name |
-| `size` | `INT` | File size in bytes |
-| `file_ext` | `TEXT` | File extension (e.g., "pdf", "png") |
+| `name` | `VARCHAR(512)` | Original file name |
+| `size` | `BIGINT` | File size in bytes |
+| `file_ext` | `VARCHAR(64)` | File extension (e.g., "pdf", "png") |
 | `tenant_id` | `INT` | Tenant identifier (list partition key) |
-| `basket` | `TEXT` | Container/scope name (list partition key) |
+| `basket` | `VARCHAR(63)` | Container/scope name (list partition key) |
 | `data` | `BYTEA` | Raw file binary content |
-| `created_at` | `TIMESTAMPTZ` | Upload date (UTC midnight, range partition key) |
+| `created_at` | `BIGINT` | Upload date (UTC midnight as Unix seconds, range partition key) |
+
+`size` and `created_at` are `BIGINT`: the provider writes the stream length and the Unix
+timestamp as 64-bit values.
+
+---
+
+## Breaking changes
+
+### 0.12.0 → 0.13.0
+
+**`size` changed from `INT` to `BIGINT`.** An `INT` column silently truncated the recorded
+size of anything over 2 GB. Existing tables must be migrated:
+
+```sql
+ALTER TABLE <schema>.<table> ALTER COLUMN size TYPE BIGINT;
+```
+
+Apply it to the root table and to every existing partition.
+
+**Options are validated at registration.** A malformed `TableName`, `StorageType` or
+`Basket` now throws `ArgumentException` from `AddSaPostgreSqlFileStorage` instead of
+producing unusable file IDs or a `relation does not exist` error on the first upload. In
+particular `TableName = "\"files\""` is now rejected rather than silently trimmed to `files`.
+
+**Names are used verbatim.** The provider no longer rewrites `TableName`, `Basket` or
+`StorageType`; the DDL and the queries always use the configured value.
 
 ---
 

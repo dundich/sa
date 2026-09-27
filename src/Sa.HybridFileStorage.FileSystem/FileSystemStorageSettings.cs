@@ -40,12 +40,12 @@ public sealed record FileSystemStorageSettings
     /// <summary>
     /// Gets the default basket name.
     /// </summary>
-    public const string DefaultBasket = "share";
+    public const string DefaultBasket = Sa.HybridFileStorage.StorageNaming.DefaultBasket;
 
     /// <summary>
     /// Validates the current configuration and throws a <see cref="ValidationException"/> if any property is invalid.
     /// </summary>
-    /// <exception cref="ValidationException">Thrown when <see cref="BasePath"/>, <see cref="Basket"/>, or <see cref="StorageType"/> is invalid.</exception>
+    /// <exception cref="ValidationException">Thrown when <see cref="BasePath"/>, <see cref="Basket"/>, <see cref="StorageType"/>, or <see cref="BufferSize"/> is invalid.</exception>
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(BasePath))
@@ -73,14 +73,13 @@ public sealed record FileSystemStorageSettings
             throw new ValidationException("Basket cannot be empty.");
         }
 
-        if (Basket.Length > 63 || Basket.Length < 3)
+        try
         {
-            throw new ValidationException($"Basket exceeds maximum length of 63 characters.");
+            StorageNaming.ValidateBasket(Basket, nameof(Basket));
         }
-
-        if (!char.IsLetter(Basket[0]) && Basket[0] != '_')
+        catch (ArgumentException ex)
         {
-            throw new ValidationException("Basket must start with a letter or underscore.");
+            throw new ValidationException(ex.Message, ex);
         }
 
         if (string.IsNullOrWhiteSpace(StorageType))
@@ -88,9 +87,18 @@ public sealed record FileSystemStorageSettings
             throw new ValidationException("StorageType cannot be empty.");
         }
 
-        if (StorageType.Length > 10)
+        try
         {
-            throw new ValidationException($"StorageType exceeds maximum length of 10 characters.");
+            StorageNaming.RequireStorageType(StorageType, nameof(StorageType));
+        }
+        catch (ArgumentException ex)
+        {
+            throw new ValidationException(ex.Message, ex);
+        }
+
+        if (BufferSize <= 0)
+        {
+            throw new ValidationException($"BufferSize must be greater than zero, but was {BufferSize}.");
         }
     }
 }

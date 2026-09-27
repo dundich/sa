@@ -82,18 +82,21 @@ public sealed class FailoverTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task HybridFileStorage_NoAvailableStorage_ThrowsNoAvailableException()
+    public void HybridFileStorage_NoAvailableStorage_ThrowsOnResolve()
     {
-        // Arrange — empty service collection, no storages registered
+        // Resolving used to succeed with an empty container, and the first upload then failed with
+        // HybridFileStorageNoAvailableException — a message pointing at the call site rather than
+        // at the missing registration. A missing provider is a startup mistake, so it now fails
+        // where the mistake is.
         var services = new ServiceCollection()
             .AddSaHybridFileStorage();
 
         using var provider = services.BuildServiceProvider();
-        var storage = provider.GetRequiredService<IHybridFileStorage>();
 
-        // Act & Assert
-        await Assert.ThrowsAsync<HybridFileStorageNoAvailableException>(() =>
-            storage.UploadAsync(string.Empty, new UploadFileInput { FileName = "nope.bin", TenantId = 1 }, FixtureHelper.GetByteStream(), _cts.Token));
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => provider.GetRequiredService<IHybridFileStorage>());
+
+        Assert.Contains("No IFileStorage provider", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

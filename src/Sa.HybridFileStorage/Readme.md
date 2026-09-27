@@ -593,6 +593,40 @@ public sealed class FileMetadata
 
 ---
 
+## Breaking changes
+
+### 0.12.0 -> 0.13.0
+
+**Resolving `IHybridFileStorage` with no registered storage now throws
+`InvalidOperationException`.** It used to resolve successfully with an empty container and
+then fail every operation with `HybridFileStorageNoAvailableException`, which points at the
+call site rather than at the missing registration. A missing provider is a startup mistake,
+so it now fails where the mistake is. The message names the `Add...` methods to reach for.
+
+**A second `AddSaHybridFileStorage` call now throws `InvalidOperationException`.** It used
+to `TryAddSingleton` into a collection that already had the factory, so the second
+builder's storages and interceptors were silently discarded. The guard keys on
+`IHybridFileStorage`, so a hand-rolled registration is detected too. Register providers
+with their own `Add...` methods and configure the hybrid layer once.
+
+**`AddSaInMemoryFileStorage(IHybridFileStorageConfiguration, ...)` now registers the
+provider in the container.** It used to build it with `new` inside the deferred callback,
+so the storage was invisible to `sp.GetServices<IFileStorage>()`, outside the provider's
+disposal, and potentially a different instance from the one registered directly. The very
+same instance is now shared.
+
+**`TimeProvider` is registered with `TryAddSingleton(TimeProvider.System)`** by the
+in-memory provider, and a previously registered `TimeProvider` wins. Previously each
+provider fell back to `TimeProvider.System` on its own, so a registered test clock was
+silently ignored.
+
+**`StorageNaming` was added** as a public helper in the base package: the naming rules
+(`DefaultBasket`, `BasketMinLength`, `StorageTypeMaxLength`, `ValidateBasket`,
+`RequireStorageType`, `RequireIdentifier`) that the provider packages now share. All three
+provider packages reference this package, so it is available to consumers of any of them.
+
+---
+
 ## Project Structure
 
 ```
@@ -607,6 +641,7 @@ src/Sa.HybridFileStorage/                          # Core library (NuGet: Sa.Hyb
 ├── FileMetadata.cs                                # Metadata DTO
 ├── InMemoryFileStorage.cs                         # In-memory provider
 ├── InMemoryFileStorageOptions.cs                  # Options for in-memory
+├── StorageNaming.cs                               # Shared naming rules (basket, storage type, identifiers)
 ├── BatchResult.cs, BatchOptions.cs, …            # Batch operation types
 └── Interceptors/                                  # Upload/download/delete hooks
     ├── IUploadInterceptor.cs

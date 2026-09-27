@@ -3,7 +3,7 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.12.0</Version>
+        <Version>0.13.0</Version>
         <Description>File storage management in S3</Description>
     </PropertyGroup>
 
@@ -18,6 +18,10 @@
 
     <ItemGroup>
         <Folder Include="AsLink\" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Sa.HybridFileStorage.S3Tests" />
     </ItemGroup>
 
 </Project>

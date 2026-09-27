@@ -35,50 +35,33 @@ public sealed record FileSystemStorageOptions
     public string Basket { get; set; } = FileSystemStorageSettings.DefaultBasket;
 
     /// <summary>
+    /// Gets or sets the buffer size used for file I/O operations. Defaults to 256 KB.
+    /// </summary>
+    [Range(1, int.MaxValue)]
+    public int BufferSize { get; set; } = 256 * 1024;
+
+    /// <summary>
     /// Validates the current configuration and throws a <see cref="ValidationException"/> if any property is invalid.
     /// </summary>
-    /// <exception cref="ValidationException">Thrown when <paramref name="BasePath"/>, <paramref name="Basket"/>, or <paramref name="StorageType"/> is invalid.</exception>
-    public void Validate()
+    /// <exception cref="ValidationException">Thrown when <see cref="BasePath"/>, <see cref="Basket"/>, <see cref="StorageType"/>, or <see cref="BufferSize"/> is invalid.</exception>
+    /// <remarks>
+    /// Validation is delegated to <see cref="FileSystemStorageSettings.Validate"/> so that the mutable
+    /// options and the immutable settings cannot drift apart. Always map through
+    /// <see cref="ToSettings"/> — a hand-written copy of the properties is how
+    /// <see cref="BufferSize"/> went missing from the provider registration.
+    /// </remarks>
+    public void Validate() => ToSettings().Validate();
+
+    /// <summary>
+    /// Creates the immutable settings this options instance describes.
+    /// </summary>
+    /// <returns>A <see cref="FileSystemStorageSettings"/> with every value copied.</returns>
+    public FileSystemStorageSettings ToSettings() => new()
     {
-        if (string.IsNullOrWhiteSpace(BasePath))
-        {
-            throw new ValidationException("BasePath cannot be empty.");
-        }
-
-        try
-        {
-            // Get the full path to resolve any relative paths
-            var _ = Path.GetFullPath(BasePath);
-
-            // Check if the path contains any invalid characters
-            if (BasePath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
-            {
-                throw new ValidationException($"BasePath contains invalid characters: {BasePath}");
-            }
-        }
-        catch (Exception ex)
-        {
-            throw new ValidationException($"Invalid BasePath format: {BasePath}. {ex.Message}");
-        }
-
-        if (Basket.Length > 63 || Basket.Length < 3)
-        {
-            throw new ValidationException($"Basket exceeds maximum length of 63 characters.");
-        }
-
-        if (!char.IsLetter(Basket[0]) && Basket[0] != '_')
-        {
-            throw new ValidationException("Basket must start with a letter or underscore.");
-        }
-
-        if (string.IsNullOrWhiteSpace(StorageType))
-        {
-            throw new ValidationException("StorageType cannot be empty.");
-        }
-
-        if (StorageType.Length > 10)
-        {
-            throw new ValidationException($"StorageType exceeds maximum length of 10 characters.");
-        }
-    }
+        BasePath = BasePath,
+        StorageType = StorageType,
+        Basket = Basket,
+        IsReadOnly = IsReadOnly,
+        BufferSize = BufferSize,
+    };
 }

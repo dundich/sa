@@ -78,9 +78,8 @@ builder.Services.AddSaPostgreSqlFileStorage(opts =>
 // которая возвращает IPartConfiguration для цепочки настройки подключения:
 builder.Services
     .AddSaPostgreSqlFileStorageChained(opts => opts.TableName = "files")
-    .AddDataSource(ds => ds
-        .WithConnectionString("Host=localhost;Database=mydb;Username=postgres;Password=password")
-        .WithSearchPath("public"));
+    .AddDataSource(ds => ds.WithConnectionString(
+        "Host=localhost;Database=mydb;Username=postgres;Password=password;Search Path=public"));
 ```
 
 > **Примечание:** `AddSaPostgreSqlFileStorage` (обычная) и `AddSaPostgreSqlFileStorageChained`
@@ -88,6 +87,33 @@ builder.Services
 > чтобы можно было настроить `IPgDataSource` после.
 >
 > Повторная регистрация идемпотентна: равные опции — no-op, конфликтующие — `InvalidOperationException`.
+
+### Как определяется схема
+
+`SchemaName` необязателен. При значении `null` схема определяется один раз на старте:
+
+1. явно заданный `SchemaName`, если он есть;
+2. первый элемент `search_path` из connection string
+   (`...;Search Path=storage,public` → `storage`);
+3. `public`.
+
+Отдельного метода `WithSearchPath` у билдера data source нет: `search_path` задаётся
+только через строку подключения. `GetSearchPath()` её парсит, обращения к БД не происходит.
+
+### Валидация опций на этапе регистрации
+
+`AddSaPostgreSqlFileStorage` выбросит `ArgumentException` до того, как что-либо
+зарегистрирует, если:
+
+| Свойство | Требование |
+|----------|------------|
+| `TableName`, `SchemaName` | «голый» SQL-идентификатор: `[A-Za-z_][A-Za-z0-9_]*`, не длиннее 63 символов |
+| `StorageType` | не длиннее 10 символов, без `:`, `/` и `\` (становится схемой file ID) |
+| `Basket` | 3–63 символа, начинается с буквы или `_`, без разделителя пути |
+| `ExpireDays`, `MigrationScheduleForwardDays` | `>= 1` |
+
+`TableName` используется и в DDL, и во всех запросах, поэтому некорректное значение
+отвергается, а не переписывается молча: `"\"files\""` раньше тихо обрезалось до `files`.
 
 ---
 
@@ -180,13 +206,13 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 -- Автоматически созданная структура таблицы:
 CREATE TABLE public.files (
     id         TEXT NOT NULL,
-    name       TEXT NOT NULL,
-    size       INT NOT NULL,
-    file_ext   TEXT NOT NULL,
+    name       VARCHAR(512) NOT NULL,
+    size       BIGINT NOT NULL,
+    file_ext   VARCHAR(64) NOT NULL,
     tenant_id  INT NOT NULL,
-    basket     TEXT NOT NULL,
+    basket     VARCHAR(63) NOT NULL,
     data       BYTEA NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL  -- используется для range-партиционирования
+    created_at BIGINT NOT NULL       -- ключ range-партиционирования, Unix seconds
 ) PARTITION BY RANGE (created_at);
 
 -- Каждая пара (tenant_id, basket) получает собственную list-партию внутри каждого диапазона дат
@@ -248,13 +274,25 @@ opts.ExpireDays = 365 * 3;  // удалять партиции старше 3 л
 | `MigrationScheduleForwardDays` | Дней заранее для предсоздания партиций | `2` |
 | `ExpireDays` | Период удержания перед удалением партиции (дни) | `365 * 3` |
 
-### Chained-регистрация
-
-`AddSaPostgreSqlFileStorageChained` возвращает `IPartConfiguration`, чтобы можно было настроить `IPgDataSource` после:
+### Методы регистрации
 
 | Метод | Описание |
 |-------|----------|
-| `AddDataSource(Action<IPgDataSourceSettingsBuilder>?)` | Настроить подключение PostgreSQL |
+| `AddSaPostgreSqlFileStorage(Action<PostgresFileStorageOptions>?)` | Регистрация провайдера; возвращает `IServiceCollection` |
+| `AddSaPostgreSqlFileStorage(PostgresFileStorageOptions)` | То же из готового экземпляра (копируется, не удерживается) |
+| `AddSaPostgreSqlFileStorageChained(Action<PostgresFileStorageOptions>?)` | То же, возвращает `IPartConfiguration` для `.AddDataSource(...)` |
+
+Регистрация идемпотентна: повторный вызов с равными опциями — no-op, с конфликтующими —
+`InvalidOperationException`, а не задвоение партиционирования, расписаний и `IFileStorage`.
+
+### DI-сервисы
+
+| Сервис | Назначение |
+|--------|------------|
+| `IFileStorage` | Сам провайдер (singleton) |
+| `RecyclableMemoryStreamManager` | Буферизация не-seekable потоков (singleton, общий) |
+| `IPartitionManager` | Обслуживание партиций, из `Sa.Partial.PostgreSql` |
+| `TimeProvider` | По умолчанию `TimeProvider.System`; свой экземпляр влияет на `UploadedAt` |
 
 ---
 
@@ -275,13 +313,39 @@ opts.ExpireDays = 365 * 3;  // удалять партиции старше 3 л
 | Колонка | Тип | Назначение |
 |---------|-----|-----------|
 | `id` | `TEXT` | Канонический File ID (часть первичного ключа) |
-| `name` | `TEXT` | Оригинальное имя файла |
-| `size` | `INT` | Размер файла в байтах |
-| `file_ext` | `TEXT` | Расширение файла (напр., "pdf", "png") |
+| `name` | `VARCHAR(512)` | Оригинальное имя файла |
+| `size` | `BIGINT` | Размер файла в байтах |
+| `file_ext` | `VARCHAR(64)` | Расширение файла (напр., "pdf", "png") |
 | `tenant_id` | `INT` | Идентификатор тенанта (ключ list-партиции) |
-| `basket` | `TEXT` | Имя контейнера (ключ list-партиции) |
+| `basket` | `VARCHAR(63)` | Имя контейнера (ключ list-партиции) |
 | `data` | `BYTEA` | Сырые бинарные данные файла |
-| `created_at` | `TIMESTAMPTZ` | Дата загрузки (полуночь UTC, ключ range-партиции) |
+| `created_at` | `BIGINT` | Дата загрузки (полуночь UTC в Unix-секундах, ключ range-партиции) |
+
+`size` и `created_at` имеют тип `BIGINT`: провайдер пишет длину потока и Unix-метку
+времени как 64-битные значения.
+
+---
+
+## Ломающие изменения
+
+### 0.12.0 → 0.13.0
+
+**`size` изменён с `INT` на `BIGINT`.** Колонка `INT` молча обрезала размер всего, что
+больше 2 ГБ. Существующие таблицы нужно мигрировать:
+
+```sql
+ALTER TABLE <schema>.<table> ALTER COLUMN size TYPE BIGINT;
+```
+
+Применять нужно и к корневой таблице, и к каждой существующей партиции.
+
+**Опции валидируются на этапе регистрации.** Некорректные `TableName`, `StorageType`
+или `Basket` теперь приводят к `ArgumentException` из `AddSaPostgreSqlFileStorage`, а не к
+нерабочим file ID или `relation does not exist` на первой загрузке. В частности
+`TableName = "\"files\""` отвергается, а не тихо обрезается до `files`.
+
+**Имена используются дословно.** Провайдер больше не переписывает `TableName`, `Basket`
+или `StorageType` — DDL и запросы всегда используют заданное значение.
 
 ---
 

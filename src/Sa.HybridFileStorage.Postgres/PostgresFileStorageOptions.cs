@@ -16,6 +16,8 @@ public sealed record PostgresFileStorageOptions
 
     /// <summary>
     /// Gets or sets the database table name for storing file metadata. Defaults to <c>"files"</c>.
+    /// Must be a bare SQL identifier — quoting it (<c>"\"files\""</c>) is rejected rather than
+    /// silently trimmed, because the same value is used for both the DDL and the queries.
     /// </summary>
     public string TableName { get; set; } = "files";
 
@@ -32,7 +34,7 @@ public sealed record PostgresFileStorageOptions
     /// <summary>
     /// Gets or sets the basket (container) name. Defaults to <c>"share"</c>.
     /// </summary>
-    public string Basket { get; set; } = "share";
+    public string Basket { get; set; } = StorageNaming.DefaultBasket;
 
     /// <summary>
     /// Gets or sets the number of days after which file records are considered expired and eligible for cleanup. Defaults to 3 years (<c>1095</c>).
@@ -48,6 +50,44 @@ public sealed record PostgresFileStorageOptions
     /// Gets or sets the partitioning granularity (day, month, or year). Defaults to <see cref="PgPartBy.Day"/>.
     /// </summary>
     public PgPartBy PgPartBy { get; set; } = PgPartBy.Day;
+
+    /// <summary>
+    /// Validates the current configuration and throws an <see cref="ArgumentException"/> describing
+    /// the first offending property.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown when any property is invalid.</exception>
+    /// <remarks>
+    /// Called from the registration extension so that a bad table name or storage type fails at
+    /// startup. Without it, an over-long or illegal <see cref="TableName"/> reaches the DDL and the
+    /// <c>Sanitize</c> rewrite in the provider produces a *different* name than the one registered,
+    /// and the mismatch only surfaces as <c>relation does not exist</c> on the first upload.
+    /// </remarks>
+    public void Validate()
+    {
+        StorageNaming.RequireIdentifier(TableName, nameof(TableName));
+        StorageNaming.RequireStorageType(StorageType, nameof(StorageType));
+        StorageNaming.ValidateBasket(Basket, nameof(Basket));
+
+        if (SchemaName is not null)
+        {
+            // Only the first schema of a search_path list is the effective one for table resolution,
+            // so a comma here would silently register the table under a name nothing can query.
+            StorageNaming.RequireIdentifier(SchemaName, nameof(SchemaName));
+        }
+
+        if (ExpireDays < 1)
+        {
+            throw new ArgumentException(
+                $"ExpireDays must be greater than zero, but was {ExpireDays}.", nameof(ExpireDays));
+        }
+
+        if (MigrationScheduleForwardDays < 1)
+        {
+            throw new ArgumentException(
+                $"MigrationScheduleForwardDays must be greater than zero, but was {MigrationScheduleForwardDays}.",
+                nameof(MigrationScheduleForwardDays));
+        }
+    }
 
     /// <summary>
     /// Creates a copy of these options with identical values.
