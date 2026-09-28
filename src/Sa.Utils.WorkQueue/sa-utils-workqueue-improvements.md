@@ -1,8 +1,12 @@
-# Sa.Utils.WorkQueue — план улучшений (баги, гонки, доки)
+# Sa.Utils.WorkQueue — аудит и улучшения
 
-**Дата аудита:** 2026-09-27 · .NET SDK 10.0 · пакет версии `0.12.0` (версия не менялась)
-**Объём:** `SaWorkQueue.cs` (962 строки), интерфейс, опции, `Setup.cs`, лог-сообщения, оба readme
-**Статус:** волны 1–3 выполнены и проверены. Детали — в [Что уже сделано](#что-уже-сделано).
+**Дата аудита:** 2026-09-28 · .NET SDK 10.0.112 · пакет версии `0.12.0` (версия не менялась)
+**Объём:** `SaWorkQueue.cs` (1094 строки), `ISaWorkQueue.cs`, `SaWorkQueueOptions.cs`, `ThrowHelper.cs`,
+`Setup.cs`, `SaWorkQueueFullException.cs`, `SaWorkQueueLogMessages.cs`, оба readme
+**Статус:** критичный баг **C1 исправлен и покрыт тестами**; M1–M4, L1–L8, D2–D3 — открыты.
+Предыдущие волны (B1–B8, D1–D7) закрыты коммитом `bdb6a15` и в этот документ не входят.
+
+---
 
 ## Объём аудита
 
@@ -14,20 +18,18 @@
 | `src/Sa.Utils.WorkQueue/ThrowHelper.cs` | генерация исключений |
 | `src/Sa.Utils.WorkQueue/Setup.cs` | DI-регистрация, `CreateSimple` |
 | `src/Sa.Utils.WorkQueue/SaWorkQueueFullException.cs` | исключение переполнения |
-| `src/Sa.Utils.WorkQueue/{SaEnqueueStrategy,SaExecutionErrorStrategy,SaReaderCancelMode,SaReaderCancellationOrder,SaWorkStatus}.cs` | enum-ы и их XML-доки |
+| `src/Sa.Utils.WorkQueue/{SaEnqueueStrategy,SaExecutionErrorStrategy,SaReaderCancelMode,SaReaderCancellationOrder,SaWorkStatus,SaWorkDrainReason}.cs` | enum-ы и их XML-доки |
 
 Смежный код, повлиявший на выводы:
 
 - `src/Sa.Schedule/Engine/JobScheduler.cs` — единственный консьюмер в репозитории
-  (`AbortJob` + `Start` воспроизводят гонку B2, `Stop` упирается в B7)
-- `src/Tests/Sa.Utils.WorkQueue.Tests/*` — 9 файлов, ~2300 строк, покрытие до B1 широкое,
-  но `SaReaderCancellationOrder.Random`/`Fifo` **не тестировались вообще**
-- `src/Samples/WorkQueue.Console/Program.cs` — пример использования
-- `src/Common.Properties.xml` — общие свойства (`Nullable=enable`, `EnableNETAnalyzers`)
+  (`AbortJob` + `Start`, `Stop` упирается в семантику `WaitForIdleAsync`)
+- `src/Tests/Sa.Utils.WorkQueue.Tests/*` — 12 файлов, покрытие до C1 было широким, но сценария
+  «ридер завершился синхронно до регистрации» не касался ни один тест
+- `src/Common.Properties.xml` — `Nullable=enable`, `EnableNETAnalyzers`, `PublishAot`
 
-**Проверено:** `ISaWorkQueue<TInput>` реализуется в репозитории только классом
-`SaWorkQueue<TInput>` — внешних реализаторов нет, поэтому добавление параметра
-с значением по умолчанию в `WaitForIdleAsync` безопасно внутри репо.
+Метод: каждая находка воспроизведена на отдельном прогоне против скомпилированной копии
+исходников. Сборка и все 108 тестов зелёные, повторный прогон тестов — 5/5 без флака.
 
 ---
 
@@ -38,10 +40,10 @@
 dotnet build src/Sa.slnx -c Release
 
 # быстрый цикл по одному пакету (из src/ — иначе dotnet test уходит в VSTest и падает)
-cd src && dotnet test --project Tests/Sa.Utils.WorkQueue.Tests -c Release --no-build --no-restore -v n
+cd src && dotnet test --project Tests/Sa.Utils.WorkQueue.Tests -c Release
 
 # регрессия потребителя
-cd src && dotnet test --project Tests/Sa.ScheduleTests -c Release --no-build --no-restore -v n
+cd src && dotnet test --project Tests/Sa.ScheduleTests -c Release
 ```
 
 Docker для этих двух наборов не нужен — Testcontainers используют только PostgreSQL/S3-наборы.
@@ -52,161 +54,353 @@ Docker для этих двух наборов не нужен — Testcontainer
 
 ### Критичные
 
-| # | Находка | Симптом |
+| # | Находка | Статус |
 |---|---|---|
-| **B1** | `RandomIndices` — Фишер–Йетс по массиву длины `toCancel` при индексации до `totalCount - 1` | `IndexOutOfRangeException` наружу из сеттера `ConcurrencyLimit`; очередь остаётся с `_concurrency = 2` и 4 живыми ридерами |
-| **B2** | `RemoveReader` декрементит `_concurrency` для уже учтённых force-cancel ридеров | `ConcurrencyLimit` «съедается» умирающими ридерами: запрошено 4 → отдаёт 0 при 4 живых ридерах |
+| **C1** | `StartReaderUnderLock` регистрирует ридер **после** запуска петли: ридер, завершившийся синхронно, ломает учёт пула | ✅ **исправлено** |
 
 ### Средние
 
 | # | Находка | Симптом |
 |---|---|---|
-| **B3** | `DrainAndResetIdle` общий для shutdown и force-cancel | Текст «Queue was shut down» на живой очереди (статус `Faulted` сохранён сознательно) |
-| **B4** | `Shutdown`/`ShutdownAsync`: `TryComplete`+дренаж внутри `try` | Исключение из `CancelAsync` оставляет канал открытым, `_taskCount` вечно > 0, `IsIdle()` навсегда `false`, продюсер в `WriteAsync` висит вечно |
-| **B5** | `CancelAndTrackReaders` фильтрует `IsCancellationRequested` вне лока | Двойной инкремент `_pendingRemovals` → постоянный дрейф → неверные решения сеттера |
-| **B6** | re-entrant `Shutdown`/`ForceCancelReaders`/`Dispose` из процессора | Блокировка на полный `ShutdownTimeout` (30 с по умолчанию) — ридер ждёт собственную задачу |
-| **B7** | `WaitForIdleAsync` определяет «паузу» эвристикой по `_concurrency` | Молча возвращается с 4 необработанными элементами; вместе с B7 радиусом B2 это ломает `JobScheduler.Stop()` |
+| **M1** | Статус-колбэк выполняется под `_readersSync` | Дедлок, если колбэк ждёт поток, которому нужен `_readersSync` |
+| **M2** | `Enqueue(Wait)` на паузе с полным буфером | Продюсер паркуется, пока очередь на паузе; освобождают shutdown, снятие паузы и токен вызывающего |
+| **M3** | `ForceCancelReaders*` без `try/finally` | `TimeoutException`/`AggregateException` пропускают дренаж: `IsIdle()` навсегда `false` |
+| **M4** | `Cancelled`/`Aborted` уходят в колбэк с `error: null` | Потерян диагностический `OperationCanceledException` |
 
 ### Низкие
 
 | # | Находка |
 |---|---|
-| **B8** | Первичный record-ctor `SaWorkQueueOptions` обходит все guard-ы `With*`: `QueueCapacity: -5` → `ArgumentOutOfRangeException` из глубины `Channel.CreateBounded`; `ConcurrencyLimit: -3` → молчаливая пауза; `ShutdownTimeout` ≤ 0 → `ArgumentOutOfRangeException` из `Task.WaitAll` |
-| **D1** | Док `SaEnqueueStrategy.Skip`: «not reported via the status callback» — код репортит `Skipped` |
-| **D2** | Док `SaExecutionErrorStrategy.StopReader`: «it will be replaced» — не заменяется, лимит падает + warning `ReaderLost` |
-| **D3** | Публичные ctor-ы `SaWorkQueueFullException` оставляют `QueueCapacity`/`QueuedCount` = 0 (читается как «пусто») |
-| **D4** | `NoWarn 1701;1702;CS8602` в csproj мёртв: пакет собирается с **0 warnings** и без `CS8602` |
-| **D5** | `ThrowHelper.QueueStopped()` без `[DoesNotReturn]` |
-| **D6** | `Setup.AddSaWorkQueue<TInput>` использует `Add` вместо `TryAdd` (двойная регистрация → throw из `GetRequiredService`); `CreateSimple` игнорирует `MaxConcurrency` |
-| **D7** | `SaWorkQueueOptions.Create(process)` без null-check |
+| **L1** | `ConcurrencyLimit = -1` молча ставит паузу навсегда, тогда как конструктор отрицательный лимит отвергает |
+| **L2** | Сеттер меняет `_concurrency`/`_paused` вне `if (IsEnabled)` — после shutdown можно «выставить» лимит, которого не будет |
+| **L3** | `ThrowHelper.QueueStopped()` выбрасывает исходное исключение, хотя в `WriteAsyncBalanced` оно в области видимости |
+| **L4** | `HandleShutdownOnError` перезаписывает `_shutdownError` безусловно — корневая причина теряется |
+| **L5** | `_taskCount` объявлен `volatile` **и** мутируется под `lock (_wiSync)` — инвариант размыт |
+| **L6** | Пролог «disposed / stopped» из 4 строк продублирован в 4 методах |
+| **L7** | `Setup.AddSaWorkQueue(configureOptions, lifetime)` принимает любой `ServiceLifetime`, хотя readme запрещает Scoped/Transient |
+| **L8** | `MaxConcurrency < 1` молча заменяется на `ProcessorCount`, тогда как остальные опции валидируются в конструкторе |
 
-### Вне объёма (P1–P5, отдельный тикет)
+### Документация
 
-- **P1** `CancelAndTrackReaders` — O(n²) (`_ctsReaders.Contains` в цикле) + 2 LINQ-последовательности
-- **P2** три параллельных списка `_ctsReaders`/`_ctsWorks`/`_taskReaders` — инвариант, который сам
-  Readme (правило 6) просит не нарушать; замена на один `List<Reader>(CtsLoop, CtsWork, Task, Generation)`
-- **P3** `ReaderLoopAsync` теоретически может завершиться синхронно до добавления в списки →
-  вечная мёртвая запись в `_ctsReaders`
-- **P4** `SaWorkQueue.cs` — 962 строки; разбить на `partial`
-- **P5** нет наблюдаемости пула (`int LiveReaders`)
+| # | Находка | Статус |
+|---|---|---|
+| **D1** | Комментарий «Called without lock» в `OnStatusChanged` был ложным | ✅ **исправлено** |
+| **D2** | Readme правило 1 говорит «декремент внутри `RemoveReader`», правило 5 — «декремент eagerly в сеттере». Прямое противоречие двух «никогда»-правил | открыто |
+| **D3** | Параметр `failIfPaused` покрывает ещё и «нет живых ридеров» (`QueueHasNoReaders`) — имя врёт | открыто |
 
 ---
 
-## Что уже сделано
+## Что сделано
 
-### B1 — `SaReaderCancellationOrder.Random`
+### C1 — ридер, завершившийся синхронно, ломал учёт пула
 
-`RandomIndices` выполнял Фишер–Йетс по массиву длины `toCancel`, но индекс `j` достигает
-`totalCount - 1`. Любое уменьшение лимита, где `toCancel < live`, падало. Воспроизведено
-до фикса:
+`StartReaderUnderLock` вызывал `ReaderLoopAsync(cts, ctsWork)` **до** добавления CTS в
+`_ctsReaders` / `_ctsWorks` / `_taskReaders`. Если буфер уже содержит элемент, а процессор
+завершается или падает **без `await`**, тело петли выполняется инлайн, доходит до `finally`
+и вызывает `RemoveReader(cts)`, где `_ctsReaders.IndexOf(cts) == -1`.
 
-```
-order=Random start ConcurrencyLimit=4
-decrease THREW IndexOutOfRangeException: Index was outside the bounds of the array.
-  ConcurrencyLimit now = 2
-```
+`System.Threading.Lock` **ре-ентрантен**, поэтому вложенный `RemoveReader` не блокировался, а
+молча отработал не по той ветке: счёл неучтённую потерю и списал слот параллелизма.
 
-Фикс: Фишер–Йетс по буферу размера `totalCount`, наружу отдаются первые `toCancel` элементов.
-
-### B2 — дрейф `ConcurrencyLimit`
-
-`CancelAndTrackReaders` только помечает removal (`_pendingRemovals++`), а декремент
-`_concurrency` происходит позже, в `finally` ридера. Окно между этими событиями использовал
-`Sa.Schedule`: `AbortJob` запускает `ForceCancelReadersAsync` через `Task.Run`, а `Start`
-выставляет `_queue.ConcurrencyLimit = _limit`. Воспроизведено до фикса:
+Воспроизведение до фикса (очередь на паузе, 20 элементов в буфере, синхронно падающий
+процессор, `StopReader`, запрошено 4):
 
 ```
-PROBE2 drift: requested=4 reported=0 (expected 4)   // при этом живы 4 ридера
+paused: limit=0 readers=0 pending=8
+round 1: requested 4 -> limit=0 readers=4 pending=4 idle=False
+round 2: requested 4 -> limit=4 readers=4 pending=4 idle=False   <- 4 "живых", 0 реальных
+round 3..6: то же
+WaitForIdleAsync: HUNG (токен 2s истёк), IsIdle=False, pending=4
+failIfPaused:true  ->  НЕ бросает (эвристика считает, что ридеры есть)
+ConcurrencyLimit=0 ->  ObjectDisposedException: The CancellationTokenSource has been disposed.
 ```
 
-Следствия: `WaitForIdleAsync` возвращался мгновенно, `JobScheduler.RefreshConcurrency`
-останавливал все контроллеры.
+Пять последствий, все подтверждены отдельно:
 
-Фикс без новых полей: учёт слота перенесён в тот же критический участок, где принимается
-решение об отмене, — декремент `_concurrency` делается сразу при пометке force-cancel,
-а `RemoveReader` теперь декрементит **только** для неучтённых (`!intentional && !tracked`)
-ридеров. Поведение последовательного force-cancel не изменилось — тест
-`ForceCancelReaders_ConcurrencyLimitReflectsZero` остаётся зелёным.
+1. **`RemoveReader` списывал слот у неучтённого ридера** — лимит, только что выставленный
+   вызывающим, молча съедался (просили 4 → отдавало 0).
+2. **Уже диспоузнутый `cts` дописывался в списки навсегда.** `IsCancellationRequested == false`,
+   то есть он выглядит живым; `HasLiveReaders()` врал; список рос на одну запись за re-arm.
+3. **`CancelReadersUnderLock` вызывал `cts.Cancel()` без `try`/`catch`** →
+   `ObjectDisposedException` вылетал из **публичного сеттера `ConcurrencyLimit`**.
+4. **`WaitForIdleAsync` висел вечно.** Проверка «нет живых ридеров» опиралась на
+   `HasLiveReaders()`, а мёртвые записи делали её ложной. `failIfPaused: true` не помогал —
+   по той же причине.
+5. **`ctsWork` не диспоузнился** (в ветке `idx < 0` переменная `work` оставалась `null`),
+   регистрация на `_shutdownCts` утекала.
 
-### B5 — гонка двойного учёта
+Триггер — не экзотика. Достаточно совпадения трёх обычных вещей: пауза с непустым буфером,
+процессор без `await` до `throw` (или `Task.CompletedTask`), и `StopReader` либо
+`ShutdownQueue` — а последний является **значением по умолчанию**, то есть
+срабатывает вообще без настройки. Дефолтный вариант воспроизведён отдельно.
 
-Учёт и отмена разнесены по разным критическим участкам; фильтр `!IsCancellationRequested`
-брался из снимка вне лока. Переписано так, что весь учёт атомарен и идемпотентен: CTS,
-уже учтённый как `_intentionalRemovals`/`_forceCancelled` либо уже отменённый, пропускается;
-`cts.Cancel()` вызывается уже после постановки на учёт.
+Прежний аудит записал это как P3 «теоретически». Оно не теоретическое.
 
-### B4 — незакрывающийся writer
+#### Фикс
 
-`Writer.TryComplete()` и `DrainAndResetIdle()` перенесены в `finally` — исключение из
-`_shutdownCts.CancelAsync()` (например, `ObjectDisposedException` от гонки с `Dispose`)
-больше не оставляет очередь в состоянии «`Shutdown`, но канал открыт».
+Наблюдение, на котором держится решение: `StartReaderUnderLock` удерживает `_readersSync`
+всю регистрацию, поэтому `RemoveReader` **с другого потока** не может увидеть незарегистрированный
+ридер — он блокируется на локе. Проблемен только инлайновый путь на том же потоке.
 
-### B7 — флаг паузы вместо эвристики
-
-`WaitForIdleAsync` определял паузу как `_concurrency == 0`, что срабатывало и при аварийной
-потере ридеров. Введено явное поле `_paused`, взводимое **только** присваиванием
-`ConcurrencyLimit = 0`, и параметр `failIfPaused`:
+`StartReaderUnderLock`:
 
 ```csharp
-Task WaitForIdleAsync(CancellationToken cancellationToken = default, bool failIfPaused = false);
+var task = ReaderLoopAsync(cts, ctsWork);
+
+// A reader can run its WHOLE body synchronously: ... so the loop reaches its
+// `finally` and calls RemoveReader before the registration below. Nothing blocks
+// it — System.Threading.Lock is re-entrant, so the nested RemoveReader simply
+// proceeds and finds this reader unregistered.
+var task = ReaderLoopAsync(cts, ctsWork);
+if (task.IsCompleted)
+{
+    return; // removed itself before it was ever tracked; both CTSs are already disposed
+}
+
+_ctsReaders.Add(cts);
+_ctsWorks.Add(ctsWork);
+_taskReaders.Add(task);
 ```
 
-Значение по умолчанию сохраняет прежнее поведение; `failIfPaused: true` бросает
-`InvalidOperationException`, если лимит явно обнулён. Проверка `_taskCount == 0` осталась
-первой — реальный простой возвращается всегда, даже на паузе.
+`task.IsCompleted` — точный сигнал: задача не может завершиться до выполнения своего `finally`,
+а завершение на **другом** потоке в это состояние не попадает (там `RemoveReader` блокируется
+на локе, который ещё удерживается здесь).
 
-Вторая ветка того же сорта: после force-cancel или сбоев `StopReader` пул может опустеть
-**без** паузы — очередь остаётся Active и принимает новые элементы, но читателей,
-способных их обработать, нет. В ожидании такого недостижимого «простого»
-`WaitForIdleAsync` не висит вечно: если очередь Active, но живых читателей нет
-(`HasLiveReaders()`: живых = `_ctsReaders.Count - _pendingRemovals`), ожидание
-возвращается немедленно, а с `failIfPaused: true` бросает `InvalidOperationException`
-(текст `ThrowHelper.QueueHasNoReaders` указывает на восстановление `ConcurrencyLimit`).
-После повторного выставления лимита ожидание работает как обычно. Очередь, созданная
-с `ConcurrencyLimit: 0`, взводит `_paused = true` прямо в конструкторе.
+`RemoveReader` — сигнатура расширена до `(cts, ctsWork)`, а ветка `idx < 0` больше не трогает учёт:
 
-### B3 — текст исключения при force-cancel
-
-Статус `Faulted` для отброшенных элементов сохранён сознательно (поведение потребителей,
-считающих `Faulted` как ошибку, не меняется). `DrainAndResetIdle` теперь принимает причину
-(`DrainReason.Shutdown` / `DrainReason.ForceCancel`) и подставляет соответствующий текст.
-
-### B6 — документированное ограничение
-
-В `ISaWorkQueue` на `Shutdown`/`ShutdownAsync`/`ForceCancelReaders`/`ForceCancelReadersAsync`
-добавлен запрет вызывать их из `ISaWork<TInput>.Execute`: вызов блокирует поток на
-`ShutdownTimeout` (по умолчанию 30 с), потому что ридер ждёт собственную задачу.
-Проверено до фикса (при `ShutdownTimeout = 2 s`):
-
-```
-PROBE5b Shutdown()             blocked  2009 ms inside the processor
-PROBE5b ForceCancelReaders()   blocked  2004 ms inside the processor
-PROBE5b Dispose()              blocked  2000 ms inside the processor
+```csharp
+registered = idx >= 0;
+...
+intentional = registered && _intentionalRemovals.Remove(cts);
+tracked = intentional || (registered && _forceCancelled.Remove(cts));
+...
+if (registered && !intentional && !tracked && _concurrency > 0)
+{
+    _concurrency--;
+}
+...
+if (registered && IsEnabled && !intentional && !tracked) { LogReaderLost(...); }
 ```
 
-Корректный обход уже показан в `JobScheduler.AbortJob` — `Task.Run` с fire-and-forget.
+Передача `ctsWork` параметром нужна, чтобы диспоузнуть work-CTS в этой ветке — иначе он
+не виден нигде и утекает.
 
-### B8 и D1–D7
+Семантика `_concurrency` после фикса: значение отражает **запрошенный** лимит, а «сколько
+ридеров реально работает» честно отдаёт `HasLiveReaders()`. Синхронно умерший ридер не был
+учтён, поэтому и не списывает слот. Это согласуется с контрактом `StopReader`
+(«ёмкость уменьшается, восстановление — выставить `ConcurrencyLimit` снова») и с тем же
+аргументом, который уже лёг в фикс B2: умирающий ридер не должен съедать лимит,
+выставленный вызывающим.
 
-Валидация перенесена в ctor `SaWorkQueue` (единая точка до создания канала),
-`[DoesNotReturn]` на `ThrowHelper.QueueStopped()`, `SaWorkQueueOptions.Create` с null-check,
-`TryAdd` в `Setup.AddSaWorkQueue<TInput>`, `init`-свойства у `SaWorkQueueFullException`,
-поправлены доки `Skip`/`StopReader`, из csproj убран мёртвый `NoWarn ...;CS8602`.
+Проверка после фикса (тот же сценарий):
 
-### Тесты
+```
+paused: limit=0 readers=0 pending=8
+round 1: requested 4 -> limit=4 readers=0 pending=4   # все 4 умерли, учёт чист
+round 2: requested 4 -> limit=4 readers=0 pending=0
+round 3: requested 4 -> limit=4 readers=4 pending=0   # буфер пуст, ридеры живые
+WaitForIdleAsync: вернулся за 1 ms, IsIdle=True
+failIfPaused:true не бросает (прогресс возможен)
+```
 
-- `WorkQueueCancellationOrderTests.cs` (новый) — все четыре порядка отмены: уменьшение не
-  бросает, отменяет ровно `delta`, оставшиеся элементы дорабатываются (×20 повторов).
-  До фикса `Random`/`Fifo` не были покрыты ни одним тестом.
-- `WorkQueueStabilityTests.cs` — гонка force-cancel с выставлением лимита: умирающие
-  ридеры не «съедают» лимит, поставленный после отмены (до фикса: запрошено 4 →
-  отчитано 0); `failIfPaused` на явной паузе с ожидающей работой; `WaitForIdleAsync`
-  на пустом пуле (после force-cancel, на паузе с момента создания) возвращается
-  немедленно вместо зависания, а `failIfPaused: true` превращает это в ошибку.
-- `WorkQueueOptionsValidationTests.cs` (новый) — конструктор очереди отклоняет
-  `QueueCapacity < 1`, отрицательный `ConcurrencyLimit`, неположительный
-  `ShutdownTimeout` (первичный record-ctor обходит guard-ы `With*`); граничные
-  `QueueCapacity: 1` / `ConcurrencyLimit: 0` принимаются и очередь работает.
-- `WorkQueueDrainTests.cs` — причина дренажа в статусе force-cancel; shutdown завершает
-  writer и дренирует даже при исключении из `CancelAsync` (инъекция callback-а в
-  `_shutdownCts` через reflection — других способов воспроизвести нет).
+### D1 — ложный комментарий в `OnStatusChanged`
+
+Комментарий утверждал «Called without lock». Теперь он уточняет, что `_wiSync` действительно
+не удерживается, но **`_readersSync` — удерживается**: когда ридер стартует при непустом буфере,
+элемент подхватывается и отчитывается синхронно внутри `StartReaderUnderLock`. Добавлено
+требование: колбэк должен быть самодостаточным (лог и возврат).
+
+Дополнительно у полей локов зафиксировано, что `System.Threading.Lock` ре-ентрантен и что
+именно это делает инлайновый `RemoveReader` молча успешным — и почему регистрация не должна
+записывать уже завершившуюся задачу.
+
+---
+
+## Что осталось открытым
+
+### M1 — статус-колбэк под `_readersSync` (дедлок)
+
+Воспроизведено: колбэк отдаёт работу в другой поток, которому нужен `_readersSync`, и ждёт
+его. Поток, выставивший `ConcurrencyLimit`, держит лок → взаимоблокировка.
+
+Сейчас это задокументировано в коде (см. D1), но **не исправлено**: фикс требует вынести запуск
+петли за пределы `_readersSync` (собрать «отложенные старты» и запустить их после выхода из
+лока), а это перестройка структуры локов — отдельное изменение со своим ревью.
+
+### M2 — `Enqueue(Wait)` на паузе с полным буфером
+
+Воспроизведено: буфер полон, очередь на паузе, `Enqueue` паркуется бесконечно.
+`SaEnqueueStrategy.Wait` — значение по умолчанию, и продюсер `Sa.Schedule` идёт этим путём.
+
+**Уточнение к первоначальной формулировке.** Ранний вариант находки утверждал, что
+единственный выход — токен вызывающего. Это не так: парящий продюсер освобождается ещё
+двумя способами, и это меняет предлагаемый фикс.
+
+```
+buffer full (AvailableCapacity=0), paused
+  after 500 ms: parked=True
+  Shutdown() after 300 ms  -> enqueue InvalidOp: Queue has been stopped.  (812 ms)
+  ConcurrencyLimit = 1     -> enqueue returned true
+  only caller token        -> OCE (caller token)
+```
+
+- `Shutdown` / `ShutdownAsync` освобождают продюсера: `Writer.TryComplete()` поднимает
+  парящий `WriteAsync` через `ChannelClosedException`, который `WriteAsyncBalanced`
+  переводит в `ThrowHelper.QueueStopped()`;
+- повышение `ConcurrencyLimit` тоже освобождает — ридер забирает элемент, место появляется.
+
+Значит связывать ожидание с `_shutdownCts` **не нужно**: это уже работает, и такой фикс
+был бы лишним дублированием. Остаётся задокументировать в `ISaWorkQueue.Enqueue` и в
+readme, что на паузе с полным буфером `Wait` блокируется до снятия паузы, shutdown'а или
+отмены токена вызывающего.
+
+### M3 — `ForceCancelReaders*` без `try/finally`
+
+`ForceCancelReaders` (`Task.WaitAll(tasks, _shutdownTimeout)`) и `ForceCancelReadersAsync`
+(`Task.WhenAll(...).WaitAsync(t, ct)`) не защищены `try`/`finally`, в отличие от `Shutdown`,
+где дренаж стоит в `finally`. `TimeoutException` или `AggregateException` пропускают
+`DrainAndResetIdle`: буфер и `_taskCount` не сбрасываются.
+
+Воспроизведено (истёкший timeout): после `TimeoutException` `IsIdle() == false` остаётся
+навсегда, при этом `WaitForIdleAsync` возвращает «OK» через ветку «нет живых ридеров» — два
+API противоречат друг другу.
+
+Нужно решить, что считать правильным: дренаж в `finally` (счётчик согласован, но отброшенное
+не сможет забрать выживший ридер) или текущее поведение (буфер цел, но счётчик завис).
+В любом случае расхождение `IsIdle()` и `WaitForIdleAsync` стоит устранить — например,
+`WaitForIdleAsync` при возврате без простоя логирует предупреждение.
+
+### M4 — `Cancelled`/`Aborted` без исключения
+
+`ExecuteItemAsync` ловит `OperationCanceledException ex`, но вызывает
+`OnStatusChanged(item, SaWorkStatus.Cancelled)` / `(…, Aborted)` **без** `ex` —
+в отличие от `Faulted`, который исключение всегда несёт. Пойманное исключение выбрасывается.
+`ThrowHelper.CallerCancelledException()` и `QueueShutdownException()` для этого уже есть и
+используются в дренаже.
+
+### L1 — `ConcurrencyLimit = -1` молча останавливает очередь
+
+Сеттер клампит в `0` (пауза), конструктор отрицательные значения отвергает. Опечатка глушит
+очередь навсегда, при этом `IsEnabled` остаётся `true` — диагностики нет. Вариант: `throw`
+на отрицательное значение в сеттере (как в конструкторе) либо как минимум лог.
+
+### L2 — сеттер меняет состояние после shutdown
+
+`_concurrency` и `_paused` присваиваются до `if (IsEnabled)`, поэтому после остановки можно
+«выставить» лимит, которого никогда не будет. Если это намеренно («запомнить настройку»),
+стоит задокументировать; если нет — перенести внутрь `if`.
+
+### L3 — теряется исходное исключение
+
+`ThrowHelper.QueueStopped()` создаёт новый `InvalidOperationException`, хотя в
+`WriteAsyncBalanced` причина (`ex`) в области видимости. Стоит передавать её вторым аргументом.
+
+### L4 — `_shutdownError` перезаписывается
+
+`HandleShutdownOnError` присваивает `_shutdownError` безусловно, до попытки `ShutdownAsync`
+(которая может вернуться из-за CAS). Поздняя ошибка вытесняет корневую. Стоит писать
+только когда поле ещё `null` — тем более, что сам `ShutdownAsync` при повторе
+ничего не делает.
+
+### L5 — `volatile` + `lock` на одном поле
+
+`_taskCount` объявлен `volatile` и при этом мутируется под `lock (_wiSync)`, а читается без
+лока в `QueueTasks` / `IsIdle()`. Либо оставить `volatile` и убрать лок (тогда нужен
+`Interlocked`), либо убрать `volatile` и читать через `Volatile.Read`. Сейчас инвариант
+описан в двух местах сразу, что и привело к C1 в соседнем коде.
+
+### L6 — дублирование пролога
+
+`ObjectDisposedException.ThrowIf(...)` + `if (!IsEnabled) ThrowHelper.QueueStopped();`
+повторяется в `Enqueue`, `EnqueueMany`, `TryEnqueue`, `WaitForIdleAsync`. Вынести в
+`ThrowIfNotActive()`.
+
+### L7 — `ServiceLifetime` в DI
+
+`Setup.AddSaWorkQueue(configureOptions, lifetime)` позволяет `Scoped`/`Transient`, при которых
+на каждое разрешение создаётся новая очередь с собственными ридерами; readme (note 1)
+прямо запрещает это. Второй перегрузки (`<TProcessor, TInput>`) жёстко шардится Singleton.
+Стоит убрать параметр или отклонять не-Singleton.
+
+### L8 — `MaxConcurrency` не валидируется
+
+`options.MaxConcurrency > 0 ? … : Environment.ProcessorCount` — любое значение `< 1` молча
+заменяется. `ConcurrencyLimit`, `QueueCapacity` и `ShutdownTimeout` в конструкторе
+отвергаются. Стоит добавить `MaxConcurrency` в тот же список проверок.
+
+### D2 / D3 — расхождения в readme и именах
+
+Readme правило 1 («декремент внутри `RemoveReader`») противоречит правилу 5 («декремент
+eagerly в сеттере и в `CancelAndTrackReaders`»). Оба — запреты, и правило 1 стоит
+переписать под фактическое поведение.
+
+`failIfPaused` покрывает и «нет живых ридеров» (`QueueHasNoReaders`) — имя вводит в
+заблуждение. Варианты: переименовать в `failIfNoProgress`, либо добавить второй параметр
+`failIfNoReaders` (дефолт `false` сохранит поведение).
+
+---
+
+## Тесты
+
+Новый файл `src/Tests/Sa.Utils.WorkQueue.Tests/WorkQueueSyncReaderTests.cs` — 9 тестов
+на C1. Сценарий строится так, чтобы ридер гарантированно умирал синхронно: пауза,
+непустой буфер, процессор без `await` до `throw`.
+
+| Тест | Что закрывает |
+|---|---|
+| `ReArm_WithStopReader_KeepsTheRequestedLimit` | последствие 1: лимит 4 не съедается |
+| `ReArm_WithDefaultShutdownQueueStrategy_KeepsTheRequestedLimit` | то же для пути по умолчанию |
+| `ReArm_LeavesNoDeadReaderBehind` | последствие 2 + 5: список пуст, ни одного диспоузнутого CTS |
+| `LimitDecrease_AfterSynchronousFault_DoesNotThrowObjectDisposedException` | последствие 3: `ObjectDisposedException` из сеттера |
+| `WaitForIdle_AfterSynchronousFaultPool_ReapsInsteadOfHanging` | последствие 4: ожидание возвращается, а не висит |
+| `WaitForIdle_FailIfPaused_ThrowsWhilePoolEmpty_AndRecoversAfterReArm` | `failIfPaused` видит пустой пул и корректно восстанавливается |
+| `RepeatedReArm_DoesNotAccumulateDeadReaders` | последствие 2: 5 раундов, ни одной накопленной записи |
+| `ReArm_WithSuspendingProcessor_StillRegistersTheReader` | «здоровая» ветка: ридер, который уступает поток, регистрируется как обычно |
+| `ScaleUpAndDown_WithLiveReaders_IsUnaffected` | регрессия: обычное масштабирование 2→5→1→4 не сломано |
+
+Вспомогательные хелперы в файле: `ReaderCts` (рефлексия в `_ctsReaders`),
+`WaitForReaderCountAsync` (поллинг до нужного числа — снятие гонки с reaping'ом
+отменённых ридеров), `AssertNoDisposedReaders` (`cts.Token` бросает `ObjectDisposedException`
+на диспоузнутом источнике).
+
+Покрытия до фикса не было ни у одного из этих сценариев: `StopReader_ReducesConcurrency_NoAutoReplace`
+проверяет незапланированный декремент из живого пула, `MultipleStopReaders_CorrectCapacityDecrease` —
+конкурентные `StopReader`, а re-arm после синхронного падения не проверял никто.
+
+Тесты к остальным находкам (M2, M3, M4) **не написаны** — они требуют сначала решить,
+какое поведение считать правильным (см. M3). После решения они добавляются как
+фиксирующие текущую семантику. Для M2 поведение уже установлено (см. раздел выше) —
+достаточно теста на две точки выхода, отличные от токена вызывающего, чтобы зафиксировать
+текущую семантику без риска для совместимости.
+
+Итог: **108/108** в `Sa.Utils.WorkQueue.Tests` (было 99), **133/133** в `Sa.ScheduleTests`.
+Пять повторных прогонов без флака. `dotnet build src/Sa.slnx -c Release` — 0 warnings, 0 errors.
+
+---
+
+## Замечания по .NET 10
+
+- **`System.Threading.Lock` ре-ентрантен.** Это не деталь реализации: именно поэтому
+  инлайновый `RemoveReader` в C1 **молча успевал** вместо того, чтобы упасть, и именно
+  поэтому дедлок M1 выглядит загадочно. Отмечено комментарием у полей локов.
+- **Таймауты не дружат с виртуальным временем.** `Task.WaitAll(tasks, ts)`,
+  `Task.WaitAsync(ts)`, `CancelAsync()` — пути с 30-секундным ожиданием нельзя проверить
+  без реального сна. Инъекция `TimeProvider` сделала бы M3 тестируемым детерминированно.
+- **AOT / тримминг:** замечаний нет. `IsAotCompatible` соблюдён, `[LoggerMessage]`
+  генерируетсяsource-gen'ом, `Channel`/`Lock`/`Interlocked` AOT-безопасны.
+- `Environment.ProcessorCount` читается один раз в конструкторе: если контейнер получает
+  CPU-лимит уже после старта, максимум не подстроится. Приемлемо, но стоит знать.
+
+---
+
+## Вне объёма (отдельный тикет)
+
+- **P1** `CancelAndTrackReaders` — O(n²) (`_ctsReaders.Contains` в цикле) + два LINQ-прохода
+- **P2** три параллельных списка `_ctsReaders`/`_ctsWorks`/`_taskReaders` — инвариант, который
+  сам readme (правило 6) просит не нарушать. Замена на один `List<Reader>(Loop, Work, Task)`.
+  C1 — прямое следствие этого инварианта: «зарегистрировать после старта» пришлось делать
+  осторожно, иначе `RemoveReader` удалил бы чужую задачу по индексу
+- **P3** закрыт — стал C1
+- **P4** `SaWorkQueue.cs` — 1094 строки; разбить на `partial`
+- **P5** нет наблюдаемости пула (`int LiveReaders`); `ConcurrencyLimit` после force-cancel
+  читается как `0`, а пул пуст не из-за паузы, и снаружи это не различить

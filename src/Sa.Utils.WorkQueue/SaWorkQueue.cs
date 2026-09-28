@@ -17,6 +17,11 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     private readonly Channel<WorkItem> _queue;
 
+    // Both locks are System.Threading.Lock, which is RE-ENTRANT (like Monitor) and
+    // therefore fair-but-nestable. The consequence that matters here: StartReaderUnderLock
+    // can start a reader whose loop runs to completion inline, and the nested
+    // RemoveReader re-enters _readersSync instead of blocking. That is why
+    // StartReaderUnderLock must not register a reader whose task already completed.
     private readonly Lock _wiSync = new();
     private readonly Lock _readersSync = new();
 
@@ -564,7 +569,29 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     {
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token);
         var ctsWork = CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token);
+
+        // A reader can run its WHOLE body synchronously: the buffer already holds an
+        // item and the processor completes or faults without yielding, so the loop
+        // reaches its `finally` and calls RemoveReader before the registration below.
+        // Nothing blocks it — System.Threading.Lock is re-entrant, so the nested
+        // RemoveReader simply proceeds and finds this reader unregistered.
+        //
+        // Registering such a reader would leave a permanently disposed CTS in the
+        // lists: it counts as live forever, so HasLiveReaders() lies (WaitForIdleAsync
+        // then waits for an idle that never comes, and failIfPaused does not help),
+        // CancelReadersUnderLock calls Cancel() on it and throws
+        // ObjectDisposedException out of the public ConcurrencyLimit setter, and
+        // RemoveReader already charged this reader a concurrency slot, eating the
+        // limit the caller just asked for.
+        //
+        // `task.IsCompleted` is an exact signal: a task cannot complete before its
+        // `finally` ran, and a completion on ANOTHER thread cannot reach this state,
+        // because RemoveReader there blocks on _readersSync — still held here.
         var task = ReaderLoopAsync(cts, ctsWork);
+        if (task.IsCompleted)
+        {
+            return; // removed itself before it was ever tracked; both CTSs are already disposed
+        }
 
         _ctsReaders.Add(cts);
         _ctsWorks.Add(ctsWork);
@@ -696,19 +723,22 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
         finally
         {
-            RemoveReader(cts);
+            RemoveReader(cts, ctsWork);
         }
     }
 
-    private void RemoveReader(CancellationTokenSource cts)
+    private void RemoveReader(CancellationTokenSource cts, CancellationTokenSource ctsWork)
     {
+        bool registered;
         bool intentional;
         bool tracked;
         CancellationTokenSource? work = null;
         lock (_readersSync)
         {
             var idx = _ctsReaders.IndexOf(cts);
-            if (idx >= 0)
+            registered = idx >= 0;
+
+            if (registered)
             {
                 // All three lists are kept in parallel order by
                 // StartReaderUnderLock; remove at the same index so completed
@@ -725,13 +755,24 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                     _taskReaders.RemoveAt(idx);
                 }
             }
+            else
+            {
+                // This reader removed itself synchronously from inside
+                // StartReaderUnderLock, before it was ever added to the lists. It
+                // holds no concurrency slot and was never counted in
+                // _pendingRemovals, so it must not touch the accounting either —
+                // doing so is what silently ate the caller's ConcurrencyLimit and
+                // left a dead entry behind. The work CTS is disposed here because
+                // nothing else ever sees it.
+                work = ctsWork;
+            }
 
             // Planned removal (limit decrease): _concurrency is already
             // set by the setter, no need to decrement it again.
-            intentional = _intentionalRemovals.Remove(cts);
+            intentional = registered && _intentionalRemovals.Remove(cts);
 
             // Was this CTS's cancellation tracked (planned or ForceCancel)?
-            tracked = intentional || _forceCancelled.Remove(cts);
+            tracked = intentional || (registered && _forceCancelled.Remove(cts));
             if (tracked)
             {
                 _pendingRemovals--;
@@ -746,7 +787,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             // removal, and CancelAndTrackReaders already lowered it for a
             // force-cancel. Decrementing again would let readers that are still
             // dying eat a limit the caller set after they were cancelled.
-            if (!intentional && !tracked && _concurrency > 0)
+            if (registered && !intentional && !tracked && _concurrency > 0)
             {
                 _concurrency--;
             }
@@ -755,7 +796,7 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         cts.Dispose();
         work?.Dispose();
 
-        if (IsEnabled && !intentional && !tracked)
+        if (registered && IsEnabled && !intentional && !tracked)
         {
             SaWorkQueueLogMessages.LogReaderLost(_logger, _concurrency);
         }
@@ -860,9 +901,18 @@ public sealed class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         Exception? handlerEx = null;
         try
         {
-            // Called without lock: a slow handler must not block
+            // Called without _wiSync: a slow handler must not block
             // other readers. Callback instances may be invoked
             // concurrently from different readers.
+            //
+            // IMPORTANT: this does NOT mean the handler runs outside every lock.
+            // When a reader is started while the buffer already holds an item
+            // (ConcurrencyLimit raised over a non-empty queue), the item is picked
+            // up and reported SYNCHRONOUSLY inside StartReaderUnderLock, so the
+            // handler runs while _readersSync is held. A handler that blocks, or
+            // that hands work to another thread which touches the queue, will
+            // deadlock against the thread that set ConcurrencyLimit. Keep the
+            // handler self-contained: log, and return.
             callback(item, status, error);
         }
         catch (Exception ex)
