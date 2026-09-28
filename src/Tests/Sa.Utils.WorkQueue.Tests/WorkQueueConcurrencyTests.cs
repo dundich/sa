@@ -436,6 +436,94 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         Assert.Equal(3, queue.ConcurrencyLimit);
     }
 
+    /// <summary>
+    /// A stopped queue has no pool to resize, so the assignment does nothing — and
+    /// says nothing, because the common caller is a shared configuration path that
+    /// does not branch on the queue's state.
+    /// </summary>
+    /// <remarks>
+    /// What it must not do is write the value and let the getter read it back. Assign
+    /// 4 after shutdown, read 4, and conclude four readers are on their way. The
+    /// queue keeps reporting the limit it was stopped at, which is a thing that was
+    /// true.
+    /// </remarks>
+    [Fact]
+    public async Task ConcurrencyLimit_AfterShutdown_ChangesNothing()
+    {
+        var work = new TrackingWork(static (_, _) => Task.CompletedTask);
+        var queue = CreateQueue(work, concurrencyLimit: 2, maxConcurrency: 8);
+
+        await queue.ShutdownAsync();
+
+        var stoppedAt = queue.ConcurrencyLimit;
+
+        queue.ConcurrencyLimit = 6;
+
+        Assert.Equal(stoppedAt, queue.ConcurrencyLimit);
+        Assert.False(queue.IsEnabled, "the assignment must not revive a stopped queue");
+        Assert.True(queue.IsIdle());
+
+        // Assigning zero must not fake a pause either: the queue is stopped, not
+        // paused, and WaitForIdleAsync has to be able to tell the difference.
+        queue.ConcurrencyLimit = 0;
+
+        Assert.Equal(stoppedAt, queue.ConcurrencyLimit);
+        await queue.WaitForIdleAsync(TestToken, failIfNoProgress: true);
+    }
+
+    /// <summary>
+    /// The same rule for a disposed queue, which is the other half of "not enabled"
+    /// and a separate caller mistake: resizing something that no longer exists.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrencyLimit_AfterDispose_ChangesNothing()
+    {
+        var work = new TrackingWork(static (_, _) => Task.CompletedTask);
+        var queue = CreateQueue(work, concurrencyLimit: 2, maxConcurrency: 8);
+
+        await queue.DisposeAsync();
+
+        // Read after the dispose, not before: dispose takes the limit to zero on its
+        // own way, and the claim under test is about the assignment, not about what
+        // stopping did.
+        var stoppedAt = queue.ConcurrencyLimit;
+
+        queue.ConcurrencyLimit = 6;
+
+        Assert.Equal(stoppedAt, queue.ConcurrencyLimit);
+    }
+
+    /// <summary>
+    /// A guard on the fix above, and the failure it would take to write: the early
+    /// return must be conditioned on the queue's state, not unconditional. A queue
+    /// that ignored every assignment would satisfy "changes nothing after shutdown"
+    /// perfectly while being broken in the only case that matters.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrencyLimit_OnALiveQueue_StillApplies()
+    {
+        var work = new TrackingWork(static (_, _) => Task.CompletedTask);
+        var queue = CreateQueue(work, concurrencyLimit: 2, maxConcurrency: 8);
+
+        Assert.True(queue.IsEnabled);
+
+        queue.ConcurrencyLimit = 6;
+        Assert.Equal(6, queue.ConcurrencyLimit);
+
+        // And the pool followed: work runs, which it could not do with a zero limit.
+        // TrackingWork gates every item on its own completion signal, so the signal
+        // has to come before the await — Enqueue only completes at the terminal status.
+        var model = new BlockingTaskModel();
+        var processed = queue.Enqueue(model, TestToken);
+        model.AllowCompletion.SetResult();
+
+        await processed;
+        await queue.WaitForIdleAsync(TestToken);
+
+        Assert.True(queue.IsIdle());
+        Assert.Equal(1, work.CompletedCount);
+    }
+
 
     [Fact]
     public async Task ConcurrencyLimit_UpChanges_DontLoseTasks()

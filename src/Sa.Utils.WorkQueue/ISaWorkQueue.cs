@@ -39,6 +39,16 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// default <see cref="SaReaderCancelMode.Hard"/> mode the in-flight item is interrupted
     /// (<see cref="SaWorkStatus.Cancelled"/>) and dropped.
     /// Values outside <c>[0, MaxConcurrency]</c> are clamped to that range.
+    /// A negative value is rejected with <see cref="ArgumentOutOfRangeException"/> rather
+    /// than clamped, because a queue paused forever while still reporting
+    /// <see cref="IsEnabled"/> gives the caller nothing to react to.
+    /// <para>
+    /// Once the queue is stopped or disposed, the setter does nothing and the getter keeps
+    /// reporting the limit the queue was stopped at. Writing it anyway would let a caller
+    /// assign a value and read it straight back, concluding that many readers are on their
+    /// way when none are. No exception is thrown: the assignment states an intent, and
+    /// <see cref="IsEnabled"/> answers whether there is a pool left to resize.
+    /// </para>
     /// </remarks>
     int ConcurrencyLimit { get; set; }
 

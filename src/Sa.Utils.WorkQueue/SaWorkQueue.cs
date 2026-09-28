@@ -355,13 +355,24 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         lock (_readersSync)
         {
+            // A stopped queue keeps the limit it was stopped at, and this assignment
+            // changes nothing. Writing it anyway would let a caller read back a value
+            // the pool does not have: assign 4 after shutdown, read 4, and believe
+            // four readers are coming. None are. A caller that only writes and reads
+            // has no way to notice, and IsEnabled is not something a shared
+            // configuration path checks before resizing a pool it may not own.
+            //
+            // Silently, rather than by throwing: the assignment is a statement of
+            // intent, not an operation on a resource the caller believes it holds.
+            // IsEnabled is the answer to "is there a pool to resize" — a caller that
+            // needs one to ask.
+            if (!IsEnabled) return;
+
             // Assigning the limit is also the eager release of the slots the readers
             // cancelled below are about to give up — the reason their own teardown
             // must not decrement again.
             _concurrency = newLimit;
             _paused = newLimit == 0;
-
-            if (!IsEnabled) return;
 
             // Delta against the readers that actually hold a slot, not against the
             // configured limit: a reader that has been cancelled but has not
