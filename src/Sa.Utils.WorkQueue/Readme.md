@@ -17,6 +17,8 @@ High-performance async task queue for .NET with bounded capacity, dynamic concur
 | **Safe shutdown** | `ShutdownAsync`, `DisposeAsync` — idempotent and thread-safe | [Important Notes](#-important-notes) |
 | **Error strategies** | Per-item fault handling: `Continue`, `StopReader`, or `ShutdownQueue` | [Error Strategies](#error-strategies) |
 | **Status callbacks** | Track item lifecycle: `Running` → `Completed` / `Faulted` / `Cancelled` / `Aborted` / `Skipped` | [Status Lifecycle](#status-lifecycle) |
+| **Pool observability** | `PoolState` names why a non-idle queue is not draining — paused on purpose, lost every reader, or stopped — which the published numbers cannot say | [Pool Observability](#pool-observability) |
+| **Emergency stop** | `ForceCancelReaders` / `ForceCancelReadersAsync` stop the reader pool without stopping the queue; the buffer is dropped unless the wait times out | [Important Notes](#-important-notes) |
 
 ---
 
@@ -128,6 +130,42 @@ queue.ConcurrencyLimit = 0;  // pause processing; set a positive value to resume
 ```
 
 When a reader terminates on its own (error strategy `StopReader`, `ForceCancelReaders`), `ConcurrencyLimit` decreases accordingly — set it back to the target value to restore the pool.
+
+A limit of `0` therefore does not say *paused*: it is also what a pool that lost every reader looks like. [`PoolState`](#pool-observability) tells those apart.
+
+---
+
+## Pool Observability
+
+`IsIdle()` answers *whether* work is pending. It does not answer *why nothing is coming for it*, and neither does anything else the queue publishes. After `ForceCancelReaders` — or after every reader is lost to a `StopReader` fault — the cancelled readers give up their slots and `ConcurrencyLimit` drops to `0`, which is exactly the number a deliberate pause leaves behind. Same limit, same `IsEnabled`, opposite situations: one is a decision, the other is a fault that needs acting on.
+
+`PoolState` names the condition in one call:
+
+| State | Meaning | Response |
+|-------|---------|----------|
+| `Active` | Running, at least one reader live | — |
+| `Paused` | `ConcurrencyLimit` was set to `0` on purpose | Raise the limit when work should resume |
+| `NoReaders` | Enabled, not paused, no readers left | Re-arm: set `ConcurrencyLimit` above `0`. This is the one that means something is wrong |
+| `Stopped` | Shut down or disposed | — |
+
+```csharp
+switch (queue.PoolState)
+{
+    case SaWorkPoolState.NoReaders:
+        logger.LogError("work queue {Queue} lost every reader; re-arming", name);
+        queue.ConcurrencyLimit = 4;          // the documented response
+        break;
+
+    case SaWorkPoolState.Paused:
+        logger.LogInformation("work queue {Queue} is paused with {Pending} item(s) pending",
+            name, queue.QueueTasks);
+        break;
+}
+```
+
+A stopped queue reports `Stopped` rather than `Paused` even if its limit was `0` when it stopped — there is no pool left to describe, and the shutdown is the reason nothing is happening, not the pause.
+
+It is a snapshot, not a value that stays true: pausing a running queue or re-arming an empty one changes it on the next read. It is meant for a log line, a metric or a health check — all of which read it once and act. For an enabled queue, `WaitForIdleAsync` names the same two reasons in the warning it logs when it gives up waiting, and a test holds the two to that.
 
 ---
 
@@ -259,6 +297,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 | `ForceCancelReaders()` | Method | Emergency stop of all readers (bounded wait) |
 | `ForceCancelReadersAsync(timeout, ct)` | Method | Async emergency stop with optional timeout |
 | `IsIdle()` | Method | `true` if no pending/active tasks |
+| `PoolState` | Property | `Active` / `Paused` / `NoReaders` / `Stopped` — why a non-idle queue is not draining, which the limit cannot say |
 | `IsEnabled` | Property | `true` while queue is active |
 | `QueueTasks` | Property | Total tasks in progress + queued |
 | `ConcurrencyLimit` | Property | Current parallelism limit (mutable) |
