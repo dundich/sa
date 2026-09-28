@@ -175,7 +175,7 @@ public sealed class WorkQueueSyncReaderTests
 
         // The shutdown drains what the dying reader left behind, and nothing
         // survives in the registry.
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(0, TrackedCount(queue));
         AssertNoDisposedReaders(queue);
     }
@@ -219,7 +219,7 @@ public sealed class WorkQueueSyncReaderTests
         // "no live readers" branch. Before the fix, a stale registry entry made the
         // pool look non-empty and the wait never completed; the test token is the
         // only thing keeping such a regression from hanging the run.
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.False(queue.IsIdle()); // 4 items are genuinely still queued
         Assert.Equal(4, queue.QueueTasks);
@@ -253,7 +253,7 @@ public sealed class WorkQueueSyncReaderTests
         // stale registry entry hid it and this reported "waiting" instead of
         // "no progress".
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => queue.WaitForIdleAsync(TestToken, failIfNoProgress: true));
+            () => queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken));
         Assert.Contains("no live readers", ex.Message, StringComparison.OrdinalIgnoreCase);
 
         // Restoring readers makes progress possible again, so the wait behaves
@@ -261,7 +261,7 @@ public sealed class WorkQueueSyncReaderTests
         processor.ShouldFail = false;
         queue.ConcurrencyLimit = 4;
         await WaitForTrackedCountAsync(queue, 4);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(queue.IsIdle());
         AssertNoDisposedReaders(queue);
@@ -284,7 +284,7 @@ public sealed class WorkQueueSyncReaderTests
 
             // Returns instead of hanging, even though the pool is empty and work
             // remains.
-            await queue.WaitForIdleAsync(TestToken);
+            await queue.WaitForIdleAsync(cancellationToken: TestToken);
         }
 
         // Buffer drained: the next reader has nothing to take, so it suspends and
@@ -319,7 +319,7 @@ public sealed class WorkQueueSyncReaderTests
         AssertNoDisposedReaders(queue);
 
         gate.TrySetResult();
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
     }
 
     [Fact]
@@ -350,7 +350,7 @@ public sealed class WorkQueueSyncReaderTests
         AssertNoDisposedReaders(queue);
 
         gate.TrySetResult();
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
     }
 
     [Fact]
@@ -372,7 +372,7 @@ public sealed class WorkQueueSyncReaderTests
             await queue.Enqueue(i, TestToken);
         }
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(6, processed);
 
         queue.ConcurrencyLimit = 5;
@@ -391,7 +391,7 @@ public sealed class WorkQueueSyncReaderTests
         }
 
         queue.ConcurrencyLimit = 4;
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(10, processed);
         await WaitForTrackedCountAsync(queue, 4);

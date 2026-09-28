@@ -181,7 +181,7 @@ public class WorkQueueTests
         await queue.Enqueue(model, cancellationToken: cts.Token);
         await cts.CancelAsync();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert
 
@@ -227,7 +227,7 @@ public class WorkQueueTests
             await queue.Enqueue(new TestModel(), cancellationToken: CancellationToken.None);
         });
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(0, queue.QueueTasks);
 
         Assert.Equal(5, errors.Count);

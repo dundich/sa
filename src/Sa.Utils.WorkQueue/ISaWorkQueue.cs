@@ -25,6 +25,31 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     bool IsIdle();
 
     /// <summary>
+    /// Gets the condition of the reader pool: <see cref="SaWorkPoolState.Active"/>,
+    /// <see cref="SaWorkPoolState.Paused"/>, <see cref="SaWorkPoolState.NoReaders"/> or
+    /// <see cref="SaWorkPoolState.Stopped"/>.
+    /// </summary>
+    /// <remarks>
+    /// The companion to <see cref="IsIdle"/>, and the answer to a question
+    /// <see cref="IsIdle"/> provokes: work is pending, so why is nothing happening to
+    /// it? Without this, a caller can see that it is not idle and has no way to find out
+    /// whether the queue was paused by hand, lost every reader to a
+    /// <see cref="ForceCancelReaders"/> or a fault, or has been stopped. Only the third
+    /// is a fault, and only the third has an obvious response.
+    /// <para>
+    /// <see cref="ConcurrencyLimit"/> does not answer it: a force-cancel releases the
+    /// slots of the readers it stops, so the limit reads <c>0</c> afterwards exactly as
+    /// it does for a pause, and the pool has no readers in either case.
+    /// </para>
+    /// <para>
+    /// One snapshot, not a value that stays true: re-arming the pool or pausing a
+    /// running one changes it on the next call. It is meant for a log line, a metric or
+    /// a health check, all of which read it once and act.
+    /// </para>
+    /// </remarks>
+    SaWorkPoolState PoolState { get; }
+
+    /// <summary>
     /// Gets or sets the current number of concurrent reader tasks.
     /// Increasing the value spawns new readers; decreasing cancels excess readers
     /// (selected by the configured <see cref="SaReaderCancellationOrder"/>).
@@ -48,6 +73,11 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// assign a value and read it straight back, concluding that many readers are on their
     /// way when none are. No exception is thrown: the assignment states an intent, and
     /// <see cref="IsEnabled"/> answers whether there is a pool left to resize.
+    /// </para>
+    /// <para>
+    /// This value says how many readers the pool is meant to have, not whether it has
+    /// them. <see cref="PoolState"/> is the difference between a deliberate pause and a
+    /// pool that lost its readers — which both leave this at <c>0</c>.
     /// </para>
     /// </remarks>
     int ConcurrencyLimit { get; set; }
@@ -194,7 +224,7 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// is <see langword="true" />.
     /// </exception>
     /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
-    Task WaitForIdleAsync(CancellationToken cancellationToken = default, bool failIfNoProgress = false);
+    Task WaitForIdleAsync(bool failIfNoProgress = false, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Shuts down the queue: cancels all readers (in-flight work is interrupted, not finished),

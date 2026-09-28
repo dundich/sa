@@ -59,7 +59,7 @@ public class OrderService(ISaWorkQueue<OrderInput> queue)
         => await queue.Enqueue(order, ct);
 
     public async Task WaitForCompletionAsync(CancellationToken ct)
-        => await queue.WaitForIdleAsync(ct);
+        => await queue.WaitForIdleAsync(cancellationToken: ct);
 
     public bool IsIdle() => queue.IsIdle();
     public int Pending => queue.QueueTasks;
@@ -253,7 +253,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 | `Enqueue(input, ct)` | Method | Add a task; returns `false` only in `Skip` mode when the buffer is full |
 | `TryEnqueue(input)` | Method | Non-blocking enqueue; returns `false` when the buffer is full (strategy-independent) |
 | `EnqueueMany(inputs, ct)` | Method | Batch enqueue; returns the number of items accepted (each item honors the configured strategy) |
-| `WaitForIdleAsync(ct, failIfNoProgress)` | Method | Wait until all tasks complete. Returns immediately when the queue is explicitly paused (`ConcurrencyLimit = 0`) or active but has no readers — in both states pending work can never drain. `failIfNoProgress: true` turns that no-progress state into `InvalidOperationException` instead of a silent return |
+| `WaitForIdleAsync(failIfNoProgress, ct)` | Method | Wait until all tasks complete. Returns immediately when the queue is explicitly paused (`ConcurrencyLimit = 0`) or active but has no readers — in both states pending work can never drain. `failIfNoProgress: true` turns that no-progress state into `InvalidOperationException` instead of a silent return |
 | `ShutdownAsync()` | Method | Cancellation shutdown: cancels all readers (in-flight work is interrupted, not finished), waits for readers bounded by `ShutdownTimeout`, drains the rest of the buffer as `Faulted` |
 | `Shutdown()` | Method | Synchronous shutdown (blocks the calling thread) |
 | `ForceCancelReaders()` | Method | Emergency stop of all readers (bounded wait) |

@@ -419,7 +419,7 @@ public sealed partial class SaWorkQueue<TInput>
     /// idle" two answers to the same question instead of a contradiction.
     /// </para>
     /// </remarks>
-    public async Task WaitForIdleAsync(CancellationToken cancellationToken = default, bool failIfNoProgress = false)
+    public async Task WaitForIdleAsync(bool failIfNoProgress = false, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _state) == (int)QueueState.Disposed, this);
 
@@ -437,7 +437,7 @@ public sealed partial class SaWorkQueue<TInput>
             if (_paused)
             {
                 if (failIfNoProgress) ThrowHelper.QueuePaused();
-                SaWorkQueueLogMessages.LogIdleWaitGaveUp(_logger, pending, SaWorkNoProgress.Paused);
+                SaWorkQueueLogMessages.LogIdleWaitGaveUp(_logger, pending, SaWorkPoolState.Paused);
                 return;
             }
 
@@ -447,7 +447,7 @@ public sealed partial class SaWorkQueue<TInput>
             if (IsEnabled && !HasLiveReaders())
             {
                 if (failIfNoProgress) ThrowHelper.QueueHasNoReaders();
-                SaWorkQueueLogMessages.LogIdleWaitGaveUp(_logger, pending, SaWorkNoProgress.NoReaders);
+                SaWorkQueueLogMessages.LogIdleWaitGaveUp(_logger, pending, SaWorkPoolState.NoReaders);
                 return;
             }
 

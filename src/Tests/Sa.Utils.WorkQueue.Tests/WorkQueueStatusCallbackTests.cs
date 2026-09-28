@@ -42,7 +42,7 @@ public sealed class WorkQueueStatusCallbackTests
 
         probe.Arm(queue);
         queue.ConcurrencyLimit = 1;
-        await queue.WaitForIdleAsync(TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
 
         Assert.True(queue.IsIdle());
         Assert.True(probe.Ran, "the status callback never ran, so this proved nothing");
@@ -77,7 +77,7 @@ public sealed class WorkQueueStatusCallbackTests
 
         var resizingThread = Environment.CurrentManagedThreadId;
         queue.ConcurrencyLimit = 1;
-        await queue.WaitForIdleAsync(TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
 
         Assert.Equal(resizingThread, firstReportThread);
     }

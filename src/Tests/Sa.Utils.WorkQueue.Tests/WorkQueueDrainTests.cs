@@ -96,7 +96,7 @@ public sealed class WorkQueueDrainTests
 
         processor.Gate.TrySetResult(); // let the stuck item finish
 
-        var wait = queue.WaitForIdleAsync(TestToken);
+        var wait = queue.WaitForIdleAsync(cancellationToken: TestToken);
         var done = await Task.WhenAny(wait, Task.Delay(2000, TestToken));
         Assert.True(ReferenceEquals(done, wait),
             "queue must reach idle once the stuck item finishes");

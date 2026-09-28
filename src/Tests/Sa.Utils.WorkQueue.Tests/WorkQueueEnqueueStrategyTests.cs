@@ -73,7 +73,7 @@ public sealed class WorkQueueEnqueueStrategyTests
 
         Assert.True(await pending);
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
     }
 
@@ -95,11 +95,11 @@ public sealed class WorkQueueEnqueueStrategyTests
         Assert.Equal(0, queue.AvailableCapacity);
 
         queue.ConcurrencyLimit = 1; // resume: readers drain the buffer
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed);
 
         Assert.True(await queue.Enqueue(3, TestToken)); // buffer free again
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
     }
 
@@ -126,7 +126,7 @@ public sealed class WorkQueueEnqueueStrategyTests
         queue.ConcurrencyLimit = 1; // resume
         processor.Gate.TrySetResult();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed); // items 2 and 3 were processed, item 1 was cancelled
     }
 
@@ -149,11 +149,11 @@ public sealed class WorkQueueEnqueueStrategyTests
         });
 
         queue.ConcurrencyLimit = 1; // resume: readers drain the buffer
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed);
 
         Assert.True(await queue.Enqueue(3, TestToken));
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
     }
 
@@ -177,7 +177,7 @@ public sealed class WorkQueueEnqueueStrategyTests
         Assert.DoesNotContain(statuses, s => s.Item == 3 && s.Status is SaWorkStatus.Running or SaWorkStatus.Completed);
 
         queue.ConcurrencyLimit = 1; // resume: readers drain the buffer
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed); // dropped item was never processed
         Assert.Contains(statuses, s => s.Item == 1 && s.Status == SaWorkStatus.Completed);
         Assert.Contains(statuses, s => s.Item == 2 && s.Status == SaWorkStatus.Completed);
@@ -237,7 +237,7 @@ public sealed class WorkQueueEnqueueStrategyTests
         Assert.Equal(2, queue.QueueTasks);
 
         queue.ConcurrencyLimit = 1; // resume
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed);
         Assert.Equal(0, queue.QueueTasks);
         Assert.True(queue.IsIdle());
@@ -257,7 +257,7 @@ public sealed class WorkQueueEnqueueStrategyTests
                 .WithEnqueueStrategy(strategy));
 
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         queue.Shutdown();
 
@@ -313,7 +313,7 @@ public sealed class WorkQueueEnqueueStrategyTests
 
         queue.ConcurrencyLimit = 1; // readers drain the buffer
         await WaitUntil(() => queue.AvailableCapacity == queue.QueueCapacity, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
     }
 }

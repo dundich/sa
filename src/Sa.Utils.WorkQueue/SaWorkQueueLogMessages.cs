@@ -36,10 +36,16 @@ internal static partial class SaWorkQueueLogMessages
                   "The {Pending} item(s) left in the buffer were kept, not dropped: set ConcurrencyLimit to process them.")]
     public static partial void ForceCancelWaitCancelled(ILogger logger, int unfinished, int pending);
 
+    /// <remarks>
+    /// Only <see cref="SaWorkPoolState.Paused"/> and
+    /// <see cref="SaWorkPoolState.NoReaders"/> are ever passed: those are the two
+    /// reasons a wait can end without the queue having drained. The other two values
+    /// are not reasons for anything.
+    /// </remarks>
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning,
         Message = "WaitForIdleAsync returned with {Pending} item(s) still pending: {Reason}. " +
                   "The queue cannot drain them on its own; set ConcurrencyLimit above 0 to resume.")]
-    public static partial void IdleWaitGaveUp(ILogger logger, int pending, SaWorkNoProgress reason);
+    public static partial void IdleWaitGaveUp(ILogger logger, int pending, SaWorkPoolState reason);
 
     public static void LogReaderLost(ILogger? logger, int concurrency)
     {
@@ -86,7 +92,7 @@ internal static partial class SaWorkQueueLogMessages
         if (logger is not null) ForceCancelWaitCancelled(logger, unfinished, pending);
     }
 
-    public static void LogIdleWaitGaveUp(ILogger? logger, int pending, SaWorkNoProgress reason)
+    public static void LogIdleWaitGaveUp(ILogger? logger, int pending, SaWorkPoolState reason)
     {
         if (logger is not null) IdleWaitGaveUp(logger, pending, reason);
     }

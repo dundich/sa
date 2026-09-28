@@ -60,7 +60,7 @@ public sealed class WorkQueueForceCancelDrainTests
             // would park, and it returns only when the "no reader can drain this" branch
             // is reached — a branch that a drained buffer would never reach.
             processor.Release();
-            await queue.WaitForIdleAsync(TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
+            await queue.WaitForIdleAsync(cancellationToken: TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
 
             // Two APIs, same question, now consistent: work is genuinely still pending
             // and nothing is coming for it, and the one that returned says so out loud.
@@ -81,7 +81,7 @@ public sealed class WorkQueueForceCancelDrainTests
             queue.ConcurrencyLimit = 1;
 
             await second.AsTask().WaitAsync(TimeSpan.FromSeconds(30), TestToken);
-            await queue.WaitForIdleAsync(TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
+            await queue.WaitForIdleAsync(cancellationToken: TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
 
             Assert.True(queue.IsIdle());
             Assert.Equal(SaWorkStatus.Completed, statuses.Terminal(2));
@@ -184,7 +184,7 @@ public sealed class WorkQueueForceCancelDrainTests
             logger);
 
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(queue.IsIdle());
         Assert.Equal(0, logger.Count(LogLevel.Warning, "WaitForIdleAsync returned with"));
@@ -214,7 +214,7 @@ public sealed class WorkQueueForceCancelDrainTests
         queue.ConcurrencyLimit = 0;
         await WaitUntilAsync(() => !queue.IsIdle(), TestToken);
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(1, logger.Count(LogLevel.Warning, "WaitForIdleAsync returned with 2 item(s) still pending"));
         Assert.Equal(1, logger.Count(LogLevel.Warning, "Paused"));

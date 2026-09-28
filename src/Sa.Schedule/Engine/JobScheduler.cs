@@ -141,7 +141,7 @@ internal sealed class JobScheduler : IJobScheduler
             // (setting the same value is a no-op when the pool is healthy).
             _queue.ConcurrencyLimit = _limit;
 
-            await _queue.WaitForIdleAsync(cancellationToken);
+            await _queue.WaitForIdleAsync(cancellationToken: cancellationToken);
 
             for (var i = 0; i < _queue.MaxConcurrency; i++)
             {
@@ -277,7 +277,7 @@ internal sealed class JobScheduler : IJobScheduler
 
         try
         {
-            await _queue.WaitForIdleAsync(timeoutCts.Token);
+            await _queue.WaitForIdleAsync(cancellationToken: timeoutCts.Token);
         }
         catch (OperationCanceledException)
         {

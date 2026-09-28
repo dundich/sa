@@ -50,7 +50,7 @@ public sealed class WorkQueueDiagnosticsTests
         release.SetResult();
 
         Assert.True(await enqueued);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Contains(SaWorkStatus.Aborted, seen);
 
@@ -129,7 +129,7 @@ public sealed class WorkQueueDiagnosticsTests
                 .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.ShutdownQueue));
 
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.False(queue.IsEnabled);
         Assert.Same(first, queue.ShutdownError);

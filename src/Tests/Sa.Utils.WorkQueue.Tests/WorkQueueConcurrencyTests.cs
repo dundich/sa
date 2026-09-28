@@ -163,7 +163,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         foreach (var tcs in blockers)
             tcs.SetResult();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(10, work.TotalProcessed);
     }
@@ -192,7 +192,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
 
         // Восстанавливаем лимит и ждём завершения
         queue.ConcurrencyLimit = 2;
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(5, work.TotalProcessed);
     }
 
@@ -239,7 +239,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         foreach (var tcs in phase1Blockers.Concat(phase2Blockers))
             tcs.SetResult();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(8, work.TotalProcessed);
     }
 
@@ -287,7 +287,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             blockers[i].SetResult();
 
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(8, work.TotalProcessed);
         Assert.Equal(0, queue.QueueTasks);
@@ -324,7 +324,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         foreach (var tcs in blockers)
             tcs.SetResult();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(taskCount, work.TotalProcessed);
     }
 
@@ -367,7 +367,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         Task processTask = CreateProcess(totals, cts, blockers);
 
         await Task.WhenAll(enqueueTask, changeTask, processTask);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert: no exceptions, all tasks processed, limit respected at peaks
         Assert.True(work.MaxParallelObserved <= 6,
@@ -468,7 +468,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         queue.ConcurrencyLimit = 0;
 
         Assert.Equal(stoppedAt, queue.ConcurrencyLimit);
-        await queue.WaitForIdleAsync(TestToken, failIfNoProgress: true);
+        await queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken);
     }
 
     /// <summary>
@@ -518,7 +518,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         model.AllowCompletion.SetResult();
 
         await processed;
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(queue.IsIdle());
         Assert.Equal(1, work.CompletedCount);
@@ -563,7 +563,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         foreach (var model in models) model.Unlock();
 
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert: all tasks completed, no duplicates, no losses
         Assert.Equal(20, completedIds.Count);
@@ -602,7 +602,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         // Shutdown should complete without hanging
         await queue.ShutdownAsync();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(work.TotalProcessed > 0);
     }

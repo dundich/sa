@@ -56,7 +56,7 @@ public sealed class WorkQueueEnqueueManyTests
         Assert.Equal(2, queue.AvailableCapacity);
 
         queue.ConcurrencyLimit = 1; // resume: readers drain the buffer
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
         Assert.Equal(0, queue.QueueTasks);
     }
@@ -82,7 +82,7 @@ public sealed class WorkQueueEnqueueManyTests
 
         Assert.Equal(3, await pending);
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
         Assert.Equal(0, queue.QueueTasks);
     }
@@ -109,7 +109,7 @@ public sealed class WorkQueueEnqueueManyTests
         Assert.DoesNotContain(statuses, s => s.Item is 3 or 4 && s.Status is SaWorkStatus.Running or SaWorkStatus.Completed);
 
         queue.ConcurrencyLimit = 1; // resume
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed); // only the accepted items were processed
         Assert.Contains(statuses, s => s.Item == 1 && s.Status == SaWorkStatus.Completed);
         Assert.Contains(statuses, s => s.Item == 2 && s.Status == SaWorkStatus.Completed);
@@ -143,7 +143,7 @@ public sealed class WorkQueueEnqueueManyTests
         Assert.Equal(2, queue.QueueTasks);
 
         queue.ConcurrencyLimit = 1; // resume
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed);
         Assert.Equal(0, queue.QueueTasks);
     }
@@ -164,7 +164,7 @@ public sealed class WorkQueueEnqueueManyTests
         Assert.Empty(statuses);
 
         queue.ConcurrencyLimit = 1;
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(0, processor.Processed);
     }
 
@@ -194,7 +194,7 @@ public sealed class WorkQueueEnqueueManyTests
         Assert.Equal(1, queue.QueueTasks);
 
         queue.ConcurrencyLimit = 1; // resume
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
         Assert.Equal(0, queue.QueueTasks);
     }
@@ -209,7 +209,7 @@ public sealed class WorkQueueEnqueueManyTests
                 .WithQueueCapacity(2));
 
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         queue.Shutdown();
 

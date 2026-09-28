@@ -62,7 +62,7 @@ public sealed class WorkQueueCancellationOrderTests
             await queue.Enqueue(i, TestToken);
         }
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(4, queue.ConcurrencyLimit);
         Assert.Equal(8, processor.Processed);
     }
@@ -96,7 +96,7 @@ public sealed class WorkQueueCancellationOrderTests
             await queue.Enqueue(i, TestToken);
         }
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(5, processor.Processed);
     }
 

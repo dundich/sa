@@ -309,6 +309,42 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     public bool IsIdle() => Volatile.Read(ref _taskCount) == 0;
 
+    /// <summary>
+    /// The condition of the reader pool, which <see cref="ConcurrencyLimit"/> alone
+    /// cannot report.
+    /// </summary>
+    /// <remarks>
+    /// A force-cancel releases the slots of the readers it stops, so the limit drops to
+    /// <c>0</c> — the same number a deliberate pause leaves behind, and the live reader
+    /// count is <c>0</c> in both cases too. The two states are the ones worth telling
+    /// apart and the two the published numbers are unable to.
+    /// <para>
+    /// Stopped is checked before paused on purpose. A queue paused and then shut down has
+    /// no pool left to report on, and answering <see cref="SaWorkPoolState.Paused"/>
+    /// would describe an intention rather than the reason nothing is happening.
+    /// </para>
+    /// <para>
+    /// Paused is checked before the live count for the opposite reason: with a limit of
+    /// <c>0</c> there are no readers by definition, and "someone set the limit to zero"
+    /// is the true answer while "the pool lost its readers" is a guess. The order here is
+    /// the one <c>WaitForIdleAsync</c> uses, deliberately, for the same reason.
+    /// </para>
+    /// </remarks>
+    public SaWorkPoolState PoolState
+    {
+        get
+        {
+            if (!IsEnabled) return SaWorkPoolState.Stopped;
+
+            lock (_readersSync)
+            {
+                if (_paused) return SaWorkPoolState.Paused;
+
+                return LiveReaderCount > 0 ? SaWorkPoolState.Active : SaWorkPoolState.NoReaders;
+            }
+        }
+    }
+
     public int MaxConcurrency => _maxConcurrency;
     public int QueueCapacity => _queueCapacity;
 

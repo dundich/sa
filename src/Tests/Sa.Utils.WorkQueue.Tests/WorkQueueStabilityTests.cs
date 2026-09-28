@@ -69,12 +69,12 @@ public sealed class WorkQueueStabilityTests
             SaWorkQueueOptions<int>.Create(processor).WithConcurrencyLimit(2));
 
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         var shutdownTask = queue.ShutdownAsync();
         await Task.Delay(10, TestToken);
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         await shutdownTask;
         Assert.False(queue.IsEnabled);
@@ -90,7 +90,7 @@ public sealed class WorkQueueStabilityTests
                 .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.StopReader));
 
         await queue.Enqueue(-1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(1, queue.ConcurrencyLimit);
 
@@ -120,7 +120,7 @@ public sealed class WorkQueueStabilityTests
         Assert.Equal(3, queue.ConcurrencyLimit);
 
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
     }
 
@@ -146,7 +146,7 @@ public sealed class WorkQueueStabilityTests
         foreach (var item in items)
             await queue.Enqueue(item, TestToken);
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(8, processor.Processed);
     }
 
@@ -172,7 +172,7 @@ public sealed class WorkQueueStabilityTests
         await queue.Enqueue(99, TestToken);
         await queue.Enqueue(2, TestToken);
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(3, processor.Processed);
         Assert.True(callbackFailures > 0);
@@ -217,7 +217,7 @@ public sealed class WorkQueueStabilityTests
         Assert.Equal(3, queue.ConcurrencyLimit);
 
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
     }
 
@@ -234,7 +234,7 @@ public sealed class WorkQueueStabilityTests
                     item == -1 ? SaExecutionErrorStrategy.StopReader : SaExecutionErrorStrategy.Continue));
 
         await queue.Enqueue(-1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         await Task.Delay(100, TestToken);
         Assert.Equal(0, queue.ConcurrencyLimit);
     }
@@ -281,7 +281,7 @@ public sealed class WorkQueueStabilityTests
         Assert.Equal(3, queue.ConcurrencyLimit);
 
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
     }
 
@@ -306,7 +306,7 @@ public sealed class WorkQueueStabilityTests
 
         // With concurrency 0 and pending items, WaitForIdleAsync must not block
         // for an idle state no reader can reach — it skips the wait and returns.
-        var wait = queue.WaitForIdleAsync(TestToken);
+        var wait = queue.WaitForIdleAsync(cancellationToken: TestToken);
         var completed = await Task.WhenAny(wait, Task.Delay(500, TestToken));
         Assert.True(ReferenceEquals(completed, wait),
             "WaitForIdleAsync did not return within 500ms while paused; expected an immediate skip.");
@@ -323,7 +323,7 @@ public sealed class WorkQueueStabilityTests
 
         // Bring the queue to a steady state first.
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
 
         // Pause: the only reader is cancelled, but the queue stays Active
@@ -343,7 +343,7 @@ public sealed class WorkQueueStabilityTests
         Assert.Equal(1, processor.Processed);
 
         // WaitForIdleAsync must not block for an idle state no reader can reach.
-        var wait = queue.WaitForIdleAsync(TestToken);
+        var wait = queue.WaitForIdleAsync(cancellationToken: TestToken);
         var done = await Task.WhenAny(wait, Task.Delay(500, TestToken));
         Assert.True(ReferenceEquals(done, wait),
             "WaitForIdleAsync did not return within 500ms while paused; expected an immediate skip.");
@@ -351,7 +351,7 @@ public sealed class WorkQueueStabilityTests
 
         // Restore the limit: a reader is spawned and the pending item is processed.
         queue.ConcurrencyLimit = 1;
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed);
     }
 
@@ -384,7 +384,7 @@ public sealed class WorkQueueStabilityTests
             s => s.Item == 2 && s.Status is SaWorkStatus.Cancelled or SaWorkStatus.Faulted);
 
         queue.ConcurrencyLimit = 1; // Resume: a new reader picks up item 2
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed);
         Assert.Contains(statuses, s => s.Item == 2 && s.Status == SaWorkStatus.Completed);
     }
@@ -420,7 +420,7 @@ public sealed class WorkQueueStabilityTests
         Assert.DoesNotContain(statuses, s => s.Status == SaWorkStatus.Cancelled);
 
         queue.ConcurrencyLimit = 2; // Restore capacity
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
         Assert.Contains(statuses, s => s.Item == 3 && s.Status == SaWorkStatus.Completed);
     }
@@ -524,7 +524,7 @@ public sealed class WorkQueueStabilityTests
 
         // And the pool must be usable again: the restored readers process new work.
         await queue.Enqueue(5, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.True(queue.IsIdle());
         // The four stuck items completed once the gate opened (the processor
         // ignores cancellation), plus the new item 5.
@@ -548,10 +548,10 @@ public sealed class WorkQueueStabilityTests
         // failIfNoProgress turns the silent no-progress into an error for callers
         // that must not proceed without progress.
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => queue.WaitForIdleAsync(TestToken, failIfNoProgress: true));
+            () => queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken));
 
         // The default keeps the old behavior: return immediately, no throw.
-        var wait = queue.WaitForIdleAsync(TestToken);
+        var wait = queue.WaitForIdleAsync(cancellationToken: TestToken);
         var completed = await Task.WhenAny(wait, Task.Delay(500, TestToken));
         Assert.True(ReferenceEquals(completed, wait),
             "WaitForIdleAsync must return immediately while paused");
@@ -560,7 +560,7 @@ public sealed class WorkQueueStabilityTests
         // Resume: a real wait happens again and must not throw.
         processor.Gate.TrySetResult(); // item 2's replacement reader must not block
         queue.ConcurrencyLimit = 1;
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.True(queue.IsIdle());
         // Only item 2 completed; item 1 was cancelled by the pause.
         Assert.Equal(1, processor.Processed);
@@ -573,11 +573,11 @@ public sealed class WorkQueueStabilityTests
             SaWorkQueueOptions<int>.Create(new CountingProcessor()).WithConcurrencyLimit(1));
 
         // No work at all: the wait returns immediately regardless of the flag.
-        await queue.WaitForIdleAsync(TestToken, failIfNoProgress: true);
+        await queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken);
 
         // Paused but still idle: there is no pending work to complain about.
         queue.ConcurrencyLimit = 0;
-        await queue.WaitForIdleAsync(TestToken, failIfNoProgress: true);
+        await queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken);
 
         Assert.True(queue.IsIdle());
     }
@@ -598,18 +598,18 @@ public sealed class WorkQueueStabilityTests
         await queue.ForceCancelReadersAsync(ct: TestToken);
         await queue.Enqueue(1, TestToken); // accepted, but no readers can drain it
 
-        var wait = queue.WaitForIdleAsync(TestToken);
+        var wait = queue.WaitForIdleAsync(cancellationToken: TestToken);
         var completed = await Task.WhenAny(wait, Task.Delay(500, TestToken));
         Assert.True(ReferenceEquals(completed, wait),
             "WaitForIdleAsync must not block while the queue has no live readers");
         await wait;
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => queue.WaitForIdleAsync(TestToken, failIfNoProgress: true));
+            () => queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken));
 
         // Re-arming the limit restores the real wait and the pool.
         queue.ConcurrencyLimit = 2;
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.True(queue.IsIdle());
         Assert.Equal(1, processor.Processed);
     }
@@ -625,16 +625,16 @@ public sealed class WorkQueueStabilityTests
 
         await queue.Enqueue(1, TestToken); // accepted, no readers ever
 
-        var wait = queue.WaitForIdleAsync(TestToken);
+        var wait = queue.WaitForIdleAsync(cancellationToken: TestToken);
         var completed = await Task.WhenAny(wait, Task.Delay(500, TestToken));
         Assert.True(ReferenceEquals(completed, wait));
         await wait;
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => queue.WaitForIdleAsync(TestToken, failIfNoProgress: true));
+            () => queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken));
 
         queue.ConcurrencyLimit = 1;
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
     }
 }

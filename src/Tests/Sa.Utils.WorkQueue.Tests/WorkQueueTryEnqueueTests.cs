@@ -34,11 +34,11 @@ public sealed class WorkQueueTryEnqueueTests
         Assert.Equal(0, queue.AvailableCapacity);
 
         queue.ConcurrencyLimit = 1; // resume: readers drain the buffer
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed);
 
         Assert.True(queue.TryEnqueue(3)); // buffer free again
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
     }
 
@@ -63,7 +63,7 @@ public sealed class WorkQueueTryEnqueueTests
         Assert.DoesNotContain(statuses, s => s.Item == 3 && s.Status is SaWorkStatus.Running or SaWorkStatus.Completed);
 
         queue.ConcurrencyLimit = 1; // resume
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed); // dropped item was never processed
         Assert.DoesNotContain(statuses, s => s.Item == 3 && s.Status is SaWorkStatus.Running or SaWorkStatus.Completed);
     }
@@ -98,7 +98,7 @@ public sealed class WorkQueueTryEnqueueTests
                 .WithQueueCapacity(2));
 
         await queue.Enqueue(1, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         queue.Shutdown();
 

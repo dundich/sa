@@ -59,7 +59,7 @@ public class OrderService(ISaWorkQueue<OrderInput> queue)
         => await queue.Enqueue(order, ct);
 
     public async Task WaitForCompletionAsync(CancellationToken ct)
-        => await queue.WaitForIdleAsync(ct);
+        => await queue.WaitForIdleAsync(cancellationToken: ct);
 
     public bool IsIdle() => queue.IsIdle();
     public int Pending => queue.QueueTasks;
@@ -253,7 +253,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 | `Enqueue(input, ct)` | Метод | Добавить задачу; возвращает `false` только в режиме `Skip` при полном буфере |
 | `TryEnqueue(input)` | Метод | Неблокирующий enqueue; возвращает `false` при полном буфере (не зависит от стратегии) |
 | `EnqueueMany(inputs, ct)` | Метод | Пакетный enqueue; возвращает число принятых элементов (каждый ведёт себя согласно стратегии) |
-| `WaitForIdleAsync(ct, failIfNoProgress)` | Метод | Дождаться завершения всех задач. Немедленный возврат, если очередь явно на паузе (`ConcurrencyLimit = 0`) или активна, но без читателей — в обоих состояниях ожидающая работа не может быть обработана. `failIfNoProgress: true` превращает это «без прогресса» в `InvalidOperationException` вместо молчаливого возврата |
+| `WaitForIdleAsync(failIfNoProgress, ct)` | Метод | Дождаться завершения всех задач. Немедленный возврат, если очередь явно на паузе (`ConcurrencyLimit = 0`) или активна, но без читателей — в обоих состояниях ожидающая работа не может быть обработана. `failIfNoProgress: true` превращает это «без прогресса» в `InvalidOperationException` вместо молчаливого возврата |
 | `ShutdownAsync()` | Метод | Завершение через отмену: отменяет всех читателей (in-flight работа прерывается, а не доделывается), ожидает читателей с ограничением `ShutdownTimeout`, дренаж остатка буфера как `Faulted` |
 | `Shutdown()` | Метод | Синхронное завершение (блокирует вызвающий поток) |
 | `ForceCancelReaders()` | Метод | Аварийная остановка всех читателей (ограниченное ожидание) |
