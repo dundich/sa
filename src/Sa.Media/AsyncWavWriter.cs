@@ -94,6 +94,14 @@ internal static class AsyncWavWriter
         // ---------- Патч размеров ----------
         long endPos = stream.Position;
 
+        // RIFF-размер считается в int32: при записи >2 GiB данных размеры в заголовке
+        // переполнятся и файл будет повреждён — лучше упасть явно, чем писать мусор.
+        if (totalDataBytes > int.MaxValue - 36)
+        {
+            throw new InvalidOperationException(
+                $"WAV file is too large to patch the RIFF header: {totalDataBytes} data bytes exceed the 2 GiB limit.");
+        }
+
         Span<byte> tmp = stackalloc byte[4];
 
         stream.Position = headerStart + 4;

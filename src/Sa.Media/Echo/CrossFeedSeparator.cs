@@ -157,7 +157,9 @@ public sealed class CrossFeedSeparator()
             AudioMath.NormalizePeak(data.AsSpan(0, count));
 
             using Stream output = new FileStream(outputPath, new FileStreamOptions { Access = FileAccess.Write, Mode = FileMode.Create, Share = FileShare.None, BufferSize = 1 << 20, Options = FileOptions.SequentialScan | FileOptions.Asynchronous });
-            await WavIO.WriteWavFileAsync(output, head.SampleRate, data.AsSpan(0, count).ToArray(), cancellationToken);
+            // Передаём ReadOnlyMemory прямо на арендованный пул-буфер: копия не нужна,
+            // потому что возврат в пул произойдёт только после завершения async-записи.
+            await WavIO.WriteWavFileAsync(output, head.SampleRate, data.AsMemory(0, count), cancellationToken);
         }
         finally { ArrayPool<float>.Shared.Return(data); }
     }

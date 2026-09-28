@@ -8,6 +8,10 @@
 /// <seealso href="https://hasan-hasanov.com/post/2023/10/how_to_parse_wav_file/"/> 
 public sealed class WavHeader
 {
+    // SubFormat-GUID из WAVE_FORMAT_EXTENSIBLE (KSDATAFORMAT_SUBTYPE_*)
+    internal static readonly Guid PcmSubtypeGuid = new("00000001-0000-0010-8000-00aa00389b71");
+    internal static readonly Guid IeeeFloatSubtypeGuid = new("00000003-0000-0010-8000-00aa00389b71");
+
     // === RIFF Chunk ===
 
     public uint ChunkId { get; set; }
@@ -100,11 +104,24 @@ public sealed class WavHeader
 
     public int GetBytesPerSample() => BitsPerSample / 8;
 
-    public bool IsPcm => AudioFormat == WaveFormatType.Pcm;
-    public bool IsIeeeFloat => AudioFormat == WaveFormatType.IeeeFloat;
+    public bool IsPcm => AudioFormat == WaveFormatType.Pcm
+        || (AudioFormat == WaveFormatType.Extensible && SubFormatGuid == PcmSubtypeGuid);
+    public bool IsIeeeFloat => AudioFormat == WaveFormatType.IeeeFloat
+        || (AudioFormat == WaveFormatType.Extensible && SubFormatGuid == IeeeFloatSubtypeGuid);
     public bool IsFloat => IsIeeeFloat;
     public bool IsIntegerPcm => IsPcm;
     public bool IsExtensible => AudioFormat == WaveFormatType.Extensible;
+
+    /// <summary>
+    /// Фактический PCM/float-формат с учётом SubFormat для WAVE_FORMAT_EXTENSIBLE.
+    /// Сэмплы extensible-файлов читаются как обычный PCM/IEEE float.
+    /// </summary>
+    internal WaveFormatType EffectiveAudioFormat => AudioFormat switch
+    {
+        WaveFormatType.Extensible when IsPcm => WaveFormatType.Pcm,
+        WaveFormatType.Extensible when IsIeeeFloat => WaveFormatType.IeeeFloat,
+        _ => AudioFormat
+    };
 
     public bool IsMono => NumChannels == 1;
     public bool IsStereo => NumChannels == 2;
@@ -192,6 +209,6 @@ public sealed class WavHeader
 
 
     public Func<ReadOnlySpan<byte>, double> GetNormalizedConverter()
-        => SampleConverter.GetNormalizedConverter(BitsPerSample, AudioFormat);
+        => SampleConverter.GetNormalizedConverter(BitsPerSample, EffectiveAudioFormat);
 
 }

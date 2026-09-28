@@ -14,19 +14,27 @@ internal static class AggressiveMode
         AudioSeparationOptions options, int sampleRate, double alpha, double beta, CancellationToken cancellationToken = default)
     {
         var inputPath = options.InputPath;
-        float[] audio = await WavIO.ReadInterleavedFloatArrayAsync(inputPath, cancellationToken);
+        var (audio, count) = await WavIO.ReadInterleavedFloatsAsync(inputPath, cancellationToken);
+        try
+        {
+            var span = audio.AsSpan(0, count);
 
-        AudioMath.InvertCrossFeedModel(audio, alpha, beta);
-        ApplySpectralMasking(audio, sampleRate, options.SpectralMaskPower, options.MaskFloor);
-        AudioMath.NormalizePeak(audio);
+            AudioMath.InvertCrossFeedModel(span, alpha, beta);
+            ApplySpectralMasking(span, sampleRate, options.SpectralMaskPower, options.MaskFloor);
+            AudioMath.NormalizePeak(span);
 
-        string outputPath = Path.GetFullPath(options.OutputPath
-            ?? Path.Combine(Path.GetDirectoryName(inputPath)!, $"{Path.GetFileNameWithoutExtension(inputPath)}_aggressive.wav"));
+            string outputPath = Path.GetFullPath(options.OutputPath
+                ?? Path.Combine(Path.GetDirectoryName(inputPath)!, $"{Path.GetFileNameWithoutExtension(inputPath)}_aggressive.wav"));
 
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
-        using Stream output = new FileStream(outputPath, new FileStreamOptions { Access = FileAccess.Write, Mode = FileMode.Create, Share = FileShare.None, BufferSize = 1 << 20, Options = FileOptions.SequentialScan | FileOptions.Asynchronous });
-        await WavIO.WriteWavFileAsync(output, sampleRate, audio, cancellationToken);
+            using Stream output = new FileStream(outputPath, new FileStreamOptions { Access = FileAccess.Write, Mode = FileMode.Create, Share = FileShare.None, BufferSize = 1 << 20, Options = FileOptions.SequentialScan | FileOptions.Asynchronous });
+            await WavIO.WriteWavFileAsync(output, sampleRate, audio.AsMemory(0, count), cancellationToken);
+        }
+        finally
+        {
+            ArrayPool<float>.Shared.Return(audio);
+        }
     }
 
     /// <summary>

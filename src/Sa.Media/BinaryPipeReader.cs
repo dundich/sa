@@ -26,6 +26,25 @@ internal sealed class BinaryPipeReader(PipeReader reader)
         return result;
     }
 
+    public async ValueTask<int> ReadInt32Async(CancellationToken cancellationToken = default)
+    {
+        var idBuffer = await reader.ReadAtLeastAsync(4, cancellationToken).ConfigureAwait(false);
+        int result = ReadInt32Little(idBuffer.Buffer);
+        reader.AdvanceTo(idBuffer.Buffer.GetPosition(4));
+        Position += 4;
+        return result;
+    }
+
+    public async ValueTask<Guid> ReadGuidAsync(CancellationToken cancellationToken = default)
+    {
+        var seq = await reader.ReadAtLeastAsync(16, cancellationToken).ConfigureAwait(false);
+        Span<byte> tmp = stackalloc byte[16];
+        seq.Buffer.Slice(0, 16).CopyTo(tmp);
+        reader.AdvanceTo(seq.Buffer.GetPosition(16));
+        Position += 16;
+        return new Guid(tmp);
+    }
+
     public async Task SkipBytesAsync(long count, CancellationToken cancellationToken = default)
     {
         Position += count;
@@ -41,6 +60,16 @@ internal sealed class BinaryPipeReader(PipeReader reader)
         Span<byte> buf = stackalloc byte[4];
         CopyTo(seq, buf);
         return BinaryPrimitives.ReadUInt32LittleEndian(buf);
+    }
+
+    private static int ReadInt32Little(ReadOnlySequence<byte> seq)
+    {
+        if (seq.Length >= 4 && seq.IsSingleSegment)
+            return BinaryPrimitives.ReadInt32LittleEndian(seq.First.Span);
+
+        Span<byte> buf = stackalloc byte[4];
+        CopyTo(seq, buf);
+        return BinaryPrimitives.ReadInt32LittleEndian(buf);
     }
 
     private static ushort ReadUInt16Little(ReadOnlySequence<byte> seq)

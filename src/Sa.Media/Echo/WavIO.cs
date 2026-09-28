@@ -7,13 +7,18 @@ namespace Sa.Media.Echo;
 // ───────────────────────────────────────────────────────────────────
 internal static class WavIO
 {
-    public static async Task<float[]> ReadInterleavedFloatArrayAsync(string path, CancellationToken ct)
+    /// <summary>
+    /// Читает стерео WAV в массив <see cref="float"/>, арендованный у <see cref="ArrayPool{T}"/>.
+    /// Возвращает также фактическое число заполненных элементов (чётное: L,R пары).
+    /// Вызывающий обязан вернуть буфер в пул: <c>ArrayPool&lt;float&gt;.Shared.Return(buffer)</c>.
+    /// </summary>
+    public static async Task<(float[] Buffer, int Count)> ReadInterleavedFloatsAsync(string path, CancellationToken ct)
     {
         await using AsyncWavReader reader = AsyncWavReader.CreateFromFile(path);
         var header = await reader.GetHeaderAsync(ct);
 
-        int sampleCount = (int)(header.DataSize / 4);
-        float[] interleaved = new float[sampleCount * 2];
+        int frameCount = (int)(header.DataSize / 4);
+        float[] interleaved = ArrayPool<float>.Shared.Rent(frameCount * 2);
         int idx = 0;
 
         await foreach (var packet in reader.ReadDoubleSamplesAsync(allowBufferReuse: true, cancellationToken: ct)
@@ -26,8 +31,8 @@ internal static class WavIO
             if (packet.ChannelId == 1) idx++;
         }
 
-        if (idx < sampleCount) Array.Resize(ref interleaved, idx * 2);
-        return interleaved;
+        // idx*2 — число реально записанных слотов (без хвостового частичного фрейма).
+        return (interleaved, Math.Min(idx * 2, interleaved.Length));
     }
 
     public static async Task WriteWavFileAsync(
@@ -44,6 +49,12 @@ internal static class WavIO
         int byteRate = sampleRate * channels * bitsPerSample / 8;
         int blockAlign = channels * bitsPerSample / 8;
         int dataSize = sampleCount * blockAlign;
+
+        if (dataSize < 0 || dataSize > int.MaxValue - 36)
+        {
+            throw new InvalidOperationException(
+                $"WAV output is too large for the RIFF header: {dataSize} data bytes exceed the 2 GiB limit.");
+        }
 
         var header = new byte[44];
 
@@ -149,6 +160,12 @@ internal static class WavIO
 
         if (stream.CanSeek)
         {
+            if (bytesWritten > int.MaxValue - 36)
+            {
+                throw new InvalidOperationException(
+                    $"WAV output is too large for the RIFF header: {bytesWritten} data bytes exceed the 2 GiB limit.");
+            }
+
             stream.Seek(4, SeekOrigin.Begin);
             var sizeBuffer = new byte[4];
             WriteInt32(sizeBuffer, 0, (int)(36 + bytesWritten));

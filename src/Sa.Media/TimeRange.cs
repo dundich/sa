@@ -46,10 +46,18 @@ public sealed record TimeRange(TimeSpan From, TimeSpan To)
             TimeSpan.MaxValue.TotalMilliseconds > end ? TimeSpan.FromMilliseconds(end) : TimeSpan.MaxValue);
 
     public static TimeRange Seconds(double fromSeconds, double? toSeconds = null)
-        => new(TimeSpan.FromSeconds(fromSeconds),
-            toSeconds.HasValue
-            && TimeSpan.MaxValue.TotalSeconds < toSeconds
+    {
+        TimeSpan from = TimeSpan.FromSeconds(fromSeconds);
+
+        // Условие проверяет, что конечная граница попадает в диапазон TimeSpan
+        // (а не наоборот — раньше условие было инвертировано, и любой конечный
+        // toSeconds игнорировался: TimeRange.Seconds(5,15) отдавал [5s, ∞)).
+        TimeSpan to = toSeconds.HasValue
+            && TimeSpan.MaxValue.TotalSeconds > toSeconds.Value
                 ? TimeSpan.FromSeconds(toSeconds.Value)
-                : TimeSpan.MaxValue);
+                : TimeSpan.MaxValue;
+
+        return new(from, to);
+    }
 }
 

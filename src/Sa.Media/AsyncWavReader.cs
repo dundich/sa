@@ -170,6 +170,13 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
                     }
                 }
 
+                // Конец обрезки достигнут: хвост канала больше не нужен.
+                // Без этой проверки мы остались бы крутиться в ReadAsync над одним и тем же
+                // непотреблённым хвостом буфера (Spin), пока поток не дойдёт до EOF —
+                // для больших файлов это 100% CPU, а для live-канала (mic/network) — вечный цикл.
+                if (currentOffset >= cutTo)
+                    yield break;
+
                 if (!advancedSomething && result.IsCompleted)
                     yield break;
             }
@@ -259,23 +266,26 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         try
         {
             var positions = new int[channelCount];
+            var lastOffsets = new long[channelCount];
 
             for (int i = 0; i < channelCount; i++)
             {
                 channelBuffers[i] = MemoryPool<byte>.Shared.Rent(alignedSize);
             }
 
-            long lastOffset = 0;
-
+            // allowBufferReuse: true — пакеты из ConvertToFormatAsync ссылаются на ОДИН внутренний
+            // буфер, но мы синхронно копируем каждый сэмпл в channelBuffers до следующего MoveNextAsync,
+            // поэтому переиспользование безопасно и убирает одну небольшую аллокацию на каждый сэмпл
+            // (раньше здесь был ToArray() на каждый сэмпл — лишний мусор в GC).
             await foreach (var (channelId, sample, position, isEof) in ConvertToFormatAsync(
                 targetFormat,
                 cutRange,
-                allowBufferReuse: false, // Внутренний буфер уже переиспользуется, нужен новый пакет
+                allowBufferReuse: true,
                 cancellationToken: cancellationToken)
                 .WithCancellation(cancellationToken)
                 .ConfigureAwait(false))
             {
-                lastOffset = position;
+                lastOffsets[channelId] = position;
 
                 // Копируем семплы в соответствующий канал
                 var buffer = channelBuffers[channelId].Memory;
@@ -307,7 +317,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
                     var result = channelBuffers[channelId].Memory[..remaining];
                     var chunk = allowBufferReuse ? result : result.ToArray();
 
-                    yield return new AudioPacket(channelId, chunk, lastOffset, true);
+                    yield return new AudioPacket(channelId, chunk, lastOffsets[channelId], true);
                 }
             }
         }
