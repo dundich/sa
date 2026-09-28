@@ -171,6 +171,12 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <see cref="ConcurrencyLimit"/> above 0 to spawn replacements.</description></item>
     /// </list>
     /// An already-idle queue returns immediately regardless of the flag.
+    /// <para>
+    /// Either non-idle return is logged as a warning. Together with
+    /// <see cref="IsIdle"/> answering <see langword="false"/> for the same state, that is what
+    /// makes the two agree: work is genuinely still pending, no reader is coming for it, and a
+    /// caller waiting here is told so rather than handed a silent no-op.
+    /// </para>
     /// </remarks>
     /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled.</exception>
     /// <exception cref="InvalidOperationException">
@@ -238,6 +244,20 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// Never <c>await</c> this from inside <see cref="ISaWork{TInput}.Execute"/> without first
     /// hopping to a background task: the calling reader is one of the tasks being awaited,
     /// so the await can never complete on its own.
+    /// <para>
+    /// Unlike the synchronous <see cref="ForceCancelReaders"/>, this method does <em>not</em> drop
+    /// the buffer when the wait ends early. A caller-supplied <paramref name="timeout"/> is a
+    /// statement about how long the readers should take, not permission to discard queued work:
+    /// on <see cref="TimeoutException"/> or cancellation the items still in the buffer are kept,
+    /// no reader is picking them up, and a warning is logged saying so. Raise
+    /// <see cref="ConcurrencyLimit"/> above 0 to spawn a replacement pool and let them run.
+    /// </para>
+    /// <para>
+    /// <see cref="IsIdle"/> reports <see langword="false"/> in that state, and keeps doing so until
+    /// the buffer is drained or dropped. That is not a contradiction with
+    /// <see cref="WaitForIdleAsync"/>, which returns rather than hanging on a queue that can
+    /// never drain; the latter logs a warning when it gives up for that reason.
+    /// </para>
     /// </remarks>
     Task ForceCancelReadersAsync(TimeSpan? timeout = null, CancellationToken ct = default);
 }

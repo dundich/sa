@@ -23,7 +23,8 @@ public sealed record SaWorkQueueOptions<TInput>(
     Func<TInput, Exception, SaExecutionErrorStrategy>? HandleItemFaulted = null,
     Action<TInput, SaWorkStatus, Exception?>? StatusChanged = null,
     Func<TInput, string>? GetItemDisplayName = null,
-    TimeSpan? ShutdownTimeout = null)
+    TimeSpan? ShutdownTimeout = null,
+    TimeProvider? TimeProvider = null)
 {
     /// <summary>Creates a new options instance with the specified queue capacity.</summary>
     /// <param name="capacity">Must be at least 1.</param>
@@ -105,6 +106,24 @@ public sealed record SaWorkQueueOptions<TInput>(
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
         return this with { ShutdownTimeout = timeout };
+    }
+
+    /// <summary>Sets the clock behind every bounded wait inside the queue.</summary>
+    /// <param name="timeProvider">
+    /// Defaults to <see cref="System.TimeProvider.System"/>. Only tests have a reason to
+    /// change it: <see cref="ShutdownTimeout"/> defaults to 30 seconds, and every timeout
+    /// path — a reader that ignores cancellation, a force-cancel that never unwinds — is
+    /// otherwise only reachable by sleeping through it. Point this at a controllable
+    /// clock and those paths complete as soon as the test advances time.
+    /// </summary>
+    /// <remarks>
+    /// A production caller should leave this alone. It governs waits only, never the
+    /// processors themselves, so a clock that jumps cannot corrupt a queue's state.
+    /// </remarks>
+    public SaWorkQueueOptions<TInput> WithTimeProvider(TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        return this with { TimeProvider = timeProvider };
     }
 
 

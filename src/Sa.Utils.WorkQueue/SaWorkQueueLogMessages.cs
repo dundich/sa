@@ -26,6 +26,21 @@ internal static partial class SaWorkQueueLogMessages
         Message = "Reader terminated unexpectedly. Effective concurrency is now {Concurrency}. Set ConcurrencyLimit to restore readers.")]
     public static partial void ReaderLost(ILogger logger, int concurrency);
 
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning,
+        Message = "Force-cancel stopped waiting after {Seconds:F0}s with {Unfinished} reader(s) still unwinding. " +
+                  "The {Pending} item(s) left in the buffer were kept, not dropped: set ConcurrencyLimit to process them.")]
+    public static partial void ForceCancelTimedOut(ILogger logger, double seconds, int unfinished, int pending);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning,
+        Message = "Force-cancel stopped waiting: the caller's token was cancelled with {Unfinished} reader(s) still unwinding. " +
+                  "The {Pending} item(s) left in the buffer were kept, not dropped: set ConcurrencyLimit to process them.")]
+    public static partial void ForceCancelWaitCancelled(ILogger logger, int unfinished, int pending);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning,
+        Message = "WaitForIdleAsync returned with {Pending} item(s) still pending: {Reason}. " +
+                  "The queue cannot drain them on its own; set ConcurrencyLimit above 0 to resume.")]
+    public static partial void IdleWaitGaveUp(ILogger logger, int pending, SaWorkNoProgress reason);
+
     public static void LogReaderLost(ILogger? logger, int concurrency)
     {
         if (logger is not null) ReaderLost(logger, concurrency);
@@ -59,5 +74,20 @@ internal static partial class SaWorkQueueLogMessages
     public static void LogShutdownError(ILogger? logger, Exception ex)
     {
         if (logger is not null) ShutdownError(logger, ex);
+    }
+
+    public static void LogForceCancelTimedOut(ILogger? logger, double seconds, int unfinished, int pending)
+    {
+        if (logger is not null) ForceCancelTimedOut(logger, seconds, unfinished, pending);
+    }
+
+    public static void LogForceCancelWaitCancelled(ILogger? logger, int unfinished, int pending)
+    {
+        if (logger is not null) ForceCancelWaitCancelled(logger, unfinished, pending);
+    }
+
+    public static void LogIdleWaitGaveUp(ILogger? logger, int pending, SaWorkNoProgress reason)
+    {
+        if (logger is not null) IdleWaitGaveUp(logger, pending, reason);
     }
 }

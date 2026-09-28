@@ -29,8 +29,10 @@ public sealed partial class SaWorkQueue<TInput>
         if (tasks.Length > 0)
         {
             // Bounded wait: a processor that ignores cancellation must not block the
-            // calling thread indefinitely.
-            Task.WaitAll(tasks, _shutdownTimeout);
+            // calling thread indefinitely. A timeout is not an error here — the reader
+            // is being abandoned on purpose, and the caller is told by the return value
+            // rather than by an exception.
+            WaitAllBounded(tasks, _shutdownTimeout);
         }
 
         DrainAndResetIdle(SaWorkDrainReason.ForceCancel);
@@ -43,6 +45,18 @@ public sealed partial class SaWorkQueue<TInput>
     /// <see cref="_shutdownTimeout"/>'s value as a starting point.
     /// </param>
     /// <param name="ct">Cancels the wait, not the readers.</param>
+    /// <remarks>
+    /// This is the one emergency-stop path that does <em>not</em> drop the buffer.
+    /// The synchronous <see cref="ForceCancelReaders"/> drains unconditionally, because
+    /// "stop the pool and throw away what is left" is what it means. Here an explicit
+    /// <paramref name="timeout"/> says the caller expects the readers to unwind; when
+    /// they do not, the items still queued were never rejected by anybody and a pool
+    /// re-armed afterwards can still take them. Dropping work that nobody asked to
+    /// drop is worse than leaving it waiting, so the buffer is kept and the shortfall
+    /// is logged instead. <see cref="IsIdle"/> stays <see langword="false"/> — truthfully,
+    /// there is work left — and a later <see cref="WaitForIdleAsync"/> that returns
+    /// without progress says so in a log line rather than silently.
+    /// </remarks>
     public async Task ForceCancelReadersAsync(TimeSpan? timeout = null, CancellationToken ct = default)
     {
         if (!IsEnabled) return;
@@ -51,10 +65,30 @@ public sealed partial class SaWorkQueue<TInput>
 
         if (tasks.Length > 0)
         {
-            if (timeout is { } t)
-                await Task.WhenAll(tasks).WaitAsync(t, ct).ConfigureAwait(false);
-            else
-                await Task.WhenAll(tasks).ConfigureAwait(false);
+            try
+            {
+                if (timeout is { } t)
+                    await Task.WhenAll(tasks).WaitAsync(t, _timeProvider, ct).ConfigureAwait(false);
+                else
+                    await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                // Deliberately no drain. The readers were asked to stop and are still
+                // unwinding; the items behind them are still processable. Rethrown so
+                // the caller learns the wait expired rather than inferring success.
+                SaWorkQueueLogMessages.LogForceCancelTimedOut(
+                    _logger, timeout!.Value.TotalSeconds, CountUnfinished(tasks), PendingCount);
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                // Same reasoning: the caller's token ended the wait, it did not change
+                // what the buffer is worth.
+                SaWorkQueueLogMessages.LogForceCancelWaitCancelled(
+                    _logger, CountUnfinished(tasks), PendingCount);
+                throw;
+            }
         }
 
         DrainAndResetIdle(SaWorkDrainReason.ForceCancel);
@@ -178,7 +212,8 @@ public sealed partial class SaWorkQueue<TInput>
 
         try
         {
-            await Task.WhenAll(tasks).WaitAsync(_shutdownTimeout).ConfigureAwait(false);
+            await Task.WhenAll(tasks).WaitAsync(_shutdownTimeout, _timeProvider, CancellationToken.None)
+                .ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
@@ -200,10 +235,60 @@ public sealed partial class SaWorkQueue<TInput>
 
         if (tasks.Length == 0) return;
 
-        if (!Task.WaitAll(tasks, _shutdownTimeout))
+        if (!WaitAllBounded(tasks, _shutdownTimeout))
         {
             SaWorkQueueLogMessages.LogShutdownError(_logger, ThrowHelper.ReadersTimeout(asynchronous: false, _shutdownTimeout.TotalSeconds));
         }
+    }
+
+    /// <summary>
+    /// Blocks until every task finishes or <paramref name="timeout"/> elapses on the
+    /// injected clock. Returns <see langword="false"/> on timeout.
+    /// </summary>
+    /// <remarks>
+    /// <c>Task.WaitAll(tasks, timeout)</c> has no <see cref="TimeProvider"/> overload, so
+    /// the bounded wait is expressed as a timed <c>WaitAsync</c> and then blocked on.
+    /// Blocking on the <em>task</em> rather than awaiting it keeps the caller's ambient
+    /// synchronization context out of it: the wait completes from a timer callback, so
+    /// nothing is posted back to the thread that is already parked here.
+    /// <para>
+    /// The timeout is deliberately not an exception, matching
+    /// <c>Task.WaitAll(tasks, timeout)</c> returning <see langword="false"/>. The one
+    /// difference is a task that faults: it surfaces as its own exception rather than
+    /// wrapped in <see cref="AggregateException"/>.
+    /// </para>
+    /// </remarks>
+    private bool WaitAllBounded(Task[] tasks, TimeSpan timeout)
+    {
+        try
+        {
+            Task.WhenAll(tasks)
+                .WaitAsync(timeout, _timeProvider, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// How many of the given tasks are still running. For diagnostics only — the
+    /// answer is a snapshot that a reader can invalidate a nanosecond later, and
+    /// nothing branches on it.
+    /// </summary>
+    private static int CountUnfinished(Task[] tasks)
+    {
+        var count = 0;
+
+        foreach (var task in tasks)
+        {
+            if (!task.IsCompleted) count++;
+        }
+
+        return count;
     }
 
     private void CompleteDispose()

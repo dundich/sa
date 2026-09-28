@@ -160,6 +160,13 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     private readonly SaEnqueueStrategy _enqueueStrategy;
     private readonly TimeSpan _shutdownTimeout;
 
+    /// <summary>
+    /// Clock behind every bounded wait. Injectable so a test can expire a
+    /// 30-second timeout instantly instead of sleeping through it — see
+    /// <see cref="SaWorkQueueOptions{TInput}.WithTimeProvider"/>.
+    /// </summary>
+    private readonly TimeProvider _timeProvider;
+
     /// <summary>Where the next <see cref="SaReaderCancellationOrder.RoundRobin"/> sweep continues.</summary>
     private int _lastRemovedIndex = -1;
 
@@ -265,6 +272,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         _getItemDisplayName = options.GetItemDisplayName ?? (item => $"{item}");
         _handleItemFaulted = options.HandleItemFaulted ?? ((_, _) => SaExecutionErrorStrategy.ShutdownQueue);
         _shutdownTimeout = options.ShutdownTimeout ?? TimeSpan.FromSeconds(30);
+        _timeProvider = options.TimeProvider ?? TimeProvider.System;
 
         _maxConcurrency = options.MaxConcurrency > 0 ? options.MaxConcurrency.Value : Environment.ProcessorCount;
         _concurrency = Math.Clamp(options.ConcurrencyLimit ?? Environment.ProcessorCount, 0, _maxConcurrency);
@@ -478,6 +486,19 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
 
         idle?.TrySetResult();
+    }
+
+    /// <summary>
+    /// Accepted work that has not reached a terminal status yet. Read under the same
+    /// lock that guards <c>_taskCount</c> — it is not a volatile field, so a bare read
+    /// would be a race.
+    /// </summary>
+    private int PendingCount
+    {
+        get
+        {
+            lock (_pendingSync) return _taskCount;
+        }
     }
 
     /// <summary>

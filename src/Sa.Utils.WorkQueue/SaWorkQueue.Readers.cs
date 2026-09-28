@@ -345,6 +345,14 @@ public sealed partial class SaWorkQueue<TInput>
     /// whether that is a silent return or an error, for callers that must not
     /// proceed on a queue that will never drain.
     /// </para>
+    /// <para>
+    /// A return that is not "already idle" is a genuine surprise, so it is logged as a
+    /// warning. Without that line the two idle APIs contradict each other: this one
+    /// returns having done nothing, while <see cref="IsIdle"/> answers
+    /// <see langword="false"/> — correctly, because there really is work left that
+    /// nothing is going to pick up. The log line is what makes "returned" and "not
+    /// idle" two answers to the same question instead of a contradiction.
+    /// </para>
     /// </remarks>
     public async Task WaitForIdleAsync(CancellationToken cancellationToken = default, bool failIfNoProgress = false)
     {
@@ -353,15 +361,18 @@ public sealed partial class SaWorkQueue<TInput>
         while (true)
         {
             TaskCompletionSource idle;
+            int pending;
             lock (_pendingSync)
             {
                 if (_taskCount == 0) return;
+                pending = _taskCount;
                 idle = _idleTcs;
             }
 
             if (_paused)
             {
                 if (failIfNoProgress) ThrowHelper.QueuePaused();
+                SaWorkQueueLogMessages.LogIdleWaitGaveUp(_logger, pending, SaWorkNoProgress.Paused);
                 return;
             }
 
@@ -371,6 +382,7 @@ public sealed partial class SaWorkQueue<TInput>
             if (IsEnabled && !HasLiveReaders())
             {
                 if (failIfNoProgress) ThrowHelper.QueueHasNoReaders();
+                SaWorkQueueLogMessages.LogIdleWaitGaveUp(_logger, pending, SaWorkNoProgress.NoReaders);
                 return;
             }
 

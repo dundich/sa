@@ -85,7 +85,14 @@ SaWorkQueueOptions<TInput>.Create(processor)
     .WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy>)
     .WithItemDisplayName(Func<TInput, string>)    // Custom display name for logging
     .WithShutdownTimeout(TimeSpan)                 // Max wait for readers on shutdown/force-cancel (default: 30s)
+    .WithTimeProvider(TimeProvider)                // Clock for every bounded wait (default: System; tests only)
 ```
+
+`WithTimeProvider` exists so that `ShutdownTimeout` can be exercised without sleeping
+through it — every wait in the queue is measured on this clock, so pointing it at a
+controllable one makes a 30-second timeout expire instantly. It governs waits only, never
+the processors, so a clock that jumps cannot corrupt a queue's state. Leave it alone in
+production code.
 
 ### Creating options
 
@@ -269,8 +276,9 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 3. **Cancellation**: each `Enqueue` accepts a `CancellationToken`. Items distinguish caller-initiated cancellation (`Aborted`) from system cancellation (`Cancelled`).
 4. **Thread safety**: all public members are thread-safe. Changing `ConcurrencyLimit` at runtime adjusts reader count without losing queued items.
 5. **Idempotent shutdown**: `ShutdownAsync`, `Shutdown`, `Dispose`, `DisposeAsync` are safe to call multiple times.
-6. **`ConcurrencyLimit = 0`**: pauses all processing (cancels all readers; in `Soft` mode the in-flight items are allowed to finish first). Restore a positive value to resume. While paused with pending work, `WaitForIdleAsync` returns immediately (or throws `InvalidOperationException` with `failIfNoProgress: true`). Note an emergency loss of all readers (`ForceCancelReaders`, `StopReader` faults) is **not** a pause, but the wait returns early there as well — the empty pool cannot drain on its own; re-arm `ConcurrencyLimit` to restore readers.
+6. **`ConcurrencyLimit = 0`**: pauses all processing (cancels all readers; in `Soft` mode the in-flight items are allowed to finish first). Restore a positive value to resume. While paused with pending work, `WaitForIdleAsync` returns immediately (or throws `InvalidOperationException` with `failIfNoProgress: true`). Note an emergency loss of all readers (`ForceCancelReaders`, `StopReader` faults) is **not** a pause, but the wait returns early there as well — the empty pool cannot drain on its own; re-arm `ConcurrencyLimit` to restore readers. Either early return is logged as a warning, because it is not the same answer as "idle".
 7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: emergency stop — immediately cancels all reader tasks. The sync variant waits up to `ShutdownTimeout` (default 30s) for readers to terminate; the async variant accepts an optional `TimeSpan? timeout`. Items still in the buffer are dropped and reported as `Faulted` with a "readers were force-cancelled" reason (the queue itself stays active — the message must not claim a shutdown that did not happen). After calling, restore concurrency by setting `ConcurrencyLimit = X` to spawn replacement readers.
+   **One exception:** if `ForceCancelReadersAsync` is given a `timeout` and it elapses (or its `ct` is cancelled), the buffer is **kept** — nobody rejected those items, and a re-armed pool can still take them. A warning is logged, the exception is rethrown so the caller knows the wait expired, and `IsIdle()` stays `false` until the buffer is drained. A `WaitForIdleAsync` that gives up for this reason also logs a warning naming the cause, so it never contradicts `IsIdle()`.
 8. **Delegate-based registration**: `AddSaWorkQueue<TInput>(configureOptions)` accepts a factory returning `SaWorkQueueOptions<TInput>`, allowing registration without an `ISaWork<TInput>` class.
 9. **`Enqueue` return value**: `ValueTask<bool>` — `false` only in `Skip` mode with a full buffer (the item is dropped and reported as `Skipped` via `StatusChanged`). A stopped/disposed queue always throws; the exception is carried by the `ValueTask` and surfaced by `await`.
 10. **`AvailableCapacity`**: informational only — free slots in the buffer. It does not affect `IsIdle()`.
