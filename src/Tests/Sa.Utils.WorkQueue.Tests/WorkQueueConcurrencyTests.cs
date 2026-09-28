@@ -416,7 +416,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ConcurrencyLimit_SetToMaxAllowed_ClampsCorrectly()
+    public async Task ConcurrencyLimit_AboveMax_Clamps_AndNegative_Throws()
     {
         // Arrange
         var work = new TrackingWork();
@@ -426,8 +426,11 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         queue.ConcurrencyLimit = 10; // Above max
         Assert.Equal(5, queue.ConcurrencyLimit); // Should be clamped
 
-        queue.ConcurrencyLimit = -1; // Below min
-        Assert.Equal(0, queue.ConcurrencyLimit); // Should be clamped to 0
+        // Below the minimum is an error rather than a silent clamp to 0: a queue
+        // paused forever while still reporting IsEnabled == true gives the caller
+        // nothing to react to.
+        Assert.Throws<ArgumentOutOfRangeException>(() => queue.ConcurrencyLimit = -1);
+        Assert.Equal(5, queue.ConcurrencyLimit); // Rejected value changed nothing
 
         queue.ConcurrencyLimit = 3; // Valid
         Assert.Equal(3, queue.ConcurrencyLimit);

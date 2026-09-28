@@ -11,9 +11,11 @@ public static class Setup
     /// <param name="services">The service collection.</param>
     /// <param name="configureOptions">Factory that builds the options for <typeparamref name="TInput"/>.</param>
     /// <param name="lifetime">
-    /// Registration lifetime. Defaults to <see cref="ServiceLifetime.Singleton"/>, which is the only
-    /// sensible choice: the queue owns reader tasks and a bounded buffer, so creating several of
-    /// them for one input type is rarely intended.
+    /// Registration lifetime. Only <see cref="ServiceLifetime.Singleton"/> is
+    /// accepted: the queue owns reader tasks and a bounded buffer, so a
+    /// <see cref="ServiceLifetime.Scoped"/> or <see cref="ServiceLifetime.Transient"/>
+    /// registration would hand every resolution its own pool — and its own copy of
+    /// every buffered item.
     /// </param>
     /// <remarks>
     /// Uses <c>TryAdd</c>: registering twice for the same <typeparamref name="TInput"/> keeps the first
@@ -26,6 +28,15 @@ public static class Setup
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configureOptions);
+
+        // Reject rather than accept: a scoped queue looks like it works right up
+        // until two scopes both enqueue the same work.
+        if (lifetime != ServiceLifetime.Singleton)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(lifetime), lifetime,
+                "A work queue owns reader tasks and a bounded buffer, so it can only be registered as a singleton.");
+        }
 
         services.TryAdd(new ServiceDescriptor(
             typeof(ISaWorkQueue<TInput>),

@@ -4,31 +4,32 @@ using System.Reflection;
 namespace Sa.Utils.WorkQueue.Tests;
 
 /// <summary>
-/// Regression tests for readers that complete SYNCHRONOUSLY, i.e. before
-/// <c>StartReaderUnderLock</c> has registered them.
+/// Regression tests for readers that run to completion <em>synchronously</em>,
+/// i.e. on the thread that started them, inside the lock that started them.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The dangerous shape is: a paused queue whose buffer already holds an item, plus a
-/// processor that completes or faults <em>without yielding</em>. The reader started by
-/// the <see cref="ISaWorkQueue{TInput}.ConcurrencyLimit"/> setter then picks the item up
-/// synchronously, and — if the item does not complete normally — the loop reaches its
-/// <c>finally</c> and calls <c>RemoveReader</c> before the three tracking lists are
-/// updated. <c>System.Threading.Lock</c> is re-entrant, so the nested call was not blocked
-/// and silently mis-accounted an unregistered reader.
+/// The shape that triggers it is ordinary: a paused queue whose buffer already
+/// holds an item, plus a processor that completes or faults without yielding. The
+/// reader started by the <see cref="ISaWorkQueue{TInput}.ConcurrencyLimit"/> setter
+/// then picks the item up on the spot, and — if the item does not complete
+/// normally — the loop reaches its <c>finally</c> and calls
+/// <c>RemoveReader</c> before the loop has ever been stored anywhere.
 /// </para>
-/// <para>Before the fix, all of the following held at once:</para>
-/// <list type="bullet">
-///   <item><c>RemoveReader</c> charged the never-registered reader a concurrency slot, so
-///   the limit the caller had just set was eaten (asked 4, got 0);</item>
-///   <item>the already-disposed CTS was appended to the lists anyway, so it counted as a
-///   live reader forever and <c>HasLiveReaders()</c> lied;</item>
-///   <item>a later limit decrease called <c>Cancel()</c> on that disposed CTS and threw
-///   <see cref="ObjectDisposedException"/> out of the public setter;</item>
-///   <item><c>WaitForIdleAsync</c> then waited forever for an idle that could not arrive —
-///   and <c>failIfPaused: true</c> did not help, because the heuristic still saw readers;</item>
-///   <item>the work CTS was never disposed, leaking its registration on the shutdown token.</item>
-/// </list>
+/// <para>
+/// Before the registry was written before the loop was started,
+/// <c>System.Threading.Lock</c> being re-entrant let that nested removal through,
+/// and the accounting silently mis-handled a reader it had never seen: the
+/// requested limit was eaten, a permanently disposed token was appended (it
+/// reports as not cancelled, so it counted as live forever), a later limit
+/// decrease threw <see cref="ObjectDisposedException"/> out of the public setter,
+/// and <c>WaitForIdleAsync</c> waited forever for an idle that could not arrive.
+/// </para>
+/// <para>
+/// The point of these tests is that the failure mode is now <em>structural</em>
+/// rather than guarded: there is one registration, one teardown, and no second
+/// list that could drift out of step with the first.
+/// </para>
 /// </remarks>
 public sealed class WorkQueueSyncReaderTests
 {
@@ -38,45 +39,10 @@ public sealed class WorkQueueSyncReaderTests
     private static Task FaultSynchronously(int input, CancellationToken ct)
         => throw new InvalidOperationException($"boom {input}");
 
-    private static List<CancellationTokenSource> ReaderCts(object queue)
-        => [.. (IEnumerable<CancellationTokenSource>)typeof(SaWorkQueue<int>)
-            .GetField("_ctsReaders", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(queue)!];
-
     /// <summary>
-    /// Waits until the reader bookkeeping reaches <paramref name="expected"/>.
-    /// Cancelled readers are removed from the list by their own <c>finally</c>, so the
-    /// count settles asynchronously after a limit change.
-    /// </summary>
-    private static async Task WaitForReaderCountAsync(SaWorkQueue<int> queue, int expected)
-    {
-        var deadline = Environment.TickCount64 + 5000;
-        while (ReaderCts(queue).Count != expected)
-        {
-            Assert.True(Environment.TickCount64 < deadline,
-                $"Expected {expected} tracked reader(s), still {ReaderCts(queue).Count} after 5 s.");
-            await Task.Delay(10, TestToken);
-        }
-    }
-
-    /// <summary>
-    /// Every tracked reader must be a usable CTS. A reader that ran to completion before
-    /// it was registered leaves a disposed CTS behind, and that stale entry counts as a
-    /// live reader forever.
-    /// </summary>
-    private static void AssertNoDisposedReaders(SaWorkQueue<int> queue)
-    {
-        foreach (var cts in ReaderCts(queue))
-        {
-            // CancellationTokenSource.Token throws ObjectDisposedException once disposed.
-            var disposable = Record.Exception(() => cts.Token);
-            Assert.Null(disposable);
-        }
-    }
-
-    /// <summary>
-    /// Faults without ever yielding (so the reader loop stays synchronous) until
-    /// <see cref="ShouldFail"/> is cleared, then completes synchronously and successfully.
+    /// Faults without ever yielding (keeping the reader loop synchronous) until
+    /// <see cref="ShouldFail"/> is cleared, then completes synchronously and
+    /// successfully.
     /// </summary>
     private sealed class SwitchableProcessor : ISaWork<int>
     {
@@ -94,9 +60,62 @@ public sealed class WorkQueueSyncReaderTests
                 : Task.CompletedTask;
     }
 
+    // --- registry introspection -------------------------------------------------
+    //
+    // The reader registry is a private list of a private type, so the assertions
+    // below reach it by reflection. They check the two properties the registry has
+    // to have: every entry is a usable reader, and none of them is a leftover.
+
+    private static List<object> Readers(SaWorkQueue<int> queue)
+        => [.. (IEnumerable)typeof(SaWorkQueue<int>)
+            .GetField("_readers", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(queue)!];
+
+    private static object? Prop(object instance, string name)
+        => instance.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public)!.GetValue(instance);
+
+    private static int TrackedCount(SaWorkQueue<int> queue) => Readers(queue).Count;
+
+    private static int LiveCount(SaWorkQueue<int> queue)
+        => Readers(queue).Count(r => (bool)Prop(r, "IsLive")!);
+
     /// <summary>
-    /// A paused queue with a full buffer, a processor that never yields, and the given
-    /// error strategy. Raising the limit starts a reader that runs to completion inline.
+    /// Waits until the registry reaches <paramref name="expected"/> entries. A
+    /// cancelled reader leaves the registry from its own <c>finally</c>, so the
+    /// count settles asynchronously after a limit change.
+    /// </summary>
+    private static async Task WaitForTrackedCountAsync(SaWorkQueue<int> queue, int expected)
+    {
+        var deadline = Environment.TickCount64 + 5000;
+        while (TrackedCount(queue) != expected)
+        {
+            Assert.True(Environment.TickCount64 < deadline,
+                $"Expected {expected} tracked reader(s), still {TrackedCount(queue)} after 5 s.");
+            await Task.Delay(10, TestToken);
+        }
+    }
+
+    /// <summary>
+    /// Every tracked reader must hold usable token sources. A reader that finished
+    /// before it was registered leaves a disposed source behind, and that stale
+    /// entry counts as a live reader forever.
+    /// </summary>
+    private static void AssertNoDisposedReaders(SaWorkQueue<int> queue)
+    {
+        foreach (var reader in Readers(queue))
+        {
+            foreach (var tokenSource in new[] { "Loop", "Work" })
+            {
+                var cts = (CancellationTokenSource)Prop(reader, tokenSource)!;
+                // CancellationTokenSource.Token throws ObjectDisposedException once disposed.
+                Assert.Null(Record.Exception(() => cts.Token));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A paused queue with a full buffer and a processor that never yields, so
+    /// raising the limit starts a reader that runs to completion inline.
     /// </summary>
     private static async Task<SaWorkQueue<int>> CreateWedgedQueueAsync(
         SaExecutionErrorStrategy strategy,
@@ -119,28 +138,40 @@ public sealed class WorkQueueSyncReaderTests
     }
 
     [Fact]
-    public async Task ReArm_WithStopReader_KeepsTheRequestedLimit()
+    public async Task ReArm_WithStopReader_ReportsTheCapacityItActuallyLost()
     {
         using var queue = await CreateWedgedQueueAsync(SaExecutionErrorStrategy.StopReader);
 
+        // Four buffered items, four readers requested: each reader takes one item
+        // and dies on the spot, inside the setter.
         queue.ConcurrencyLimit = 4;
 
-        // Before the fix: RemoveReader decremented for the unregistered reader, so the
-        // requested limit of 4 was reported back as 0.
-        Assert.Equal(4, queue.ConcurrencyLimit);
+        // StopReader means the pool really lost four slots, so the limit honestly
+        // drops to zero. What must not happen is a limit that disagrees with the
+        // pool, or an entry the accounting never owned.
+        Assert.Equal(0, queue.ConcurrencyLimit);
+        Assert.Equal(0, LiveCount(queue));
+        Assert.Equal(0, TrackedCount(queue));
+        AssertNoDisposedReaders(queue);
     }
 
     [Fact]
-    public async Task ReArm_WithDefaultShutdownQueueStrategy_KeepsTheRequestedLimit()
+    public async Task ReArm_WithDefaultShutdownQueueStrategy_ShutsDownWithoutResidue()
     {
-        // The default strategy (ShutdownQueue) is the one that matters: a processor that
-        // throws synchronously drives it without any explicit configuration.
+        // The default strategy matters: a processor that throws synchronously drives
+        // it with no explicit configuration at all.
         using var queue = await CreateWedgedQueueAsync(SaExecutionErrorStrategy.ShutdownQueue);
 
         queue.ConcurrencyLimit = 1;
 
-        Assert.Equal(1, queue.ConcurrencyLimit);
-        Assert.False(queue.IsEnabled); // the default strategy did shut the queue down
+        Assert.False(queue.IsEnabled);
+        Assert.NotNull(queue.ShutdownError);
+
+        // The shutdown drains what the dying reader left behind, and nothing
+        // survives in the registry.
+        await queue.WaitForIdleAsync(TestToken);
+        Assert.Equal(0, TrackedCount(queue));
+        AssertNoDisposedReaders(queue);
     }
 
     [Fact]
@@ -150,41 +181,38 @@ public sealed class WorkQueueSyncReaderTests
 
         queue.ConcurrencyLimit = 4;
 
-        // Every reader that ran synchronously and died removed itself, so nothing may be
-        // left in the tracking list. A stale entry would report IsCancellationRequested
-        // == false (it looks alive) while its CTS is already disposed.
-        Assert.Empty(ReaderCts(queue));
+        // Every reader that ran synchronously and died removed itself, so the
+        // registry is empty again — no permanently disposed token left behind.
+        Assert.Equal(0, TrackedCount(queue));
         AssertNoDisposedReaders(queue);
     }
 
     [Fact]
     public async Task LimitDecrease_AfterSynchronousFault_DoesNotThrowObjectDisposedException()
     {
-        using var queue = await CreateWedgedQueueAsync(SaExecutionErrorStrategy.StopReader);
+        using var queue = await CreateWedgedQueueAsync(SaExecutionErrorStrategy.StopReader, bufferedItems: 8);
 
-        queue.ConcurrencyLimit = 2;
-        queue.ConcurrencyLimit = 0; // cancels the "live" readers
+        queue.ConcurrencyLimit = 4;
+        queue.ConcurrencyLimit = 2; // re-arms four readers, which each fault and die
+        queue.ConcurrencyLimit = 0;
 
-        // Before the fix: CancelReadersUnderLock called Cancel() on the disposed CTS that
-        // RemoveReader had already disposed, and the ObjectDisposedException escaped the
-        // public ConcurrencyLimit setter.
+        // Before the fix: cancelling walked a registry that held an already-disposed
+        // token, and the ObjectDisposedException escaped the public setter.
         Assert.Equal(0, queue.ConcurrencyLimit);
     }
 
     [Fact]
     public async Task WaitForIdle_AfterSynchronousFaultPool_ReapsInsteadOfHanging()
     {
-        // 8 items but only 4 readers requested, so 4 items are still pending while the
-        // pool is empty.
         using var queue = await CreateWedgedQueueAsync(SaExecutionErrorStrategy.StopReader, bufferedItems: 8);
 
-        queue.ConcurrencyLimit = 4;
+        queue.ConcurrencyLimit = 4; // consumes 4 of 8 items, then the pool is empty
         await Task.Delay(100, TestToken);
 
-        // The pool is empty (every reader died synchronously) but the queue is not paused,
-        // so this is the documented "no live readers" branch. Before the fix the dead
-        // entries made HasLiveReaders() report > 0, so the wait never completed — the test
-        // token is the only thing keeping a regression from hanging the run.
+        // The pool is empty but the queue is not paused, so this is the documented
+        // "no live readers" branch. Before the fix, a stale registry entry made the
+        // pool look non-empty and the wait never completed; the test token is the
+        // only thing keeping such a regression from hanging the run.
         await queue.WaitForIdleAsync(TestToken);
 
         Assert.False(queue.IsIdle()); // 4 items are genuinely still queued
@@ -195,8 +223,8 @@ public sealed class WorkQueueSyncReaderTests
     [Fact]
     public async Task WaitForIdle_FailIfPaused_ThrowsWhilePoolEmpty_AndRecoversAfterReArm()
     {
-        // The processor has to be able to succeed eventually, otherwise restoring readers
-        // just kills them again and the recovery path can never be exercised.
+        // The processor has to be able to succeed eventually, otherwise restoring
+        // readers just kills them again and the recovery path is unreachable.
         var processor = new SwitchableProcessor();
         using var queue = new SaWorkQueue<int>(
             SaWorkQueueOptions<int>.Create(processor)
@@ -213,18 +241,20 @@ public sealed class WorkQueueSyncReaderTests
 
         queue.ConcurrencyLimit = 4; // 4 readers each fault inline and die; 4 items remain
         await Task.Delay(100, TestToken);
-        Assert.Empty(ReaderCts(queue));
+        Assert.Equal(0, TrackedCount(queue));
 
-        // failIfPaused must see the empty pool for what it is. Before the fix the stale
-        // reader entries hid it, so this reported "waiting" instead of "no progress".
+        // failIfNoProgress has to see the empty pool for what it is. Before the fix, a
+        // stale registry entry hid it and this reported "waiting" instead of
+        // "no progress".
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => queue.WaitForIdleAsync(TestToken, failIfPaused: true));
+            () => queue.WaitForIdleAsync(TestToken, failIfNoProgress: true));
         Assert.Contains("no live readers", ex.Message, StringComparison.OrdinalIgnoreCase);
 
-        // Restoring readers makes progress possible again, so the wait behaves normally.
+        // Restoring readers makes progress possible again, so the wait behaves
+        // normally.
         processor.ShouldFail = false;
         queue.ConcurrencyLimit = 4;
-        await WaitForReaderCountAsync(queue, 4);
+        await WaitForTrackedCountAsync(queue, 4);
         await queue.WaitForIdleAsync(TestToken);
 
         Assert.True(queue.IsIdle());
@@ -234,29 +264,28 @@ public sealed class WorkQueueSyncReaderTests
     [Fact]
     public async Task RepeatedReArm_DoesNotAccumulateDeadReaders()
     {
-        // Deterministic by construction: one item per round, one reader per round. The
-        // reader picks the item up synchronously, throws and dies inline, so each round
-        // must leave the tracking list empty again.
+        // Deterministic by construction: one item per round, one reader per round.
         using var queue = await CreateWedgedQueueAsync(SaExecutionErrorStrategy.StopReader, bufferedItems: 5);
 
         for (var round = 1; round <= 5; round++)
         {
             queue.ConcurrencyLimit = 1;
 
-            Assert.Empty(ReaderCts(queue));
+            Assert.Equal(0, TrackedCount(queue));
             AssertNoDisposedReaders(queue);
-            Assert.Equal(1, queue.ConcurrencyLimit);
+            Assert.Equal(0, queue.ConcurrencyLimit);
             Assert.Equal(5 - round, queue.QueueTasks);
 
-            // Returns instead of hanging, even though the pool is empty and work remains.
+            // Returns instead of hanging, even though the pool is empty and work
+            // remains.
             await queue.WaitForIdleAsync(TestToken);
         }
 
-        // Buffer drained: the next reader has nothing to take, so it suspends on
-        // ReadAsync and stays tracked. Before the fix each round also appended a dead
-        // entry, so the list grew to 10 while only 1 reader was real.
+        // Buffer drained: the next reader has nothing to take, so it suspends and
+        // stays registered. Before the fix each round also appended a dead entry,
+        // so the registry grew to 10 while a single reader was real.
         queue.ConcurrencyLimit = 1;
-        await WaitForReaderCountAsync(queue, 1);
+        await WaitForTrackedCountAsync(queue, 1);
         AssertNoDisposedReaders(queue);
         Assert.Equal(1, queue.ConcurrencyLimit);
     }
@@ -264,17 +293,13 @@ public sealed class WorkQueueSyncReaderTests
     [Fact]
     public async Task ReArm_WithSuspendingProcessor_StillRegistersTheReader()
     {
-        // The healthy path: a processor that yields keeps the reader alive, so it must be
-        // tracked normally. Guards against "fix" by skipping the registration too eagerly.
+        // The healthy path: a processor that yields keeps the reader alive, so it is
+        // registered and observable right away.
         var gate = new TaskCompletionSource();
-        var started = new TaskCompletionSource();
 
         using var queue = new SaWorkQueue<int>(
             SaWorkQueueOptions<int>.Create(async (int input, CancellationToken ct) =>
-            {
-                started.TrySetResult();
-                await gate.Task.WaitAsync(ct);
-            })
+                await gate.Task.WaitAsync(ct).ConfigureAwait(false))
                 .WithConcurrencyLimit(0)
                 .WithMaxConcurrency(4)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip));
@@ -282,8 +307,41 @@ public sealed class WorkQueueSyncReaderTests
         await queue.Enqueue(1, TestToken);
         queue.ConcurrencyLimit = 2;
 
-        Assert.Equal(2, ReaderCts(queue).Count);
+        Assert.Equal(2, TrackedCount(queue));
+        Assert.Equal(2, LiveCount(queue));
         Assert.Equal(2, queue.ConcurrencyLimit);
+        AssertNoDisposedReaders(queue);
+
+        gate.TrySetResult();
+        await queue.WaitForIdleAsync(TestToken);
+    }
+
+    [Fact]
+    public async Task ReArm_WhileCancellingReaders_DoesNotLetThemEatTheNewLimit()
+    {
+        // A limit the caller sets while readers are still dying must survive their
+        // teardown. This is the accounting rule that the registry now encodes: a
+        // planned stop releases its slot when the decision is taken, so the reader
+        // gives nothing up a second time when it unwinds.
+        var gate = new TaskCompletionSource();
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(async (int input, CancellationToken ct) =>
+                await gate.Task.WaitAsync(ct).ConfigureAwait(false))
+                .WithConcurrencyLimit(4)
+                .WithMaxConcurrency(8));
+
+        Assert.Equal(4, TrackedCount(queue));
+
+        queue.ConcurrencyLimit = 1; // three readers are told to stop, but none has unwound
+        Assert.Equal(1, LiveCount(queue));
+
+        // No await in between: the three dying readers are still mid-teardown.
+        queue.ConcurrencyLimit = 4;
+
+        Assert.Equal(4, queue.ConcurrencyLimit);
+        await WaitForTrackedCountAsync(queue, 4);
+        Assert.Equal(4, LiveCount(queue));
+        AssertNoDisposedReaders(queue);
 
         gate.TrySetResult();
         await queue.WaitForIdleAsync(TestToken);
@@ -312,12 +370,12 @@ public sealed class WorkQueueSyncReaderTests
         Assert.Equal(6, processed);
 
         queue.ConcurrencyLimit = 5;
-        await WaitForReaderCountAsync(queue, 5);
+        await WaitForTrackedCountAsync(queue, 5);
         AssertNoDisposedReaders(queue);
         Assert.Equal(5, queue.ConcurrencyLimit);
 
         queue.ConcurrencyLimit = 1;
-        await WaitForReaderCountAsync(queue, 1);
+        await WaitForTrackedCountAsync(queue, 1);
         AssertNoDisposedReaders(queue);
         Assert.Equal(1, queue.ConcurrencyLimit);
 
@@ -330,7 +388,7 @@ public sealed class WorkQueueSyncReaderTests
         await queue.WaitForIdleAsync(TestToken);
 
         Assert.Equal(10, processed);
-        await WaitForReaderCountAsync(queue, 4);
+        await WaitForTrackedCountAsync(queue, 4);
         AssertNoDisposedReaders(queue);
     }
 }

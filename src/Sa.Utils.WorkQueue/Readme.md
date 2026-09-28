@@ -246,7 +246,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 | `Enqueue(input, ct)` | Method | Add a task; returns `false` only in `Skip` mode when the buffer is full |
 | `TryEnqueue(input)` | Method | Non-blocking enqueue; returns `false` when the buffer is full (strategy-independent) |
 | `EnqueueMany(inputs, ct)` | Method | Batch enqueue; returns the number of items accepted (each item honors the configured strategy) |
-| `WaitForIdleAsync(ct, failIfPaused)` | Method | Wait until all tasks complete. Returns immediately when the queue is explicitly paused (`ConcurrencyLimit = 0`) or active but has no readers — in both states pending work can never drain. `failIfPaused: true` turns that no-progress state into `InvalidOperationException` instead of a silent return |
+| `WaitForIdleAsync(ct, failIfNoProgress)` | Method | Wait until all tasks complete. Returns immediately when the queue is explicitly paused (`ConcurrencyLimit = 0`) or active but has no readers — in both states pending work can never drain. `failIfNoProgress: true` turns that no-progress state into `InvalidOperationException` instead of a silent return |
 | `ShutdownAsync()` | Method | Cancellation shutdown: cancels all readers (in-flight work is interrupted, not finished), waits for readers bounded by `ShutdownTimeout`, drains the rest of the buffer as `Faulted` |
 | `Shutdown()` | Method | Synchronous shutdown (blocks the calling thread) |
 | `ForceCancelReaders()` | Method | Emergency stop of all readers (bounded wait) |
@@ -264,29 +264,18 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 
 ## ⚠️ Important Notes
 
-1. **Lifecycle**: registered as `Singleton`. Do not use `Scoped`/`Transient`.
+1. **Lifecycle**: registered as `Singleton` only. `AddSaWorkQueue` rejects `Scoped`/`Transient` with `ArgumentOutOfRangeException` — a scoped queue gives every resolution its own reader pool and its own copy of the buffer, which works right up until two scopes enqueue the same work.
 2. **`StatusChanged` callback**: invoked synchronously on a thread-pool thread. Avoid long-running operations inside. Handler exceptions are logged but not propagated.
 3. **Cancellation**: each `Enqueue` accepts a `CancellationToken`. Items distinguish caller-initiated cancellation (`Aborted`) from system cancellation (`Cancelled`).
 4. **Thread safety**: all public members are thread-safe. Changing `ConcurrencyLimit` at runtime adjusts reader count without losing queued items.
 5. **Idempotent shutdown**: `ShutdownAsync`, `Shutdown`, `Dispose`, `DisposeAsync` are safe to call multiple times.
-6. **`ConcurrencyLimit = 0`**: pauses all processing (cancels all readers; in `Soft` mode the in-flight items are allowed to finish first). Restore a positive value to resume. While paused with pending work, `WaitForIdleAsync` returns immediately (or throws `InvalidOperationException` with `failIfPaused: true`). Note an emergency loss of all readers (`ForceCancelReaders`, `StopReader` faults) is **not** a pause, but the wait returns early there as well — the empty pool cannot drain on its own; re-arm `ConcurrencyLimit` to restore readers.
+6. **`ConcurrencyLimit = 0`**: pauses all processing (cancels all readers; in `Soft` mode the in-flight items are allowed to finish first). Restore a positive value to resume. While paused with pending work, `WaitForIdleAsync` returns immediately (or throws `InvalidOperationException` with `failIfNoProgress: true`). Note an emergency loss of all readers (`ForceCancelReaders`, `StopReader` faults) is **not** a pause, but the wait returns early there as well — the empty pool cannot drain on its own; re-arm `ConcurrencyLimit` to restore readers.
 7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: emergency stop — immediately cancels all reader tasks. The sync variant waits up to `ShutdownTimeout` (default 30s) for readers to terminate; the async variant accepts an optional `TimeSpan? timeout`. Items still in the buffer are dropped and reported as `Faulted` with a "readers were force-cancelled" reason (the queue itself stays active — the message must not claim a shutdown that did not happen). After calling, restore concurrency by setting `ConcurrencyLimit = X` to spawn replacement readers.
 8. **Delegate-based registration**: `AddSaWorkQueue<TInput>(configureOptions)` accepts a factory returning `SaWorkQueueOptions<TInput>`, allowing registration without an `ISaWork<TInput>` class.
 9. **`Enqueue` return value**: `ValueTask<bool>` — `false` only in `Skip` mode with a full buffer (the item is dropped and reported as `Skipped` via `StatusChanged`). A stopped/disposed queue always throws; the exception is carried by the `ValueTask` and surfaced by `await`.
 10. **`AvailableCapacity`**: informational only — free slots in the buffer. It does not affect `IsIdle()`.
 11. **Never from inside `Execute`**: do not call `Shutdown`, `ShutdownAsync`, `ForceCancelReaders`, `ForceCancelReadersAsync`, or `Dispose`/`DisposeAsync` from within your `ISaWork<TInput>.Execute` implementation: the calling reader is one of the tasks those methods wait for, so the call blocks for the full `ShutdownTimeout` (30 s by default) before returning. Hand the work off to a background task instead (e.g. `Task.Run`).
-12. **Options validation**: the `SaWorkQueueOptions<TInput>` primary constructor is public, so its arguments bypass the `With*` guards; the `SaWorkQueue<TInput>` constructor re-validates (`ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, positive `ShutdownTimeout`) and throws `ArgumentOutOfRangeException` before creating the channel.
+12. **Options validation**: the `SaWorkQueueOptions<TInput>` primary constructor is public, so its arguments bypass the `With*` guards; the `SaWorkQueue<TInput>` constructor re-validates and throws `ArgumentOutOfRangeException` before creating the channel — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, positive `ShutdownTimeout`. `MaxConcurrency = 0` and `null` both mean "processor count" (the same thing `WithMaxConcurrency(0)` produces); a negative value has no meaning and is rejected. Assigning a negative `ConcurrencyLimit` after construction throws too — a silent clamp to 0 would produce a permanently paused queue that still reports `IsEnabled == true`. Only a *positive* value above `MaxConcurrency` is clamped, not rejected.
 
 ---
 
-## 🤖 Critical Rules for AI Agents (⚠️ IMPORTANT)
-
-These rules MUST be followed when modifying this code:
-
-1. **NEVER** use direct assignment `_concurrency = _ctsReaders.Count`. Pool capacity change on reader removal is done via `_concurrency--` inside `RemoveReader` (under `_readersSync`) to avoid race conditions.
-2. **NEVER** rely on `_queue.Reader.Count` to determine `IsIdle()`. Use only `_taskCount == 0`.
-3. When adding new forced-interruption methods, always include a wait for task completion (`Task.WhenAll`) so that counter state has time to synchronize.
-4. The `ConcurrencyLimit` setter computes delta from the actual live reader count (`_ctsReaders.Count - _pendingRemovals`), not from the configured `_concurrency` — this prevents spurious spawns/cancels for already-cancelled readers.
-5. `RemoveReader` is called in the `finally` of `ReaderLoopAsync`, which executes **after** `MarkInactive()` (in `ExecuteItemAsync`'s finally). The `_concurrency` decrement for planned removals and force-cancels happens **eagerly** — in the `ConcurrencyLimit` setter and in `CancelAndTrackReaders`, in the same critical section as the cancellation decision; `RemoveReader` decrements only for *untracked* terminations (`!intentional && !tracked`). Do not move the tracked-path decrement back into `RemoveReader`: a dying reader would then eat a limit the caller set after the cancellation (the `JobScheduler.AbortJob`-then-`Start` race).
-6. All reader-list mutations (`_ctsReaders`, `_ctsWorks`, `_taskReaders`, `_pendingRemovals`, `_intentionalRemovals`, `_forceCancelled`) must happen under `lock (_readersSync)`. The three parallel lists are removed at the same index in `RemoveReader` — never desynchronise them.
-7. All task-count mutations (`_taskCount`, `_idleTcs`) must happen under `lock (_wiSync)`.

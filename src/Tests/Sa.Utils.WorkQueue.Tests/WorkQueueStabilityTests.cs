@@ -545,10 +545,10 @@ public sealed class WorkQueueStabilityTests
         queue.ConcurrencyLimit = 0; // explicit pause
         await Task.Delay(50, TestToken);
 
-        // failIfPaused turns the silent no-progress into an error for callers
+        // failIfNoProgress turns the silent no-progress into an error for callers
         // that must not proceed without progress.
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => queue.WaitForIdleAsync(TestToken, failIfPaused: true));
+            () => queue.WaitForIdleAsync(TestToken, failIfNoProgress: true));
 
         // The default keeps the old behavior: return immediately, no throw.
         var wait = queue.WaitForIdleAsync(TestToken);
@@ -573,11 +573,11 @@ public sealed class WorkQueueStabilityTests
             SaWorkQueueOptions<int>.Create(new CountingProcessor()).WithConcurrencyLimit(1));
 
         // No work at all: the wait returns immediately regardless of the flag.
-        await queue.WaitForIdleAsync(TestToken, failIfPaused: true);
+        await queue.WaitForIdleAsync(TestToken, failIfNoProgress: true);
 
         // Paused but still idle: there is no pending work to complain about.
         queue.ConcurrencyLimit = 0;
-        await queue.WaitForIdleAsync(TestToken, failIfPaused: true);
+        await queue.WaitForIdleAsync(TestToken, failIfNoProgress: true);
 
         Assert.True(queue.IsIdle());
     }
@@ -605,7 +605,7 @@ public sealed class WorkQueueStabilityTests
         await wait;
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => queue.WaitForIdleAsync(TestToken, failIfPaused: true));
+            () => queue.WaitForIdleAsync(TestToken, failIfNoProgress: true));
 
         // Re-arming the limit restores the real wait and the pool.
         queue.ConcurrencyLimit = 2;
@@ -631,7 +631,7 @@ public sealed class WorkQueueStabilityTests
         await wait;
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => queue.WaitForIdleAsync(TestToken, failIfPaused: true));
+            () => queue.WaitForIdleAsync(TestToken, failIfNoProgress: true));
 
         queue.ConcurrencyLimit = 1;
         await queue.WaitForIdleAsync(TestToken);

@@ -148,26 +148,37 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Asynchronously waits until all currently queued and in-progress tasks have completed.
-    /// Returns immediately if the queue is already idle, or if it is explicitly paused
-    /// (<see cref="ConcurrencyLimit"/> was set to <c>0</c>) with pending items that no reader can process.
+    /// Returns immediately if the queue is already idle, or if it cannot reach idle on its own
+    /// (see <paramref name="failIfNoProgress"/>).
     /// </summary>
     /// <param name="cancellationToken">Token to cancel the wait. The wait can be resumed by calling again.</param>
-    /// <param name="failIfPaused">
-    /// When <see langword="true" /> and the queue is explicitly paused with pending items, throws
-    /// <see cref="InvalidOperationException"/> instead of returning. Use it when continuing without
-    /// progress is an error for the caller (for example, a "stop and wait for completion" path);
-    /// leave it <see langword="false" /> to treat a paused queue as "not idle, and never will be".
-    /// An emergency reader loss (<see cref="ForceCancelReaders"/>, a <see cref="SaExecutionErrorStrategy.StopReader"/>
-    /// fault) is <em>not</em> a pause: the wait keeps waiting, and replacement readers can still drain the queue.
+    /// <param name="failIfNoProgress">
+    /// When <see langword="true" />, pending work that no reader can ever reach throws
+    /// <see cref="InvalidOperationException"/> instead of returning. Leave it <see langword="false" />
+    /// to read that state as "not idle, and never will be" — the honest answer to "is it idle?",
+    /// and usually what a caller wants.
     /// </param>
-    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled.</exception>
-    /// <exception cref="InvalidOperationException">If the queue is explicitly paused and <paramref name="failIfPaused"/> is <see langword="true" />.</exception>
-    /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
     /// <remarks>
-    /// An idle queue returns immediately regardless of <paramref name="failIfPaused"/> —
-    /// only pending work combined with an explicit pause is reported.
+    /// Two states cannot drain on their own. They share one flag because they mean the same
+    /// thing to a caller waiting here:
+    /// <list type="bullet">
+    /// <item><description>the queue is <em>paused</em> (<see cref="ConcurrencyLimit"/> was set to
+    /// <c>0</c>) with items still queued;</description></item>
+    /// <item><description>the queue is active but has <em>no live readers</em> — every reader was
+    /// lost to <see cref="ForceCancelReaders"/> or a
+    /// <see cref="SaExecutionErrorStrategy.StopReader"/> fault, and nothing re-armed the pool. The
+    /// wait returns here too, because an empty pool cannot make progress. Set
+    /// <see cref="ConcurrencyLimit"/> above 0 to spawn replacements.</description></item>
+    /// </list>
+    /// An already-idle queue returns immediately regardless of the flag.
     /// </remarks>
-    Task WaitForIdleAsync(CancellationToken cancellationToken = default, bool failIfPaused = false);
+    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// If items are pending that no live reader can process, and <paramref name="failIfNoProgress"/>
+    /// is <see langword="true" />.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
+    Task WaitForIdleAsync(CancellationToken cancellationToken = default, bool failIfNoProgress = false);
 
     /// <summary>
     /// Shuts down the queue: cancels all readers (in-flight work is interrupted, not finished),

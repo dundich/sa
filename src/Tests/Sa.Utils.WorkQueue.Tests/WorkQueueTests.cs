@@ -277,17 +277,33 @@ public class WorkQueueTests
     }
 
     [Fact]
-    public void ConcurrencyLimit_InvalidValue_Clamp()
+    public void ConcurrencyLimit_NegativeValue_Throws()
     {
-        var queue = new SaWorkQueue<TestModel>(
-            SaWorkQueueOptions<TestModel>.Create(new TestWork()))
-        {
-            ConcurrencyLimit = -1
-        };
+        using var queue = new SaWorkQueue<TestModel>(
+            SaWorkQueueOptions<TestModel>.Create(new TestWork()));
 
-        Assert.Equal(0, queue.ConcurrencyLimit);
+        var before = queue.ConcurrencyLimit;
 
-        queue.Dispose();
+        // A sign mistake must not become a queue that stays paused forever while
+        // still reporting IsEnabled == true: there is nothing for the caller to
+        // react to. The constructor and WithConcurrencyLimit already reject it.
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => queue.ConcurrencyLimit = -1);
+        Assert.Equal("value", ex.ParamName);
+
+        // A rejected value must leave the queue exactly as it was.
+        Assert.Equal(before, queue.ConcurrencyLimit);
+    }
+
+    [Fact]
+    public void MaxConcurrency_NegativeValue_Throws()
+    {
+        // "Unbounded" is null, or 0 through WithMaxConcurrency. A negative value
+        // has no reading — it used to be folded to the processor count here, so a
+        // sign mistake looked like a deliberate default.
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => _ = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask) with { MaxConcurrency = -4 }));
+
+        Assert.Equal("MaxConcurrency", ex.ParamName);
     }
 
     [Fact]
