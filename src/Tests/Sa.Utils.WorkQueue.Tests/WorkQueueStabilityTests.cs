@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 
 namespace Sa.Utils.WorkQueue.Tests;
 
@@ -16,6 +17,28 @@ public sealed class WorkQueueStabilityTests
             if (input == -1) throw new InvalidOperationException("Simulated fault");
             Interlocked.Increment(ref _processed);
             return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// Takes one item and refuses to give it up, ignoring its cancellation token —
+    /// so a shutdown gives up waiting for it and drains around it.
+    /// </summary>
+    private sealed class StubbornProcessor : ISaWork<int>
+    {
+        public readonly TaskCompletionSource Gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource EnteredSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Entered => EnteredSource.Task;
+
+        public void Release() => Gate.TrySetResult();
+
+        public async Task Execute(int input, CancellationToken ct)
+        {
+            EnteredSource.TrySetResult();
+
+            // No ct: the whole point is a reader that outlives the shutdown wait.
+            await Gate.Task;
         }
     }
 
@@ -612,6 +635,159 @@ public sealed class WorkQueueStabilityTests
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.True(queue.IsIdle());
         Assert.Equal(1, processor.Processed);
+    }
+
+    /// <summary>
+    /// A queue that was paused and then stopped still has a drain to wait for, and the
+    /// wait must be that wait.
+    /// </summary>
+    /// <remarks>
+    /// The old code checked <c>_paused</c> before anything else, so this queue was
+    /// reported <c>Paused</c> — "no reader can process these" — while a shutdown was
+    /// actively draining the buffer. It returned while work was still pending, and
+    /// <c>IsIdle()</c> said <c>false</c> a moment later. With <c>failIfNoProgress</c>
+    /// it was worse than useless: it threw <c>QueuePaused</c>, whose message tells the
+    /// caller to raise <c>ConcurrencyLimit</c> on a queue where that assignment does
+    /// nothing.
+    /// <para>
+    /// The setup has to keep one item in flight past the shutdown for the wait to have
+    /// something to park on: a processor that ignores its cancellation token, so the
+    /// drain runs, drops the buffered item, and finds a reader still holding the other
+    /// one. That reader is what makes <c>IsIdle()</c> false afterwards, and the wait
+    /// cannot return until it lets go.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task WaitForIdle_OnAPausedThenStoppedQueue_WaitsForTheDrain()
+    {
+        var processor = new StubbornProcessor();
+        var logger = new RecordingLogger<SaWorkQueue<int>>();
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(1)
+                .WithQueueCapacity(8)
+                .WithShutdownTimeout(TimeSpan.FromMilliseconds(200)),
+            logger);
+
+        await queue.Enqueue(1, TestToken);
+        await processor.Entered.WaitAsync(TestToken);
+        await queue.Enqueue(2, TestToken); // stays in the buffer, the reader is busy
+
+        queue.ConcurrencyLimit = 0;      // paused
+        await queue.ShutdownAsync();     // ... and then stopped
+
+        // The drain has run: item 2 is gone, item 1 is still held by the reader that
+        // ignored its cancellation. Work is genuinely pending, so this wait has to wait.
+        Assert.False(queue.IsIdle());
+        Assert.Equal(SaWorkPoolState.Stopped, queue.PoolState);
+        // The limit is still zero, which is exactly why it could not be the reason.
+        Assert.Equal(0, queue.ConcurrencyLimit);
+
+        var wait = queue.WaitForIdleAsync(cancellationToken: TestToken);
+        var raced = await Task.WhenAny(wait, Task.Delay(500, TestToken));
+        Assert.False(ReferenceEquals(raced, wait),
+            "a stopped queue is draining; the wait must not report the old pause instead");
+
+        processor.Release();
+        await wait.WaitAsync(TimeSpan.FromSeconds(30), TestToken);
+
+        Assert.True(queue.IsIdle());
+        Assert.False(logger.Contains(LogLevel.Warning, "WaitForIdleAsync returned with"),
+            "a wait that actually waited has nothing to confess");
+    }
+
+    /// <summary>
+    /// The same queue with <c>failIfNoProgress</c>, where the old answer was an
+    /// exception carrying advice that cannot work.
+    /// </summary>
+    [Fact]
+    public async Task WaitForIdle_FailIfNoProgress_OnAPausedThenStoppedQueue_DoesNotThrowQueuePaused()
+    {
+        var processor = new StubbornProcessor();
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(1)
+                .WithQueueCapacity(8)
+                .WithShutdownTimeout(TimeSpan.FromMilliseconds(200)));
+
+        await queue.Enqueue(1, TestToken);
+        await processor.Entered.WaitAsync(TestToken);
+        await queue.Enqueue(2, TestToken);
+
+        queue.ConcurrencyLimit = 0;
+        await queue.ShutdownAsync();
+
+        Assert.False(queue.IsIdle());
+
+        // QueuePaused says "raise ConcurrencyLimit above 0". On a stopped queue that
+        // assignment is a no-op — L2 removed the write — so the exception was telling
+        // the caller to do something that cannot help.
+        var wait = queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken);
+        var raced = await Task.WhenAny(wait, Task.Delay(500, TestToken));
+        Assert.False(ReferenceEquals(raced, wait),
+            "failIfNoProgress must not turn a queue that is draining into an error");
+
+        processor.Release();
+        await wait.WaitAsync(TimeSpan.FromSeconds(30), TestToken);
+
+        Assert.True(queue.IsIdle());
+    }
+
+    /// <summary>
+    /// The branches the unification must not disturb: a queue that is still running
+    /// keeps both early returns, and each one still names its own cause.
+    /// </summary>
+    [Fact]
+    public async Task WaitForIdle_OnALiveQueue_KeepsBothEarlyReturnsAndTheirCauses()
+    {
+        var logger = new RecordingLogger<SaWorkQueue<int>>();
+
+        // Paused while still enabled: returns, logs Paused, throws QueuePaused.
+        using (var paused = new SaWorkQueue<int>(
+                   SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+                       .WithConcurrencyLimit(1)
+                       .WithQueueCapacity(8),
+                   logger))
+        {
+            paused.ConcurrencyLimit = 0;
+            await paused.Enqueue(1, TestToken);
+
+            await paused.WaitForIdleAsync(cancellationToken: TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
+
+            // On the message, not just the type: both causes throw
+            // InvalidOperationException, and the text is the only thing that tells the
+            // caller which of the two it hit and what to do about it.
+            var pausedThrow = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => paused.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken));
+            Assert.Contains("paused", pausedThrow.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Empty pool while still enabled: returns, logs NoReaders, throws
+        // QueueHasNoReaders. The two are different causes and the caller can only act
+        // on one of them, so a single "no progress" would have been a loss.
+        var processor = new CountingProcessor();
+        using var emptied = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(1)
+                .WithQueueCapacity(8)
+                .WithMaxConcurrency(4),
+            logger);
+
+        await emptied.Enqueue(1, TestToken);
+        await emptied.ForceCancelReadersAsync(ct: TestToken);
+        await emptied.Enqueue(2, TestToken);
+
+        await emptied.WaitForIdleAsync(cancellationToken: TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
+
+        var emptyThrow = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => emptied.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken));
+        Assert.Contains("no live readers", emptyThrow.Message, StringComparison.OrdinalIgnoreCase);
+
+        // The log names both, in order, for the two different waits above.
+        Assert.True(logger.Contains(LogLevel.Warning, "Paused"));
+        Assert.True(logger.Contains(LogLevel.Warning, "NoReaders"));
     }
 
     [Fact]

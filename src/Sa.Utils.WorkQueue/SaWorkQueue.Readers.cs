@@ -33,14 +33,6 @@ public sealed partial class SaWorkQueue<TInput>
         }
     }
 
-    private bool HasLiveReaders()
-    {
-        lock (_readersSync)
-        {
-            return LiveReaderCount > 0;
-        }
-    }
-
     /// <summary>
     /// The loop tasks of every tracked reader, for anything that has to wait for
     /// the pool to wind down.
@@ -403,12 +395,17 @@ public sealed partial class SaWorkQueue<TInput>
     /// <remarks>
     /// Only a <em>disposed</em> queue is rejected here. A stopped one is a normal
     /// thing to wait on: shutdown drains what is left, and that drain is exactly
-    /// what the caller is waiting for.
+    /// what the caller is waiting for. That holds even if the limit was <c>0</c>
+    /// when the queue stopped — a stopped queue reports
+    /// <see cref="SaWorkPoolState.Stopped"/>, and the drain it is waiting on needs
+    /// no reader, so the wait parks for it rather than returning.
     /// <para>
     /// Both early-return branches are the same idea — the queue cannot reach idle
     /// on its own, and hanging would be a lie. <see cref="failIfNoProgress"/> picks
     /// whether that is a silent return or an error, for callers that must not
-    /// proceed on a queue that will never drain.
+    /// proceed on a queue that will never drain. The branch is chosen from
+    /// <see cref="PoolState"/>, so the reason reported to the caller, the reason
+    /// written to the log, and the state a caller polls are one answer.
     /// </para>
     /// <para>
     /// A return that is not "already idle" is a genuine surprise, so it is logged as a
@@ -434,23 +431,35 @@ public sealed partial class SaWorkQueue<TInput>
                 idle = _idleTcs;
             }
 
-            if (_paused)
+            // The reason comes from PoolState rather than from checks repeated here,
+            // and that is the point: the warning this method logs and the state a
+            // caller polls for the same question are now one value, produced once,
+            // instead of two conditions that could disagree. It is also a real
+            // snapshot — reading _paused and then counting readers separately could
+            // straddle a re-arm and report an empty pool that had just been refilled.
+            var state = PoolState;
+
+            if (state is SaWorkPoolState.Paused or SaWorkPoolState.NoReaders)
             {
-                if (failIfNoProgress) ThrowHelper.QueuePaused();
-                SaWorkQueueLogMessages.LogIdleWaitGaveUp(_logger, pending, SaWorkPoolState.Paused);
+                if (failIfNoProgress)
+                {
+                    // The exception has to match the state, not just be thrown: they
+                    // name different causes and tell the caller different things to do.
+                    if (state == SaWorkPoolState.Paused) ThrowHelper.QueuePaused();
+                    ThrowHelper.QueueHasNoReaders();
+                }
+
+                SaWorkQueueLogMessages.LogIdleWaitGaveUp(_logger, pending, state);
                 return;
             }
 
-            // Same dead end, different cause: the queue is not paused but the pool
-            // is empty, because every reader was force-cancelled or lost to a
-            // fault and nothing re-armed it. Setting ConcurrencyLimit restores it.
-            if (IsEnabled && !HasLiveReaders())
-            {
-                if (failIfNoProgress) ThrowHelper.QueueHasNoReaders();
-                SaWorkQueueLogMessages.LogIdleWaitGaveUp(_logger, pending, SaWorkPoolState.NoReaders);
-                return;
-            }
-
+            // Active, or stopped with a drain still to come. A stopped queue is a
+            // normal thing to wait on — the shutdown draining the buffer is exactly
+            // what is being waited for, and it releases the signal when it is done.
+            // Parking is right here even when the limit was 0: a pause is a reason
+            // work cannot start, but the drain does not need a reader, and telling
+            // the caller "paused, no progress possible" while a drain is running
+            // would be the same wrong answer in a worse place.
             try
             {
                 await idle.Task.WaitAsync(cancellationToken).ConfigureAwait(false);

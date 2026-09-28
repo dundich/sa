@@ -208,10 +208,12 @@ public sealed class WorkQueuePoolStateTests
     /// The state and the warning <c>WaitForIdleAsync</c> logs name the same thing.
     /// </summary>
     /// <remarks>
-    /// They are two answers to one question, produced in two places, and the audit that
-    /// led to this property was largely about the queue giving two answers to the same
-    /// question. A test that watched only one of them would let them drift, which is what
-    /// this one is for.
+    /// The warning <c>WaitForIdleAsync</c> logs is now derived from <c>PoolState</c>
+    /// rather than decided beside it, so the two cannot name different causes by
+    /// construction. This test is what a future reader would run to confirm that is
+    /// still true: it asserts the end-to-end consequence — a caller polling the state
+    /// and a wait that gave up hear the same word — which a future change to either
+    /// side alone would break.
     /// </remarks>
     [Fact]
     public async Task PoolState_NamesTheSameReasonThatWaitForIdleAsyncLogs()

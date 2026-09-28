@@ -202,15 +202,29 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// Two states cannot drain on their own. They share one flag because they mean the same
     /// thing to a caller waiting here:
     /// <list type="bullet">
-    /// <item><description>the queue is <em>paused</em> (<see cref="ConcurrencyLimit"/> was set to
-    /// <c>0</c>) with items still queued;</description></item>
-    /// <item><description>the queue is active but has <em>no live readers</em> — every reader was
+    /// <item><description>the queue is <em>running and paused</em> (<see cref="ConcurrencyLimit"/>
+    /// was set to <c>0</c>) with items still queued;</description></item>
+    /// <item><description>the queue is running but has <em>no live readers</em> — every reader was
     /// lost to <see cref="ForceCancelReaders"/> or a
     /// <see cref="SaExecutionErrorStrategy.StopReader"/> fault, and nothing re-armed the pool. The
     /// wait returns here too, because an empty pool cannot make progress. Set
     /// <see cref="ConcurrencyLimit"/> above 0 to spawn replacements.</description></item>
     /// </list>
-    /// An already-idle queue returns immediately regardless of the flag.
+    /// Both are read from <see cref="PoolState"/>, so the state, the warning and the exception
+    /// below cannot name different causes. An already-idle queue returns immediately regardless
+    /// of the flag.
+    /// <para>
+    /// Neither branch applies to a <em>stopped</em> queue, even one that was paused when it
+    /// stopped. A shutdown drains what is left, and that drain needs no reader, so the wait
+    /// parks for it instead of reporting a pause that is no longer the reason. Only a
+    /// <em>disposed</em> queue is rejected; a stopped one is a normal thing to wait on.
+    /// </para>
+    /// <para>
+    /// <see cref="failIfNoProgress"/> therefore throws the exception that matches the cause —
+    /// the queue is paused, or it has no readers — rather than one generic failure, because the
+    /// two call for different responses and the message is where the caller reads which one it
+    /// hit.
+    /// </para>
     /// <para>
     /// Either non-idle return is logged as a warning. Together with
     /// <see cref="IsIdle"/> answering <see langword="false"/> for the same state, that is what
