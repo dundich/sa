@@ -10,7 +10,9 @@ internal static class WavIO
     /// <summary>
     /// Читает стерео WAV в массив <see cref="float"/>, арендованный у <see cref="ArrayPool{T}"/>.
     /// Возвращает также фактическое число заполненных элементов (чётное: L,R пары).
-    /// Вызывающий обязан вернуть буфер в пул: <c>ArrayPool&lt;float&gt;.Shared.Return(buffer)</c>.
+    /// При успехе владение буфером передаётся вызывающему, который обязан вернуть его в пул:
+    /// <c>ArrayPool&lt;float&gt;.Shared.Return(buffer)</c>.
+    /// При ошибке/отмене метод возвращает буфер в пул сам (вызывающий ссылку не получает).
     /// </summary>
     public static async Task<(float[] Buffer, int Count)> ReadInterleavedFloatsAsync(string path, CancellationToken ct)
     {
@@ -19,20 +21,29 @@ internal static class WavIO
 
         int frameCount = (int)(header.DataSize / 4);
         float[] interleaved = ArrayPool<float>.Shared.Rent(frameCount * 2);
-        int idx = 0;
 
-        await foreach (var packet in reader.ReadDoubleSamplesAsync(allowBufferReuse: true, cancellationToken: ct)
-            .WithCancellation(ct))
+        try
         {
-            if (packet.ChannelId == 0)
-                interleaved[idx * 2] = (float)packet.Sample;
-            else
-                interleaved[idx * 2 + 1] = (float)packet.Sample;
-            if (packet.ChannelId == 1) idx++;
-        }
+            int idx = 0;
 
-        // idx*2 — число реально записанных слотов (без хвостового частичного фрейма).
-        return (interleaved, Math.Min(idx * 2, interleaved.Length));
+            await foreach (var packet in reader.ReadDoubleSamplesAsync(allowBufferReuse: true, cancellationToken: ct)
+                .WithCancellation(ct))
+            {
+                if (packet.ChannelId == 0)
+                    interleaved[idx * 2] = (float)packet.Sample;
+                else
+                    interleaved[idx * 2 + 1] = (float)packet.Sample;
+                if (packet.ChannelId == 1) idx++;
+            }
+
+            // idx*2 — число реально записанных слотов (без хвостового частичного фрейма).
+            return (interleaved, Math.Min(idx * 2, interleaved.Length));
+        }
+        catch
+        {
+            ArrayPool<float>.Shared.Return(interleaved);
+            throw;
+        }
     }
 
     public static async Task WriteWavFileAsync(
