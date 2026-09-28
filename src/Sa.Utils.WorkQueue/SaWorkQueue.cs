@@ -10,12 +10,12 @@ using System.Threading.Channels;
 /// <see cref="SaWorkStatus"/>.
 /// </summary>
 /// <remarks>
-/// <para><b>Two locks, and only two.</b> They are never held at the same time
-/// except re-entrantly from <see cref="StartReaderUnderLock"/>.</para>
+/// <para><b>Two locks, and only two.</b> They are never held at the same time,
+/// and never re-entered.</para>
 /// <list type="bullet">
 /// <item><description><c>_readersSync</c> — the reader pool: the registry, the
 /// concurrency limit, and each reader's stop reason. Used by
-/// <see cref="SetConcurrencyLimit"/>, <see cref="StartReaderUnderLock"/>,
+/// <see cref="SetConcurrencyLimit"/>, <see cref="RegisterReaderUnderLock"/>,
 /// <see cref="CancelReadersUnderLock"/>, <see cref="CancelAndTrackReaders"/>,
 /// <see cref="RemoveReader"/>, <see cref="LiveReaderCount"/> and
 /// <see cref="SnapshotReaderTasks"/>.</description></item>
@@ -29,14 +29,15 @@ using System.Threading.Channels;
 /// decides to stop a reader records <see cref="Reader.Stop"/> and releases the
 /// slot in the same critical section, so a reader that is already on its way out
 /// can never take a second slot's worth of accounting down with it.</para>
-/// <para><b>Why re-entrancy is load-bearing.</b> Both locks are
-/// <see cref="Lock"/>, so the same thread may enter again. A reader loop can
-/// run to completion inline on the thread that started it — the buffer already
-/// holds an item and the processor neither yields nor awaits — which means
-/// <see cref="RemoveReader"/> may re-enter <c>_readersSync</c> from inside
-/// <see cref="StartReaderUnderLock"/>. The registry is written before the loop
-/// starts precisely so that this entirely ordinary case needs no special
-/// handling.</para>
+/// <para><b>Why a reader's loop is started outside the lock.</b> A loop can run to
+/// completion on the thread that started it — the buffer already holds an item and
+/// the processor neither yields nor awaits — and that work reports itself through
+/// the status callback. Starting loops under <c>_readersSync</c> therefore ran a
+/// caller-supplied callback while the pool's lock was held, which deadlocked any
+/// handler that waits on a thread needing that lock. So registration and launch are
+/// separate steps: <see cref="StartReaders"/> registers under the lock and calls
+/// <see cref="LaunchReader"/> after releasing it. Inline execution is kept — it is
+/// the queue's normal speed — but it no longer happens with a lock held.</para>
 /// </remarks>
 public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 {
@@ -85,7 +86,10 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     /// Keeping the loop token, the work token, the task and the stop reason on one
     /// object is what makes the pool hard to get wrong: there is no way to reach a
     /// reader's task without also seeing its tokens, and no second list that could
-    /// drift out of step with the first.
+    /// drift out of step with the first. The task is the <see cref="Completion"/>
+    /// source, so it exists from construction — a reader is never registered with a
+    /// task still to be assigned, which is the window the old
+    /// <c>Task?</c> forced every observer to tolerate.
     /// </remarks>
     private sealed class Reader
     {
@@ -116,22 +120,28 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         public ReaderStop Stop { get; set; }
 
         /// <summary>
-        /// The reader loop. Assigned by <see cref="StartReaderUnderLock"/> right
-        /// after registration, under the same lock — so a reader observed from
-        /// another thread always has its task. Readable as <see langword="null"/>
-        /// only from that one starting thread.
+        /// Completed by <see cref="LaunchReader"/> when the loop ends. Exists from
+        /// construction, so <see cref="Task"/> is never <see langword="null"/> and no
+        /// observer has to ask whether a reader is the one that has not started yet.
         /// </summary>
-        public Task? Task { get; set; }
+        public TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>
+        /// What to await for this reader. Completes when the loop does, and never
+        /// carries its outcome: the loop catches everything itself, so a fault here
+        /// would only ever be a bug in the catch.
+        /// </summary>
+        public Task Task => Completion.Task;
 
         /// <summary>Whether this reader still holds a slot of the concurrency limit.</summary>
         public bool IsLive => Stop == ReaderStop.None;
 
         /// <summary>
-        /// Whether the loop is known to have finished. A reader without a published
-        /// task is inside <see cref="StartReaderUnderLock"/> and counts as not
-        /// finished: it holds a slot and may be about to report an item.
+        /// Whether the loop is known to have finished. A registered-but-unlaunched
+        /// reader counts as not finished: it holds a slot and is about to be handed
+        /// work, so treating it as done would clear a count that is not clear.
         /// </summary>
-        public bool IsFinished => Task is { IsCompleted: true };
+        public bool IsFinished => Completion.Task.IsCompleted;
 
         /// <summary>Releases both token sources. Call once per reader.</summary>
         public void Release()
@@ -290,7 +300,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
             FullMode = BoundedChannelFullMode.Wait
         });
 
-        StartReadersUnderLock(_concurrency);
+        StartReaders(_concurrency);
     }
 
     public bool IsEnabled => Volatile.Read(ref _state) == (int)QueueState.Active;
@@ -326,13 +336,23 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     /// a non-negative value already clamped to <see cref="_maxConcurrency"/>.
     /// </summary>
     /// <remarks>
-    /// The limit change, the reader bookkeeping and the spawn/cancel decisions are
-    /// one atomic step. A reader that dies in the middle of it must not be able to
+    /// The limit change, the reader bookkeeping and the cancel decisions are one
+    /// atomic step. A reader that dies in the middle of it must not be able to
     /// consume the slot that was just created for it, which is why the whole
     /// adjustment happens under a single hold of <c>_readersSync</c>.
+    /// <para>
+    /// Spawning is the one thing that leaves the lock. The decisions stay inside it
+    /// — <see cref="LiveReaderCount"/> is read there, so two concurrent limit changes
+    /// cannot both decide to create the same slot — but the loops themselves start
+    /// through <see cref="StartReaders"/> afterwards. They are launched rather than
+    /// started, so a reader registered by an earlier caller counts towards the limit
+    /// for the whole window.
+    /// </para>
     /// </remarks>
     private void SetConcurrencyLimit(int newLimit)
     {
+        var toStart = 0;
+
         lock (_readersSync)
         {
             // Assigning the limit is also the eager release of the slots the readers
@@ -350,13 +370,15 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
             if (delta > 0)
             {
-                StartReadersUnderLock(delta);
+                toStart = delta;
             }
             else if (delta < 0)
             {
                 CancelReadersUnderLock(-delta);
             }
         }
+
+        StartReaders(toStart);
     }
 
     /// <summary>
@@ -512,17 +534,17 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
         try
         {
-            // No lock is held around the handler beyond _pendingSync being free: a
-            // slow observer must not block other readers, and it may be invoked
-            // concurrently by different readers.
+            // No queue lock is held: a slow observer must not block other readers,
+            // and it may be invoked concurrently by different readers. Reader loops
+            // are launched after _readersSync is released, so the callback cannot
+            // deadlock against a thread resizing the pool either.
             //
-            // The one lock this does NOT escape is _readersSync. A reader started
-            // over a non-empty buffer (a limit raised while items are queued) picks
-            // its item up and reports Running and Completed synchronously, inside
-            // SetConcurrencyLimit. A handler that blocks, or that hands work to
-            // another thread which touches the queue, will deadlock against the
-            // thread that set the limit. Keep the handler self-contained: log, and
-            // return.
+            // The one thing still true, and the remaining constraint: a reader that
+            // finds work waiting runs it on this thread, so setting ConcurrencyLimit
+            // over a non-empty buffer calls the handler inline, from inside the
+            // setter. A handler that waits for that same reader to finish is waiting
+            // on itself. Waiting on any *other* thread is fine. Keep the handler
+            // self-contained: log, and return.
             callback(item, status, error);
         }
         catch (Exception ex)

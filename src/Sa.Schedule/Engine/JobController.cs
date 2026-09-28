@@ -23,10 +23,10 @@ internal sealed partial class JobController(
     // with respect to Pause/Resume. While paused, _pauseWaiters holds the
     // TaskCompletionSource that WaitIfPaused awaits — the await YIELDS
     // instead of blocking the calling thread: a reader is spawned
-    // synchronously by the queue (StartReaderUnderLock, under the queue's
-    // reader lock) and runs the loop on the caller's thread until the first
-    // real yield, so a thread-blocking gate would deadlock the very call
-    // that Resumes the controller next.
+    // synchronously by the queue (LaunchReader, on the caller's thread) and
+    // runs the loop on that thread until the first real yield, so a
+    // thread-blocking gate would deadlock the very call that Resumes the
+    // controller next.
     private readonly Lock _pauseSync = new();
     private volatile bool _isPaused;
     private volatile TaskCompletionSource<bool>? _pauseWaiters;

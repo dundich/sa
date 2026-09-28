@@ -46,43 +46,78 @@ public sealed partial class SaWorkQueue<TInput>
     /// the pool to wind down.
     /// </summary>
     /// <remarks>
-    /// Must be called under <c>_readersSync</c> — which is also what guarantees
-    /// every <see cref="Reader.Task"/> is already assigned, since a reader is added
-    /// to the registry and given its task in the same critical section.
+    /// Must be called under <c>_readersSync</c>, so the registry cannot change
+    /// mid-copy. The lock is no longer what makes every task usable — a reader
+    /// publishes <see cref="Reader.Completion"/> before it is registered — but it is
+    /// still what makes the set consistent.
     /// </remarks>
     private Task[] SnapshotReaderTasks()
-        => [.. _readers.Select(static r => r.Task).OfType<Task>()];
+        => [.. _readers.Select(static r => r.Task)];
 
-    /// <summary>Starts <paramref name="count"/> readers. Must be called under <c>_readersSync</c>.</summary>
-    private void StartReadersUnderLock(int count)
+    /// <summary>
+    /// Adds <paramref name="count"/> readers to the pool and starts their loops,
+    /// with the two halves deliberately on opposite sides of the lock.
+    /// </summary>
+    /// <remarks>
+    /// Registration is under <c>_readersSync</c> so the pool's accounting sees the
+    /// new readers immediately, and launch is after it so that nothing able to reach
+    /// a caller-supplied callback runs with the lock held. A reader that finds work
+    /// waiting executes it synchronously on this thread and reports it through the
+    /// status callback, so starting loops under the lock meant running user code
+    /// under <c>_readersSync</c>: a handler that waits on anything touching the pool
+    /// deadlocked against the very thread that resized it.
+    /// </remarks>
+    private void StartReaders(int count)
     {
-        for (var i = 0; i < count; i++)
+        if (count <= 0) return;
+
+        var registered = new Reader[count];
+
+        lock (_readersSync)
         {
-            StartReaderUnderLock();
+            for (var i = 0; i < count; i++)
+            {
+                registered[i] = RegisterReaderUnderLock();
+            }
+        }
+
+        // Outside the lock, on purpose. A reader cancelled in the window above is
+        // still launched: it counts as live until it unwinds, and its loop checks
+        // the token before reading anything.
+        foreach (var reader in registered)
+        {
+            LaunchReader(reader);
         }
     }
 
     /// <summary>
-    /// Creates a reader, registers it, and starts its loop. Must be called under
-    /// <c>_readersSync</c>, which the reader's own teardown may re-enter.
+    /// Creates a reader and registers it, without starting its loop. Must be called
+    /// under <c>_readersSync</c>.
     /// </summary>
     /// <remarks>
-    /// Register <em>before</em> starting. The loop can run to completion inline —
-    /// the buffer already holds an item and the processor neither yields nor awaits
-    /// — and then <see cref="RemoveReader"/> runs on this very thread, re-entering
-    /// the re-entrant lock and taking the reader straight back out. Because the
-    /// registry was written first, that case is identical to a reader that dies a
-    /// millisecond later, and needs no branch of its own.
+    /// Register before launching, and that is the whole reason for the two methods.
+    /// A loop that runs to completion on this very thread — the buffer already holds
+    /// an item and the processor neither yields nor awaits — calls
+    /// <see cref="RemoveReader"/> before <see cref="LaunchReader"/> has returned. So
+    /// the registry is written first, and the reader that removes itself a
+    /// microsecond later is the ordinary case, not a special one.
     /// <para>
-    /// The order matters. A reader registered only after it finished is one the
-    /// accounting never saw, yet the caller would then have a permanently disposed
-    /// token in the registry: it reports as not cancelled, so it counted as live
-    /// forever, which made <c>WaitForIdleAsync</c> wait for an idle that could not
-    /// arrive and threw <see cref="ObjectDisposedException"/> out of the
-    /// <see cref="ConcurrencyLimit"/> setter.
+    /// A reader registered only after it finished is one the accounting never saw, yet
+    /// the caller would then have a permanently disposed token in the registry: it
+    /// reports as not cancelled, so it counted as live forever, which made
+    /// <c>WaitForIdleAsync</c> wait for an idle that could not arrive and threw
+    /// <see cref="ObjectDisposedException"/> out of the <see cref="ConcurrencyLimit"/>
+    /// setter.
+    /// </para>
+    /// <para>
+    /// The loop's task is not published here, because there is no loop yet. What is
+    /// published is <see cref="Reader.Completion"/>, which the launch completes when
+    /// the loop ends — so <see cref="SnapshotReaderTasks"/> and
+    /// <see cref="Reader.IsFinished"/> have something meaningful to read for a reader
+    /// that is registered but has not started, from any thread.
     /// </para>
     /// </remarks>
-    private void StartReaderUnderLock()
+    private Reader RegisterReaderUnderLock()
     {
         // Both sources are linked to the shutdown token, so shutdown stays a hard
         // stop in every mode.
@@ -91,7 +126,37 @@ public sealed partial class SaWorkQueue<TInput>
             CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token));
 
         _readers.Add(reader);
-        reader.Task = ReaderLoopAsync(reader);
+        return reader;
+    }
+
+    /// <summary>
+    /// Runs an already-registered reader's loop and points the task the registry
+    /// published at its outcome. Never called under <c>_readersSync</c>.
+    /// </summary>
+    private void LaunchReader(Reader reader)
+    {
+        var loop = ReaderLoopAsync(reader);
+
+        if (loop.IsCompleted)
+        {
+            // It can end right here, and did the bookkeeping in its own finally.
+            // Completing synchronously is what keeps a start-then-immediately-finish
+            // indistinguishable from one that finished a millisecond later.
+            reader.Completion.TrySetResult();
+            return;
+        }
+
+        // The loop then outlives this call, possibly for the life of the process.
+        // One continuation, run inline on whichever thread completes the loop, so
+        // the published task is never meaningfully behind the real one. The delegate
+        // cannot throw, so the loop's own outcome — which it has already swallowed,
+        // it catches everything — has nowhere to go even in the impossible case.
+        _ = loop.ContinueWith(
+            static (_, state) => ((TaskCompletionSource)state!).TrySetResult(),
+            reader.Completion,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     /// <summary>
@@ -237,8 +302,8 @@ public sealed partial class SaWorkQueue<TInput>
 
     /// <summary>
     /// Takes a reader out of the registry and releases its token sources. Runs from
-    /// the reader loop's <c>finally</c>, on the reader's own thread — possibly
-    /// inline on the thread that started it, re-entering <c>_readersSync</c>.
+    /// the reader loop's <c>finally</c>, on the reader's own thread — which can be
+    /// the thread that launched it, but never with <c>_readersSync</c> already held.
     /// </summary>
     private void RemoveReader(Reader reader)
     {

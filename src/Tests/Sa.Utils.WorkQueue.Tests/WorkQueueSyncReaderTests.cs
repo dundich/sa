@@ -5,7 +5,7 @@ namespace Sa.Utils.WorkQueue.Tests;
 
 /// <summary>
 /// Regression tests for readers that run to completion <em>synchronously</em>,
-/// i.e. on the thread that started them, inside the lock that started them.
+/// i.e. on the thread that started them.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -14,7 +14,7 @@ namespace Sa.Utils.WorkQueue.Tests;
 /// reader started by the <see cref="ISaWorkQueue{TInput}.ConcurrencyLimit"/> setter
 /// then picks the item up on the spot, and — if the item does not complete
 /// normally — the loop reaches its <c>finally</c> and calls
-/// <c>RemoveReader</c> before the loop has ever been stored anywhere.
+/// <c>RemoveReader</c> before the loop has ever finished starting.
 /// </para>
 /// <para>
 /// Before the registry was written before the loop was started,
@@ -24,6 +24,12 @@ namespace Sa.Utils.WorkQueue.Tests;
 /// reports as not cancelled, so it counted as live forever), a later limit
 /// decrease threw <see cref="ObjectDisposedException"/> out of the public setter,
 /// and <c>WaitForIdleAsync</c> waited forever for an idle that could not arrive.
+/// </para>
+/// <para>
+/// That re-entrancy is no longer available even in principle: loops are launched
+/// after the pool's lock is released, so a reader that removes itself on this very
+/// thread takes the lock like any other caller. Registering first is still
+/// load-bearing — the reader is in the registry before it can possibly leave it.
 /// </para>
 /// <para>
 /// The point of these tests is that the failure mode is now <em>structural</em>
