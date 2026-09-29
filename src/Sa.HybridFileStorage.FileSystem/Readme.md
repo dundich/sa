@@ -265,39 +265,6 @@ new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
 
 ---
 
-## Breaking changes
-
-### 0.12.0 -> 0.13.0
-
-**`AddSaFileSystemFileStorage(Action<IServiceProvider, FileSystemStorageOptions>)` was
-removed.** It built a throwaway `new ServiceCollection().BuildServiceProvider()` to
-hand a provider to the callback, so the callback could not resolve `IConfiguration`,
-`IHostEnvironment` or any application service. No shim was left behind. Replace it with:
-
-```csharp
-// before
-builder.Services.AddSaFileSystemFileStorage((sp, options) =>
-{
-    options.BasePath = sp.GetRequiredService<IHostEnvironment>().ContentRootPath;
-});
-
-// after
-builder.Services.AddSaFileSystemFileStorage(options =>
-{
-    options.BasePath = builder.Environment.ContentRootPath;
-});
-```
-
-**Options are validated at registration**, not at first use. An invalid `BasePath`,
-`StorageType` or `Basket` now throws `ArgumentException` from the `Add...` call rather
-than on the first upload.
-
-**`FileSystemStorageOptions` and `FileSystemStorageSettings` are immutable records** and
-`BufferSize` is present on both. The old mutable builder type copied four of five
-properties into settings, dropping `BufferSize`.
-
----
-
 ## License
 
 MIT

@@ -325,29 +325,6 @@ timestamp as 64-bit values.
 
 ---
 
-## Breaking changes
-
-### 0.12.0 → 0.13.0
-
-**`size` changed from `INT` to `BIGINT`.** An `INT` column silently truncated the recorded
-size of anything over 2 GB. Existing tables must be migrated:
-
-```sql
-ALTER TABLE <schema>.<table> ALTER COLUMN size TYPE BIGINT;
-```
-
-Apply it to the root table and to every existing partition.
-
-**Options are validated at registration.** A malformed `TableName`, `StorageType` or
-`Basket` now throws `ArgumentException` from `AddSaPostgreSqlFileStorage` instead of
-producing unusable file IDs or a `relation does not exist` error on the first upload. In
-particular `TableName = "\"files\""` is now rejected rather than silently trimmed to `files`.
-
-**Names are used verbatim.** The provider no longer rewrites `TableName`, `Basket` or
-`StorageType`; the DDL and the queries always use the configured value.
-
----
-
 ## License
 
 MIT

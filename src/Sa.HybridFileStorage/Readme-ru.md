@@ -25,7 +25,6 @@
 - [Справочник настроек](#справочник-настроек)
 - [Доменные типы](#доменные-типы)
 - [Исключения](#исключения)
-- [Структура проекта](#структура-проекта)
 
 ---
 
@@ -626,37 +625,6 @@ public sealed class FileMetadata
 `RequireStorageType`, `RequireIdentifier`), которыми теперь делятся пакеты провайдеров.
 Все три пакета провайдеров ссылаются на базовый, поэтому хелпер доступен потребителю
 любого из них.
-
----
-
-## Структура проекта
-
-```
-src/Sa.HybridFileStorage/                          # Основная библиотека (NuGet: Sa.HybridFileStorage)
-├── IHybridFileStorage.cs                          # Главный интерфейс
-├── HybridFileStorage.cs                           # Реализация с failover + interceptors
-├── HybridFileStorageContainer.cs                  # Контейнер провайдеров
-├── HybridStorageBuilder.cs                        # Fluent DI builder
-├── HybridFileStorageExtensions.cs                 # Пакетные операции (CopyFromFile, CopyToBasket, …)
-├── Setup.cs                                       # DI расширения (AddSaHybridFileStorage, AddSaInMemoryFileStorage)
-├── FileIdParser.cs                                # Утилита парсинга/форматирования File ID
-├── FileMetadata.cs                                # DTO метаданных
-├── InMemoryFileStorage.cs                         # In-memory провайдер
-├── InMemoryFileStorageOptions.cs                  # Настройки in-memory
-├── StorageNaming.cs                               # Общие правила именования (корзина, схема, идентификаторы)
-├── BatchResult.cs, BatchOptions.cs, …            # Типы пакетных операций
-└── Interceptors/                                  # Хуки загрузки/скачивания/удаления
-    ├── IUploadInterceptor.cs
-    ├── IDownloadInterceptor.cs
-    ├── IDeleteInterceptor.cs
-    ├── UploadLoggingInterceptor.cs
-    ├── DownloadLoggingInterceptor.cs
-    └── DeleteLoggingInterceptor.cs
-
-src/Sa.HybridFileStorage.FileSystem/               # Файловая система (NuGet: Sa.HybridFileStorage.FileSystem)
-src/Sa.HybridFileStorage.S3/                       # S3 (NuGet: Sa.HybridFileStorage.S3)
-src/Sa.HybridFileStorage.Postgres/                 # PostgreSQL (NuGet: Sa.HybridFileStorage.Postgres)
-```
 
 ---
 

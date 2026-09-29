@@ -271,38 +271,6 @@ new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
 
 ---
 
-## Ломающие изменения
-
-### 0.12.0 -> 0.13.0
-
-**Удалена перегрузка `AddSaFileSystemFileStorage(Action<IServiceProvider, FileSystemStorageOptions>)`.**
-Она создавала одноразовый `new ServiceCollection().BuildServiceProvider()`, чтобы передать
-провайдер в колбэк, поэтому колбэк не мог resolve-ить `IConfiguration`,
-`IHostEnvironment` или любой сервис приложения. Shim-а не оставлено. Замена:
-
-```csharp
-// было
-builder.Services.AddSaFileSystemFileStorage((sp, options) =>
-{
-    options.BasePath = sp.GetRequiredService<IHostEnvironment>().ContentRootPath;
-});
-
-// стало
-builder.Services.AddSaFileSystemFileStorage(options =>
-{
-    options.BasePath = builder.Environment.ContentRootPath;
-});
-```
-
-**Опции валидируются на этапе регистрации**, а не при первом использовании. Невалидные
-`BasePath`, `StorageType` или `Basket` теперь приводят к `ArgumentException` прямо из
-вызова `Add...`, а не на первой загрузке файла.
-
-**`FileSystemStorageOptions` и `FileSystemStorageSettings` — неизменяемые record'ы**,
-и `BufferSize` присутствует в обоих. Старый изменяемый builder-копировал четыре поля из
-пяти, теряя `BufferSize`.
-
----
 
 ## Лицензия
 

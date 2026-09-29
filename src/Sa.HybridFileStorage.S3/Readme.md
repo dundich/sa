@@ -245,22 +245,6 @@ drift alone is not treated as a conflict, since neither can be applied anyway.
 
 ---
 
-## Breaking changes
-
-### 0.12.0 -> 0.13.0
-
-**`Defaults` was renamed to `S3Defaults`.** The old name was too generic for a public type
-in the package namespace. It is a source-level break only; the values are unchanged
-(`DefaultRegion` = `"eu-central-1"`).
-
-**`S3FileStorageOptions` is now a `record` and is validated eagerly.** Options that used
-to be accepted and failed later — a blank `Endpoint`, a `StorageType` containing `/` that
-produced file IDs the provider itself could not parse — are rejected at registration.
-
-**`ClientSettings` was added** to expose the transport settings that
-`S3BucketClientSetupSettings` supports but `S3FileStorageOptions` previously hid.
-
----
 
 ## Dependencies
 
