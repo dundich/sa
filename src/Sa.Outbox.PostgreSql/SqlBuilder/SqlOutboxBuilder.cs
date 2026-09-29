@@ -290,11 +290,32 @@ WHERE
     // The msg/task upgrades make the *schema* of an existing deployment match the new binaries;
     // the offset upgrade adds the live BIGINT cursor next to the legacy UUID one (expand), so
     // the UUID column can keep serving old binaries during a rolling upgrade and is dropped by
-    // a later contract version. Converting a *populated* deployment still needs the recorded
-    // manual step (see docs/outbox-postgresql-review.md, C2): backfill msg_seq by msg_id order
-    // and, per consumer group, seed group_offset_seq with MAX(task.msg_seq) — otherwise the new
-    // cursor starts at 0 and re-delivers the whole history. This hook is the safe half — it must
-    // never rewrite cursor values.
+    // a later contract version. This hook is the safe half — it must never rewrite cursor values.
+    //
+    // Converting a *populated* deployment still needs a manual data step, and the hooks above
+    // cannot do it: they only add columns, whose defaults are 0. Two things have to be fixed by
+    // an operator, once, before the new binaries serve that database.
+    //
+    //   1. Backfill msg_seq on the rows that predate the column. BIGSERIAL numbers the backfill
+    //      in whatever order the UPDATE happens to touch rows, so if the historical msg_id order
+    //      matters, renumber explicitly by msg_id instead of trusting the physical order.
+    //   2. Seed group_offset_seq per consumer group. Skip this and every cursor starts at 0,
+    //      because the predicate is `msg_seq > @offset`, so the entire history is delivered again
+    //      — as new messages, to consumers that already processed it.
+    //
+    //   -- 1) renumber the old rows by msg_id (drop the ORDER BY if the physical order is fine)
+    //   UPDATE <msg$table> m SET msg_seq = n.seq
+    //   FROM (SELECT msg_id, ROW_NUMBER() OVER (ORDER BY msg_id) AS seq FROM <msg$table>) n
+    //   WHERE m.msg_id = n.msg_id;
+    //
+    //   -- 2) seed each group's cursor at its highest existing task
+    //   UPDATE <offset$table> o SET group_offset_seq = COALESCE((
+    //     SELECT MAX(t.msg_seq) FROM <task$table> t
+    //     WHERE t.consumer_group = o.consumer_group AND t.tenant_id = o.tenant_id), 0);
+    //
+    // The task table's msg_seq is denormalised and backfilled by the same statement that walks the
+    // message table, so run 1 before 2. Both are idempotent in effect: re-running 2 lands on the
+    // same MAX, and re-running 1 re-derives the same numbering from msg_id.
     public readonly string SqlAddMsgSeqColumnToMsgTable =
 $"""
 ALTER TABLE {settings.GetQualifiedMsgTableName()}
