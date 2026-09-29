@@ -31,15 +31,19 @@ dotnet run --project Samples/Configuration.Web
 ## Архитектура
 
 ```
-AddSaConfiguration()
+AddSaConfiguration()                         [Sa.Configuration]
   ├── AddSaCommandLine(args)         → CommandLineArgsSecretStore
-  ├── AddSaPostSecretProcessing()    → ChainedSecrets(
-       │                               │     ├── EnvironmentVariableSecretStore
-       │                               │     ├── CommandLineArgsSecretStore
-       │                               │     └── FileSecretStore (secrets.txt)
-       │                              )
-  └── AddSaPostgreSqlConfiguration   → Динамические настройки из PostgreSQL
+  └── AddSaPostSecretProcessing()    → ChainedSecrets(
+           │                               │     ├── EnvironmentVariableSecretStore
+           │                               │     ├── CommandLineArgsSecretStore
+           │                               │     └── FileSecretStore (secrets.txt)
+           │                              )
+
+AddSaPostgreSqlConfiguration(options)         [Sa.Configuration.PostgreSql]
+  └── DatabaseConfigurationProvider   → Динамические настройки из PostgreSQL
 ```
+
+`AddSaConfiguration()` и `AddSaPostgreSqlConfiguration` — независимые вызовы из разных пакетов: `Sa.Configuration` не ссылается на `Sa.Configuration.PostgreSql`, поэтому источник PostgreSQL подключается отдельной строкой, а не встраивается в цепочку секретов.
 
 ---
 
@@ -110,16 +114,31 @@ ds.ExecuteScalar("""
 """, null).Wait();
 
 // Шаг 4: Добавляем PostgreSQL как источник динамической конфигурации
-builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions
-(
-    ConnectionString: connectionString,
-    SelectSql: "select * from settings"
-));
+// Приложение уже держит свой источник данных, поэтому передаём его, вместо того чтобы
+// заставлять источник конфигурации открывать второй пул. Владение остаётся здесь —
+// провайдер никогда не освобождает `ds`, и подключение несёт источник данных,
+// поэтому строка подключения игнорируется.
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    new PostgreSqlConfigurationOptions(
+        ConnectionString: string.Empty,
+        // Называем колонки явно: провайдер берёт первые две как (key, value), поэтому
+        // порядок колонок — часть контракта, а `select *` делал бы его неявным.
+        SelectSql: "select key, value from settings"),
+    ds);
 
 // Шаг 5: Регистрируем эндпоинты
+var app = builder.Build();
+
 var todosApi = app.MapGroup("/settings");
+
+// Строка подключения содержит пароль, поэтому отдавать её клиенту как есть нельзя.
+// Маскируем для показа; всё остальное на этом эндпоинте выводится дословно.
+static string MaskPassword(string? connectionString) => connectionString is null
+    ? string.Empty
+    : new NpgsqlConnectionStringBuilder(connectionString) { Password = "***" }.ConnectionString;
+
 todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
-    new (Key: PG_KEY, Value: configuration[PG_KEY]),
+    new (Key: PG_KEY, Value: MaskPassword(configuration[PG_KEY])),
     new (Key: "theme", Value: configuration["theme"]),
     new (Key: "language", Value: configuration["language"]),
     new (Key: "notifications", Value: configuration["notifications"]),
@@ -131,13 +150,18 @@ todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
 
 ```json
 [
-  { "key": "sa:pg:connection", "value": "User ID=postgres;Password=postgres;..." },
+  { "key": "sa:pg:connection", "value": "Username=postgres;Password=***;Host=localhost;Port=5432;Database=postgres;Pooling=True;Search Path=public;Command Timeout=180" },
   { "key": "theme",             "value": "dark" },
   { "key": "language",          "value": "en" },
   { "key": "notifications",     "value": "enabled" },
   { "key": "secret",            "value": "ТОП СЕКРЕТ!" }
 ]
 ```
+
+Обратите внимание, что пароль замаскирован: `NpgsqlConnectionStringBuilder` нормализует
+имена параметров при разборе и сборке строки, поэтому в выводе будет `Username=…` и
+`Search Path=…`, а не написание `User ID=…` и `SearchPath=…` из `secrets.txt`. Это
+пересобранная строка подключения, а не исходная.
 
 ---
 
@@ -148,6 +172,7 @@ todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
 | `Sa.Configuration` | Управление секретами, разбор аргументов CLI |
 | `Sa.Configuration.PostgreSql` | Динамическая конфигурация из PostgreSQL |
 | `Sa.Data.PostgreSql` | Обёртка клиента Npgsql |
+| `Npgsql` | `NpgsqlConnectionStringBuilder` для маскирования пароля; приходит транзитивно, но сэмпл использует его напрямую |
 | `Microsoft.AspNetCore.OpenApi` | Поддержка OpenAPI (только для разработки) |
 
 ---
