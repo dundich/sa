@@ -26,11 +26,28 @@ internal static class NumericExtensions
 
     [DebuggerStepThrough]
     public static DateTime ToDateTimeFromUnixTimestamp(this ulong timestamp)
-        => ToDateTimeFromUnixTimestamp((long)timestamp);
+    {
+        // The unchecked (long) cast wrapped past long.MaxValue into a negative number, so
+        // ulong.MaxValue landed before 1970 — a plausible-looking date instead of a rejected
+        // input. The rest of the family reports out-of-range values by letting
+        // AddSeconds/AddMilliseconds throw ArgumentOutOfRangeException; this does the same.
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(timestamp, (ulong)long.MaxValue);
+        return ToDateTimeFromUnixTimestamp((long)timestamp);
+    }
 
     [DebuggerStepThrough]
     public static DateTime ToDateTimeFromUnixTimestamp(this double timestamp)
-        => ToDateTimeFromUnixTimestamp((long)timestamp);
+    {
+        // The double cast truncates towards zero, so -0.5 s became 0 and the instant
+        // 1969-12-31T23:59:59.5Z came back as the epoch. Flooring is the convention for
+        // timestamp conversion and keeps the result at or before the true instant. NaN and
+        // ±∞ used to reach the cast as long.MinValue (an implementation-defined result) and
+        // then fail inside AddSeconds, so they are rejected here.
+        if (!double.IsFinite(timestamp))
+            throw new ArgumentOutOfRangeException(nameof(timestamp), timestamp, "Timestamp must be a finite number.");
+
+        return ToDateTimeFromUnixTimestamp((long)Math.Floor(timestamp));
+    }
 
     [DebuggerStepThrough]
     public static DateTime? ToDateTimeFromUnixTimestamp(this long? ts)

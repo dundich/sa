@@ -1,4 +1,6 @@
-﻿using Sa.Extensions;
+﻿using Sa.Classes;
+using Sa.Extensions;
+using System.Text;
 
 namespace SaTests;
 
@@ -169,4 +171,123 @@ public class StringExtensionsTests
         // Assert
         Assert.Equal("hello world", result);
     }
+
+    #region NormalizeWhiteSpaceSpan
+
+    [Theory]
+    [InlineData("hello  world", "hello world")]
+    [InlineData("  hello world  ", "hello world")]
+    [InlineData("hello\tworld", "hello world")]
+    [InlineData("a b c d", "a b c d")]
+    public void NormalizeWhiteSpaceSpan_FitsBuffer_WritesNormalizedText(string input, string expected)
+    {
+        // Arrange — длина результата не превышает длину входа (с учётом trim)
+        char[] buffer = new char[input.Length];
+
+        // Act
+        int written = StringExtensions.NormalizeWhiteSpaceSpan(input, buffer);
+
+        // Assert
+        Assert.Equal(expected, new string(buffer, 0, written));
+    }
+
+    [Theory]
+    [InlineData("hello  world", 10)]   // на один символ короче
+    [InlineData("hello  world", 0)]
+    [InlineData("hello", 0)]
+    public void NormalizeWhiteSpaceSpan_BufferTooSmall_ThrowsArgumentException(string input, int destSize)
+    {
+        // Arrange
+        char[] buffer = new char[destSize];
+
+        // Act
+        // Раньше IndexOutOfRangeException вылетал из цикла записи — уже после того, как
+        // часть буфера была заполнена, — и ничто не указывало на размер буфера.
+        var ex = Assert.Throws<ArgumentException>(() =>
+            StringExtensions.NormalizeWhiteSpaceSpan(input, buffer));
+
+        // Assert
+        Assert.Equal("dest", ex.ParamName);
+    }
+
+    [Fact]
+    public void NormalizeWhiteSpaceSpan_ExactFit_Accepts()
+    {
+        // Граница: буфер ровно по длине входа — нормализация не может разъехаться.
+        const string input = "a  b";
+        char[] buffer = new char[input.Length];
+
+        int written = StringExtensions.NormalizeWhiteSpaceSpan(input, buffer);
+
+        Assert.Equal("a b", new string(buffer, 0, written));
+    }
+
+    [Fact]
+    public void NormalizeWhiteSpaceSpan_EmptyInput_WritesNothingAndSkipsTheBufferCheck()
+    {
+        char[] buffer = ['x'];
+
+        int written = StringExtensions.NormalizeWhiteSpaceSpan("   ", buffer);
+
+        Assert.Equal(0, written);
+        Assert.Equal('x', buffer[0]);
+    }
+
+    #endregion
+
+    #region GetMurmurHash3
+
+    [Fact]
+    public void GetMurmurHash3_MatchesTheHashOfTheSameTextEncodedToUtf8()
+    {
+        // Обёртка не должна менять хэш: она лишь кодирует строку в буфер.
+        const string input = "The quick brown fox jumps over the lazy dog";
+
+        var viaExtension = input.GetMurmurHash3(seed: 7);
+        var viaBytes = MurmurHash3.Hash32(Encoding.UTF8.GetBytes(input), 7);
+
+        Assert.Equal(viaBytes, viaExtension);
+    }
+
+    [Fact]
+    public void GetMurmurHash3_NonAsciiText_StaysCanonical()
+    {
+        // Многобайтовые символы: оценка длины буфера в 3 байта на символ должна
+        // оставаться достаточной, а результат — совпадать с хэшем самих байтов.
+        const string input = "привет мир";
+
+        var viaExtension = input.GetMurmurHash3();
+        var viaBytes = MurmurHash3.Hash32(Encoding.UTF8.GetBytes(input), 0);
+
+        Assert.Equal(viaBytes, viaExtension);
+    }
+
+    [Fact]
+    public void GetMurmurHash3_EmojiOutsideTheStackallocThreshold_UsesTheHeapBuffer()
+    {
+        // Строка длиннее порога stackalloc идёт через new byte[]; при 4 байтах на символ
+        // старая оценка `Length * 3` всё ещё умещалась, поэтому здесь важно совпадение
+        // с хэшем байтов, а не сам порог.
+        string input = string.Concat(Enumerable.Repeat("😀", 200));
+
+        var viaExtension = input.GetMurmurHash3(seed: 3);
+        var viaBytes = MurmurHash3.Hash32(Encoding.UTF8.GetBytes(input), 3);
+
+        Assert.Equal(viaBytes, viaExtension);
+    }
+
+    [Fact]
+    public void GetMurmurHash3_LongAsciiInput_StaysCanonical()
+    {
+        // 100_000 символов — заметно за порогом stackalloc, но оценка длины не должна
+        // ни переполниться, ни обрезать буфер.
+        string input = new('x', 100_000);
+
+        var viaExtension = input.GetMurmurHash3();
+        var viaBytes = MurmurHash3.Hash32(Encoding.UTF8.GetBytes(input), 0);
+
+        Assert.Equal(viaBytes, viaExtension);
+    }
+
+    #endregion
 }

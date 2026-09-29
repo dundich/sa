@@ -8,7 +8,7 @@ internal static class EnumerableExtensions
     [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string JoinByString<T>(this IEnumerable<T> source, string? joinWith = null)
     {
-        if (source == null) return default!;
+        if (source == null) return string.Empty;
         return string.Join(joinWith, source);
     }
 
@@ -19,7 +19,10 @@ internal static class EnumerableExtensions
     [DebuggerStepThrough]
     public static string JoinByString<T>(this IEnumerable<T> source, Func<T, T> map, string? joinWith = null)
     {
-        if (source == null) return default!;
+        // The signature promises a non-nullable string, so a null source returns the empty
+        // string. `default!` silenced the compiler while handing every caller a null, which
+        // surfaced as a NullReferenceException far from this line.
+        if (source == null) return string.Empty;
 
         // Fast path: if source is also ICollection, use the count hint
         if (source is ICollection<T> coll)
@@ -43,7 +46,7 @@ internal static class EnumerableExtensions
     [DebuggerStepThrough]
     public static string JoinByString<T>(this IEnumerable<T> source, Func<T, int, T> map, string? joinWith = null)
     {
-        if (source == null) return default!;
+        if (source == null) return string.Empty;
 
         if (source is ICollection<T> coll)
         {

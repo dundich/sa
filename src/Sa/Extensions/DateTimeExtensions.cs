@@ -8,12 +8,21 @@ internal static class DateTimeExtensions
     /// <summary>
     /// Unix timestamp. Skips <see cref="DateTime.ToUniversalTime"/> when the value is already UTC.
     /// </summary>
+    /// <remarks>
+    /// The stamp is floored, not truncated: the cast of <see cref="TimeSpan.TotalSeconds"/> /
+    /// <see cref="TimeSpan.TotalMilliseconds"/> rounds towards zero, which for any pre-1970
+    /// date with a sub-second component rounded the value <em>up</em> towards the epoch
+    /// (…:59.5 became <c>0</c>, the epoch itself). After 1970 the value is non-negative and
+    /// flooring is a no-op.
+    /// </remarks>
     [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long ToUnixTimestamp(this DateTime dateTime, bool isInMilliseconds = false)
     {
         var dt = dateTime.Kind == DateTimeKind.Utc ? dateTime : dateTime.ToUniversalTime();
         var ts = dt.Subtract(DateTime.UnixEpoch);
-        return isInMilliseconds ? (long)ts.TotalMilliseconds : (long)ts.TotalSeconds;
+        return isInMilliseconds
+            ? (long)Math.Floor(ts.TotalMilliseconds)
+            : (long)Math.Floor(ts.TotalSeconds);
     }
 
     [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]

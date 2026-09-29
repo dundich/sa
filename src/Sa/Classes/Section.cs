@@ -55,12 +55,21 @@ public static class RangeExtensions
         => range.Start.CompareTo(value) <= 0 && (range.HasEnd ? range.End.CompareTo(value) >= 0 : range.End.CompareTo(value) > 0);
 
     /// <summary>
-    /// список пустых (незанятых) интервалов
+    /// список пустых (незанятых) интервалов: <paramref name="range"/> за вычетом объединения
+    /// <paramref name="busyIntervals"/>.
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="range">интервал</param>
     /// <param name="busyIntervals"> список отрезков, которые заняты</param>
     /// <returns>список пустых (незанятых) интервалов</returns>
+    /// <remarks>
+    /// Занятые отрезки обрезаются по <paramref name="range"/>, не пересекающиеся с ним игнорируются,
+    /// взаимно перекрывающиеся склеиваются. Раньше <c>currentStart</c> присваивался концу каждого
+    /// занятого отрезка безусловно, из-за чего отрезок целиком слева от <paramref name="range"/>
+    /// уводил начало назад: <c>[10,100]</c> минус <c>[0,5]</c> давало <c>[5,100]</c>, то есть
+    /// ответ начинался левее самого запроса. Отрезок целиком справа давал пустой список, хотя
+    /// <c>[10,100]</c> целиком свободен.
+    /// </remarks>
     public static List<Section<T>> FindEmptyIntervals<T>(this Section<T> range, IEnumerable<Section<T>> busyIntervals)
         where T : IComparable<T>
     {
@@ -77,12 +86,25 @@ public static class RangeExtensions
         T currentStart = range.Start;
         foreach (Section<T> interval in sortedBusyIntervals)
         {
+            // Занятый отрезок, кончившийся до текущего начала, уже учтён — или лежит левее
+            // range. Раньше эта проверка отсутствовала, и конец такого отрезка становился
+            // новым currentStart, то есть граница уезжала назад.
+            if (interval.End.CompareTo(currentStart) <= 0) continue;
+
+            // Дальше занятых отрезков в отсортированном массиве нет: текущий свободен целиком.
+            if (interval.Start.CompareTo(range.End) >= 0) break;
+
             if (interval.Start.CompareTo(currentStart) > 0)
             {
-                T currentEnd = interval.Start;
-                emptyIntervals.Add(new Section<T>(currentStart, currentEnd));
+                emptyIntervals.Add(new Section<T>(currentStart, interval.Start));
             }
-            currentStart = interval.End;
+
+            // Отрезок может кончиться раньше currentStart, если перекрывает предыдущий:
+            // тогда начало не отступает назад.
+            if (interval.End.CompareTo(currentStart) > 0)
+            {
+                currentStart = interval.End;
+            }
         }
 
         if (range.End.CompareTo(currentStart) > 0)
@@ -96,6 +118,13 @@ public static class RangeExtensions
     /// <summary>
     /// Поиск пересечения
     /// </summary>
+    /// <remarks>
+    /// <see cref="Section{T}"/> — закрытый отрезок (<see cref="InRange{T}(Section{T}, T)"/>
+    /// включает обе границы), поэтому касание концом считается пересечением, и его результат —
+    /// вырожденная точка: <c>[10,20] ∩ [20,30] = {20}</c>, то есть
+    /// <c>Section(20, 20)</c>. Различить касание от перекрытия можно через
+    /// <see cref="IsPoint{T}"/>, а пустой результат — это <see langword="null"/>.
+    /// </remarks>
     public static Section<T>? FindIntersections<T>(this Section<T> self, Section<T> other)
         where T : IComparable<T>
     {
@@ -131,6 +160,10 @@ public static class RangeExtensions
     {
         List<Section<T>> sortedList = [.. intervals];
 
+        // Объединять нечего — раньше здесь брался sortedList[0] и пустой вход падал с
+        // ArgumentOutOfRangeException.
+        if (sortedList.Count == 0) return [];
+
         if (sortedList.Count > 1)
         {
             sortedList.Sort((a, b) => a.Start.CompareTo(b.Start)); // Сортировка по начальным точкам
@@ -138,10 +171,13 @@ public static class RangeExtensions
 
         List<Section<T>> mergedIntervals = [];
 
+        // Первый отрезок — текущий накопленный, цикл идёт по остальным. Раньше он начинался с
+        // него же, то есть первый элемент сравнивался сам с собой.
         Section<T> currentInterval = sortedList[0];
 
-        foreach (Section<T> interval in sortedList)
+        for (int i = 1; i < sortedList.Count; i++)
         {
+            Section<T> interval = sortedList[i];
             if (currentInterval.End.CompareTo(interval.Start) >= 0) // Пересечение интервалов
             {
                 var currentEnd = currentInterval.End.CompareTo(interval.End) >= 0

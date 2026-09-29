@@ -26,27 +26,73 @@ internal static class LockRenewer
         return new LockRenewerHandle(lockExpiration, extendLocked, blockImmediately, cancellationToken);
     }
 
+    /// <summary>
+    /// Polls <paramref name="predicate"/> until it returns <see langword="true"/>,
+    /// <paramref name="timeout"/> elapses, or <paramref name="cancellationToken"/> is cancelled.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> only if the predicate was satisfied. A timeout and a cancellation
+    /// both report <see langword="false"/> — cancellation is not an error here.
+    /// </returns>
+    /// <remarks>
+    /// The wait between polls is bounded by the time left, and the deadline is checked before each
+    /// poll. The loop used to sleep a full <paramref name="pollInterval"/> and only then re-check
+    /// <c>sw.Elapsed &lt; timeout</c>, so a 1 s poll with a 100 ms timeout still took a second and
+    /// ran the predicate past the deadline. It also built a <see cref="PeriodicTimer"/> for what
+    /// is a single sleep, which rejected a non-positive interval with an
+    /// <see cref="ArgumentOutOfRangeException"/> of its own instead of the documented one.
+    /// </remarks>
     public static async Task<bool> WaitForConditionAsync(
         Func<CancellationToken, Task<bool>> predicate,
         TimeSpan timeout,
         TimeSpan? pollInterval = null,
         CancellationToken cancellationToken = default)
     {
-        var interval = pollInterval ?? TimeSpan.FromMilliseconds(10);
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        TimeSpan interval = pollInterval ?? DefaultPollInterval;
+        if (interval <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(pollInterval), interval, "Poll interval must be > 0.");
+        if (timeout < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout), timeout, "Timeout must be ≥ 0.");
+
         var sw = Stopwatch.StartNew();
-        using var timer = new PeriodicTimer(interval);
 
         try
         {
-            while (sw.Elapsed < timeout)
+            while (true)
             {
+                if (sw.Elapsed >= timeout)
+                    return false;
+
                 if (!cancellationToken.IsCancellationRequested
                     && await predicate(cancellationToken).ConfigureAwait(false))
                 {
                     return true;
                 }
 
-                await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false);
+                // Не хватает времени ещё на один полный цикл опроса. Не стоит ни делать ещё один
+                // вызов предиката, ни ждать остаток в теле цикла: Task.Delay(remaining) с крошечным
+                // remaining мог бы сработать раньше, чем sw пересеёт timeout, и цикл разогнал бы
+                // tight-loop (уже было 4885 вызовов за один прогон). Поэтому остаток дожидается
+                // отдельным циклом: он не делает новых вызовов предиката, а выходит, как только
+                // sw переступает boundary. Task.Delay ждёт не меньше заданного, так что
+                // несколько коротких ожиданий здесь сходятся за пару итераций, а не в бесконечность.
+                TimeSpan remaining = timeout - sw.Elapsed;
+                if (remaining <= TimeSpan.Zero)
+                    return false;
+
+                if (remaining < interval)
+                {
+                    while (sw.Elapsed < timeout)
+                    {
+                        await Task.Delay(timeout - sw.Elapsed, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    return false;
+                }
+
+                await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -56,6 +102,8 @@ internal static class LockRenewer
 
         return false;
     }
+
+    private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(10);
 }
 
 /// <summary>

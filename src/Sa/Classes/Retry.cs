@@ -1,4 +1,6 @@
-﻿using System.Diagnostics;
+﻿using Sa.Extensions;
+using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 
 namespace Sa.Classes;
 
@@ -239,7 +241,12 @@ internal static class Retry
         }
 
         if (lastEx != null)
-            throw lastEx;
+        {
+            // Rethrowing the caught instance resets the stack trace to this frame, so the
+            // caller sees Retry.WaitAndRetry as the failure site. Capturing the dispatch info
+            // preserves the original trace — the throw site inside the retried delegate.
+            ExceptionDispatchInfo.Capture(lastEx).Throw();
+        }
 
         throw new OperationCanceledException("Retry loop exited due to cancellation.", null, cancellationToken);
     }
@@ -287,7 +294,12 @@ internal static class Retry
         }
 
         if (lastEx != null)
-            throw lastEx;
+        {
+            // Rethrowing the caught instance resets the stack trace to this frame, so the
+            // caller sees Retry.WaitAndRetry as the failure site. Capturing the dispatch info
+            // preserves the original trace — the throw site inside the retried delegate.
+            ExceptionDispatchInfo.Capture(lastEx).Throw();
+        }
 
         throw new OperationCanceledException("Retry loop exited due to cancellation.", null, cancellationToken);
     }
@@ -295,6 +307,31 @@ internal static class Retry
     #endregion
 
     #region Private helpers
+
+    /// <summary>
+    /// Last representable delay, in milliseconds. Anything at or above it saturates instead of
+    /// overflowing.
+    /// </summary>
+    private static readonly double MaxDelayMs = TimeSpan.MaxValue.TotalMilliseconds;
+
+    /// <summary>
+    /// Converts a millisecond delay to a <see cref="TimeSpan"/>, saturating at
+    /// <see cref="TimeSpan.MaxValue"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TimeSpan.FromMilliseconds(double)"/> throws <see cref="OverflowException"/>
+    /// once the value passes <see cref="TimeSpan.MaxValue"/> (~292 years), and the delay
+    /// sequences are materialised up front (<c>TimeSpan[] points = [.. timeSpans]</c>). An
+    /// ordinary exponential back-off — 100 ms, factor 2, 50 retries — reached the ceiling around
+    /// the 47th delay, so <c>Retry.Exponential(..., retryCount: 50)</c> threw before the first
+    /// attempt. A back-off that has grown past <see cref="TimeSpan.MaxValue"/> means "do not
+    /// retry within any process lifetime", which is what the ceiling stands for.
+    /// </remarks>
+    [DebuggerStepThrough]
+    private static TimeSpan ToDelay(double milliseconds)
+        => milliseconds >= MaxDelayMs
+            ? TimeSpan.MaxValue
+            : TimeSpan.FromMilliseconds(milliseconds);
 
     [DebuggerStepThrough]
     private static async Task Delay(TimeSpan delay, CancellationToken cancellationToken)
@@ -317,18 +354,16 @@ internal static class Retry
     /// <summary>
     /// Determines whether <paramref name="ex"/> is a critical (non-retriable) exception.
     /// </summary>
+    /// <remarks>
+    /// Delegates to <see cref="ExceptionExtensions.IsCritical"/> so that this predicate and the
+    /// one its callers use cannot drift apart: the two lists were identical except for
+    /// <see cref="AccessViolationException"/>, which made an access violation non-retriable
+    /// here and retriable in <c>Sa.Outbox</c>, <c>Sa.Schedule</c> and
+    /// <c>Sa.Outbox.PostgreSql</c>, which all use <c>IsCritical</c>.
+    /// <see cref="ExceptionExtensions.cs"/> must therefore be link-included wherever this file is.
+    /// </remarks>
     [DebuggerStepThrough]
-    public static bool IsFatal(Exception ex)
-    {
-        return ex is OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException
-            or BadImageFormatException
-            or CannotUnloadAppDomainException
-            or InvalidProgramException
-            or ThreadAbortException;
-    }
+    public static bool IsFatal(Exception ex) => ex.IsCritical();
 
     #endregion
 
@@ -370,7 +405,8 @@ internal static class Retry
             TimeSpan initialDelay, int retryCount, double factor = 1.0, bool fastFirst = true)
         {
             ValidateParameters(initialDelay, retryCount, nameof(initialDelay));
-            if (factor < 0) throw new ArgumentOutOfRangeException(nameof(factor), factor, "Factor must be ≥ 0.");
+            if (!double.IsFinite(factor) || factor < 0)
+                throw new ArgumentOutOfRangeException(nameof(factor), factor, "Factor must be a finite number ≥ 0.");
             return retryCount == 0 ? Empty() : Generator.GenLinear(initialDelay, retryCount, factor, fastFirst);
         }
 
@@ -382,7 +418,10 @@ internal static class Retry
             TimeSpan initialDelay, int retryCount, double factor = 2.0, bool fastFirst = true)
         {
             ValidateParameters(initialDelay, retryCount, nameof(initialDelay));
-            if (factor < 1.0) throw new ArgumentOutOfRangeException(nameof(factor), factor, "Factor must be ≥ 1.0.");
+            // double.NaN compares false against everything, so the old `factor < 1.0` guard let
+            // it through and every delay became NaN, which TimeSpan.FromMilliseconds rejects.
+            if (!double.IsFinite(factor) || factor < 1.0)
+                throw new ArgumentOutOfRangeException(nameof(factor), factor, "Factor must be a finite number ≥ 1.0.");
             return retryCount == 0 ? Empty() : Generator.GenExponential(initialDelay, retryCount, factor, fastFirst);
         }
 
@@ -420,8 +459,10 @@ internal static class Retry
                 double ms = initialDelay.TotalMilliseconds;
                 double increment = factor * ms;
 
+                // ToDelay saturates: a huge factor makes increment infinite on the second
+                // iteration, which TimeSpan.FromMilliseconds would have rejected.
                 for (int i = fastFirst ? 1 : 0; i < retryCount; i++, ms += increment)
-                    yield return TimeSpan.FromMilliseconds(ms);
+                    yield return ToDelay(ms);
             }
 
             public static IEnumerable<TimeSpan> GenExponential(
@@ -433,7 +474,7 @@ internal static class Retry
                 double ms = initialDelay.TotalMilliseconds;
 
                 for (int i = fastFirst ? 1 : 0; i < retryCount; i++, ms *= factor)
-                    yield return TimeSpan.FromMilliseconds(ms);
+                    yield return ToDelay(ms);
             }
 
             /// <summary>

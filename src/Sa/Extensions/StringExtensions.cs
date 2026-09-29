@@ -104,6 +104,14 @@ internal static partial class StringExtensions
         }
 
         int len = str.Length;
+
+        // Normalization never grows the input, so dest must hold the trimmed length. Without the
+        // check a short buffer threw IndexOutOfRangeException from the write loop — after a
+        // partial write, leaving the destination half-normalized — and nothing pointed at the
+        // buffer as the cause. Same exception type Encoding.GetBytes(string, Span<byte>) uses.
+        if (dest.Length < len)
+            throw new ArgumentException("Destination is too short for the normalized source.", nameof(dest));
+
         int w = 0;
         bool prevWhite = false;
         for (int i = 0; i < len; i++)
@@ -136,11 +144,14 @@ internal static partial class StringExtensions
     [DebuggerStepThrough]
     public static uint GetMurmurHash3(this string str, uint seed = 0)
     {
-        // Estimate UTF-8 byte length (upper bound: 3 bytes per char for BMP Latin, up to 4 for emoji)
-        int estimatedLen = str.Length * 3;
-        Span<byte> buf = estimatedLen is > 0 and <= MaxStackallocChars
-            ? stackalloc byte[estimatedLen]
-            : new byte[estimatedLen];
+        // The old estimate `str.Length * 3` overflowed int past ~715 million characters (a 1.4 GB
+        // string): the product wrapped, and the wrapped value either went negative (failing inside
+        // `new byte[]`) or was too small (failing inside GetBytes with "buffer too small") — both
+        // far from the arithmetic that broke. GetByteCount is exact and cannot under-estimate.
+        int byteCount = Encoding.UTF8.GetByteCount(str);
+        Span<byte> buf = byteCount <= MaxStackallocChars
+            ? stackalloc byte[byteCount]
+            : new byte[byteCount];
 
         int actualLen = Encoding.UTF8.GetBytes(str, buf);
         return MurmurHash3.Hash32(buf[..actualLen], seed);

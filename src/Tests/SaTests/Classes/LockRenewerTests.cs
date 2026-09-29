@@ -493,4 +493,140 @@ public class LockRenewerTests
         await handle.DisposeAsync();
         handle.Dispose();
     }
+
+    #region WaitForConditionAsync
+
+    [Fact]
+    public async Task WaitForConditionAsync_PollIntervalLongerThanTimeout_ReturnsPromptly()
+    {
+        // Arrange
+        // Раньше между опросами выжидался весь интервал, и только потом проверялось
+        // sw.Elapsed < timeout: интервал в 1 с при таймауте в 100 мс тянулся секунду и
+        // опрос выходил за границу.
+        int calls = 0;
+        var sw = Stopwatch.StartNew();
+
+        // Act
+        bool result = await LockRenewer.WaitForConditionAsync(
+            _ => { calls++; return Task.FromResult(false); },
+            TimeSpan.FromMilliseconds(100),
+            TimeSpan.FromSeconds(1),
+            TestContext.Current.CancellationToken);
+        sw.Stop();
+
+        // Assert
+        Assert.False(result);
+        Assert.Equal(1, calls);
+        Assert.True(
+            sw.Elapsed < TimeSpan.FromMilliseconds(800),
+            $"Ждал {sw.Elapsed.TotalMilliseconds:F0} мс при таймауте 100 мс и интервале 1 с.");
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_DoesNotRunThePredicatePastTheTimeout()
+    {
+        // Граница проверяется до опроса, а не после: последний опрос не должен уже
+        // выходить за пределы timeout.
+        int calls = 0;
+        var sw = Stopwatch.StartNew();
+
+        bool result = await LockRenewer.WaitForConditionAsync(
+            _ => { calls++; return Task.FromResult(false); },
+            TimeSpan.FromMilliseconds(200),
+            TimeSpan.FromMilliseconds(50),
+            TestContext.Current.CancellationToken);
+        sw.Stop();
+
+        // Assert
+        Assert.False(result);
+        // Опросов должно быть несколько, но не тысячи: это и есть проверка, что цикл не
+        // разогнал tight-loop из-за ожидания остатка интервала. Точное число не фиксируем —
+        // оно зависит от гранулярности таймера.
+        Assert.True(calls >= 2, $"Слишком мало опросов: {calls}");
+        Assert.True(calls <= 6, $"Слишком много опросов: {calls}");
+        // Последний опрос не выходит за пределы таймаута больше чем на один интервал.
+        Assert.True(
+            sw.Elapsed <= TimeSpan.FromMilliseconds(200) + TimeSpan.FromMilliseconds(50),
+            $"Переопросили: {sw.Elapsed.TotalMilliseconds:F0} мс при таймауте 200 мс.");
+        Assert.True(
+            sw.Elapsed >= TimeSpan.FromMilliseconds(200) - TimeSpan.FromMilliseconds(50),
+            $"Слишком рано: {sw.Elapsed.TotalMilliseconds:F0} мс при таймауте 200 мс.");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-500)]
+    public async Task WaitForConditionAsync_NonPositivePollInterval_ThrowsArgumentOutOfRangeException(int pollMs)
+    {
+        // Раньше проверку отдавал конструктор PeriodicTimer со своим текстом; ноль к тому же
+        // завёл бы в бесконечный цикл опроса без ожидания.
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            LockRenewer.WaitForConditionAsync(
+                _ => Task.FromResult(false),
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMilliseconds(pollMs),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("pollInterval", ex.ParamName);
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_NegativeTimeout_ThrowsArgumentOutOfRangeException()
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            LockRenewer.WaitForConditionAsync(
+                _ => Task.FromResult(false),
+                TimeSpan.FromMilliseconds(-1),
+                TimeSpan.FromMilliseconds(10),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("timeout", ex.ParamName);
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_NullPredicate_ThrowsArgumentNullException()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            LockRenewer.WaitForConditionAsync(
+                null!,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMilliseconds(10),
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_ZeroTimeout_DoesNotCallThePredicate()
+    {
+        int calls = 0;
+
+        bool result = await LockRenewer.WaitForConditionAsync(
+            _ => { calls++; return Task.FromResult(true); },
+            TimeSpan.Zero,
+            TimeSpan.FromMilliseconds(10),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_ConditionTrueImmediately_ReturnsTrueWithoutWaiting()
+    {
+        int calls = 0;
+        var sw = Stopwatch.StartNew();
+
+        bool result = await LockRenewer.WaitForConditionAsync(
+            _ => { calls++; return Task.FromResult(true); },
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(1),
+            TestContext.Current.CancellationToken);
+        sw.Stop();
+
+        Assert.True(result);
+        Assert.Equal(1, calls);
+        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(500), $"Первый опрос ждал {sw.Elapsed}.");
+    }
+
+    #endregion
 }

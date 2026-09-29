@@ -1,4 +1,5 @@
 ﻿using Sa.Classes;
+using Sa.Extensions;
 
 namespace SaTests.Classes;
 
@@ -644,6 +645,151 @@ public class RetryTests
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             Retry.Quartz.GenerateLinear(TimeSpan.FromMilliseconds(100), 3, factor));
         Assert.Equal("factor", ex.ParamName);
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void GenerateExponential_NonFiniteFactor_ThrowsArgumentOutOfRangeException(double factor)
+    {
+        // double.NaN не проходит проверку `factor < 1.0` (сравнение с NaN ложно), и каждая
+        // задержка становилась NaN, что TimeSpan.FromMilliseconds отвергает уже при перечислении.
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Retry.Quartz.GenerateExponential(TimeSpan.FromMilliseconds(100), 3, factor));
+        Assert.Equal("factor", ex.ParamName);
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void GenerateLinear_NonFiniteFactor_ThrowsArgumentOutOfRangeException(double factor)
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Retry.Quartz.GenerateLinear(TimeSpan.FromMilliseconds(100), 3, factor));
+        Assert.Equal("factor", ex.ParamName);
+    }
+
+    [Fact]
+    public void GenerateExponential_LargeRetryCount_SaturatesInsteadOfOverflowing()
+    {
+        // 100 мс * 2^46 ≈ 7·10^15 мс, что переполняет TimeSpan. Последовательность
+        // материализуется целиком до первой попытки, поэтому 50 экспоненциальных повторов —
+        // обычное значение — падало с OverflowException, не выполнив ни одной попытки.
+        var delays = Retry.Quartz.GenerateExponential(TimeSpan.FromMilliseconds(100), 50, 2.0).ToArray();
+
+        Assert.Equal(50, delays.Length);
+        Assert.All(delays, d => Assert.InRange(d, TimeSpan.Zero, TimeSpan.MaxValue));
+        Assert.Equal(TimeSpan.MaxValue, delays[^1]);
+    }
+
+    [Fact]
+    public async Task GenerateExponential_PublicEntryPoint_DoesNotThrowBeforeTheFirstAttempt()
+    {
+        // Тот же сценарий через публичную точку входа: последовательность материализуется
+        // до первой попытки, поэтому OverflowException приходило раньше, чем fun звали.
+        // shouldRetry останавливает цикл на первой же ошибке — иначе тест реально ждал бы
+        // насытившиеся задержки до TimeSpan.MaxValue.
+        int attempts = 0;
+
+        ValueTask<int> Throwing(int input, CancellationToken ct)
+        {
+            attempts++;
+            return ValueTask.FromException<int>(new TransientException("always fails"));
+        }
+
+        var ex = await Assert.ThrowsAsync<TransientException>(() => Retry.Exponential(
+            Throwing, 42, retryCount: 50, initialDelay: 100, factor: 2.0,
+            shouldRetry: (_, _) => false,
+            cancellationToken: TestContext.Current.CancellationToken).AsTask());
+
+        // Насыщение вместо OverflowException: падает исходная ошибка, а не арифметика
+        // генератора, и попытка была выполнена.
+        Assert.Equal(1, attempts);
+        Assert.Equal("always fails", ex.Message);
+    }
+
+    [Fact]
+    public void GenerateLinear_HugeFactor_SaturatesInsteadOfOverflowing()
+    {
+        // factor = 1e308 делает increment бесконечным уже на второй итерации.
+        var delays = Retry.Quartz.GenerateLinear(TimeSpan.FromMilliseconds(100), 5, 1e308).ToArray();
+
+        Assert.Equal(5, delays.Length);
+        Assert.All(delays, d => Assert.InRange(d, TimeSpan.Zero, TimeSpan.MaxValue));
+    }
+
+    #endregion
+
+    #region Rethrow and critical exceptions
+
+    [Fact]
+    public async Task WaitAndRetry_AllAttemptsFailed_KeepsTheOriginalStackTrace()
+    {
+        // Arrange
+        // Именно throw, а не ValueTask.FromException: трассировка снимается при броске,
+        // поэтому кадр броска появляется в ней только если исключение действительно
+        // бросается здесь.
+        ValueTask<int> Throwing(int input, CancellationToken ct)
+            => throw new InvalidOperationException("boom");
+
+        // Act
+        // `throw lastEx;` вне catch обнуляет трассировку: местом падения становился сам
+        // Retry.WaitAndRetry, и вызывающий не видел, где именно упало.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Retry.Constant(Throwing, 42, retryCount: 1, waitTime: 1,
+                cancellationToken: TestContext.Current.CancellationToken).AsTask());
+
+        // Assert
+        Assert.NotNull(ex.StackTrace);
+        Assert.Contains(nameof(Throwing), ex.StackTrace, StringComparison.Ordinal);
+        Assert.Contains(nameof(Retry.WaitAndRetry), ex.StackTrace, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WaitAndRetry_NoInputOverload_AllAttemptsFailed_KeepsTheOriginalStackTrace()
+    {
+        // Arrange
+        ValueTask<int> Throwing(CancellationToken ct)
+            => throw new InvalidOperationException("boom");
+
+        // Act
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Retry.Constant(Throwing, retryCount: 1, waitTime: 1,
+                cancellationToken: TestContext.Current.CancellationToken).AsTask());
+
+        // Assert
+        Assert.NotNull(ex.StackTrace);
+        Assert.Contains(nameof(Throwing), ex.StackTrace, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IsFatal_AccessViolation_IsFatalAndCritical()
+    {
+        // Списки IsFatal и IsCritical расходились ровно на этом типе: повреждённое состояние
+        // процесса было нерепитируемым для Retry и репитируемым для его вызывающих.
+        Assert.True(Retry.IsFatal(new AccessViolationException()));
+        Assert.True(new AccessViolationException().IsCritical());
+    }
+
+    [Theory]
+    [InlineData(typeof(OutOfMemoryException), true)]
+    [InlineData(typeof(StackOverflowException), true)]
+    [InlineData(typeof(AppDomainUnloadedException), true)]
+    [InlineData(typeof(BadImageFormatException), true)]
+    [InlineData(typeof(CannotUnloadAppDomainException), true)]
+    [InlineData(typeof(InvalidProgramException), true)]
+    [InlineData(typeof(TransientException), false)]
+    [InlineData(typeof(InvalidOperationException), false)]
+    [InlineData(typeof(TimeoutException), false)]
+    public void IsFatal_AndIsCritical_NeverDisagree(Type exceptionType, bool expected)
+    {
+        // Arrange
+        var ex = (Exception)Activator.CreateInstance(exceptionType)!;
+
+        // Assert
+        Assert.Equal(expected, Retry.IsFatal(ex));
+        Assert.Equal(expected, ex.IsCritical());
     }
 
     #endregion

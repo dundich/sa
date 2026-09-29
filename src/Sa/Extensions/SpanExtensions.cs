@@ -4,8 +4,24 @@ namespace Sa.Extensions;
 
 internal static class SpanExtensions
 {
+    /// <summary>
+    /// Разбивает <paramref name="arr"/> на чанки длиной не более <paramref name="chunkSize"/>.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="chunkSize"/> проверяется сразу при вызове, а не при первом
+    /// <c>MoveNext</c>: проверка внутри итератора отложилась бы до перечисления. При нулевом
+    /// размере цикл <c>i += chunkSize</c> не сдвигался и перечисление зависало, выдавая
+    /// бесконечный поток пустых чанков.
+    /// </remarks>
     [DebuggerStepThrough]
     public static IEnumerable<Memory<T>> GetChunks<T>(this Memory<T> arr, int chunkSize)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(chunkSize, 0);
+
+        return GetChunksCore(arr, chunkSize);
+    }
+
+    private static IEnumerable<Memory<T>> GetChunksCore<T>(Memory<T> arr, int chunkSize)
     {
         for (int i = 0; i < arr.Length; i += chunkSize)
         {
@@ -20,6 +36,10 @@ internal static class SpanExtensions
     [DebuggerStepThrough]
     public static Memory<T>[] GetChunksArray<T>(this Memory<T> arr, int chunkSize)
     {
+        // При chunkSize == 0 деление на ноль падало в DivideByZeroException, при отрицательном
+        // размере new[] получал отрицательную ёмкость.
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(chunkSize, 0);
+
         int count = (arr.Length + chunkSize - 1) / chunkSize;
         var result = new Memory<T>[count];
         int idx = 0;
