@@ -15,5 +15,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sa.Configuration.PostgreSqlTests" />
+  </ItemGroup>
   
 </Project>
