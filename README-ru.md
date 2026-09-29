@@ -99,6 +99,7 @@ Minio-compatible S3-клиент для операций с данными.
 
 ## Сборка
 
+```bash
 # Полная сборка (clean + restore + build)
 ./build-sh/do-build.sh
 
