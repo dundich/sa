@@ -73,7 +73,7 @@ internal sealed partial class OutboxTaskLoader(
         await AcquireOffsetLock(consumerGroup, conn, tx, cancellationToken);
 
 
-        Guid currentOffset = await GetCurrentOffset(consumerGroup, conn, tx, cancellationToken);
+        long currentOffset = await GetCurrentOffset(consumerGroup, conn, tx, cancellationToken);
 
         var batchResult = await LoadTasksByOffset(currentOffset, filter, batchSize, conn, tx, cancellationToken);
 
@@ -88,7 +88,7 @@ internal sealed partial class OutboxTaskLoader(
     }
 
     private async Task<LoadGroupResult> LoadTasksByOffset(
-        Guid currentOffset,
+        long currentOffset,
         OutboxMessageFilter filter,
         int batchSize,
         NpgsqlConnection conn,
@@ -106,8 +106,8 @@ internal sealed partial class OutboxTaskLoader(
             .AddParamOffset(currentOffset)
             .AddParamLimit(batchSize)
             .AddParamNowDate(filter.NowDate)
-            .AddParamFromDate(filter.FromDate)
-            .AddParamToDate(filter.ToDate)
+            .AddParamWindowFrom(filter.FromDate)
+            .AddParamWindowTo(filter.ToDate)
             .AddParamTypeId(typeCode)
             ;
 
@@ -122,7 +122,7 @@ internal sealed partial class OutboxTaskLoader(
             if (copiedRows == 0)
                 return LoadGroupResult.Empty;
 
-            return new LoadGroupResult(copiedRows, reader.GetGuid(1));
+            return new LoadGroupResult(copiedRows, reader.GetInt64(1));
         }
         else
         {
@@ -145,7 +145,7 @@ internal sealed partial class OutboxTaskLoader(
 
     private async Task UpdateOffsetAsync(
         ConsumerGroupIdentifier consumerGroup,
-        Guid newOffset,
+        long newOffset,
         NpgsqlConnection conn,
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
@@ -160,7 +160,7 @@ internal sealed partial class OutboxTaskLoader(
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private async Task<Guid> GetCurrentOffset(
+    private async Task<long> GetCurrentOffset(
         ConsumerGroupIdentifier consumerGroup,
         NpgsqlConnection conn,
         NpgsqlTransaction? tx,
@@ -174,18 +174,65 @@ internal sealed partial class OutboxTaskLoader(
 
         object? currentOffsetObj = await command.ExecuteScalarAsync(cancellationToken);
 
-        Guid minOffset = consumeSettings.GetMinOffset(consumerGroup.ConsumerGroupId);
+        long minOffset = await ResolveMinOffsetAsync(consumerGroup, conn, tx, cancellationToken);
 
-        Guid currentOffset = (currentOffsetObj != null)
-            ? (Guid)currentOffsetObj
+        long currentOffset = (currentOffsetObj != null)
+            ? (long)currentOffsetObj
             : await InitializeOffset(consumerGroup, minOffset, conn, tx, cancellationToken);
 
         return (currentOffset > minOffset) ? currentOffset : minOffset;
     }
 
-    private async Task<Guid> InitializeOffset(
+    /// <summary>
+    /// Translates a configured floor into the exclusive <c>msg_seq</c> boundary below it — the
+    /// seq of the last message that still sorts below the floor (0 when none) — once per consumer
+    /// group, and keeps the result cached in <see cref="PgOutboxConsumeSettings"/>. Runs inside
+    /// the advisory lock so two workers of the same group cannot resolve different floors.
+    /// <c>SqlLoadConsumerGroup</c> compares <c>msg_seq &gt; @offset</c> against this boundary, so
+    /// the first message at or above the floor is the first delivered (strict semantics, same set
+    /// the old UUID cursor picked with <c>msg_id &gt; @offset</c>).
+    /// </summary>
+    private async Task<long> ResolveMinOffsetAsync(
         ConsumerGroupIdentifier consumerGroup,
-        Guid minOffset,
+        NpgsqlConnection conn,
+        NpgsqlTransaction? tx,
+        CancellationToken cancellationToken)
+    {
+        var groupId = consumerGroup.ConsumerGroupId;
+
+        if (consumeSettings.TryGetResolvedFloor(groupId, out long cached))
+            return cached;
+
+        long floor = 0;
+
+        if (consumeSettings.TryGetGuidFloor(groupId, out Guid guidFloor))
+        {
+            using var command = new NpgsqlCommand(sql.SqlResolveMsgIdFloor, conn, tx);
+
+            command
+                .AddParamTenantId(consumerGroup.TenantId)
+                .AddParamMsgId(guidFloor);
+
+            floor = (long)(await command.ExecuteScalarAsync(cancellationToken) ?? 0L);
+        }
+        else if (consumeSettings.TryGetDateFloor(groupId, out DateTimeOffset dateFloor))
+        {
+            using var command = new NpgsqlCommand(sql.SqlResolveDateFloor, conn, tx);
+
+            command
+                .AddParamTenantId(consumerGroup.TenantId)
+                .AddParamFloorDate(dateFloor);
+
+            floor = (long)(await command.ExecuteScalarAsync(cancellationToken) ?? 0L);
+        }
+
+        consumeSettings.SetResolvedFloor(groupId, floor);
+        return floor;
+    }
+
+    private async Task<long> InitializeOffset(
+        ConsumerGroupIdentifier consumerGroup,
+        long minOffset,
         NpgsqlConnection conn,
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)

@@ -1,6 +1,6 @@
 # Sa.Outbox.PostgreSql — аудит приёма/передачи, SQL и оптимизаций памяти
 
-Дата: 2026-09-28 · Область: `src/Sa.Outbox.PostgreSql` (+ зависимости `Sa.Outbox`, `Sa.Data.PostgreSql`, `Sa.Partial.PostgreSql`)
+Дата: 2026-09-28 · Область: `src/Sa.Outbox.PostgreSql` (+ зависимости `Sa.Outbox`, `Sa.Data.PostgreSql`, `Sa.Partitional.PostgreSql`)
 
 ## 0. Что проверялось и как
 
@@ -159,7 +159,7 @@ RETURNING msg_id
 не влияют. `msg_id` остаётся везде, где он ключ связи (`SqlOutboxBuilder.cs:105` — джойн с `msg$`,
 `:235` — колонка task-таблицы, `:27-36` — BINARY COPY).
 
-**Что заденет вариант 3:**
+**Что заденет вариант 3** *(план на 2026-09-28; фактический состав реализации, включая expand по `__offset$` — ниже в «Реализовано 2026-09-29»)*:
 
 | Файл | Изменение |
 |---|---|
@@ -187,6 +187,70 @@ PostgreSQL подставит `DEFAULT` (нужно подтвердить те�
 **Риск:** высокий — меняется формат курсора. Нужны тесты: две пачки в пределах одной мс, два инстанса
 с разницей часов, backdated-публикация.
 
+### Реализовано 2026-09-29 (вариант 3, финальный состав)
+
+Курсор потребления переехал с `msg_id` (UUID v7) на `msg_seq` (BIGINT, порядок вставки, назначаемый базой).
+
+| Таблица | Колонка | Что сделано |
+|---|---|---|
+| `__msg$` | `msg_seq BIGSERIAL NOT NULL` | Порядок назначает база в момент COPY; `BulkInsertMsgCommand` **не** перечисляет колонку — подставляется `DEFAULT` (проверено пином `SqlBulkMsgCopy_DoesNotListMsgSeq`) |
+| `outbox` (`__task$`) | `msg_seq BIGINT NOT NULL DEFAULT 0` | Денормализованный seq рядом с `msg_id` — чтобы `RETURNING msg_seq` из `SqlLoadConsumerGroup` мог вернуть курсор по вставленным строкам |
+| `__offset$` | `group_offset UUID` (легаси) + `group_offset_seq BIGINT NOT NULL DEFAULT 0` (живой) | **Expand/contract по решению владельца** («оставь старый UUID — через версию удалим»): старая UUID-колонка сохранена для старых бинарей при раскатке, новая версия пишет/читает только `group_offset_seq`; падение UUID-колонки — отдельная контрактная версия |
+
+**Курсор живёт на `msg_seq` везде** (`SqlLoadConsumerGroup`): предикат `msg_seq > @offset`, `ORDER BY msg_seq`,
+`RETURNING msg_seq`, максимум пачки — `MAX(msg_seq)` возвращается как новый offset. Лоадер работает с `long`:
+`group_offset_seq` читается через `GetInt64`, offset-параметр — `bigint`.
+
+**Флоры (публичный API сохранён).** `WithMinOffset(string, Guid)` и `WithMinOffset(string, DateTimeOffset)`
+остаются; `GetMinOffset` удалён. Каждый флор при первом использовании (внутри транзакции с advisory-локом)
+разрешается в **эксклюзивную границу `msg_seq`** и кэшируется на группу:
+
+```sql
+-- флор по v7-id:  последний msg_seq, чей msg_id ещё сортируется ниже флора
+SELECT COALESCE(MAX(msg_seq), 0)
+FROM __msg$
+WHERE tenant_id = @tnt AND msg_id < @msg_id;
+-- флор по дате:  то же по msg_created_at (unix-секунды)
+... AND msg_created_at < @flr_date;
+```
+
+Граница эксклюзивная (строгий `<`), а не инклюзивная: `MAX(...) WHERE key >= floor` дал бы off-by-one —
+сообщение, ровно совпавшее с флором, было бы пропущено, а при пустой выборке `MIN` схлопнулся бы в 0
+и доставил бы всё. Эксклюзивная форма сохраняет семантику старого строгого `msg_id > @offset` в точности.
+
+**Upgrade.** Свежие БД получают полную схему из `All()`; существующие догоняются идемпотентными
+`ADD COLUMN IF NOT EXISTS` из post-хука Partitional (строки `SqlAddMsgSeqColumnToMsgTable`,
+`SqlAddMsgSeqColumnToTaskTable`, `SqlAddGroupOffsetSeqColumnToOffsetTable`) — повторный проход миграции
+безопасен, на свежей БД это no-op. Хуки меняют только схему; **данные** наполненного деплоя
+переносятся вручную:
+
+```sql
+-- 1) msg_seq на старых строках msg (если важен порядок: перенумеровать по msg_id,
+--    а не полагаться на физический порядок бэкфилла BIGSERIAL);
+-- 2) затравка нового курсора: иначе новая колонка = 0 и история пере-доставится целиком.
+UPDATE __offset$ o
+SET group_offset_seq = COALESCE((
+  SELECT MAX(t.msg_seq) FROM outbox t
+  WHERE t.consumer_group = o.consumer_group AND t.tenant_id = o.tenant_id
+), 0);
+```
+
+**Что НЕ вошло:** детектор рассинхрона «вставлено 0 строк при `msg_created_at < now - batchingWindow`»
+(п. «Дополнительно» выше) — отдельным решением; полная подсистема версионирования DDL из C14 —
+пока закрыта идемпотентными хуками (см. C14).
+
+**Тесты (зелёные, 2026-09-29):** `SqlOutboxBuilderTests` — пины на SQL-форму (`msg_seq > @offset`,
+`RETURNING msg_seq`, обе колонки `__offset$`, апгрейд-SQL, флор-резолверы, COPY без `msg_seq`);
+`DeliveryCursorMsgSeqTests.SecondPublish_WithIdsBelowCursor_IsStillDelivered` — скошенные часы
+(пачка B с `msg_id` на 3 ч **раньше** пачки A всё равно доставлена, seq [1..5], курсор = 5);
+`DeliveryMinOffsetFloorTests.FloorByDate_SkipsMessagesBeforeIt` — флор по дате пропускает сообщение
+ниже границы и доставляет ровно одно. Полный прогон решения: 1351 тест, 0 failed.
+
+**Находки по ходу:** (1) флор-резолвер был спроектирован как инклюзивный `MIN(seq) WHERE >= floor` —
+схлопывание в 0 на пустой выборке (доставка всего) + off-by-one по самому полу; исправлено на
+эксклюзивную границу до мержа. (2) В тесте флора `new DateTimeOffset(sec, TimeSpan.Zero)` трактует
+секунды как **тики** (флор = год 0001 → всё доставлено); заменено на `DateTimeOffset.FromUnixTimeSeconds`.
+
 ---
 
 ## C3 — КРИТИЧНО (производительность, деградация со временем). Завершённые задачи не удаляются и не индексируются
@@ -200,7 +264,7 @@ PostgreSQL подставит `DEFAULT` (нужно подтвердить те�
 При этом фильтр выбора в `SqlLockAndSelect` (`:62-64`) — `delivery_status_code IN (0,100,103,104,400)`.
 Завершённые статусы в него **не входят** ⇒ каждая задача, попадая в `LIMIT @lim` по `ORDER BY task_id`,
 требует, чтобы планировщик её **пропустил**. Единственный индекс task-таблицы — PK `(task_id, task_created_at)`
-(`Sa.Partial.PostgreSql/SqlBuilder/SqlTemplate.cs:62-65`); вторичных индексов модуль не создаёт вовсе.
+(`Sa.Partitional.PostgreSql/SqlBuilder/SqlTemplate.cs:62-65`); вторичных индексов модуль не создаёт вовсе.
 
 Следствие: стоимость одного опроса **пропорциональна числу уже завершённых задач в текущей суточной
 партиции**, а не размеру очереди. К вечеру при потоке 10 msg/s это ~300k строк, которые каждый опрос
@@ -416,7 +480,7 @@ FNV), и перейти на двухаргументную форму `pg_advis
 **Где:** весь репозиторий — `grep 'ALTER TABLE' src/` даёт **0 совпадений**.
 
 Вся DDL генерируется как `CREATE TABLE IF NOT EXISTS`: корневые таблицы и партиции — в
-`Sa.Partial.PostgreSql/SqlBuilder/SqlTemplate.cs:62,101,135`; вспомогательные `__type$` и `__offset$` —
+`Sa.Partitional.PostgreSql/SqlBuilder/SqlTemplate.cs:62,101,135`; вспомогательные `__type$` и `__offset$` —
 в `SqlOutboxBuilder.cs:132,170`, выполняемые через `AddPostSql` (`Partitional/Setup.cs:28,36`).
 
 Следствие: **библиотека никогда не меняет форму существующей таблицы.** Уже задеплоенная система
@@ -443,6 +507,14 @@ DDL, но требует корректного `DELETE` в DML — там пр�
 **Риск:** высокий, но это инфраструктурная задача, а не правка SQL. Пока её нет, C2/C3 нельзя
 мержить как «просто» — нужен либо релизный скрипт, либо эта подсистема.
 
+**Статус 2026-09-29:** полная подсистема версионирования **не** построена. Для C2 использован
+прагматичный поднабор — идемпотентные `ADD COLUMN IF NOT EXISTS`-хуки (`SqlAddMsgSeqColumnToMsgTable`,
+`SqlAddMsgSeqColumnToTaskTable`, `SqlAddGroupOffsetSeqColumnToOffsetTable`), которые выполняются в
+post-хуке `AddPostSql` (`Partitional/Setup.cs`) на каждом проходе миграции и безопасны при повторе.
+Этого достаточно для *схемы*; перенос *данных* наполненного деплоя остаётся ручным документированным
+шагом (см. C2). Версионирование DDL (`__schema$`-таблица с номером версии) — открытая задача на
+следующую смену схемы.
+
 ---
 
 ## C15 — СУЩЕСТВЕННО. Механизм курсора не покрыт тестами вообще
@@ -465,7 +537,7 @@ DDL, но требует корректного `DELETE` в DML — там пр�
 
 Порядок — по соотношению «эффект / риск».
 
-## M1 — `StringBuilderPooledObjectPolicy` настроен так, что пул не работает вообще
+## M1 — `StringBuilderPooledObjectPolicy` настроен так, что пул не работает вообще — ЗАКРЫТО (2026-09-29)
 
 **Где:** `SqlBuilder/Setup.cs:15-23`
 
@@ -474,9 +546,9 @@ var policy = new StringBuilderPooledObjectPolicy() { InitialCapacity = 1024 };
 ```
 
 `MaximumRetainedSize` **не задан**, а дефолт в BCL — `4 * 1024 = 4096` байт. `BuildDeliveryInsertValues`
-(`SqlOutboxBuilder.cs:370-401`) и `BuildErrorInsertValues` (`:284-310`) строят VALUES-список на 512 строк
-≈ 30–60 КБ ⇒ **каждый** построитель больше 4 КБ ⇒ `objectPool.Return(sb)` молча его выбрасывает, а
-`Get()` каждый раз выделяет новый `StringBuilder(1024)`, который затем 5–6 раз дорастает с копированием.
+(`SqlOutboxBuilder.cs:370-401`) и `BuildErrorInsertValues` (`:284-310`) строят VALUES-список на строку чанка
+(до 1024, см. M8/Q4) ≈ 30–120 КБ ⇒ **каждый** построитель больше 4 КБ ⇒ `objectPool.Return(sb)` молча его
+выбрасывает, а `Get()` каждый раз выделяет новый `StringBuilder(1024)`, который затем 5–6 раз дорастает с копированием.
 
 При этом пул на hot path **не используется вовсе**: `FinishDeliveryCommand.cs:11` и
 `ErrorDeliveryCommand.cs:13` пропускают SQL через `SqlCacheSplitter`, который мемоизирует по длине —
@@ -487,9 +559,14 @@ var policy = new StringBuilderPooledObjectPolicy() { InitialCapacity = 1024 };
 `new StringBuilder(EstimateCapacity(count))` (оценка: `count * 48`). Минус ~40 строк кода, исчезает
 ложная «оптимизация». Альтернатива (если хочется оставить пул) — задать `MaximumRetainedSize = 128 * 1024`.
 
+**Сделано:** пул удалён целиком — регистрации выпилены из `SqlBuilder/Setup.cs`, ctor
+`SqlOutboxBuilder(PgOutboxTableSettings)` без `ObjectPool`; `BuildErrorInsertValues` — `new StringBuilder(count * 48)`,
+`BuildDeliveryInsertValues` — `new StringBuilder(count * 96)` (8 индексированных + 3 общих имени на строку —
+≈ 90–96 байт, оценка-флор, дорастание амортизировано). `SqlOutboxBuilderTests.Create()` обновлён.
+
 ---
 
-## M2 — `WritePayload`: стрим на каждое сообщение + двойное копирование payload
+## M2 — `WritePayload`: стрим на каждое сообщение + двойное копирование payload — ЗАКРЫТО (2026-09-29)
 
 **Где:** `Commands/BulkInsertMsgCommand.cs:63-100`
 
@@ -549,9 +626,17 @@ private void WriteRows<TMessage>(NpgsqlBinaryImporter writer, long payloadTypeCo
 
 Эффект: для батча из 16 сообщений — 1 аллокация вместо 16, и −1 копия payload на сообщение.
 
+**Сделано (с поправкой на Npgsql 10):** реализована нижняя половина — один `RecyclableMemoryStream` на батч
+(`WriteRows` берёт поток до цикла; `WritePayload` делает `SetLength(0)` → сериализация в тот же буфер →
+`Position = 0`; `writer.Write(stream, Bytea)` читает ровно текущий payload). Span-вариант
+`writer.Write(stream.GetBuffer().AsSpan(0, len), Bytea)` **невозможен**: у `NpgsqlBinaryImporter` в Npgsql 10.0.3
+только generic `Write<T>(T, NpgsqlDbType)` (проверено по `Npgsql.xml` пакета, `Write(ReadOnlySpan<byte>)`
+отсутствует) — write остался стрим-в-writer, но `GetStream` теперь 1 на батч вместо 1 на сообщение, и буфер
+перематывается, а не пересоздаётся. Выигрыш «16 → 1» получен; «−1 копия payload» внутри Npgsql не подтверждается.
+
 ---
 
-## M3 — `NpgsqlOutboxReader`: 17 lookup'ов по имени колонки на строку
+## M3 — `NpgsqlOutboxReader`: 17 lookup'ов по имени колонки на строку — ЗАКРЫТО (2026-09-29)
 
 **Где:** `Commands/NpgsqlOutboxReader.cs:20-63`, вызывается из `StartDeliveryCommand.cs:53-111`
 
@@ -565,6 +650,12 @@ private void WriteRows<TMessage>(NpgsqlBinaryImporter writer, long payloadTypeCo
 кешировать **нельзя** (reader переиспользуется), но кешировать ординалы один раз на `NpgsqlCommand` — можно и нужно.
 
 Побочно: `NpgsqlOutboxReader` — `internal`, поэтому изменение сигнатуры не ломает публичный API.
+
+**Сделано:** `TaskQueueReader.Ordinals` — `readonly record struct` из 14 `int` + статический `Capture`
+(по `TableFields`, `reader.GetOrdinal`); все 14 аксессоров `TaskQueueReader` переведены на `Get*(reader, in Ordinals)`.
+`StartDeliveryCommand.ExecuteFill` захватывает ординалы на первой строке через замыкание (`bool haveOrdinals`):
+команда — singleton, но колбэк `ExecuteReader` синхронный на строку и локали живут в замыкании вызова, поэтому
+гонок нет. `MsgReader`/`TypeReader` (однострочные чтения, 3 аксессора) намеренно не тронуты.
 
 ---
 
@@ -588,9 +679,13 @@ TMessage payload = serializer.Deserialize<TMessage>(stream)!;
 Это требует расширения `IOutboxMessageSerializer` новым перегрузками (см. R3 ниже) — поэтому
 это отдельная, необязательная оптимизация; M3 и M2 дают больше при меньшем риске.
 
+**Статус:** отложен по дизайну — единственный оставшийся пункт этапа 4; требует расширения публичного
+`IOutboxMessageSerializer` (R3) и обоснован профилировщиком: средний риск против небольшого выигрыша
+на фоне уже закрытых M2/M3.
+
 ---
 
-## M5 — `ErrorDeliveryCommand`: текст ошибки собирается дважды
+## M5 — `ErrorDeliveryCommand`: текст ошибки собирается дважды — ЗАКРЫТО (2026-09-29)
 
 **Где:** `Commands/ErrorDeliveryCommand.cs:66-86, 113-147`
 
@@ -611,9 +706,14 @@ internal readonly record struct ErrorRow(Exception Exception, ErrorInfo Info, st
 Композиция и хеш считаются один раз в `GroupByException`, `Fill` берёт `row.Message`. Экономия:
 до 50% CPU на пути записи `__error$` и минус N `StringBuilder` на батч. Риск: нулевой (внутримний тип).
 
+**Сделано:** `ErrorRow` расширен до `(Exception Exception, string ErrorMessage, ErrorInfo Info)`;
+`GroupByException` композирует `GetErrorMessage` один раз, хеширует готовую строку
+(`errorMessage.GetMurmurHash3()`) и кладёт её в `ErrorMessage`; `Fill` пишет `row.ErrorMessage`.
+`GetErrorMessageHash(Exception)` оставлен как тест-пин (в производственном пути больше не используется).
+
 ---
 
-## M6 — `OutboxPartInfo[]` + `HashSet` на каждый publish
+## M6 — `OutboxPartInfo[]` + `HashSet` на каждый publish — ЗАКРЫТО (2026-09-29)
 
 **Где:** `Services/Plug/OutboxBulkWriter.cs:18-19`, `Services/OutboxPartRepository.cs:36-53`
 
@@ -647,9 +747,15 @@ public async Task<int> EnsureParts(string table, IEnumerable<OutboxPartInfo> par
 `Contains` на коротком списке (обычно 1–3 элемента) дешевле `HashSet`, и параллельный `EnsureParts`
 убирает последовательные round trips из M7/C7.
 
+**Сделано:** `OutboxPartRepository.EnsureParts` дедуплицирует по `(StartOfDay(CreatedAt), TenantId, Part)` —
+`HashSet` на вызов вместо `Distinct()` по record'у с точным `CreatedAt` (в `ReturnDelivery` ключи уже приходят
+дедуплицированными из M7; набор здесь — защита для остальных путей, `List.Contains` из черновика не понадобился).
+Параллельность: `EnsureMsgParts`+`EnsureTaskParts` в rent-пути и `EnsureDeliveryParts`+`EnsureErrorParts` в
+`ReturnDelivery` — оба плеча `Task.WhenAll` (независимые DDL на разных таблицах).
+
 ---
 
-## M7 — `ReturnDelivery`: три линейных прохода с аллокациями по батчу
+## M7 — `ReturnDelivery`: три линейных прохода с аллокациями по батчу — ЗАКРЫТО (2026-09-29)
 
 **Где:** `Services/Plug/OutboxDeliveryManager.cs:37-91`
 
@@ -662,35 +768,43 @@ IOutboxContextOperations<TMessage>[] errs = messages.Span.SelectWhere(m => m, m 
 var dates = errs.Select(c => c.DeliveryResult.CreatedAt);                                     // :85 IEnumerable, аллоцируется лениво
 ```
 
-Три отдельных прохода, три аллокации на батч в 16–512 элементов. `dates` затем ещё раз
+Три отдельных прохода, три аллокации на батч в 16–4096 элементов (чанки до `DefaultMaxLen`). `dates` затем ещё раз
 `.StartOfDay().Distinct()` в `OutboxPartRepository.cs:24`. Объединить в один проход,
 собирая дедуплицированные `day`-ключи в один переиспользуемый `HashSet<(int,string,DateTimeOffset)>`.
 
----
-
-## M8 — `CachedParamNames<T>` держит 4608 строк всегда
-
-**Где:** `Sa.Data.PostgreSql/DbCommandExtensions.cs:57-101`, `Commands/NpgsqlCommandExtension.cs:115-131`
-
-`CreateCachedArrays(9 префиксов, 512)` = **4608 объектов `string`** + 9 массивов, живущих весь процесс
-(~200–300 КБ вместе со ссылками), плюс `ReadOnlyDictionary` поверх `Dictionary`.
-
-Плюс: `MaxIndex = 512` в `BatchParams` (`:117`) и `maxLen = 512` в `SqlCacheSplitter.GetSql`
-(`SqlCacheSplitter.cs:41`) — **два несвязанных литерала**, а комментарий в `SqlCacheSplitter.cs:14-15`
-(«~16 SQL параметров на элемент») фактически неверен: в `SqlFinishDelivery` на строку приходится
-8 индексированных + 4 общих параметра.
-
-**Исправление:**
-- вынести `public const int BatchSize = 512;` в одно место и использовать в обоих;
-- поправить комментарий на фактические 13 параметров;
-- 4608 кешированных строк — разменная монета против `string.Format` на каждый параметр; оставить как есть,
-  но **задокументировать** в `DbCommandExtensions`, иначе следующий читатель удалит «лишний» кеш.
-- консервативный лимит можно поднять: 512 × 13 = 6656 ≪ 65535, реальный потолок ~5000 строк на statement.
-  Это уменьшит число round trips при больших батчах. (Опционально, отдельным решением — Q4.)
+**Сделано:** `ReturnDelivery` — один `foreach` по `messages.Span`: `List<IOutboxContextOperations<TMessage>>? errs`
+(лениво, через `??=`), `HashSet<OutboxPartInfo>` delivery-партиций (с `StartOfDay` в `with`, M6) и
+`HashSet<DateTimeOffset>` error-дней. Затем два ensure-таска через `Task.WhenAll` (M6) и один
+`errorCmd.Execute(errs.ToArray(), ct)` — ковариация массива в `ReadOnlyMemory<IOutboxContext>` (тот же вызов, что
+и раньше, теперь с одним массивом вместо трёх структур). `GetErrors` удалён.
 
 ---
 
-## M9 — `SqlOutboxBuilder`: 12 интерполированных строки на инстанс
+## M8 — `CachedParamNames<T>` держит 4608 строк всегда — ЗАКРЫТО (2026-09-29)
+
+**Где:** `Sa.Data.PostgreSql/DbCommandExtensions.cs:57-101`, `Commands/NpgsqlCommandExtension.cs:142-158`
+
+`CreateCachedArrays(9 префиксов, MaxIndex)` = **9 × MaxIndex объектов `string`** + 9 массивов, живущих весь
+процесс (~200–500 КБ вместе со ссылками), плюс `ReadOnlyDictionary` поверх `Dictionary`.
+
+Плюс: `MaxIndex` в `BatchParams` и `maxLen` в `SqlCacheSplitter.GetSql` — **два несвязанных литерала**, а
+комментарий в `SqlCacheSplitter.cs` («~16 SQL параметров на элемент») фактически неверен: в `SqlFinishDelivery`
+на строку приходится 8 индексированных + 4 общих параметра, в `SqlError` — 4. Замер на реальном SQL закреплён
+пином `SqlOutboxBuilderTests.BulkStatements_ParameterPerRowRatio_Is8And4_Not16` (4100 и 2048 параметров при
+512 строках).
+
+**Исправление (сделано):**
+- единая `public const int SqlCacheSplitter.DefaultMaxLen = 1024` + `BatchParams.MaxIndex => DefaultMaxLen`
+  (связка констант — не косметика, а инвариант: индекс ≥ MaxIndex тихо падает на интерполяцию имён
+  параметров; общая константа делает расхождение невозможным по построению; связка закреплена тестом
+  `SqlCacheSplitterTests.DefaultMaxLen_Is1024_AndDrivesTheParameterNameCache`);
+- комментарий переписан на фактические 8+4/N и 4 параметра на строку (выбор значения — Q4);
+- кеш имён (9216 строк при 1024) задокументирован в `DbCommandExtensions` — «разменная монета против
+  интерполяции на каждый параметр», чтобы следующий читатель не удалил «лишний» кеш.
+
+---
+
+## M9 — `SqlOutboxBuilder`: 12 интерполированных строки на инстанс — ЗАКРЫТО (2026-09-29)
 
 **Где:** `SqlBuilder/SqlOutboxBuilder.cs:25-269`
 
@@ -699,6 +813,10 @@ var dates = errs.Select(c => c.DeliveryResult.CreatedAt);                       
 любой переход на `Scoped`/`Transient` даст ~12 строк на резолв. Если планируется, вынести в
 `static readonly` + кеш по `(schema, tableNames)` — либо оставить комментарий, что класс обязан быть singleton.
 
+**Сделано:** XML-remark на классе `SqlOutboxBuilder` — «зарегистрирован singleton (`SqlBuilder/Setup.cs`), шаблоны
+строятся в конструкторе из настроек; смена регистрации на scoped/transient = пересборка ~20 шаблонов на резолв —
+требует выноса шаблонов в static + кеша по (schema, table)».
+
 ---
 
 ## Сводная таблица оптимизаций
@@ -706,26 +824,35 @@ var dates = errs.Select(c => c.DeliveryResult.CreatedAt);                       
 | # | Что | Место | Эффект | Риск |
 |---|---|---|---|---|
 | M1 | Убрать мёртвый `ObjectPool<StringBuilder>` | `SqlBuilder/Setup.cs:15-23` | ~40 строк кода, -1 класс, пул не работал | нулевой |
-| M2 | 1 стрим на батч + `Write(ReadOnlySpan<byte>)` | `BulkInsertMsgCommand.cs:93-100` | 16→1 аллокация, −1 копия payload/сообщение | низкий |
+| M2 | 1 стрим на батч (span-оверлоада в Npgsql 10 нет) | `BulkInsertMsgCommand.cs:63-100` | 16→1 аллокация; −1 копия не подтверждена | низкий |
 | M3 | Кеш ординалов колонок | `NpgsqlOutboxReader.cs` | −17 lookup/строку → 0 | низкий |
 | M5 | Текст ошибки один раз | `ErrorDeliveryCommand.cs:60,124` | −50% CPU на `__error$` | нулевой |
 | M6 | Партиционный ключ без `CreatedAt` + параллельный `EnsureParts` | `OutboxBulkWriter.cs:18`, `OutboxPartRepository.cs:36-53` | −3 аллокации/publish, −N round trips | низкий |
 | M7 | Один проход вместо трёх | `OutboxDeliveryManager.cs:44-85` | −3 аллокации/батч | нулевой |
 | M4 | `Deserialize` из спана вместо `GetStream` | `StartDeliveryCommand.cs:98-103` | −1 объект/сообщение | средний (нужен новый API сериализатора) |
-| M8 | Единая константа `512`, правка комментария | `NpgsqlCommandExtension.cs:117`, `SqlCacheSplitter.cs:41` | гигиена, защита от тихой деградации | нулевой |
+| M8 | Единая константа `DefaultMaxLen=1024`, честный комментарий (8+4/N, 4) | `NpgsqlCommandExtension.cs:142`, `SqlCacheSplitter.cs` | гигиена + подъём потолка чанка (Q4): 1024-батчи 2→1 round trip | нулевой |
 | M9 | Комментарий «обязан быть singleton» | `SqlOutboxBuilder.cs` | предотвращает регрессию | нулевой |
+
+Статусы на 2026-09-29: **закрыты M1, M2, M3, M5, M6, M7, M8, M9**; **M4 отложен** (нужен новый API
+`IOutboxMessageSerializer`, см. R3). `Sa.Outbox.PostgreSqlTests` — 104/104 зелёные.
 
 ---
 
 # Часть III. Что делать и в каком порядке
 
-## Этап 1 — корректность (без изменения схемы)
+## Этап 1 — корректность (без изменения схемы) — выполнено 2026-09-28
 
-1. **C5** — логировать несовпадение `affected < batch` в `FinishDeliveryCommand`. 3 строки.
-2. **C4** — `SELECT DISTINCT tenant_id`. 1 строка, максимальный эффект на серверную память.
-3. **C6** — убрать/осмыслить два `ON CONFLICT DO NOTHING`.
-4. **C11**, **C9**, **C12** — мелочи, чистка.
-5. **C8** — переименовать параметры + комментарий-таблица семантики.
+1. **C5** — логировать несовпадение `affected < batch` в `FinishDeliveryCommand`. 3 строки. ✓
+   (`FinishDeliveryCommand.cs:48-57` + `LogStolenBatch`, Warning, EventId 3008; тест `DeliveryStolenBatchTests`)
+2. **C4** — `SELECT DISTINCT tenant_id`. 1 строка, максимальный эффект на серверную память. ✓
+   (`SqlSelectTenant`; тест плана `SqlSelectTenantPlanTests`)
+3. **C6** — убрать/осмыслить два `ON CONFLICT DO NOTHING`. ✓ (`__log$`-вставка без `ON CONFLICT`,
+   комментированная в `SqlFinishDelivery`; `ON CONFLICT` остался только там, где он load-bearing — `SqlInsertType`)
+4. **C11**, **C9**, **C12** — мелочи, чистка. ✓ (`SqlInsertOffset` удалён как мёртвый код;
+   `delivery_attempt`: исключение для `Postpone` (103) закреплено комментарием-дизайн-решением;
+   `delivery_created_at = 0` → `DateTimeOffset.MinValue` в `NpgsqlOutboxReader`)
+5. **C8** — переименовать параметры + комментарий-таблица семантики. ✓ (`@win_from`/`@win_to`/`@now`,
+   таблица семантики — в шапке `SqlOutboxBuilder.cs:57-71`; тест `DeliveryBatchingWindowTests`)
 
 ## Этап 2 — индексы (решает C3)
 
@@ -738,9 +865,12 @@ var dates = errs.Select(c => c.DeliveryResult.CreatedAt);                       
 
 8. **C14 + C15 (первыми)** — тесты, падающие на текущем коде, и подсистема миграций DDL.
    Без них пункты 9–11 недоказуемы: нечем подтвердить, что фикс что-то исправил.
+   → C15 закрыт тестами C2 (2026-09-29); C14 закрыт частично (идемпотентные ADD COLUMN-хуки, см. C14).
 9. **C1** — `DELETE` зависших задач в том же statement + счётчик в лог. *(Q1: вариант a)*
-10. **C2** — `msg_seq BIGSERIAL` на `__msg$`, `group_offset UUID → BIGINT`, курсор переезжает
-    на `msg_seq`. Публичный API `WithMinOffset` сохраняется. *(Q2: вариант 3)*
+10. **C2** — `msg_seq BIGSERIAL` на `__msg$`, курсор переезжает на `msg_seq`,
+    `__offset$`: легаси `group_offset` UUID + живой `group_offset_seq` BIGINT (expand).
+    Публичный API `WithMinOffset` сохраняется. *(Q2: вариант 3)* — **реализовано 2026-09-29**
+    (пины SQL-формы + 2 интеграционных теста скошенных часов и флора; полный прогон 1351/0).
 11. **C3 (удаление)** — `DELETE` успешно завершённых task-строк с сохранением `task_id` в `__log$`.
     Перед удалением — `ANALYZE` партиции. *(Q3: да)*
 
@@ -754,12 +884,16 @@ var dates = errs.Select(c => c.DeliveryResult.CreatedAt);                       
 
 ## Тесты, которые обязательны для этапов 1–3
 
-- `C1`: задача без сообщения (удалить строку из `msg$`) → consumer group продолжает доставлять.
+- `C1`: задача без сообщения (удалить строку из `msg$`) → consumer group продолжает доставлять. — **открыто**
 - `C2`: две publish-пачки в пределах одной мс; backdated-публикация; два инстанса со сдвинутыми часами
   (через подменённый `TimeProvider`) → ни одного потерянного сообщения.
-- `C3`: 50k завершённых задач в партиции + план `SqlLockAndSelect` — время и buffers не растут.
-- `C5`: батч, чей `LockDuration` истёк во время `Consume` → в логе `Warning`, повторная доставка.
-- `C8`: `BatchingWindow = 0` → захват задачи сразу, без сдвига.
+  — **backdated/сдвинутые часы закрыты** (`DeliveryCursorMsgSeqTests.SecondPublish_WithIdsBelowCursor_IsStillDelivered`,
+  `DeliveryMinOffsetFloorTests.FloorByDate_SkipsMessagesBeforeIt`, оба 2026-09-29);
+  **две пачки в пределах одной мс — остаётся открытым** (последовательный порядок через seq покрыт,
+  но явного same-millisecond-теста нет).
+- `C3`: 50k завершённых задач в партиции + план `SqlLockAndSelect` — время и buffers не растут. — **открыто**
+- `C5`: батч, чей `LockDuration` истёк во время `Consume` → в логе `Warning`, повторная доставка. — **закрыт** (`DeliveryStolenBatchTests`)
+- `C8`: `BatchingWindow = 0` → захват задачи сразу, без сдвига. — **закрыт** (`DeliveryBatchingWindowTests`)
 
 ---
 
@@ -774,6 +908,10 @@ var dates = errs.Select(c => c.DeliveryResult.CreatedAt);                       
 
 **Q2. Модель курсора (C2)?** → **вариант 3: `msg_seq BIGSERIAL` на `__msg$`.** Разбор всех четырёх
 вариантов и разбор радиуса поражения — в секции C2. Публичный API `WithMinOffset` сохраняется.
+**Реализован 2026-09-29** (см. «Реализовано 2026-09-29» в C2): окончательная форма — expand по
+`__offset$` (легаси `group_offset` UUID + живой `group_offset_seq` BIGINT, UUID-колонка убирается
+отдельной контрактной версией), флоры транслируются в эксклюзивную границу `msg_seq` и кэшируются;
+`GetMinOffset` удалён.
 
 **Q3. Удалять ли успешно завершённые строки task (C3)?** → **да**, с `task_id` в `__log$` (уже есть,
 `SqlOutboxBuilder.cs:334`) и `ANALYZE` партиции. Потеря «поиска по `task_id` в живой таблице» приемлема:
@@ -785,11 +923,18 @@ var dates = errs.Select(c => c.DeliveryResult.CreatedAt);                       
 
 ## Открыто — нужно ваше решение
 
-**Q4. Поднимать ли потолок батча (M8)?** 512 строк × 13 параметров = 6656 при лимите PostgreSQL 65535.
-Подъём до ~4000 сократит число round trips на больших батчах в 8 раз, но раздует SQL (кеш `SqlCacheSplitter`
-разрастётся с ~50 до ~260 ключей, ~260 КБ — приемлемо). Либо оставить 512 для предсказуемости.
-Моя позиция: оставить 512. Выигрыш 8 round trips на больших батчах не окупает 5× рост кеша SQL,
-а текущее значение заведомо ниже потолка — то есть не является узким местом.
+**Q4. Поднимать ли потолок батча (M8)?** — **РЕШЕНО 2026-09-29: поднят до 1024** (`SqlCacheSplitter.DefaultMaxLen`,
+одна константа на оба места, см. M8).
+
+Проверка эффективности по реальному SQL (а не по мифическим «~16 параметров»): на строку `SqlFinishDelivery`
+приходится 8 индексированных + 4 общих параметра, `SqlError` — 4 (пин `BulkStatements_ParameterPerRowRatio_Is8And4_Not16`).
+При 512 строках finish-чанк связывает 8×512+4 = **4100** параметров (6.3% лимита 65535), error — **2048** (3.1%);
+потолок одного statement — (65535−4)/8 ≈ **8190** строк. Т.е. 512 оставлял ~16× неиспользованного запаса и стоил
+потребителям `MaxBatchSize=1024` (shipped-пресет, реально гоняется в `OutboxParallelMessagingTests`) **два** round
+trip'а за цикл доставки. При 1024: 8×1024+4 = **8196** параметров (12.5% лимита, 8× запас), пресет 1024 — один
+statement. Цена подъёма: кеш имён параметров 4608→9216 строк и SQL-кеш ≤47→79 ключей — доли МБ. 4096 (50% лимита,
+кеш ~2 МБ) не выбран: выигрыш только для батчей >1024, которых нет в shipped-пресетах; 8192 уже не влезает
+(65540 > 65535).
 
 **Q5. Нужен ли `EXPLAIN`-бенчмарк как обязательный шаг?** Docker на машине есть, так что я могу его
 запустить и снять реальные цифры вместо `[не проверено]`. Осталось решить, включать ли это в объём
@@ -802,3 +947,105 @@ var dates = errs.Select(c => c.DeliveryResult.CreatedAt);                       
 чтение → удалить старую) или допустима одномоментная миграция в окно обслуживания? Моя позиция:
 expand/contract, потому что иначе раскатка новой версии библиотеки требует остановки доставки на
 всех инстансах разом.
+
+**Статус 2026-09-29 — expand/contract применён к `__offset$`:** обе колонки (`group_offset` UUID и
+`group_offset_seq` BIGINT) живут одновременно, старые бинари продолжают читать UUID-колонку при
+раскатке, контрактное удаление — отдельной версией. Для `__msg$`/`__task$` `ADD COLUMN IF NOT EXISTS`
+выполняется идемпотентным хуком автоматически (на свежих БД — no-op), но бэкфилл значений на
+наполненной БД — ручной документированный шаг (SQL в C2, «Реализовано 2026-09-29»). Одномоментная
+миграция с переписыванием данных не используется.
+
+---
+
+# Статус реализации (хронология)
+
+Всё ниже — изменения, внесённые по этому документу. Git-состояние: правки не коммитились, рабочее
+дерево не тронуто командами git.
+
+## 2026-09-28 — этап 1: корректность без изменения схемы
+
+| Пункт | Что сделано | Где |
+|---|---|---|
+| C4 | `SqlSelectTenant` — `SELECT DISTINCT tenant_id` вместо оконной функции | `SqlBuilder/SqlOutboxBuilder.cs` (`SqlSelectTenant`) |
+| C5 | Учёт «украденного» батча: `total != messages.Length` → `LogStolenBatch` (Warning, EventId 3008) | `Commands/FinishDeliveryCommand.cs:48-57` |
+| C6 | Убран бессмысленный `ON CONFLICT DO NOTHING` в `SqlFinishDelivery`; оставлен только там, где он load-bearing (`SqlInsertType`) | `SqlBuilder/SqlOutboxBuilder.cs` |
+| C8 | Семантика параметров окна разведена: `@win_from`/`@win_to`/`@now` + таблица семантики в шапке класса | `SqlBuilder/SqlParam.cs`, `SqlBuilder/SqlOutboxBuilder.cs:57-71` |
+| C9 | `delivery_attempt` — поведение подтверждено как дизайн-решение: инкремент на всех кодах, кроме `Postpone` (103); исключение закреплено комментарием «do not fix» | `SqlBuilder/SqlOutboxBuilder.cs:416-421` |
+| C11 | `SqlInsertOffset` удалён как мёртвый код (побайтовый дубликат `SqlInitOffset`, вдобавок синтаксически битый) | `SqlBuilder/SqlOutboxBuilder.cs` |
+| C12 | `delivery_created_at = 0` → `DateTimeOffset.MinValue` вместо `1970-01-01` | `Commands/NpgsqlOutboxReader.cs:72` |
+
+Тесты этапа 1 (все зелёные): `SqlSelectTenantPlanTests` (план `DISTINCT`), `DeliveryStolenBatchTests`
+(перехват батча → Warning + повторная доставка), `DeliveryBatchingWindowTests` (`BatchingWindow = 0`),
+`CleanupSettingsDefaultsTests`, `OutboxIdGeneratorTests` — плюс существующий набор
+(`ErrorDeliveryGroupingTests`, `SqlCacheSplitterTests[Concurrency]`, `Delivery*`-набор, `OutboxTests`,
+`OutboxTwoGroupsTests`, `OutboxTenantParallelismTests`, `OutboxPublisherTests`,
+`OutboxParallelMessagingTests`).
+
+## 2026-09-29 — C2: курсор на `msg_seq` (вариант 3, финальный состав)
+
+Полный состав — в секции C2 («Реализовано 2026-09-29»). Коротко:
+
+- **Схема**: `__msg$` `msg_seq BIGSERIAL NOT NULL` (порядок назначает база; COPY колонку не перечисляет);
+  `outbox` `msg_seq BIGINT NOT NULL DEFAULT 0` (денормализовано — чтобы `RETURNING msg_seq` работал);
+  `__offset$` — expand: легаси `group_offset` UUID + живой `group_offset_seq BIGINT NOT NULL DEFAULT 0`.
+- **Курсор**: `SqlLoadConsumerGroup` (INSERT/SELECT/`ORDER BY`/`RETURNING`/`MAX`) — на `msg_seq`;
+  лоадер читает `long` (`GetInt64`), `AddParamOffset(long)`, `IOutboxTaskLoader.LoadGroupResult(int, long)`.
+- **Флоры**: `WithMinOffset(Guid/DateTimeOffset)` сохранены, внутренний словарь — сырые флоры +
+  кэш разрешённых границ; резолвер — `COALESCE(MAX(msg_seq),0) WHERE tenant_id=@tnt AND key < @floor`
+  (**эксклюзивная** граница: off-by-one инклюзивного `MIN >= floor` был пойман до мержа); `GetMinOffset` удалён.
+- **Upgrade**: три идемпотентных `ADD COLUMN IF NOT EXISTS`-хука в post-хуке `Partitional/Setup.cs`
+  (msg, task, offset); перенос данных наполненного деплоя — ручной документированный шаг (SQL в C2).
+- **Публичный API**: без изменений (перегрузки `WithMinOffset` сохранены; курсор внутри — BIGINT).
+
+Тесты (зелёные): `SqlOutboxBuilderTests` — пины на SQL-форму (обе колонки `__offset$`, `SELECT group_offset_seq`,
+`msg_seq>@offset` / `,msg_seq` / `msg_id,\n msg_seq`, `RETURNING msg_seq`, апгрейд-SQL, флор-резолверы,
+`SqlBulkMsgCopy_DoesNotListMsgSeq`); `DeliveryCursorMsgSeqTests.SecondPublish_WithIdsBelowCursor_IsStillDelivered`
+(пачка B с id на 3 ч раньше пачки A доставлена; seq [1..5]; курсор 5); `DeliveryMinOffsetFloorTests.FloorByDate_SkipsMessagesBeforeIt`
+(флор по дате: сообщение ниже границы пропущено, доставлено одно). Полный прогон решения — **1351 тест, 0 failed, 5 skipped**.
+
+## 2026-09-29 — M8/Q4: потолок батча 512 → 1024
+
+Проверка эффективности батча 512 (по запросу): замер реального SQL показал, что на строку `SqlFinishDelivery`
+приходится 8 индексированных + 4 общих параметра (4100 при 512 строках, 6.3% лимита 65535), `SqlError` — 4 (2048,
+3.1%), потолок одного statement — ~8190 строк. Поток «~16 параметров на элемент» был неверен. Решение: поднять
+потолок чанка до 1024 единой константой — 1024-пресет (shipped, гоняется в `OutboxParallelMessagingTests`) больше
+не режется на два чанка, 8× запас до лимита сохраняется.
+
+- `Commands/SqlCacheSplitter.cs`: `public const int DefaultMaxLen = 1024` (+ честные комментарии: реальные
+  соотношения 8+4/N и 4, кеш ≤79 ключей, worst-case несколько МБ SQL-текста против прежних «~50 КБ»);
+- `Commands/NpgsqlCommandExtension.cs`: `BatchParams.MaxIndex => SqlCacheSplitter.DefaultMaxLen` (связка констант —
+  инвариант против тихой деградации кеша имён; `BatchParams` стал `internal` для теста);
+- `Sa.Data.PostgreSql/DbCommandExtensions.cs`: кеш имён параметров задокументирован (9 префиксов × MaxIndex =
+  9216 строк при 1024);
+- пины: `SqlOutboxBuilderTests.BulkStatements_ParameterPerRowRatio_Is8And4_Not16` (4100/2048),
+  `SqlCacheSplitterTests.DefaultMaxLen_Is1024_AndDrivesTheParameterNameCache`,
+  `GetSql_DefaultMaxLen_1024BatchIsOneChunk_1025Splits`; инвариант-тест сплиттера переведён на `DefaultMaxLen`,
+  арифметические тесты — на явный `maxLen: 512` (алгоритм, а не значение).
+
+## 2026-09-29 — M1–M9: этап 4 оптимизаций закрыт
+
+Закрыты M1, M2, M3, M5, M6, M7, M9 (M8 — блок выше в этой же дате; M4 отложен по дизайну — нужен новый API
+`IOutboxMessageSerializer`, см. R3). Полный прогон `Sa.Outbox.PostgreSqlTests` — 104/104, затем полный прогон решения.
+
+- **M1** — мёртвый `ObjectPool<StringBuilder>` выпилен (`SqlBuilder/Setup.cs`, ctor `SqlOutboxBuilder`);
+  `BuildErrorInsertValues` → `count*48`, `BuildDeliveryInsertValues` → `count*96`;
+- **M2** — один `RecyclableMemoryStream` на батч: `WritePayload` перематывает буфер (`SetLength(0)`), а не создаёт
+  стрим на сообщение. Span-запись невозможна — у `NpgsqlBinaryImporter` в Npgsql 10.0.3 только generic `Write<T>`
+  (проверено по `Npgsql.xml` пакета);
+- **M3** — `TaskQueueReader.Ordinals` (14 `int`, `readonly record struct`) + статический `Capture`; захват на
+  первой строке в `StartDeliveryCommand.ExecuteFill`, чтение по индексу;
+- **M5** — `ErrorRow(Exception, string ErrorMessage, ErrorInfo)`; текст композируется один раз в `GroupByException`,
+  хеш — от готовой строки; `Fill` пишет `row.ErrorMessage`;
+- **M6** — `EnsureParts` дедуплицирует по `(StartOfDay(CreatedAt), TenantId, Part)`;
+  rent-путь: msg+task `Task.WhenAll`; `ReturnDelivery`: delivery+error `Task.WhenAll`;
+- **M7** — `ReturnDelivery` — один проход: errs-список, delivery-партиции и error-дни собираются разом,
+  `GetErrors` удалён;
+- **M9** — XML-remark «обязан быть singleton» на `SqlOutboxBuilder`.
+
+## Осталось (открытые пункты)
+
+- C1 — DELETE зависших задач в том же statement (Q1, вариант a) + тест;
+- C3 — удаление завершённых task-строк + частичный индекс `ix_{task}_live` (этап 2) + `EXPLAIN`-бенч (Q5);
+- полная подсистема версионирования DDL (C14) — сейчас закрыта идемпотентными хуками;
+- явный same-millisecond-тест для C2 (две пачки в одну мс);
+- M4 — отложен по дизайну (нужен новый API `IOutboxMessageSerializer`, R3); M1–M3, M5–M9 закрыты (2026-09-29).

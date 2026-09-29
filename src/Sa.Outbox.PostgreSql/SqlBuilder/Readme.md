@@ -24,12 +24,14 @@ All templates are built at construction time using column/table names resolved f
 | `SqlCreateTypeTable` | Creates the type lookup table if missing |
 | `SqlSelectType` | Selects all rows from the type table |
 | `SqlInsertType` | Inserts a new type row with `ON CONFLICT DO NOTHING` |
-| `SqlCreateOffsetTable` | Creates the offset tracking table if missing |
-| `SqlInsertOffset` / `SqlSelectOffset` / `SqlUpdateOffset` / `SqlInitOffset` | CRUD operations for consumer-group offset tracking |
+| `SqlCreateOffsetTable` | Creates the offset tracking table if missing — carries both the legacy `group_offset` (UUID v7, kept for rolling upgrades, dropped by a later contract version) and the live `group_offset_seq` (BIGINT `msg_seq` cursor) |
+| `SqlSelectOffset` / `SqlUpdateOffset` / `SqlInitOffset` | Read / advance / lazily create the consumer-group offset. All three operate on `group_offset_seq` — the legacy UUID column is never read by this version. Offset creation is `INSERT ... ON CONFLICT DO NOTHING`, so `SqlInitOffset` covers both insert and no-op — a separate `SqlInsertOffset` existed once and was removed as dead code (it was also syntactically broken: a stray second `;`, which Npgsql would reject as `42601`) |
 | `SqlLockOffset` | Advisory lock (`pg_advisory_xact_lock`) for serialising offset writes |
 | `SqlLockAndSelect` | CTE-based lock-and-fetch: selects pending/recoverable tasks, marks them `Processing`, joins with the message table, and returns payloads. Uses `FOR UPDATE SKIP LOCKED` for safe concurrent consumption |
 | `SqlExtendDelivery` | Extends the lock TTL on a currently-processing task |
-| `SqlLoadConsumerGroup` | Bulk-inserts tasks from the message table into the task queue, returning the last inserted ID |
+| `SqlLoadConsumerGroup` | Bulk-inserts tasks from the message table into the task queue, returning copied-row count plus the max `msg_seq` of the inserted rows — the new consumption cursor (C2). ORDER BY / WHERE / RETURNING all live on `msg_seq`, never on the v7 id |
+| `SqlResolveMsgIdFloor` / `SqlResolveDateFloor` | Legacy floor translation (C2): turn a v7-id or date `WithMinOffset` floor into the exclusive `msg_seq` boundary — `MAX(msg_seq)` of messages that still sort below the floor, 0 when none. Cached per consumer group by the loader |
+| `SqlAddMsgSeqColumnToMsgTable` / `SqlAddMsgSeqColumnToTaskTable` / `SqlAddGroupOffsetSeqColumnToOffsetTable` | Idempotent C14-style upgrade hooks (`ADD COLUMN IF NOT EXISTS`, run from the Partitional post-hook on every migration pass): bring an existing deployment's schema up to the C2 shape. They only touch the schema — backfilling cursor values on a populated DB stays a recorded manual step |
 
 ### Dynamic templates (generated per-call)
 
@@ -53,7 +55,7 @@ Every parameter follows a short mnemonic alias stored in `SqlParam`:
 | `FromDate` / `ToDate` | `@frm` / `@to` | Time-range boundaries |
 | `NowDate` | `@now` | Server-side `NOW()` substitute |
 | `TransactId` | `@trn` | Transaction/session identifier |
-| `Offset` | `@offset` | Cursor position for pagination |
+| `Offset` | `@offset` | `msg_seq` cursor position (BIGINT, database-assigned insertion order) |
 | `Limit` | `@lim` | Max rows per batch |
 | `LockOffset` | `@lck_id` | Advisory-lock numeric ID |
 | `LockExpiresOn` | `@lck_on` | Lock expiry timestamp |
@@ -78,6 +80,7 @@ It also delegates to `AddPgOutboxSettings` to register table/column configuratio
 
 - **Pooled StringBuilder** — Dynamic multi-row value lists (errors, deliveries) use `ObjectPool<StringBuilder>` to avoid allocations during high-throughput batching.
 - **Advisory locking** — Offset writes are serialised via `pg_advisory_xact_lock` to prevent race conditions without heavy table-level locks.
+- **Cursor on `msg_seq`, not on the v7 id (C2)** — `msg_id` is minted by application clocks, so a skewed or backdated clock can make a new message sort *below* an already-advanced cursor; `msg_id > @offset` would skip it forever. `msg_seq` (BIGSERIAL) is assigned by the database at COPY time, so "newer row" and "larger seq" are the same thing by construction and the cursor can never pass a not-yet-inserted row. The legacy UUID `group_offset` stays in the offset table for rolling upgrades and is dropped by a later contract version.
 - **SKIP LOCKED** — Task selection uses PostgreSQL's `FOR UPDATE SKIP LOCKED` to allow multiple consumers to safely compete for work.
 - **ON CONFLICT DO NOTHING** — Idempotent inserts protect against duplicate processing on retries.
 - **Schema-aware templates** — Every template resolves table/column names from `PgOutboxTableSettings` at construction time, so no string concatenation happens at runtime.

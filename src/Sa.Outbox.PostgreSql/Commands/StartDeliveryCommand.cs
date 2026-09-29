@@ -28,18 +28,29 @@ internal sealed class StartDeliveryCommand(
         long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
         var lockOn = filter.NowDate + lockDuration;
 
+        // Column ordinals are resolved once, on the first row, and read by index afterwards (M3).
+        // The locals live in this invocation's closure and the callback runs synchronously inside
+        // ExecuteReader, so the singleton command instance needs no synchronization.
+        NpgsqlOutboxReader.TaskQueueReader.Ordinals ordinals = default;
+        bool haveOrdinals = false;
 
         return await dataSource.ExecuteReader(sql.SqlLockAndSelect
             , (reader, i) =>
             {
-                OutboxDeliveryMessage<TMessage> deliveryMessage = Read<TMessage>(reader, serializer);
+                if (!haveOrdinals)
+                {
+                    ordinals = outboxReader.TaskQueue.GetOrdinals(reader);
+                    haveOrdinals = true;
+                }
+
+                OutboxDeliveryMessage<TMessage> deliveryMessage = Read<TMessage>(reader, in ordinals, serializer);
                 writeBuffer.Span[i] = contextFactory.Create<TMessage>(deliveryMessage);
             }
             , cmd => cmd
                 .AddParamTenantId(filter.TenantId)
                 .AddParamMsgPart(filter.Part)
-                .AddParamFromDate(filter.FromDate)
-                .AddParamToDate(filter.ToDate)
+                .AddParamWindowFrom(filter.FromDate)
+                .AddParamRetryAfter(filter.ToDate)
                 .AddParamConsumerGroupId(filter.ConsumerGroupId)
                 .AddParamTypeId(typeCode)
                 .AddParamTransactId(filter.TransactId)
@@ -50,48 +61,51 @@ internal sealed class StartDeliveryCommand(
     }
 
 
-    private OutboxDeliveryMessage<TMessage> Read<TMessage>(NpgsqlDataReader reader, IOutboxMessageSerializer serializer)
+    private OutboxDeliveryMessage<TMessage> Read<TMessage>(
+        NpgsqlDataReader reader,
+        in NpgsqlOutboxReader.TaskQueueReader.Ordinals o,
+        IOutboxMessageSerializer serializer)
     {
-        Guid msgId = outboxReader.TaskQueue.GetMgsId(reader);
-        string payloadId = outboxReader.TaskQueue.GetMgsPayloadId(reader);
-        int tenantId = outboxReader.TaskQueue.GetTenantId(reader);
+        Guid msgId = outboxReader.TaskQueue.GetMgsId(reader, in o);
+        string payloadId = outboxReader.TaskQueue.GetMgsPayloadId(reader, in o);
+        int tenantId = outboxReader.TaskQueue.GetTenantId(reader, in o);
 
         TMessage payload = ReadPayload<TMessage>(reader, serializer);
-        OutboxPartInfo outboxPart = ReadOutboxMsgPart(reader, tenantId);
-        OutboxTaskDeliveryInfo deliveryInfo = ReadDeliveryInfo(reader, tenantId);
+        OutboxPartInfo outboxPart = ReadOutboxMsgPart(reader, in o, tenantId);
+        OutboxTaskDeliveryInfo deliveryInfo = ReadDeliveryInfo(reader, in o, tenantId);
 
         OutboxMessage<TMessage> msg = new(payloadId, payload, outboxPart);
 
         return new OutboxDeliveryMessage<TMessage>(msgId, msg, deliveryInfo);
     }
 
-    private OutboxPartInfo ReadOutboxMsgPart(NpgsqlDataReader reader, int tenantId)
+    private OutboxPartInfo ReadOutboxMsgPart(NpgsqlDataReader reader, in NpgsqlOutboxReader.TaskQueueReader.Ordinals o, int tenantId)
     {
         return new OutboxPartInfo(
             tenantId
-            , outboxReader.TaskQueue.GetMsgPart(reader)
-            , outboxReader.TaskQueue.GetMsgCreatedAt(reader)
+            , outboxReader.TaskQueue.GetMsgPart(reader, in o)
+            , outboxReader.TaskQueue.GetMsgCreatedAt(reader, in o)
         );
     }
 
-    private OutboxTaskDeliveryInfo ReadDeliveryInfo(NpgsqlDataReader reader, int tenantId)
+    private OutboxTaskDeliveryInfo ReadDeliveryInfo(NpgsqlDataReader reader, in NpgsqlOutboxReader.TaskQueueReader.Ordinals o, int tenantId)
     {
         return new OutboxTaskDeliveryInfo(
-            outboxReader.TaskQueue.GetTaskId(reader)
-            , outboxReader.TaskQueue.GetDeliveryId(reader)
-            , outboxReader.TaskQueue.GetDeliveryAttempt(reader)
-            , outboxReader.TaskQueue.GetErrorId(reader)
-            , ReadStatus(reader)
-            , ReadTaskPart(reader, tenantId)
+            outboxReader.TaskQueue.GetTaskId(reader, in o)
+            , outboxReader.TaskQueue.GetDeliveryId(reader, in o)
+            , outboxReader.TaskQueue.GetDeliveryAttempt(reader, in o)
+            , outboxReader.TaskQueue.GetErrorId(reader, in o)
+            , ReadStatus(reader, in o)
+            , ReadTaskPart(reader, in o, tenantId)
         );
     }
 
-    private OutboxPartInfo ReadTaskPart(NpgsqlDataReader reader, int tenantId)
+    private OutboxPartInfo ReadTaskPart(NpgsqlDataReader reader, in NpgsqlOutboxReader.TaskQueueReader.Ordinals o, int tenantId)
     {
         return new OutboxPartInfo(
             tenantId
-            , outboxReader.TaskQueue.GetConsumerGroup(reader)
-            , outboxReader.TaskQueue.GetTaskCreatedAt(reader)
+            , outboxReader.TaskQueue.GetConsumerGroup(reader, in o)
+            , outboxReader.TaskQueue.GetTaskCreatedAt(reader, in o)
         );
     }
 
@@ -102,11 +116,11 @@ internal sealed class StartDeliveryCommand(
         return payload;
     }
 
-    private DeliveryStatus ReadStatus(NpgsqlDataReader reader)
+    private DeliveryStatus ReadStatus(NpgsqlDataReader reader, in NpgsqlOutboxReader.TaskQueueReader.Ordinals o)
     {
-        int code = outboxReader.TaskQueue.GetDeliveryStatusCode(reader);
-        string message = outboxReader.TaskQueue.GetDeliveryStatusMessage(reader);
-        DateTimeOffset createAt = outboxReader.TaskQueue.GetDeliveryCreatedAt(reader).ToDateTimeOffsetFromUnixTimestamp();
+        int code = outboxReader.TaskQueue.GetDeliveryStatusCode(reader, in o);
+        string message = outboxReader.TaskQueue.GetDeliveryStatusMessage(reader, in o);
+        DateTimeOffset createAt = outboxReader.TaskQueue.GetDeliveryCreatedAt(reader, in o);
         return new DeliveryStatus((DeliveryStatusCode)code, message, createAt);
     }
 }

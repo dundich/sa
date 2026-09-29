@@ -166,11 +166,12 @@ PgOutboxSettings
 
 Каждая таблица содержит get-only объект `Fields` с одним string-свойством на колонку; каждое свойство по умолчанию равно соответствующей константе `OutboxFieldDefaults`. Метод `Fields.All()` возвращает точные определения колонок PostgreSQL, используемые при создании таблицы.
 
-#### Таблица сообщений (`__msg$`) — 8 колонок
+#### Таблица сообщений (`__msg$`) — 9 колонок
 
 | Свойство | Имя по умолчанию | Определение колонки | Описание |
 |---|---|---|---|
-| `MsgId` | `msg_id` | `UUID NOT NULL` | Id сообщения — UUID v7, генерируется приложением; sort-ключ партиционирования и offset потребления |
+| `MsgSeq` | `msg_seq` | `BIGSERIAL NOT NULL` | Порядок вставки, назначаемый базой (C2) — курсор потребления живёт на этой колонке, никогда на v7-идентификаторе |
+| `MsgId` | `msg_id` | `UUID NOT NULL` | Id сообщения — UUID v7, генерируется приложением; sort-ключ партиционирования |
 | `TenantId` | `tenant_id` | `INT NOT NULL DEFAULT 0` | Id тенанта; первый ключ партиционирования |
 | `MsgPart` | `msg_part` | `TEXT NOT NULL` | Часть (part) сообщения; второй ключ партиционирования |
 | `MsgPayloadId` | `msg_payload_id` | `TEXT NOT NULL DEFAULT ''` | Опциональный payload id, передаваемый публикатором |
@@ -179,7 +180,7 @@ PgOutboxSettings
 | `MsgPayloadSize` | `msg_payload_size` | `INT NOT NULL DEFAULT 0` | Размер payload в байтах |
 | `MsgCreatedAt` | `msg_created_at` | `BIGINT NOT NULL DEFAULT 0` | Время создания (ticks); timestamp-колонка партиционирования |
 
-#### Таблица очереди задач (`outbox`) — 17 колонок
+#### Таблица очереди задач (`outbox`) — 18 колонок
 
 | Свойство | Имя по умолчанию | Определение колонки | Описание |
 |---|---|---|---|
@@ -187,6 +188,7 @@ PgOutboxSettings
 | `ConsumerGroup` | `consumer_group` | `TEXT NOT NULL` | Группа консьюмеров; второй ключ партиционирования |
 | `TaskLockExpiresOn` | `task_lock_expires_on` | `BIGINT NOT NULL DEFAULT 0` | TTL блокировки (ticks) — конкуренты на `SKIP LOCKED` пропускают строки, у которых лок ещё действует |
 | `TaskTransactId` | `task_transact_id` | `TEXT NOT NULL DEFAULT ''` | Id транзакции / корреляции воркера, обрабатывающего задачу |
+| `MsgSeq` | `msg_seq` | `BIGINT NOT NULL DEFAULT 0` | Исходный `msg_seq` (денормализован) — загружается вместе с задачей и возвращается `SqlLoadConsumerGroup` как новый курсор |
 | `MsgId` | `msg_id` | `UUID NOT NULL` | Ссылка на исходное сообщение (v7 UUID) |
 | `MsgPart` | `msg_part` | `TEXT NOT NULL` | Часть сообщения (денормализована) |
 | `TenantId` | `tenant_id` | `INT NOT NULL DEFAULT 0` | Id тенанта; первый ключ партиционирования |
@@ -234,13 +236,14 @@ PgOutboxSettings
 | `TypeId` | `type_id` | `BIGINT NOT NULL` | Хэш типа (murmurHash3) — первичный ключ |
 | `TypeName` | `type_name` | `TEXT NOT NULL` | Полное имя типа |
 
-#### Таблица offsets (`__offset$`) — 4 колонки
+#### Таблица offsets (`__offset$`) — 5 колонок
 
 | Свойство | Имя по умолчанию | Определение колонки | Описание |
 |---|---|---|---|
 | `ConsumerGroup` | `consumer_group` | `TEXT` (nullable) | Id группы консьюмеров — часть первичного ключа |
 | `TenantId` | `tenant_id` | `INT NOT NULL DEFAULT 0` | Тенант — часть первичного ключа |
-| `GroupOffset` | `group_offset` | `UUID NOT NULL DEFAULT '{Guid.Empty}'` | Последнее потреблённое `msg_id` (UUID v7) — offset является v7 UUID и потому упорядочен по времени |
+| `GroupOffset` | `group_offset` | `UUID NOT NULL DEFAULT '{Guid.Empty}'` | Легаси-курсор (UUID v7) — остаётся для бесшовной раскатки, этой версией не читается, удаляется отдельным версией-контрактом |
+| `GroupOffsetSeq` | `group_offset_seq` | `BIGINT NOT NULL DEFAULT 0` | Живой курсор (C2) — последний потреблённый `msg_seq`; читается и продвигается только через эту колонку |
 | `GroupUpdatedAt` | `group_updated_at` | `TIMESTAMP WITH TIME ZONE DEFAULT NOW()` | Время последнего обновления offset |
 
 ### Fluent-методы (`PgOutboxTableSettingsExtensions`)
@@ -353,33 +356,30 @@ settings.CleanupSettings.ExecutionInterval = TimeSpan.FromHours(2);
 
 ## PgOutboxConsumeSettings
 
-**Минимальные offsets** по группам консьюмеров — нижняя граница сохранённого offset группы (public, sealed). Внутри это `Dictionary<string, Guid>` с ключом id группы консьюмеров.
+**Минимальные offsets** по группам консьюмеров — нижняя граница сохранённого offset группы (public, sealed). Публичный API не изменился (UUID v7 / `DateTimeOffset`), но курсор теперь это `msg_seq` (BIGINT), поэтому каждое значение «пола» транслируется при первом использовании:
+
+- сырой floor (`Guid` v7 или `DateTimeOffset`) хранится в `Dictionary<string, ...>` с ключом id группы консьюмеров;
+- при первой загрузке внутри транзакции с advisory-локом лоадер разрешает его в **эксклюзивную границу `msg_seq`** — `MAX(msg_seq)` сообщений, которые всё ещё сортируются ниже пола (0, если таких нет) — и кэширует результат на группу, так что перевод стоимости платится один раз.
 
 | Член | Описание |
 |---|---|
-| `WithMinOffset(string consumerGroupId, Guid offset)` | Задаёт минимальный offset для группы (upsert — повторный вызов для той же группы заменяет значение). Ожидает реальный UUID v7 |
-| `WithMinOffset(string consumerGroupId, DateTimeOffset offset)` | Преобразует дату-время в UUID v7 (`Guid.CreateVersion7(offset)`) и затем в его **минимальную форму** через `ToMinGuidV7()` — случайные биты v7 GUID обнуляются, результат — наименьший возможный v7 GUID для этого timestamp (чистая миллисекундная граница) |
-| `GetMinOffset(string consumerGroupId)` | Возвращает заданный минимум, либо `Guid.Empty`, если для группы ничего не задано |
+| `WithMinOffset(string consumerGroupId, Guid offset)` | Задаёт пол для группы (upsert — повторный вызов для той же группы заменяет значение). Ожидает реальный UUID v7; разрешается как «пропустить все сообщения, чей `msg_id` сортируется ниже этого id» |
+| `WithMinOffset(string consumerGroupId, DateTimeOffset offset)` | Задаёт пол по дате-времени; разрешается как «пропустить все сообщения, чей `msg_created_at` раньше этого момента» (точность — секунды: timestamp хранится как unix-секунды) |
+
+Прежний геттер `GetMinOffset` удалён — он отдавал курсор в виде UUID v7 до C2 и теряет смысл, как только пол разрешается в `msg_seq`.
 
 ### Где применяется — `OutboxTaskLoader`
 
 Для каждой пары «группа консьюмеров + тенант» loader:
 
 1. берёт advisory-лок на группу,
-2. читает сохранённый offset из таблицы `__offset$` (`SELECT group_offset WHERE consumer_group = ... AND tenant_id = ...`); если строки ещё нет, вставляет её, инициализируя сохранённым минимумом (или `Guid.Empty`),
-3. вычисляет эффективный offset как `max(сохранённый offset, GetMinOffset(group))` — минимум это **пол**: сохранённый offset двигает консьюмера только вперёд, никогда ниже заданной границы,
-4. загружает батч через `... WHERE msg_id > @offset ... ORDER BY msg_id LIMIT n` — поскольку `msg_id` это UUID v7, offset фактически означает «пропустить все сообщения, созданные до этой временной границы»,
-5. сдвигает сохранённый offset на максимум `msg_id` загруженного батча.
+2. читает сохранённый курсор из таблицы `__offset$` (`SELECT group_offset_seq WHERE consumer_group = ... AND tenant_id = ...`); если строки ещё нет, вставляет её, инициализируя разрешённым полом (`0`, если пол не задан),
+3. разрешает (при первом использовании за запуск) и кэширует заданный пол в его эксклюзивную границу `msg_seq` — см. выше,
+4. вычисляет эффективный offset как `max(сохранённый offset, пол)` — пол двигает консьюмера только вперёд, никогда ниже заданной границы,
+5. загружает батч через `... WHERE msg_seq > @offset ... ORDER BY msg_seq LIMIT n` — `msg_seq` назначается базой в момент COPY, поэтому откаченные/скошенные часы приложения не могут заставить новое сообщение сортироваться ниже уже продвинутого курсора,
+6. сдвигает сохранённый курсор на максимум `msg_seq` загруженного батча (возвращается загрузкой).
 
-Практический эффект: после утери offset, передеплоя или первого старта группы `WithMinOffset(group, DateTimeOffset.UtcNow)` заставит консьюмера начать «с сейчас», а не пережевывать всю историческую очередь.
-
-### Пример
-
-```csharp
-settings.ConsumeSettings
-    .WithMinOffset("cg_order_consumer", DateTimeOffset.UtcNow)  // пропустить всё, опубликованное до сейчас
-    .WithMinOffset("cg_analytics", Guid.Parse("01913a2e-8f3c-7a1e-8f3c-0a2b3c4d5e6f"));
-```
+Практический эффект: после утери offset, передеплоя или первого старта группы `WithMinOffset(group, DateTimeOffset.UtcNow)` заставит консьюмера начать «с сейчас», а не пережевывать всю историческую очередь. Обратите внимание: пол вычисляется по `msg_created_at`, как он записан в базе, — сообщения с временем публикации старее пола намеренно пропускаются, даже если пришли с опозданием.
 
 ---
 
@@ -396,11 +396,13 @@ Static-класс с именами колонок по умолчанию, ко
 | Общие (сообщение) | `MsgPayloadType` | `msg_payload_type` |
 | Общие (сообщение) | `MsgPayload` | `msg_payload` |
 | Общие (сообщение) | `MsgPayloadSize` | `msg_payload_size` |
+| Общие (сообщение) | `MsgSeq` | `msg_seq` |
 | Общие (сообщение) | `MsgCreatedAt` | `msg_created_at` |
 | TaskQueue (`outbox`) | `TaskId` | `task_id` |
 | TaskQueue (`outbox`) | `ConsumerGroup` | `consumer_group` |
 | TaskQueue (`outbox`) | `TaskLockExpiresOn` | `task_lock_expires_on` |
 | TaskQueue (`outbox`) | `TaskTransactId` | `task_transact_id` |
+| TaskQueue (`outbox`) | `MsgSeq` | `msg_seq` |
 | TaskQueue (`outbox`) | `TaskCreatedAt` | `task_created_at` |
 | Delivery (`__log$`) | `DeliveryId` | `delivery_id` |
 | Delivery (`__log$`) | `DeliveryAttempt` | `delivery_attempt` |
@@ -414,9 +416,10 @@ Static-класс с именами колонок по умолчанию, ко
 | Type (`__type$`) | `TypeId` | `type_id` |
 | Type (`__type$`) | `TypeName` | `type_name` |
 | Offset (`__offset$`) | `GroupOffset` | `group_offset` |
+| Offset (`__offset$`) | `GroupOffsetSeq` | `group_offset_seq` |
 | Offset (`__offset$`) | `GroupUpdatedAt` | `group_updated_at` |
 
-Константы «Общие (сообщение)» разделяют несколько таблиц (одна и та же колонка `msg_id` есть в таблицах сообщений, очереди задач и доставки); `ConsumerGroup`, `TenantId`, `TaskId`, `TaskLockExpiresOn`, `TaskTransactId`, `TaskCreatedAt` и `ErrorId` разделяются между таблицами очереди задач / доставки / offsets, как показано выше.
+Константы «Общие (сообщение)» разделяют несколько таблиц (одна и та же колонка `msg_id` есть в таблицах сообщений, очереди задач и доставки); `MsgSeq` есть и в таблице сообщений, и в таблице очереди задач; `ConsumerGroup`, `TenantId`, `TaskId`, `TaskLockExpiresOn`, `TaskTransactId`, `TaskCreatedAt` и `ErrorId` разделяются между таблицами очереди задач / доставки / offsets, как показано выше.
 
 ---
 

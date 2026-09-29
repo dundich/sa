@@ -39,16 +39,38 @@ internal sealed class OutboxDeliveryManager(
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
     {
-        IReadOnlyDictionary<Exception, ErrorInfo> errors = await GetErrors(messages, cancellationToken);
+        // One pass over the batch (M7): error contexts, delivery-part keys and error day keys are
+        // all derived here, each deduplicated as it goes. The old code walked the span three
+        // times — parts .SelectWhere + .Distinct, errs .SelectWhere, dates lazy re-enumeration —
+        // with three per-batch allocations. Delivery parts are keyed by day (M6): the partition is
+        // daily, so the exact timestamp is noise that used to fan one batch into several
+        // EnsureParts round trips.
+        List<IOutboxContextOperations<TMessage>>? errs = null;
+        HashSet<OutboxPartInfo> deliveryParts = new(messages.Length);
+        HashSet<DateTimeOffset> errorDays = new(messages.Length);
 
-        var parts = messages
-            .Span
-            .SelectWhere(c => c.DeliveryInfo.PartInfo with { CreatedAt = c.DeliveryResult.CreatedAt })
-            .Distinct();
+        foreach (IOutboxContextOperations<TMessage> context in messages.Span)
+        {
+            deliveryParts.Add(context.DeliveryInfo.PartInfo with { CreatedAt = context.DeliveryResult.CreatedAt.StartOfDay() });
 
-        await partRepository.EnsureDeliveryParts(parts, cancellationToken);
+            if (context.Exception is not null && context.DeliveryResult.Code.IsError())
+            {
+                (errs ??= []).Add(context);
+                errorDays.Add(context.DeliveryResult.CreatedAt.StartOfDay());
+            }
+        }
 
-        return await finishCmd.Execute(messages, errors, filter, cancellationToken);
+        // Delivery-log and error-log partitions are independent DDL on different tables — run the
+        // ensures concurrently instead of awaiting them in sequence (M6).
+        Task<int> ensureDelivery = partRepository.EnsureDeliveryParts(deliveryParts, cancellationToken);
+        Task<int> ensureErrors = partRepository.EnsureErrorParts(errorDays, cancellationToken);
+        await Task.WhenAll(ensureDelivery, ensureErrors).ConfigureAwait(false);
+
+        IReadOnlyDictionary<Exception, ErrorInfo> errors = errs is null
+            ? ReadOnlyDictionary<Exception, ErrorInfo>.Empty
+            : await errorCmd.Execute(errs.ToArray(), cancellationToken).ConfigureAwait(false);
+
+        return await finishCmd.Execute(messages, errors, filter, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<int> ExtendDelivery(
@@ -59,34 +81,15 @@ internal sealed class OutboxDeliveryManager(
 
     private async Task EnsureParts(OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
-        await partRepository.EnsureMsgParts(
+        // Message and task table partitions are independent DDL on different tables — run the two
+        // ensures concurrently instead of awaiting them in sequence (M6).
+        Task<int> msgParts = partRepository.EnsureMsgParts(
             [new OutboxPartInfo(filter.TenantId, filter.Part, filter.NowDate)],
             cancellationToken);
-
-        await partRepository.EnsureTaskParts(
+        Task<int> taskParts = partRepository.EnsureTaskParts(
             [new OutboxPartInfo(filter.TenantId, filter.ConsumerGroupId, filter.NowDate)],
             cancellationToken);
-    }
 
-    private async ValueTask<IReadOnlyDictionary<Exception, ErrorInfo>> GetErrors<TMessage>(
-        ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
-        CancellationToken cancellationToken)
-    {
-        // Only permanent failures (5xx, including ErrorMaxAttempts) belong in __error$.
-        // Retryable warnings (400) would pollute the error log and set task.error_id for
-        // transient failures.
-        IOutboxContextOperations<TMessage>[] errs = messages
-            .Span
-            .SelectWhere(m => m, m => m.Exception != null && m.DeliveryResult.Code.IsError());
-
-        if (errs.Length == 0)
-            return ReadOnlyDictionary<Exception, ErrorInfo>.Empty;
-
-        var dates = errs.Select(c => c.DeliveryResult.CreatedAt);
-
-        await partRepository.EnsureErrorParts(dates, cancellationToken);
-
-        return await errorCmd.Execute(errs, cancellationToken);
-
+        await Task.WhenAll(msgParts, taskParts).ConfigureAwait(false);
     }
 }

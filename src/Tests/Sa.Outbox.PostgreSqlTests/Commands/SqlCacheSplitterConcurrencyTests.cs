@@ -19,17 +19,19 @@ public class SqlCacheSplitterConcurrencyTests
 
     /// <summary>
     /// Pool of lengths covering every branch of <c>GetSql</c>: remainders 1–15,
-    /// multiples of 16 up to 512, the maxLen boundary, 513–527 just above it,
-    /// 1024, mid-range 1000, and large 4096 / 10000 / 100000.
+    /// multiples of 16 up to 47, the chunk boundaries (512, 1024), just above the
+    /// DefaultMaxLen boundary (1025), mid-range 1000, and large 2048 / 4096 /
+    /// 10000 / 100000.
     /// </summary>
     private static readonly int[] LengthPool =
     [
         .. Enumerable.Range(1, 15),
         .. Enumerable.Range(16, 32),
         512,
-        513, 527,
-        1024,
         1000,
+        1024,
+        1025,
+        2048,
         4096,
         10000,
         100000,
@@ -71,7 +73,7 @@ public class SqlCacheSplitterConcurrencyTests
                         token.ThrowIfCancellationRequested();
 
                         int len = LengthPool[rnd.Next(LengthPool.Length)];
-                        var chunks = splitter.GetSql(len, 512).ToList();
+                        var chunks = splitter.GetSql(len, SqlCacheSplitter.DefaultMaxLen).ToList();
 
                         // Splitting invariant, checked on the producing thread for every call:
                         // sum of chunk lengths == len, every length > 0, every length except

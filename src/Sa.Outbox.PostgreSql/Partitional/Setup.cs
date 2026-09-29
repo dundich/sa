@@ -25,7 +25,10 @@ internal static class Setup
                     .PartByList(tableSettings.Message.Fields.TenantId, tableSettings.Message.Fields.MsgPart)
                     .TimestampAs(tableSettings.Message.Fields.MsgCreatedAt)
                     .WithFillFactor(tableSettings.Message.FillFactor) // insert only
-                    .AddPostSql(() => sql.SqlCreateTypeTable)
+                    .AddPostSql(() => $"""
+                        {sql.SqlCreateTypeTable}
+                        {sql.SqlAddMsgSeqColumnToMsgTable}
+                        """)
                 ;
 
                 ITableBuilder queueTableBuilder = schema
@@ -33,7 +36,11 @@ internal static class Setup
                     .PartByList(tableSettings.TaskQueue.Fields.TenantId, tableSettings.TaskQueue.Fields.ConsumerGroup)
                     .TimestampAs(tableSettings.TaskQueue.Fields.TaskCreatedAt)
                     .WithFillFactor(tableSettings.TaskQueue.FillFactor)
-                    .AddPostSql(() => sql.SqlCreateOffsetTable)
+                    .AddPostSql(() => $"""
+                        {sql.SqlCreateOffsetTable}
+                        {sql.SqlAddMsgSeqColumnToTaskTable}
+                        {sql.SqlAddGroupOffsetSeqColumnToOffsetTable}
+                        """)
                 ;
 
                 ITableBuilder deliveryTableBuilder = schema

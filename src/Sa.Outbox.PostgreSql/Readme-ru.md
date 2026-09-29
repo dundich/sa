@@ -405,7 +405,7 @@ if (!migrationService.OnMigrated.IsCancellationRequested)
 | **SKIP LOCKED** | Безопасная конкуренция воркеров за задачи |
 | **Advisory Locks** | Координация смещений на consumer group + tenant |
 | **murmurHash3** | Компактная идентификация типов, кэшированная в `__type$` |
-| **SqlCacheSplitter** | Дробит крупные UPDATE-запросы на батчи ≤512 элементов |
+| **SqlCacheSplitter** | Дробит крупные UPDATE-запросы на чанки до общей `DefaultMaxLen` (1024) |
 
 ---
 

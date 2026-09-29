@@ -396,7 +396,7 @@ After processing each message, call exactly one method:
 | **SKIP LOCKED** | Multiple workers safely compete for tasks |
 | **Advisory Locks** | Offset coordination per consumer group + tenant |
 | **murmurHash3** | Compact type identification cached in `__type$` |
-| **SqlCacheSplitter** | Splits large UPDATE queries into ≤512-element batches |
+| **SqlCacheSplitter** | Splits large UPDATE queries into chunks up to the shared `DefaultMaxLen` (1024) |
 
 ---
 

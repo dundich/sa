@@ -291,7 +291,7 @@ opts.ExpireDays = 365 * 3;  // удалять партиции старше 3 л
 |--------|------------|
 | `IFileStorage` | Сам провайдер (singleton) |
 | `RecyclableMemoryStreamManager` | Буферизация не-seekable потоков (singleton, общий) |
-| `IPartitionManager` | Обслуживание партиций, из `Sa.Partial.PostgreSql` |
+| `IPartitionManager` | Обслуживание партиций, из `Sa.Partitional.PostgreSql` |
 | `TimeProvider` | По умолчанию `TimeProvider.System`; свой экземпляр влияет на `UploadedAt` |
 
 ---

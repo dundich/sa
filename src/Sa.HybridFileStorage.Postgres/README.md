@@ -290,7 +290,7 @@ partitioning setup, the schedules and the `IFileStorage`.
 |---------|---------|
 | `IFileStorage` | The provider itself (singleton) |
 | `RecyclableMemoryStreamManager` | Buffering for non-seekable streams (singleton, shared) |
-| `IPartitionManager` | Partition maintenance, from `Sa.Partial.PostgreSql` |
+| `IPartitionManager` | Partition maintenance, from `Sa.Partitional.PostgreSql` |
 | `TimeProvider` | Defaults to `TimeProvider.System`; register your own to control `UploadedAt` |
 
 ---
@@ -300,7 +300,7 @@ partitioning setup, the schedules and the `IFileStorage`.
 | Package | Purpose |
 |---------|---------|
 | `Sa.Data.PostgreSql` | Npgsql client (`IPgDataSource`) |
-| `Sa.Partial.PostgreSql` | Declarative partition management (`IPartitionManager`) |
+| `Sa.Partitional.PostgreSql` | Declarative partition management (`IPartitionManager`) |
 | `Microsoft.IO.RecyclableMemoryStream` | Efficient memory buffering for non-seekable streams |
 
 ---

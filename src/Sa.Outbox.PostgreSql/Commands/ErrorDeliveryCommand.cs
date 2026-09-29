@@ -57,7 +57,7 @@ internal sealed class ErrorDeliveryCommand(
             //(error_id, error_type, error_message, error_created_at)
             command.AddParamErrorId(row.Info.ErrorId, i);
             command.AddParamTypeName(row.Info.TypeName, i);
-            command.AddParamStatusMessage(GetErrorMessage(row.Exception), i);
+            command.AddParamStatusMessage(row.ErrorMessage, i);
             command.AddParamCreatedAt(row.Info.CreatedAt, i);
             i++;
         }
@@ -119,15 +119,20 @@ internal sealed class ErrorDeliveryCommand(
         {
             if (message.Exception is null) continue;
 
+            // Compose the compact text once (M5): it feeds both the stored row — written verbatim
+            // to error_message — and the error_id hash. The old path built GetErrorMessage here and
+            // again in Fill, doubling the exception→text walk on the __error$ write path.
+            string errorMessage = GetErrorMessage(message.Exception);
+
             ErrorInfo info = new(
-                GetErrorMessageHash(message.Exception),
+                errorMessage.GetMurmurHash3(),
                 message.Exception.GetType().Name,
                 message.DeliveryResult.CreatedAt.StartOfDay());
 
             var key = new ErrorKey(info.ErrorId, info.CreatedAt);
 
             if (!rows.ContainsKey(key))
-                rows[key] = new ErrorRow(message.Exception, info);
+                rows[key] = new ErrorRow(message.Exception, errorMessage, info);
 
             byException[message.Exception] = info;
         }
@@ -136,9 +141,15 @@ internal sealed class ErrorDeliveryCommand(
     /// <summary>The <c>__error$</c> primary key: <c>(error_id, error_created_at)</c>.</summary>
     internal readonly record struct ErrorKey(long ErrorId, DateTimeOffset CreatedAt);
 
-    /// <summary>One <c>__error$</c> row: the exception the message text is built from, and the stored values.</summary>
-    internal readonly record struct ErrorRow(Exception Exception, ErrorInfo Info);
+    /// <summary>One <c>__error$</c> row: the exception the row is keyed by, the pre-composed error
+    /// text (written verbatim to <c>error_message</c>), and the stored values.</summary>
+    internal readonly record struct ErrorRow(Exception Exception, string ErrorMessage, ErrorInfo Info);
 
+    /// <summary>
+/// Hash of the compact error text, for callers that do not have the text at hand (test pins).
+/// The production path computes the text once in <see cref="GroupByException"/> and hashes it
+/// directly — do not route production through this helper, it would compose the text twice (M5).
+/// </summary>
     internal static long GetErrorMessageHash(Exception exception)
     {
         // Hash the same compact representation used in GetErrorMessage so that
