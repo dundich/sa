@@ -9,31 +9,13 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
 {
     private readonly IServiceCollection _services;
 
-    private bool _isHostedService;
-
-    private Func<IJobContext, Exception, bool>? _handleError;
-
     public ScheduleBuilder(IServiceCollection services)
     {
+        ArgumentNullException.ThrowIfNull(services);
+
         _services = services;
 
-        _services.TryAddSingleton<IScheduleSettings>(sp =>
-        {
-            IEnumerable<JobSettings> jobSettings = sp.GetServices<JobSettings>();
-
-            ScheduleSettings settings = ScheduleSettings.Create(
-                jobSettings,
-                _isHostedService,
-                _handleError);
-
-            return settings;
-        });
-
-        _services.TryAddSingleton<IInterceptorSettings>(sp =>
-        {
-            IEnumerable<JobInterceptorSettings> jobSettings = sp.GetServices<JobInterceptorSettings>();
-            return new InterceptorSettings(jobSettings);
-        });
+        ScheduleSettingsRegistration.AddTo(_services);
     }
 
 
@@ -84,7 +66,13 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
 
     public IScheduleBuilder AddErrorHandler(Func<IJobContext, Exception, bool> handler)
     {
-        _handleError = handler;
+        ArgumentNullException.ThrowIfNull(handler);
+
+        // Registered rather than stored: only the first builder's IScheduleSettings factory
+        // survives TryAdd, so a field on this instance would be dropped on any later
+        // AddSaSchedule call. Every call to AddErrorHandler contributes a handler instead.
+        _services.AddSingleton(new ErrorHandlerRegistration(handler));
+
         return this;
     }
 
@@ -92,8 +80,15 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
 
     public IScheduleBuilder UseHostedService()
     {
-        _isHostedService = true;
+        // A marker, not a flag on this builder: only the first builder's IScheduleSettings
+        // factory survives TryAdd, so an instance field would read false for every caller
+        // after the first. TryAddSingleton — the marker only has to be present.
+        _services.TryAddSingleton(ScheduleHostedServiceMarker.Instance);
+
+        // TryAddEnumerable inside AddHostedService dedupes on the implementation type, so
+        // calling UseHostedService from several builders still yields a single ScheduleHost.
         _services.AddHostedService<ScheduleHost>();
+
         return this;
     }
 

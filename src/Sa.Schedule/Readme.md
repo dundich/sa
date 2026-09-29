@@ -170,6 +170,10 @@ b.AddErrorHandler((context, exception) =>
 });
 ```
 
+Handlers accumulate: registering more than one — including from separate `AddSaSchedule` calls —
+means the error is consumed as soon as **any** handler returns `true`. Only when every handler
+returns `false` does the per-job error policy decide.
+
 ### JobException
 
 When a job throws, it's wrapped in `JobException` containing:

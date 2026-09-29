@@ -1,4 +1,6 @@
-﻿namespace Sa.Schedule.Settings;
+﻿using Microsoft.Extensions.DependencyInjection;
+
+namespace Sa.Schedule.Settings;
 
 internal sealed class ScheduleSettings : IScheduleSettings
 {
@@ -20,6 +22,33 @@ internal sealed class ScheduleSettings : IScheduleSettings
 
     public IEnumerable<IJobSettings> GetJobSettings()
         => _storage.Values.Where(c => c.Properties.Disabled != true);
+
+    /// <summary>
+    /// Builds the settings from everything registered in the container.
+    /// </summary>
+    internal static ScheduleSettings Create(IServiceProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+
+        // Return true = "the error is consumed" (see JobErrorHandler), so several handlers
+        // compose as "any of them consumed it". With a single handler this is that handler,
+        // unchanged — no wrapper, no extra indirection on the error path.
+        Func<IJobContext, Exception, bool>? handleError =
+            provider.GetServices<ErrorHandlerRegistration>()
+                .Select(c => c.Handler)
+                .ToArray() switch
+            {
+                [] => null,
+                [var single] => single,
+                var all => (IJobContext context, Exception exception)
+                    => all.Any(handler => handler(context, exception)),
+            };
+
+        return Create(
+            provider.GetServices<JobSettings>(),
+            isHostedService: provider.GetService<ScheduleHostedServiceMarker>() is not null,
+            handleError: handleError);
+    }
 
     internal static ScheduleSettings Create(
         IEnumerable<JobSettings> jobSettings,
