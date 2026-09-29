@@ -1,220 +1,93 @@
 # Sa — Набор инфраструктурных библиотек для .NET 10
 
-Нейрохерня - Серия переиспользуемых .NET 10-библиотек, сфокусированных на инфраструктурных паттернах для распределённых систем. Целевая платформа — **.NET 10.0**, используется **Native AOT**, применяется паттерн **Central Package Management (CPM)** через `Directory.Packages.props`.
+Переиспользуемые инфраструктурные библиотек для .NET 10, совместимые с **Native AOT**, с включённым `nullable`, построенные на современных примитивах .NET.
 
 ---
 
-### [Sa](src/Sa) — Общие утилиты
-
-Ядро экосистемы **Sa**: базовые классы и методы расширения, линкуемые в другие пакеты через `<Compile Include="..." Link="..."/>`. Целевая платформа — **.NET 10.0**, совместимость с **Native AOT**, нулевые внешние зависимости.
-
-
-Смотрите [полную документацию API](src/Sa/Readme.md).
-
----
-
-### [Sa.Outbox.PostgreSql](src/Sa.Outbox.PostgreSql) — Реализация Outbox на PostgreSQL
-
-Реализация паттерна **Transactional Outbox** на PostgreSQL для гарантированной доставки сообщений в распределённых системах. Предотвращает потерю сообщений и гарантирует обработку даже при сбоях.
-
-- **Гарантированная доставка**: сообщения хранятся в БД до успешной обработки
-- **Параллельная обработка**: несколько воркеров безопасно конкурируют за задачи через `SKIP LOCKED`
-- **Мультитенантность**: изоляция и параллелизм по арендаторам
-- **Авто-масштабирование**: runtime-изменение параллелизма без перезапуска
-- **Планируемая очистка**: автоматическое удаление старых партиций
-- **Self-bootstrapping**: авто-регистрация настроек консьюмера при первом запуске
-- **Immutable настройки**: `OutboxConsumerSettings` record с fluent-билдером
-
-See [full README](src/Sa.Outbox.PostgreSql/Readme.md).
-
----
-
-### [Sa.Partitional.PostgreSql](src/Sa.Partitional.PostgreSql) — Декларативное партиционирование PostgreSQL
-
-Объявление партицирования таблиц PostgreSQL (range: день/месяц/год; list) с автоматической миграцией, планированием очистки и in-memory кэшем.
-
-- **Range-партиционирование** по дню, месяцу или году с авто-именованием по timestamp
-- **List-партиционирование** по строковым/числовым ключам с иерархическими дочерними партициями
-- **Fluent-билдер** для объявления таблиц, настройки fillfactor, кастомных ограничений и миграций
-- **Автоматическая миграция** — предсоздание будущих партиций как фоновая задача
-- **Автоматическая очистка** — удаление старых партиций по настраиваемому окну удержания
-- **In-memory кэш** — избегает повторных запросов к каталогу; инвалидируется при runtime-изменениях
-- **StrOrNum** — discriminated union для типобезопасных значений ключей партиций
-
-See the full [Guide](src/Sa.Partitional.PostgreSql/Guide.md) and [API Reference](src/Sa.Partitional.PostgreSql/ApiReference.md).
-
----
-
-### [Sa.Schedule](src/Sa.Schedule) — Планировщик задач
-
-Конфигурация и выполнение задач по расписанию — cron, интервалы, одноразовые запуски.
-
-| Возможность | Описание |
-|-------------|----------|
-| **Cron-тайминги** | Любое cron-выражение через `IJobTiming.FromCron()` |
-| **Интервальное расписание** | `EverySeconds`, `EveryMinutes`, `EveryHours`, `EveryDays` |
-| **Одноразовые задачи** | `RunOnce()` с опциональной начальной задержкой |
-| **Стратегии ошибок** | `CloseApplication`, `AbortJob`, `StopAllJobs`, `Ignore` |
-| **Повторные попытки** | Настраиваемое количество ретраев на ошибку |
-| **Интерцепторы** | Кросс логика через `IJobInterceptor` |
-| **Обработчики ошибок** | Глобальные `HandleError`-хендлеры на уровне планировщика |
-| **DI-интеграция** | `AddSaSchedule(Action<IScheduleBuilder>)` с `BackgroundService` |
-
-```csharp
-builder.Services.AddSaSchedule(b => b
-    .AddJob<MyCleanupJob>()
-        .WithName("cleanup")
-        .EveryHours(1)
-        .ConfigureErrorHandling(eh => eh.IfErrorRetry(3).ThenAbortJob())
-);
-```
-
----
-
-### [Sa.HybridFileStorage](src/Sa.HybridFileStorage) — Гибридное файловое хранилище
-
-Абстракция файлового хранилища с автоматическим failover между провайдерами (FileSystem ↔ S3 ↔ PostgreSQL).
-
-| Возможность | Описание |
-|-------------|----------|
-| **Мультипровайдер** | FileSystem, S3 (Minio), PostgreSQL — подключайте сколько угодно |
-| **Автоматический failover** | При недоступности одного провайдера — переход к следующему |
-| **Интерцепторы** | `before`, `after`, `onError` хуки на каждом провайдере |
-| **Пакетные операции** | `CopyToScopeBatchAsync` с параллелизмом и прогрессом |
-| **Расширения** | `CopyFromFileAsync`, `CopyToBasketAsync` для удобства |
-| **InMemory-провайдер** | Для тестирования: `AddSaInMemoryFileStorage()` |
-
-```csharp
-builder.Services.AddSaHybridFileStorage(cfg => cfg
-    .ConfigureStorage((sp, c) => c
-        .AddStorage(new FileSystemStorage("disk"))
-        .AddStorage(new S3Storage("s3"))
-    )
-);
-```
-
----
+## Библиотеки
 
 ### [Sa.Configuration](src/Sa.Configuration) — Аргументы командной строки и секреты
 
-| Компонент | Назначение |
-|-----------|------------|
-| **Arguments** | Парсер CLI-аргументов в стиле dictionary — поддержка одиночных и множественных значений, типизированные геттеры (`GetBool`, `GetInt`, `GetTimeSpan` и т.д.) |
-| **Secrets** | Безопасное управление секретами из файлов, переменных окружения и генерируемых host-key файлов. Поддержка chained stores и environment-aware загрузки |
-
-```csharp
-var args = Arguments.CreateDefault();
-var dbPassword = args["db-password"]; // string?
-var timeout = args.GetTimeSpan("timeout"); // TimeSpan?
-```
+`Arguments` — словарноподобный парсер аргументов командной строки с типизированными геттерами (`GetBool`, `GetInt`, `GetTimeSpan` и т.д.). `Secrets` — безопасное управление секретами из файлов, переменных окружения и host-key файлов с цепочками хранилищ и шаблонизацией `${secret:key}`.
 
 ---
 
 ### [Sa.Configuration.PostgreSql](src/Sa.Configuration.PostgreSql) — Динамическая конфигурация из PostgreSQL
 
-Добавляет источник конфигурации из БД — изменения отражаются в приложении без перекомпиляции и редеплоя.
-
-```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
-    connectionString: "Host=localhost;Database=myapp",
-    selectSql: "SELECT config_key, config_value FROM app_config",
-    parameters: Array.Empty<NpgsqlParameter>()
-));
-```
-
----
-
-### [Sa.Media](src/Sa.Media) — Асинхронное чтение WAV
-
-Памятно-эффективный асинхронный читатель WAV-файлов с конвертацией форматов.
-
-| Метод | Описание |
-|-------|----------|
-| `CreateFromFile(path)` | Открыть файл по пути |
-| `GetHeaderAsync()` | Считать WAV-заголовок |
-| `ReadSamplesPerChannelAsync()` | Потоковое чтение сэмплов по каналам |
-| `ReadDoubleSamplesAsync()` | Нормализованные double-сэмплы [-1..1] |
-| `ConvertToFormatAsync()` | Конвертация в PCM16/24/32, IEEE float |
-| `ReadStreamableChunksAsync()` | Чанки фиксированного размера для streaming |
-
-```csharp
-using var reader = AsyncWavReader.CreateFromFile("audio.wav");
-await foreach (var packet in reader.ReadDoubleSamplesAsync())
-{
-    Console.WriteLine($"Ch{packet.ChannelId}: {packet.Sample:F4}");
-}
-```
-
----
-
-### [Sa.Media.FFmpeg](src/Sa.Media.FFmpeg) — Обёртка FFmpeg для .NET
-
-FFmpeg из коробки со встроенными бинарниками (Windows x64 + Linux) и DI.
-
-| Интерфейс | Назначение |
-|-----------|------------|
-| `IFFMpegExecutor` | Конвертация аудио/видео (PCM16LE, MP3, OGG) |
-| `IFFProbeExecutor` | Извлечение метаданных (длина, каналы, частота, битрейт) |
-| `IPcmS16LeChannelManipulator` | Разделение/объединение каналов |
-| `IFFMpegLocator` | Автопоиск исполняемого FFmpeg |
-
-```csharp
-builder.Services.AddSaFFMpeg();
-
-var probe = IFFProbeExecutor.Default;
-var meta = await probe.GetMetaInfo("input.mp3");
-Console.WriteLine($"Duration: {meta.Duration}s, Channels: {meta.Channels}");
-```
+Добавляет источник конфигурации на основе PostgreSQL, поэтому изменения в базе применяются в приложении без редеплоя.
 
 ---
 
 ### [Sa.Data.PostgreSql](src/Sa.Data.PostgreSql) — Лёгкая обёртка Npgsql
 
-Без ORM-overhead, с DI, Native AOT и минимальными аллокациями.
+Тонкая обёртка над Npgsql, дружелюбная к Native AOT, для типовых операций с базой данных без нагрузки ORM: не-выборочное выполнение, скаляры, потоковые читатели, транзакции, бинарный COPY-импорт...
 
-| Метод | Описание |
-|-------|----------|
-| `ExecuteNonQuery` | INSERT / UPDATE / DELETE / DDL с возвратом rowCount |
-| `ExecuteScalar / ExecuteScalarTyped<T>` | Одиночное значение с авто-кастомом |
-| `ExecuteReader` | Потоковое чтение через callback (без загрузки в память) |
-| `ExecuteReaderList<T>` | Сборка всех строк в `List<T>` |
-| `ExecuteReaderFirst<T>` | Первое значение первого столбца |
-| `ExecuteReaderSingle<T>` | Безопасное scalar-значение |
-| `BeginBinaryImport` | Быстрый COPY BINARY для массового импорта |
-| `PgRetryStrategy` | Повторы с jitter для transient-ошибок Npgsql |
+---
+
+### [Sa.Data.S3](src/Sa.Data.S3) — S3-клиент для данных
+
+Minio-compatible S3-клиент для операций с данными.
+
+---
+
+### [Sa.Outbox.PostgreSql](src/Sa.Outbox.PostgreSql) — Реализация на PostgreSQL
+
+Реализация **Transactional Outbox** на PostgreSQL. Сообщения фиксируются в outbox-таблице вместе с бизнес-операциями в одной транзакции, затем доставляются с повторами и отслеживанием статуса. Потребление — конкурентное (`SKIP LOCKED`), координация оффсетов — advisory-замками. Применение — на вашем страхе и риске.
+
+---
+
+### [Sa.Partitional.PostgreSql](src/Sa.Partitional.PostgreSql) — Декларативное партиционирование
+
+Декларативное партиционирование таблиц PostgreSQL (range по дню/месяцу/году и list) с fluent-билдером, автоматической миграцией будущей партиций, очисткой по политике удержания и in-memory кэшем, автоматически инвалидируемым при runtime-изменениях.
+
+---
+
+### [Sa.Schedule](src/Sa.Schedule) — Планировщик задач
+
+Конфигурируемые задачи по расписанию с поддержкой cron-выражений, фиксированных интервалов и одноразовых запусков, со стратегиями ошибок на уровне задачи, повторами, лимитами параллелизма, интерцепторами и управлением старт/стоп/перезапуск на лету.
+
+---
+
+### [Sa.HybridFileStorage](src/Sa.HybridFileStorage) — Мульти- провайдерное хранилище
+
+`IHybridFileStorage` абстрагирует загрузку/выгрузку/удаление между несколькими провайдерами (FileSystem, S3, PostgreSQL) с автоматическим последовательным фейловером, пакетными операциями и интерцепторами на каждом провайдере. Провайдеры eagerly валидируют опции при регистрации, поэтому ошибка конфигурации проявляется рано, а не на каждой операции.
+
+Првайдеры: [`Sa.HybridFileStorage.FileSystem`](src/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Sa.HybridFileStorage.Postgres).
+
+---
+
+### [Sa.Media](src/Sa.Media) — Асинхронное чтение WAV
+
+Памятно-эффективный полностью асинхронный читатель WAV на базе `System.IO.Pipelines`: разбирает заголовок, читает сырые или нормализованные double-сэмплы по каналам, конвертирует между PCM16/24/32 и IEEE float, выдаёт потоковые чанки с настраиваемым размером батча.
+
+---
+
+### [Sa.Media.FFmpeg](src/Sa.Media.FFmpeg) — Обёртка FFmpeg для .NET
+
+Кроссплатформная обёртка над FFmpeg со встроенными статическими бинарниками (win-x64, linux-x64) — работает без установки. Включает извлечение метаданных, конвертацию аудио (PCM S16/S32 LE, F32 LE, raw, MP3, OGG), разделение/объединение каналов, потоковый ввод/вывод через стримы и DI.
 
 ---
 
 ### [Sa.Utils.WorkQueue](src/Sa.Utils.WorkQueue) — Асинхронная очередь с ограничением параллелизма
 
-Высокопроизводительная очередь задач на базе `System.Threading.Channels` с ограниченной ёмкостью, динамическим контролем параллелизма и стратегиями масштабирования.
-
-| Возможность | Описание |
-|-------------|----------|
-| **Ограниченная очередь** | Back-pressure через `BoundedChannel` |
-| **Динамический параллелизм** | Изменяйте `ConcurrencyLimit` на лету |
-| **Стратегии масштабирования** | `Lifo` • `Fifo` • `RoundRobin` • `Random` |
-| **Стратегии ошибок** | `Continue`, `StopReader`, `ShutdownQueue` |
-| **Обратные вызовы статусов** | `Running` → `Completed` / `Faulted` / `Cancelled` / `Aborted` |
-| **Логирование без аллокаций** | `[LoggerMessage]` source generator |
-
-See [full README](src/Sa.Utils.WorkQueue/Readme.md).
+Высокопроизводительная асинхронная очередь задач на `System.Threading.Channels` с ограниченной ёмкостью и back-pressure (стратегии заполнения при переполнении: `Wait`/`Skip`/`Throw`). Изменяемый на лету параллелизм (`ConcurrencyLimit`/`MaxConcurrency`) с динамическим масштабированием, порядком отмены ридеров (`Lifo`•`Fifo`•`RoundRobin`•`Random`) и режимами отмены (`Hard`/`Soft`). DI, безопасный (идемпотентный) shutdown, стратегии ошибок и обратные вызовы статусов.
 
 ---
 
-## Образцы
+## Примеры
 
 В `src/Samples/`:
 
 | Образец | Описание |
 |---------|----------|
 | [Configuration.Web](src/Samples/Configuration.Web) | CLI-аргументы + секреты в ASP.NET |
-| [FFmpeg.Console](src/Samples/FFmpeg.Console) | Извлечение метаданных FFmpeg |
-| [HybridFileStorage.Console](src/Samples/HybridFileStorage.Console) | Мульти-провайдерное хранилище |
-| [Partitional.ConsoleApp](src/Samples/Partitional.ConsoleApp) | Декларативное партиционирование |
+| [FFMpeg.Console](src/Samples/FFMpeg.Console) | Извлечение метаданных FFmpeg |
+| [HybridFileStorage.Console](src/Samples/HybridFileStorage.Console) | Мульти- провайдерное хранилище |
+| [Partitational.ConsoleApp](src/Samples/Partitational.ConsoleApp) | Декларативное партиционирование |
 | [PgOutbox.ConsoleApp](src/Samples/PgOutbox.ConsoleApp) | Паттерн Outbox |
 | [Schedule.Console](src/Samples/Schedule.Console) | Планировщик задач |
-| [Storage.Tests](src/Samples/Storage.Tests) | Тесты гибридного хранилища |
+| [Echo](src/Samples/Echo) | Разделение аудиоканалов на базе Sa.Media |
+| [WorkQueue.Console](src/Samples/WorkQueue.Console) | Демо Sa.WorkQueue с изменением параллелизма на лету |
 
 ---
 
@@ -226,24 +99,24 @@ See [full README](src/Sa.Utils.WorkQueue/Readme.md).
 
 ## Сборка
 
-```powershell
-# Полная сборка
-.\build\do_build.ps1
+# Полная сборка (clean + restore + build)
+./build-sh/do-build.sh
 
 # Запуск тестов
-.\build\do_test.ps1
+./build-sh/do-test.sh
 
 # Создание NuGet-пакетов
-.\build\do_package.ps1
+./build-sh/do-package.sh
 ```
 
 Прямые команды dotnet:
 
-```powershell
+```bash
 dotnet restore src/Sa.slnx -c Release
-dotnet build src/Sa.slnx -c Release -v n
-dotnet test src/Sa.slnx -v n
+dotnet build src/Sa.slnx -c Release
 ```
+
+Запускать `dotnet test` изнутри `src/`.
 
 ---
 
@@ -254,6 +127,7 @@ dotnet test src/Sa.slnx -v n
 - Общие утилиты в **Sa** линкуются в consuming-проект через `<Compile Include="..." Link="..."/>`
 - Все пакеты используют SDK-style csproj с implicit usings, nullable и анализаторами
 - Решение управляется через `.slnx`
+- Тесты на **xunit v3** с **Testcontainers** (PostgreSQL + Minio), изоляция на класс теста
 
 ## Лицензия
 
