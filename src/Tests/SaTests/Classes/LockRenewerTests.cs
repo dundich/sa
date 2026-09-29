@@ -408,4 +408,89 @@ public class LockRenewerTests
 
         Assert.Equal(afterDispose, extensionCount);
     }
+
+    [Fact]
+    public async Task KeepLocked_ExtendCancelledByItself_ReportsItSeparatelyFromShutdown()
+    {
+        // OCE, на который не отменён наш токен, приходит не от гашения цикла, а от самого
+        // вызова продления: Npgsql бросает его из Command.Cancel, например, когда сняли
+        // блокировку строки. Продления не состоялось — блокировка потеряна, — но путать это
+        // с обычным сбоем продления нельзя, иначе в логе не будет видно, что произошло.
+        using var cts = new CancellationTokenSource();
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20),
+            _ => throw new OperationCanceledException("command cancelled"),
+            blockImmediately: true,
+            cancellationToken: cts.Token);
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        Assert.False(cts.IsCancellationRequested, "Токен вызывающего не отменяли — отмена пришла из вызова продления.");
+
+        var ex = await Assert.ThrowsAsync<LockRenewalException>(async () => await handle.DisposeAsync());
+        Assert.IsType<OperationCanceledException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task KeepLocked_ShutdownCancellation_IsNotReportedAsAFailure()
+    {
+        // Отмена нашего же токена — штатное завершение, даже если extendLocked бросает OCE
+        // из-за переданного ему токена. Иначе каждое нормальное освобождение держателя
+        // выглядело бы как потеря блокировки.
+        using var cts = new CancellationTokenSource();
+
+        async Task extendLocked(CancellationToken token)
+        {
+            await Task.Delay(Timeout.Infinite, token);
+        }
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20), extendLocked,
+            blockImmediately: true, cancellationToken: cts.Token);
+
+        await Task.Delay(80, TestContext.Current.CancellationToken);
+        await cts.CancelAsync();
+        await handle.DisposeAsync();
+
+        Assert.Null(handle.RenewalError);
+    }
+
+    [Fact]
+    public async Task KeepLocked_DisposeAsyncTwice_ReportsTheFailureBothTimes()
+    {
+        // DisposeAsync освобождает источники отмены, поэтому второе освобождение обязано
+        // узнать, что они уже освобождены, — иначе вместо потери блокировки вылезает
+        // ObjectDisposedException из Cancel.
+        using var cts = new CancellationTokenSource();
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20),
+            _ => throw new InvalidOperationException("extend failed"),
+            blockImmediately: true,
+            cancellationToken: cts.Token);
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<LockRenewalException>(async () => await handle.DisposeAsync());
+        await Assert.ThrowsAsync<LockRenewalException>(async () => await handle.DisposeAsync());
+    }
+
+    [Fact]
+    public async Task KeepLocked_SyncDisposeAfterAsyncDispose_IsANoOp()
+    {
+        // Синхронное освобождение не должно трогать источники отмены, уже освобождённые
+        // асинхронным: у IDisposable и IAsyncDisposable один объект, а порядок вызовов —
+        // дело вызывающего.
+        using var cts = new CancellationTokenSource();
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20),
+            _ => Task.CompletedTask,
+            blockImmediately: true,
+            cancellationToken: cts.Token);
+
+        await handle.DisposeAsync();
+        handle.Dispose();
+    }
 }

@@ -1,4 +1,5 @@
-﻿using Sa.Outbox.Partitional;
+﻿using Sa.Classes;
+using Sa.Outbox.Partitional;
 
 namespace Sa.Outbox.Delivery;
 
@@ -179,6 +180,16 @@ internal sealed class DeliveryProcessor(
         catch (OperationCanceledException)
         {
             // ignore
+            return 0;
+        }
+        catch (LockRenewalException)
+        {
+            // A lost lock is local to this tenant, and so is everything it can cause: the next
+            // pass simply re-acquires the messages, and the losing owner's batch is closed by
+            // ReturnDelivery like any other. Letting it out would abort the tenant loop and take
+            // the whole cycle down with it — for a condition the per-tenant pass is already
+            // designed to absorb. Counted as 0: the batch was released, but the count we lost is
+            // the one ProcessInTenant never got to return.
             return 0;
         }
     }
