@@ -229,4 +229,45 @@ public class ArgumentsTests
         };
         Assert.Equal(expected, result);
     }
+
+    [Fact]
+    public void TestNegativeNumberIsTreatedAsValue()
+    {
+        // Arrange
+        var args = new[] { "--offset", "-1" };
+
+        // Act
+        var arguments = new Arguments(args);
+
+        // Assert
+        Assert.Equal("-1", arguments["offset"]);
+        Assert.False(arguments.Contains("1"));
+    }
+
+    [Fact]
+    public void TestNegativeFloatIsTreatedAsValue()
+    {
+        // Arrange
+        var args = new[] { "--offset", "-1.5" };
+
+        // Act
+        var arguments = new Arguments(args);
+
+        // Assert
+        Assert.Equal("-1.5", arguments["offset"]);
+    }
+
+    [Fact]
+    public void TestNegativeNumberWithoutParameter_IsIgnored()
+    {
+        // Arrange
+        var args = new[] { "-1", "--param", "value" };
+
+        // Act
+        var arguments = new Arguments(args);
+
+        // Assert
+        Assert.False(arguments.Contains("1"));
+        Assert.Equal("value", arguments["param"]);
+    }
 }

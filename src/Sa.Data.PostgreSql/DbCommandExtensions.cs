@@ -54,6 +54,16 @@ public interface INamePrefixProvider
 
 
 
+/// <summary>
+/// Pre-allocates parameter-name strings "{prefix}{index}" for every prefix and every index
+/// in [0, maxIndex) so the hot path never interpolates. The eager cost is bounded and small:
+/// for the outbox bulk provider (BatchParams) that is 9 prefixes × MaxIndex — 9216 strings at
+/// MaxIndex = 1024. An index at or above MaxIndex still resolves, via the <see cref="Combine"/>
+/// fallback, which is exactly why a provider's MaxIndex and the batch chunk ceiling must stay
+/// in lock-step (see Sa.Outbox.PostgreSql.Commands.SqlCacheSplitter.DefaultMaxLen — the two
+/// share the same constant). One instance per provider is created lazily and shared for the
+/// process lifetime.
+/// </summary>
 sealed class CachedParamNames<T>(int maxIndex) where T : INamePrefixProvider
 {
     private static readonly ReadOnlyDictionary<string, int> PrefixToIndex =

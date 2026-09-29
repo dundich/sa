@@ -156,7 +156,7 @@ Where inside `AddSaOutbox`:
 | `WithLockDuration(span)` | 10 с | TTL блокировки сообщения |
 | `WithLockRenewal(span)` | 3 с | Период продления блокировки |
 | `WithLookbackInterval(span)` | 7 дн | История поиска необработанных |
-| `WithBatchingWindow(span)` | 0 с | Окно агрегации сообщений |
+| `WithBatchingWindow(span)` | 3 с | Окно агрегации сообщений |
 | `WithNoBatchingWindow()` | — | Взять всё доступное сейчас |
 | `WithConcurrencyLimit(n)` | 1 | Одновременных задач |
 | `WithMaxConcurrency(n)` | 1 | Макс. параллельных процессоров |
@@ -396,7 +396,7 @@ After processing each message, call exactly one method:
 | **SKIP LOCKED** | Multiple workers safely compete for tasks |
 | **Advisory Locks** | Offset coordination per consumer group + tenant |
 | **murmurHash3** | Compact type identification cached in `__type$` |
-| **SqlCacheSplitter** | Splits large UPDATE queries into ≤512-element batches |
+| **SqlCacheSplitter** | Splits large UPDATE queries into chunks up to the shared `DefaultMaxLen` (1024) |
 
 ---
 

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Sa.Classes;
@@ -15,8 +16,13 @@ internal static class MurmurHash3
         var h1 = seed;
         var remainder = length & 3;
         var position = length - remainder;
+
+        // MurmurHash3 loads every 4-byte block as a little-endian uint32. BitConverter.ToUInt32
+        // read it in host byte order instead, so on a big-endian machine the hash disagreed with
+        // every other implementation — the property that makes a hash usable for sharding keys
+        // across machines. On little-endian hosts the result is bit-identical to before.
         for (var start = 0; start < position; start += 4)
-            h1 = (uint)((int)RotateLeft(h1 ^ RotateLeft(BitConverter.ToUInt32(bytes.Slice(start, 4)) * 3432918353U, 15) * 461845907U, 13) * 5 - 430675100);
+            h1 = (uint)((int)RotateLeft(h1 ^ RotateLeft(BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(start, 4)) * 3432918353U, 15) * 461845907U, 13) * 5 - 430675100);
 
         if (remainder > 0)
         {

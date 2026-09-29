@@ -49,7 +49,10 @@ internal sealed class JobErrorHandler(
         logger?.LogStopAllJobs(jobName, exception.ToString());
 
         var scheduler = context.ServiceProvider.GetService<IScheduler>();
-        scheduler?.Stop();
+
+        // A fire-and-forget Stop() could not be awaited — its exception (for
+        // example from a job still finishing on shutdown) was silently lost.
+        scheduler?.Stop().GetAwaiter().GetResult();
     }
 
     private void CloseApplication(string jobName, Exception exception)

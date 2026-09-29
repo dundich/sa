@@ -7,13 +7,38 @@ namespace Sa.Utils.WorkQueue;
 
 public static class Setup
 {
+    /// <summary>Registers a work queue built from an options factory.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configureOptions">Factory that builds the options for <typeparamref name="TInput"/>.</param>
+    /// <param name="lifetime">
+    /// Registration lifetime. Only <see cref="ServiceLifetime.Singleton"/> is
+    /// accepted: the queue owns reader tasks and a bounded buffer, so a
+    /// <see cref="ServiceLifetime.Scoped"/> or <see cref="ServiceLifetime.Transient"/>
+    /// registration would hand every resolution its own pool — and its own copy of
+    /// every buffered item.
+    /// </param>
+    /// <remarks>
+    /// Uses <c>TryAdd</c>: registering twice for the same <typeparamref name="TInput"/> keeps the first
+    /// registration instead of making <c>GetRequiredService</c> throw on a duplicate service type.
+    /// </remarks>
     public static IServiceCollection AddSaWorkQueue<TInput>(
         this IServiceCollection services,
         Func<IServiceProvider, SaWorkQueueOptions<TInput>> configureOptions,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
     {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configureOptions);
 
-        services.Add(new ServiceDescriptor(
+        // Reject rather than accept: a scoped queue looks like it works right up
+        // until two scopes both enqueue the same work.
+        if (lifetime != ServiceLifetime.Singleton)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(lifetime), lifetime,
+                "A work queue owns reader tasks and a bounded buffer, so it can only be registered as a singleton.");
+        }
+
+        services.TryAdd(new ServiceDescriptor(
             typeof(ISaWorkQueue<TInput>),
             sp =>
             {
@@ -23,15 +48,21 @@ public static class Setup
             },
             lifetime));
 
-
         return services;
     }
 
+    /// <summary>Registers a singleton work queue around a <typeparamref name="TProcessor"/> resolved from DI.</summary>
+    /// <typeparam name="TProcessor">The <see cref="ISaWork{TInput}"/> implementation; registered if absent.</typeparam>
+    /// <typeparam name="TInput">The work item type.</typeparam>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configureOptions">Optional hook to adjust the generated options.</param>
     public static IServiceCollection AddSaWorkQueue<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TProcessor, TInput>(
         this IServiceCollection services,
         Func<IServiceProvider, SaWorkQueueOptions<TInput>, SaWorkQueueOptions<TInput>>? configureOptions = null)
         where TProcessor : class, ISaWork<TInput>
     {
+        ArgumentNullException.ThrowIfNull(services);
+
         services.TryAddSingleton<TProcessor>();
 
         configureOptions ??= (_, opts) => opts;
@@ -49,22 +80,50 @@ public static class Setup
     }
 
 
+    /// <summary>Creates a work queue from a processor with a fixed concurrency.</summary>
+    /// <param name="processor">The processor that executes each work item.</param>
+    /// <param name="concurrency">
+    /// The number of parallel readers. <c>null</c> (default) means automatic
+    /// (processor count); <c>0</c> starts the queue paused (no readers);
+    /// values above the automatic max are clamped to it.
+    /// </param>
+    /// <remarks>
+    /// <see cref="MaxConcurrency"/> is left at the processor count, so the queue cannot scale above it
+    /// at runtime. Use the options directly (and <c>WithMaxConcurrency</c>) when a higher ceiling
+    /// is needed.
+    /// </remarks>
     public static ISaWorkQueue<TInput> CreateSimple<TInput>(
         this ISaWork<TInput> processor,
-        int concurrency = -1)
+        int? concurrency = null)
     {
+        ArgumentNullException.ThrowIfNull(processor);
+
         var options = SaWorkQueueOptions<TInput>.Create(processor)
-            .WithConcurrencyLimit(concurrency > 0 ? concurrency : Environment.ProcessorCount);
+            .WithConcurrencyLimit(concurrency ?? Environment.ProcessorCount);
 
         return new SaWorkQueue<TInput>(options);
     }
 
+    /// <summary>Creates a work queue from a processing delegate with a fixed concurrency.</summary>
+    /// <param name="process">Async delegate that receives the item and a cancellation token.</param>
+    /// <param name="concurrency">
+    /// The number of parallel readers. <c>null</c> (default) means automatic
+    /// (processor count); <c>0</c> starts the queue paused (no readers);
+    /// values above the automatic max are clamped to it.
+    /// </param>
+    /// <remarks>
+    /// <see cref="ISaWorkQueue{TInput}.MaxConcurrency"/> is left at the processor count, so the queue
+    /// cannot scale above it at runtime. Use the options directly (and <c>WithMaxConcurrency</c>)
+    /// when a higher ceiling is needed.
+    /// </remarks>
     public static ISaWorkQueue<TInput> CreateSimple<TInput>(
         Func<TInput, CancellationToken, Task> process,
-        int concurrency = -1)
+        int? concurrency = null)
     {
+        ArgumentNullException.ThrowIfNull(process);
+
         var options = SaWorkQueueOptions<TInput>.Create(process)
-            .WithConcurrencyLimit(concurrency > 0 ? concurrency : Environment.ProcessorCount);
+            .WithConcurrencyLimit(concurrency ?? Environment.ProcessorCount);
 
         return new SaWorkQueue<TInput>(options);
     }

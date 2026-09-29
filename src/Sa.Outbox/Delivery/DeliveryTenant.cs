@@ -41,11 +41,13 @@ internal sealed class DeliveryTenant(
 
         await using IAsyncDisposable locker = RenewerLocker(settings, filter, cancellationToken);
 
-        var successfulDeliveries = await deliveryCourier.Deliver(settings, filter, messages, cancellationToken);
+        var delivered = await deliveryCourier.Deliver(settings, filter, messages, cancellationToken);
 
         await ReleaseMessagesAsync(messages, filter, cancellationToken);
 
-        return successfulDeliveries;
+        // Handled count, not success count: a batch that failed entirely is still processed
+        // work and must not be mistaken for an empty queue by the greedy loop.
+        return delivered;
     }
 
     private OutboxMessageFilter CreateFilter<TMessage>(int tenantId, OutboxConsumerSettings settings)
@@ -121,5 +123,31 @@ internal sealed class DeliveryTenant(
                 , cancellationToken: cancellationToken);
 
     private static IMemoryOwner<IOutboxContextOperations<TMessage>> RentMemory<TMessage>(int size)
-        => MemoryPool<IOutboxContextOperations<TMessage>>.Shared.Rent(size);
+        => new ClearingMemoryOwner<IOutboxContextOperations<TMessage>>(
+            MemoryPool<IOutboxContextOperations<TMessage>>.Shared.Rent(size));
+
+    /// <summary>
+    /// <see cref="IMemoryOwner{T}"/> decorator that clears the rented array before handing it back
+    /// to the pool.
+    /// <para>
+    /// Without this, the pooled array keeps references to the contexts of the last delivered batch —
+    /// and through them to the message payloads and exceptions — until the very same slots happen to
+    /// be overwritten. The tail region <c>[batchSize..rented)</c> is never written at all, so it
+    /// would retain whatever the previous rental left there. Both effects pin whole batches in
+    /// memory for as long as the pool entry stays idle.
+    /// </para>
+    /// </summary>
+    private sealed class ClearingMemoryOwner<T>(IMemoryOwner<T> inner) : IMemoryOwner<T>
+    {
+        public Memory<T> Memory => inner.Memory;
+
+        public void Dispose()
+        {
+            // Span.Clear() covers exactly the rented region, whether or not it is backed by a
+            // larger array with a non-zero offset.
+            inner.Memory.Span.Clear();
+
+            inner.Dispose();
+        }
+    }
 }

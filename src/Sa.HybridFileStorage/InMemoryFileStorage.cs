@@ -11,7 +11,7 @@ public sealed class InMemoryFileStorage(
     InMemoryFileStorageOptions? options = null,
     TimeProvider? timeProvider = null) : IFileStorage
 {
-    private readonly InMemoryFileStorageOptions _options = options ?? new(string.Empty);
+    private readonly InMemoryFileStorageOptions _options = options ?? new();
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 

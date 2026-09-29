@@ -260,4 +260,373 @@ public class LockRenewerTests
             Assert.InRange(intervalMs, 0, 45); // ~10ms, allow jitter
         }
     }
+
+    // ─────────────────────────── регрессии ───────────────────────────
+
+    [Fact]
+    public async Task KeepLocked_ExtendThrows_ReportsFailureOnDispose()
+    {
+        // Arrange
+        var extendAttempts = 0;
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        Task extendLocked(CancellationToken _)
+        {
+            Interlocked.Increment(ref extendAttempts);
+            throw new InvalidOperationException("extend failed");
+        }
+
+        // Act
+        var locker = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20), extendLocked, blockImmediately: true,
+            cancellationToken: cancellationTokenSource.Token);
+
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+
+        // Assert
+        // Раньше здесь стоял Debug.WriteLine — в Release он вырезается целиком, цикл тихо умирал
+        // после первого сбоя, и про истёкшую блокировку не узнавал никто.
+        Assert.Equal(1, extendAttempts);
+        Assert.IsType<InvalidOperationException>(locker.RenewalError);
+
+        var ex = await Assert.ThrowsAsync<LockRenewalException>(async () => await locker.DisposeAsync());
+        Assert.IsType<InvalidOperationException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task KeepLocked_ExtendThrows_DoesNotKillTheProcess()
+    {
+        // Сбой продления — это фоновая ошибка, а не повод ронять процесс.
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        var locker = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(10),
+            _ => throw new InvalidOperationException("boom"),
+            blockImmediately: true,
+            cancellationToken: cancellationTokenSource.Token);
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(locker.RenewalError);
+        await cancellationTokenSource.CancelAsync();
+        await Assert.ThrowsAsync<LockRenewalException>(async () => await locker.DisposeAsync());
+    }
+
+    [Fact]
+    public async Task KeepLocked_CleanShutdown_DoesNotThrow()
+    {
+        // Arrange
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        async Task extendLocked(CancellationToken token)
+        {
+            await Task.Delay(5, token);
+        }
+
+        // Act
+        var locker = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20), extendLocked,
+            blockImmediately: true, cancellationToken: cancellationTokenSource.Token);
+
+        await Task.Delay(80, TestContext.Current.CancellationToken);
+        await cancellationTokenSource.CancelAsync();
+        await locker.DisposeAsync();
+
+        // Assert — штатная отмена не считается ошибкой
+        Assert.Null(locker.RenewalError);
+    }
+
+    [Fact]
+    public void KeepLocked_ThrowsOnNonPositiveExpiration()
+    {
+        // Раньше Period <= 0 прилетал из конструктора PeriodicTimer с параметром 'period'.
+        var zero = Assert.Throws<ArgumentOutOfRangeException>(
+            () => LockRenewer.KeepLocked(TimeSpan.Zero, _ => Task.CompletedTask, cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal("lockExpiration", zero.ParamName);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => LockRenewer.KeepLocked(TimeSpan.FromMilliseconds(-1), _ => Task.CompletedTask, cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void KeepLocked_ReturnedHandle_ExposesBothDisposeOverloads()
+    {
+        // Раньше возвращаемый тип был объявлен как IAsyncDisposable, из-за чего реализация
+        // IDisposable.Dispose() была недостижима: fire-and-forget вариант никто не мог вызвать.
+        var handle = LockRenewer.KeepLocked(TimeSpan.FromMinutes(5), _ => Task.CompletedTask, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.IsAssignableFrom<IAsyncDisposable>(handle);
+        Assert.IsAssignableFrom<IDisposable>(handle);
+
+        handle.Dispose();
+    }
+
+    [Fact]
+    public async Task KeepLocked_SyncDispose_DoesNotBlockOnTheRenewalTask()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource();
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMinutes(5),
+            async token =>
+            {
+                started.TrySetResult();
+                // Продление «зависло» и держится только на отмене — самый тяжёлый случай.
+                await Task.Delay(Timeout.Infinite, token);
+            },
+            blockImmediately: true,
+            cancellationToken: cts.Token);
+
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        var sw = Stopwatch.StartNew();
+        handle.Dispose(); // не должен ждать зависшее продление
+        sw.Stop();
+
+        Assert.InRange(sw.Elapsed.TotalSeconds, 0, 2);
+    }
+
+    [Fact]
+    public async Task KeepLocked_SyncDispose_StopsTheRenewalLoop()
+    {
+        // Токен вызывающего жив — цикл обязан умереть по освобождению держателя.
+        var extensionCount = 0;
+        using var cts = new CancellationTokenSource();
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20),
+            _ => { Interlocked.Increment(ref extensionCount); return Task.CompletedTask; },
+            blockImmediately: true,
+            cancellationToken: cts.Token);
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        handle.Dispose();
+        var afterDispose = extensionCount;
+
+        await Task.Delay(200, TestContext.Current.CancellationToken);
+
+        Assert.Equal(afterDispose, extensionCount);
+    }
+
+    [Fact]
+    public async Task KeepLocked_ExtendCancelledByItself_ReportsItSeparatelyFromShutdown()
+    {
+        // OCE, на который не отменён наш токен, приходит не от гашения цикла, а от самого
+        // вызова продления: Npgsql бросает его из Command.Cancel, например, когда сняли
+        // блокировку строки. Продления не состоялось — блокировка потеряна, — но путать это
+        // с обычным сбоем продления нельзя, иначе в логе не будет видно, что произошло.
+        using var cts = new CancellationTokenSource();
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20),
+            _ => throw new OperationCanceledException("command cancelled"),
+            blockImmediately: true,
+            cancellationToken: cts.Token);
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        Assert.False(cts.IsCancellationRequested, "Токен вызывающего не отменяли — отмена пришла из вызова продления.");
+
+        var ex = await Assert.ThrowsAsync<LockRenewalException>(async () => await handle.DisposeAsync());
+        Assert.IsType<OperationCanceledException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task KeepLocked_ShutdownCancellation_IsNotReportedAsAFailure()
+    {
+        // Отмена нашего же токена — штатное завершение, даже если extendLocked бросает OCE
+        // из-за переданного ему токена. Иначе каждое нормальное освобождение держателя
+        // выглядело бы как потеря блокировки.
+        using var cts = new CancellationTokenSource();
+
+        async Task extendLocked(CancellationToken token)
+        {
+            await Task.Delay(Timeout.Infinite, token);
+        }
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20), extendLocked,
+            blockImmediately: true, cancellationToken: cts.Token);
+
+        await Task.Delay(80, TestContext.Current.CancellationToken);
+        await cts.CancelAsync();
+        await handle.DisposeAsync();
+
+        Assert.Null(handle.RenewalError);
+    }
+
+    [Fact]
+    public async Task KeepLocked_DisposeAsyncTwice_ReportsTheFailureBothTimes()
+    {
+        // DisposeAsync освобождает источники отмены, поэтому второе освобождение обязано
+        // узнать, что они уже освобождены, — иначе вместо потери блокировки вылезает
+        // ObjectDisposedException из Cancel.
+        using var cts = new CancellationTokenSource();
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20),
+            _ => throw new InvalidOperationException("extend failed"),
+            blockImmediately: true,
+            cancellationToken: cts.Token);
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<LockRenewalException>(async () => await handle.DisposeAsync());
+        await Assert.ThrowsAsync<LockRenewalException>(async () => await handle.DisposeAsync());
+    }
+
+    [Fact]
+    public async Task KeepLocked_SyncDisposeAfterAsyncDispose_IsANoOp()
+    {
+        // Синхронное освобождение не должно трогать источники отмены, уже освобождённые
+        // асинхронным: у IDisposable и IAsyncDisposable один объект, а порядок вызовов —
+        // дело вызывающего.
+        using var cts = new CancellationTokenSource();
+
+        var handle = LockRenewer.KeepLocked(
+            TimeSpan.FromMilliseconds(20),
+            _ => Task.CompletedTask,
+            blockImmediately: true,
+            cancellationToken: cts.Token);
+
+        await handle.DisposeAsync();
+        handle.Dispose();
+    }
+
+    #region WaitForConditionAsync
+
+    [Fact]
+    public async Task WaitForConditionAsync_PollIntervalLongerThanTimeout_ReturnsPromptly()
+    {
+        // Arrange
+        // Раньше между опросами выжидался весь интервал, и только потом проверялось
+        // sw.Elapsed < timeout: интервал в 1 с при таймауте в 100 мс тянулся секунду и
+        // опрос выходил за границу.
+        int calls = 0;
+        var sw = Stopwatch.StartNew();
+
+        // Act
+        bool result = await LockRenewer.WaitForConditionAsync(
+            _ => { calls++; return Task.FromResult(false); },
+            TimeSpan.FromMilliseconds(100),
+            TimeSpan.FromSeconds(1),
+            TestContext.Current.CancellationToken);
+        sw.Stop();
+
+        // Assert
+        Assert.False(result);
+        Assert.Equal(1, calls);
+        Assert.True(
+            sw.Elapsed < TimeSpan.FromMilliseconds(800),
+            $"Ждал {sw.Elapsed.TotalMilliseconds:F0} мс при таймауте 100 мс и интервале 1 с.");
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_DoesNotRunThePredicatePastTheTimeout()
+    {
+        // Граница проверяется до опроса, а не после: последний опрос не должен уже
+        // выходить за пределы timeout.
+        int calls = 0;
+        var sw = Stopwatch.StartNew();
+
+        bool result = await LockRenewer.WaitForConditionAsync(
+            _ => { calls++; return Task.FromResult(false); },
+            TimeSpan.FromMilliseconds(200),
+            TimeSpan.FromMilliseconds(50),
+            TestContext.Current.CancellationToken);
+        sw.Stop();
+
+        // Assert
+        Assert.False(result);
+        // Опросов должно быть несколько, но не тысячи: это и есть проверка, что цикл не
+        // разогнал tight-loop из-за ожидания остатка интервала. Точное число не фиксируем —
+        // оно зависит от гранулярности таймера.
+        Assert.True(calls >= 2, $"Слишком мало опросов: {calls}");
+        Assert.True(calls <= 6, $"Слишком много опросов: {calls}");
+        // Последний опрос не выходит за пределы таймаута больше чем на один интервал.
+        Assert.True(
+            sw.Elapsed <= TimeSpan.FromMilliseconds(200) + TimeSpan.FromMilliseconds(50),
+            $"Переопросили: {sw.Elapsed.TotalMilliseconds:F0} мс при таймауте 200 мс.");
+        Assert.True(
+            sw.Elapsed >= TimeSpan.FromMilliseconds(200) - TimeSpan.FromMilliseconds(50),
+            $"Слишком рано: {sw.Elapsed.TotalMilliseconds:F0} мс при таймауте 200 мс.");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-500)]
+    public async Task WaitForConditionAsync_NonPositivePollInterval_ThrowsArgumentOutOfRangeException(int pollMs)
+    {
+        // Раньше проверку отдавал конструктор PeriodicTimer со своим текстом; ноль к тому же
+        // завёл бы в бесконечный цикл опроса без ожидания.
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            LockRenewer.WaitForConditionAsync(
+                _ => Task.FromResult(false),
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMilliseconds(pollMs),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("pollInterval", ex.ParamName);
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_NegativeTimeout_ThrowsArgumentOutOfRangeException()
+    {
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            LockRenewer.WaitForConditionAsync(
+                _ => Task.FromResult(false),
+                TimeSpan.FromMilliseconds(-1),
+                TimeSpan.FromMilliseconds(10),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("timeout", ex.ParamName);
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_NullPredicate_ThrowsArgumentNullException()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            LockRenewer.WaitForConditionAsync(
+                null!,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMilliseconds(10),
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_ZeroTimeout_DoesNotCallThePredicate()
+    {
+        int calls = 0;
+
+        bool result = await LockRenewer.WaitForConditionAsync(
+            _ => { calls++; return Task.FromResult(true); },
+            TimeSpan.Zero,
+            TimeSpan.FromMilliseconds(10),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public async Task WaitForConditionAsync_ConditionTrueImmediately_ReturnsTrueWithoutWaiting()
+    {
+        int calls = 0;
+        var sw = Stopwatch.StartNew();
+
+        bool result = await LockRenewer.WaitForConditionAsync(
+            _ => { calls++; return Task.FromResult(true); },
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(1),
+            TestContext.Current.CancellationToken);
+        sw.Stop();
+
+        Assert.True(result);
+        Assert.Equal(1, calls);
+        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(500), $"Первый опрос ждал {sw.Elapsed}.");
+    }
+
+    #endregion
 }

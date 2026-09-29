@@ -166,10 +166,22 @@ public class CronTimingTests
     [InlineData("* * * 13 *")]
     [InlineData("* * * * 7")]
     [InlineData("abc * * * *")]
+    [InlineData("5-3/2 * * * *")] // inverted range/step — must not be silently accepted
     public void Constructor_ThrowsFormatException_ForInvalidExpression(string invalidExpression)
     {
         CronTiming act() => new(invalidExpression);
         Assert.Throws<FormatException>((Func<CronTiming>)act);
+    }
+
+    [Fact]
+    public void Constructor_InvertedRangeStep_ThrowsInsteadOfSilentNoMatch()
+    {
+        // "5-3/2" produces no values — an empty field must fail at construction time,
+        // not turn into a timing that never matches (and kills the job silently).
+        CronTiming act() => new("5-3/2 * * * *");
+
+        var ex = Assert.Throws<FormatException>(act);
+        Assert.Contains("minute", ex.Message);
     }
 
     [Fact]
@@ -200,19 +212,37 @@ public class CronTimingTests
     }
 
     [Fact]
-    public void GetNextOccurrence_BothDayConstraints_BothMustMatch()
+    public void GetNextOccurrence_BothDayConstraints_EitherMustMatch()
     {
-        // Day of month AND day of week both specified — both must match
-        var timing = new CronTiming("0 12 15 * 3"); // Wednesday (3) on 15th
+        // Day of month AND day of week both specified — either may match (standard cron OR)
+        var timing = new CronTiming("0 12 15 * 3"); // 12:00 on the 15th or on a Wednesday
 
-        // Find a date that's both the 15th and a Wednesday
-        // June 15, 2026 is a Tuesday, so it should skip
+        // June 15, 2026 is a Monday: day-of-month matches, but the 12:00 slot is already past
         var start = new DateTimeOffset(2026, 6, 15, 13, 0, 0, TimeSpan.Zero);
 
-        // July 15, 2026 is a Wednesday
-        var expected = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
+        // June 17, 2026 is a Wednesday → matches via day-of-week
+        var expected = new DateTimeOffset(2026, 6, 17, 12, 0, 0, TimeSpan.Zero);
 
         Assert.Equal(expected, timing.GetNextOccurrence(start, null!));
+    }
+
+    [Fact]
+    public void GetNextOccurrence_FirstOrMonday_ORSemantics()
+    {
+        // "At 00:00 on day-of-month 1 and on Monday" — both fields restricted → either matches
+        var timing = new CronTiming("0 0 1 * 1");
+
+        // 2026-06-25 (Thu) → next Monday 2026-06-29
+        Assert.Equal(new DateTimeOffset(2026, 6, 29, 0, 0, 0, TimeSpan.Zero),
+            timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 0, 0, 0, TimeSpan.Zero), null!));
+
+        // 2026-06-29 (Mon) → next is July 1st (Wed) via day-of-month
+        Assert.Equal(new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero),
+            timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 29, 0, 0, 0, TimeSpan.Zero), null!));
+
+        // 2026-07-01 (Wed) → next Monday 2026-07-06
+        Assert.Equal(new DateTimeOffset(2026, 7, 6, 0, 0, 0, TimeSpan.Zero),
+            timing.GetNextOccurrence(new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero), null!));
     }
 
     [Fact]
@@ -241,19 +271,28 @@ public class CronTimingTests
     }
 
     [Fact]
-    public void GetNextOccurrence_WildcardMonth_AnyMonth()
+    public void GetNextOccurrence_Feb29_NextLeapYearWithinHorizon()
     {
         var timing = new CronTiming("0 0 29 2 *"); // Feb 29 only
 
         var jan2028 = new DateTimeOffset(2028, 1, 1, 0, 0, 0, TimeSpan.Zero);
         Assert.Equal(new DateTimeOffset(2028, 2, 29, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(jan2028, null!));
 
-        // From within 2028 (after Feb 29), next leap day is 2032 — but that's 4 years away
-        // The 2-year search limit means this returns null
+        // From within 2028 (after Feb 29), the next leap day is 2032 — 4 years away.
+        // The 28-year horizon still covers it, so the job keeps running instead of aborting.
         var mar2028 = new DateTimeOffset(2028, 3, 1, 0, 0, 0, TimeSpan.Zero);
-        var result = timing.GetNextOccurrence(mar2028, null!);
-        // Beyond 2-year horizon → null
-        Assert.Null(result);
+        Assert.Equal(new DateTimeOffset(2032, 2, 29, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(mar2028, null!));
+    }
+
+    [Fact]
+    public void GetNextOccurrence_Feb29_CenturyNonLeapYear_GapOfEightYears()
+    {
+        // 2100 is not a leap year (divisible by 100 but not by 400), so the
+        // leap-day gap across that century is 8 years: 2096 → 2104.
+        var timing = new CronTiming("0 0 29 2 *");
+
+        var start = new DateTimeOffset(2097, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Assert.Equal(new DateTimeOffset(2104, 2, 29, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(start, null!));
     }
 
     [Fact]

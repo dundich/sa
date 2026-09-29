@@ -100,8 +100,82 @@ public class JobControllerTests
     public void WithMaxConcurrency_RejectsZero()
     {
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
-        var ex = Record.Exception(() => settings.Properties.WithMaxConcurrencyLimit(0));
+        var ex = Record.Exception(() => settings.Properties.WithMaxConcurrency(0));
         Assert.IsType<ArgumentOutOfRangeException>(ex);
+    }
+
+    [Fact]
+    public async Task WaitIfPaused_NotPaused_ReturnsImmediately()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var controller = CreateController(settings);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await controller.WaitIfPaused(TestContext.Current.CancellationToken);
+        sw.Stop();
+
+        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(100));
+    }
+
+    [Fact]
+    public async Task WaitIfPaused_Paused_BlocksUntilCancellation()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var controller = CreateController(settings);
+
+        controller.Pause();
+
+        var cts = new CancellationTokenSource(100);
+        var ex = await Record.ExceptionAsync(async () => await controller.WaitIfPaused(cts.Token));
+
+        Assert.IsType<OperationCanceledException>(ex);
+    }
+
+    [Fact]
+    public async Task WaitIfPaused_Paused_UnblocksOnResume()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var controller = CreateController(settings);
+
+        controller.Pause();
+
+        // The gate is async: while paused it yields and the returned
+        // ValueTask stays incomplete until Resume.
+        ValueTask wait = controller.WaitIfPaused(CancellationToken.None);
+
+        // Let the waiter park on the pause gate
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(wait.IsCompleted);
+
+        controller.Resume();
+
+        await wait.AsTask().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task WaitIfPaused_Paused_UnblocksOnShutdown()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var controller = CreateController(settings);
+
+        controller.Pause();
+
+        ValueTask wait = controller.WaitIfPaused(CancellationToken.None);
+
+        // Let the waiter park on the pause gate
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(wait.IsCompleted);
+
+        controller.Shutdown();
+
+        // The waiter exits either via the gate completion or via the
+        // shutdown token cancellation — either way it surfaces as OCE.
+        Task waiter = wait.AsTask();
+        var ex = await Record.ExceptionAsync(async () => await waiter.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        if (ex is not null)
+        {
+            Assert.IsType<OperationCanceledException>(ex);
+        }
     }
 
     [Fact]

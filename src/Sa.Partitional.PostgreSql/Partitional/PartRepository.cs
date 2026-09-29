@@ -10,7 +10,9 @@ namespace Sa.Partitional.PostgreSql.Repositories;
 internal sealed partial class PartRepository(
     IPgDataSource dataSource,
     ISqlBuilder sqlBuilder,
-    ILogger<PartRepository>? logger = null) : IPartRepository, IDisposable
+    // Required, not optional: the [LoggerMessage] methods dereference it, so a null logger
+    // turned the first drop/migrate into a NullReferenceException.
+    ILogger<PartRepository> logger) : IPartRepository, IDisposable
 {
 
     /// <summary>
@@ -104,11 +106,39 @@ internal sealed partial class PartRepository(
         string sql = sqlBuilder.SelectPartsFromDateSql(tableName);
         long unixTime = fromDate.ToUniversalTime().StartOfDay().ToUnixTimeSeconds();
 
-        return await GetPartsFromDateWithRetry(sql, unixTime, cancellationToken).ConfigureAwait(false);
+        return await GetPartsWithRetry(
+            sql,
+            "from_date",
+            unixTime,
+            cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<List<PartByRangeInfo>> GetPartsFromDateWithRetry(
-        string sql, long unixTime, CancellationToken cancellationToken)
+    public async Task<List<PartByRangeInfo>> GetPartsToDate(
+        string tableName,
+        DateTimeOffset toDate,
+        CancellationToken cancellationToken = default)
+    {
+        string sql = sqlBuilder.SelectPartsToDateSql(tableName);
+
+        // Same retry policy as GetPartsFromDate: both are the same read of the same cache table, and
+        // a cleanup that gives up on one transient connection failure would silently skip a batch of
+        // partitions to drop.
+        return await GetPartsWithRetry(
+            sql,
+            "to_date",
+            toDate.ToUnixTimeSeconds(),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reads the partition cache table, retrying only transport-level failures and treating a missing
+    /// cache table as "nothing cached yet" instead of an error.
+    /// </summary>
+    private async Task<List<PartByRangeInfo>> GetPartsWithRetry(
+        string sql,
+        string parameterName,
+        long unixTime,
+        CancellationToken cancellationToken)
     {
         return await PgRetryStrategy.ExecuteWithRetry(
             async t =>
@@ -118,7 +148,7 @@ internal sealed partial class PartRepository(
                     return await dataSource.ExecuteReaderList(
                         sql,
                         ReadPartInfo,
-                        [new NpgsqlParameter<long>("from_date", unixTime)], t).ConfigureAwait(false);
+                        [new NpgsqlParameter<long>(parameterName, unixTime)], t).ConfigureAwait(false);
                 }
                 catch (PostgresException ex) when (UndefinedTable(ex))
                 {
@@ -127,26 +157,6 @@ internal sealed partial class PartRepository(
             }
             , next: CanRetryByError
             , cancellationToken: cancellationToken);
-    }
-
-    public async Task<List<PartByRangeInfo>> GetPartsToDate(
-        string tableName,
-        DateTimeOffset toDate,
-        CancellationToken cancellationToken = default)
-    {
-        string sql = sqlBuilder.SelectPartsToDateSql(tableName);
-        try
-        {
-            return await dataSource.ExecuteReaderList(
-                sql
-                , ReadPartInfo
-                , [new NpgsqlParameter<long>("to_date", toDate.ToUnixTimeSeconds())]
-                , cancellationToken).ConfigureAwait(false);
-        }
-        catch (PostgresException ex) when (UndefinedTable(ex))
-        {
-            return [];
-        }
     }
 
     public async Task<int> DropPartsToDate(
@@ -173,6 +183,14 @@ internal sealed partial class PartRepository(
                 catch (PostgresException pgErr) when (UndefinedTable(pgErr))
                 {
                     LogSkipToDrop(pgErr, part.Id);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // Dropping is idempotent (DROP TABLE IF EXISTS + a DELETE ... WHERE id =), so a
+                    // cancelled cleanup can simply stop and let the next run continue. Swallowing the
+                    // cancellation here instead would keep the loop spinning over every remaining
+                    // partition, failing each one, and then report a completed scan.
+                    throw;
                 }
                 catch (Exception ex)
                 {

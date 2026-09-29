@@ -110,7 +110,7 @@ public sealed class ExtensionMethodTests : IAsyncLifetime
         // Act
         var result = await storage.CopyFromFileAsync(
             testFilePath,
-            string.Empty,
+            "share",
             new UploadFileInput { FileName = "disk_copy.txt", TenantId = 1 },
             ct: _cts.Token);
 

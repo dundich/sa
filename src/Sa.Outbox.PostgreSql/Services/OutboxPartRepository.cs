@@ -38,13 +38,22 @@ internal sealed class OutboxPartRepository(
         IEnumerable<OutboxPartInfo> outboxParts,
         CancellationToken cancellationToken)
     {
+        // Partitions are daily, so the dedup key is (day, tenant, part) — the exact timestamp on
+        // OutboxPartInfo is noise that used to fan one batch into multiple EnsureParts round trips
+        // (and the old Distinct() compared it as part of the record). The day passed to the part
+        // manager is StartOfDay-truncated, matching what the error path already did (M6).
         int i = 0;
-        foreach (OutboxPartInfo part in outboxParts.Distinct())
+        var seen = new HashSet<(DateTimeOffset Day, int TenantId, string Part)>();
+
+        foreach (OutboxPartInfo part in outboxParts)
         {
+            var day = part.CreatedAt.StartOfDay();
+            if (!seen.Add((day, part.TenantId, part.Part))) continue;
+
             i++;
             await partManager.EnsureParts(
                 databaseTableName,
-                part.CreatedAt,
+                day,
                 [part.TenantId, part.Part],
                 cancellationToken);
         }

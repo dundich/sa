@@ -7,5 +7,9 @@
 
   <PropertyGroup>
     <IsTestProject>false</IsTestProject>
+    <!-- Фикстура подключается к тестам как библиотека, но тестовым модулем не является:
+         иначе прогон решения запускает её, не находит тестов и завершает весь прогон
+         exit code 8 (MTP: "no tests discovered"). -->
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
   </PropertyGroup>
 </Project>

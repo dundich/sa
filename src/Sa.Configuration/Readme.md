@@ -7,10 +7,11 @@ Secure secrets management and command-line argument parsing within the .NET `Mic
 ## Features
 
 - **Automatic secret substitution**: `{{key}}` placeholders are replaced with real values from files, environment variables, or command-line arguments
-- **Cycle protection**: built-in guard against infinite recursion during placeholder resolution
-- **Optional placeholders**: `{{?key}}` — if the secret is not found, returns `null` instead of throwing
-- **Chained Stores**: multiple secret sources with priority ordering
-- **Argument parser**: supports `--key value`, `--key=value`, `-flag` formats
+- **Value normalization**: secret values are trimmed; surrounding quotes (`'`, `"`, `` ` ``) are stripped
+- **Cycle protection**: nested placeholders resolve up to a depth of 3; circular references throw `InvalidOperationException`
+- **Optional placeholders**: `{{?key}}` — if the secret is not found, the whole string becomes `null` instead of throwing
+- **Chained Stores**: multiple secret sources with LIFO priority (the store added last wins); `AddStore` is thread-safe
+- **Argument parser**: supports `--key value`, `--key=value`, `-flag` formats; negative numbers are treated as values; surrounding quotes are stripped
 - **Environments**: automatic loading of `secrets.{Environment}.txt` (Development/Staging/Production)
 
 ---
@@ -77,16 +78,16 @@ var pgConn = app.Configuration["sa:pg:connection"];
 
 ## Secret Priority Order
 
-Secrets are looked up in descending priority order:
+Secrets use LIFO priority — the store added last wins. The default chain is resolved in this order:
 
-| # | Source | Example File |
-|---|--------|-------------|
-| 1 | Base secrets file | `secrets.txt` |
-| 2 | Environment-specific file | `secrets.Development.txt` |
-| 3 | Environment variables | `SA_PG_PASSWORD=...` |
-| 4 | Command-line arguments | `--sa_pg_password=...` |
+| # | Source | Example |
+|---|--------|---------|
+| 1 | Command-line arguments | `--sa_pg_password=...` |
+| 2 | Environment variables | `SA_PG_PASSWORD=...` |
+| 3 | Environment-specific file | `secrets.Development.txt` |
+| 4 | Base secrets file | `secrets.txt` |
 
-The first source that has a value wins. This allows overriding secrets per environment.
+The first source with a value wins — command line can override everything, environment variables override files, and so on.
 
 ---
 
@@ -100,7 +101,9 @@ Use `{{?key}}` instead of `{{key}}` to avoid an error when a secret is missing:
 }
 ```
 
-If `feature_flag` is not found in any store, `null` is returned.
+If `feature_flag` is not found in any store, the whole string is `null`.
+
+In the configuration pipeline (`AddSaConfiguration` / `AddSaPostSecretProcessing`), any missing secret — including a plain `{{key}}` — results in `null` for that value instead of throwing.
 
 ---
 
@@ -126,17 +129,17 @@ var app = builder.Build();
 
 ---
 
-## Arguments — Command-Line Argument Parser
+## Arguments
 
 ```csharp
 using Sa.Configuration.CommandLine;
 
-// some.exe --config_db /share/data.db --debug
+// some.exe --config_db /share/data.db --debug --port -5
 var args = new Arguments(args);
 
 string? configDb = args["config_db"];       // → "/share/data.db"
 bool?   debug    = args.GetBool("debug");   // → true
-int?    port     = args.GetInt("port");     // → null
+int?    port     = args.GetInt("port");     // → -5
 TimeSpan? timeout = args.GetTimeSpan("timeout");
 ```
 
@@ -147,10 +150,11 @@ Supported formats:
 --key=value
 -key value
 -key=value
--flag          → flag=true (boolean flag)
+-flag            → flag=true (boolean flag)
+--key -5         → value "-5" (negative numbers are never treated as flags)
 ```
 
-Typed methods return `null` when the parameter is absent or invalid:
+Typed getters return `null` when the parameter is absent or invalid:
 
 | Method | Return Type | Conversion |
 |--------|------------|------------|
@@ -160,122 +164,33 @@ Typed methods return `null` when the parameter is absent or invalid:
 | `GetLong()` | `long?` | same as above |
 | `GetTimeSpan()` | `TimeSpan?` | `TimeSpan.TryParse(..., InvariantCulture)` |
 
-Additional methods:
-
-| Method | Return Type | Description |
-|--------|------------|-------------|
-| `Contains(param)` | `bool` | Checks if parameter exists |
-| `IsPresent(param)` | `bool` | Parameter exists AND has a non-null value |
+`args.Contains("key")` checks for parameter existence; `args.Parameters` gives access to the full parsed dictionary.
 
 ---
 
-## Secrets — Secrets Management
+## Secrets
 
-### Creating Defaults
+Use `Secrets` directly when you need secrets outside of `IConfiguration`:
 
 ```csharp
 using Sa.Configuration.SecretStore;
 
-// Standard chain: File → File.Env → EnvVar → CommandLine
+// Default chain (LIFO): CLI args → env vars → secrets.{Env}.txt → secrets.txt
 var secrets = Secrets.CreateDefault();
-```
 
-### Custom Chain
-
-```csharp
-var secrets = new Secrets(
-    new FileSecretStore("my-secrets.txt"),
-    new EnvironmentVariableSecretStore(),
-    new InMemorySecretStore(new Dictionary<string, string?> {
-        { "override_key", "override_value" }
-    })
-);
-```
-
-### Fluent Addition at Runtime
-
-```csharp
-secrets.AddStore(new FileSecretStore("additional-secrets.txt"));
-```
-
-### Placeholder Substitution
-
-```csharp
-string template = "Server={{host}};Password={{password}}";
-string result = secrets.PopulateSecrets(template);
-// → "Server=localhost;Password=s3cret!"
-```
-
-### Getting a Single Secret
-
-```csharp
+string? result   = secrets.PopulateSecrets("Server={{host}};Pwd={{sa_pg_password}}");
 string? password = secrets.GetSecret("sa_pg_password");
 ```
 
-### Environment Name Resolution
+Custom chain — any `ISecretStore` (`FileSecretStore`, `EnvironmentVariableSecretStore`, `CommandLineArgsSecretStore`, `InMemorySecretStore`):
 
 ```csharp
-string env = Secrets.GetEnvironmentName();
-// → "Development", "Staging", "Production", etc.
+var secrets = new Secrets(new FileSecretStore("my-secrets.txt"));
+secrets.AddStore(new InMemorySecretStore().AddSecret("override_key", "override_value"));
+// LIFO: the newly added store has the highest priority
 ```
 
----
-
-## Public API
-
-### Namespace `Sa.Configuration`
-
-| Type | Purpose |
-|------|---------|
-| `Setup.AddSaConfiguration()` | Main entry-point: connects arguments + secret processing |
-
-### Namespace `Sa.Configuration.CommandLine`
-
-| Type | Purpose |
-|------|---------|
-| `Arguments` | Command-line argument parser |
-| `Arguments.CreateDefault()` | Creates from `Environment.GetCommandLineArgs()` |
-| `Setup.AddSaCommandLine()` | Extension method for `IConfigurationBuilder` |
-
-### Namespace `Sa.Configuration.SecretStore`
-
-| Type | Purpose |
-|------|---------|
-| `Secrets` | Main secrets management class, implements `ISecretService` |
-| `Secrets.CreateDefault()` | Standard store chain |
-| `Secrets.GetEnvironmentName()` | Resolves environment (`DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT`) |
-| `SecretOptions` | Options for `CreateDefault()`: `FileName`, `Args`, `EnvironmentName` |
-| `ISecretService` | Interface: `PopulateSecrets()` + `GetSecret()` |
-| `ISecretStore` | Interface: `GetSecret(string key)` |
-| `Setup.AddSaPostSecretProcessing()` | Extension method: applies `ISecretService` to config AFTER other sources are loaded |
-
-### Secret Stores (`Sa.Configuration.SecretStore.Stories`)
-
-| Class | Description |
-|-------|-------------|
-| `FileSecretStore` | Loads `key=value` from a text file (skips `#` comments) |
-| `EnvironmentVariableSecretStore` | Reads from `Environment.GetEnvironmentVariable()` |
-| `CommandLineArgsSecretStore` | Pulls secrets from `Arguments` |
-| `InMemorySecretStore` | Dictionary in memory, fluent `.AddSecret()` |
-
----
-
-## How It Works
-
-```
-┌──────────────────────────────────────────────────────┐
-│ 1. appsettings.json contains:                        │
-│    "connection": "Host={{sa_pg_host}};Password={{...}}"│
-├──────────────────────────────────────────────────────┤
-│ 2. secrets.txt contains:                             │
-│    sa_pg_host=localhost                              │
-│    sa_pg_password=s3cret!                            │
-├──────────────────────────────────────────────────────┤
-│ 3. AddSaPostSecretProcessing substitutes placeholders:│
-│    IConfiguration["sa:pg:connection"]                │
-│    → "Host=localhost;Password=s3cret!;..."           │
-└──────────────────────────────────────────────────────┘
-```
+`Secrets.CreateDefault(new SecretOptions { FileName = "app-secrets.txt", EnvironmentName = "Staging" })` customizes the base file name and environment. `Secrets.GetEnvironmentName()` resolves it from `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` / `environment`, falling back to `Production`.
 
 ---
 

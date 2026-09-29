@@ -13,7 +13,12 @@ internal sealed class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBui
 
     public ErrorHandlingAction ThenAction { get; private set; } = Default.Action;
 
-    public int RetryCount { get; private set; }
+    /// <summary>
+    /// The configured retry count; <see langword="null"/> when
+    /// <see cref="IfErrorRetry"/> was not called (the
+    /// <see cref="Default.RetryCount"/> default applies at execution time).
+    /// </summary>
+    public int? RetryCount { get; private set; }
 
     public Func<Exception, bool>? SuppressError { get; private set; }
 
@@ -42,11 +47,6 @@ internal sealed class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBui
     {
         ThenAction = ErrorHandlingAction.AbortJob;
         return this;
-    }
-
-    public IJobErrorHandlingBuilder ThenStopJob()
-    {
-        return ThenAbortJob();
     }
 
     public IJobErrorHandlingBuilder ThenStopAllJobs()

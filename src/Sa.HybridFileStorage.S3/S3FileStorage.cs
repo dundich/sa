@@ -10,12 +10,12 @@ internal sealed class S3FileStorage(
     S3FileStorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
-    private const string DefaultBasket = "share";
     private const string SchemeSeparator = "://";
 
-    private readonly string _pathPrefix = string.IsNullOrWhiteSpace(options.Basket)
-        ? DefaultBasket
-        : options.Basket;
+    // The options reach this type only via Setup.AddSaS3FileStorage, which calls
+    // S3FileStorageOptions.Validate() first, so Basket is a non-empty validated word and the
+    // previous IsNullOrWhiteSpace fallback to "share" was unreachable.
+    private readonly string _pathPrefix = options.Basket;
     private readonly string _schemePrefix = $"{options.StorageType}{SchemeSeparator}";
     private readonly string _storageType = options.StorageType;
     private readonly bool _isReadOnly = options.IsReadOnly;

@@ -1,5 +1,4 @@
 dist/
-.vscode/
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
 # User-specific files
@@ -797,6 +796,7 @@ FodyWeavers.xsd
 *.sln.iml
 src/.vscode/
 /build/do_push_prod-ex.ps1
+/build-sh/do-push-prod-ex.sh
 /src/Sa.Media.FFmpeg/build/*.tar.gz
 /src/Sa.Media.FFmpeg/build/artifacts/
 /src/Sa.Media.FFmpeg/build/build.*/
@@ -808,3 +808,9 @@ src/.vscode/
 .agents/
 /.github/skills
 /src/Sa.Media.FFmpeg/sa/native/
+/src/Tests/Sa.MediaTests/data/pcm_s16le.wav
+/src/Sa.Media/Echo/output.wav
+src/Sa.Media/Echo/data/pcm_s16le.wav
+/src/.nuget
+/src/.localpilot
+/.opencode/**

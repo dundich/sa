@@ -6,6 +6,7 @@ using Sa.Data.PostgreSql.Fixture;
 namespace Sa.Configuration.PostgreSqlTests;
 
 
+[Trait("Category", "Local")]
 public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProviderTests.Fixture fixture)
     : IClassFixture<DatabaseConfigurationProviderTests.Fixture>
 {
@@ -115,5 +116,40 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
 
         // Assert
         Assert.Null(configuration["NullValueKey"]);
+    }
+
+    [Fact]
+    public async Task Load_Reload_DropsValuesRemovedFromDatabase()
+    {
+        // Arrange: seed a row that will be removed before the second load
+        using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        using var seed = new NpgsqlCommand(
+            "INSERT INTO config_provider_test (key, value) VALUES ('stale_key', 'stale_value') ON CONFLICT (key) DO NOTHING;",
+            connection);
+        await seed.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+        var builder = new ConfigurationBuilder();
+        var options = new PostgreSqlConfigurationOptions(
+            fixture.ConnectionString,
+            "SELECT key, value FROM config_provider_test");
+
+        builder.AddSaPostgreSqlConfiguration(options);
+
+        var configuration = builder.Build();
+
+        // Assert: the first load sees the row
+        Assert.Equal("stale_value", configuration["stale_key"]);
+
+        // Act: remove the row from the database, then reload
+        using var del = new NpgsqlCommand("DELETE FROM config_provider_test WHERE key = 'stale_key';", connection);
+        await del.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+        configuration.Reload();
+
+        // Assert: the stale row no longer lingers, surviving rows are intact
+        Assert.Null(configuration["stale_key"]);
+        Assert.Equal("normal_value", configuration["NormalKey"]);
     }
 }

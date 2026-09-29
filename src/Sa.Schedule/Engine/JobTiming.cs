@@ -9,7 +9,4 @@ internal sealed class JobTiming(
 
     public static IJobTiming EveryTime(TimeSpan timeSpan, string? name = null) =>
         new JobTiming((dateTime, _) => dateTime.Add(timeSpan), name ?? $"every {timeSpan}");
-
-    public static IJobTiming Default { get; }
-        = EveryTime(TimeSpan.FromSeconds(1), "default every seconds");
 }

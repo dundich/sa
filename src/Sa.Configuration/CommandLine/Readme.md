@@ -2,6 +2,8 @@
 
 Parse and consume command-line arguments in .NET apps with a simple dictionary-like API. Supports `--flag=value`, `--flag value`, short options (`-x`), and typed getters.
 
+Tokens that look like negative numbers (e.g. `-5`, `--1.5`) are treated as **values**, not flags.
+
 > **Key detail:** the parser strips leading dashes from parameter names. When you access a value, use the key **without** leading `-` or `--`.
 > Example: `--config_db` in CLI → `args["config_db"]` in code. `-v` in CLI → `args["v"]` in code.
 
@@ -16,14 +18,14 @@ var args = new Arguments(args);
 // Indexer access (returns null if absent) — keys have leading dashes stripped
 string? db    = args["config_db"];
 string? file  = args["config_file"];
-bool    debug = args.IsPresent("debug");   // true if flag present & truthy
+bool?   debug = args.GetBool("debug");     // true/1/yes/on → true; null if absent
 
 // Typed helpers (return nullable, null on missing/invalid)
 int?     port    = args.GetInt("port");
 float?   timeout = args.GetFloat("timeout");
-long     offset  = args.GetLong("offset");
-TimeSpan ttl     = args.GetTimeSpan("ttl");
-bool     verbose = args.GetBool("v");       // "true"/"1"/"yes"/"on" → true
+long?    offset  = args.GetLong("offset");
+TimeSpan? ttl    = args.GetTimeSpan("ttl");
+bool?    verbose = args.GetBool("v");      // "true"/"1"/"yes"/"on" → true
 ```
 
 ### Minimal Console App
@@ -35,7 +37,7 @@ var arguments = new Arguments(args);
 
 Console.WriteLine($"DB:    {arguments["db"]    ?? "(default)"}");
 Console.WriteLine($"Port:  {arguments.GetInt("port")    ?? 5432}");
-Console.WriteLine($"Debug: {arguments.IsPresent("debug")}");
+Console.WriteLine($"Debug: {arguments.GetBool("debug") == true}");
 Console.WriteLine($"TTL:   {arguments.GetTimeSpan("ttl") ?? TimeSpan.Zero}");
 ```
 
@@ -66,6 +68,7 @@ TTL:   00:05:00
 | Short equals | `-k=v` | `"k"` | `"v"` |
 | Boolean flag | `--debug` | `"debug"` | `"true"` |
 | Quoted value | `--name "hello world"` | `"name"` | `"hello world"` |
+| Negative value | `--offset -5` | `"offset"` | `"-5"` |
 
 ---
 
@@ -74,7 +77,7 @@ TTL:   00:05:00
 ### Constructor
 
 ```csharp
-public Arguments(params IReadOnlyList<string> args)
+public Arguments(params string[] args)
 ```
 
 Creates an instance from a list of argument strings.
@@ -88,7 +91,7 @@ public static Arguments CreateDefault(string[]? args = null)
 Shortcut that uses `Environment.GetCommandLineArgs()` when `args` is null.
 
 ```csharp
-var args = Arguments.CreateDefault();   // reads Process.GetCurrentProcess().CommandLine
+var args = Arguments.CreateDefault();   // uses Environment.GetCommandLineArgs()
 ```
 
 ### Indexer
@@ -103,14 +106,11 @@ Returns the value for a parameter name, or `null` if not found. Keys are stored 
 var db = args["database"];   // null if --database was never passed
 ```
 
-### Contains / IsPresent
+### Contains
 
 ```csharp
 public bool Contains(string param)           // true if key exists (even if value is empty)
-public bool IsPresent(string param)          // true if key exists AND value is non-null
 ```
-
-`IsPresent` distinguishes between a missing flag and a present-but-empty flag.
 
 ### Typed Getters
 
@@ -205,4 +205,6 @@ Set arguments in launchSettings.json:
 | `--flag=` (empty) | `"flag"` | `""` |
 | `--flag "quoted value"` | `"flag"` | `"quoted value"` |
 | `-short=value` | `"short"` | `"value"` |
+| `--key -5` | `"key"` | `"-5"` |
+| `-1`, `--1`, `-1.5`, `-1.5` (token after a flag) | appended to the previous key | negative number value |
 | Unknown format | Ignored silently | — |

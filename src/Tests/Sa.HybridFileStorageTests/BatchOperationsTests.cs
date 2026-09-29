@@ -83,7 +83,14 @@ public sealed class BatchOperationsTests : IAsyncLifetime
 
         var fileIds = new[] { result.FileId, result.FileId, result.FileId };
         var progressReports = new List<BatchOperationProgress>();
-        var progress = new Progress<BatchOperationProgress>(p => progressReports.Add(p));
+        // A plain <see cref="Progress{T}"/> marshals callbacks onto the captured
+        // SynchronizationContext, which under heavy parallel load can arrive after
+        // the batch completes. A synchronous IProgress<> records each report
+        // immediately, removing that timing dependency.
+        var progress = new SynchronousProgress<BatchOperationProgress>(p =>
+        {
+            lock (progressReports) progressReports.Add(p);
+        });
 
         // Act
         var batchResult = await _storage.CopyToScopeBatchAsync(
@@ -100,6 +107,20 @@ public sealed class BatchOperationsTests : IAsyncLifetime
         // Last report should show 100%
         var lastProgress = progressReports.Last();
         Assert.Equal(100.0, lastProgress.PercentComplete);
+    }
+
+    /// <summary>
+    /// A <see cref="IProgress{T}"/> that invokes its handler synchronously on the
+    /// calling thread, avoiding the async SynchronizationContext marshaling of the
+    /// built-in <see cref="Progress{T}"/> (which can lag under load).
+    /// </summary>
+    private sealed class SynchronousProgress<T> : IProgress<T>
+    {
+        private readonly Action<T> _handler;
+
+        public SynchronousProgress(Action<T> handler) => _handler = handler;
+
+        public void Report(T value) => _handler(value);
     }
 
     [Fact]

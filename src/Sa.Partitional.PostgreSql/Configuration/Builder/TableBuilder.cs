@@ -1,5 +1,7 @@
-﻿using Sa.Partitional.PostgreSql.Classes;
+﻿using Sa.Partitional.PostgreSql.SqlBuilder;
+using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.Settings;
+using System.Text;
 
 namespace Sa.Partitional.PostgreSql.Configuration.Builder;
 
@@ -10,9 +12,13 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         public readonly static PgPartBy DefaultPartBy = PgPartBy.Day;
         public const string PartByRangeFieldName = "created_at";
         public const string SqlPartSeparator = "__";
-        public const int FillFactor = 0;
         public const string PartTablePostfix = "part$";
     }
+
+    /// <summary>
+    /// PostgreSQL truncates identifiers to 63 <b>bytes</b> (UTF-8), not to 63 characters.
+    /// </summary>
+    private const int MaxIdentifierBytes = 63;
 
 
     private readonly List<string> _fields = [];
@@ -57,12 +63,25 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     public ITableBuilder PartByRange(PgPartBy partBy, string? timestampFieldName = null)
     {
         _partBy = partBy;
+
+        // TimestampAs is the more specific declaration, so it wins: the argument here is only a
+        // fallback for callers that do not call TimestampAs at all.
         _timestamp ??= timestampFieldName;
         return this;
     }
 
     public ITableBuilder WithPartSeparator(string partSeparator)
     {
+        // Same validation as WithPartTablePostfix: an empty separator silently glues the values
+        // together ("ab" instead of "a" + sep + "b"), which collapses distinct partitions onto one
+        // table name, and a quote would have to be escaped in every generated identifier.
+        ArgumentException.ThrowIfNullOrWhiteSpace(partSeparator);
+
+        if (partSeparator.Contains('"'))
+        {
+            throw new ArgumentException("Part separator cannot contain a double quote.", nameof(partSeparator));
+        }
+
         _separator = partSeparator;
         return this;
     }
@@ -87,7 +106,9 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
     public ITableBuilder WithPartTablePostfix(string postfix)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(nameof(postfix));
+        // nameof(postfix) is the constant "postfix", so the check below never fired and a null /
+        // empty postfix silently produced a cache table named exactly like the root table.
+        ArgumentException.ThrowIfNullOrWhiteSpace(postfix);
 
         _postfix = postfix;
         return this;
@@ -99,8 +120,20 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         var timestampField = _timestamp ?? Default.PartByRangeFieldName;
         string[] partByListFieldNames = [.. _parts];
 
-        var firstIdSql = _fields.Find(c => !string.IsNullOrWhiteSpace(c));
-        var idFieldName = firstIdSql?.Trim().Split(' ')[0] ?? string.Empty;
+        string idFieldName = GetIdFieldName();
+        string partTablePostfix = _postfix ?? Default.PartTablePostfix;
+
+        // Fail fast on a name PostgreSQL would silently truncate: the truncated DDL would never
+        // match the identifiers written to the cache table. The name carrying partition values
+        // cannot be checked here - those values are only known when the DDL is generated, and
+        // SqlTemplate.GetQualifiedTableName checks them there.
+        string cacheTableName = $"{databaseTableName}{_separator ?? Default.SqlPartSeparator}{partTablePostfix}";
+        if (Encoding.UTF8.GetByteCount(cacheTableName) > MaxIdentifierBytes)
+        {
+            throw new InvalidOperationException(
+                $"Cache table name '{cacheTableName}' of table '{schemaName}.{databaseTableName}' exceeds "
+                + $"PostgreSQL's {MaxIdentifierBytes}-byte identifier limit.");
+        }
 
         return new TableSettings(
             DatabaseSchemaName: schemaName,
@@ -121,9 +154,36 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
             PostRootSql: _postSql,
             ConstraintPkSql: _pkSql,
 
-            FillFactor: _fillFactor ?? Default.FillFactor,
-            PartTablePostfix: _postfix ?? Default.PartTablePostfix
+            FillFactor: _fillFactor,
+            PartTablePostfix: partTablePostfix
         );
+    }
+
+    /// <summary>
+    /// The first declared column doubles as the primary key id column, so its name has to be
+    /// extracted from the raw SQL definition: cut at the first whitespace and drop the surrounding
+    /// quotes, because the value is quoted again by <c>QuoteIdentifier</c>.
+    /// </summary>
+    private string GetIdFieldName()
+    {
+        string? firstField = _fields.Find(c => !string.IsNullOrWhiteSpace(c));
+
+        if (firstField is null)
+        {
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' declares no fields. Call AddFields (or AddTable) "
+                + "with at least one column definition - the first one becomes the primary key id column.");
+        }
+
+        string idFieldName = SqlFieldName.Extract(firstField).ToString();
+
+        if (idFieldName.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' has an empty first field definition ('{firstField}').");
+        }
+
+        return idFieldName;
     }
 
     public ITableBuilder AddMigration(params StrOrNum[] partValues)

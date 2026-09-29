@@ -4,44 +4,44 @@ namespace Sa.Schedule.Engine;
 
 internal sealed class JobRunner() : IJobRunner
 {
-    public async Task Run(IJobController controller, CancellationToken cancellationToken)
+    public async Task<bool> Run(IJobController controller, CancellationToken cancellationToken)
     {
-        await controller.WaitToRun(cancellationToken);
-
-        controller.Start();
+        bool aborted = false;
 
         try
         {
-            await RunLoop(controller, cancellationToken);
+            await controller.WaitToRun(cancellationToken);
+
+            controller.Start();
+
+            aborted = await RunLoop(controller, cancellationToken);
         }
         finally
         {
+            // Always shut down the controller (and its DI scope) — also on
+            // wait/start failure, otherwise the scope would leak.
             controller.Shutdown();
         }
+
+        return aborted;
     }
 
     [StackTraceHidden]
-    private static async Task RunLoop(IJobController controller, CancellationToken cancellationToken)
+    private static async Task<bool> RunLoop(IJobController controller, CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
             await controller.WaitIfPaused(cancellationToken);
 
-            CanJobExecuteResult next = await controller.CanExecute(cancellationToken);
-
-            switch (next)
+            if (await controller.CanExecute(cancellationToken) == CanJobExecuteResult.Abort)
             {
-                case CanJobExecuteResult.Abort:
-                    return;
-
-                case CanJobExecuteResult.Skip:
-                    continue;
-
-                case CanJobExecuteResult.Ok:
-                    await ExecuteIteration(controller, cancellationToken);
-                    break;
+                return controller.AbortedByError;
             }
+
+            await ExecuteIteration(controller, cancellationToken);
         }
+
+        return false;
     }
 
     private static async Task ExecuteIteration(

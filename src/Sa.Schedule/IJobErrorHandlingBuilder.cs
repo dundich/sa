@@ -5,7 +5,11 @@ public interface IJobErrorHandlingBuilder
     /// <summary>
     /// Specifies the retry policy for the job in case of an error.
     /// </summary>
-    /// <param name="count">The number of times to retry the job. If null, the job will not be retried.</param>
+    /// <param name="count">
+    /// The number of times to retry the job before the configured
+    /// <see cref="ErrorHandlingAction"/> is applied. If null, the default
+    /// retry count (2) is used.
+    /// </param>
     /// <returns>The current IJobErrorHandlingBuilder instance.</returns>
     IJobErrorHandlingBuilder IfErrorRetry(int? count = null);
 

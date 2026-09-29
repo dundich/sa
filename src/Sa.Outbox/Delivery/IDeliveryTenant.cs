@@ -12,7 +12,7 @@ internal interface IDeliveryTenant
     /// <param name="tenantId">The identifier of the tenant whose messages to process.</param>
     /// <param name="settings">Runtime delivery settings for this tenant's processing scope.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>The number of messages successfully processed.</returns>
+    /// <returns>How many messages were handled.</returns>
     Task<int> ProcessInTenant<TMessage>(
             int tenantId,
             OutboxConsumerSettings settings,

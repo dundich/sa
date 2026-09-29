@@ -41,7 +41,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
                         {
                             s.WithBatchingWindow(TimeSpan.Zero)
                                 .WithNoLockDuration()
-                                .WithLockRenewal(TimeSpan.FromMinutes(10))
+                                .WithLockRenewal(TimeSpan.FromMilliseconds(10))
                                 .WithMaxDeliveryAttempts(MaxDeliveryAttempts);
 
                             OutboxSettings = s.Build();

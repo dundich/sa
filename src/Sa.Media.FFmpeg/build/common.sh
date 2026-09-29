@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 
-# apt-get install -y build-essential autoconf automake libtool pkg-config libopus-dev libasound2-dev libvorbis-dev libogg-dev libmp3lame-dev libflac-dev libsoxr-dev wget
-
+# Зависимости для сборки (Debian/Ubuntu):
+#   apt-get install -y build-essential autoconf automake libtool pkg-config \
+#       libopus-dev libasound2-dev libvorbis-dev libogg-dev libmp3lame-dev libflac-dev libsoxr-dev wget
+#
+# ВАЖНО: набор кодеков обязан совпадать для всех платформ. Sa.Media.FFmpeg больше не подставляет
+# -c:a в зависимости от ОС (раньше на Windows флаг опускался, и ConvertToOgg(isLibopus: true)
+# молча писал Vorbis), поэтому бинарь, собранный без этих библиотек, сломает MP3/Ogg.
+# Перед изменением этого файла пересоберите payload'ы: sa/<rid>/ffmpeg.zip.
 
 FFMPEG_VERSION=7.1.5
 FFMPEG_TARBALL=ffmpeg-$FFMPEG_VERSION.tar.gz
@@ -40,6 +46,15 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-gpl
     # --enable-nonfree
     --enable-version3
+
+    # Аудиокодеки. Одинаковые для всех платформ — иначе один и тот же вызов
+    # ConvertToMp3/ConvertToOgg даёт на Windows и Linux разный битрейт и кодировщик.
+    --enable-libmp3lame
+    --enable-libvorbis
+    --enable-libopus
+    --enable-encoder=libmp3lame
+    --enable-encoder=libvorbis
+    --enable-encoder=libopus
 
     # Управление утилитами
     --disable-programs
@@ -147,8 +162,7 @@ FFMPEG_CONFIGURE_FLAGS=(
     --enable-decoder=vorbis
     --enable-decoder=opus
 
-    --enable-decoder=wavpack
-    --enable-decoder=wmalossless
+    --enable-decoder=wavpack    --enable-decoder=wmalossless
     --enable-decoder=wmapro
     --enable-decoder=wmav1
     --enable-decoder=wmav2

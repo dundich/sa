@@ -1,6 +1,6 @@
 # Sa.Media.FFmpeg
 
-Cross-platform .NET wrapper for FFmpeg (Windows x64/arm64, Linux x64/arm64) with **bundled static binaries** — works out of the box without system-wide installation. Simplifies audio processing: metadata extraction, format conversion, channel split/join, and DI integration.
+Cross-platform .NET wrapper for FFmpeg (Windows x64, Linux x64) with **bundled fully-static binaries** — works out of the box without system-wide installation. Simplifies audio processing: metadata extraction, format conversion, channel split/join, and DI integration.
 
 ---
 
@@ -9,7 +9,7 @@ Cross-platform .NET wrapper for FFmpeg (Windows x64/arm64, Linux x64/arm64) with
 - 🎵 **Metadata extraction** — duration, bitrate, format, size via `ffprobe`
 - 🔊 **Audio conversion** — PCM S16 LE WAV, PCM S32 LE WAV, raw PCM S16 LE/F32 LE binary, MP3, OGG Vorbis/Opus
 - 🎛️ **Channel manipulation** — split stereo to mono files, join two monos into stereo (via DI)
-- 📦 **Bundled FFmpeg binaries** — Windows x64/arm64, Linux x64/arm64, macOS x64 (falls back to linux-x64)
+- 📦 **Bundled FFmpeg binaries** — fully-static builds for `win-x64` and `linux-x64`, extracted into the app's output directory at build time (no system install, no native dependencies)
 - 💉 **DI support** — standard `IServiceCollection` integration with options configuration
 - ⚡ **Streaming I/O** — pipe audio directly from streams without intermediate files
 
@@ -219,7 +219,7 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 | Any | **Raw PCM F32 LE binary** | `ConvertToPcmF32LeRaw()` | 32-bit IEEE float, no WAV header |
 | Any | **MP3** | `ConvertToMp3()` | 16 kHz, 128 kbps, libmp3lame |
 | Any | **OGG Vorbis** | `ConvertToOgg(isLibopus: false)` | Standard Vorbis codec |
-| Any | **OGG Opus** | `ConvertToOgg(isLibopus: true)` | Opus codec (Linux only) |
+| Any | **OGG Opus** | `ConvertToOgg(isLibopus: true)` | Opus codec |
 
 ---
 
@@ -230,10 +230,10 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 | Property | Type | Description | Default |
 |----------|------|-------------|---------|
 | `ExecutablePath` | `string?` | Full path to ffmpeg/ffprobe binary | Auto-discovery (bundled → PATH) |
-| `WritableDirectory` | `string?` | Output directory for generated files | Current working directory |
+| `WritableDirectory` | `string?` | Default directory for bare output file names (names without a directory part); created if missing | Unset — bare names stay relative to the process working directory |
 | `TimeoutSeconds` | `int?` | Operation timeout in seconds | `300` (5 minutes) |
 
-Call `options.Validate()` to verify `WritableDirectory` exists and timeout is non-negative.
+Options are validated at host start (`ValidateOnStart`): `TimeoutSeconds` must be non-negative or unset, and `WritableDirectory` must not point at an existing *file* — a missing directory is fine, the factory creates it.
 
 ---
 
@@ -297,11 +297,13 @@ public sealed record MediaMetadata(
     double? Duration = null,
     string? FormatName = null,
     int? BitRate = null,
-    int? Size = null)
+    long? Size = null)
 {
     public static readonly MediaMetadata Empty = new();
 }
 ```
+
+> `Size` is `long?` (bytes): `int` overflowed on files over 2 GB, and ffprobe reported garbage for them.
 
 ### ProcessExecutionResult
 
@@ -327,54 +329,14 @@ public record ProcessExecutionResult(
 
 ## Bundled Binaries
 
-FFmpeg static builds are embedded at build time and unpacked into `sa/native/` at runtime. No system installation required.
+FFmpeg static builds are packed into the NuGet package and extracted by an MSBuild target into `sa/native/` next to the application at build time. No system installation required.
 
-**Supported RIDs:** `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64` (macOS falls back to linux-x64).
+**Supported RIDs:** `win-x64`, `win-arm64`, `linux-x64`. **Payloads shipped in the package:** `win-x64` and `linux-x64`. `win-arm64` has no payload yet — the build emits a loud warning, and at runtime the library falls back to a system FFmpeg (PATH or `ExecutablePath`). Other platforms (Linux arm64, macOS) resolve to no payload as well.
 
 **Discovery order:**
-1. `AppContext.BaseDirectory/sa/native/ffmpeg`
-2. `AppContext.BaseDirectory/ffmpeg`
-3. System `PATH`
-
----
-
-## Native Dependencies (Linux)
-
-On Ubuntu/Debian:
-
-```bash
-sudo apt update && sudo apt install libmp3lame0 libopus0 libvorbis0a libvorbisenc2
-```
-
-On Alpine Linux:
-
-```bash
-sudo apk add lame-libs opus libvorbis
-```
-
----
-
-## Project Layout
-
-```
-src/Sa.Media.FFmpeg/
-├── IFFMpegExecutor.cs           # Audio conversion interface
-├── IFFProbeExecutor.cs          # Metadata extraction interface
-├── IFFRawExecutor.cs            # Low-level process execution
-├── IFFMpegExecutorFactory.cs    # Factory for creating executors
-├── IFFMpegLocator.cs            # Binary discovery
-├── IPcmS16LeChannelManipulator.cs # Split/join operations
-├── FFMpegOptions.cs             # Configuration options
-├── MediaMetadata.cs             # Probe result DTO
-├── Services/
-│   ├── ProcessExecutor.cs       # Process runner + exceptions
-│   ├── FFMpegExecutor.cs        # Implementation
-│   ├── FFProbeExecutor.cs       # Implementation
-│   └── ...                      # Internal parsers, serializers
-├── buildTransitive/
-│   └── Sa.Media.FFmpeg.targets  # MSBuild: unpack native binaries
-└── sa/                          # Local ZIP archives (dev only)
-```
+1. `AppContext.BaseDirectory/ffmpeg`
+2. `AppContext.BaseDirectory/sa/native/ffmpeg`
+3. System `PATH`, plus common install dirs (`Program Files\ffmpeg\bin` on Windows; `/usr/local/bin`, `/usr/bin`, `/bin` on Unix)
 
 ---
 

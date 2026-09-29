@@ -163,7 +163,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         foreach (var tcs in blockers)
             tcs.SetResult();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(10, work.TotalProcessed);
     }
@@ -192,7 +192,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
 
         // Восстанавливаем лимит и ждём завершения
         queue.ConcurrencyLimit = 2;
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(5, work.TotalProcessed);
     }
 
@@ -239,7 +239,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         foreach (var tcs in phase1Blockers.Concat(phase2Blockers))
             tcs.SetResult();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(8, work.TotalProcessed);
     }
 
@@ -287,7 +287,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             blockers[i].SetResult();
 
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(8, work.TotalProcessed);
         Assert.Equal(0, queue.QueueTasks);
@@ -324,7 +324,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         foreach (var tcs in blockers)
             tcs.SetResult();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(taskCount, work.TotalProcessed);
     }
 
@@ -367,7 +367,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         Task processTask = CreateProcess(totals, cts, blockers);
 
         await Task.WhenAll(enqueueTask, changeTask, processTask);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert: no exceptions, all tasks processed, limit respected at peaks
         Assert.True(work.MaxParallelObserved <= 6,
@@ -407,15 +407,16 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
                     }
                 }
             }
-            catch (Exception e)
+            catch (OperationCanceledException)
             {
-                Console.WriteLine(e);
+                // The helper loop was cancelled by the test token: stop quietly.
+                // Any other exception propagates to WhenAll and fails the test.
             }
         }, cts.Token);
     }
 
     [Fact]
-    public async Task ConcurrencyLimit_SetToMaxAllowed_ClampsCorrectly()
+    public async Task ConcurrencyLimit_AboveMax_Clamps_AndNegative_Throws()
     {
         // Arrange
         var work = new TrackingWork();
@@ -425,11 +426,102 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         queue.ConcurrencyLimit = 10; // Above max
         Assert.Equal(5, queue.ConcurrencyLimit); // Should be clamped
 
-        queue.ConcurrencyLimit = -1; // Below min
-        Assert.Equal(0, queue.ConcurrencyLimit); // Should be clamped to 0
+        // Below the minimum is an error rather than a silent clamp to 0: a queue
+        // paused forever while still reporting IsEnabled == true gives the caller
+        // nothing to react to.
+        Assert.Throws<ArgumentOutOfRangeException>(() => queue.ConcurrencyLimit = -1);
+        Assert.Equal(5, queue.ConcurrencyLimit); // Rejected value changed nothing
 
         queue.ConcurrencyLimit = 3; // Valid
         Assert.Equal(3, queue.ConcurrencyLimit);
+    }
+
+    /// <summary>
+    /// A stopped queue has no pool to resize, so the assignment does nothing — and
+    /// says nothing, because the common caller is a shared configuration path that
+    /// does not branch on the queue's state.
+    /// </summary>
+    /// <remarks>
+    /// What it must not do is write the value and let the getter read it back. Assign
+    /// 4 after shutdown, read 4, and conclude four readers are on their way. The
+    /// queue keeps reporting the limit it was stopped at, which is a thing that was
+    /// true.
+    /// </remarks>
+    [Fact]
+    public async Task ConcurrencyLimit_AfterShutdown_ChangesNothing()
+    {
+        var work = new TrackingWork(static (_, _) => Task.CompletedTask);
+        var queue = CreateQueue(work, concurrencyLimit: 2, maxConcurrency: 8);
+
+        await queue.ShutdownAsync();
+
+        var stoppedAt = queue.ConcurrencyLimit;
+
+        queue.ConcurrencyLimit = 6;
+
+        Assert.Equal(stoppedAt, queue.ConcurrencyLimit);
+        Assert.False(queue.IsEnabled, "the assignment must not revive a stopped queue");
+        Assert.True(queue.IsIdle());
+
+        // Assigning zero must not fake a pause either: the queue is stopped, not
+        // paused, and WaitForIdleAsync has to be able to tell the difference.
+        queue.ConcurrencyLimit = 0;
+
+        Assert.Equal(stoppedAt, queue.ConcurrencyLimit);
+        await queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken);
+    }
+
+    /// <summary>
+    /// The same rule for a disposed queue, which is the other half of "not enabled"
+    /// and a separate caller mistake: resizing something that no longer exists.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrencyLimit_AfterDispose_ChangesNothing()
+    {
+        var work = new TrackingWork(static (_, _) => Task.CompletedTask);
+        var queue = CreateQueue(work, concurrencyLimit: 2, maxConcurrency: 8);
+
+        await queue.DisposeAsync();
+
+        // Read after the dispose, not before: dispose takes the limit to zero on its
+        // own way, and the claim under test is about the assignment, not about what
+        // stopping did.
+        var stoppedAt = queue.ConcurrencyLimit;
+
+        queue.ConcurrencyLimit = 6;
+
+        Assert.Equal(stoppedAt, queue.ConcurrencyLimit);
+    }
+
+    /// <summary>
+    /// A guard on the fix above, and the failure it would take to write: the early
+    /// return must be conditioned on the queue's state, not unconditional. A queue
+    /// that ignored every assignment would satisfy "changes nothing after shutdown"
+    /// perfectly while being broken in the only case that matters.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrencyLimit_OnALiveQueue_StillApplies()
+    {
+        var work = new TrackingWork(static (_, _) => Task.CompletedTask);
+        var queue = CreateQueue(work, concurrencyLimit: 2, maxConcurrency: 8);
+
+        Assert.True(queue.IsEnabled);
+
+        queue.ConcurrencyLimit = 6;
+        Assert.Equal(6, queue.ConcurrencyLimit);
+
+        // And the pool followed: work runs, which it could not do with a zero limit.
+        // TrackingWork gates every item on its own completion signal, so the signal
+        // has to come before the await — Enqueue only completes at the terminal status.
+        var model = new BlockingTaskModel();
+        var processed = queue.Enqueue(model, TestToken);
+        model.AllowCompletion.SetResult();
+
+        await processed;
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
+
+        Assert.True(queue.IsIdle());
+        Assert.Equal(1, work.CompletedCount);
     }
 
 
@@ -471,7 +563,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         foreach (var model in models) model.Unlock();
 
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert: all tasks completed, no duplicates, no losses
         Assert.Equal(20, completedIds.Count);
@@ -510,7 +602,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         // Shutdown should complete without hanging
         await queue.ShutdownAsync();
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(work.TotalProcessed > 0);
     }

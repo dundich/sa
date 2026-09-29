@@ -19,15 +19,28 @@ internal static class NpgsqlCommandExtension
         return command;
     }
 
+    /// <summary>Lookback floor for historical rows: "anything created at or after this".</summary>
     public static NpgsqlCommand AddParamFromDate(this NpgsqlCommand command, DateTimeOffset value)
     {
         command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.FromDate, value.ToUnixTimeSeconds()));
         return command;
     }
 
-    public static NpgsqlCommand AddParamToDate(this NpgsqlCommand command, DateTimeOffset value)
+    public static NpgsqlCommand AddParamWindowFrom(this NpgsqlCommand command, DateTimeOffset value)
     {
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.ToDate, value.ToUnixTimeSeconds()));
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, value.ToUnixTimeSeconds()));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamWindowTo(this NpgsqlCommand command, DateTimeOffset value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, value.ToUnixTimeSeconds()));
+        return command;
+    }
+
+    public static NpgsqlCommand AddParamRetryAfter(this NpgsqlCommand command, DateTimeOffset value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.RetryAfter, value.ToUnixTimeSeconds()));
         return command;
     }
 
@@ -106,15 +119,33 @@ internal static class NpgsqlCommandExtension
     public static NpgsqlCommand AddParamTaskCreatedAt(this NpgsqlCommand command, DateTimeOffset value, int index)
         => command.AddParam<BatchParams, long>(SqlParam.TaskCreatedAt, value.ToUnixTimeSeconds(), index);
 
-    public static NpgsqlCommand AddParamOffset(this NpgsqlCommand command, Guid value)
+    public static NpgsqlCommand AddParamOffset(this NpgsqlCommand command, long value)
     {
-        command.Parameters.Add(new NpgsqlParameter<Guid>(SqlParam.Offset, value));
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.Offset, value));
         return command;
     }
 
-    sealed class BatchParams : INamePrefixProvider
+    /// <summary>Legacy floor: the v7 message id a consumer group must not start below.</summary>
+    public static NpgsqlCommand AddParamMsgId(this NpgsqlCommand command, Guid value)
     {
-        public static int MaxIndex => 512;
+        command.Parameters.Add(new NpgsqlParameter<Guid>(SqlParam.MsgId, value));
+        return command;
+    }
+
+    /// <summary>Floor by date: resolve "start consuming from this moment" to a msg_seq boundary.</summary>
+    public static NpgsqlCommand AddParamFloorDate(this NpgsqlCommand command, DateTimeOffset value)
+    {
+        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.FloorDate, value.ToUnixTimeSeconds()));
+        return command;
+    }
+
+    internal sealed class BatchParams : INamePrefixProvider
+    {
+        // MUST stay in lock-step with SqlCacheSplitter.DefaultMaxLen: an index at or above
+        // this cache falls back to string interpolation (CachedParamNames.Get → Combine),
+        // silently undoing the cache on exactly the statement it exists for. Sharing the
+        // single constant makes divergence impossible by construction.
+        public static int MaxIndex => SqlCacheSplitter.DefaultMaxLen;
 
         public static string[] GetPrefixes() =>
         [

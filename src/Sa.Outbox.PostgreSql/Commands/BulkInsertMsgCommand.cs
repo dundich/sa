@@ -65,6 +65,11 @@ internal sealed class BulkInsertMsgCommand(
         long payloadTypeCode,
         ReadOnlyMemory<OutboxMessage<TMessage>> messages)
     {
+        // One pooled stream serves the whole batch (M2): each payload is serialized into it in
+        // place — only Length rewinds, the buffer and capacity are reused — and then written as a
+        // single Bytea value. The old code called streamManager.GetStream() per message, wrapping
+        // every payload in a fresh stream object just to hand it to the Bytea writer.
+        using RecyclableMemoryStream stream = streamManager.GetStream();
         foreach (OutboxMessage<TMessage> row in messages.Span)
         {
             Guid id = idGenerator.GenId(row.PartInfo.CreatedAt);
@@ -82,7 +87,8 @@ internal sealed class BulkInsertMsgCommand(
             // payload_type
             writer.Write(payloadTypeCode, NpgsqlDbType.Bigint);
             // payload
-            int streamLength = WritePayload(writer, row.Payload);
+            int streamLength = WritePayload(stream, row.Payload);
+            writer.Write(stream, NpgsqlDbType.Bytea);
             // payload_size
             writer.Write(streamLength, NpgsqlDbType.Integer);
             // created_at
@@ -90,12 +96,11 @@ internal sealed class BulkInsertMsgCommand(
         }
     }
 
-    private int WritePayload<TMessage>(NpgsqlBinaryImporter writer, TMessage? payload)
+    private int WritePayload<TMessage>(RecyclableMemoryStream stream, TMessage? payload)
     {
-        using RecyclableMemoryStream stream = streamManager.GetStream();
+        stream.SetLength(0); // rewind in place — the pooled buffer carries over to the next payload
         serializer.Serialize(stream, payload);
         stream.Position = 0;
-        writer.Write(stream, NpgsqlDbType.Bytea);
         return (int)stream.Length;
     }
 }

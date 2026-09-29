@@ -1,4 +1,5 @@
-using Npgsql;
+﻿using Npgsql;
+using System.Net.Sockets;
 
 namespace Sa.Partitional.PostgreSql;
 
@@ -28,7 +29,12 @@ internal static class PgErrorCodes
             };
         }
 
-        // Retry non-Postgres exceptions (e.g. network-level failures)
-        return true;
+        // Only transport-level failures are worth retrying. Everything else (a name over the
+        // 63-byte identifier limit, a missing table in the configuration, an argument error) is a
+        // programming or configuration problem: retrying it three times just delays the report.
+        return ex is NpgsqlException
+            or SocketException
+            or IOException
+            or TimeoutException;
     }
 }

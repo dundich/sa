@@ -56,31 +56,44 @@ internal sealed class DeliveryCourier(
 
 
     /// <summary>
-    /// Method to post-handle the delivery results of messages
+    /// Post-processes message statuses after consumption.
+    ///
+    /// Rules:
+    ///   1. Messages left in a retryable warning state (Warn) that have exhausted
+    ///      <c>MaxDeliveryAttempts</c> are marked as permanent errors (ErrorMaxAttempts) so they
+    ///      stop being retried. This check must run BEFORE the "already handled" short-circuit,
+    ///      otherwise a permanently failing message would be retried forever.
+    ///   2. Messages already marked by the consumer (Ok, Created, Warn, Error, etc.) are left
+    ///      untouched — their status reflects the consumer's decision.
+    ///   3. Messages still in Pending state are auto-marked as Ok (the consumer didn't touch them,
+    ///      meaning no exception was thrown → implicit success).
+    ///
+    /// Returns the number of messages handled, regardless of the status each one ended up in.
     /// </summary>
     private static int PostHandle<TMessage>(ReadOnlySpan<IOutboxContextOperations<TMessage>> messages, int maxDeliveryAttempts)
     {
-        int successfulDeliveries = 0; // Counter for successfully delivered messages
-
         foreach (var message in messages)
         {
+            // Retryable failure that ran out of attempts → dead letter. Checked first,
+            // otherwise the short-circuit below would skip it and retry forever.
             if (IsAttemptsError(message, maxDeliveryAttempts))
             {
-                // Mark the message as a permanent error
                 message.ErrorMaxAttempts();
+                continue;
             }
-            else if (message.DeliveryResult.Code.IsPending()) // If delivery was successful
-            {
+
+            // Consumer didn't touch this message — treat as success. Anything else was already
+            // decided by the consumer and is left alone.
+            if (message.DeliveryResult.Code.IsPending())
                 message.Ok();
-                successfulDeliveries++; // Increment the success counter
-            }
         }
 
-        return successfulDeliveries; // Return the count of successfully delivered messages
+        return messages.Length;
     }
 
     /// <summary>
-    /// Check if the message should be marked as a permanent error
+    /// Check if the message should be marked as a permanent error: it is in a retryable
+    /// warning state and has run out of delivery attempts.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsAttemptsError(IOutboxContext message, int maxDeliveryAttempts)

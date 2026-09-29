@@ -1,4 +1,5 @@
-﻿using Sa.Configuration;
+﻿using Npgsql;
+using Sa.Configuration;
 using Sa.Configuration.PostgreSql;
 using Sa.Data.PostgreSql;
 using System.Text.Json.Serialization;
@@ -29,11 +30,16 @@ ds.ExecuteScalar("""
 """, null).Wait();
 
 
-builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions
-(
-    ConnectionString: connectionString,
-    SelectSql: "select * from settings"
-));
+// The application already holds a data source, so hand it over instead of letting the
+// configuration source open a second pool. Ownership stays here — `ds` is never disposed
+// by the provider, and it carries the connection, so the connection string is ignored.
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    new PostgreSqlConfigurationOptions(
+        ConnectionString: string.Empty,
+        // Name the columns: the provider takes the first two as (key, value), so the column
+        // order is part of the contract and `select *` would make it an implicit one.
+        SelectSql: "select key, value from settings"),
+    ds);
 
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -47,8 +53,15 @@ var app = builder.Build();
 
 var todosApi = app.MapGroup("/settings");
 
+// A connection string carries the password, so never hand one to a client as-is.
+// Mask it for display; everything else on this endpoint is shown verbatim.
+static string MaskPassword(string? connectionString) => connectionString is null
+    ? string.Empty
+    : new NpgsqlConnectionStringBuilder(connectionString) { Password = "***" }.ConnectionString;
+
+
 todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
-    new (Key: PG_KEY, Value: configuration[PG_KEY]),
+    new (Key: PG_KEY, Value: MaskPassword(configuration[PG_KEY])),
     new (Key: "theme", Value: configuration["theme"]),
     new (Key: "language", Value: configuration["language"]),
     new (Key: "notifications", Value: configuration["notifications"]),

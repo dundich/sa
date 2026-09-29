@@ -68,19 +68,48 @@ internal static class StrToExtensions
     public static Guid? StrToGuid(this ReadOnlySpan<char> str) => Guid.TryParse(str, CultureInfo.InvariantCulture, out var r) ? r : null;
 
     // ── Enum ───────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Parses a member name, or a comma-separated list of them for a <see cref="FlagsAttribute"/> enum.
+    /// Returns <paramref name="defaultValue"/> when the text does not name a member.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/> also accepts the numeric form and
+    /// comma-joined names regardless of <see cref="FlagsAttribute"/>, so <c>"7"</c> — or
+    /// <c>"A,B"</c> against a non-flags enum — produced an <em>undefined</em> value that then
+    /// fell through every arm of the switch its caller feeds. A flags enum keeps accepting
+    /// combinations; any other enum must name a member that actually exists.
+    /// </remarks>
     [DebuggerStepThrough]
-    public static T StrToEnum<T>(this string? str, T defaultValue) where T : struct => (Enum.TryParse<T>(str, true, out T result)) ? result : defaultValue;
+    public static T StrToEnum<T>(this string? str, T defaultValue) where T : struct
+        => Enum.TryParse<T>(str, true, out T result) && (EnumInfo<T>.IsFlags || Enum.IsDefined(typeof(T), result))
+            ? result
+            : defaultValue;
+
+    /// <summary>
+    /// Per-enum-type reflection results, so the lookup happens once per type rather than per call.
+    /// </summary>
+    private static class EnumInfo<T>
+    {
+        public static readonly bool IsFlags = typeof(T).IsDefined(typeof(FlagsAttribute), inherit: false);
+    }
 
     // ── DateTime ───────────────────────────────────────────────────────────
     [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static DateTime? StrToDate(this string? str, IFormatProvider? provider = null, DateTimeStyles style = DateTimeStyles.None)
-        => str is not null && DateTime.TryParseExact(str.AsSpan(), DateFmt.Formats, provider ?? CultureInfo.InvariantCulture, style, out DateTime result)
-            ? result
-            : null;
+        => str is not null ? ParseDate(str.AsSpan(), provider, style) : null;
 
     [DebuggerStepThrough]
     public static DateTime? StrToDate(this ReadOnlySpan<char> str, IFormatProvider? provider = null, DateTimeStyles style = DateTimeStyles.None)
-        => DateTime.TryParseExact(str, DateFmt.Formats, provider ?? CultureInfo.InvariantCulture, style, out DateTime result)
+        => ParseDate(str, provider, style);
+
+    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static DateTime? ParseDate(ReadOnlySpan<char> str, IFormatProvider? provider, DateTimeStyles style)
+        => DateTime.TryParseExact(
+            str,
+            DateFmt.Formats,
+            provider ?? CultureInfo.InvariantCulture,
+            style,
+            out DateTime result)
             ? result
             : null;
 }

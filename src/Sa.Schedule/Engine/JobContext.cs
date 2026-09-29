@@ -15,7 +15,7 @@ internal sealed class JobContext(IJobSettings settings) : IJobContext
 
     public ulong FailedIterations { get; set; }
 
-    public ulong CompetedIterations { get; set; }
+    public ulong CompletedIterations { get; set; }
 
     public int FailedRetries { get; set; }
 
@@ -27,29 +27,16 @@ internal sealed class JobContext(IJobSettings settings) : IJobContext
 
     public ulong NumRuns { get; set; }
 
-    public Queue<IJobContext> Stack { get; private set; } = [];
+    // Previous context snapshots, oldest first. The queue is capped by the
+    // consumer (CanExecute) to the configured ContextStackSize.
+    public Queue<IJobSnapshot> Stack { get; private set; } = [];
 
-    IEnumerable<IJobContext> IJobContext.Stack => Stack.Reverse();
+    IEnumerable<IJobSnapshot> IJobContext.Stack => Stack.Reverse();
 
     public IServiceProvider ServiceProvider { get; set; } = NullJobServices.Instance;
 
     public ILogger Logger => ServiceProvider.GetService<ILogger<JobContext>>()
         ?? NullLogger<JobContext>.Instance;
 
-    public IJobContext Clone()
-    {
-        JobContext clone = new(Settings)
-        {
-            NumIterations = NumIterations,
-            FailedRetries = FailedRetries,
-            FailedIterations = FailedIterations,
-            LastError = LastError,
-            CreatedAt = CreatedAt,
-            ExecuteAt = ExecuteAt,
-            NumRuns = NumRuns,
-            Stack = new Queue<IJobContext>(Stack.Select(x => x.Clone())),
-        };
-
-        return clone;
-    }
+    internal IJobSnapshot ToSnapshot() => new JobSnapshot(this);
 }

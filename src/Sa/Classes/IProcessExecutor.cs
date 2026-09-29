@@ -21,7 +21,7 @@ internal interface IProcessExecutor
     /// </summary>
     async Task<ProcessExecutionResult> ExecuteWithResultAsync(
         ProcessStartInfo startInfo
-        , bool captureErrorOutput = true
+        , bool throwOnError = true
         , TimeSpan? timeout = null
         , CancellationToken cancellationToken = default)
     {
@@ -41,7 +41,7 @@ internal interface IProcessExecutor
             StandardOutput: output.ToString(),
             StandardError: error.ToString());
 
-        if (result.ExitCode == 0 || captureErrorOutput) return result;
+        if (result.ExitCode == 0 || !throwOnError) return result;
 
         throw new ProcessExecutionResultException(result);
     }
@@ -126,13 +126,25 @@ internal sealed class ProcessExecutor : IProcessExecutor
         {
             await Run(process, outputDataReceived, errorDataReceived, timeout, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            throw new ProcessTimeoutException("Process execution timed out");
+            // Отмена вызывающим кодом. Порядок catch-блоков обязателен: если бы проверка таймаута
+            // стояла первой, отмена пользователя превращалась бы в ProcessTimeoutException.
+            throw;
+        }
+        catch (OperationCanceledException oce)
+        {
+            // Токен вызывающего не отменён — отменился только наш таймаут.
+            throw new ProcessTimeoutException($"Process execution timed out after {Describe(timeout)}", oce);
         }
         catch (Exception ex)
         {
-            throw new ProcessExecutionException(process.ExitCode, "Process execution failed", ex);
+            // HasExited, а не process.ExitCode: у ещё живого процесса ExitCode бросает
+            // InvalidOperationException, и в catch-блоке он бы заменил собой настоящую ошибку.
+            throw new ProcessExecutionException(
+                process.HasExited ? process.ExitCode : -1,
+                $"Process execution failed: {Describe(process.StartInfo)}",
+                ex);
         }
         finally
         {
@@ -141,6 +153,11 @@ internal sealed class ProcessExecutor : IProcessExecutor
 
         return exitCode;
     }
+
+    private static string Describe(ProcessStartInfo startInfo)
+        => string.IsNullOrEmpty(startInfo.Arguments) ? startInfo.FileName : $"{startInfo.FileName} {startInfo.Arguments}";
+
+    private static string Describe(TimeSpan? timeout) => timeout is { } t ? t.ToString() : "(none)";
 
     private static async Task Run(
         Process process,
@@ -172,8 +189,11 @@ internal sealed class ProcessExecutor : IProcessExecutor
             process.BeginErrorReadLine();
         }
 
-        using var timeoutCts = timeout.HasValue && timeout.Value == TimeSpan.Zero
-            ? new CancellationTokenSource(timeout.Value)
+        // null и TimeSpan.Zero означают «без таймаута». Условие обязано быть именно t > 0:
+        // проверка t == Zero создавала CTS только для нулевого таймаута, то есть любой
+        // осмысленный timeout.Value молча игнорировался и процесс висел до естественного выхода.
+        using var timeoutCts = timeout is { } t && t > TimeSpan.Zero
+            ? new CancellationTokenSource(t)
             : null;
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
@@ -182,20 +202,55 @@ internal sealed class ProcessExecutor : IProcessExecutor
 
         var waitTask = process.WaitForExitAsync(linkedCts.Token);
 
-        // Wait for all streams to finish reading
-        List<Task> outputTasks = [waitTask];
-
+        // Пока читатели не дошли до EOF, а он наступает только когда процесс закрывает пайпы.
+        List<Task> readerTasks = [];
         if (outputDataReceived != null)
         {
-            outputTasks.Add(outputCompletion.Task);
+            readerTasks.Add(outputCompletion.Task);
         }
 
         if (errorDataReceived != null)
         {
-            outputTasks.Add(errorCompletion.Task);
+            readerTasks.Add(errorCompletion.Task);
         }
 
-        await Task.WhenAll(outputTasks).ConfigureAwait(false);
+        var readersDone = readerTasks.Count > 0
+            ? Task.WhenAll(readerTasks)
+            : Task.CompletedTask;
+
+        // КогдаAny, а не КогдаAll: Task.WhenAll не прерывается на отмену (только на fault),
+        // а читатели завершаются лишь тогда, когда процесс закроет пайпы. Зависший процесс —
+        // ровно то, что мы ловим таймаутом — их не закроет никогда, поэтому отмена таймаута или
+        // токена вызывающего уходила в ожидание естественной смерти процесса.
+        var completed = await Task.WhenAny(waitTask, readersDone).ConfigureAwait(false);
+        if (completed != waitTask)
+        {
+            // Читатели закончились первыми (пайпы закрыты, но процесс ещё жив) — ждём выхода.
+            await waitTask.ConfigureAwait(false);
+            return;
+        }
+
+        await waitTask.ConfigureAwait(false); // пробрасывает сбой, в т.ч. OCE при отмене
+
+        if (!linkedCts.IsCancellationRequested)
+        {
+            // Нормальный выход: даём читателям донести последние буферизованные строки.
+            // Без этого процесс, у которого stderr прочитан не до конца, не завершится:
+            // WaitForExit ждёт опустошения буферов.
+            await readersDone.ConfigureAwait(false);
+        }
+
+        // Освобождаем асинхронные reader'ы до возврата, иначе процесс держится за коллекторы
+        // событий ещё какое-то время после нашего Dispose().
+        if (outputDataReceived != null)
+        {
+            process.CancelOutputRead();
+        }
+
+        if (errorDataReceived != null)
+        {
+            process.CancelErrorRead();
+        }
     }
 
     private static void SetupErrorDataReceived(
@@ -260,8 +315,8 @@ internal sealed class ProcessExecutor : IProcessExecutor
         int exitCode;
         try
         {
-            using var timeoutCts = timeout.HasValue
-                ? new CancellationTokenSource(timeout.Value)
+            using var timeoutCts = timeout is { } t && t > TimeSpan.Zero
+                ? new CancellationTokenSource(t)
                 : null;
 
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
@@ -284,6 +339,16 @@ internal sealed class ProcessExecutor : IProcessExecutor
                 await stdoutStream.DisposeAsync().ConfigureAwait(false);
             }
             await Task.WhenAll(backgroundTasks).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Отмена вызывающим кодом — раньше и здесь она маскировалась в OCE от своего таймаута.
+            throw;
+        }
+        catch (OperationCanceledException oce)
+        {
+            throw new ProcessTimeoutException(
+                $"Process execution timed out after {Describe(timeout)}: {Describe(startInfo)}", oce);
         }
         finally
         {
@@ -451,6 +516,6 @@ public sealed class ProcessStartException(string message) : IOException(message)
 {
 }
 
-public sealed class ProcessTimeoutException(string message) : TimeoutException(message)
+public sealed class ProcessTimeoutException(string message, Exception? inner = null) : TimeoutException(message, inner)
 {
 }

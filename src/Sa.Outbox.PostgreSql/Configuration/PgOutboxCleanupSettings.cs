@@ -8,7 +8,7 @@ public sealed class PgOutboxCleanupSettings
 {
     /// <summary>
     /// Gets or sets a value indicating whether the cleanup should be executed as a background job.
-    /// Default is set to false, meaning the cleanup will not run as a job.
+    /// Default is set to true, meaning the cleanup runs as a background job by default.
     /// </summary>
     public bool AsBackgroundJob { get; set; } = true;
 

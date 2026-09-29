@@ -29,7 +29,7 @@ internal sealed class FFRawExecutor(
 
     public Task<ProcessExecutionResult> ExecuteAsync(
         string commandArguments,
-        bool captureErrorOutput = false,
+        bool throwOnError = false,
         TimeSpan? timeout = null,
         Action<ProcessStartInfo>? configure = null,
         CancellationToken cancellationToken = default)
@@ -39,7 +39,7 @@ internal sealed class FFRawExecutor(
 
         return executor.ExecuteWithResultAsync(
             psi,
-            captureErrorOutput,
+            throwOnError,
             timeout ?? DefaultTimeout,
             cancellationToken);
     }
@@ -54,6 +54,8 @@ internal sealed class FFRawExecutor(
     {
         var psi = GetStartInfo(ExecutablePath, commandArguments);
         configure?.Invoke(psi);
-        return executor.ExecuteStdOutAsync(psi, inputStream, onOutput, timeout, cancellationToken);
+        // Раньше таймаут по умолчанию применялся только к файловым вызовам: потоковые операции
+        // висели вечно. Теперь поведение одинаковое.
+        return executor.ExecuteStdOutAsync(psi, inputStream, onOutput, timeout ?? DefaultTimeout, cancellationToken);
     }
 }

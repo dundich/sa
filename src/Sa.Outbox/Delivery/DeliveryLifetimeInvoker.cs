@@ -9,7 +9,10 @@ namespace Sa.Outbox.Delivery;
 internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) : IDeliveryLifetimeInvoker
 {
 
-    private readonly ConcurrentDictionary<string, IConsumer> _singletonConsumers = new();
+    // Keyed by (message type, consumer group) rather than by group alone: a group id is only unique
+    // per message type, so keying by group alone would hand a second TMessage the first one's
+    // consumer instance and fail the cast below with InvalidCastException inside the delivery path.
+    private readonly ConcurrentDictionary<(Type MessageType, string ConsumerGroupId), IConsumer> _singletonConsumers = new();
 
     // Method to process messages using a consumer in scope
     public Task ConsumeInScope<TMessage>(
@@ -29,7 +32,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
     {
-        var consumer = GetOrCreateSingletonConsumer<TMessage>(settings);
+        var consumer = GetOrCreateSingletonConsumer<TMessage>(settings.ConsumerGroupId);
         return ProcessMessages(consumer, settings, filter, messages, cancellationToken);
     }
 
@@ -57,10 +60,12 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         await consumer.Consume(settings, filter, messages, cancellationToken).ConfigureAwait(false);
     }
 
-    private IConsumer<TMessage> GetOrCreateSingletonConsumer<TMessage>(
-        OutboxConsumerSettings settings)
+    private IConsumer<TMessage> GetOrCreateSingletonConsumer<TMessage>(string consumerGroupId)
     {
-        return (IConsumer<TMessage>)_singletonConsumers.GetOrAdd(settings.ConsumerGroupId, key =>
-            GetConsumer<TMessage>(serviceProvider, key));
+        var key = (typeof(TMessage), consumerGroupId);
+
+        return (IConsumer<TMessage>)_singletonConsumers.GetOrAdd(
+            key,
+            k => GetConsumer<TMessage>(serviceProvider, k.ConsumerGroupId));
     }
 }

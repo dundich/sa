@@ -66,7 +66,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "test.bin", TenantId = 2 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(string.Empty, input, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync("share", input, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.NotEmpty(result.FileId);
@@ -92,7 +92,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         var input = new UploadFileInput { FileName = "some.bin", TenantId = 1 };
         using MemoryStream fileContent = FixtureHelper.GetByteStream();
 
-        var result = await Storage.UploadAsync(string.Empty, input, fileContent, fixture.CancellationToken);
+        var result = await Storage.UploadAsync("share", input, fileContent, fixture.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal(InMemoryFileStorage.DefaultStorageType, result.StorageType);
@@ -105,17 +105,19 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
     }
 
     [Fact]
-    public async Task WhenStorageIsEmptyThrowsInvalidOperationException()
+    public void WhenStorageIsEmptyThrowsInvalidOperationException()
     {
         ServiceCollection services = new();
         services.AddSaHybridFileStorage();
 
         using var sp = services.BuildServiceProvider();
 
-        using MemoryStream fileContent = FixtureHelper.GetByteStream();
-        await Assert.ThrowsAsync<HybridFileStorageNoAvailableException>(() =>
-           sp.GetRequiredService<IHybridFileStorage>().UploadAsync(
-               string.Empty, new UploadFileInput { FileName = "", TenantId = 1 }, fileContent, fixture.CancellationToken));
+        // The exception surfaces when IHybridFileStorage is resolved, not on the first operation:
+        // an empty container used to resolve successfully and then fail every call with
+        // HybridFileStorageNoAvailableException, which says nothing about the missing registration.
+        var ex = Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IHybridFileStorage>());
+
+        Assert.Contains("No IFileStorage provider", ex.Message, StringComparison.Ordinal);
     }
 
 

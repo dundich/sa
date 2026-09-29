@@ -43,13 +43,25 @@ public interface IScheduleBuilder
     /// <summary>
     /// Configures the schedule to use a hosted service.
     /// </summary>
+    /// <remarks>
+    /// Idempotent: calling it from several builders still registers a single hosted service.
+    /// </remarks>
     /// <returns>The schedule builder.</returns>
     IScheduleBuilder UseHostedService();
 
     /// <summary>
     /// Adds an error handler to the schedule.
     /// </summary>
-    /// <param name="handler">A function to handle errors that occur during job execution.</param>
+    /// <param name="handler">
+    /// A function to handle errors that occur during job execution. Returning <c>true</c>
+    /// consumes the error; returning <c>false</c> leaves it to the per-job error policy.
+    /// </param>
+    /// <remarks>
+    /// Handlers accumulate across calls, including across separate
+    /// <see cref="Setup.AddSaSchedule"/> calls — the error is considered handled
+    /// as soon as any handler returns <c>true</c>. A <c>null</c> handler throws
+    /// <see cref="ArgumentNullException"/>.
+    /// </remarks>
     /// <returns>The schedule builder.</returns>
     IScheduleBuilder AddErrorHandler(Func<IJobContext, Exception, bool> handler);
 }

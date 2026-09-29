@@ -31,11 +31,11 @@ public class SaWorkQueueRecoveryTests
         // Добавим несколько задач
         await queue.Enqueue(1, TestToken);
         await queue.Enqueue(2, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(2, ((TestProcessor)options.Processor).ProcessedCount);
 
-        await queue.ForceCancelReadersAsync();
+        await queue.ForceCancelReadersAsync(ct: TestToken);
         await Task.Delay(100, TestToken);
 
         Assert.True(queue.IsIdle());
@@ -46,7 +46,7 @@ public class SaWorkQueueRecoveryTests
         await Task.Delay(100, TestToken);
 
         await queue.Enqueue(3, TestToken);
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, ((TestProcessor)options.Processor).ProcessedCount);
     }
 
@@ -71,7 +71,7 @@ public class SaWorkQueueRecoveryTests
 
         await queue.Enqueue(2, TestToken);          // OK после fail
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert
         Assert.Equal(2, processor.ProcessedCount);
@@ -103,11 +103,11 @@ public class SaWorkQueueRecoveryTests
 
         await queue.Enqueue(-1, TestToken);         // Fail
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         await queue.Enqueue(1, TestToken);          // OK
 
-        await queue.WaitForIdleAsync(TestToken);
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert
         Assert.Equal(2, processor.ProcessedCount);
@@ -135,11 +135,9 @@ public class SaWorkQueueRecoveryTests
 
         await queue.Enqueue(-1, TestToken);         // Fail
 
-        await queue.WaitForIdleAsync(TestToken);
-
-
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
+            await queue.WaitForIdleAsync(cancellationToken: TestToken);
             await queue.Enqueue(2, cancellationToken: CancellationToken.None);
         });
 

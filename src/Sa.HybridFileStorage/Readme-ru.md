@@ -25,7 +25,6 @@
 - [Справочник настроек](#справочник-настроек)
 - [Доменные типы](#доменные-типы)
 - [Исключения](#исключения)
-- [Структура проекта](#структура-проекта)
 
 ---
 
@@ -55,21 +54,31 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
     .ConfigureStorage((sp, c) => c.AddStorage(new FileSystemStorage(
         new FileSystemStorageSettings { BasePath = @"C:\data\черновик", Basket = "черновик" })))
 
-    // Корзина "документы" → PostgreSQL с авто-партиционированием
-    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(dataSource, new PostgresFileStorageOptions
-    {
-        PartOptions = new() { Basket = "документы" },
-        StorageOptions = new() { SchemaName = "files", TableName = "files" }
-    })))
+    // Корзина "документы" → PostgreSQL с авто-партиционированием.
+    // Зависимости (IPgDataSource, IPartitionManager, RecyclableMemoryStreamManager)
+    // резолвятся из DI в момент регистрации.
+    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(
+        sp.GetRequiredService<IPgDataSource>(),
+        sp.GetRequiredService<IPartitionManager>(),
+        sp.GetRequiredService<RecyclableMemoryStreamManager>(),
+        new PostgresFileStorageOptions
+        {
+            Basket = "документы",
+            TableName = "files"
+        })))
 
     // Корзина "архив" → S3 облачное хранилище
-    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(s3Client, new S3FileStorageOptions
-    {
-        Endpoint = "http://minio:9000",
-        Bucket = "company-archive",
-        Basket = "архив"
-    }))));
+    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(
+        sp.GetRequiredService<IS3BucketClient>(),
+        new S3FileStorageOptions
+        {
+            Endpoint = "http://minio:9000",
+            Bucket = "company-archive",
+            Basket = "архив"
+        }))));
 ```
+
+Несколько вызовов `ConfigureStorage` накапливаются: каждый вызов регистрирует дополнительные storage в контейнере, поэтому в одной цепочке `AddSaHybridFileStorage` можно повесить несколько корзин.
 
 После настройки все CRUD-операции работают с именами корзин, а не спецификой провайдеров:
 
@@ -506,23 +515,25 @@ builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
 
 ### PostgresFileStorageOptions
 
+Опции плоские (без вложенных `PartOptions`/`CleanupOptions`/`StorageOptions`):
+
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
-| `StorageOptions.SchemaName` | Схема PostgreSQL | `"public"` |
-| `StorageOptions.TableName` | Таблица для данных файлов | `"files"` |
-| `StorageOptions.StorageType` | Префикс схемы в File ID | `"pg"` |
-| `PartOptions.Basket` | Имя контейнера | `"share"` |
-| `PartOptions.PgPartBy` | Гранулярность партиционирования | `PgPartBy.Day` |
-| `PartOptions.MigrationScheduleForwardDays` | Дней заранее для предсоздания партиций | `2` |
-| `CleanupOptions.ExpireDays` | Порог автоочистки (дней) | `365 * 3` |
-| `StorageOptions.IsReadOnly` | Запрет записи | `false` |
+| `SchemaName` | Схема PostgreSQL (автоопределяется из search_path, если не задано) | `"public"` |
+| `TableName` | Таблица для данных файлов | `"files"` |
+| `StorageType` | Префикс схемы в File ID | `"pg"` |
+| `Basket` | Имя контейнера | `"share"` |
+| `PgPartBy` | Гранулярность партиционирования | `PgPartBy.Day` |
+| `MigrationScheduleForwardDays` | Дней заранее для предсоздания партиций | `2` |
+| `ExpireDays` | Порог автоочистки (дней) | `365 * 3` |
+| `IsReadOnly` | Запрет записи | `false` |
 
 ### InMemoryFileStorageOptions
 
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
 | `Basket` | Имя контейнера | `"share"` |
-| `MaxSizeBytes` | Лимит в байтах (`0` = без лимита) | `0` |
+| `MaxSizeBytes` | Лимит в байтах (`0` = без лимита) | `1 GB` |
 | `IsReadOnly` | Запрет записи | `false` |
 
 ---
@@ -581,33 +592,39 @@ public sealed class FileMetadata
 
 ---
 
-## Структура проекта
+## Ломающие изменения
 
-```
-src/Sa.HybridFileStorage/                          # Основная библиотека (NuGet: Sa.HybridFileStorage)
-├── IHybridFileStorage.cs                          # Главный интерфейс
-├── HybridFileStorage.cs                           # Реализация с failover + interceptors
-├── HybridFileStorageContainer.cs                  # Контейнер провайдеров
-├── HybridStorageBuilder.cs                        # Fluent DI builder
-├── HybridFileStorageExtensions.cs                 # Пакетные операции (CopyFromFile, CopyToBasket, …)
-├── Setup.cs                                       # DI расширения (AddSaHybridFileStorage, AddSaInMemoryFileStorage)
-├── FileIdParser.cs                                # Утилита парсинга/форматирования File ID
-├── FileMetadata.cs                                # DTO метаданных
-├── InMemoryFileStorage.cs                         # In-memory провайдер
-├── InMemoryFileStorageOptions.cs                  # Настройки in-memory
-├── BatchResult.cs, BatchOptions.cs, …            # Типы пакетных операций
-└── Interceptors/                                  # Хуки загрузки/скачивания/удаления
-    ├── IUploadInterceptor.cs
-    ├── IDownloadInterceptor.cs
-    ├── IDeleteInterceptor.cs
-    ├── UploadLoggingInterceptor.cs
-    ├── DownloadLoggingInterceptor.cs
-    └── DeleteLoggingInterceptor.cs
+### 0.12.0 -> 0.13.0
 
-src/Sa.HybridFileStorage.FileSystem/               # Файловая система (NuGet: Sa.HybridFileStorage.FileSystem)
-src/Sa.HybridFileStorage.S3/                       # S3 (NuGet: Sa.HybridFileStorage.S3)
-src/Sa.HybridFileStorage.Postgres/                 # PostgreSQL (NuGet: Sa.HybridFileStorage.Postgres)
-```
+**Резолв `IHybridFileStorage` без зарегистрированных провайдеров теперь бросает
+`InvalidOperationException`.** Раньше резолв проходил успешно с пустым контейнером, а
+затем каждая операция падала с `HybridFileStorageNoAvailableException` — сообщение
+указывало на место вызова, а не на отсутствующую регистрацию. Отсутствующий провайдер —
+это ошибка старта, поэтому падать нужно там, где ошибка. В сообщении перечислены подходящие
+методы `Add...`.
+
+**Второй вызов `AddSaHybridFileStorage` теперь бросает `InvalidOperationException`.**
+Раньше он делал `TryAddSingleton` в коллекцию, где фабрика уже была, поэтому storage'ы и
+перехватчики второго builder'а молча терялись. Проверка идёт по `IHybridFileStorage`, так
+что регистрация руками тоже обнаруживается. Регистрируйте провайдеры их собственными
+методами `Add...`, а гибридный слой настраивайте один раз.
+
+**`AddSaInMemoryFileStorage(IHybridFileStorageConfiguration, ...)` теперь регистрирует
+провайдера в контейнере.** Раньше он создавался через `new` внутри отложенного колбэка,
+поэтому был невидим для `sp.GetServices<IFileStorage>()`, не участвовал в disposal провайдера
+и мог оказаться другим экземпляром, чем при прямой регистрации. Теперь это ровно тот же
+экземпляр.
+
+**`TimeProvider` регистрируется через `TryAddSingleton(TimeProvider.System)`**, причём
+ранее зарегистрированный `TimeProvider` выигрывает. Раньше каждый провайдер подставлял
+`TimeProvider.System` сам по себе, из-за чего зарегистрированные тестовые часы молча
+игнорировались.
+
+**Добавлен публичный хелпер `StorageNaming`** в базовом пакете: правила именования
+(`DefaultBasket`, `BasketMinLength`, `StorageTypeMaxLength`, `ValidateBasket`,
+`RequireStorageType`, `RequireIdentifier`), которыми теперь делятся пакеты провайдеров.
+Все три пакета провайдеров ссылаются на базовый, поэтому хелпер доступен потребителю
+любого из них.
 
 ---
 

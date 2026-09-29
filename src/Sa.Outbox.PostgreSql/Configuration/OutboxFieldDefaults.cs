@@ -4,6 +4,8 @@ public static class OutboxFieldDefaults
 {
     // Common fields
     public const string MsgId = "msg_id";
+    /// <summary>Database-assigned insertion order of a message. The consumption cursor.</summary>
+    public const string MsgSeq = "msg_seq";
     public const string TenantId = "tenant_id";
     public const string MsgPart = "msg_part";
     public const string MsgPayloadId = "msg_payload_id";
@@ -38,5 +40,8 @@ public static class OutboxFieldDefaults
 
     // Offset  __offset
     public const string GroupOffset = "group_offset";
+    /// <summary>Msg-seq cursor column. Sits next to the legacy <see cref="GroupOffset"/> (UUID),
+    /// which stays for rolling upgrades and is dropped by a later contract version.</summary>
+    public const string GroupOffsetSeq = "group_offset_seq";
     public const string GroupUpdatedAt = "group_updated_at";
 }

@@ -18,6 +18,7 @@
 | 4 | [Partitional.ConsoleApp](#4-partitionalconsoleapp) | `Sa.Partitional.PostgreSql` | Console | Декларативное партиционирование таблиц с расписанием миграций |
 | 5 | [PgOutbox.ConsoleApp](#5-pgoutboxconsoleapp) | `Sa.Outbox.PostgreSql` | Console | Надёжная публикация сообщений через паттерн Outbox |
 | 6 | [Schedule.Console](#6-scheduleconsole) | `Sa.Schedule` | Console | Планировщик задач с стратегиями обработки ошибок |
+| 7 | [WorkQueue.Console](#7-workqueueconsole) | `Sa.Utils.WorkQueue` | Console | Очередь с ограниченным параллелизмом и динамическим изменением ёмкости на лету |
 
 ---
 
@@ -224,6 +225,41 @@ err 1
 2026-07-01T... 0: Some 2
 <end>
 *** cancelled on timeout
+*** THE END ***
+```
+
+---
+
+## 7. WorkQueue.Console
+
+Демонстрирует `Sa.Utils.WorkQueue` — очерёдную систему с ограниченным параллелизмом, back-pressure и динамическим изменением параллелизма на лету.
+
+### Что делает
+
+1. Создаёт `SaWorkQueue<int>` с начальным лимитом параллелизма 3 и максимумом 8.
+2. Закладывает пачку из 10 элементов.
+3. Пока элементы идут, меняет параллелизм с 3 на 6 и обратно на 2.
+4. Ждёт завершения, выводит количество обработанных элементов.
+5. Корректно завершает работу — завершающиеся элементы добираются, оставшиеся помечаются как `Faulted`.
+
+### Запуск
+
+```powershell
+dotnet run --project WorkQueue.Console
+```
+
+### Ожидаемый вывод
+
+```
+=== Sa.WorkQueue sample ===
+Enqueued 10 items, concurrency = 3
+[8] #1 started
+[8] #1 -> Running
+...
+Scaled up -> concurrency = 6
+Scaled down -> concurrency = 2
+Processed 10 items, queue is idle: True
+Enabled after shutdown: False
 *** THE END ***
 ```
 

@@ -14,6 +14,7 @@ internal sealed class JobProperties : IJobProperties
     public int? ContextStackSize { get; private set; }
     public int? ConcurrencyLimit { get; private set; }
     public int? MaxConcurrency { get; private set; }
+    public TimeSpan? ShutdownTimeout { get; private set; }
 
     public JobProperties WithName(string name)
     {
@@ -45,7 +46,7 @@ internal sealed class JobProperties : IJobProperties
         return this;
     }
 
-    public JobProperties SetDisabled()
+    public JobProperties Disable()
     {
         Disabled = true;
         return this;
@@ -76,10 +77,17 @@ internal sealed class JobProperties : IJobProperties
         return this;
     }
 
-    public JobProperties WithMaxConcurrencyLimit(int limit)
+    public JobProperties WithMaxConcurrency(int limit)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         MaxConcurrency = limit;
+        return this;
+    }
+
+    public JobProperties WithShutdownTimeout(TimeSpan timeout)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
+        ShutdownTimeout = timeout;
         return this;
     }
 
@@ -97,6 +105,7 @@ internal sealed class JobProperties : IJobProperties
 
         ConcurrencyLimit ??= props.ConcurrencyLimit;
         MaxConcurrency ??= props.MaxConcurrency;
+        ShutdownTimeout ??= props.ShutdownTimeout;
 
         return this;
     }

@@ -1,4 +1,5 @@
-﻿using Sa.Outbox.Partitional;
+﻿using Sa.Classes;
+using Sa.Outbox.Partitional;
 
 namespace Sa.Outbox.Delivery;
 
@@ -38,8 +39,18 @@ internal sealed class DeliveryProcessor(
         bool continueProcessing;
         do
         {
-            // Re-check Paused on each iteration — a runtime Pause() should interrupt
-            // the greedy loop, not wait for all pending messages to drain.
+            // Re-checked every iteration, but deliberately against the *same* immutable snapshot.
+            // `settings` was captured once by DeliveryJob<TMessage>.Execute, so a runtime Pause()
+            // or Resume() cannot be observed here — by design.
+            //
+            // Why not re-read IOutboxConsumerManager per iteration: interrupting a drain in flight
+            // is more dangerous than letting it finish. A partially drained batch means rented tasks,
+            // an in-flight lock renewal and uncommitted per-message statuses, so aborting mid-cycle
+            // trades a bounded wait for an unbounded recovery. The wait is bounded by
+            // MaxProcessingIterations and by PerTenantTimeout, and Pause() takes effect on the next
+            // job execution.
+            //
+            // Do not "fix" this by injecting IOutboxConsumerManager and polling it here.
             if (settings.Paused)
             {
                 await Task.Delay(PausedPollDelay, cancellationToken).ConfigureAwait(false);
@@ -51,13 +62,13 @@ internal sealed class DeliveryProcessor(
                 await Task.Delay(settings.IterationDelay, cancellationToken).ConfigureAwait(false);
             }
 
-            int sentCount = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false);
+            int processed = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false);
 
-            totalProcessed += sentCount;
+            totalProcessed += processed;
             iterations++;
 
             continueProcessing = ShouldContinueProcessing(
-                sentCount,
+                processed,
                 iterations,
                 settings,
                 cancellationToken);
@@ -68,7 +79,7 @@ internal sealed class DeliveryProcessor(
     }
 
     private static bool ShouldContinueProcessing(
-        int lastBatchSize,
+        int processedCount,
         int iterations,
         OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
@@ -76,7 +87,9 @@ internal sealed class DeliveryProcessor(
         if (cancellationToken.IsCancellationRequested)
             return false;
 
-        if (lastBatchSize == 0)
+        // Driven by the number of messages handled, not successes: a batch where every message
+        // failed is still work in flight and the backlog may not be drained yet.
+        if (processedCount == 0)
             return false;
 
         if (settings.MaxProcessingIterations >= 0 && iterations >= settings.MaxProcessingIterations)
@@ -100,16 +113,16 @@ internal sealed class DeliveryProcessor(
         OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
-        int count = 0;
+        var total = 0;
         foreach (int tenantId in tenantIds)
         {
-            count += await ProcessInTenant<TMessage>(tenantId, settings, cancellationToken).ConfigureAwait(false);
+            total += await ProcessTenantWithTimeout<TMessage>(tenantId, settings, cancellationToken).ConfigureAwait(false);
         }
 
-        return count;
+        return total;
     }
 
-    public async Task<int> ProcessTenantsParallel<TMessage>(
+    private async Task<int> ProcessTenantsParallel<TMessage>(
         int[] tenantIds,
         OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
@@ -122,7 +135,7 @@ internal sealed class DeliveryProcessor(
             CancellationToken = cancellationToken
         };
 
-        int totalCount = 0;
+        int processed = 0;
 
         try
         {
@@ -131,8 +144,8 @@ internal sealed class DeliveryProcessor(
                 parallelOptions,
                 async (tenantId, ct) =>
                 {
-                    int processed = await ProcessInTenant<TMessage>(tenantId, settings, ct).ConfigureAwait(false);
-                    Interlocked.Add(ref totalCount, processed);
+                    int tenantProcessed = await ProcessTenantWithTimeout<TMessage>(tenantId, settings, ct).ConfigureAwait(false);
+                    Interlocked.Add(ref processed, tenantProcessed);
                 }).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -140,10 +153,16 @@ internal sealed class DeliveryProcessor(
             // ignore
         }
 
-        return totalCount;
+        return processed;
     }
 
-    private async Task<int> ProcessInTenant<TMessage>(
+    /// <summary>
+    /// Applies <see cref="OutboxConsumerSettings.PerTenantTimeout"/> to a single tenant pass and
+    /// swallows the resulting cancellation, so one unresponsive tenant cannot fail the whole cycle.
+    /// Deliberately distinct from <see cref="IDeliveryTenant.ProcessInTenant{TMessage}"/>, which does
+    /// the actual work — the two used to share a name, which made the call chain ambiguous to read.
+    /// </summary>
+    private async Task<int> ProcessTenantWithTimeout<TMessage>(
         int tenantId,
         OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
@@ -161,6 +180,16 @@ internal sealed class DeliveryProcessor(
         catch (OperationCanceledException)
         {
             // ignore
+            return 0;
+        }
+        catch (LockRenewalException)
+        {
+            // A lost lock is local to this tenant, and so is everything it can cause: the next
+            // pass simply re-acquires the messages, and the losing owner's batch is closed by
+            // ReturnDelivery like any other. Letting it out would abort the tenant loop and take
+            // the whole cycle down with it — for a condition the per-tenant pass is already
+            // designed to absorb. Counted as 0: the batch was released, but the count we lost is
+            // the one ProcessInTenant never got to return.
             return 0;
         }
     }

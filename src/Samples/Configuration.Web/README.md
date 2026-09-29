@@ -28,21 +28,6 @@ Open `http://localhost:5245/settings` in your browser to see all configuration v
 
 ---
 
-## Architecture
-
-```
-AddSaConfiguration()
-  ├── AddSaCommandLine(args)         → CommandLineArgsSecretStore
-  ├── AddSaPostSecretProcessing()    → ChainedSecrets(
-       │                               │     ├── EnvironmentVariableSecretStore
-       │                               │     ├── CommandLineArgsSecretStore
-       │                               │     └── FileSecretStore (secrets.txt)
-       │                              )
-  └── AddSaPostgreSqlConfiguration   → Dynamic settings from PostgreSQL
-```
-
----
-
 ## Configuration Chain
 
 The placeholder format `{{key}}` resolves values from the chained secret stores in order:
@@ -110,16 +95,30 @@ ds.ExecuteScalar("""
 """, null).Wait();
 
 // Step 4: Add PostgreSQL as dynamic config source
-builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions
-(
-    ConnectionString: connectionString,
-    SelectSql: "select * from settings"
-));
+// The application already holds a data source, so hand it over instead of letting the
+// configuration source open a second pool. Ownership stays here — `ds` is never disposed
+// by the provider, and it carries the connection, so the connection string is ignored.
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    new PostgreSqlConfigurationOptions(
+        ConnectionString: string.Empty,
+        // Name the columns: the provider takes the first two as (key, value), so the column
+        // order is part of the contract and `select *` would make it an implicit one.
+        SelectSql: "select key, value from settings"),
+    ds);
 
 // Step 5: Register endpoints
+var app = builder.Build();
+
 var todosApi = app.MapGroup("/settings");
+
+// A connection string carries the password, so never hand one to a client as-is.
+// Mask it for display; everything else on this endpoint is shown verbatim.
+static string MaskPassword(string? connectionString) => connectionString is null
+    ? string.Empty
+    : new NpgsqlConnectionStringBuilder(connectionString) { Password = "***" }.ConnectionString;
+
 todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
-    new (Key: PG_KEY, Value: configuration[PG_KEY]),
+    new (Key: PG_KEY, Value: MaskPassword(configuration[PG_KEY])),
     new (Key: "theme", Value: configuration["theme"]),
     new (Key: "language", Value: configuration["language"]),
     new (Key: "notifications", Value: configuration["notifications"]),
@@ -131,13 +130,18 @@ todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
 
 ```json
 [
-  { "key": "sa:pg:connection", "value": "User ID=postgres;Password=postgres;..." },
+  { "key": "sa:pg:connection", "value": "Username=postgres;Password=***;Host=localhost;Port=5432;Database=postgres;Pooling=True;Search Path=public;Command Timeout=180" },
   { "key": "theme",             "value": "dark" },
   { "key": "language",          "value": "en" },
   { "key": "notifications",     "value": "enabled" },
   { "key": "secret",            "value": "TOP SECRET!" }
 ]
 ```
+
+Note the password is masked: `NpgsqlConnectionStringBuilder` normalises the keywords it
+round-trips, so the output reads `Username=…` / `Search Path=…` rather than the
+`User ID=…` / `SearchPath=…` spelling used in `secrets.txt`. The value is a re-render of the
+connection string, not the raw one.
 
 ---
 
@@ -148,6 +152,7 @@ todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
 | `Sa.Configuration` | Secrets management, CLI argument parsing |
 | `Sa.Configuration.PostgreSql` | Dynamic config from PostgreSQL |
 | `Sa.Data.PostgreSql` | Npgsql client wrapper |
+| `Npgsql` | `NpgsqlConnectionStringBuilder` for masking the password; arrives transitively, but the sample uses it directly |
 | `Microsoft.AspNetCore.OpenApi` | OpenAPI support (dev only) |
 
 ---

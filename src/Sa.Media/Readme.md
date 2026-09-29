@@ -1,6 +1,6 @@
 # Sa.Media
 
-Async, memory-efficient WAV file reader for .NET 10+. Designed for Native AOT compatibility with zero allocations on hot paths.
+Async, memory-efficient WAV file reader for .NET 10+. Designed for Native AOT compatibility with zero allocations on hot paths. Includes a stereo cross-feed suppression pipeline (`Sa.Media.Echo`) for separating closely miked sources.
 
 ---
 
@@ -13,6 +13,7 @@ Async, memory-efficient WAV file reader for .NET 10+. Designed for Native AOT co
 - **Time-based trimming** — read only the portion you need via `TimeRange`
 - **Channel-aware** — per-channel sample enumeration with position tracking
 - **Automatic chunk skipping** — `JUNK`, `LIST`, and other metadata chunks are transparently skipped
+- **Cross-feed suppression** — stereo separation pipeline in `Sa.Media.Echo`
 
 ---
 
@@ -94,6 +95,44 @@ await foreach (var packet in reader.ConvertToFormatAsync(
 
 ---
 
+## Cross-feed suppression (`Sa.Media.Echo`)
+
+Separates a stereo recording of two closely miked speakers/microphones into two
+near-dialectal tracks. The algorithm estimates the acoustic cross-talk between
+channels (`y_L = x_L + β·x_R`, `y_R = x_R + α·x_L`) and inverts the model.
+
+Supports two modes:
+
+- **Linear** — cross-talk cancellation only (fast, low memory).
+- **Aggressive** — cross-talk cancellation plus per-frequency spectral masking
+  for sharper separation (higher CPU/GPU cost).
+
+```csharp
+using Sa.Media.Echo;
+
+// Automatic mode: in-memory for short clips, streaming for long ones
+await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
+    InputPath: "recording.wav",
+    OutputPath: "separated.wav"), CancellationToken.None);
+
+// Aggressive mode with spectral masking
+await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
+    InputPath: "recording.wav",
+    OutputPath: "separated_aggressive.wav",
+    Processing: CrossFeedSeparator.ProcessingMode.Aggressive,
+    DominanceThresholdDb: 6.0,   // dB threshold for single-speaker regions
+    SpectralMaskPower: 4.0,      // spectral mask sharpening exponent
+    MaskFloor: 0.01),            // minimum mask floor [0, 1]
+    CancellationToken.None);
+```
+
+The separator must run on a **2-channel (stereo)** recording. Output is 16-bit
+PCM WAV, peak-normalized. The linear path streams and avoids loading the whole
+file into memory; the in-memory path kicks in automatically for short
+recordings (≤ 100 Mframes).
+
+---
+
 ## Supported Formats
 
 | Format | Read | Write |
@@ -122,6 +161,20 @@ All formats support mono and stereo. Unknown chunks (`JUNK`, `LIST`, etc.) are a
 | `TimeRange` | Record: `(From, To)` — time-based trimming with factory methods |
 | `AudioEncoding` | Enum: PCM 8/16/24/32, IEEE Float 32/64 |
 | `WaveFormatType` | Enum: `Pcm`, `Adpcm`, `IeeeFloat`, `Extensible` |
+
+### Echo types (`Sa.Media.Echo`)
+
+| Type | Description |
+|------|-------------|
+| `CrossFeedSeparator` | Stereo cross-feed suppression pipeline (entry point) |
+| `CrossFeedSeparator.ProcessingMode` | Enum: `Auto`, `MaximumSpeed`, `MinimumMemory`, `MinimumMemoryFastNormalize`, `Aggressive` |
+| `AudioSeparationOptions` | Record: `InputPath`, `OutputPath`, `Processing`, `DominanceThresholdDb`, `SpectralMaskPower`, `MaskFloor` |
+
+### Key methods on `CrossFeedSeparator`
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `ExecuteAsync(AudioSeparationOptions, ct)` | `Task` | Runs separation and writes the output WAV |
 
 ### Key methods on `AsyncWavReader`
 
@@ -175,6 +228,14 @@ src/Sa.Media/
 ├── WavHeaderReader.cs       # Header parser
 ├── WaveFormatType.cs        # Format type enum
 └── WaveFormatTypeExtensions.cs
+
+src/Sa.Media/Echo/
+├── CrossFeedSeparator.cs     # Entry point — estimate + invert cross-talk
+├── AudioSeparationOptions.cs # Public options record
+├── AggressiveMode.cs         # STFT-based spectral masking
+├── AudioMath.cs              # Coefficient math, percentile, normalization
+├── AudioConstants.cs         # Tunable constants
+└── WavIO.cs                  # Interleaved float I/O helpers
 ```
 
 ---

@@ -17,16 +17,29 @@ internal sealed partial class JobController(
 {
 
     private readonly JobContext _context = new(settings);
-    private readonly SemaphoreSlim _pauseSemaphore = new(1, 1);
+
+    // Pause gate: _isPaused is the single source of truth and is only read
+    // and written under _pauseSync, so the "am I paused" decision is atomic
+    // with respect to Pause/Resume. While paused, _pauseWaiters holds the
+    // TaskCompletionSource that WaitIfPaused awaits — the await YIELDS
+    // instead of blocking the calling thread: a reader is spawned
+    // synchronously by the queue (LaunchReader, on the caller's thread) and
+    // runs the loop on that thread until the first real yield, so a
+    // thread-blocking gate would deadlock the very call that Resumes the
+    // controller next.
+    private readonly Lock _pauseSync = new();
+    private volatile bool _isPaused;
+    private volatile TaskCompletionSource<bool>? _pauseWaiters;
 
     private volatile bool _disposed;
-    private volatile JobExecutor? _job;
-    private volatile bool _isPaused;
+    private volatile bool _abortedByError;
+    private volatile JobExecutor? _executor;
     private readonly CancellationTokenSource _shutdownCts = new();
 
 
     public int Index => index;
     public bool IsPaused => _isPaused;
+    public bool AbortedByError => _abortedByError;
 
 
     public async ValueTask WaitToRun(CancellationToken cancellationToken)
@@ -34,10 +47,10 @@ internal sealed partial class JobController(
         if (_disposed) return;
 
         if (_context.NumRuns == 0
-            && settings.Properties.InitialDelay.HasValue
-            && settings.Properties.InitialDelay.Value != TimeSpan.Zero)
+            && settings.Properties.InitialDelay is { } delay
+            && delay != TimeSpan.Zero)
         {
-            await Task.Delay(settings.Properties.InitialDelay.Value, cancellationToken);
+            await Task.Delay(delay, cancellationToken);
         }
     }
 
@@ -46,59 +59,67 @@ internal sealed partial class JobController(
     {
         if (_disposed) return;
 
-        if (Interlocked.CompareExchange(ref _isPaused, true, false))
+        lock (_pauseSync)
         {
-            return;
-        }
+            if (_isPaused) return;
 
-        _pauseSemaphore.Wait(); // Блокируем семафор
+            _isPaused = true;
+            _pauseWaiters = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
     }
 
     public void Resume()
     {
         if (_disposed) return;
 
-        if (!Interlocked.CompareExchange(ref _isPaused, false, true))
+        lock (_pauseSync)
         {
-            return;
-        }
+            if (!_isPaused) return;
 
-        ReleaseSemaphore();
-    }
-
-    private void ReleaseSemaphore()
-    {
-        try
-        {
-            _pauseSemaphore.Release();
-        }
-        catch (ObjectDisposedException)
-        {
-            // ignore
-        }
-        catch (SemaphoreFullException)
-        {
-            // Уже разблокирован
+            _isPaused = false;
+            var waiters = _pauseWaiters;
+            _pauseWaiters = null;
+            waiters?.TrySetResult(true);
         }
     }
 
     public async ValueTask WaitIfPaused(CancellationToken cancellationToken)
     {
-        if (_disposed || !_isPaused) return;
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken, _shutdownCts.Token);
-
-        try
+        while (true)
         {
-            await _pauseSemaphore.WaitAsync(cts.Token);
-        }
-        finally
-        {
-            if (!_disposed && !_isPaused)
+            if (_disposed) throw new OperationCanceledException(cancellationToken);
+
+            bool paused;
+            TaskCompletionSource<bool>? waiters;
+
+            lock (_pauseSync)
             {
-                ReleaseSemaphore();
+                paused = _isPaused;
+                waiters = _pauseWaiters;
             }
+
+            if (!paused) return;
+
+            // (paused, no waiters) is only reachable after Shutdown tore the
+            // gate down — same exit as a cancelled wait.
+            if (waiters is null) throw new OperationCanceledException(cancellationToken);
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _shutdownCts.Token);
+
+            try
+            {
+                await waiters.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // WaitAsync throws TaskCanceledException (a subclass) —
+                // normalize to the plain OCE the caller's loop expects.
+                throw new OperationCanceledException(cancellationToken);
+            }
+
+            // Woken by a resume — re-check the state: the job may have been
+            // re-paused (or shut down) while we were waiting.
         }
     }
 
@@ -106,9 +127,9 @@ internal sealed partial class JobController(
     {
         if (_disposed) return;
 
-        _job = new JobExecutor(settings, interceptorSettings, scopeFactory);
+        _executor = new JobExecutor(settings, interceptorSettings, scopeFactory);
 
-        _context.ServiceProvider = _job.ServiceProvider;
+        _context.ServiceProvider = _executor.ServiceProvider;
 
         if (_context.NumRuns == 0) _context.CreatedAt = timeProvider.GetUtcNow();
         _context.NumRuns++;
@@ -121,14 +142,27 @@ internal sealed partial class JobController(
         _disposed = true;
         _shutdownCts.Cancel();
 
+        // Complete the pause gate so a waiter parked on it can exit;
+        // waiters that observe the _shutdownCts cancellation first
+        // leave via the linked-token OCE instead.
+        TaskCompletionSource<bool>? waiters;
+        lock (_pauseSync)
+        {
+            waiters = _pauseWaiters;
+            _pauseWaiters = null;
+        }
+        waiters?.TrySetResult(true);
+
         _context.ServiceProvider = NullJobServices.Instance;
-        _job?.Dispose();
-        _pauseSemaphore.Dispose();
+        _executor?.Dispose();
         _shutdownCts.Dispose();
     }
 
     public async ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken)
     {
+        if (_abortedByError)
+            return CanJobExecuteResult.Abort;
+
         if (settings.Properties.IsRunOnce == true && _context.NumIterations > 0)
             return CanJobExecuteResult.Abort;
 
@@ -154,29 +188,34 @@ internal sealed partial class JobController(
             }
         }
 
-        int stackSize = settings.Properties.ContextStackSize.GetValueOrDefault();
-
-        if (stackSize > 0)
-        {
-            if (_context.Stack.Count == stackSize) _context.Stack.Dequeue();
-            _context.Stack.Enqueue(_context.Clone());
-        }
+        PushStackSnapshot();
 
         return !cancellationToken.IsCancellationRequested
             ? CanJobExecuteResult.Ok
             : CanJobExecuteResult.Abort;
     }
 
+    private void PushStackSnapshot()
+    {
+        int stackSize = settings.Properties.ContextStackSize.GetValueOrDefault();
+
+        if (stackSize > 0)
+        {
+            if (_context.Stack.Count == stackSize) _context.Stack.Dequeue();
+            _context.Stack.Enqueue(_context.ToSnapshot());
+        }
+    }
+
     public Task Execute(CancellationToken cancellationToken)
     {
         _context.NumIterations++;
         _context.ExecuteAt = timeProvider.GetUtcNow();
-        return _job!.Execute(_context, cancellationToken);
+        return _executor!.Execute(_context, cancellationToken);
     }
 
     public void ExecutionCompleted()
     {
-        _context.CompetedIterations++;
+        _context.CompletedIterations++;
         _context.FailedRetries = 0;
     }
 
@@ -199,23 +238,35 @@ internal sealed partial class JobController(
             return;
         }
 
+        int retryCount = errorHandling.RetryCount ?? JobErrorHandling.Default.RetryCount;
+
         // Track retry count. The scheduler decides whether to re-enqueue the job
         // based on FailedRetries < RetryCount.
-        if (_context.FailedRetries < settings.ErrorHandling.RetryCount)
+        if (_context.FailedRetries < retryCount)
         {
             _context.FailedRetries++;
             LogFailedRetryAttempts(
                 _context.Logger,
                 _context.JobName,
                 _context.FailedRetries,
-                errorHandling.RetryCount,
+                retryCount,
                 exception.GetType().Name,
                 exception.Message);
             return;
         }
 
         // All retries exhausted — delegate to the registered error handler.
-        _context.ServiceProvider.GetService<IJobErrorHandler>()?.HandleError(_context, error);
+        // Returning normally means the global handler consumed the error and
+        // the job continues; throwing means the configured action was applied
+        // (abort job / stop all jobs / close application) and this job must stop.
+        try
+        {
+            _context.ServiceProvider.GetService<IJobErrorHandler>()?.HandleError(_context, error);
+        }
+        catch
+        {
+            _abortedByError = true;
+        }
     }
 
 

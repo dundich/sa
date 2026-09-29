@@ -7,11 +7,15 @@ namespace Sa.HybridFileStorage.PostgresTests;
 
 public class PostgresFileStorageFixture : PgDataSourceFixture<IFileStorage>
 {
-    protected PostgresFileStorageFixture(string tableName)
+    protected PostgresFileStorageFixture(
+        string tableName,
+        Action<PostgresFileStorageOptions>? configure = null)
     {
-        Services.AddSaPostgreSqlFileStorage(cfg => cfg
-            .AddDataSource(b => b.WithConnectionString(sp => ConnectionString))
-            .WithTableName(tableName)
-        );
+        Services.AddSaPostgreSqlFileStorageChained(opts =>
+            {
+                opts.TableName = tableName;
+                configure?.Invoke(opts);
+            })
+            .AddDataSource(b => b.WithConnectionString(_ => ConnectionString));
     }
 }

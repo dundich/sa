@@ -1,6 +1,6 @@
 # Sa.Media.FFmpeg
 
-Кроссплатформенная обёртка .NET над FFmpeg (Windows x64, Linux) со **встроенными статическими бинарниками** — работает сразу без установки в систему. Упрощает обработку аудио: извлечение метаданных, конвертация форматов, разделение/объединение каналов и DI-интеграция.
+Кроссплатформенная обёртка .NET над FFmpeg (Windows x64, Linux x64) со **встроенными полностью статическими бинарниками** — работает сразу без установки в систему. Упрощает обработку аудио: извлечение метаданных, конвертация форматов, разделение/объединение каналов и DI-интеграция.
 
 ---
 
@@ -9,7 +9,7 @@
 - 🎵 **Извлечение метаданных** — длительность, битрейт, формат, частота дискретизации, каналы через `ffprobe`
 - 🔊 **Конвертация аудио** — PCM S16 LE WAV, PCM S32 LE WAV, сырой PCM S16 LE/F32 LE бинарник, MP3, OGG Vorbis/Opus
 - 🎛️ **Манипуляция каналами** — разделение стерео на монофайлы, объединение двух моно в стерео
-- 📦 **Встроенные бинарники FFmpeg** — Windows x64/arm64, Linux x64/arm64, macOS x64 (fallback на linux-x64)
+- 📦 **Встроенные бинарники FFmpeg** — полностью статические сборки для `win-x64` и `linux-x64`, распаковываются в каталог приложения на этапе сборки (без установки в систему и без нативных зависимостей)
 - 💉 **Поддержка DI** — стандартная интеграция с `IServiceCollection` и конфигурацией опций
 - ⚡ **Потоковый I/O** — передача аудио напрямую из потоков без промежуточных файлов
 
@@ -191,7 +191,7 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 | Любой | **Сырой PCM F32 LE бинарник** | `ConvertToPcmF32LeRaw()` | 32-bit IEEE float, без WAV-заголовка |
 | Любой | **MP3** | `ConvertToMp3()` | 16 кГц, 128 kbps, libmp3lame |
 | Любой | **OGG Vorbis** | `ConvertToOgg(isLibopus: false)` | Стандартный Vorbis |
-| Любой | **OGG Opus** | `ConvertToOgg(isLibopus: true)` | Кодек Opus (только Linux) |
+| Любой | **OGG Opus** | `ConvertToOgg(isLibopus: true)` | Кодек Opus |
 
 ---
 
@@ -202,10 +202,10 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 | Свойство | Тип | Описание | По умолчанию |
 |----------|-----|----------|-------------|
 | `ExecutablePath` | `string?` | Полный путь к бинарнику ffmpeg/ffprobe | Автопоиск (встроенный → PATH) |
-| `WritableDirectory` | `string?` | Директория для выходных файлов | Текущая рабочая директория |
+| `WritableDirectory` | `string?` | Каталог по умолчанию для выходных файлов без указания каталога; создаётся, если отсутствует | Не задан — имена без каталога остаются относительными к рабочему каталогу процесса |
 | `TimeoutSeconds` | `int?` | Таймаут операции в секундах | `300` (5 минут) |
 
-Вызовите `options.Validate()` для проверки существования `WritableDirectory` и неотрицательности таймаута.
+Опции валидируются при старте хоста (`ValidateOnStart`): `TimeoutSeconds` — неотрицательное число или не задано, `WritableDirectory` не должен указывать на существующий *файл* — несуществующего каталога не страшно, фабрика его создаст.
 
 ---
 
@@ -269,11 +269,13 @@ public sealed record MediaMetadata(
     double? Duration = null,
     string? FormatName = null,
     int? BitRate = null,
-    int? Size = null)
+    long? Size = null)
 {
     public static readonly MediaMetadata Empty = new();
 }
 ```
+
+> `Size` — `long?` (байты): `int` переполнялся на файлах больше 2 ГБ, и ffprobe в этом случае отдавал мусор вместо размера.
 
 ### ProcessExecutionResult
 
@@ -299,54 +301,14 @@ public record ProcessExecutionResult(
 
 ## Встроенные бинарники
 
-Статические сборки FFmpeg встраиваются на этапе билда и распаковываются в `sa/native/` во время выполнения. Установка в систему не требуется.
+Статические сборки FFmpeg упаковываются в NuGet-пакет и на этапе сборки потребителя распаковываются MSBuild-таргетом в `sa/native/` рядом с приложением. Установка в систему не требуется.
 
-**Поддерживаемые RID:** `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64` (macOS fallback на linux-x64).
+**Поддерживаемые RID:** `win-x64`, `win-arm64`, `linux-x64`. **Пейлоады в пакете:** `win-x64` и `linux-x64`. Для `win-arm64` пейлоада пока отсутствует — сборка выводит заметное предупреждение, а на рантайме библиотека откатывается на системный FFmpeg (PATH или `ExecutablePath`). На других платформах (Linux arm64, macOS) пейлоады тоже нет.
 
 **Порядок поиска:**
-1. `AppContext.BaseDirectory/sa/native/ffmpeg`
-2. `AppContext.BaseDirectory/ffmpeg`
-3. Системный `PATH`
-
----
-
-## Нативные зависимости (Linux)
-
-Ubuntu/Debian:
-
-```bash
-sudo apt update && sudo apt install libmp3lame0 libopus0 libvorbis0a libvorbisenc2
-```
-
-Alpine Linux:
-
-```bash
-sudo apk add lame-libs opus libvorbis
-```
-
----
-
-## Структура проекта
-
-```
-src/Sa.Media.FFmpeg/
-├── IFFMpegExecutor.cs           # Интерфейс конвертации аудио
-├── IFFProbeExecutor.cs          # Интерфейс извлечения метаданных
-├── IFFRawExecutor.cs            # Низкоуровневое выполнение процессов
-├── IFFMpegExecutorFactory.cs    # Фабрика создания экzekторов
-├── IFFMpegLocator.cs            # Поиск бинарников
-├── IPcmS16LeChannelManipulator.cs # Операции split/join
-├── FFMpegOptions.cs             # Опции конфигурации
-├── MediaMetadata.cs             # DTO результата probe
-├── Services/
-│   ├── ProcessExecutor.cs       # Запускщик процессов + исключения
-│   ├── FFMpegExecutor.cs        # Реализация
-│   ├── FFProbeExecutor.cs       # Реализация
-│   └── ...                      # Внутренние парсеры, сериализаторы
-├── buildTransitive/
-│   └── Sa.Media.FFmpeg.targets  # MSBuild: распаковка нативных бинарников
-└── sa/                          # Локальные ZIP-архивы (только для разработки)
-```
+1. `AppContext.BaseDirectory/ffmpeg`
+2. `AppContext.BaseDirectory/sa/native/ffmpeg`
+3. Системный `PATH`, плюс каталоги типичных установок (`Program Files\ffmpeg\bin` на Windows; `/usr/local/bin`, `/usr/bin`, `/bin` на Unix)
 
 ---
 

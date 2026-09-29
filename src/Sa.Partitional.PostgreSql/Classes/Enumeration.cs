@@ -87,9 +87,19 @@ public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberT
     /// <param name="name">The display name to look up.</param>
     /// <param name="item">The matching enumeration value, or <c>null</c> if not found.</param>
     /// <returns><c>true</c> if a matching variant was found; otherwise <c>false</c>.</returns>
+    /// <remarks>A <c>null</c> name is reported as "not found" rather than throwing from the
+    /// underlying dictionary, so a nullable value read from the database can be passed straight in.</remarks>
     [DebuggerStepThrough]
-    public static bool TryFromName(string name, [MaybeNullWhen(false)] out T item)
-        => AllItemsByName.Value.TryGetValue(name, out item);
+    public static bool TryFromName(string? name, [MaybeNullWhen(false)] out T item)
+    {
+        if (name is null)
+        {
+            item = null;
+            return false;
+        }
+
+        return AllItemsByName.Value.TryGetValue(name, out item);
+    }
 
     /// <summary>
     /// Attempts to look up an enumeration value by its integer <see cref="Id"/>.

@@ -5,18 +5,24 @@ namespace Sa.Extensions;
 
 internal static class ExceptionExtensions
 {
+    /// <summary>
+    /// Exceptions that leave the process unusable, so a caller must neither retry them nor
+    /// swallow them. <see cref="AccessViolationException"/> is part of the list: it means the
+    /// process state is corrupt, and <c>Retry.IsFatal</c> has always treated it that way —
+    /// the two lists used to disagree, so the same failure was fatal to
+    /// <c>Retry</c> and retriable by its callers.
+    /// </summary>
     [DebuggerStepThrough]
     public static bool IsCritical(this Exception ex)
     {
-        if (ex is OutOfMemoryException) return true;
-        if (ex is StackOverflowException) return true;
-        if (ex is AppDomainUnloadedException) return true;
-        if (ex is BadImageFormatException) return true;
-        if (ex is CannotUnloadAppDomainException) return true;
-        if (ex is InvalidProgramException) return true;
-        if (ex is ThreadAbortException) return true;
-
-        return false;
+        return ex is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException
+            or InvalidProgramException
+            or ThreadAbortException;
     }
 
     [DebuggerStepThrough]

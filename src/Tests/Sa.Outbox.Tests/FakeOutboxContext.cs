@@ -1,6 +1,5 @@
 ﻿namespace Sa.Outbox.Tests;
 
-using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Exceptions;
 

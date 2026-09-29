@@ -1,4 +1,6 @@
-﻿namespace Sa.HybridFileStorage.FileSystem;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Sa.HybridFileStorage.FileSystem;
 
 /// <summary>
 /// Immutable settings for the filesystem file storage provider.
@@ -38,5 +40,65 @@ public sealed record FileSystemStorageSettings
     /// <summary>
     /// Gets the default basket name.
     /// </summary>
-    public const string DefaultBasket = "share";
+    public const string DefaultBasket = Sa.HybridFileStorage.StorageNaming.DefaultBasket;
+
+    /// <summary>
+    /// Validates the current configuration and throws a <see cref="ValidationException"/> if any property is invalid.
+    /// </summary>
+    /// <exception cref="ValidationException">Thrown when <see cref="BasePath"/>, <see cref="Basket"/>, <see cref="StorageType"/>, or <see cref="BufferSize"/> is invalid.</exception>
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(BasePath))
+        {
+            throw new ValidationException("BasePath cannot be empty.");
+        }
+
+        try
+        {
+            // Resolve any relative path to detect malformed input early.
+            Path.GetFullPath(BasePath);
+
+            if (BasePath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+            {
+                throw new ValidationException($"BasePath contains invalid characters: {BasePath}");
+            }
+        }
+        catch (Exception ex) when (ex is not ValidationException)
+        {
+            throw new ValidationException($"Invalid BasePath format: {BasePath}. {ex.Message}");
+        }
+
+        if (string.IsNullOrWhiteSpace(Basket))
+        {
+            throw new ValidationException("Basket cannot be empty.");
+        }
+
+        try
+        {
+            StorageNaming.ValidateBasket(Basket, nameof(Basket));
+        }
+        catch (ArgumentException ex)
+        {
+            throw new ValidationException(ex.Message, ex);
+        }
+
+        if (string.IsNullOrWhiteSpace(StorageType))
+        {
+            throw new ValidationException("StorageType cannot be empty.");
+        }
+
+        try
+        {
+            StorageNaming.RequireStorageType(StorageType, nameof(StorageType));
+        }
+        catch (ArgumentException ex)
+        {
+            throw new ValidationException(ex.Message, ex);
+        }
+
+        if (BufferSize <= 0)
+        {
+            throw new ValidationException($"BufferSize must be greater than zero, but was {BufferSize}.");
+        }
+    }
 }

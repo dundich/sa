@@ -112,7 +112,7 @@ public sealed class OutboxConsumerSettingsBuilder
     /// </summary>
     public OutboxConsumerSettingsBuilder WithConcurrencyLimit(int concurrencyLimit)
     {
-        if (concurrencyLimit < 0) throw new ArgumentException("ConcurrencyLimit must be > 0.", nameof(concurrencyLimit));
+        if (concurrencyLimit < 0) throw new ArgumentException("ConcurrencyLimit must be >= 0.", nameof(concurrencyLimit));
         _concurrencyLimit = concurrencyLimit;
         return this;
     }
@@ -190,27 +190,38 @@ public sealed class OutboxConsumerSettingsBuilder
     }
 
     /// <summary>
-    /// Sets the message lock duration.
+    /// Sets the message lock duration. Must be greater than TimeSpan.Zero.
     /// </summary>
     public OutboxConsumerSettingsBuilder WithLockDuration(TimeSpan lockDuration)
     {
-        if (lockDuration < TimeSpan.Zero) throw new ArgumentException("LockDuration must be >= TimeSpan.Zero.", nameof(lockDuration));
+        if (lockDuration <= TimeSpan.Zero)
+            throw new ArgumentException("LockDuration must be > TimeSpan.Zero.", nameof(lockDuration));
         _lockDuration = lockDuration;
         return this;
     }
 
     /// <summary>
-    /// Disables lock duration — messages are not locked before processing.
+    /// Effectively disables the lock: sets a minimal <see cref="NoLockDuration"/> TTL, so a task
+    /// becomes re-rentable almost immediately. Useful when a batch is delivered at-least-once and
+    /// a long lock is not worth the latency. <see cref="WithLockRenewal(TimeSpan)"/> must still be
+    /// less than this value.
     /// </summary>
-    public OutboxConsumerSettingsBuilder WithNoLockDuration() => WithLockDuration(TimeSpan.Zero);
+    public OutboxConsumerSettingsBuilder WithNoLockDuration() => WithLockDuration(NoLockDuration);
 
     /// <summary>
-    /// Sets the lock renewal time. Must be less than <see cref="WithLockDuration(TimeSpan)"/> value.
+    /// The TTL applied by <see cref="WithNoLockDuration"/>.
+    /// </summary>
+    public static readonly TimeSpan NoLockDuration = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>
+    /// Sets the lock renewal time. Must be greater than TimeSpan.Zero and less than
+    /// <see cref="WithLockDuration(TimeSpan)"/> value.
     /// Cross-field validation is performed at <see cref="Build"/> time.
     /// </summary>
     public OutboxConsumerSettingsBuilder WithLockRenewal(TimeSpan lockRenewal)
     {
-        if (lockRenewal.Ticks < 0) throw new ArgumentException("LockRenewal must be >= TimeSpan.Zero.", nameof(lockRenewal));
+        if (lockRenewal <= TimeSpan.Zero)
+            throw new ArgumentException("LockRenewal must be > TimeSpan.Zero.", nameof(lockRenewal));
         _lockRenewal = lockRenewal;
         return this;
     }

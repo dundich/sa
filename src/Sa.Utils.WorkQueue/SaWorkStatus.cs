@@ -23,5 +23,13 @@ public enum SaWorkStatus
     /// Operation was intentionally aborted by user or orchestrator.
     /// Automatic retry MUST NOT be performed.
     /// </summary>
-    Aborted
+    Aborted,
+    /// <summary>
+    /// The item was not accepted into the buffer because it was full
+    /// (the <see cref="SaEnqueueStrategy.Skip"/> strategy, or the non-blocking
+    /// <see cref="ISaWorkQueue{TInput}.TryEnqueue"/> / <see cref="ISaWorkQueue{TInput}.EnqueueMany"/>
+    /// while the buffer was full). The item was never processed.
+    /// Automatic retry is permissible.
+    /// </summary>
+    Skipped
 }

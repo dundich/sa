@@ -8,6 +8,14 @@ namespace Sa.Extensions;
 internal static partial class StringExtensions
 {
     /// <summary>
+    /// Сколько байт стека метод готов занять под <c>stackalloc</c>. Всё, что больше,
+    /// уходит на кучу: <c>stackalloc</c> без ограничения упирается в стек потока, а
+    /// <see cref="StackOverflowException"/> перехватить нельзя — процесс падает целиком.
+    /// Потоки ASP.NET по умолчанию имеют 1 МБ стека, то есть 1 МБ / 2 байта на символ.
+    /// </summary>
+    private const int MaxStackallocChars = 512;
+
+    /// <summary>
     /// Returns <paramref name="str"/> unless it is null, empty, or consists entirely of whitespace — in which cases returns <c>null</c>.
     /// </summary>
     [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -55,7 +63,7 @@ internal static partial class StringExtensions
         }
 
         // Slow path: span-based normalization — allocates one new string, avoids StringBuilder heap churn
-        Span<char> dest = stackalloc char[len];
+        Span<char> dest = len <= MaxStackallocChars ? stackalloc char[len] : new char[len];
         int w = 0;
         bool prevWhite = false;
         for (int i = 0; i < len; i++)
@@ -96,6 +104,14 @@ internal static partial class StringExtensions
         }
 
         int len = str.Length;
+
+        // Normalization never grows the input, so dest must hold the trimmed length. Without the
+        // check a short buffer threw IndexOutOfRangeException from the write loop — after a
+        // partial write, leaving the destination half-normalized — and nothing pointed at the
+        // buffer as the cause. Same exception type Encoding.GetBytes(string, Span<byte>) uses.
+        if (dest.Length < len)
+            throw new ArgumentException("Destination is too short for the normalized source.", nameof(dest));
+
         int w = 0;
         bool prevWhite = false;
         for (int i = 0; i < len; i++)
@@ -128,9 +144,14 @@ internal static partial class StringExtensions
     [DebuggerStepThrough]
     public static uint GetMurmurHash3(this string str, uint seed = 0)
     {
-        // Estimate UTF-8 byte length (upper bound: 3 bytes per char for BMP Latin, up to 4 for emoji)
-        int estimatedLen = str.Length * 3;
-        Span<byte> buf = estimatedLen <= 512 ? stackalloc byte[estimatedLen] : new byte[estimatedLen];
+        // The old estimate `str.Length * 3` overflowed int past ~715 million characters (a 1.4 GB
+        // string): the product wrapped, and the wrapped value either went negative (failing inside
+        // `new byte[]`) or was too small (failing inside GetBytes with "buffer too small") — both
+        // far from the arithmetic that broke. GetByteCount is exact and cannot under-estimate.
+        int byteCount = Encoding.UTF8.GetByteCount(str);
+        Span<byte> buf = byteCount <= MaxStackallocChars
+            ? stackalloc byte[byteCount]
+            : new byte[byteCount];
 
         int actualLen = Encoding.UTF8.GetBytes(str, buf);
         return MurmurHash3.Hash32(buf[..actualLen], seed);

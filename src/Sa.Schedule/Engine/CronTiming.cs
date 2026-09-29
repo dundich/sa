@@ -5,11 +5,23 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Implements cron-based scheduling using standard 5-field cron expressions.
+/// When both day-of-month and day-of-week are restricted, a day matches when
+/// either field matches (standard vixie-cron OR semantics).
+/// The next occurrence is searched within a 28-year horizon — the full Gregorian
+/// day-of-week cycle — so every satisfiable 5-field expression is found; null means
+/// the expression can never match (e.g. February 30).
 /// Optimized with O(1) membership tests and precomputed jump tables (.NET 8–10).
 /// </summary>
 internal sealed class CronTiming : IJobTiming
 {
     private const string DefaultName = "cron";
+
+    /// <summary>
+    /// Search horizon in years. 28 years = 10,227 days = exactly 1,461 weeks — the full
+    /// Gregorian date→day-of-week cycle (non-century years) — so any satisfiable
+    /// 5-field expression fires within this window.
+    /// </summary>
+    private const int MaxSearchYears = 28;
 
     // Flag arrays for O(1) membership checks
     private readonly bool[] _minuteFlags = new bool[60];
@@ -67,13 +79,13 @@ internal sealed class CronTiming : IJobTiming
     public DateTimeOffset? GetNextOccurrence(DateTimeOffset dateTime, IJobContext context)
     {
         var candidate = TruncateToMinute(dateTime.AddMinutes(1));
-        var maxSearch = dateTime.AddYears(2);
+        var maxSearch = dateTime.AddYears(MaxSearchYears);
 
         while (candidate <= maxSearch)
         {
             if (Matches(candidate))
                 return candidate;
-            candidate = Advance(candidate);
+            candidate = Advance(candidate, maxSearch);
         }
         return null;
     }
@@ -90,13 +102,13 @@ internal sealed class CronTiming : IJobTiming
         bool dowMatch = _dowFlags[(int)dt.DayOfWeek];   // 0..6
 
         if (!_domWildcard && !_dowWildcard)
-            return domMatch && dowMatch;   // Both restricted → both must match
+            return domMatch || dowMatch;  // Both restricted → either must match (standard cron OR semantics)
         if (_domWildcard && _dowWildcard)
             return true;                   // No restrictions → any day
         return _domWildcard ? dowMatch : domMatch;
     }
 
-    private DateTimeOffset Advance(DateTimeOffset dt)
+    private DateTimeOffset Advance(DateTimeOffset dt, DateTimeOffset horizon)
     {
         // 1. Try later minute this hour
         int nextMin = dt.Minute + 1;
@@ -116,17 +128,21 @@ internal sealed class CronTiming : IJobTiming
                 return new DateTimeOffset(dt.Year, dt.Month, dt.Day, h, _firstMinute, 0, dt.Offset);
         }
 
-        // 3. Jump to tomorrow
+        // 3. Jump to tomorrow and search forward up to the horizon
         var nextDay = new DateTimeOffset(dt.Year, dt.Month, dt.Day, 0, 0, 0, dt.Offset).AddDays(1);
-        return FindEarliestOnOrAfter(nextDay);
+        return FindEarliestOnOrAfter(nextDay, horizon);
     }
 
-    private DateTimeOffset FindEarliestOnOrAfter(DateTimeOffset from)
+    private DateTimeOffset FindEarliestOnOrAfter(DateTimeOffset from, DateTimeOffset horizon)
     {
-        var maxYear = from.AddYears(2);
+        // Empty search window — return the start point; the caller still advances
+        // by at least a day, so the outer loop terminates.
+        if (from > horizon)
+            return from;
+
         var current = from;
 
-        while (current <= maxYear)
+        while (current <= horizon)
         {
             // Month skip
             if (!_monthFlags[current.Month])
@@ -165,7 +181,12 @@ internal sealed class CronTiming : IJobTiming
 
             current = current.AddDays(1);
         }
-        return from; // fallback (never reached)
+
+        // No match within the horizon. Jump the caller to the end of the horizon —
+        // a guaranteed forward step (the previous candidate is strictly before it),
+        // so no valid occurrence is skipped and the search never degrades into a
+        // day-by-day re-walk of the same window.
+        return horizon;
     }
 
     private static DateTimeOffset TruncateToMinute(DateTimeOffset dt) =>
@@ -263,6 +284,11 @@ internal sealed class CronTiming : IJobTiming
         }
 
         values.Sort();
+
+        // Guard: an empty field would make the timing silently unschedulable — fail fast instead.
+        if (values.Count == 0)
+            throw new FormatException($"Cron field '{field}' for {name} produced no values.");
+
         return [.. values];
     }
 
@@ -283,6 +309,7 @@ internal sealed class CronTiming : IJobTiming
                 throw new FormatException($"Invalid range/step '{parts[0]}' for {name}.");
             start = Validate(start, min, max, name);
             end = Validate(end, min, max, name);
+            if (start > end) throw new FormatException($"Range {start}-{end} invalid for {name}.");
         }
         else if (int.TryParse(parts[0], out int s))
         {

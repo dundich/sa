@@ -28,7 +28,9 @@ public interface ITableBuilder
     /// </summary>
     /// <param name="partBy">The partitioning granularity — day, month, or year.</param>
     /// <param name="timestampFieldName">
-    /// The column to partition on. When <c>null</c>, the first <c>timestamptz</c>-typed column is used automatically.
+    /// The column to partition on. Used only when <see cref="TimestampAs"/> was not called - that call
+    /// is the more specific declaration and always wins, so the result does not depend on the order of
+    /// the two calls. When both are omitted, <c>created_at</c> is used.
     /// </param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
     ITableBuilder PartByRange(PgPartBy partBy, string? timestampFieldName = null);
@@ -41,24 +43,30 @@ public interface ITableBuilder
     ITableBuilder TimestampAs(string timestampFieldName);
 
     /// <summary>
-    /// Sets the separator character used between schema and table names in generated SQL (default: <c>_</c>).
+    /// Sets the separator placed between the table name and each partition key value in generated
+    /// table names (default: <c>__</c>).
     /// </summary>
-    /// <param name="partSeparator">The separator character(s).</param>
+    /// <remarks>A partition value must not contain this separator: <c>["a__b"]</c> and <c>["a", "b"]</c>
+    /// would otherwise produce the same partition table name.</remarks>
+    /// <param name="partSeparator">The separator string.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
     ITableBuilder WithPartSeparator(string partSeparator);
 
     /// <summary>
-    /// Sets the <c>fillfactor</c> storage parameter for both root and child tables.
+    /// Sets the <c>fillfactor</c> storage parameter of the generated range partitions.
     /// Lower values leave free space for future HOT updates or dynamic partition growth.
     /// </summary>
-    /// <param name="fillFactor">An integer between 1 and 100.</param>
+    /// <remarks>Applied to the date-range child tables only - the root table and the intermediate
+    /// list partitions are emitted without it.</remarks>
+    /// <param name="fillFactor">An integer; values are clamped to the 10..100 range.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
     ITableBuilder WithFillFactor(int fillFactor);
 
     /// <summary>
-    /// Sets the postfix appended to child/partition table names (default: <c>__part</c>).
+    /// Sets the postfix of the cache table that tracks the existing range partitions
+    /// (default: <c>part$</c>).
     /// </summary>
-    /// <param name="postfix">The suffix string.</param>
+    /// <param name="postfix">The suffix string; must not be <c>null</c> or whitespace.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
     ITableBuilder WithPartTablePostfix(string postfix);
 
@@ -70,9 +78,13 @@ public interface ITableBuilder
     ITableBuilder AddPostSql(Func<string> postSql);
 
     /// <summary>
-    /// Registers a callback that produces custom <c>CHECK</c> / <c>PRIMARY KEY</c> constraint SQL.
+    /// Overrides the <b>name</b> of the generated primary-key constraint (default: <c>pk_{table}</c>).
     /// </summary>
-    /// <param name="pkSql">A factory producing the constraint definition.</param>
+    /// <remarks>The library emits <c>CONSTRAINT "{name}" PRIMARY KEY ({columns})</c> itself, so the
+    /// callback returns the name only - a full <c>CONSTRAINT ... PRIMARY KEY (...)</c> clause here would
+    /// be quoted as a single identifier and the DDL would not parse. The columns of the constraint
+    /// follow from the declaration: the id column, the list-partition columns, and the range column.</remarks>
+    /// <param name="pkSql">A factory producing the constraint name.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
     ITableBuilder AddConstraintPkSql(Func<string> pkSql);
 
@@ -99,13 +111,17 @@ public interface ITableBuilder
     /// <summary>
     /// Declares static list-partition values to create eagerly at startup.
     /// </summary>
-    /// <param name="partValues">One or more partition values (strings or numbers).</param>
+    /// <param name="partValues">One or more partition values (strings or numbers) forming a single
+    /// nesting level. Pass one argument per <c>PartByList</c> column, or none for a range-only table.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
     ITableBuilder AddMigration(params StrOrNum[] partValues);
 
     /// <summary>
     /// Declares a parent-child hierarchy of list-partition values.
     /// </summary>
+    /// <remarks><c>AddMigration("a", "b")</c> binds to the <c>params</c> overload above and declares two
+    /// independent values, not a parent-child pair. Nesting has to be spelled out with an explicit
+    /// array: <c>AddMigration("a", ["b"])</c>.</remarks>
     /// <param name="parent">The parent partition value.</param>
     /// <param name="childs">Child partition values nested under the parent.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>

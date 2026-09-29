@@ -1,14 +1,19 @@
-﻿using Npgsql;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
-internal sealed class FinishDeliveryCommand(
+internal sealed partial class FinishDeliveryCommand(
     IPgDataSource dataSource,
-    SqlOutboxBuilder sqlBuilder) : IFinishDeliveryCommand
+    SqlOutboxBuilder sqlBuilder,
+    ILogger<FinishDeliveryCommand>? logger = null) : IFinishDeliveryCommand
 {
     private readonly SqlCacheSplitter _sqlCache = new(len => sqlBuilder.SqlFinishDelivery(len));
+
+    private readonly ILogger _logger = logger ?? NullLogger<FinishDeliveryCommand>.Instance;
 
     public async Task<int> Execute<TMessage>(
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
@@ -33,8 +38,38 @@ internal sealed class FinishDeliveryCommand(
                 cancellationToken);
         }
 
+        // `total` is the rowcount of the UPDATE, not of the preceding INSERT INTO __log$:
+        // for a WITH ... UPDATE, PostgreSQL reports the top-level statement's tag. A shortfall
+        // therefore means some task rows no longer matched the WHERE — in practice the batch's
+        // lock had already expired and been taken by another worker, which rewrote
+        // task_transact_id. That is at-least-once doing its job, not a lost message, but it is
+        // invisible without this line: DeliveryTenant discards the return value, so a client
+        // that stalls past LockDuration re-delivers with no trace anywhere.
+        if (total != messages.Length)
+        {
+            LogStolenBatch(
+                _logger,
+                filter.ConsumerGroupId,
+                filter.TenantId,
+                filter.TransactId,
+                messages.Length,
+                total);
+        }
+
         return total;
     }
+
+    [LoggerMessage(
+        EventId = 3008,
+        Level = LogLevel.Warning,
+        Message = "Finished {Updated} of {Expected} tasks for consumer group '{ConsumerGroup}' (tenant {TenantId}, transaction '{TransactId}'): the difference lost the lock to another worker and will be re-delivered. The consumer is expected to be idempotent.")]
+    static partial void LogStolenBatch(
+        ILogger logger,
+        string consumerGroup,
+        int tenantId,
+        string transactId,
+        int expected,
+        int updated);
 
     private static void FillCommandParameters<TMessage>(
         NpgsqlCommand cmd,

@@ -227,5 +227,96 @@ public class MurmurHash3Tests
         Assert.NotEqual(0U, result);
         Assert.InRange(result, 0U, uint.MaxValue);
     }
+
+    [Fact]
+    public void Hash32_MultipleOfFourBytes_UsesTheCanonicalLittleEndianBlockLoad()
+    {
+        // Раньше 4-байтовый блок читался через BitConverter.ToUInt32, то есть в порядке
+        // байтов хоста: на большом эндиане хэш расходился с любым другим MurmurHash3.
+        // На little-endian результат не меняется, и эталонные значения ниже это фиксируют.
+        byte[] block = [0x01, 0x02, 0x03, 0x04];
+
+        var hash = MurmurHash3.Hash32(block, 0U);
+
+        Assert.Equal(1043635621U, hash);
+    }
+
+    [Theory]
+    [InlineData("aaaaaaaaaaaaaaaa", 0U, 4187236331U)]                      // 16 байт — 4 полных блока
+    [InlineData("abcdefghijklmnopqrstuvwxyz", 1U, 36174746U)]
+    public void Hash32_LongInput_StaysCanonicalAcrossBlocks(string input, uint seed, uint expected)
+    {
+        // Вход длиннее одного блока: little-endian загрузка должна применяться ко всем
+        // блокам, а не только к первому. Хвост у этих входов пуст, так что проверяется
+        // именно ветка полных блоков.
+        var bytes = Encoding.UTF8.GetBytes(input);
+
+        var result = MurmurHash3.Hash32(bytes, seed);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void Hash32_LongInputWithTail_MatchesTheSameAlgorithmOnShortInput()
+    {
+        // Вход с хвостом: последние байты попадают в отдельную ветку остатка. Эталон
+        // получен независимой реализацией MurmurHash3 x86_32 с явной little-endian
+        // загрузкой, сошёдшейся с каноническими векторами выше.
+        var bytes = Encoding.UTF8.GetBytes("The quick brown fox jumps over the lazy dog");
+
+        var result = MurmurHash3.Hash32(bytes, 0U);
+
+        Assert.Equal(ReferenceLittleEndianHash(bytes, 0U), result);
+    }
+
+    /// <summary>
+    /// Независимая реализация MurmurHash3 x86_32 с явной little-endian загрузкой блоков —
+    /// эталон для проверки порядка байтов. Сверена со всеми каноническими значениями
+    /// этой же тестовой классовой части.
+    /// </summary>
+    private static uint ReferenceLittleEndianHash(ReadOnlySpan<byte> bytes, uint seed)
+    {
+        const uint c1 = 0xcc9e2d51U;
+        const uint c2 = 0x1b873593U;
+        const uint m = 5U;
+        const uint n = 0xe6546b64U;
+
+        uint h1 = seed;
+        int blocks = bytes.Length / 4;
+
+        for (int i = 0; i < blocks; i++)
+        {
+            int o = i * 4;
+            uint k = (uint)(bytes[o] | (bytes[o + 1] << 8) | (bytes[o + 2] << 16) | (bytes[o + 3] << 24));
+            k *= c1;
+            k = (k << 15) | (k >> 17);
+            k *= c2;
+
+            h1 ^= k;
+            h1 = (h1 << 13) | (h1 >> 19);
+            h1 = h1 * m + n;
+        }
+
+        uint tail = 0;
+        int rest = bytes.Length & 3;
+        for (int i = rest - 1; i >= 0; i--)
+            tail = (tail << 8) | bytes[blocks * 4 + i];
+
+        if (rest > 0)
+        {
+            tail *= c1;
+            tail = (tail << 15) | (tail >> 17);
+            tail *= c2;
+            h1 ^= tail;
+        }
+
+        h1 ^= (uint)bytes.Length;
+        h1 ^= h1 >> 16;
+        h1 *= 0x85ebca6bU;
+        h1 ^= h1 >> 13;
+        h1 *= 0xc2b2ae35U;
+        h1 ^= h1 >> 16;
+        return h1;
+    }
 }
 

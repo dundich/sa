@@ -18,9 +18,12 @@ public interface IJobScheduler: IDisposable, IAsyncDisposable
     bool IsStarted { get; }
 
     /// <summary>
-    /// Gets the number of tasks that are contained in the Job.
+    /// Gets the number of tasks currently in the queue buffer.
+    /// While the job is running this equals the number of pre-allocated slots
+    /// (the job's <c>MaxConcurrency</c>); it is <c>0</c> when the job is
+    /// stopped, disabled, or has not been started yet.
     /// </summary>
-    int ActiveTasks { get; }
+    int QueueTasks { get; }
 
     /// <summary>
     /// Consume instance count

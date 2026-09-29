@@ -1,11 +1,11 @@
-﻿using Sa.Partitional.PostgreSql.Classes;
+using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// Represents information about a range-partitioned child table in PostgreSQL.
 /// </summary>
-/// <param name="Id">Fully qualified partition identifier, including schema (e.g. <c>"public.outbox__20260626"</c>).</param>
+/// <param name="Id">Fully qualified partition identifier, including schema (e.g. <c>"public"."outbox__y2026m06d26"</c>).</param>
 /// <param name="RootTableName">The name of the parent/root table from which this partition is derived.</param>
 /// <param name="PartValues">Partition key values — may be strings (for list) or numbers (for range dates).</param>
 /// <param name="PartBy">The <see cref="PgPartBy"/> strategy that governs how this partition was created.</param>

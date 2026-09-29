@@ -25,7 +25,6 @@ Hybrid file storage abstraction with automatic provider failover. Unifies multip
 - [Settings Reference](#settings-reference)
 - [Domain Types](#domain-types)
 - [Exceptions](#exceptions)
-- [Project Structure](#project-structure)
 
 ---
 
@@ -55,21 +54,31 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
     .ConfigureStorage((sp, c) => c.AddStorage(new FileSystemStorage(
         new FileSystemStorageSettings { BasePath = @"C:\data\drafts", Basket = "drafts" })))
 
-    // Basket "documents" → PostgreSQL with auto-partitioning
-    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(dataSource, new PostgresFileStorageOptions
-    {
-        PartOptions = new() { Basket = "documents" },
-        StorageOptions = new() { SchemaName = "files", TableName = "files" }
-    })))
+    // Basket "documents" → PostgreSQL with auto-partitioning.
+    // Dependencies (IPgDataSource, IPartitionManager, RecyclableMemoryStreamManager)
+    // are resolved from DI during registration.
+    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(
+        sp.GetRequiredService<IPgDataSource>(),
+        sp.GetRequiredService<IPartitionManager>(),
+        sp.GetRequiredService<RecyclableMemoryStreamManager>(),
+        new PostgresFileStorageOptions
+        {
+            Basket = "documents",
+            TableName = "files"
+        })))
 
     // Basket "archive" → S3 cloud storage
-    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(s3Client, new S3FileStorageOptions
-    {
-        Endpoint = "http://minio:9000",
-        Bucket = "company-archive",
-        Basket = "archive"
-    }))));
+    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(
+        sp.GetRequiredService<IS3BucketClient>(),
+        new S3FileStorageOptions
+        {
+            Endpoint = "http://minio:9000",
+            Bucket = "company-archive",
+            Basket = "archive"
+        }))));
 ```
+
+Multiple `ConfigureStorage` calls accumulate: each call registers additional storages into the container, so several baskets can be wired in a single `AddSaHybridFileStorage` chain.
 
 Once configured, all CRUD operations use basket names — not provider specifics:
 
@@ -506,23 +515,25 @@ builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
 
 ### PostgresFileStorageOptions
 
+Flat options (no nested `PartOptions`/`CleanupOptions`/`StorageOptions`):
+
 | Property | Description | Default |
 |----------|-------------|---------|
-| `StorageOptions.SchemaName` | PostgreSQL schema | `"public"` |
-| `StorageOptions.TableName` | Table for file data | `"files"` |
-| `StorageOptions.StorageType` | Scheme prefix in File ID | `"pg"` |
-| `PartOptions.Basket` | Scope/container name | `"share"` |
-| `PartOptions.PgPartBy` | Partitioning granularity | `PgPartBy.Day` |
-| `PartOptions.MigrationScheduleForwardDays` | Days ahead to pre-create partitions | `2` |
-| `CleanupOptions.ExpireDays` | Auto-cleanup threshold (days) | `365 * 3` |
-| `StorageOptions.IsReadOnly` | Prevent writes | `false` |
+| `SchemaName` | PostgreSQL schema (auto-detected from search_path if not set) | `"public"` |
+| `TableName` | Table for file data | `"files"` |
+| `StorageType` | Scheme prefix in File ID | `"pg"` |
+| `Basket` | Scope/container name | `"share"` |
+| `PgPartBy` | Partitioning granularity | `PgPartBy.Day` |
+| `MigrationScheduleForwardDays` | Days ahead to pre-create partitions | `2` |
+| `ExpireDays` | Auto-cleanup threshold (days) | `365 * 3` |
+| `IsReadOnly` | Prevent writes | `false` |
 
 ### InMemoryFileStorageOptions
 
 | Property | Description | Default |
 |----------|-------------|---------|
 | `Basket` | Scope/container name | `"share"` |
-| `MaxSizeBytes` | Total byte limit (`0` = unlimited) | `0` |
+| `MaxSizeBytes` | Total byte limit (`0` = unlimited) | `1 GB` |
 | `IsReadOnly` | Prevent writes | `false` |
 
 ---
@@ -581,35 +592,6 @@ public sealed class FileMetadata
 
 ---
 
-## Project Structure
-
-```
-src/Sa.HybridFileStorage/                          # Core library (NuGet: Sa.HybridFileStorage)
-├── IHybridFileStorage.cs                          # Main interface
-├── HybridFileStorage.cs                           # Implementation with failover + interceptors
-├── HybridFileStorageContainer.cs                  # Provider container
-├── HybridStorageBuilder.cs                        # Fluent DI builder
-├── HybridFileStorageExtensions.cs                 # Batch operations (CopyFromFile, CopyToBasket, …)
-├── Setup.cs                                       # DI extensions (AddSaHybridFileStorage, AddSaInMemoryFileStorage)
-├── FileIdParser.cs                                # File ID parsing/formatting utility
-├── FileMetadata.cs                                # Metadata DTO
-├── InMemoryFileStorage.cs                         # In-memory provider
-├── InMemoryFileStorageOptions.cs                  # Options for in-memory
-├── BatchResult.cs, BatchOptions.cs, …            # Batch operation types
-└── Interceptors/                                  # Upload/download/delete hooks
-    ├── IUploadInterceptor.cs
-    ├── IDownloadInterceptor.cs
-    ├── IDeleteInterceptor.cs
-    ├── UploadLoggingInterceptor.cs
-    ├── DownloadLoggingInterceptor.cs
-    └── DeleteLoggingInterceptor.cs
-
-src/Sa.HybridFileStorage.FileSystem/               # File system provider (NuGet: Sa.HybridFileStorage.FileSystem)
-src/Sa.HybridFileStorage.S3/                       # S3 provider (NuGet: Sa.HybridFileStorage.S3)
-src/Sa.HybridFileStorage.Postgres/                 # PostgreSQL provider (NuGet: Sa.HybridFileStorage.Postgres)
-```
-
----
 
 ## License
 

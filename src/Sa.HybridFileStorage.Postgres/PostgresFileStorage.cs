@@ -14,8 +14,7 @@ internal sealed class PostgresFileStorage(
     IPgDataSource dataSource,
     IPartitionManager partManager,
     RecyclableMemoryStreamManager streamManager,
-    StorageOptions options,
-    string basket,
+    PostgresFileStorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
 
@@ -43,14 +42,19 @@ internal sealed class PostgresFileStorage(
           AND created_at >= @timestamp AND id = @id
         """;
 
-    private readonly string _partName
-        = string.IsNullOrWhiteSpace(basket) ? "share" : Sanitize(basket);
+    // The options reach this type only via the registration extension, which calls
+    // PostgresFileStorageOptions.Validate() first. That guarantees Basket, TableName and
+    // StorageType are already bare words and SchemaName is a single identifier, so they are
+    // used verbatim. Rewriting them here (the previous Sanitize) made the DDL registered under
+    // the raw name and the queries under the rewritten one, and made StorageType disagree with
+    // _schemePrefix — a file ID this storage produced could not be processed by it.
+    private readonly string _partName = options.Basket;
 
     private readonly string _qualifiedTableName
-        = $"{options.SchemaName}.\"{Sanitize(options.TableName)}\"";
+        = $"\"{options.SchemaName ?? PostgresFileStorageSchema.FallbackSchema}\".\"{options.TableName}\"";
 
     private readonly string _schemePrefix
-        = $"{options.StorageType}{FileIdParser.SchemeSeparator}{Sanitize(basket)}/";
+        = $"{options.StorageType}{FileIdParser.SchemeSeparator}{options.Basket}/";
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -58,7 +62,7 @@ internal sealed class PostgresFileStorage(
 
     public bool IsReadOnly => options.IsReadOnly;
 
-    public string Basket => basket;
+    public string Basket => options.Basket;
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -140,7 +144,9 @@ internal sealed class PostgresFileStorage(
                 , new NpgsqlParameter<string>("name", metadata.FileName)
                 , new NpgsqlParameter<string>("file_ext", fileExtension)
                 , new NpgsqlParameter<Stream>("data", ms)
-                , new NpgsqlParameter<int>("size", (int)ms.Length)
+                // 64-bit: the column is BIGINT, and the previous (int) cast silently truncated
+                // the length of anything over 2 GB, recording a wrong size with no error.
+                , new NpgsqlParameter<long>("size", ms.Length)
                 , new NpgsqlParameter<int>("tenant_id", metadata.TenantId)
                 , new NpgsqlParameter<string>("basket", _partName)
                 , new NpgsqlParameter<long>("created_at", createdAt)
@@ -217,26 +223,6 @@ internal sealed class PostgresFileStorage(
 
         return rowsAffected > 0;
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static string Sanitize(ReadOnlySpan<char> input)
-    {
-        if (input.IsEmpty) return string.Empty;
-
-        Span<char> result = stackalloc char[input.Length];
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            char c = input[i];
-            result[i] = char.IsLetter(c) || (i > 0 && char.IsDigit(c)) || c == '_' ? c : '_';
-        }
-
-        return new string(result);
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static string Sanitize(string input) => Sanitize(input.AsSpan());
 
     public Task<FileMetadata?> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default)
     {

@@ -1,6 +1,6 @@
 # Sa.Media
 
-Асинхронный, экономичный по памяти WAV-ридер для .NET 10+. Создан для совместимости с Native AOT с нулевыми аллокациями на горячих путях.
+Асинхронный, экономичный по памяти WAV-ридер для .NET 10+. Создан для совместимости с Native AOT с нулевыми аллокациями на горячих путях. Включает конвейер подавления кросс-феда для стерео (`Sa.Media.Echo`) для разделения близко расположенных источников.
 
 ---
 
@@ -13,6 +13,7 @@
 - **Обрезка по времени** — читайте только нужную часть через `TimeRange`
 - **Канало-ориентированный** — перечисление сэмплов по каналам с отслеживанием позиции
 - **Автоматический пропуск чанков** — `JUNK`, `LIST` и другие метаданные пропускаются прозрачно
+- **Подавление кросс-феда** — конвейер разделения в `Sa.Media.Echo`
 
 ---
 
@@ -94,6 +95,44 @@ await foreach (var packet in reader.ConvertToFormatAsync(
 
 ---
 
+## Подавление кросс-феда (`Sa.Media.Echo`)
+
+Разделяет стерео-запись двух близко расположенных говорящих/микрофонов на два
+почти раздельных трека. Алгоритм оценивает акустический кросс-фед между
+каналами (`y_L = x_L + β·x_R`, `y_R = x_R + α·x_L`) и инверсирует модель.
+
+Поддерживает два режима:
+
+- **Линейный** — только отмена кросс-феда (быстро, мало памяти).
+- **Агрессивный** — отмена кросс-феда плюс частотное спектральное маскирование
+  для более резкого разделения (выше нагрузка на CPU/GPU).
+
+```csharp
+using Sa.Media.Echo;
+
+// Режим по умолчанию: в памяти для коротких клипов, потоково для длинных
+await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
+    InputPath: "recording.wav",
+    OutputPath: "separated.wav"), CancellationToken.None);
+
+// Агрессивный режим со спектральным маскированием
+await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
+    InputPath: "recording.wav",
+    OutputPath: "separated_aggressive.wav",
+    Processing: CrossFeedSeparator.ProcessingMode.Aggressive,
+    DominanceThresholdDb: 6.0,   // порог в дБ для определения областей одного говорящего
+    SpectralMaskPower: 4.0,      // экспонента усиления спектральной маски
+    MaskFloor: 0.01),            // минимум маски [0, 1]
+    CancellationToken.None);
+```
+
+Разделитель должен работать с **2-канальным (стерео)** записью. Вывод —
+16-bit PCM WAV с нормализацией по пиковому уровню. Линейный путь работает в
+потоковом режиме и не загружает весь файл в память; режим в памяти
+автоматически включается для коротких записей (≤ 100 Mframes).
+
+---
+
 ## Поддерживаемые форматы
 
 | Формат | Чтение | Запись |
@@ -122,6 +161,20 @@ await foreach (var packet in reader.ConvertToFormatAsync(
 | `TimeRange` | Record: `(From, To)` — обрезка по времени с фабричными методами |
 | `AudioEncoding` | Enum: PCM 8/16/24/32, IEEE Float 32/64 |
 | `WaveFormatType` | Enum: `Pcm`, `Adpcm`, `IeeeFloat`, `Extensible` |
+
+### Типы Echo (`Sa.Media.Echo`)
+
+| Тип | Описание |
+|-----|----------|
+| `CrossFeedSeparator` | Конвейер подавления кросс-феда для стерео (главная точка входа) |
+| `CrossFeedSeparator.ProcessingMode` | Enum: `Auto`, `MaximumSpeed`, `MinimumMemory`, `MinimumMemoryFastNormalize`, `Aggressive` |
+| `AudioSeparationOptions` | Record: `InputPath`, `OutputPath`, `Processing`, `DominanceThresholdDb`, `SpectralMaskPower`, `MaskFloor` |
+
+### Ключевые методы `CrossFeedSeparator`
+
+| Метод | Возврат | Описание |
+|-------|---------|----------|
+| `ExecuteAsync(AudioSeparationOptions, ct)` | `Task` | Выполняет разделение и записывает вывод в WAV |
 
 ### Ключевые методы `AsyncWavReader`
 
@@ -175,6 +228,14 @@ src/Sa.Media/
 ├── WavHeaderReader.cs       # Парсер заголовка
 ├── WaveFormatType.cs        # Enum типа формата
 └── WaveFormatTypeExtensions.cs
+
+src/Sa.Media/Echo/
+├── CrossFeedSeparator.cs     # Точка входа — оценка + инверсия кросс-феда
+├── AudioSeparationOptions.cs # Публичный record опций
+├── AggressiveMode.cs         # Спектральное маскирование на основе STFT
+├── AudioMath.cs              # Математика коэффициентов, перцентиль, нормализация
+├── AudioConstants.cs         # Настраиваемые константы
+└── WavIO.cs                  # Помощники ввода-вывода чередованных float
 ```
 
 ---

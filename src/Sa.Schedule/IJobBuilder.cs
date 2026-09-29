@@ -119,18 +119,20 @@ public interface IJobBuilder
     IJobBuilder WithConcurrencyLimit(int limit);
 
     /// <summary>
-    /// Sets the maximum concurrency limit for the job.
+    /// Sets the maximum number of slots pre-allocated for the job.
     /// </summary>
-    /// <param name="limit">The maximum concurrency limit.</param>
+    /// <param name="limit">The maximum concurrency.</param>
     /// <returns>The current builder instance.</returns>
     IJobBuilder WithMaxConcurrency(int limit);
 
     /// <summary>
-    /// Sets the maximum concurrency limit for the job (alias for <see cref="WithMaxConcurrency"/>).
+    /// Sets the maximum time <see cref="IJobScheduler.Stop"/> waits for
+    /// running iterations to finish before giving up.
+    /// Also bounds the queue's own wait for readers during shutdown/force-cancel.
     /// </summary>
-    /// <param name="limit">The maximum concurrency limit.</param>
+    /// <param name="timeout">Must be positive. If not set, defaults to 30 seconds.</param>
     /// <returns>The current builder instance.</returns>
-    IJobBuilder WithMaxConcurrencyLimit(int limit) => WithMaxConcurrency(limit);
+    IJobBuilder WithShutdownTimeout(TimeSpan timeout);
 
 
     /// <summary>

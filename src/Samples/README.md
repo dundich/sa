@@ -18,6 +18,7 @@ All samples target **.NET 10.0**, use **Native AOT**, and follow the same DI + G
 | 4 | [Partitional.ConsoleApp](#4-partitionalconsoleapp) | `Sa.Partitional.PostgreSql` | Console | Declarative table partitioning with migration schedule |
 | 5 | [PgOutbox.ConsoleApp](#5-pgoutboxconsoleapp) | `Sa.Outbox.PostgreSql` | Console | Reliable message publishing via Outbox pattern |
 | 6 | [Schedule.Console](#6-scheduleconsole) | `Sa.Schedule` | Console | Scheduled job executor with failure strategies |
+| 7 | [WorkQueue.Console](#7-workqueueconsole) | `Sa.Utils.WorkQueue` | Console | Bounded queue with runtime concurrency scaling and per-item error strategies |
 
 ---
 
@@ -224,6 +225,41 @@ err 1
 2026-07-01T... 0: Some 2
 <end>
 *** cancelled on timeout
+*** THE END ***
+```
+
+---
+
+## 7. WorkQueue.Console
+
+Demonstrates `Sa.Utils.WorkQueue` — a bounded, back-pressured task queue with runtime concurrency scaling.
+
+### What it does
+
+1. Creates a `SaWorkQueue<int>` with an initial concurrency limit of 3 and a max of 8.
+2. Enqueues a batch of 10 items.
+3. While items flow, scales concurrency up to 6 and back down to 2 on the fly.
+4. Waits for idle, reports the processed count.
+5. Gracefully shuts down — in-flight items finish, remaining items are reported as `Faulted`.
+
+### Run
+
+```powershell
+dotnet run --project WorkQueue.Console
+```
+
+### Expected output
+
+```
+=== Sa.WorkQueue sample ===
+Enqueued 10 items, concurrency = 3
+[8] #1 started
+[8] #1 -> Running
+...
+Scaled up -> concurrency = 6
+Scaled down -> concurrency = 2
+Processed 10 items, queue is idle: True
+Enabled after shutdown: False
 *** THE END ***
 ```
 

@@ -11,8 +11,14 @@ public interface IScheduleSettings
     bool IsHostedService { get; }
 
     /// <summary>
-    /// Gets a function that handles errors that occur during job execution.
+    /// Gets a function that handles errors that occur during job execution, or <c>null</c> when
+    /// no global handler is registered.
     /// </summary>
+    /// <remarks>
+    /// When several handlers were registered through
+    /// <see cref="IScheduleBuilder.AddErrorHandler"/>, this is the composition of all of them:
+    /// it returns <c>true</c> as soon as any handler did.
+    /// </remarks>
     Func<IJobContext, Exception, bool>? HandleError { get; }
 
     /// <summary>

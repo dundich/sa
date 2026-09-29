@@ -28,8 +28,8 @@ internal sealed class JobSettings(Type jobType, Guid jobId) : IJobSettings
     public static JobSettings Create<T>(Guid jobId)
         where T : class, IJob => new(typeof(T), jobId);
 
-    public static JobSettings Create(IJobSettings options)
-        => new JobSettings(options.JobType, options.JobId).Merge(options);
+    public static JobSettings Create(IJobSettings settings)
+        => new JobSettings(settings.JobType, settings.JobId).Merge(settings);
 
     public IJobSettings Clone() => new JobSettings(JobType, JobId).Merge(this);
 }

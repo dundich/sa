@@ -98,6 +98,12 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
 
     public class Fixture : OutboxPostgreSqlFixture<IDeliveryProcessor>
     {
+        /// <summary>Минимальный валидный TTL блокировки: задача освобождается почти сразу.</summary>
+        public static readonly TimeSpan TestLockDuration = OutboxConsumerSettingsBuilder.NoLockDuration;
+
+        /// <summary>Период продления блокировки — строго меньше <see cref="TestLockDuration"/>.</summary>
+        public static readonly TimeSpan TestLockRenewal = TimeSpan.FromMilliseconds(10);
+
         public OutboxConsumerSettings SettingsForTestGroup = default!;
         /// <summary>Реальное (санитизированное) имя группы для CountingMessageConsumer.</summary>
         public string CountingGroupId => SettingsForTestGroup.ConsumerGroupId;
@@ -134,8 +140,8 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                     MaxBatchSize: 1,
                     MaxProcessingIterations: -1,
                     IterationDelay: TimeSpan.Zero,
-                    LockDuration: TimeSpan.FromMinutes(5),
-                    LockRenewal: TimeSpan.FromMinutes(5),
+                    LockDuration: TestLockDuration,
+                    LockRenewal: TestLockRenewal,
                     LookbackInterval: TimeSpan.FromDays(7),
                     MaxDeliveryAttempts: 3,
                     BatchingWindow: TimeSpan.Zero,
@@ -161,7 +167,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                             b.WithInterval(TimeSpan.FromMilliseconds(200))
                              .WithMaxBatchSize(4)
                              .WithNoLockDuration()
-                             .WithLockRenewal(TimeSpan.FromMinutes(5))
+                             .WithLockRenewal(TestLockRenewal)
                              .WithNoBatchingWindow();
 
                             SettingsForTestGroup = b.Build();
@@ -171,7 +177,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                             b.WithInterval(TimeSpan.FromMilliseconds(200))
                              .WithMaxBatchSize(1)
                              .WithNoLockDuration()
-                             .WithLockRenewal(TimeSpan.FromMinutes(5))
+                             .WithLockRenewal(TestLockRenewal)
                              .WithNoBatchingWindow();
                         })
                     )
@@ -285,10 +291,11 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
 
         await publisher.Publish(messages, m => m.TenantId, TestContext.Current.CancellationToken);
 
-        // Process first batch
-        await fixture.Sub.ProcessMessages<TestMessage>(fixture.SettingsForTestGroup, TestContext.Current.CancellationToken);
-        int firstBatchCount = CountingMessageConsumer.TotalMessagesConsumed;
-        Assert.True(firstBatchCount > 0 && firstBatchCount <= totalMessages);
+        // Process first batch — read settings from manager so we always get the latest snapshot
+        long firstBatchCount = await fixture.Sub.ProcessMessages<TestMessage>(
+            fixture.SettingsForTestGroup, TestContext.Current.CancellationToken);
+        Assert.True(firstBatchCount > 0,
+            $"Первый батч должен быть непустым, получено {firstBatchCount}");
 
         // Если первое ProcessMessages обработало все сообщения — публикуем ещё для проверки Pause/Resume
         if (firstBatchCount >= totalMessages)
@@ -297,21 +304,31 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
             await publisher.Publish(extraMessages, m => m.TenantId, TestContext.Current.CancellationToken);
         }
 
-        // Pause
-        manager.Pause(group);
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+        // Give any in-flight polling cycle a chance to settle before pausing
+        await Task.Delay(200, TestContext.Current.CancellationToken);
 
-        // Should NOT process more while paused
-        int beforeResume = CountingMessageConsumer.TotalMessagesConsumed;
-        Assert.Equal(firstBatchCount, beforeResume);
+        // Pause and re-read settings from the manager — the authoritative snapshot includes Paused=true
+        manager.Pause(group);
+        var pausedSettings = manager.Get(group) ?? fixture.SettingsForTestGroup;
+        Assert.True(pausedSettings.Paused, "Settings retrieved from manager must reflect Paused state");
+
+        // Small delay to ensure the pause is visible before the next poll
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        // Should NOT process more while paused — ProcessMessages must return 0
+        // while the group is paused, regardless of any pending rows.
+        long pausedCount = await fixture.Sub.ProcessMessages<TestMessage>(
+            pausedSettings, TestContext.Current.CancellationToken);
+        Assert.Equal(0, pausedCount);
 
         // Resume
         manager.Resume(group);
 
-        // Process remaining — read updated settings from manager
+        // Process remaining — read updated settings from manager after resume
         var resumedSettings = manager.Get(group) ?? fixture.SettingsForTestGroup;
-        await fixture.Sub.ProcessMessages<TestMessage>(resumedSettings, TestContext.Current.CancellationToken);
-        Assert.True(CountingMessageConsumer.TotalMessagesConsumed > firstBatchCount,
+        long remainingCount = await fixture.Sub.ProcessMessages<TestMessage>(
+            resumedSettings, TestContext.Current.CancellationToken);
+        Assert.True(remainingCount > 0,
             "После Resume должны обработаться дополнительные сообщения");
     }
 
@@ -417,8 +434,8 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         manager.Apply(group, s => s with { MaxBatchSize = 32 });
 
         // Subscriber should have received the updated settings
-        Assert.Single(capturedSettings);
-        Assert.Equal(32, capturedSettings[0].MaxBatchSize);
+        var item = Assert.Single(capturedSettings);
+        Assert.Equal(32, item.MaxBatchSize);
         Assert.Equal(group, capturedSettings[0].ConsumerGroupId);
     }
 

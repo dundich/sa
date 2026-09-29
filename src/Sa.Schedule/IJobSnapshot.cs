@@ -16,7 +16,7 @@ public interface IJobSnapshot
     ulong FailedIterations { get; }
 
     /// <summary>Gets the number of completed (successful) iterations.</summary>
-    ulong CompetedIterations { get; }
+    ulong CompletedIterations { get; }
 
     /// <summary>Gets the time when the job was first created.</summary>
     DateTimeOffset CreatedAt { get; }

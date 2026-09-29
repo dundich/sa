@@ -1,5 +1,15 @@
 # Auto detect text files and perform LF normalization
-*        text=auto
+*        text=lf
+*        text eol=lf
+
+# ...except binaries: EOL normalization rewrites bytes inside compressed streams, and the
+# stored copy then no longer matches the file on disk. ffmpeg.zip was unreadable by zipfile
+# in the repository (65 stray 0x0D bytes eaten out of the deflate data). Keep in sync with
+# the repo-root .gitattributes.
+*.zip    binary
+*.mp3    binary
+*.wav    binary
+*.ogg    binary
 
 *.cs     text diff=csharp
 *.java   text diff=java
@@ -9,7 +19,6 @@
 *.sql    text
 
 *.csproj text merge=union
-*.sln    text merge=union eol=crlf
 
 *.docx   diff=astextplain
 *.DOCX   diff=astextplain
@@ -21,3 +30,5 @@
 relative/path/*.txt text eol=lf
 
 Sa.Media.FFmpeg/build/*.sh text eol=lf
+
+

@@ -1,34 +1,56 @@
 <Project>
 
-    <!-- 🔹 определение RID у потребителя -->
+    <!-- Лежит рядом с payload'ом, а не в build/buildTransitive/, поэтому импортируется вручную:
+         ответ зависит от $(RuntimeIdentifier), который известен только после тела проекта. -->
+    <Import Project="$(MSBuildThisFileDirectory)..\ffmpeg\Sa.Media.FFmpeg.Rid.props"
+            Condition="Exists('$(MSBuildThisFileDirectory)..\ffmpeg\Sa.Media.FFmpeg.Rid.props')" />
+
     <PropertyGroup>
-        <_FfmpegRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_FfmpegRid>
-        <_FfmpegRid Condition="'$(_FfmpegRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_FfmpegRid>
+        <_FfmpegRidFileMissing Condition="!Exists('$(MSBuildThisFileDirectory)..\ffmpeg\Sa.Media.FFmpeg.Rid.props')">true</_FfmpegRidFileMissing>
+    </PropertyGroup>
 
-        <!-- если macOS x64, принудительно ставим linux-x64 -->
-        <_FfmpegRid Condition="'$(_FfmpegRid)' == 'osx-x64'">linux-x64</_FfmpegRid>
-
+    <!-- 🔹 определение RID у потребителя (см. Sa.Media.FFmpeg.Rid.props) -->
+    <PropertyGroup>
+        <_FfmpegRid>$(_FfmpegCurrentRid)</_FfmpegRid>
         <_FfmpegPkgRoot>$(MSBuildThisFileDirectory)..\</_FfmpegPkgRoot>
         <_FfmpegZip>$(_FfmpegPkgRoot)ffmpeg\$(_FfmpegRid)\ffmpeg.zip</_FfmpegZip>
         <_FfmpegDest>$(OutputPath)sa\native</_FfmpegDest>
         <_FfmpegMarker>$(_FfmpegDest)\.extracted-$(_FfmpegRid)</_FfmpegMarker>
     </PropertyGroup>
 
-    <!-- Распаковка при сборке потребителя -->
+    <!--
+      No bundled payload for this RID. The library still builds and runs — it falls back to a
+      system FFmpeg or to FFMpegOptions.ExecutablePath — so this is a warning, not an error,
+      but it must be loud: the previous behaviour (silently skipping the extraction because
+      the distro-qualified RID did not match a payload folder) shipped broken packages.
+    -->
+    <Target Name="WarnMissingFfmpegPayload"
+            BeforeTargets="Build;CoreBuild;GetCopyToOutputDirectoryItems"
+            Condition="'$(SkipFfmpegExtract)' != 'true' AND '$(_FfmpegRidFileMissing)' == 'true'">
+        <Error Text="[Sa.Media.FFmpeg] Broken package: ffmpeg\Sa.Media.FFmpeg.Rid.props is missing, so the RID cannot be resolved. Reinstall Sa.Media.FFmpeg, or pass -p:SkipFfmpegExtract=true and provide your own FFmpeg." />
+    </Target>
+
+    <Target Name="WarnUnsupportedFfmpegRid"
+            BeforeTargets="Build;CoreBuild;GetCopyToOutputDirectoryItems"
+            Condition="'$(SkipFfmpegExtract)' != 'true' AND '$(_FfmpegRidFileMissing)' != 'true' AND '$(_FfmpegRid)' == ''">
+        <Warning Text="[Sa.Media.FFmpeg] No bundled FFmpeg for RID '$(_FfmpegRequestedRid)'. Supported: $(FfmpegSupportedRids). Install FFmpeg system-wide or set FFMpegOptions.ExecutablePath. Pass -p:SkipFfmpegExtract=true to silence." />
+    </Target>
+
+    <!-- 🔹 Распаковка при сборке потребителя -->
     <Target Name="ExtractFfmpegInConsumer"
             BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths;Build;CoreBuild"
             Inputs="$(_FfmpegZip)"
             Outputs="$(_FfmpegMarker)"
-            Condition="Exists('$(_FfmpegZip)')">
+            Condition="'$(SkipFfmpegExtract)' != 'true' AND Exists('$(_FfmpegZip)')">
 
-        <Message Text="📦 [Sa.Media.FFmpeg] Extracting for RID $(_FfmpegRid)..." Importance="high" />
-        <Message Text="📦 [Sa.Media.FFmpeg] Source=$(_FfmpegZip)" Importance="high"/>
-        <Message Text="📦 [Sa.Media.FFmpeg] Dest=$(_FfmpegDest)" Importance="high"/>
-        
+        <Message Text="📦 [Sa.Media.FFmpeg] Extracting for RID $(_FfmpegRid)..."
+                 Importance="normal" />
+        <Message Text="📦 [Sa.Media.FFmpeg] Source=$(_FfmpegZip)"
+                 Importance="normal" />
+        <Message Text="📦 [Sa.Media.FFmpeg] Dest=$(_FfmpegDest)"
+                 Importance="normal" />
+
         <MakeDir Directories="$(_FfmpegDest)" />
-
-        <Message Text="📦 [Sa.Media.FFmpeg] Extracting FFmpeg ($(_FfmpegRid)) → sa/native/"
-                 Importance="high" />
 
         <Unzip SourceFiles="$(_FfmpegZip)"
                DestinationFolder="$(_FfmpegDest)"
@@ -57,12 +79,14 @@
             </Content>
         </ItemGroup>
 
-        <Message Text="[Sa.Media.FFmpeg] ✓ FFmpeg ready at $(_FfmpegDest)" Importance="high" />
+        <Message Text="[Sa.Media.FFmpeg] ✓ FFmpeg ready at $(_FfmpegDest)"
+                 Importance="normal" />
     </Target>
 
     <!-- Очистка старых маркеров при смене RID -->
     <Target Name="CleanFfmpegMarkerOnRidChange"
-            BeforeTargets="ExtractFfmpegInConsumer">
+            BeforeTargets="ExtractFfmpegInConsumer"
+            Condition="'$(_FfmpegRid)' != ''">
         <ItemGroup>
             <_OldMarkers Include="$(_FfmpegDest)\.extracted-*"
                          Exclude="$(_FfmpegMarker)" />
@@ -71,9 +95,10 @@
     </Target>
 
     <!-- Очистка при dotnet clean -->
-    <Target Name="CleanFfmpegExtracted" AfterTargets="Clean">
+    <Target Name="CleanFfmpegExtracted" AfterTargets="Clean" Condition="'$(_FfmpegDest)' != ''">
         <RemoveDir Directories="$(_FfmpegDest)" Condition="Exists('$(_FfmpegDest)')" />
-        <Message Text="🧹 [Sa.Media.FFmpeg] Cleaned up native binaries at $(_FfmpegDest)" Importance="low" />
+        <Message Text="🧹 [Sa.Media.FFmpeg] Cleaned up native binaries at $(_FfmpegDest)"
+                 Importance="low" />
     </Target>
 
 </Project>

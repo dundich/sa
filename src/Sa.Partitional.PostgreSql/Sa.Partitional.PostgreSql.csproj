@@ -3,15 +3,11 @@
 	<Import Project="../Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
-		<Version>0.12.0</Version>
+		<Version>0.15.0</Version>
 		<Description>For managing table partitioning in PostgreSQL</Description>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-		<NoWarn>1701;1702;CS8602;</NoWarn>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+	<PropertyGroup>
 		<NoWarn>1701;1702;CS8602;</NoWarn>
 	</PropertyGroup>
 
@@ -30,7 +26,6 @@
 		<Compile Include="..\Sa\Extensions\StrToExtensions.cs" Link="AsLink\StrToExtensions.cs" />
 	</ItemGroup>
 	<ItemGroup>
-		<Folder Include="AsLink\" />
 		<Folder Include="AsLink\" />
 	</ItemGroup>
 

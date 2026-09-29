@@ -13,7 +13,7 @@ public interface IScheduler
     /// <summary>
     /// Gets the collection of job schedulers.
     /// </summary>
-    IReadOnlyCollection<IJobScheduler> Schedules { get; }
+    IReadOnlyCollection<IJobScheduler> Jobs { get; }
 
     /// <summary>
     /// Starts the scheduler.
@@ -35,5 +35,5 @@ public interface IScheduler
     Task Stop();
 
 
-    IJobScheduler? GetSchedule(Guid jobId) => Schedules.FirstOrDefault(c => c.JobId == jobId);
+    IJobScheduler? GetSchedule(Guid jobId) => Jobs.FirstOrDefault(c => c.JobId == jobId);
 }

@@ -34,6 +34,14 @@ FFMPEG_CONFIGURE_FLAGS+=(
     --arch=$ARCH
     --cross-prefix=$ARCH-w64-mingw32-
 
+    # configure prepends $cross_prefix to the pkg-config default, which would look for a
+    # nonexistent x86_64-w64-mingw32-pkg-config and silently disable all pkg-config-based
+    # lib detection (в т.ч. --enable-libmp3lame/libvorbis/libopus из common.sh).
+    # Force the host pkg-config; .pc files come from PKG_CONFIG_PATH
+    # (на этой машине — vcpkg, triplet x64-mingw-static).
+    --pkg-config=pkg-config
+    --pkg-config-flags=--static
+
     --disable-libdrm
 )
 
@@ -48,7 +56,7 @@ printf '%s\n' "${FFMPEG_CONFIGURE_FLAGS[@]}"
 
 
 echo "Building FFmpeg..."
-make
+make -j"$(nproc)"
 
 echo "Installing FFmpeg..."
 make install
