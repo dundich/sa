@@ -31,11 +31,16 @@ public sealed record PostgreSqlConfigurationOptions(
     public int MedianFirstRetryDelay { get; init; } = 530;
 
     /// <summary>
-    /// When <see langword="true"/> (default), a row whose key is blank, or whose value is
-    /// <see langword="null"/>, empty or whitespace, is skipped — which makes this source
-    /// <em>delegate</em> such keys to lower-priority providers. Set to <see langword="false"/>
-    /// to store them, so this source <em>overrides</em> lower-priority providers instead.
+    /// When <see langword="true"/> (default), a row whose value is <see langword="null"/>, empty
+    /// or whitespace-only is skipped — which makes this source <em>delegate</em> such keys to
+    /// lower-priority providers. Set to <see langword="false"/> to store them, so this source
+    /// <em>overrides</em> lower-priority providers instead.
     /// </summary>
+    /// <remarks>
+    /// This governs the value only. A blank or whitespace-only <em>key</em> is always dropped,
+    /// whatever this is set to: an empty key is not a meaningful path in <c>IConfiguration</c>,
+    /// and <c>GetChildKeys</c> misbehaves on one.
+    /// </remarks>
     public bool SkipEmptyValues { get; init; } = true;
 
     /// <summary>

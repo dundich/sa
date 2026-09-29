@@ -38,7 +38,9 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
                 INSERT INTO config_load_test (key, value) VALUES
                     ('NormalKey', 'normal_value'),
                     ('EmptyValueKey', ''),
-                    ('NullValueKey', null)
+                    ('NullValueKey', null),
+                    ('', 'empty_key_value'),
+                    ('   ', 'whitespace_key_value')
                 ON CONFLICT (key) DO NOTHING;", connection);
 
             await insertCommand.ExecuteNonQueryAsync();
@@ -427,6 +429,28 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
 
         // Assert
         Assert.Equal("from-lower", configuration["EmptyValueKey"]);
+    }
+
+    [Fact]
+    public void BlankKeys_AreAlwaysSkipped_EvenWhenSkipEmptyValuesIsFalse()
+    {
+        // SkipEmptyValues governs the value only. A blank or whitespace-only key is dropped
+        // unconditionally: an empty key is not a meaningful IConfiguration path, and
+        // GetChildKeys misbehaves on one. Pinning the asymmetry so it cannot drift.
+        var builder = new ConfigurationBuilder();
+        builder.Add(new DatabaseConfigurationSource(
+            Options(SelectSql) with { SkipEmptyValues = false }, DataSource(failuresBeforeSuccess: 0)));
+
+        // Act
+        var configuration = builder.Build();
+
+        // Assert — the blank keys never reach the configuration…
+        Assert.Null(configuration[""]);
+        Assert.Null(configuration["   "]);
+
+        // …while the blank *value* next to a real key is kept, which is what the option controls.
+        Assert.Equal("normal_value", configuration["NormalKey"]);
+        Assert.Equal(string.Empty, configuration["EmptyValueKey"]);
     }
 
     [Fact]

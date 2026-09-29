@@ -94,7 +94,7 @@ raises its own) observe the new snapshot. Concurrent reloads collapse into a sin
 |--------|---------|---------|
 | `MaxAttempts` | `3` | Total load attempts including the first. `0` and `1` both mean a single attempt. |
 | `MedianFirstRetryDelay` | `530` | Median first-retry delay in ms; each delay is jittered. The first retry is always immediate. |
-| `SkipEmptyValues` | `true` | Drop rows with a blank key, or a `NULL`/blank value. See *Layering* below. |
+| `SkipEmptyValues` | `true` | Drop rows whose **value** is `NULL`/blank. See *Layering* below. Blank **keys** are dropped regardless of this setting. |
 | `LastWins` | `true` | For duplicate keys, the last row wins. Set to `false` for first-row-wins. |
 
 ```csharp
@@ -116,7 +116,8 @@ the connection string's password is redacted, so options objects are safe to int
 
 | Scenario | Result |
 |----------|--------|
-| Key is `NULL`, empty, or whitespace only | Skipped |
+| Key is `NULL` | Skipped — always, regardless of `SkipEmptyValues` |
+| Key is empty or whitespace only | Skipped — always, regardless of `SkipEmptyValues` |
 | Value is `NULL` in DB | Skipped by default — see *Layering* |
 | Value is an empty string or whitespace only | Skipped by default — see *Layering* |
 | Key or value has surrounding whitespace | Trimmed |
