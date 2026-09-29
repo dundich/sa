@@ -10,14 +10,11 @@ namespace Sa.Classes;
 /// <param name="Start">начало</param>
 /// <param name="End">конец</param>
 [DebuggerStepThrough]
-public record Section<T>(T Start, T End) where T : IComparable<T>
-{
-    public static readonly Section<T> Empty = new(default!, default!);
-}
+public record Section<T>(T Start, T End) where T : IComparable<T>;
 
 /// <summary>
 /// line with lim end
-/// экземпляр с конкретным началом, окончанием и указанием включен ли конец в диапазон  
+/// экземпляр с конкретным началом, окончанием и указанием включен ли конец в диапазон
 /// </summary>
 /// <typeparam name="T"></typeparam>
 /// <param name="Start">начало</param>
@@ -26,24 +23,18 @@ public record Section<T>(T Start, T End) where T : IComparable<T>
 
 [DebuggerStepThrough]
 public record LimSection<T>(T Start, T End, bool HasEnd = false)
-    : Section<T>(Start, End) where T : IComparable<T>
-{
-    public static readonly new LimSection<T> Empty = new(default!, default!, false);
-}
+    : Section<T>(Start, End) where T : IComparable<T>;
 
 /// <summary>
 /// half-line or ray
-/// экземпляр с конкретным началом, возможным окончанием и указанием включен ли конец в диапазон  
+/// экземпляр с конкретным началом, возможным окончанием и указанием включен ли конец в диапазон
 /// </summary>
 /// <typeparam name="T"></typeparam>
 /// <param name="Start">начало</param>
 /// <param name="End">конец или бесконечность</param>
 /// <param name="HasEnd">Indicates whether the value at the end of the range is included</param>
 [DebuggerStepThrough]
-public record HalfSection<T>(T Start, T? End, bool HasEnd = false)
-{
-    public static readonly HalfSection<T> Empty = new(default!, default, false);
-}
+public record HalfSection<T>(T Start, T? End, bool HasEnd = false);
 
 [DebuggerStepThrough]
 public static class RangeExtensions
@@ -225,9 +216,36 @@ public static class RangeExtensions
 
     public static bool IsPoint<T>(this Section<T> self) where T : IComparable<T> => self.Start.CompareTo(self.End) == 0;
 
-    public static bool IsEmpty<T>(this Section<T> self) where T : IComparable<T> => self == Section<T>.Empty;
-    public static bool IsEmpty<T>(this LimSection<T> self) where T : IComparable<T> => self == LimSection<T>.Empty;
-    public static bool IsEmpty<T>(this HalfSection<T> self) where T : IComparable<T> => self == HalfSection<T>.Empty;
+    /// <summary>
+    /// Пуста ли секция, то есть не содержит ли ни одного значения: <c>Start &gt; End</c>.
+    /// <para>
+    /// Проверять «секция равна <c>Empty</c>» нельзя. Для любого value-типа
+    /// <c>T</c> обычная <c>new Section&lt;int&gt;(0, 0)</c> сравнима по record-равенству
+    /// с <c>new Section&lt;int&gt;(default, default)</c>, то есть с sentinel, и такой тест
+    /// объявлял пустой совершенно законно построенную точку. Поэтому <c>Empty</c>-sentinel'ы
+    /// убраны, а emptiness определяется структурно.
+    /// </para>
+    /// </summary>
+    public static bool IsEmpty<T>(this Section<T> self) where T : IComparable<T> => self.Start.CompareTo(self.End) > 0;
+
+    /// <inheritdoc cref="IsEmpty{T}(Section{T})"/>
+    /// <remarks>
+    /// У <see cref="LimSection{T}"/> секция с равными границами пуста, если конец не включён:
+    /// <c>(0, 0)</c> не содержит ни одного значения, а <c>[0, 0]</c> содержит точку 0.
+    /// </remarks>
+    public static bool IsEmpty<T>(this LimSection<T> self) where T : IComparable<T>
+    {
+        var order = self.Start.CompareTo(self.End);
+        return order > 0 || (order == 0 && !self.HasEnd);
+    }
+
+    /// <inheritdoc cref="IsEmpty{T}(Section{T})"/>
+    /// <remarks>
+    /// У <see cref="HalfSection{T}"/> незаданный конец (<c>End == null</c>) означает бесконечность,
+    /// а не пустоту, поэтому сравнивать не с чем и такая секция непуста.
+    /// </remarks>
+    public static bool IsEmpty<T>(this HalfSection<T> self) where T : IComparable<T>
+        => self.End is not null && self.End.CompareTo(self.Start) < 0;
 
     public static TimeSpan GetLength(this Section<DateTime> range) => range.End.ToUniversalTime() - range.Start.ToUniversalTime();
     public static int GetLength(this Section<int> range) => range.End - range.Start;

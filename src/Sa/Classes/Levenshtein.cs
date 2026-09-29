@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Buffers;
+using System.Runtime.CompilerServices;
 using Sa.Extensions;
 
 namespace Sa.Classes;
@@ -33,6 +34,14 @@ internal static class Levenshtein
         return CalculateDistance(value1, value2);
     }
 
+    /// <summary>
+    /// Сколько int'ов метод готов положить на стек. Три полосы по <c>m</c> элементов дают
+    /// 3 * 4 * m байт; при 1 МБ стека потока ASP.NET это ~85 тыс. символов, после чего
+    /// <see cref="StackOverflowException"/> убивает процесс — а его перехватить нельзя.
+    /// Всё, что длиннее, считается на куче, взятой из <see cref="ArrayPool{T}"/>.
+    /// </summary>
+    private const int MaxStackallocInts = 1024;
+
     private static int CalculateDistance(ReadOnlySpan<char> firstText, ReadOnlySpan<char> secondText)
     {
         var n = firstText.Length + 1;
@@ -41,10 +50,33 @@ internal static class Levenshtein
         if (n == 1) return m - 1;
         if (m == 1) return n - 1;
 
-        // Для хранения двух предыдущих строк
-        Span<int> previousPreviousRow = stackalloc int[m];
-        Span<int> previousRow = stackalloc int[m];
-        Span<int> currentRow = stackalloc int[m];
+        if (m <= MaxStackallocInts)
+        {
+            return CalculateDistanceCore(firstText, secondText,
+                stackalloc int[m], stackalloc int[m], stackalloc int[m]);
+        }
+
+        int[] rented = ArrayPool<int>.Shared.Rent(m * 3);
+        try
+        {
+            return CalculateDistanceCore(firstText, secondText,
+                rented.AsSpan(0, m), rented.AsSpan(m, m), rented.AsSpan(2 * m, m));
+        }
+        finally
+        {
+            ArrayPool<int>.Shared.Return(rented);
+        }
+    }
+
+    private static int CalculateDistanceCore(
+        ReadOnlySpan<char> firstText,
+        ReadOnlySpan<char> secondText,
+        Span<int> previousPreviousRow,
+        Span<int> previousRow,
+        Span<int> currentRow)
+    {
+        var n = firstText.Length + 1;
+        var m = secondText.Length + 1;
 
         // Инициализация
         for (var j = 0; j < m; j++)
