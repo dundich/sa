@@ -94,21 +94,6 @@ internal static class StrToExtensions
     }
 
     // ── DateTime ───────────────────────────────────────────────────────────
-    /// <summary>
-    /// Parses one of <see cref="DateFmt.Formats"/>. The result is always
-    /// <see cref="DateTimeKind.Local"/>.
-    /// </summary>
-    /// <remarks>
-    /// <paramref name="style"/> is combined with <c>DateTimeStyles.AssumeLocal</c>: an input
-    /// without an offset is read as local wall-clock time, an input with one is converted to local
-    /// time. Without it the format list, which mixes offset-less shapes
-    /// (<c>yyyy-MM-dd HH:mm:ss</c> → <see cref="DateTimeKind.Unspecified"/>) with offset-bearing
-    /// ones (<c>…K</c> → <see cref="DateTimeKind.Local"/>), returned a different kind depending on
-    /// which format happened to match — so the same shape of text meant different things to the
-    /// caller, and <c>Kind</c> could not be relied on. Assuming local uniformly makes the
-    /// interpretation explicit; the cost is inherent to <see cref="DateTimeKind.Local"/> itself —
-    /// the resulting value depends on the host time zone, deliberately.
-    /// </remarks>
     [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static DateTime? StrToDate(this string? str, IFormatProvider? provider = null, DateTimeStyles style = DateTimeStyles.None)
         => str is not null ? ParseDate(str.AsSpan(), provider, style) : null;
@@ -123,7 +108,7 @@ internal static class StrToExtensions
             str,
             DateFmt.Formats,
             provider ?? CultureInfo.InvariantCulture,
-            style | DateTimeStyles.AssumeLocal,
+            style,
             out DateTime result)
             ? result
             : null;

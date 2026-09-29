@@ -86,15 +86,17 @@ public class StrToExtensionsTests
     [InlineData("2024-01-01 10:00:00", 2024, 1, 1, 10, 0, 0)]
     [InlineData("2024-01-01T10:00:00", 2024, 1, 1, 10, 0, 0)]
     [InlineData("20240101", 2024, 1, 1, 0, 0, 0)]
-    public void StrToDate_WithoutOffset_IsReadAsLocalWallClock(string input, int y, int mo, int d, int h, int mi, int s)
+    public void StrToDate_WithoutOffset_IsReadAsUnspecifiedWallClock(string input, int y, int mo, int d, int h, int mi, int s)
     {
+        // Без Assume*/Adjust* парсер не знает часового пояса безсмещённой строки, поэтому Kind —
+        // Unspecified, а стенное время остаётся тем, что в строке.
         // Act
         var result = input.StrToDate();
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(DateTimeKind.Local, result.Value.Kind);
-        Assert.Equal(new DateTime(y, mo, d, h, mi, s), result.Value);
+        Assert.Equal(DateTimeKind.Unspecified, result.Value.Kind);
+        Assert.Equal(new DateTime(y, mo, d, h, mi, s, DateTimeKind.Unspecified), result.Value);
     }
 
     [Theory]
@@ -116,11 +118,10 @@ public class StrToExtensionsTests
     }
 
     [Fact]
-    public void StrToDate_EveryFormatShape_YieldsTheSameKind()
+    public void StrToDate_FormatKind_DependsOnInputNotForced()
     {
-        // Исходный дефект: список форматов смешивает формы без смещения (дают Unspecified)
-        // и формы со смещением (дают Local), поэтому Kind зависел от того, какой формат
-        // случайно совпал. Теперь он одинаков для всех.
+        // Plain style не навязывает единый Kind: безсмещённая строка приходит Unspecified,
+        // строка со смещением — Local. Это и есть поведение DateTime.TryParseExact по умолчанию.
         const string withoutOffset = "2024-01-01 10:00:00";
         const string withOffset = "2024-01-01T10:00:00+03:00";
 
@@ -129,22 +130,21 @@ public class StrToExtensionsTests
 
         Assert.NotNull(a);
         Assert.NotNull(b);
-        Assert.Equal(DateTimeKind.Local, a.Value.Kind);
-        Assert.Equal(a.Value.Kind, b.Value.Kind);
+        Assert.Equal(DateTimeKind.Unspecified, a.Value.Kind);
+        Assert.Equal(DateTimeKind.Local, b.Value.Kind);
     }
 
     [Fact]
-    public void StrToDate_OffsetLessInput_KeepsItsWallClockReading()
+    public void StrToDate_OffsetLessInput_IsUnspecifiedWithPreservedWallClock()
     {
         const string input = "2024-01-01 10:00:00";
 
         var result = input.StrToDate();
 
         Assert.NotNull(result);
+        Assert.Equal(DateTimeKind.Unspecified, result.Value.Kind);
+        // Стенное время без смещения не конвертируется — час тот же, что в строке.
         Assert.Equal(10, result.Value.Hour);
-        Assert.Equal(
-            new DateTimeOffset(result.Value).Offset,
-            TimeZoneInfo.Local.GetUtcOffset(result.Value));
     }
 
     [Theory]
