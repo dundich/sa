@@ -28,25 +28,6 @@ dotnet run --project Samples/Configuration.Web
 
 ---
 
-## Архитектура
-
-```
-AddSaConfiguration()                         [Sa.Configuration]
-  ├── AddSaCommandLine(args)         → CommandLineArgsSecretStore
-  └── AddSaPostSecretProcessing()    → ChainedSecrets(
-           │                               │     ├── EnvironmentVariableSecretStore
-           │                               │     ├── CommandLineArgsSecretStore
-           │                               │     └── FileSecretStore (secrets.txt)
-           │                              )
-
-AddSaPostgreSqlConfiguration(options)         [Sa.Configuration.PostgreSql]
-  └── DatabaseConfigurationProvider   → Динамические настройки из PostgreSQL
-```
-
-`AddSaConfiguration()` и `AddSaPostgreSqlConfiguration` — независимые вызовы из разных пакетов: `Sa.Configuration` не ссылается на `Sa.Configuration.PostgreSql`, поэтому источник PostgreSQL подключается отдельной строкой, а не встраивается в цепочку секретов.
-
----
-
 ## Цепочка Разрешения Секретов
 
 Формат плейсхолдера `{{key}}` разрешает значения из цепочки хранилищ по порядку:

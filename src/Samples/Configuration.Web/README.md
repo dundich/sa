@@ -28,25 +28,6 @@ Open `http://localhost:5245/settings` in your browser to see all configuration v
 
 ---
 
-## Architecture
-
-```
-AddSaConfiguration()                         [Sa.Configuration]
-  ├── AddSaCommandLine(args)         → CommandLineArgsSecretStore
-  └── AddSaPostSecretProcessing()    → ChainedSecrets(
-           │                               │     ├── EnvironmentVariableSecretStore
-           │                               │     ├── CommandLineArgsSecretStore
-           │                               │     └── FileSecretStore (secrets.txt)
-           │                              )
-
-AddSaPostgreSqlConfiguration(options)         [Sa.Configuration.PostgreSql]
-  └── DatabaseConfigurationProvider   → Dynamic settings from PostgreSQL
-```
-
-`AddSaConfiguration()` and `AddSaPostgreSqlConfiguration` are independent calls from separate packages: `Sa.Configuration` does not reference `Sa.Configuration.PostgreSql`, so the PostgreSQL source is wired in with its own line rather than being nested in the secret chain.
-
----
-
 ## Configuration Chain
 
 The placeholder format `{{key}}` resolves values from the chained secret stores in order:
