@@ -175,7 +175,7 @@ internal sealed partial class JobController(
         {
             DateTimeOffset now = timeProvider.GetUtcNow();
 
-            DateTimeOffset? next = timing.GetNextOccurrence(now, _context);
+            DateTimeOffset? next = timing.GetNextOccurrence(now);
 
             if (!next.HasValue)
                 return CanJobExecuteResult.Abort;

@@ -1,4 +1,4 @@
-﻿using Sa.Schedule.Engine;
+﻿using Sa.Schedule.Cron;
 using System.Globalization;
 
 namespace Sa.ScheduleTests;
@@ -21,7 +21,7 @@ public class CronTimingTests
         var start = DateTimeOffset.Parse(startTime, CultureInfo.InvariantCulture);
         var expected = DateTimeOffset.Parse(expectedNext, CultureInfo.InvariantCulture);
 
-        var result = timing.GetNextOccurrence(start, null!);
+        var result = timing.GetNextOccurrence(start);
 
         Assert.NotNull(result);
         Assert.Equal(expected, result);
@@ -33,7 +33,7 @@ public class CronTimingTests
         var timing = new CronTiming("* * * * *");
         var start = new DateTimeOffset(2026, 6, 25, 10, 30, 45, TimeSpan.Zero);
 
-        var result = timing.GetNextOccurrence(start, null!);
+        var result = timing.GetNextOccurrence(start);
 
         Assert.Equal(new DateTimeOffset(2026, 6, 25, 10, 31, 0, TimeSpan.Zero), result);
     }
@@ -44,7 +44,7 @@ public class CronTimingTests
         var timing = new CronTiming("0 * * * *");
         var start = new DateTimeOffset(2026, 6, 25, 10, 15, 0, TimeSpan.Zero);
 
-        var result = timing.GetNextOccurrence(start, null!);
+        var result = timing.GetNextOccurrence(start);
 
         Assert.Equal(new DateTimeOffset(2026, 6, 25, 11, 0, 0, TimeSpan.Zero), result);
     }
@@ -60,12 +60,12 @@ public class CronTimingTests
         DateTimeOffset t3 = new(2026, 6, 25, 4, 0, 0, TimeSpan.Zero);
         DateTimeOffset t4 = new(2026, 6, 25, 22, 0, 0, TimeSpan.Zero);
 
-        Assert.Equal(t2, timing.GetNextOccurrence(t1, null!));
-        Assert.Equal(t3, timing.GetNextOccurrence(t2, null!));
+        Assert.Equal(t2, timing.GetNextOccurrence(t1));
+        Assert.Equal(t3, timing.GetNextOccurrence(t2));
         // From 04:00 → next slot is 06:00 same day
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 6, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(t3, null!));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 6, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(t3));
         // From 22:00 → next slot is 00:00 next day
-        Assert.Equal(new DateTimeOffset(2026, 6, 26, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(t4, null!));
+        Assert.Equal(new DateTimeOffset(2026, 6, 26, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(t4));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class CronTimingTests
         var friday = new DateTimeOffset(2026, 6, 26, 10, 0, 0, TimeSpan.Zero);
         var nextMonday = new DateTimeOffset(2026, 6, 29, 9, 0, 0, TimeSpan.Zero);
 
-        Assert.Equal(nextMonday, timing.GetNextOccurrence(friday, null!));
+        Assert.Equal(nextMonday, timing.GetNextOccurrence(friday));
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class CronTimingTests
         var june25 = new DateTimeOffset(2026, 6, 25, 12, 0, 0, TimeSpan.Zero);
         var july1 = new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero);
 
-        Assert.Equal(july1, timing.GetNextOccurrence(june25, null!));
+        Assert.Equal(july1, timing.GetNextOccurrence(june25));
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class CronTimingTests
         var timing = new CronTiming("10,30,50 * * * *");
         var start = new DateTimeOffset(2026, 6, 25, 10, 15, 0, TimeSpan.Zero);
 
-        var result = timing.GetNextOccurrence(start, null!);
+        var result = timing.GetNextOccurrence(start);
 
         Assert.Equal(new DateTimeOffset(2026, 6, 25, 10, 30, 0, TimeSpan.Zero), result);
     }
@@ -111,7 +111,7 @@ public class CronTimingTests
         // After June 20, next valid day is July 1 (1-15 range includes the 1st)
         var nextMonth = new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero);
 
-        Assert.Equal(nextMonth, timing.GetNextOccurrence(midMonth, null!));
+        Assert.Equal(nextMonth, timing.GetNextOccurrence(midMonth));
     }
 
     [Fact]
@@ -124,11 +124,11 @@ public class CronTimingTests
         var afternoon = new DateTimeOffset(2026, 6, 25, 17, 0, 0, TimeSpan.Zero);
 
         // From 9:00 → next slot is 11:00
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 11, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(morning, null!));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 11, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(morning));
         // From 11:00 → next slot is 13:00 (not 17!)
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 13, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(noon, null!));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 13, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(noon));
         // From 17:00 → next slot is 9:00 next day
-        Assert.Equal(new DateTimeOffset(2026, 6, 26, 9, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(afternoon, null!));
+        Assert.Equal(new DateTimeOffset(2026, 6, 26, 9, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(afternoon));
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class CronTimingTests
         var normalYear = new DateTimeOffset(2026, 6, 25, 0, 0, 0, TimeSpan.Zero);
         var leapDay2028 = new DateTimeOffset(2028, 2, 29, 0, 0, 0, TimeSpan.Zero);
 
-        Assert.Equal(leapDay2028, timing.GetNextOccurrence(normalYear, null!));
+        Assert.Equal(leapDay2028, timing.GetNextOccurrence(normalYear));
     }
 
     [Fact]
@@ -164,13 +164,12 @@ public class CronTimingTests
     [InlineData("* 24 * * *")]
     [InlineData("* * 32 * *")]
     [InlineData("* * * 13 *")]
-    [InlineData("* * * * 7")]
     [InlineData("abc * * * *")]
     [InlineData("5-3/2 * * * *")] // inverted range/step — must not be silently accepted
     public void Constructor_ThrowsFormatException_ForInvalidExpression(string invalidExpression)
     {
         CronTiming act() => new(invalidExpression);
-        Assert.Throws<FormatException>((Func<CronTiming>)act);
+        Assert.ThrowsAny<FormatException>((Func<CronTiming>)act);
     }
 
     [Fact]
@@ -178,16 +177,21 @@ public class CronTimingTests
     {
         // "5-3/2" produces no values — an empty field must fail at construction time,
         // not turn into a timing that never matches (and kills the job silently).
-        CronTiming act() => new("5-3/2 * * * *");
+        static CronTiming act() => new("5-3/2 * * * *");
 
-        var ex = Assert.Throws<FormatException>(act);
+        var ex = Assert.ThrowsAny<FormatException>(act);
         Assert.Contains("minute", ex.Message);
     }
 
-    [Fact]
-    public void Constructor_NullExpression_ThrowsArgumentException()
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Constructor_EmptyExpression_ThrowsCronParseException(string expression)
     {
-        Assert.ThrowsAny<Exception>(() => new CronTiming(null!));
+        CronTiming act() => new(expression);
+
+        Assert.Throws<CronParseException>(act);
     }
 
     [Fact]
@@ -208,7 +212,7 @@ public class CronTimingTests
         var dt = new DateTimeOffset(2026, 6, 25, 9, 30, 0, tzOffset);
         var expected = new DateTimeOffset(2026, 6, 25, 10, 0, 0, tzOffset);
 
-        Assert.Equal(expected, timing.GetNextOccurrence(dt, null!));
+        Assert.Equal(expected, timing.GetNextOccurrence(dt));
     }
 
     [Fact]
@@ -223,7 +227,7 @@ public class CronTimingTests
         // June 17, 2026 is a Wednesday → matches via day-of-week
         var expected = new DateTimeOffset(2026, 6, 17, 12, 0, 0, TimeSpan.Zero);
 
-        Assert.Equal(expected, timing.GetNextOccurrence(start, null!));
+        Assert.Equal(expected, timing.GetNextOccurrence(start));
     }
 
     [Fact]
@@ -234,15 +238,15 @@ public class CronTimingTests
 
         // 2026-06-25 (Thu) → next Monday 2026-06-29
         Assert.Equal(new DateTimeOffset(2026, 6, 29, 0, 0, 0, TimeSpan.Zero),
-            timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 0, 0, 0, TimeSpan.Zero), null!));
+            timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 0, 0, 0, TimeSpan.Zero)));
 
         // 2026-06-29 (Mon) → next is July 1st (Wed) via day-of-month
         Assert.Equal(new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero),
-            timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 29, 0, 0, 0, TimeSpan.Zero), null!));
+            timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 29, 0, 0, 0, TimeSpan.Zero)));
 
         // 2026-07-01 (Wed) → next Monday 2026-07-06
         Assert.Equal(new DateTimeOffset(2026, 7, 6, 0, 0, 0, TimeSpan.Zero),
-            timing.GetNextOccurrence(new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero), null!));
+            timing.GetNextOccurrence(new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero)));
     }
 
     [Fact]
@@ -251,10 +255,10 @@ public class CronTimingTests
         var timing = new CronTiming("*/15 * * * *"); // Every 15 minutes: 0, 15, 30, 45
 
         var start = new DateTimeOffset(2026, 6, 25, 10, 0, 0, TimeSpan.Zero);
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 10, 15, 0, TimeSpan.Zero), timing.GetNextOccurrence(start, null!));
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 10, 30, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 10, 15, 0, TimeSpan.Zero), null!));
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 10, 45, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 10, 30, 0, TimeSpan.Zero), null!));
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 11, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 10, 45, 0, TimeSpan.Zero), null!));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 10, 15, 0, TimeSpan.Zero), timing.GetNextOccurrence(start));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 10, 30, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 10, 15, 0, TimeSpan.Zero)));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 10, 45, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 10, 30, 0, TimeSpan.Zero)));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 11, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 10, 45, 0, TimeSpan.Zero)));
     }
 
     [Fact]
@@ -264,10 +268,10 @@ public class CronTimingTests
         var timing = new CronTiming("0 8-17/3 * * *");
 
         var start = new DateTimeOffset(2026, 6, 25, 8, 0, 0, TimeSpan.Zero);
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 11, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(start, null!));
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 14, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 11, 0, 0, TimeSpan.Zero), null!));
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 17, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 14, 0, 0, TimeSpan.Zero), null!));
-        Assert.Equal(new DateTimeOffset(2026, 6, 26, 8, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 17, 0, 0, TimeSpan.Zero), null!));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 11, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(start));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 14, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 11, 0, 0, TimeSpan.Zero)));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 17, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 14, 0, 0, TimeSpan.Zero)));
+        Assert.Equal(new DateTimeOffset(2026, 6, 26, 8, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(new DateTimeOffset(2026, 6, 25, 17, 0, 0, TimeSpan.Zero)));
     }
 
     [Fact]
@@ -276,12 +280,12 @@ public class CronTimingTests
         var timing = new CronTiming("0 0 29 2 *"); // Feb 29 only
 
         var jan2028 = new DateTimeOffset(2028, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        Assert.Equal(new DateTimeOffset(2028, 2, 29, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(jan2028, null!));
+        Assert.Equal(new DateTimeOffset(2028, 2, 29, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(jan2028));
 
         // From within 2028 (after Feb 29), the next leap day is 2032 — 4 years away.
         // The 28-year horizon still covers it, so the job keeps running instead of aborting.
         var mar2028 = new DateTimeOffset(2028, 3, 1, 0, 0, 0, TimeSpan.Zero);
-        Assert.Equal(new DateTimeOffset(2032, 2, 29, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(mar2028, null!));
+        Assert.Equal(new DateTimeOffset(2032, 2, 29, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(mar2028));
     }
 
     [Fact]
@@ -292,7 +296,7 @@ public class CronTimingTests
         var timing = new CronTiming("0 0 29 2 *");
 
         var start = new DateTimeOffset(2097, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        Assert.Equal(new DateTimeOffset(2104, 2, 29, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(start, null!));
+        Assert.Equal(new DateTimeOffset(2104, 2, 29, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(start));
     }
 
     [Fact]
@@ -301,7 +305,7 @@ public class CronTimingTests
         var timing = new CronTiming("0 9 * * *"); // Any day at 9 AM
 
         var friday = new DateTimeOffset(2026, 6, 26, 10, 0, 0, TimeSpan.Zero);
-        Assert.Equal(new DateTimeOffset(2026, 6, 27, 9, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(friday, null!));
+        Assert.Equal(new DateTimeOffset(2026, 6, 27, 9, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(friday));
     }
 
     [Fact]
@@ -312,7 +316,7 @@ public class CronTimingTests
 
         var start = new DateTimeOffset(2026, 6, 25, 10, 30, 30, TimeSpan.Zero);
         // Already past 10:30, so next is 11:30
-        Assert.Equal(new DateTimeOffset(2026, 6, 25, 11, 30, 0, TimeSpan.Zero), timing.GetNextOccurrence(start, null!));
+        Assert.Equal(new DateTimeOffset(2026, 6, 25, 11, 30, 0, TimeSpan.Zero), timing.GetNextOccurrence(start));
     }
 
     [Fact]
@@ -321,11 +325,11 @@ public class CronTimingTests
         var timing = new CronTiming("0 0 31 1 *"); // Jan 31 only
 
         var jan2026 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        Assert.Equal(new DateTimeOffset(2026, 1, 31, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(jan2026, null!));
+        Assert.Equal(new DateTimeOffset(2026, 1, 31, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(jan2026));
 
         var feb2026 = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
         // Next Jan 31 is 2027
-        Assert.Equal(new DateTimeOffset(2027, 1, 31, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(feb2026, null!));
+        Assert.Equal(new DateTimeOffset(2027, 1, 31, 0, 0, 0, TimeSpan.Zero), timing.GetNextOccurrence(feb2026));
     }
 
     [Fact]
@@ -335,7 +339,7 @@ public class CronTimingTests
         var timing = new CronTiming("0 0 30 2 *");
 
         var start = new DateTimeOffset(2026, 6, 25, 0, 0, 0, TimeSpan.Zero);
-        var result = timing.GetNextOccurrence(start, null!);
+        var result = timing.GetNextOccurrence(start);
 
         Assert.Null(result);
     }

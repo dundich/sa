@@ -18,11 +18,6 @@ Adds a PostgreSQL-backed `IConfigurationSource` so configuration changes in the 
 
 ---
 
-### [Sa.Data.PostgreSql](src/Sa.Data.PostgreSql) — Lightweight Npgsql Wrapper
-
-A thin, Native AOT-friendly wrapper over Npgsql for typical database operations with no ORM overhead — non-query execution, scalars, streaming readers, transactions, binary COPY import, and jittered retries via `PgRetryStrategy`.
-
----
 
 ### [Sa.Data.S3](src/Sa.Data.S3) — S3 Data Client
 
@@ -44,7 +39,7 @@ Declarative PostgreSQL table partitioning (range by day/month/year and list) wit
 
 ### [Sa.Schedule](src/Sa.Schedule) — Scheduled Task Executor
 
-Configurable scheduled tasks supporting cron expressions, fixed intervals, and one-shot delays, with per-job failure strategies, retries, concurrency limits, interceptors, and runtime start/stop/restart.
+Configurable scheduled tasks supporting cron expressions, fixed intervals, and one-shot delays, with per-job failure strategies, retries, concurrency limits, interceptors, and runtime start/stop/restart. ([Cron docs EN](src/Sa.Schedule/CRON.md), [Cron docs RU](src/Sa.Schedule/CRON-ru.md))
 
 ---
 
@@ -97,15 +92,13 @@ Located in `src/Tests/`: 15 test projects using **xunit v3** and **Testcontainer
 
 ## Building
 
-```powershell
+```bash
 # Full build
-.\build\do_build.ps1
-
+./build-sh/do-build.sh
 # Run tests
-.\build\do_test.ps1
-
+./build-sh/do-test.sh
 # Package NuGet packages
-.\build\do_package.ps1
+./build-sh/do-package.sh
 ```
 
 Direct dotnet commands:

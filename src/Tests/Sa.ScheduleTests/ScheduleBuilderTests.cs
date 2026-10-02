@@ -289,6 +289,8 @@ public class ScheduleBuilderTests
         Assert.NotNull(scheduleSettings);
     }
 
+
+
     sealed class TestJob : IJob
     {
         public Task Execute(IJobContext context, CancellationToken cancellationToken) => Task.CompletedTask;

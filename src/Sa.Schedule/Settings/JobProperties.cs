@@ -1,6 +1,4 @@
-using Sa.Schedule.Engine;
-
-namespace Sa.Schedule.Settings;
+﻿namespace Sa.Schedule.Settings;
 
 internal sealed class JobProperties : IJobProperties
 {
@@ -67,6 +65,25 @@ internal sealed class JobProperties : IJobProperties
     public JobProperties EveryTime(TimeSpan timeSpan, string? name = null)
     {
         Timing = JobTiming.EveryTime(timeSpan, name);
+        return this;
+    }
+
+    /// <summary>
+    /// Creates a cron-based timing from a standard 5-field cron expression.
+    /// Format: "minute hour day-of-month month day-of-week"
+    /// 
+    /// Examples:
+    ///   "0 9 * * *"       — Every day at 9:00 AM
+    ///   "0 */2 * * *"    — Every 2 hours at minute 0
+    ///   "30 14 * * 1-5"  — Weekdays (Mon-Fri) at 2:30 PM
+    ///   "0 0 1 * *"      — First day of every month at midnight
+    /// </summary>
+    /// <param name="expression">The cron expression.</param>
+    /// <param name="name">Optional display name.</param>
+    /// <returns>An IJobTiming configured with cron scheduling.</returns>
+    public JobProperties WithCron(string expression, string? name = null)
+    {
+        Timing = new CronTimingAdapter(new Cron.CronTiming(expression, name));
         return this;
     }
 
