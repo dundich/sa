@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Sa.Schedule;
 using Sa.Schedule.Engine;
 using Sa.Schedule.Settings;
@@ -133,7 +133,7 @@ public sealed class JobControllerLifecycleTests
         // the loop must abort instead of spinning forever.
         var jobId = Guid.NewGuid();
         var settings = JobSettings.Create<RecordingJob>(jobId);
-        settings.Properties.WithTiming(CronTiming.Every("0 0 30 2 *"));
+        settings.Properties.WithCron("0 0 30 2 *");
 
         var controller = MakeController(settings);
 
@@ -220,7 +220,7 @@ public sealed class JobControllerLifecycleTests
     }
 
     private static JobController MakeController(
-        IJobSettings settings,
+        JobSettings settings,
         Action<IServiceCollection>? extra = null)
     {
         var jobId = settings.JobId;

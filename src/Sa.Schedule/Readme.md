@@ -117,6 +117,8 @@ b.AddJob((context, ct) =>
 
 5-field expression: `minute hour day-of-month month day-of-week`. Supports `*`, `,`, `-`, `/`.
 
+- [Detailed Cron documentation (EN)](./Cron/CRON.md)
+
 ```csharp
 b.AddJob<DailyReport>().WithCron("0 9 * * *");       // Every day at 9:00 AM
 b.AddJob<HealthCheck>().WithCron("*/15 * * * *");    // Every 15 minutes

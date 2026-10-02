@@ -1,4 +1,4 @@
-﻿using Sa.Schedule.Engine;
+﻿using Sa.Schedule.Cron;
 
 namespace Sa.Schedule.Settings;
 
@@ -90,7 +90,7 @@ internal sealed class JobBuilder(JobSettings settings) : IJobBuilder
 
     public IJobBuilder WithCron(string cronExpression, string? name = null)
     {
-        settings.Properties.WithTiming(CronTiming.Every(cronExpression, name));
+        settings.Properties.WithTiming(new CronTimingAdapter(new Cron.CronTiming(cronExpression, name)));
         return this;
     }
 }
