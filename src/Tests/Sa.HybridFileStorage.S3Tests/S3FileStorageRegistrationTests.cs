@@ -1,196 +1,90 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
 using Sa.HybridFileStorage.S3;
 
 namespace Sa.HybridFileStorage.S3Tests;
 
 /// <summary>
-/// Registration-level behaviour of the S3 provider. The shared <c>IS3BucketClient</c> is
-/// first-wins, so a second registration cannot be honoured — it has to be rejected rather than
-/// silently ignored.
+/// Registration-level behaviour of the S3 provider: the options pipeline the caller configures, and
+/// what the single registration ends up putting in the container.
 /// </summary>
 public sealed class S3FileStorageRegistrationTests
 {
-    private static S3FileStorageOptions Options(
+    private static Action<OptionsBuilder<S3FileStorageOptions>> Configure(
         string bucket = "mybucket",
         string endpoint = "http://localhost:9000",
         string basket = S3FileStorageOptions.DefaultBasket,
         string storageType = "s3",
         string accessKey = "ROOTUSER",
-        string secretKey = "ChangeMe123") => new()
+        string secretKey = "ChangeMe123")
+        => o => o.Configure(x =>
         {
-            AccessKey = accessKey,
-            SecretKey = secretKey,
-            Bucket = bucket,
-            Endpoint = endpoint,
-            Basket = basket,
-            StorageType = storageType,
-        };
+            x.AccessKey = accessKey;
+            x.SecretKey = secretKey;
+            x.Bucket = bucket;
+            x.Endpoint = endpoint;
+            x.Basket = basket;
+            x.StorageType = storageType;
+        });
 
-    // ---------- null / validation ----------
+    static S3FileStorageOptions Options(IServiceProvider provider)
+        => provider.GetRequiredService<IOptions<S3FileStorageOptions>>().Value;
+
+    // ---------- null / повторная регистрация ----------
 
     [Fact]
     public void Register_Rejects_NullServices()
     {
         IServiceCollection services = null!;
 
-        Assert.Throws<ArgumentNullException>(() => services.AddSaS3FileStorage(Options()));
+        Assert.Throws<ArgumentNullException>(() => services.AddSaS3FileStorage());
     }
 
     [Fact]
-    public void Register_Rejects_NullOptions()
+    public void Register_RejectsASecondCall()
+    {
+        // Безымянный S3FileStorageOptions принадлежит регистрации: второй вызов добавил бы ещё один
+        // IConfigureOptions в тот же экземпляр, и обе Configure-функции применились бы — настройки
+        // молча слились бы, а IFileStorage появился бы в двух экземплярах.
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure());
+
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddSaS3FileStorage(Configure()));
+
+        Assert.Contains("already been registered", ex.Message, StringComparison.Ordinal);
+        Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<S3FileStorageOptions>));
+        Assert.Single(services, d => d.ServiceType == typeof(IFileStorage));
+    }
+
+    [Fact]
+    public void Register_ReturnsTheCollection_SoChainingWorks()
     {
         var services = new ServiceCollection();
 
-        Assert.Throws<ArgumentNullException>(() => services.AddSaS3FileStorage(null!));
+        var returned = services.AddSaS3FileStorage(Configure());
+
+        Assert.Same(services, returned);
     }
 
     [Fact]
-    public void Register_Rejects_BlankEndpoint_BeforeTouchingTheClient()
-    {
-        // Used to surface as a bare UriFormatException from inside the bucket client setup,
-        // or — with the old ArgumentNullException guard — as "Value cannot be null" for a blank.
-        var services = new ServiceCollection();
-
-        var ex = Assert.Throws<ArgumentException>(() => services.AddSaS3FileStorage(Options(endpoint: "  ")));
-        Assert.Equal("options.Endpoint", ex.ParamName);
-        Assert.Empty(services);
-    }
-
-    [Fact]
-    public void Register_Rejects_NonAbsoluteEndpoint()
+    public void Register_AddsTheValidatorOnce()
     {
         var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure());
 
-        var ex = Assert.Throws<ArgumentException>(() => services.AddSaS3FileStorage(Options(endpoint: "localhost:9000")));
-        Assert.Equal("options.Endpoint", ex.ParamName);
+        Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<S3FileStorageOptions>));
     }
 
-    [Fact]
-    public void Register_Rejects_MalformedBasketAndStorageType()
-    {
-        Assert.Throws<ArgumentException>(() =>
-            new ServiceCollection().AddSaS3FileStorage(Options(basket: "ab")));
-
-        var ex = Assert.Throws<ArgumentException>(() =>
-            new ServiceCollection().AddSaS3FileStorage(Options(storageType: "s3://")));
-        Assert.Equal("options.StorageType", ex.ParamName);
-    }
-
-    // ---------- idempotency guard ----------
-
-    [Fact]
-    public void Register_IsIdempotent_ForEqualOptions()
-    {
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
-        int after = services.Count;
-
-        services.AddSaS3FileStorage(Options());
-
-        Assert.Equal(after, services.Count);
-    }
-
-    [Fact]
-    public void Register_Throws_ForADifferentBucket()
-    {
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
-
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            services.AddSaS3FileStorage(Options(bucket: "other")));
-        Assert.Contains("first-wins", ex.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Register_Throws_ForADifferentEndpoint()
-    {
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
-
-        Assert.Throws<InvalidOperationException>(() =>
-            services.AddSaS3FileStorage(Options(endpoint: "http://other:9000")));
-    }
-
-    [Fact]
-    public void Register_Throws_ForADifferentRegion()
-    {
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
-
-        Assert.Throws<InvalidOperationException>(() =>
-            services.AddSaS3FileStorage(Options() with { Region = "us-east-1" }));
-    }
-
-    [Fact]
-    public void Register_Throws_ForADifferentBasket()
-    {
-        // The old guard compared only the client settings, so this was a silent no-op: the caller
-        // got the first registration's basket while observing that the call "succeeded".
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
-
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            services.AddSaS3FileStorage(Options(basket: "uploads")));
-        Assert.Contains("basket", ex.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Register_Throws_ForADifferentStorageType()
-    {
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
-
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            services.AddSaS3FileStorage(Options(storageType: "minio")));
-        Assert.Contains("storage type", ex.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Register_Ignores_CredentialDrift()
-    {
-        // Rotating credentials must not fail an otherwise-correct startup: the client is already
-        // built and cannot be rebuilt, so failing here would only block a redeploy.
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
-        int after = services.Count;
-
-        services.AddSaS3FileStorage(Options(accessKey: "OTHERUSER", secretKey: "OtherSecret456"));
-
-        Assert.Equal(after, services.Count);
-    }
-
-    [Fact]
-    public void Register_Ignores_ClientSettingsDrift()
-    {
-        // Transport tuning is applied once, when the shared client is built; a differing value
-        // cannot take effect, so it must not block startup either.
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
-        int after = services.Count;
-
-        services.AddSaS3FileStorage(Options() with
-        {
-            ClientSettings = new Sa.Data.S3.S3BucketClientSetupSettings
-            {
-                AccessKey = "ROOTUSER",
-                SecretKey = "ChangeMe123",
-                Bucket = "mybucket",
-                Endpoint = "http://localhost:9000",
-                TotalRequestTimeout = TimeSpan.FromSeconds(5),
-            },
-        });
-
-        Assert.Equal(after, services.Count);
-    }
-
-    // ---------- what actually gets registered ----------
+    // ---------- что регистрируется ----------
 
     [Fact]
     public void Register_AddsExactlyOneFileStorage()
     {
         var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
+        services.AddSaS3FileStorage(Configure());
 
         Assert.Single(services, d => d.ServiceType == typeof(IFileStorage));
     }
@@ -199,47 +93,21 @@ public sealed class S3FileStorageRegistrationTests
     public void Register_AddsExactlyOneBucketClient()
     {
         var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
+        services.AddSaS3FileStorage(Configure());
         int after = services.Count;
 
-        services.AddSaS3FileStorage(Options());
+        // The AddHttpClient pipeline must be registered exactly once: first-wins would otherwise
+        // depend on registration order rather than on the guard.
+        Assert.Throws<InvalidOperationException>(() => services.AddSaS3FileStorage(Configure()));
 
-        // A repeated call must not register a second AddHttpClient pipeline: the first-wins
-        // rule then depends on registration order rather than on the guard.
         Assert.Equal(after, services.Count);
-    }
-
-    [Fact]
-    public void Register_NormalisesTheTrailingSlashOfTheEndpoint()
-    {
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options(endpoint: "http://localhost:9000/"));
-
-        var marker = Assert.IsType<S3FileStorageRegistration>(
-            Assert.Single(services, d => d.ServiceType == typeof(S3FileStorageRegistration)).ImplementationInstance);
-
-        Assert.Equal("http://localhost:9000", marker.Client.Endpoint);
-    }
-
-    [Fact]
-    public void Register_ResolvesAStorageWithTheConfiguredNames()
-    {
-        var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options(basket: "uploads", storageType: "minio"));
-
-        using var provider = services.BuildServiceProvider();
-        var storage = provider.GetRequiredService<IFileStorage>();
-
-        Assert.Equal("minio", storage.StorageType);
-        Assert.Equal("uploads", storage.Basket);
-        Assert.False(storage.IsReadOnly);
     }
 
     [Fact]
     public void Register_RegistersTimeProvider()
     {
         var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Options());
+        services.AddSaS3FileStorage(Configure());
 
         using var provider = services.BuildServiceProvider();
 
@@ -253,11 +121,246 @@ public sealed class S3FileStorageRegistrationTests
 
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(fake);
-        services.AddSaS3FileStorage(Options());
+        services.AddSaS3FileStorage(Configure());
 
         using var provider = services.BuildServiceProvider();
 
         Assert.Same(fake, provider.GetRequiredService<TimeProvider>());
+    }
+
+    // ---------- конвейер опций ----------
+
+    [Fact]
+    public void Register_NormalisesTheTrailingSlashOfTheEndpoint()
+    {
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure(endpoint: "http://localhost:9000/"));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Equal("http://localhost:9000", Options(provider).Endpoint);
+    }
+
+    [Fact]
+    public void Register_PostConfiguresBeforeValidating()
+    {
+        // Хвостовой слешш срезается до валидации: иначе валидатор видел бы сырое значение.
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure(endpoint: "  http://localhost:9000/  "));
+
+        using var provider = services.BuildServiceProvider();
+
+        var options = Options(provider);
+
+        Assert.Equal("http://localhost:9000", options.Endpoint);
+        options.Validate();
+    }
+
+    [Fact]
+    public void Register_CallbackPostConfigure_SeesTheNormalisedValue()
+    {
+        string? seen = null;
+
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(o =>
+        {
+            Configure(endpoint: "http://localhost:9000/")(o);
+            o.PostConfigure(x => seen = x.Endpoint);
+        });
+
+        using var provider = services.BuildServiceProvider();
+
+        // Материализует опции именно чтение .Value — сам IOptions<T> ленив.
+        _ = Options(provider);
+
+        Assert.Equal("http://localhost:9000", seen);
+    }
+
+    [Fact]
+    public void Register_CallbackCanAddValidation()
+    {
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(o => o
+            .Configure(x =>
+            {
+                x.AccessKey = "ROOTUSER";
+                x.SecretKey = "ChangeMe123";
+                x.Bucket = "mybucket";
+                x.Endpoint = "http://localhost:9000";
+                x.TotalRequestTimeout = TimeSpan.FromSeconds(30);
+            })
+            .Validate(x => x.TotalRequestTimeout > TimeSpan.FromMinutes(1), "Timeout is too aggressive."));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => Options(provider));
+
+        Assert.Contains("too aggressive", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Register_CallbackValidation_AddsToTheBuiltInChecks()
+    {
+        // Validate из callback не заменяет встроенную проверку: сообщаются обе ошибки.
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(o => o
+            .Configure(x =>
+            {
+                x.AccessKey = "  ";
+                x.SecretKey = "ChangeMe123";
+                x.Bucket = "mybucket";
+                x.Endpoint = "http://localhost:9000";
+                x.TotalRequestTimeout = TimeSpan.FromSeconds(30);
+            })
+            .Validate(x => x.TotalRequestTimeout > TimeSpan.FromMinutes(1), "Timeout is too aggressive."));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => Options(provider));
+
+        Assert.Contains("AccessKey", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("too aggressive", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Register_BindsAConfigurationSection()
+    {
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["S3FileStorage:Endpoint"] = "http://localhost:9000/",
+                ["S3FileStorage:AccessKey"] = "ROOTUSER",
+                ["S3FileStorage:SecretKey"] = "ChangeMe123",
+                ["S3FileStorage:Bucket"] = "mybucket",
+                ["S3FileStorage:Basket"] = "uploads",
+                ["S3FileStorage:StorageType"] = "minio",
+                ["S3FileStorage:IsReadOnly"] = "true",
+                ["S3FileStorage:TotalRequestTimeout"] = "00:00:42",
+                ["S3FileStorage:UseHttp2"] = "true",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(configuration);
+        services.AddSaS3FileStorage(configSectionPath: "S3FileStorage");
+
+        using var provider = services.BuildServiceProvider();
+
+        var options = Options(provider);
+
+        Assert.Equal("http://localhost:9000", options.Endpoint);
+        Assert.Equal("ROOTUSER", options.AccessKey);
+        Assert.Equal("ChangeMe123", options.SecretKey);
+        Assert.Equal("mybucket", options.Bucket);
+        Assert.Equal("uploads", options.Basket);
+        Assert.Equal("minio", options.StorageType);
+        Assert.True(options.IsReadOnly);
+        Assert.Equal(TimeSpan.FromSeconds(42), options.TotalRequestTimeout);
+        Assert.True(options.UseHttp2);
+    }
+
+    [Fact]
+    public void Register_ConfigureCallback_OverridesTheBoundSection()
+    {
+        // Callback вызывается после BindConfiguration, поэтому его Configure — последнее слово.
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["S3FileStorage:Endpoint"] = "http://localhost:9000",
+                ["S3FileStorage:AccessKey"] = "ROOTUSER",
+                ["S3FileStorage:SecretKey"] = "ChangeMe123",
+                ["S3FileStorage:Bucket"] = "mybucket",
+                ["S3FileStorage:Basket"] = "uploads",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(configuration);
+        services.AddSaS3FileStorage(
+            configSectionPath: "S3FileStorage",
+            configure: o => o.Configure(x => x.Basket = "share"));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Equal("share", Options(provider).Basket);
+    }
+
+    [Fact]
+    public void Register_WithoutASection_WorksWithoutConfiguration()
+    {
+        // BindConfiguration вызывается только когда задан путь, поэтому контейнер вовсе без
+        // IConfiguration обязан работать. Значения по умолчанию здесь не проверяются напрямую: чтение
+        // .Value прогоняет валидацию, а Endpoint без настройки закономерно пуст. Важно, что падает
+        // именно валидация опций, а не поиск IConfiguration в контейнере.
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage();
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => Options(provider));
+
+        Assert.Contains("Endpoint", ex.Message, StringComparison.Ordinal);
+    }
+
+    // ---------- валидация ----------
+
+    [Fact]
+    public void Register_FailsValidation_OnResolve_NotOnRegistration()
+    {
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure(endpoint: "localhost:9000"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => Options(provider));
+
+        Assert.Contains("absolute http or https URL", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Register_FailsValidation_ForAMalformedBasket()
+    {
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure(basket: "ab"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => Options(provider));
+
+        Assert.Contains("Basket", ex.Message, StringComparison.Ordinal);
+    }
+
+    // ---------- что получает потребитель ----------
+
+    [Fact]
+    public void Register_ResolvesAStorageWithTheConfiguredNames()
+    {
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure(basket: "uploads", storageType: "minio"));
+
+        using var provider = services.BuildServiceProvider();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        Assert.Equal("minio", storage.StorageType);
+        Assert.Equal("uploads", storage.Basket);
+        Assert.False(storage.IsReadOnly);
+    }
+
+    [Fact]
+    public void Register_GivesTheBucketClient_TheSameNormalisedOptions()
+    {
+        // Один набор значений на оба слоя: S3FileStorageOptions сам наследует
+        // S3BucketClientSetupOptions, поэтому проекции, которая могла бы что-то потерять, нет.
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure(endpoint: "http://localhost:9000/"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var options = Options(provider);
+        var clientSettings = provider.GetRequiredService<S3BucketSettings>();
+
+        Assert.Same(options, clientSettings);
+        Assert.Equal("http://localhost:9000", clientSettings.Endpoint);
     }
 
     private sealed class TimeProviderStub : TimeProvider;

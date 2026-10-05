@@ -3,7 +3,7 @@
 	<Import Project="../Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
-		<Version>0.15.0</Version>
+		<Version>0.16.0</Version>
 		<Title>Sa.Data.S3</Title>
 		<Description>Simple client for S3 (Sa.Data.S3)</Description>
 		<PackageTags>s3</PackageTags>
@@ -12,9 +12,21 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="Sa.Data.S3Tests" />
+		<!-- Провайдер Sa.HybridFileStorage.S3 собирает HTTP-обвязку клиента через общий внутренний
+		     AddSaS3BucketClientCore: у него свой тип опций (S3FileStorageOptions), а обвязка должна быть одна. -->
+		<InternalsVisibleTo Include="Sa.HybridFileStorage.S3" />
 	</ItemGroup>
 
 	<ItemGroup>
+		<!--
+		  Options + Options.ConfigurationExtensions дают AddOptions/Configure/PostConfigure/
+		  IValidateOptions/ValidateOnStart и BindConfiguration. Источник конфигурации
+		  (source-generated binder) включается в .NET SDK по умолчанию
+		  (EnableConfigurationBindingGenerator), поэтому BindConfiguration не тянет reflection
+		  и собирается под Native AOT.
+		-->
+		<PackageReference Include="Microsoft.Extensions.Options" />
+		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
 		<PackageReference Include="Microsoft.Extensions.Http.Resilience"/>
 	</ItemGroup>
 

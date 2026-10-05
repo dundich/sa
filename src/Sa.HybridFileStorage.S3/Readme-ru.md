@@ -73,7 +73,7 @@ var options = new S3FileStorageOptions
 };
 
 // Требуется предварительно зарегистрированный IS3BucketClient
-var client = new S3BucketClient(new S3BucketClientSetupSettings
+var client = new S3BucketClient(new S3BucketClientSetupOptions
 {
     Endpoint = options.Endpoint,
     AccessKey = options.AccessKey,
@@ -96,20 +96,38 @@ Console.WriteLine(result.AbsoluteUrl);  // http://localhost:9000/mybucket/upload
 
 ### С DI
 
+`AddSaS3FileStorage` принимает стандартный колбэк опций, поэтому конфигурация идёт через
+`Configure` / `PostConfigure` / `Validate` как у любого другого типа опций:
+
 ```csharp
 using Sa.HybridFileStorage.S3;
 
-builder.Services.AddSaS3FileStorage(new S3FileStorageOptions
+builder.Services.AddSaS3FileStorage(o => o.Configure(x =>
 {
-    Endpoint = "http://localhost:9000",
-    AccessKey = "ROOTUSER",
-    SecretKey = "ChangeMe123",
-    Bucket = "mybucket",
-    Basket = "uploads"
-});
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "mybucket";
+    x.Basket = "uploads";
+}));
 
 // AddSaS3FileStorage автоматически регистрирует IS3BucketClient через AddSaS3BucketClient
 ```
+
+Настройки транспорта здесь не вложенный объект: `TotalRequestTimeout`, `ConnectionPoolLifetime`
+и `HandlerLifetime` — свойства того же экземпляра опций, из которого строится bucket-клиент.
+
+### Из секции конфигурации
+
+```csharp
+// appsettings.json:
+// { "S3FileStorage": { "Endpoint": "http://localhost:9000", "AccessKey": "…", "SecretKey": "…", "Bucket": "mybucket", "Basket": "uploads" } }
+builder.Services.AddSaS3FileStorage(configSectionPath: "S3FileStorage");
+```
+
+Секция биндится **первой**, поэтому `Configure` внутри колбэка имеет последнее слово. Сам колбэк
+вызывается после собственных `PostConfigure` и `Validate` регистрации, так что ваши проверки
+дополняют встроенные, а не заменяют их.
 
 ---
 
@@ -199,15 +217,21 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 | `Region` | Регион AWS для SigV4 подписи | `"eu-central-1"` |
 | `StorageType` | Префикс схемы в File ID | `"s3"` |
 | `IsReadOnly` | Запрет операций записи/удаления | `false` |
-| `ClientSettings` | Настройки транспорта (`TotalRequestTimeout`, `HandlerLifetime`, `ConnectionPoolLifetime`, ...) | `null` — дефолты клиента |
+| `TotalRequestTimeout` | Таймаут одного запроса | `180 сек` |
+| `ConnectionPoolLifetime` | Время жизни пула соединений | `15 мин` |
+| `HandlerLifetime` | Время жизни handler'а HttpClient | `∞` (бесконечность) |
+| `Service`, `UseHttp2` | Имя сервиса для SigV4 / принудительный HTTP/2 | `"s3"` / `false` |
 
-`S3FileStorageOptions` — неизменяемый record, поэтому подготовленный экземпляр можно
-переиспользовать между регистрациями; при регистрации он копируется, и последующие правки
-вашего экземпляра на зарегистрированный storage не влияют.
+`S3FileStorageOptions` — один изменяемый тип, обслуживаемый конвейером опций. Настройки
+подключения и транспорта он наследует от `S3BucketClientSetupOptions` — того самого типа, из
+которого строится bucket-клиент. Второй копии и ручной проекции нет — именно так `UseHttp2`
+раньше можно было настроить и при этом никогда не применить.
 
-### Валидация опций на этапе регистрации
+### Валидация опций
 
-`AddSaS3FileStorage` выбросит исключение до того, как что-либо зарегистрирует, если:
+Сначала значения нормализуются (`PostConfigure`), затем проверяются. `ValidateOnStart()`
+превращает неверную конфигурацию в `OptionsValidationException` на старте хоста, а не в голый
+`UriFormatException` посреди первой загрузки:
 
 | Свойство | Требование |
 |----------|------------|
@@ -215,21 +239,24 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 | `AccessKey`, `SecretKey`, `Bucket` | не null и не пустые |
 | `StorageType` | не длиннее 10 символов, без `:`, `/` и `\` (становится схемой file ID) |
 | `Basket` | 3-63 символа, начинается с буквы или `_`, без разделителя пути |
+| `TotalRequestTimeout`, `ConnectionPoolLifetime` | положительные |
+| `HandlerLifetime` | положительное либо `Timeout.InfiniteTimeSpan` |
 
-`null` даёт `ArgumentNullException`, пустая строка — `ArgumentException`: по конвенции
-BCL, а не наоборот, как было раньше.
+Те же проверки остаются доступными и вне DI:
 
-### Идемпотентность
+```csharp
+options.Validate(); // бросает DataAnnotations.ValidationException с именем виновной опции
+```
 
-Регистрация идемпотентна. Повторный вызов с тем же таргетом (те же `Endpoint`, `Bucket`
-и `Region`) — no-op. Вызов, который направил бы общий `IS3BucketClient` на другой
-таргет, бросает `InvalidOperationException`.
+### Одна регистрация на коллекцию сервисов
 
-Повторный вызов, меняющий только `Basket`, `StorageType`, `IsReadOnly` или креденшелы,
-тоже бросает исключение: общий клиент регистрируется по принципу first-wins и не может
-быть пересобран, поэтому вторая storage молча писала бы в корзину первой. Дрейф самих
-креденшелов и транспортных настроек конфликтом не считается — применить их всё равно
-нельзя.
+Второй вызов `AddSaS3FileStorage` бросает `InvalidOperationException`. Провайдер владеет
+безымянным экземпляром опций: второй вызов зарегистрировал бы поверх него ещё один
+`IFileStorage`, и оба `Configure`-колбэка применились бы — storage молча работал бы со
+слитыми настройками.
+
+Креденшелы или целевой бакет меняются правкой единственной регистрации, а не добавлением
+второй.
 
 ---
 

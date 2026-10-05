@@ -20,6 +20,23 @@
 > файлового провайдера нет, а повторная регистрация отвергается маркером
 > `FileSystemStorageRegistration`. Описание остальных волн остаётся актуальным.
 
+> **Устарело в части `S3` (пакеты `0.16.0`).** Волны 1 и 3 ниже описывают состояние на `0.13.0`,
+> когда `S3FileStorageOptions` был `record` с `init`/`required`, вложенным `ClientSettings`,
+> `ToBucketClientSettings()` и `HasSameStorageIdentity()`. Сейчас это **один** изменяемый тип
+> `S3FileStorageOptions : S3BucketClientSetupOptions`, обслуживаемый тем же конвейером
+> `Microsoft.Extensions.Options`, что и FileSystem:
+> `AddSaS3FileStorage(Action<OptionsBuilder<S3FileStorageOptions>>? configure, string? configSectionPath)`
+> с возвратом `IServiceCollection`, `Configure` → `PostConfigure` → валидация, `ValidateOnStart()`
+> и `IValidateOptions<S3FileStorageOptions>`. Наследование от `S3BucketClientSetupOptions` убрало
+> проекцию целиком: bucket-клиент строится из того же экземпляра опций, поэтому `UseHttp2`
+> больше нельзя настроить и не применить, а `ClientSettings`, `ToBucketClientSettings()`,
+> `HasSameStorageIdentity()` и `S3BucketClientSetupSettings` удалены. Валидация переехала с
+> «бросить при регистрации» на конвейер (`OptionsValidationException` на старте хоста), а
+> сравнение значений вместе с идемпотентным повтором заменено безусловным
+> `InvalidOperationException` на второй вызов — ровно как в FileSystem. В `Sa.Data.S3`
+> `AddSaS3BucketClient` переведён на ту же сигнатуру с колбэком опций и секцией конфигурации.
+> Описание волн 2, 4, 5 и 6 остаётся актуальным.
+
 ## Объём аудита
 
 Прочитаны и проверены:
@@ -353,7 +370,10 @@ dotnet test -c Release --no-build --no-restore \
 - `AddSaS3BucketClient` в `Sa.Data.S3` — не-идемпотентность отмечалась как
   «проверить/закрыть» в волне 3. Проверено: после удаления дублирующего
   `TryAddSingleton(settings)` повторный вызов `AddSaS3FileStorage` ничего не добавляет,
-  потому что guard отсекает его раньше. Правка самого `Sa.Data.S3` вынесена бы в отдельный PR.
+  потому что guard отсекает его раньше. ~~Правка самого `Sa.Data.S3` вынесена бы в отдельный
+  PR.~~ Сделано позже (`0.16.0`): `AddSaS3BucketClient(Action<OptionsBuilder<S3BucketClientSetupOptions>>? configure, string? configSectionPath)`,
+  маркер `S3BucketClientRegistration` вместо молчаливого повтора, HTTP-обвязка вынесена в
+  общий `AddSaS3BucketClientCore`, из которого пользуются оба пакета.
 - Кэширование схемы/настроек, `IOptionsMonitor`-переподписка — не рассматривалось,
   текущая семантика (singleton, резолв при первом использовании) соответствует остальному репо.
 - `data BYTEA NOT NULL` запрещает пустое тело файла — оставлено как есть, чтобы не менять

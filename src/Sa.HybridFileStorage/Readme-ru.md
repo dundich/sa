@@ -258,14 +258,14 @@ builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
 }));
 
 // Только S3
-builder.Services.AddSaS3FileStorage(new S3FileStorageOptions
+builder.Services.AddSaS3FileStorage(o => o.Configure(x =>
 {
-    Endpoint = "http://localhost:9000",
-    AccessKey = "ROOTUSER",
-    SecretKey = "ChangeMe123",
-    Bucket = "mybucket",
-    Basket = "uploads"
-});
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "mybucket";
+    x.Basket = "uploads";
+}));
 
 // Затем регистрируем гибридный слой
 builder.Services.AddSaHybridFileStorage(cfg => cfg.AddLogging());
@@ -524,6 +524,13 @@ builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
 | `Region` | Регион для SigV4 подписи | `"eu-central-1"` |
 | `StorageType` | Префикс схемы в File ID | `"s3"` |
 | `IsReadOnly` | Запрет записи | `false` |
+| `TotalRequestTimeout` | Таймаут одного запроса | `180 сек` |
+| `ConnectionPoolLifetime` | Время жизни пула соединений | `15 мин` |
+| `HandlerLifetime` | Время жизни handler'а HttpClient | `∞` (бесконечность) |
+
+Настраивается через стандартный конвейер options — см.
+[`Sa.HybridFileStorage.S3/Readme-ru.md`](../Sa.HybridFileStorage.S3/Readme-ru.md)
+про pre/post-инициализацию, привязку конфигурации и валидацию.
 
 ### PostgresFileStorageOptions
 

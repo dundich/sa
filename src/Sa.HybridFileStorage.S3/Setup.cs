@@ -1,5 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration.Binder.SourceGeneration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
 
@@ -11,101 +13,102 @@ namespace Sa.HybridFileStorage.S3;
 public static class Setup
 {
     /// <summary>
-    /// Registers the S3 file storage provider with the specified service collection.
+    /// Registers the S3 file storage provider using the standard options pipeline.
     /// </summary>
     /// <param name="services">The service collection to add the services to.</param>
-    /// <param name="options">Configuration options for the S3 storage provider.</param>
+    /// <param name="configure">
+    /// An optional callback receiving the <see cref="OptionsBuilder{TOptions}"/> for this provider, so
+    /// configuration goes through the standard <c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>
+    /// methods rather than a bespoke overload.
+    /// </param>
+    /// <param name="configSectionPath">
+    /// An optional configuration section to bind the options from, e.g. <c>"S3FileStorage"</c>.
+    /// Bound first, so a <c>Configure</c> call in <paramref name="configure"/> has the last word.
+    /// </param>
     /// <returns>The same <see cref="IServiceCollection"/> instance with the services added.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> or <paramref name="options"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">Thrown when an option is missing or malformed.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a conflicting S3 storage was already registered.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when an S3 storage was already registered in this collection.</exception>
     /// <remarks>
-    /// Registration is idempotent. A second call is a no-op only when it would produce the very same
-    /// storage: the shared <see cref="IS3BucketClient"/> is first-wins, so a differing target cannot
-    /// be honoured, and a differing basket or storage type would be silently ignored while the caller
-    /// observed the first registration's values. Anything else throws.
+    /// The options pipeline runs in a fixed order: <c>Configure</c> (pre-initialisation, raw values) →
+    /// <c>PostConfigure</c> (this method's normalisation) → <c>PostConfigure</c> calls made in
+    /// <paramref name="configure"/> → validation. Validation therefore sees the normalised
+    /// <see cref="S3BucketClientSetupOptions.Endpoint"/> and trimmed names, and
+    /// <c>ValidateOnStart()</c> turns an invalid configuration into an
+    /// <see cref="OptionsValidationException"/> at host start instead of a bare
+    /// <see cref="UriFormatException"/> from inside the bucket client on the first upload.
     /// <para>
-    /// Credentials are deliberately excluded from the comparison: rotating them must not fail a
-    /// startup that would otherwise be correct, and the client cannot be rebuilt anyway.
+    /// The callback is invoked after this method's own registrations, so its <c>Configure</c> runs last
+    /// and its <c>Validate</c> adds to — rather than replaces — the built-in checks.
+    /// </para>
+    /// <para>
+    /// The bucket client is built from these very options (see <see cref="S3BucketClientSetupOptions"/>),
+    /// so there is a single set of values from the configuration section all the way down to the HTTP
+    /// pipeline.
     /// </para>
     /// </remarks>
-    public static IServiceCollection AddSaS3FileStorage(this IServiceCollection services, S3FileStorageOptions options)
+    public static IServiceCollection AddSaS3FileStorage(
+        this IServiceCollection services,
+        Action<OptionsBuilder<S3FileStorageOptions>>? configure = null,
+        string? configSectionPath = null)
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(options);
 
-        // Fail fast at registration: a blank endpoint used to surface as a bare UriFormatException
-        // from inside the bucket client setup, with no indication of which option was at fault.
-        options.Validate();
-
-        var settings = options.ToBucketClientSettings();
-
-        var existing = services.FirstOrDefault(d => d.ServiceType == typeof(S3FileStorageRegistration))
-            ?.ImplementationInstance as S3FileStorageRegistration;
-        if (existing is not null)
+        // The provider owns the unnamed S3FileStorageOptions instance. A second call would add a second
+        // IFileStorage built from those same options, and its Configure callback would stack on top of
+        // the first one's — one storage with a mangled basket plus a copy of it. Fail here, where the
+        // cause is visible, mirroring AddSaFileSystemFileStorage.
+        if (services.Any(d => d.ServiceType == typeof(S3FileStorageRegistration)))
         {
-            if (IsSameTarget(existing.Client, settings))
-            {
-                // Same bucket and endpoint: the client is already wired up. The storage options must
-                // match too, or the caller would get the first registration's basket/storage type.
-                if (existing.Options.HasSameStorageIdentity(options))
-                {
-                    return services;
-                }
-
-                throw new InvalidOperationException(
-                    $"AddSaS3FileStorage has already been registered for bucket '{existing.Client.Bucket}' " +
-                    $"at '{existing.Client.Endpoint}' with a different basket or storage type " +
-                    $"('{existing.Options.Basket}'/'{existing.Options.StorageType}' versus " +
-                    $"'{options.Basket}'/'{options.StorageType}'). The second call would be ignored, " +
-                    "so the storage would silently use the first registration's names. " +
-                    "Register only one S3 storage per service collection.");
-            }
-
             throw new InvalidOperationException(
-                $"AddSaS3FileStorage has already been registered for bucket '{existing.Client.Bucket}' " +
-                $"at '{existing.Client.Endpoint}'. A second S3 storage targeting '{settings.Bucket}' " +
-                $"at '{settings.Endpoint}' is not supported: the shared IS3BucketClient is first-wins and " +
-                "the second storage would silently route files to the wrong bucket. " +
-                "Register only one S3 storage per service collection.");
+                "AddSaS3FileStorage has already been registered in this service collection. " +
+                "The second call would register another IFileStorage over the same options instance, " +
+                "and both Configure callbacks would apply, so the storage would silently use merged " +
+                "settings. Register only one S3 storage per service collection.");
         }
 
-        // Idempotent pipeline: the bucket client + HTTP pipeline is registered exactly once.
-        services.AddSingleton(new S3FileStorageRegistration(options, settings));
-        services.AddSaS3BucketClient(settings);
+        services.AddSingleton(new S3FileStorageRegistration());
+
+        var builder = services.AddOptions<S3FileStorageOptions>();
+
+        if (configSectionPath is not null)
+        {
+            builder.BindConfiguration(configSectionPath);
+        }
+
+        // Runs before validation, so the checks in Validate() apply to the normalised result.
+        builder.PostConfigure(static options => options.Normalize());
+
+        builder.ValidateOnStart();
+
+        // IValidateOptions rather than ValidateDataAnnotations(): the latter is marked
+        // RequiresUnreferencedCode (IL2026) and breaks Native AOT.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<S3FileStorageOptions>, S3FileStorageOptionsValidator>());
+
+        // Invoked last, so the caller's Configure runs after any section binding and its PostConfigure
+        // and Validate run after this method's own.
+        configure?.Invoke(builder);
+
+        // The bucket client is configured from the same instance — same endpoint, credentials,
+        // timeouts and pool lifetime — so there is no second place to keep in sync.
+        services.AddSaS3BucketClientCore(sp => sp.GetRequiredService<IOptions<S3FileStorageOptions>>().Value);
 
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddSingleton<IFileStorage>(sp => new S3FileStorage(
             sp.GetRequiredService<IS3BucketClient>(),
-            options,
+            sp.GetRequiredService<IOptions<S3FileStorageOptions>>().Value,
             sp.GetRequiredService<TimeProvider>()));
 
         return services;
     }
-
-    private static bool IsSameTarget(S3BucketClientSetupSettings a, S3BucketClientSetupSettings b)
-        => a.Endpoint == b.Endpoint
-        && a.Bucket == b.Bucket
-        && a.Region == b.Region;
 }
 
 /// <summary>
-/// Sentinel marker holding the options and bucket client settings of the S3 storage registered by
-/// <see cref="Setup.AddSaS3FileStorage"/>. Ensures the pipeline is registered exactly once and lets
-/// a conflicting second registration fail fast.
+/// Sentinel marker recording that the S3 provider is already registered in this collection, so a
+/// second <see cref="Setup.AddSaS3FileStorage"/> call fails fast instead of silently stacking a
+/// second <see cref="IFileStorage"/> over the same options instance.
 /// </summary>
-internal sealed class S3FileStorageRegistration(
-    S3FileStorageOptions options,
-    S3BucketClientSetupSettings client)
+internal sealed class S3FileStorageRegistration
 {
-    /// <summary>
-    /// Gets the storage options the provider was registered with.
-    /// </summary>
-    public S3FileStorageOptions Options { get; } = options ?? throw new ArgumentNullException(nameof(options));
-
-    /// <summary>
-    /// Gets the settings of the registered S3 bucket client.
-    /// </summary>
-    public S3BucketClientSetupSettings Client { get; } = client ?? throw new ArgumentNullException(nameof(client));
 }

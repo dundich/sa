@@ -258,14 +258,14 @@ builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
 }));
 
 // S3 only
-builder.Services.AddSaS3FileStorage(new S3FileStorageOptions
+builder.Services.AddSaS3FileStorage(o => o.Configure(x =>
 {
-    Endpoint = "http://localhost:9000",
-    AccessKey = "ROOTUSER",
-    SecretKey = "ChangeMe123",
-    Bucket = "mybucket",
-    Basket = "uploads"
-});
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "mybucket";
+    x.Basket = "uploads";
+}));
 
 // Then register the hybrid layer
 builder.Services.AddSaHybridFileStorage(cfg => cfg.AddLogging());
@@ -524,6 +524,13 @@ for pre/post-initialisation and configuration binding.
 | `Region` | Region for SigV4 signing | `"eu-central-1"` |
 | `StorageType` | Scheme prefix in File ID | `"s3"` |
 | `IsReadOnly` | Prevent writes | `false` |
+| `TotalRequestTimeout` | Per-request timeout | `180 sec` |
+| `ConnectionPoolLifetime` | Connection pool lifetime | `15 min` |
+| `HandlerLifetime` | HttpClient handler lifetime | `∞` (infinite) |
+
+Configured through the standard options pipeline — see
+[`Sa.HybridFileStorage.S3/Readme.md`](../Sa.HybridFileStorage.S3/Readme.md)
+for pre/post-initialisation, configuration binding and validation.
 
 ### PostgresFileStorageOptions
 

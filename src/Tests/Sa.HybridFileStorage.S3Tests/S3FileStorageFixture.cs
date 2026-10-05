@@ -9,20 +9,17 @@ public class S3FileStorageFixture : S3Fixture<IFileStorage>
     public S3FileStorageFixture()
         : base()
     {
-        SetupServices = (services, cfg)
-            => services.AddSaS3FileStorage(CreateOptions());
-    }
-
-    private S3FileStorageOptions CreateOptions()
-    {
-        var settings = CreateSettings("mybucket");
-
-        return new S3FileStorageOptions
+        SetupServices = (services, cfg) =>
         {
-            AccessKey = settings.AccessKey,
-            SecretKey = settings.SecretKey,
-            Bucket = settings.Bucket,
-            Endpoint = settings.Endpoint,
+            var settings = CreateSettings("mybucket");
+
+            services.AddSaS3FileStorage(o => o.Configure(x =>
+            {
+                x.AccessKey = settings.AccessKey;
+                x.SecretKey = settings.SecretKey;
+                x.Bucket = settings.Bucket;
+                x.Endpoint = settings.Endpoint;
+            }));
         };
     }
 }

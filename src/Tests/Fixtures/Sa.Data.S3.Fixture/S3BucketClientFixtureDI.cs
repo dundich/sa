@@ -9,8 +9,18 @@ public class S3BucketClientFixtureDI : S3Fixture<IS3BucketClient>
     public S3BucketClientFixtureDI()
         : base()
     {
-        SetupServices = (services, cfg)
-            => services.AddSaS3BucketClient(CreateSettings("mybucket"));
+        SetupServices = (services, cfg) =>
+        {
+            var settings = CreateSettings("mybucket");
+
+            services.AddSaS3BucketClient(o => o.Configure(x =>
+            {
+                x.Bucket = settings.Bucket;
+                x.Endpoint = settings.Endpoint;
+                x.AccessKey = settings.AccessKey;
+                x.SecretKey = settings.SecretKey;
+            }));
+        };
     }
 
     public async override ValueTask InitializeAsync()

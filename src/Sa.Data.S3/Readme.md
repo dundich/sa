@@ -15,7 +15,7 @@ This is a fork of https://github.com/teoadal/Storage. Motivation: the [AWS SDK f
 ### Without DI
 
 ```csharp
-var client = new S3BucketClient(new HttpClient(), new S3BucketClientSetupSettings
+var client = new S3BucketClient(new HttpClient(), new S3BucketClientSetupOptions
 {
     Bucket = "mybucket",
     Endpoint = "http://localhost:9000",
@@ -26,110 +26,59 @@ var client = new S3BucketClient(new HttpClient(), new S3BucketClientSetupSetting
 
 ### With DI
 
+`AddSaS3BucketClient` takes the standard options callback, so configuration goes through `Configure` / `PostConfigure` / `Validate` like any other options type — not through a bespoke overload:
+
 ```csharp
-services.AddSaS3BucketClient(new S3BucketClientSetupSettings
+services.AddSaS3BucketClient(o => o.Configure(x =>
 {
-    Bucket = "mybucket",
-    Endpoint = "http://localhost:9000",
-    AccessKey = "ROOTUSER",
-    SecretKey = "ChangeMe123",
-    TotalRequestTimeout = TimeSpan.FromSeconds(180),
-    ConnectionPoolLifetime = TimeSpan.FromMinutes(15),
-    HandlerLifetime = Timeout.InfiniteTimeSpan // or TimeSpan.FromHours(2) for periodic handler refresh
-});
+    x.Bucket = "mybucket";
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.TotalRequestTimeout = TimeSpan.FromSeconds(180);
+    x.ConnectionPoolLifetime = TimeSpan.FromMinutes(15);
+    x.HandlerLifetime = Timeout.InfiniteTimeSpan; // or TimeSpan.FromHours(2) for periodic handler refresh
+}));
 
 // Usage:
 var client = serviceProvider.GetRequiredService<IS3BucketClient>();
 ```
 
+### From a configuration section
+
+```csharp
+// appsettings.json:
+// { "S3": { "Endpoint": "http://localhost:9000", "AccessKey": "…", "SecretKey": "…", "Bucket": "mybucket" } }
+services.AddSaS3BucketClient(configSectionPath: "S3");
+```
+
+The section is bound **first**, so a `Configure` call inside the callback has the last word. The callback also runs after the registration's own `PostConfigure` and `Validate`, so your checks add to the built-in ones instead of replacing them.
+
+### Validation
+
+Values are normalised (`PostConfigure`) and then validated on the way out, with `ValidateOnStart()` turning a bad configuration into an `OptionsValidationException` at host start rather than a bare `UriFormatException` from the middle of the first upload. The same checks are available outside DI:
+
+```csharp
+options.Validate(); // throws DataAnnotations.ValidationException
+```
+
+Register only one S3 bucket client per service collection — a second call throws `InvalidOperationException`, because both `Configure` callbacks would otherwise apply to the same unnamed options instance and the settings would silently merge.
+
 ---
 
 ## Settings
+
+`S3BucketClientSetupOptions` inherits `S3BucketSettings`, so the very same object is handed to `S3BucketClient` — there is no projection between them that could quietly drop a property.
 
 | Property | Description | Default |
 |----------|-------------|---------|
 | `AccessKey` | S3 access key | *(required)* |
 | `SecretKey` | S3 secret key | *(required)* |
 | `Bucket` | Bucket name | *(required)* |
-| `Endpoint` | S3 storage URL | *(required)* |
+| `Endpoint` | S3 storage URL (absolute http/https) | *(required)* |
 | `Region` | Region for SigV4 | `"us-east-1"` |
 | `Service` | Service name for SigV4 | `"s3"` |
 | `UseHttp2` | Force HTTP/2 | `false` |
 | `TotalRequestTimeout` | Per-request timeout | `180 sec` |
 | `ConnectionPoolLifetime` | Connection pool lifetime | `15 min` |
 | `HandlerLifetime` | HttpClient handler lifetime | `∞` (infinite) |
-
----
-
-## API
-
-### IBucketOperations
-
-```csharp
-public interface IBucketOperations
-{
-    Task<bool> CreateBucket(CancellationToken ct);
-    Task<bool> DeleteBucket(CancellationToken ct);
-    Task<bool> DeleteBucket(bool forceDelete, CancellationToken ct); // force: delete all objects before removing bucket
-    Task<bool> IsBucketExists(CancellationToken ct);
-}
-```
-
-### IFileOperations
-
-```csharp
-public interface IFileOperations
-{
-    string BuildFileUrl(string fileName);
-    string BuildFileUrl(string fileName, TimeSpan expiration);
-    Task DeleteFile(string fileName, CancellationToken ct);
-    Task<S3File> GetFile(string fileName, CancellationToken ct);
-    Task<Stream> GetFileStream(string fileName, CancellationToken ct);
-    Task<string?> GetFileUrl(string fileName, TimeSpan expiration, CancellationToken ct);
-    Task<bool> IsFileExists(string fileName, CancellationToken ct);
-    IAsyncEnumerable<string> List(string? prefix, CancellationToken ct); // with pagination
-    Task<bool> UploadFile(string fileName, string contentType, byte[] data, CancellationToken ct);
-    Task<S3Upload> UploadFile(string fileName, string contentType, CancellationToken ct); // manual multipart
-    Task<bool> UploadFile(string fileName, string contentType, Stream data, CancellationToken ct);
-}
-```
-
-### Manual Multipart Upload
-
-For files > 5MB, multipart upload is selected automatically. For manual control:
-
-```csharp
-using var uploader = await client.UploadFile("large-file.bin", "application/octet-stream", ct);
-
-uploader.AddPart(chunkData, ct);
-uploader.AddPart(chunkData, offset, length, ct); // overload with offset
-uploader.AddParts(fullDataStream, ct);
-uploader.AddParts(fullByteArray, ct);
-
-if (await uploader.Complete(ct))
-{
-    Console.WriteLine($"Uploaded {uploader.Written} bytes");
-}
-else
-{
-    await uploader.Abort(ct);
-}
-```
-
----
-
-## Implementation Details
-
-- **AWS SigV4** — full manual implementation of request signing (SHA256 + HMAC-SHA256 chain)
-- **ArrayPool<T>.Shared** — buffer pooling to minimize GC pressure
-- **ref struct ValueStringBuilder** — stack-based string builder with zero allocations
-- **stackalloc** — wherever possible to avoid heap allocation
-- **Buffered XML parser** — efficient reading of S3 responses (ListObjects, Multipart IDs)
-- **Pagination** — automatic handling of `IsTruncated` / `NextContinuationToken` in `List()`
-- **CancellationToken** — supported in all async operations
-
----
-
-## License
-
-MIT

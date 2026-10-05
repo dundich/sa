@@ -1,11 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+using Sa.Data.S3;
 using Sa.HybridFileStorage.S3;
 
 namespace Sa.HybridFileStorage.S3Tests;
 
 /// <summary>
-/// The S3 options are validated at registration so that a bad endpoint surfaces as a named
-/// <see cref="ArgumentException"/> instead of a bare <see cref="UriFormatException"/> thrown
-/// later from inside the bucket client setup.
+/// <see cref="S3FileStorageOptions"/> is a single mutable type served by the options pipeline, so
+/// the checks live on the type itself and throw <see cref="ValidationException"/> — the pipeline
+/// turns them into an <c>OptionsValidationException</c> at start-up. They stay usable outside DI.
 /// </summary>
 public sealed class S3FileStorageOptionsTests
 {
@@ -23,28 +25,20 @@ public sealed class S3FileStorageOptionsTests
         ValidOptions().Validate();
     }
 
-    [Fact]
-    public void Validate_Rejects_NullEndpoint_AsArgumentNull()
-    {
-        var options = ValidOptions() with { Endpoint = null! };
-
-        // ArgumentException.ThrowIfNullOrWhiteSpace follows the BCL convention: null is a
-        // missing value (ArgumentNullException), whitespace is a malformed one (ArgumentException).
-        // The old code used ArgumentNullException.ThrowIfNullOrWhiteSpace and reported
-        // "Value cannot be null" for a blank endpoint.
-        var ex = Assert.Throws<ArgumentNullException>(() => options.Validate());
-        Assert.Equal("options.Endpoint", ex.ParamName);
-    }
-
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void Validate_Rejects_BlankEndpoint_AsArgumentException(string endpoint)
+    public void Validate_Rejects_BlankEndpoint(string endpoint)
     {
-        var options = ValidOptions() with { Endpoint = endpoint };
+        var options = ValidOptions();
+        options.Endpoint = endpoint;
 
-        var ex = Assert.Throws<ArgumentException>(() => options.Validate());
-        Assert.Equal("options.Endpoint", ex.ParamName);
+        // Normalisation deliberately leaves a blank endpoint untouched, so this reports the missing
+        // option by name instead of silently turning it into a relative path.
+        options.Normalize();
+
+        var ex = Assert.Throws<ValidationException>(() => options.Validate());
+        Assert.Contains("Endpoint", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -54,167 +48,161 @@ public sealed class S3FileStorageOptionsTests
     [InlineData("/tmp/files")]
     public void Validate_Rejects_EndpointThatIsNotAnAbsoluteHttpUrl(string endpoint)
     {
-        var options = ValidOptions() with { Endpoint = endpoint };
+        var options = ValidOptions();
+        options.Endpoint = endpoint;
 
-        var ex = Assert.Throws<ArgumentException>(() => options.Validate());
-        Assert.Equal("options.Endpoint", ex.ParamName);
+        var ex = Assert.Throws<ValidationException>(() => options.Validate());
         Assert.Contains("absolute http or https URL", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Validate_UsesTheCallerParamName()
+    public void Validate_NamesTheOffendingType_AndNotTheBaseClass()
     {
-        var options = ValidOptions() with { Bucket = " " };
+        // The message is built from GetType().Name so that a failure raised for the storage provider
+        // says S3FileStorageOptions, not the base class the check lives in.
+        var options = ValidOptions();
+        options.AccessKey = "  ";
 
-        var ex = Assert.Throws<ArgumentException>(() => options.Validate("myOptions"));
-        Assert.Equal("myOptions.Bucket", ex.ParamName);
+        var ex = Assert.Throws<ValidationException>(() => options.Validate());
+
+        Assert.StartsWith("S3FileStorageOptions:", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Validate_Rejects_BlankCredentials()
     {
-        Assert.Throws<ArgumentException>(() => (ValidOptions() with { AccessKey = "  " }).Validate());
-        Assert.Throws<ArgumentException>(() => (ValidOptions() with { SecretKey = "  " }).Validate());
-        Assert.Throws<ArgumentNullException>(() => (ValidOptions() with { AccessKey = null! }).Validate());
+        var options = ValidOptions();
+        options.AccessKey = "  ";
+
+        Assert.Throws<ValidationException>(() => options.Validate());
+
+        options = ValidOptions();
+        options.SecretKey = "  ";
+
+        Assert.Throws<ValidationException>(() => options.Validate());
     }
 
     [Fact]
     public void Validate_Rejects_EmptyBucket()
     {
-        var options = ValidOptions() with { Bucket = "" };
+        var options = ValidOptions();
+        options.Bucket = "";
 
-        Assert.Throws<ArgumentException>(() => options.Validate());
+        Assert.Throws<ValidationException>(() => options.Validate());
     }
 
     [Fact]
     public void Validate_Rejects_MalformedStorageType()
     {
-        var options = ValidOptions() with { StorageType = "s3://" };
+        var options = ValidOptions();
+        options.StorageType = "s3://";
 
-        var ex = Assert.Throws<ArgumentException>(() => options.Validate());
-        Assert.Equal("options.StorageType", ex.ParamName);
+        var ex = Assert.Throws<ValidationException>(() => options.Validate());
+        Assert.Contains("StorageType", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Validate_Rejects_MalformedBasket()
     {
-        var options = ValidOptions() with { Basket = "ab" };
+        var options = ValidOptions();
+        options.Basket = "ab";
 
-        var ex = Assert.Throws<ArgumentException>(() => options.Validate());
-        Assert.Equal("options.Basket", ex.ParamName);
+        var ex = Assert.Throws<ValidationException>(() => options.Validate());
+        Assert.Contains("Basket", ex.Message, StringComparison.Ordinal);
     }
 
-    // ---------- ToBucketClientSettings ----------
+    // ---------- transport settings ----------
 
     [Fact]
-    public void ToBucketClientSettings_CopiesCredentialsAndTrimsEndpoint()
+    public void Validate_Rejects_NonPositiveTotalRequestTimeout()
     {
-        var settings = (ValidOptions() with { Endpoint = "http://localhost:9000/" }).ToBucketClientSettings();
+        var options = ValidOptions();
+        options.TotalRequestTimeout = TimeSpan.Zero;
+
+        var ex = Assert.Throws<ValidationException>(() => options.Validate());
+        Assert.Contains("TotalRequestTimeout", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_Rejects_NonPositiveConnectionPoolLifetime()
+    {
+        var options = ValidOptions();
+        options.ConnectionPoolLifetime = TimeSpan.Zero;
+
+        var ex = Assert.Throws<ValidationException>(() => options.Validate());
+        Assert.Contains("ConnectionPoolLifetime", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_Rejects_HandlerLifetimeBelowInfinite()
+    {
+        var options = ValidOptions();
+        options.HandlerLifetime = TimeSpan.FromMilliseconds(-2);
+        var ex = Assert.Throws<ValidationException>(() => options.Validate());
+        Assert.Contains("HandlerLifetime", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_AcceptsInfiniteHandlerLifetime()
+    {
+        // The default: never recycle the handler, which is what a long-running service wants.
+        var options = ValidOptions();
+
+        Assert.Equal(Timeout.InfiniteTimeSpan, options.HandlerLifetime);
+        options.Validate();
+    }
+
+    // ---------- normalisation ----------
+
+    [Fact]
+    public void Normalize_CanonicalisesTheEndpoint()
+    {
+        var options = ValidOptions();
+        options.Endpoint = "  HTTP://Localhost:9000/  ";
+        options.Bucket = " mybucket ";
+        options.StorageType = " s3 ";
+
+        options.Normalize();
+
+        Assert.Equal("http://localhost:9000", options.Endpoint);
+        Assert.Equal("mybucket", options.Bucket);
+        Assert.Equal("s3", options.StorageType);
+    }
+
+    [Fact]
+    public void Normalize_KeepsAValidPathInTheEndpoint()
+    {
+        // Only the trailing slash is canonical away — a prefix path is part of the target and must
+        // survive normalisation.
+        var options = ValidOptions();
+        options.Endpoint = "http://localhost:9000/gateway/";
+
+        options.Normalize();
+
+        Assert.Equal("http://localhost:9000/gateway", options.Endpoint);
+    }
+
+    // ---------- no projection: the options *are* the client settings ----------
+
+    [Fact]
+    public void Options_AreThemselvesTheClientSettings()
+    {
+        // The projection ToBucketClientSettings() used to copy eight properties by hand, and is how a
+        // setting (UseHttp2) could end up configured but never applied. The options instance is now
+        // the very object the bucket client is constructed from.
+        S3BucketSettings settings = ValidOptions();
+
+        Assert.IsAssignableFrom<S3BucketClientSetupOptions>(settings);
+
+        settings.Endpoint = "http://localhost:9000/";
+        settings.Region = "us-east-1";
+        settings.UseHttp2 = true;
+
+        ((S3BucketClientSetupOptions)settings).Normalize();
 
         Assert.Equal("http://localhost:9000", settings.Endpoint);
-        Assert.Equal("ROOTUSER", settings.AccessKey);
-        Assert.Equal("ChangeMe123", settings.SecretKey);
-        Assert.Equal("mybucket", settings.Bucket);
-        Assert.Equal(S3Defaults.DefaultRegion, settings.Region);
-    }
-
-    [Fact]
-    public void ToBucketClientSettings_KeepsUpstreamDefaults_WhenClientSettingsIsNull()
-    {
-        var settings = ValidOptions().ToBucketClientSettings();
-        var upstream = new Sa.Data.S3.S3BucketClientSetupSettings
-        {
-            AccessKey = "a",
-            SecretKey = "b",
-            Bucket = "c",
-            Endpoint = "http://x",
-        };
-
-        Assert.Equal(upstream.TotalRequestTimeout, settings.TotalRequestTimeout);
-        Assert.Equal(upstream.ConnectionPoolLifetime, settings.ConnectionPoolLifetime);
-        Assert.Equal(upstream.HandlerLifetime, settings.HandlerLifetime);
-    }
-
-    [Fact]
-    public void ToBucketClientSettings_AppliesClientSettings()
-    {
-        var timeout = TimeSpan.FromSeconds(30);
-        var pool = TimeSpan.FromMinutes(5);
-        var handler = TimeSpan.FromHours(2);
-
-        var options = ValidOptions() with
-        {
-            ClientSettings = new Sa.Data.S3.S3BucketClientSetupSettings
-            {
-                AccessKey = "ROOTUSER",
-                SecretKey = "ChangeMe123",
-                Bucket = "mybucket",
-                Endpoint = "http://localhost:9000",
-                TotalRequestTimeout = timeout,
-                ConnectionPoolLifetime = pool,
-                HandlerLifetime = handler,
-            },
-        };
-
-        var settings = options.ToBucketClientSettings();
-
-        Assert.Equal(timeout, settings.TotalRequestTimeout);
-        Assert.Equal(pool, settings.ConnectionPoolLifetime);
-        Assert.Equal(handler, settings.HandlerLifetime);
-    }
-
-    // ---------- storage identity (what the registration guard compares) ----------
-
-    [Fact]
-    public void HasSameStorageIdentity_IgnoresCredentialsAndTransportTuning()
-    {
-        var a = ValidOptions();
-        var b = (a with { AccessKey = "OTHERUSER", SecretKey = "OtherSecret456" })
-            with
-            {
-                ClientSettings = new Sa.Data.S3.S3BucketClientSetupSettings
-                {
-                    AccessKey = "OTHERUSER",
-                    SecretKey = "OtherSecret456",
-                    Bucket = "mybucket",
-                    Endpoint = "http://localhost:9000",
-                },
-            };
-
-        Assert.NotEqual(a, b);                                  // record equality differs
-        Assert.True(a.HasSameStorageIdentity(b));              // ...but the storage is the same
-    }
-
-    [Theory]
-    [InlineData("uploads", "s3", false)]
-    [InlineData("share", "minio", false)]
-    [InlineData("share", "s3", true)]
-    public void HasSameStorageIdentity_DetectsADifferentStorage(
-        string basket, string storageType, bool isReadOnly)
-    {
-        var a = ValidOptions();
-
-        Assert.False(a.HasSameStorageIdentity(
-            a with { Basket = basket, StorageType = storageType, IsReadOnly = isReadOnly }));
-    }
-
-    [Fact]
-    public void HasSameStorageIdentity_IsFalse_ForNull()
-    {
-        Assert.False(ValidOptions().HasSameStorageIdentity(null));
-    }
-
-    // ---------- value equality (needed by the registration guard) ----------
-
-    [Fact]
-    public void Options_HaveValueEquality()
-    {
-        var a = ValidOptions();
-        var b = ValidOptions();
-
-        Assert.Equal(a, b);
-        Assert.Equal(a.GetHashCode(), b.GetHashCode());
-        Assert.NotEqual(a, a with { Basket = "uploads" });
+        Assert.Equal("us-east-1", settings.Region);
+        Assert.True(settings.UseHttp2);
     }
 
     [Fact]
@@ -226,6 +214,22 @@ public sealed class S3FileStorageOptionsTests
         Assert.Equal(Sa.HybridFileStorage.StorageNaming.DefaultBasket, options.Basket);
         Assert.Equal(S3Defaults.DefaultRegion, options.Region);
         Assert.False(options.IsReadOnly);
-        Assert.Null(options.ClientSettings);
+
+        // Inherited transport defaults, unchanged from the previous S3BucketClientSetupSettings.
+        Assert.Equal(TimeSpan.FromSeconds(180), options.TotalRequestTimeout);
+        Assert.Equal(TimeSpan.FromMinutes(15), options.ConnectionPoolLifetime);
+        Assert.Equal(Timeout.InfiniteTimeSpan, options.HandlerLifetime);
+        Assert.False(options.UseHttp2);
+        Assert.Equal("s3", options.Service);
+    }
+
+    [Fact]
+    public void Region_DefaultsToTheS3ProviderValue_NotTheBaseClassOne()
+    {
+        // The base class defaults to us-east-1 for the standalone client; the storage provider has
+        // always defaulted to eu-central-1, and setting it in the constructor (rather than
+        // redeclaring the property) keeps a single Region on the instance.
+        Assert.Equal("us-east-1", new S3BucketClientSetupOptions().Region);
+        Assert.Equal(S3Defaults.DefaultRegion, new S3FileStorageOptions().Region);
     }
 }
