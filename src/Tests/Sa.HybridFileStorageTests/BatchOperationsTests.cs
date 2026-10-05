@@ -22,7 +22,7 @@ public sealed class BatchOperationsTests : IAsyncLifetime
         
         // Register FileSystem with "share" basket
         services.AddSingleton<IFileStorage>(new FileSystemStorage(
-            new FileSystemStorageSettings { BasePath = _tempDir }));
+            new FileSystemStorageOptions { BasePath = _tempDir }));
         
         // Register InMemory with "memory" basket
         services.AddSingleton<IFileStorage>(new InMemoryFileStorage(

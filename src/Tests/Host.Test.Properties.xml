@@ -31,6 +31,8 @@
 		<PackageReference Include="Microsoft.Extensions.Configuration" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
 		<PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+		<!-- IOptions<T> / IOptionsMonitor<T> / OptionsValidationException in provider registration tests. -->
+		<PackageReference Include="Microsoft.Extensions.Options" />
 
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />

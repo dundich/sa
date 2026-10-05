@@ -7,16 +7,19 @@ namespace Sa.HybridFileStorage.FileSystemTests;
 public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
     : IClassFixture<FileSystemStorageTests.Fixture>
 {
-    public sealed class Fixture : SaFixture<IFileStorage, FileSystemStorageSettings>
+    // `Settings` is a template, not the instance the container builds: AddOptions creates its own, and
+    // post-configuration rewrites that one's BasePath to a full path. This instance stays untouched, so
+    // Settings.BasePath is still the relative path written and is safe to delete here.
+    public sealed class Fixture : SaFixture<IFileStorage, FileSystemStorageOptions>
     {
         public Fixture()
-            : base(new FileSystemStorageSettings
+            : base(new FileSystemStorageOptions
             {
                 BasePath = "mytemp"
             })
         {
             SetupServices = (services, cfg)
-                => services.AddSaFileSystemFileStorage(Settings);
+                => services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = Settings.BasePath));
         }
 
         public override ValueTask DisposeAsync()

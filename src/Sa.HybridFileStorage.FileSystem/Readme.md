@@ -10,10 +10,12 @@ Local filesystem provider for `Sa.HybridFileStorage`. Stores files as physical f
 - [File ID Format](#file-id-format)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-  - [Without DI](#without-di)
-  - [With DI](#with-di)
+  - [Pre-initialisation (Configure)](#pre-initialisation-configure)
+  - [Post-initialisation (PostConfigure)](#post-initialisation-postconfigure)
+  - [From configuration](#from-configuration)
+  - [One storage per collection](#one-storage-per-collection)
 - [CRUD Examples](#crud-examples)
-- [Settings Reference](#settings-reference)
+- [Options Reference](#options-reference)
 - [Security](#security)
 - [Error Handling](#error-handling)
 
@@ -21,7 +23,7 @@ Local filesystem provider for `Sa.HybridFileStorage`. Stores files as physical f
 
 ## Overview
 
-`FileSystemStorage` implements `IFileStorage` backed by the local file system. Files are stored under a configurable base directory using the structure:
+The filesystem provider registers an `IFileStorage` backed by the local file system. Files are stored under a configurable base directory using the structure:
 
 ```
 {BasePath}/{Basket}/{TenantId}/{FileName}
@@ -60,69 +62,85 @@ dotnet add package Sa.HybridFileStorage.FileSystem
 
 ## Quick Start
 
-### Without DI
-
-```csharp
-using Sa.HybridFileStorage.FileSystem;
-using Sa.HybridFileStorage.Domain;
-
-var settings = new FileSystemStorageSettings
-{
-    BasePath = @"C:\data\files",
-    Basket = "documents"
-};
-
-using var storage = new FileSystemStorage(settings);
-
-// Upload
-using var stream = File.OpenRead(@"C:\temp\document.pdf");
-var result = await storage.UploadAsync(
-    new UploadFileInput { FileName = "document.pdf", TenantId = 42 },
-    stream, ct);
-
-Console.WriteLine(result.FileId);  // fs://documents/42/document.pdf
-
-// Download
-bool found = await storage.DownloadAsync(result.FileId, async (fs, token) =>
-{
-    using var reader = new StreamReader(fs, Encoding.UTF8);
-    var content = await reader.ReadToEndAsync(token);
-    Console.WriteLine(content);
-}, ct);
-
-// Delete
-bool deleted = await storage.DeleteAsync(result.FileId, ct);
-```
-
-### With DI
+The provider is registered through the standard `Microsoft.Extensions.Options` pipeline. It returns
+the `IServiceCollection`, so it composes with the other `Add...` calls:
 
 ```csharp
 using Sa.HybridFileStorage.FileSystem;
 
-// Option 1: Immutable settings (recommended)
-builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
-{
-    BasePath = @"C:\data\files",
-    Basket = "documents"
-});
-
-// Option 2: Mutable options with fluent builder
-builder.Services.AddSaFileSystemFileStorage(options =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
 {
     options.BasePath = @"C:\data\files";
     options.Basket = "documents";
-    options.IsReadOnly = false;
-    options.StorageType = "fs";
-    options.BufferSize = 256 * 1024;
-});
+}));
 ```
 
-The options are validated at registration time, so a blank `BasePath`, a malformed `Basket`
-or a non-positive `BufferSize` throws there rather than on the first upload.
+The `configure` callback receives the `OptionsBuilder<FileSystemStorageOptions>`, so configuration
+goes through the standard `Configure` / `PostConfigure` / `Validate` methods — there is no bespoke
+options overload.
+
+The pipeline runs in a fixed order — **`Configure` → `PostConfigure` → validate** — so a value
+normalised in post-initialisation is what validation sees.
+
+### Pre-initialisation (Configure)
+
+`Configure` runs first and receives the raw values:
+
+```csharp
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
+{
+    options.BasePath = @"C:\data\files";
+    options.BufferSize = 512 * 1024;
+}));
+```
+
+### Post-initialisation (PostConfigure)
+
+`PostConfigure` runs after every `Configure` and before validation. The registration already
+normalises `BasePath` to a full path and trims `StorageType` / `Basket`; anything you add here
+runs after that, so it sees normalised values:
+
+```csharp
+builder.Services.AddSaFileSystemFileStorage(o => o
+    .Configure(options => options.BasePath = @"C:\data\files")
+    .PostConfigure(options => options.BufferSize = 1024 * 1024));
+```
+
+### From configuration
+
+Pass the section path and the options are bound from `IConfiguration`:
+
+```csharp
+// appsettings.json
+// { "FileSystemStorage": { "BasePath": "C:\\data\\files", "Basket": "documents" } }
+
+builder.Services.AddSaFileSystemFileStorage(configSectionPath: "FileSystemStorage");
+```
+
+Binding is registered **before** the callback, so a `Configure` call inside the callback has the
+last word when both are used.
+
+### One storage per collection
+
+`AddSaFileSystemFileStorage` owns the unnamed `FileSystemStorageOptions` instance, so a second call
+throws `InvalidOperationException`. Register the filesystem provider once and route the remaining
+baskets to other providers.
+
+Options are validated lazily on first resolve, and `ValidateOnStart()` also forces validation when
+the host starts. A blank `BasePath`, a malformed `Basket` or a non-positive `BufferSize` therefore
+surfaces as `OptionsValidationException` — at host start, or at the first resolve in a container
+built by hand — rather than on the first upload.
 
 ---
 
 ## CRUD Examples
+
+`storage` below is the registered `IFileStorage`; `hybridStorage` is `IHybridFileStorage` from the
+core package.
+
+```csharp
+var storage = sp.GetRequiredService<IFileStorage>();
+```
 
 ### Upload from Stream
 
@@ -183,59 +201,55 @@ if (metadata != null)
 
 ---
 
-## Settings Reference
+## Options Reference
 
-### FileSystemStorageSettings (immutable)
+### FileSystemStorageOptions
 
-| Property | Description | Default |
-|----------|-------------|---------|
-| `BasePath` | Root directory for all files | *(required)* |
-| `Basket` | Container name appended to BasePath | `"share"` |
-| `StorageType` | Scheme prefix in File ID | `"fs"` |
-| `IsReadOnly` | Prevent write/delete operations | `false` |
-| `BufferSize` | Read/write buffer size in bytes | `262144` (256 KB) |
-
-### FileSystemStorageOptions (immutable record)
-
-Used with the `Action<FileSystemStorageOptions>` overload:
+One mutable type, served by the options pipeline. Every property is bindable and settable, and the
+same instance is what the storage is constructed from — there is no second settings type and no
+copy step that could drop a property.
 
 | Property | Description | Default |
 |----------|-------------|---------|
 | `BasePath` | Root directory for all files | *(required)* |
-| `Basket` | Container name | `"share"` |
+| `Basket` | Container name appended to `BasePath` | `"share"` |
 | `StorageType` | Scheme prefix in File ID | `"fs"` |
 | `IsReadOnly` | Prevent write/delete operations | `false` |
 | `BufferSize` | Read/write buffer size in bytes | `262144` (256 KB) |
 
-```csharp
-builder.Services.AddSaFileSystemFileStorage(options =>
-{
-    options.BasePath = @"C:\data\files";
-    options.Basket = "documents";
-    options.BufferSize = 512 * 1024;
-});
-```
+`FileSystemStorageOptions.DefaultStorageType` and `FileSystemStorageOptions.DefaultBasket` are
+exposed as constants. The defaults live on the type itself, so binding a partial configuration
+leaves the rest intact.
 
-The overload converts the options with `ToSettings()` and delegates to the settings
-overload, so there is exactly one place where the two types are mapped. Both overloads
-validate eagerly at registration: nothing is added to the service collection if the options
-are invalid. `FileSystemStorageSettings` and `FileSystemStorageOptions` are both immutable
-records, and the registration copies them, so a later edit to your instance does not
-affect the registered storage.
+Validation runs after post-configuration and enforces:
 
 | Requirement | Applies to |
 |-------------|------------|
-| `BasePath` not null or blank | both |
-| `BasePath` is an absolute, creatable path | both |
-| `StorageType` at most 10 characters, no `:`, `/` or `\` | both |
-| `Basket` 3-63 characters, starts with a letter or `_`, no path separator | both |
-| no path separator inside `BasePath` beyond the platform root | both |
+| `BasePath` not null or blank | `BasePath` |
+| `BasePath` is an absolute, creatable path | `BasePath` |
+| `StorageType` at most 10 characters, no `:`, `/` or `\` | `StorageType` |
+| `Basket` 3-63 characters, starts with a letter or `_`, no path separator | `Basket` |
+| `BufferSize` greater than zero | `BufferSize` |
+
+A blank `BasePath` is deliberately **not** normalised in post-configuration: `Path.GetFullPath("   ")`
+succeeds on Unix and would silently create a directory named `"   "`.
+
+### Adding your own validation
+
+```csharp
+builder.Services.AddSaFileSystemFileStorage(o => o
+    .Configure(options => options.BasePath = @"C:\data\files")
+    .Validate(options => options.BufferSize >= 64 * 1024, "BufferSize must be at least 64 KB."));
+```
+
+Your rule runs in addition to the built-in checks; all failures are reported together in the
+resulting `OptionsValidationException`.
 
 ---
 
 ## Security
 
-`FileSystemStorage` protects against directory traversal attacks:
+The provider protects against directory traversal attacks:
 
 1. **Path sanitisation** — leading `/` or `\` characters in `FileName` are stripped; all backslashes are converted to forward slashes
 2. **Base path containment** — every resolved file path is checked for belonging to `{BasePath}/{Basket}`. Attempts to escape via `../` are rejected with `SecurityException`
@@ -261,7 +275,7 @@ new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
 | IOException on delete | Retries internally; returns `false` if all retries fail |
 | Path escape attempt | Throws `SecurityException` |
 | Invalid File ID format | Throws `ArgumentException` |
-| Invalid options at registration | Throws `ArgumentException` before anything is registered |
+| Invalid options | Throws `OptionsValidationException` at host start (`ValidateOnStart`) or on first resolve |
 
 ---
 

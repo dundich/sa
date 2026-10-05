@@ -46,14 +46,19 @@ Behind every basket may hide **a single storage or a list of stores** — the hy
 
 ### Configuring baskets to backends
 
-Register each basket → provider mapping explicitly. One provider binds to exactly one basket:
+Each provider binds to exactly one basket, set through its own options. Providers that register
+themselves with an `Add...` method — filesystem, in-memory — are picked up by the container
+automatically:
 
 ```csharp
-builder.Services.AddSaHybridFileStorage(cfg => cfg
-    // Basket "drafts" → local filesystem
-    .ConfigureStorage((sp, c) => c.AddStorage(new FileSystemStorage(
-        new FileSystemStorageSettings { BasePath = @"C:\data\drafts", Basket = "drafts" })))
+// Basket "drafts" → local filesystem. Registers its own IFileStorage.
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+{
+    x.BasePath = @"C:\data\drafts";
+    x.Basket = "drafts";
+}));
 
+builder.Services.AddSaHybridFileStorage(cfg => cfg
     // Basket "documents" → PostgreSQL with auto-partitioning.
     // Dependencies (IPgDataSource, IPartitionManager, RecyclableMemoryStreamManager)
     // are resolved from DI during registration.
@@ -98,12 +103,16 @@ await storage.CopyToBasketAsync(result.FileId, "archive", ct);
 
 ## Supported Storage Providers
 
-| Provider | Package | Class | Use Case |
-|----------|---------|-------|----------|
-| **In-Memory** | `Sa.HybridFileStorage` | `InMemoryFileStorage` | Testing, ephemeral scenarios |
-| **File System** | `Sa.HybridFileStorage.FileSystem` | `FileSystemStorage` | Local development, on-premise deployments |
-| **S3 Compatible** | `Sa.HybridFileStorage.S3` | `S3FileStorage` | Cloud storage (AWS S3, MinIO, etc.) |
-| **PostgreSQL** | `Sa.HybridFileStorage.Postgres` | `PostgresFileStorage` | Database-embedded files, transactional consistency, partitioning |
+| Provider | Package | Registration | Use Case |
+|----------|---------|--------------|----------|
+| **In-Memory** | `Sa.HybridFileStorage` | `AddSaInMemoryFileStorage()` | Testing, ephemeral scenarios |
+| **File System** | `Sa.HybridFileStorage.FileSystem` | `AddSaFileSystemFileStorage(...)` | Local development, on-premise deployments |
+| **S3 Compatible** | `Sa.HybridFileStorage.S3` | `AddSaS3FileStorage(...)` | Cloud storage (AWS S3, MinIO, etc.) |
+| **PostgreSQL** | `Sa.HybridFileStorage.Postgres` | `AddSaPostgreSqlFileStorage(...)` | Database-embedded files, transactional consistency, partitioning |
+
+> Each provider's `Add...` method registers an `IFileStorage`, and the hybrid container picks every
+> registered `IFileStorage` up automatically. The provider classes themselves are internal — construct
+> them through their `Add...` method, not with `new`.
 
 ---
 
@@ -200,20 +209,18 @@ using Sa.HybridFileStorage.S3;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Register all providers at once via fluent builder
+// Providers that register themselves first — the hybrid container picks up every
+// registered IFileStorage automatically, so no ConfigureStorage call is needed for them.
+builder.Services.AddSaInMemoryFileStorage();
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+{
+    x.BasePath = @"C:\data\files";
+    x.Basket = "documents";
+}));
+
+// Then wire up the container
 builder.Services.AddSaHybridFileStorage(cfg => cfg
-    // In-Memory provider
-    .ConfigureStorage((sp, c) => c.AddStorage(new InMemoryFileStorage()))
-
-    // File System provider
-    .ConfigureStorage((sp, c) => c.AddStorage(new FileSystemStorage(
-        new FileSystemStorageSettings
-        {
-            BasePath = @"C:\data\files",
-            Basket = "documents"
-        })))
-
-    // S3 provider
+    // S3 provider — registered by hand here to show the pattern
     .ConfigureStorage((sp, c) => c.AddStorage(
         new S3FileStorage(
             sp.GetRequiredService<IS3BucketClient>(),
@@ -244,11 +251,11 @@ For quick setups, each provider has its own extension method:
 builder.Services.AddSaInMemoryFileStorage();
 
 // File System only
-builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
 {
-    BasePath = @"C:\data\files",
-    Basket = "documents"
-});
+    x.BasePath = @"C:\data\files";
+    x.Basket = "documents";
+}));
 
 // S3 only
 builder.Services.AddSaS3FileStorage(new S3FileStorageOptions
@@ -480,18 +487,18 @@ Built-in logging interceptors are available via `.AddLogging()`.
 Set `IsReadOnly = true` on any provider to prevent writes. Attempted writes throw `HybridFileStorageWritableException`:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
 {
-    BasePath = @"C:\readonly\data",
-    IsReadOnly = true  // uploads/deletes will fail
-});
+    x.BasePath = @"C:\readonly\data";
+    x.IsReadOnly = true  // uploads/deletes will fail
+}));
 ```
 
 ---
 
 ## Settings Reference
 
-### FileSystemStorageSettings
+### FileSystemStorageOptions
 
 | Property | Description | Default |
 |----------|-------------|---------|
@@ -499,6 +506,11 @@ builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
 | `Basket` | Scope/container name | `"share"` |
 | `StorageType` | Scheme prefix in File ID | `"fs"` |
 | `IsReadOnly` | Prevent writes | `false` |
+| `BufferSize` | Read/write buffer size in bytes | `262144` (256 KB) |
+
+Configured through the standard options pipeline — see
+[`Sa.HybridFileStorage.FileSystem/Readme.md`](../Sa.HybridFileStorage.FileSystem/Readme.md)
+for pre/post-initialisation and configuration binding.
 
 ### S3FileStorageOptions
 

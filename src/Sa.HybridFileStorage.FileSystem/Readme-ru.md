@@ -10,10 +10,12 @@
 - [Формат File ID](#формат-file-id)
 - [Установка](#установка)
 - [Быстрый старт](#быстрый-старт)
-  - [Без DI](#без-di)
-  - [С DI](#с-di)
+  - [Pre-инициализация (Configure)](#pre-инициализация-configure)
+  - [Post-инициализация (PostConfigure)](#post-инициализация-postconfigure)
+  - [Из конфигурации](#из-конфигурации)
+  - [Одно хранилище на коллекцию](#одно-хранилище-на-коллекцию)
 - [Примеры CRUD](#примеры-crud)
-- [Справочник настроек](#справочник-настроек)
+- [Справочник опций](#справочник-опций)
 - [Безопасность](#безопасность)
 - [Обработка ошибок](#обработка-ошибок)
 
@@ -21,7 +23,7 @@
 
 ## Обзор
 
-`FileSystemStorage` реализует `IFileStorage` поверх локальной файловой системы. Файлы хранятся в настраиваемой корневой директории по структуре:
+Провайдер файловой системы регистрирует `IFileStorage` поверх локальной файловой системы. Файлы хранятся в настраиваемой корневой директории по структуре:
 
 ```
 {BasePath}/{Basket}/{TenantId}/{FileName}
@@ -60,68 +62,85 @@ dotnet add package Sa.HybridFileStorage.FileSystem
 
 ## Быстрый старт
 
-### Без DI
-
-```csharp
-using Sa.HybridFileStorage.FileSystem;
-using Sa.HybridFileStorage.Domain;
-
-var settings = new FileSystemStorageSettings
-{
-    BasePath = @"C:\data\files",
-    Basket = "documents"
-};
-
-using var storage = new FileSystemStorage(settings);
-
-// Загрузка
-using var stream = File.OpenRead(@"C:\temp\document.pdf");
-var result = await storage.UploadAsync(
-    new UploadFileInput { FileName = "document.pdf", TenantId = 42 },
-    stream, ct);
-
-Console.WriteLine(result.FileId);  // fs://documents/42/document.pdf
-
-// Скачивание
-bool found = await storage.DownloadAsync(result.FileId, async (fs, token) =>
-{
-    using var reader = new StreamReader(fs, Encoding.UTF8);
-    var content = await reader.ReadToEndAsync(token);
-    Console.WriteLine(content);
-}, ct);
-
-// Удаление
-bool deleted = await storage.DeleteAsync(result.FileId, ct);
-```
-
-### С DI
+Провайдер подключается через стандартный конвейер `Microsoft.Extensions.Options`. Метод возвращает
+`IServiceCollection`, поэтому он складывается в цепочку с остальными вызовами `Add...`:
 
 ```csharp
 using Sa.HybridFileStorage.FileSystem;
 
-// Вариант 1: неизменяемые настройки (рекомендуется)
-builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
-{
-    BasePath = @"C:\data\files",
-    Basket = "documents"
-});
-
-// Вариант 2: изменяемые опции с fluent builder
-builder.Services.AddSaFileSystemFileStorage(options =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
 {
     options.BasePath = @"C:\data\files";
     options.Basket = "documents";
-    options.IsReadOnly = false;
-    options.StorageType = "fs";
-    options.BufferSize = 256 * 1024;
-});
+}));
 ```
 
-> **Примечание:** валидация выполняется в момент регистрации (fail-fast): пустой `BasePath`, некорректный `Basket` или неположительный `BufferSize` приводят к исключению там, а не при первой загрузке. Callback варианта 2 выполняется сразу, поэтому внешние значения нужно захватывать замыканием — контейнер на этом шаге ещё не собран, и host-сервисы (`IConfiguration` и т.п.) недоступны.
+В callback передаётся `OptionsBuilder<FileSystemStorageOptions>`, поэтому настройка идёт через
+стандартные методы `Configure` / `PostConfigure` / `Validate` — отдельной перегрузки под опции
+нет.
+
+Конвейер выполняется в фиксированном порядке — **`Configure` → `PostConfigure` → валидация**,
+поэтому валидация видит уже нормализованные значения.
+
+### Pre-инициализация (Configure)
+
+`Configure` выполняется первым и получает «сырые» значения:
+
+```csharp
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
+{
+    options.BasePath = @"C:\data\files";
+    options.BufferSize = 512 * 1024;
+}));
+```
+
+### Post-инициализация (PostConfigure)
+
+`PostConfigure` выполняется после всех `Configure` и до валидации. Регистрация уже нормализует
+`BasePath` в полный путь и обрезает `StorageType` / `Basket`; всё, что добавите здесь, выполнится
+после этого и увидит уже нормализованные значения:
+
+```csharp
+builder.Services.AddSaFileSystemFileStorage(o => o
+    .Configure(options => options.BasePath = @"C:\data\files")
+    .PostConfigure(options => options.BufferSize = 1024 * 1024));
+```
+
+### Из конфигурации
+
+Передайте путь секции — опции будут привязаны из `IConfiguration`:
+
+```csharp
+// appsettings.json
+// { "FileSystemStorage": { "BasePath": "C:\\data\\files", "Basket": "documents" } }
+
+builder.Services.AddSaFileSystemFileStorage(configSectionPath: "FileSystemStorage");
+```
+
+Привязка регистрируется **до** callback'а, поэтому при одновременном использовании последнее
+слово остаётся за `Configure` внутри callback'а.
+
+### Одно хранилище на коллекцию
+
+`AddSaFileSystemFileStorage` владеет экземпляром `FileSystemStorageOptions` без имени, поэтому
+второй вызов выбрасывает `InvalidOperationException`. Регистрируйте файловый провайдер один раз,
+а остальные корзины отдайте другим провайдерам.
+
+Опции валидируются лениво, при первом разрешении, а `ValidateOnStart()` дополнительно форсирует
+проверку при старте хоста. Поэтому пустой `BasePath`, некорректный `Basket` или неположительный
+`BufferSize` приводят к `OptionsValidationException` — на старте хоста либо на первом разрешении
+контейнера, собранного вручную, — а не при первой загрузке файла.
 
 ---
 
 ## Примеры CRUD
+
+Ниже `storage` — это зарегистрированный `IFileStorage`, а `hybridStorage` — `IHybridFileStorage`
+из ядра:
+
+```csharp
+var storage = sp.GetRequiredService<IFileStorage>();
+```
 
 ### Загрузка из Stream
 
@@ -189,59 +208,55 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 
 ---
 
-## Справочник настроек
+## Справочник опций
 
-### FileSystemStorageSettings (неизменяемые)
+### FileSystemStorageOptions
 
-| Свойство | Описание | По умолчанию |
-|----------|----------|-------------|
-| `BasePath` | Корневая директория для всех файлов | *(обязательно)* |
-| `Basket` | Имя контейнера, добавляемое к BasePath | `"share"` |
-| `StorageType` | Префикс схемы в File ID | `"fs"` |
-| `IsReadOnly` | Запрет операций записи/удаления | `false` |
-| `BufferSize` | Размер буфера чтения/записи в байтах | `262144` (256 КБ) |
-
-### FileSystemStorageOptions (неизменяемый record)
-
-Используется с перегрузкой `Action<FileSystemStorageOptions>`:
+Один изменяемый тип, обслуживаемый конвейером options. Все свойства биндятся и устанавливаются, и
+именно этот же экземпляр передаётся в хранилище — второго типа настроек и шага копирования,
+который мог бы потерять свойство, больше нет.
 
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
 | `BasePath` | Корневая директория для всех файлов | *(обязательно)* |
-| `Basket` | Имя контейнера | `"share"` |
+| `Basket` | Имя контейнера, добавляемое к `BasePath` | `"share"` |
 | `StorageType` | Префикс схемы в File ID | `"fs"` |
 | `IsReadOnly` | Запрет операций записи/удаления | `false` |
 | `BufferSize` | Размер буфера чтения/записи в байтах | `262144` (256 КБ) |
 
-```csharp
-builder.Services.AddSaFileSystemFileStorage(options =>
-{
-    options.BasePath = @"C:\data\files";
-    options.Basket = "documents";
-    options.BufferSize = 512 * 1024;
-});
-```
+`FileSystemStorageOptions.DefaultStorageType` и `FileSystemStorageOptions.DefaultBasket`
+опубликованы как константы. Значения по умолчанию живут на самом типе, поэтому частичная
+привязка конфигурации не затирает остальные свойства.
 
-Перегрузка конвертирует опции через `ToSettings()` и делегирует перегрузке с
-настройками, поэтому место маппинга между двумя типами ровно одно. Обе перегрузки
-валидируют опции сразу при регистрации: если опции невалидны, в коллекцию сервисов
-ничего не попадает. `FileSystemStorageSettings` и `FileSystemStorageOptions` — оба
-неизменяемые record'ы, при регистрации они копируются, поэтому последующие правки вашего
-экземпляра на зарегистрированный storage не влияют.
+Валидация выполняется после post-конфигурации и проверяет:
 
 | Требование | К чему относится |
 |------------|------------------|
-| `BasePath` не null и не пустой | к обоим типам |
-| `BasePath` — абсолютный путь, который можно создать | к обоим типам |
-| `StorageType` не длиннее 10 символов, без `:`, `/` и `\` | к обоим типам |
-| `Basket` 3–63 символа, начинается с буквы или `_`, без разделителя пути | к обоим типам |
-| `BasePath` без разделителя пути за пределами корня платформы | к обоим типам |
+| `BasePath` не null и не пустой | `BasePath` |
+| `BasePath` — абсолютный путь, который можно создать | `BasePath` |
+| `StorageType` не длиннее 10 символов, без `:`, `/` и `\` | `StorageType` |
+| `Basket` 3–63 символа, начинается с буквы или `_`, без разделителя пути | `Basket` |
+| `BufferSize` больше нуля | `BufferSize` |
+
+Пустой `BasePath` намеренно **не** нормализуется в post-конфигурации: `Path.GetFullPath("   ")`
+на Unix успешно отрабатывает и молча создал бы директорию с именем `"   "`.
+
+### Своя валидация
+
+```csharp
+builder.Services.AddSaFileSystemFileStorage(o => o
+    .Configure(options => options.BasePath = @"C:\data\files")
+    .Validate(options => options.BufferSize >= 64 * 1024, "BufferSize должен быть не меньше 64 КБ."));
+```
+
+Ваше правило выполняется в дополнение к встроенным проверкам; все ошибки собираются вместе
+в итоговом `OptionsValidationException`.
 
 ---
 
 ## Безопасность
 
-`FileSystemStorage` защищает от атак через обход директорий:
+Провайдер защищает от атак через обход директорий:
 
 1. **Санитизация путей** — ведущие символы `/` или `\` в `FileName` удаляются; все обратные слеши конвертируются в прямые
 2. **Контейнирование базового пути** — каждый разрешённый путь файла проверяется на принадлежность `{BasePath}/{Basket}`. Попытки побега через `../` отклоняются с `SecurityException`
@@ -267,7 +282,7 @@ new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
 | IOException при удалении | Повторяется внутренне; возвращает `false`, если все повторы неудачны |
 | Попытка обхода пути | Выбрасывает `SecurityException` |
 | Неверный формат File ID | Выбрасывает `ArgumentException` |
-| Невалидные опции при регистрации | Выбрасывает `ArgumentException` до того, как что-либо зарегистрировано |
+| Невалидные опции | Выбрасывает `OptionsValidationException` на старте хоста (`ValidateOnStart`) или при первом разрешении |
 
 ---
 

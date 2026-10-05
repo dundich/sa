@@ -53,7 +53,7 @@ public sealed class ExtensionMethodTests : IAsyncLifetime
         Directory.CreateDirectory(fsPath);
 
         var services = new ServiceCollection()
-            .AddSaFileSystemFileStorage(new FileSystemStorageSettings { BasePath = fsPath })
+            .AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = fsPath))
             .AddSaHybridFileStorage();
 
         using var provider = services.BuildServiceProvider();
@@ -140,7 +140,7 @@ public sealed class ExtensionMethodTests : IAsyncLifetime
         
         // Register FileSystem with default "share" basket
         services.AddSingleton<IFileStorage>(new FileSystemStorage(
-            new FileSystemStorageSettings { BasePath = fsPath }));
+            new FileSystemStorageOptions { BasePath = fsPath }));
         
         // Register InMemory with explicit "mem_basket"
         services.AddSingleton<IFileStorage>(new InMemoryFileStorage(

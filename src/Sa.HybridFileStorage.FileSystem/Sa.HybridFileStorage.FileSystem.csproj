@@ -3,13 +3,25 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.15.0</Version>
+    <Version>0.16.0</Version>
     <Description>File storage management</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Sa.HybridFileStorage.FileSystemTests" />
     <InternalsVisibleTo Include="Sa.HybridFileStorageTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Options + Options.ConfigurationExtensions дают AddOptions/Configure/PostConfigure/
+      IValidateOptions/ValidateOnStart и BindConfiguration. Источник конфигурации
+      (source-generated binder) включается в .NET SDK по умолчанию
+      (EnableConfigurationBindingGenerator), поэтому BindConfiguration не тянет
+      reflection и собирается под Native AOT — см. Sa.Media.FFmpeg/Setup.cs.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
   </ItemGroup>
 
   <ItemGroup>

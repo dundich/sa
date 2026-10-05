@@ -7,6 +7,19 @@
 (19 сборок, `dotnet test -c Release --max-parallel-test-modules 2 --solution Sa.slnx`).
 Подробности реализации — в разделе [Что уже сделано](#что-уже-сделано).
 
+> **Устарело в части `FileSystem` (пакет `0.16.0`).** Документ ниже описывает состояние на
+> `0.13.0`, когда у `Sa.HybridFileStorage.FileSystem` было два почти одинаковых типа
+> (`FileSystemStorageOptions` + `FileSystemStorageSettings`) и две перегрузки регистрации с
+> валидацией на лету. Позже это заменено на стандартный конвейер `Microsoft.Extensions.Options`:
+> один `public sealed class FileSystemStorageOptions` и регистрация
+> `AddSaFileSystemFileStorage(Action<OptionsBuilder<FileSystemStorageOptions>>? configure, string? configSectionPath)`
+> с возвратом `IServiceCollection`, `Configure` → `PostConfigure` → валидация, `ValidateOnStart()`
+> и `IValidateOptions<FileSystemStorageOptions>`.
+> `FileSystemStorageSettings.cs` удалён, `ToSettings()` — вместе с ним. `IOptionsMonitor<T>`,
+> который здесь был сознательно вынесен за рамки, не понадобился: именованных экземпляров у
+> файлового провайдера нет, а повторная регистрация отвергается маркером
+> `FileSystemStorageRegistration`. Описание остальных волн остаётся актуальным.
+
 ## Объём аудита
 
 Прочитаны и проверены:

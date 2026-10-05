@@ -46,14 +46,19 @@
 
 ### Настройка маппинга корзин на бэкенды
 
-Регистрируйте каждое соответствие корзина → провайдер явно. Один провайдер привязан ровно к одной корзине:
+Каждый провайдер привязан ровно к одной корзине, которая задаётся в его собственных опциях.
+Провайдеры, регистрирующие себя методом `Add...` (файловая система, in-memory), подхватываются
+контейнером автоматически:
 
 ```csharp
-builder.Services.AddSaHybridFileStorage(cfg => cfg
-    // Корзина "черновик" → файловая система
-    .ConfigureStorage((sp, c) => c.AddStorage(new FileSystemStorage(
-        new FileSystemStorageSettings { BasePath = @"C:\data\черновик", Basket = "черновик" })))
+// Корзина "черновик" → файловая система. Регистрирует собственный IFileStorage.
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+{
+    x.BasePath = @"C:\data\черновик";
+    x.Basket = "черновик";
+}));
 
+builder.Services.AddSaHybridFileStorage(cfg => cfg
     // Корзина "документы" → PostgreSQL с авто-партиционированием.
     // Зависимости (IPgDataSource, IPartitionManager, RecyclableMemoryStreamManager)
     // резолвятся из DI в момент регистрации.
@@ -98,12 +103,16 @@ await storage.CopyToBasketAsync(result.FileId, "архив", ct);
 
 ## Поддерживаемые провайдеры
 
-| Провайдер | Пакет | Класс | Сценарий использования |
-|-----------|-------|-------|----------------------|
-| **In-Memory** | `Sa.HybridFileStorage` | `InMemoryFileStorage` | Тестирование, эфемерные сценарии |
-| **Файловая система** | `Sa.HybridFileStorage.FileSystem` | `FileSystemStorage` | Локальная разработка, on-premise развёртывания |
-| **S3-совместимое** | `Sa.HybridFileStorage.S3` | `S3FileStorage` | Облачное хранилище (AWS S3, MinIO и др.) |
-| **PostgreSQL** | `Sa.HybridFileStorage.Postgres` | `PostgresFileStorage` | Файлы внутри БД, транзакционная согласованность, партиционирование |
+| Провайдер | Пакет | Регистрация | Сценарий использования |
+|-----------|-------|-------------|----------------------|
+| **In-Memory** | `Sa.HybridFileStorage` | `AddSaInMemoryFileStorage()` | Тестирование, эфемерные сценарии |
+| **Файловая система** | `Sa.HybridFileStorage.FileSystem` | `AddSaFileSystemFileStorage(...)` | Локальная разработка, on-premise развёртывания |
+| **S3-совместимое** | `Sa.HybridFileStorage.S3` | `AddSaS3FileStorage(...)` | Облачное хранилище (AWS S3, MinIO и др.) |
+| **PostgreSQL** | `Sa.HybridFileStorage.Postgres` | `AddSaPostgreSqlFileStorage(...)` | Файлы внутри БД, транзакционная согласованность, партиционирование |
+
+> Метод `Add...` каждого провайдера регистрирует `IFileStorage`, и гибридный контейнер
+> автоматически подхватывает все зарегистрированные `IFileStorage`. Сами классы провайдеров
+> внутренние — создавайте их через метод `Add...`, а не через `new`.
 
 ---
 
@@ -200,20 +209,18 @@ using Sa.HybridFileStorage.S3;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Регистрируем все провайдеры через fluent builder
+// Провайдеры, регистрирующие себя сами, — гибридный контейнер подхватывает любой
+// зарегистрированный IFileStorage автоматически, вызов ConfigureStorage для них не нужен.
+builder.Services.AddSaInMemoryFileStorage();
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+{
+    x.BasePath = @"C:\data\files";
+    x.Basket = "documents";
+}));
+
+// Затем собираем контейнер
 builder.Services.AddSaHybridFileStorage(cfg => cfg
-    // In-Memory провайдер
-    .ConfigureStorage((sp, c) => c.AddStorage(new InMemoryFileStorage()))
-
-    // Файловая система
-    .ConfigureStorage((sp, c) => c.AddStorage(new FileSystemStorage(
-        new FileSystemStorageSettings
-        {
-            BasePath = @"C:\data\files",
-            Basket = "documents"
-        })))
-
-    // S3 провайдер
+    // S3 провайдер — здесь показан ручной вариант
     .ConfigureStorage((sp, c) => c.AddStorage(
         new S3FileStorage(
             sp.GetRequiredService<IS3BucketClient>(),
@@ -244,11 +251,11 @@ var storage = host.Services.GetRequiredService<IHybridFileStorage>();
 builder.Services.AddSaInMemoryFileStorage();
 
 // Только файловая система
-builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
 {
-    BasePath = @"C:\data\files",
-    Basket = "documents"
-});
+    x.BasePath = @"C:\data\files";
+    x.Basket = "documents";
+}));
 
 // Только S3
 builder.Services.AddSaS3FileStorage(new S3FileStorageOptions
@@ -480,18 +487,18 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
 Установите `IsReadOnly = true` для любого провайдера, чтобы запретить запись. Попытки записи вызывают `HybridFileStorageWritableException`:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
+builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
 {
-    BasePath = @"C:\readonly\data",
-    IsReadOnly = true  // загрузки/удаления будут завершаться ошибкой
-});
+    x.BasePath = @"C:\readonly\data";
+    x.IsReadOnly = true  // загрузки/удаления будут завершаться ошибкой
+}));
 ```
 
 ---
 
 ## Справочник настроек
 
-### FileSystemStorageSettings
+### FileSystemStorageOptions
 
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
@@ -499,6 +506,11 @@ builder.Services.AddSaFileSystemFileStorage(new FileSystemStorageSettings
 | `Basket` | Имя контейнера (scopes) | `"share"` |
 | `StorageType` | Префикс схемы в File ID | `"fs"` |
 | `IsReadOnly` | Запрет записи | `false` |
+| `BufferSize` | Размер буфера чтения/записи в байтах | `262144` (256 КБ) |
+
+Настраивается через стандартный конвейер options — см.
+[`Sa.HybridFileStorage.FileSystem/Readme-ru.md`](../Sa.HybridFileStorage.FileSystem/Readme-ru.md)
+про pre/post-инициализацию и привязку конфигурации.
 
 ### S3FileStorageOptions
 

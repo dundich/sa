@@ -3,23 +3,43 @@
 namespace Sa.HybridFileStorage.FileSystem;
 
 /// <summary>
-/// Mutable configuration options for the filesystem file storage provider, used with fluent builder pattern.
+/// Configuration options for the filesystem file storage provider.
 /// </summary>
-public sealed record FileSystemStorageOptions
+/// <remarks>
+/// A single mutable type served by the standard <c>Microsoft.Extensions.Options</c> pipeline:
+/// <c>Configure</c> runs first (pre-initialisation, raw values), then <c>PostConfigure</c>
+/// (normalisation), then validation. The provider used to ship two near-identical types —
+/// a mutable <c>FileSystemStorageOptions</c> and an immutable <c>FileSystemStorageSettings</c>
+/// joined by a hand-written <c>ToSettings()</c> copy, which is exactly how a property
+/// (<c>BufferSize</c>) once went missing from the registration.
+/// </remarks>
+public sealed class FileSystemStorageOptions
 {
     /// <summary>
-    /// Gets or sets the storage type identifier. Defaults to <see cref="FileSystemStorageSettings.DefaultStorageType"/> (<c>"fs"</c>).
+    /// Gets the default storage type identifier.
     /// </summary>
-    [Required]
-    [StringLength(10)]
-    public string StorageType { get; set; } = FileSystemStorageSettings.DefaultStorageType;
+    public const string DefaultStorageType = "fs";
+
+    /// <summary>
+    /// Gets the default basket name.
+    /// </summary>
+    public const string DefaultBasket = Sa.HybridFileStorage.StorageNaming.DefaultBasket;
+
+    /// <summary>
+    /// Gets or sets the storage type identifier. Defaults to <see cref="DefaultStorageType"/> (<c>"fs"</c>).
+    /// </summary>
+    public string StorageType { get; set; } = DefaultStorageType;
 
     /// <summary>
     /// Gets or sets the base directory path where files will be stored.
     /// </summary>
-    [Required]
-    [StringLength(255)]
     public string BasePath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the basket (container) name. Must be 3–63 characters, start with a letter or underscore.
+    /// Defaults to <see cref="DefaultBasket"/> (<c>"share"</c>).
+    /// </summary>
+    public string Basket { get; set; } = DefaultBasket;
 
     /// <summary>
     /// Gets or sets a value indicating whether this storage is read-only. Defaults to <c>false</c>.
@@ -27,17 +47,8 @@ public sealed record FileSystemStorageOptions
     public bool IsReadOnly { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the basket (container) name. Must be 3–63 characters, start with a letter or underscore.
-    /// Defaults to <see cref="FileSystemStorageSettings.DefaultBasket"/> (<c>"share"</c>).
-    /// </summary>
-    [Required]
-    [StringLength(63, MinimumLength = 3)]
-    public string Basket { get; set; } = FileSystemStorageSettings.DefaultBasket;
-
-    /// <summary>
     /// Gets or sets the buffer size used for file I/O operations. Defaults to 256 KB.
     /// </summary>
-    [Range(1, int.MaxValue)]
     public int BufferSize { get; set; } = 256 * 1024;
 
     /// <summary>
@@ -45,23 +56,64 @@ public sealed record FileSystemStorageOptions
     /// </summary>
     /// <exception cref="ValidationException">Thrown when <see cref="BasePath"/>, <see cref="Basket"/>, <see cref="StorageType"/>, or <see cref="BufferSize"/> is invalid.</exception>
     /// <remarks>
-    /// Validation is delegated to <see cref="FileSystemStorageSettings.Validate"/> so that the mutable
-    /// options and the immutable settings cannot drift apart. Always map through
-    /// <see cref="ToSettings"/> — a hand-written copy of the properties is how
-    /// <see cref="BufferSize"/> went missing from the provider registration.
+    /// Called by <see cref="FileSystemStorageOptionsValidator"/> after the post-configuration step,
+    /// so it validates normalised values (a fully resolved <see cref="BasePath"/>, trimmed names).
+    /// Explicit checks rather than <c>ValidateDataAnnotations()</c>: the latter is marked
+    /// <c>RequiresUnreferencedCode</c> (IL2026) and breaks Native AOT.
     /// </remarks>
-    public void Validate() => ToSettings().Validate();
-
-    /// <summary>
-    /// Creates the immutable settings this options instance describes.
-    /// </summary>
-    /// <returns>A <see cref="FileSystemStorageSettings"/> with every value copied.</returns>
-    public FileSystemStorageSettings ToSettings() => new()
+    public void Validate()
     {
-        BasePath = BasePath,
-        StorageType = StorageType,
-        Basket = Basket,
-        IsReadOnly = IsReadOnly,
-        BufferSize = BufferSize,
-    };
+        if (string.IsNullOrWhiteSpace(BasePath))
+        {
+            throw new ValidationException("BasePath cannot be empty.");
+        }
+
+        try
+        {
+            // Resolve any relative path to detect malformed input early.
+            Path.GetFullPath(BasePath);
+
+            if (BasePath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+            {
+                throw new ValidationException($"BasePath contains invalid characters: {BasePath}");
+            }
+        }
+        catch (Exception ex) when (ex is not ValidationException)
+        {
+            throw new ValidationException($"Invalid BasePath format: {BasePath}. {ex.Message}");
+        }
+
+        if (string.IsNullOrWhiteSpace(Basket))
+        {
+            throw new ValidationException("Basket cannot be empty.");
+        }
+
+        try
+        {
+            StorageNaming.ValidateBasket(Basket, nameof(Basket));
+        }
+        catch (ArgumentException ex)
+        {
+            throw new ValidationException(ex.Message, ex);
+        }
+
+        if (string.IsNullOrWhiteSpace(StorageType))
+        {
+            throw new ValidationException("StorageType cannot be empty.");
+        }
+
+        try
+        {
+            StorageNaming.RequireStorageType(StorageType, nameof(StorageType));
+        }
+        catch (ArgumentException ex)
+        {
+            throw new ValidationException(ex.Message, ex);
+        }
+
+        if (BufferSize <= 0)
+        {
+            throw new ValidationException($"BufferSize must be greater than zero, but was {BufferSize}.");
+        }
+    }
 }

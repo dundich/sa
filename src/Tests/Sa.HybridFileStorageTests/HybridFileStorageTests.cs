@@ -10,17 +10,17 @@ namespace Sa.HybridFileStorageTests;
 public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
     : IClassFixture<HybridFileStorageTests.Fixture>
 {
-    public sealed class Fixture : SaFixture<IHybridFileStorage, FileSystemStorageSettings>
+    public sealed class Fixture : SaFixture<IHybridFileStorage, FileSystemStorageOptions>
     {
         public Fixture()
-            : base(new FileSystemStorageSettings
+            : base(new FileSystemStorageOptions
             {
                 BasePath = "hybrid_test"
             })
         {
-            SetupServices = (services, cfg)
-                => services
-                    .AddSaFileSystemFileStorage(Settings)
+            SetupServices = (services, cfg) =>
+                services
+                    .AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = Settings.BasePath))
                     .AddSaInMemoryFileStorage()
                     .AddSaHybridFileStorage(b
                         => b.ConfigureInterceptors((_, c)

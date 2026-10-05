@@ -4,8 +4,9 @@ using Sa.HybridFileStorage.FileSystem;
 namespace Sa.HybridFileStorage.FileSystemTests;
 
 /// <summary>
-/// The mutable options and the immutable settings must never disagree: the provider registration
-/// used to copy properties by hand, which is how <c>BufferSize</c> went missing.
+/// The options are a single mutable type served by the standard options pipeline. There is no second
+/// settings type and no hand-written mapping any more, so a property cannot be dropped between
+/// configuration and the provider — which is exactly how <c>BufferSize</c> used to go missing.
 /// </summary>
 public sealed class FileSystemStorageOptionsTests
 {
@@ -15,41 +16,29 @@ public sealed class FileSystemStorageOptionsTests
     };
 
     [Fact]
-    public void ToSettings_CopiesEveryProperty()
+    public void Defaults_AreTheSharedNamingDefaults()
     {
-        var options = new FileSystemStorageOptions
-        {
-            BasePath = "/tmp/data",
-            StorageType = "fsx",
-            Basket = "documents",
-            IsReadOnly = true,
-            BufferSize = 4096,
-        };
+        var options = new FileSystemStorageOptions();
 
-        var settings = options.ToSettings();
-
-        Assert.Equal("/tmp/data", settings.BasePath);
-        Assert.Equal("fsx", settings.StorageType);
-        Assert.Equal("documents", settings.Basket);
-        Assert.True(settings.IsReadOnly);
-        Assert.Equal(4096, settings.BufferSize);
-    }
-
-    [Fact]
-    public void ToSettings_DefaultsMatchTheSettingsDefaults()
-    {
-        var settings = new FileSystemStorageOptions { BasePath = "/tmp/data" }.ToSettings();
-
-        Assert.Equal(FileSystemStorageSettings.DefaultStorageType, settings.StorageType);
-        Assert.Equal(FileSystemStorageSettings.DefaultBasket, settings.Basket);
-        Assert.False(settings.IsReadOnly);
-        Assert.Equal(256 * 1024, settings.BufferSize);
+        Assert.Equal("fs", options.StorageType);
+        Assert.Equal(Sa.HybridFileStorage.StorageNaming.DefaultBasket, options.Basket);
+        Assert.False(options.IsReadOnly);
+        Assert.Equal(256 * 1024, options.BufferSize);
+        Assert.Equal(string.Empty, options.BasePath);
     }
 
     [Fact]
     public void DefaultBasket_IsSharedWithTheBasePackage()
     {
-        Assert.Equal(Sa.HybridFileStorage.StorageNaming.DefaultBasket, FileSystemStorageSettings.DefaultBasket);
+        Assert.Equal(
+            Sa.HybridFileStorage.StorageNaming.DefaultBasket,
+            FileSystemStorageOptions.DefaultBasket);
+    }
+
+    [Fact]
+    public void DefaultStorageType_IsExposedAsAConstant()
+    {
+        Assert.Equal("fs", FileSystemStorageOptions.DefaultStorageType);
     }
 
     [Fact]
@@ -107,6 +96,15 @@ public sealed class FileSystemStorageOptionsTests
     {
         var options = ValidOptions();
         options.StorageType = new string('a', 11);
+
+        Assert.Throws<ValidationException>(() => options.Validate());
+    }
+
+    [Fact]
+    public void Validate_Rejects_TooLongBasket()
+    {
+        var options = ValidOptions();
+        options.Basket = new string('a', 64);
 
         Assert.Throws<ValidationException>(() => options.Validate());
     }

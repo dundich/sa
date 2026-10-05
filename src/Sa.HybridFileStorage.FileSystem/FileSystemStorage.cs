@@ -7,25 +7,33 @@ namespace Sa.HybridFileStorage.FileSystem;
 /// <summary>
 /// fs://share/tenant/filename
 /// </summary>
+/// <remarks>
+/// Takes the concrete <see cref="FileSystemStorageOptions"/> rather than <c>IOptions&lt;T&gt;</c> so the
+/// type carries no dependency on Microsoft.Extensions.Options and stays constructible in a test without a
+/// container. When it comes from <see cref="Setup.AddSaFileSystemFileStorage"/> the value has already been
+/// through the pipeline's post-configuration step.
+/// </remarks>
 internal sealed class FileSystemStorage(
-    FileSystemStorageSettings settings,
+    FileSystemStorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
     private const string SchemeSeparator = "://";
 
+    // GetFullPath is idempotent, so the post-configured absolute path passes through unchanged; it stays
+    // because a hand-constructed instance may carry a relative one.
     private readonly string _basePath = Path.TrimEndingDirectorySeparator(
-        Path.GetFullPath(settings.BasePath));
+        Path.GetFullPath(options.BasePath));
 
     private readonly string _basePathScope = Path.TrimEndingDirectorySeparator(
-        Path.GetFullPath(Path.Combine(settings.BasePath, settings.Basket)));
+        Path.GetFullPath(Path.Combine(options.BasePath, options.Basket)));
 
-    private readonly string _schemePrefix = $"{settings.StorageType}{SchemeSeparator}";
-    private readonly string _storageType = settings.StorageType;
-    private readonly bool _isReadOnly = settings.IsReadOnly;
-    private readonly int _bufferSize = settings.BufferSize;
+    private readonly string _schemePrefix = $"{options.StorageType}{SchemeSeparator}";
+    private readonly string _storageType = options.StorageType;
+    private readonly bool _isReadOnly = options.IsReadOnly;
+    private readonly int _bufferSize = options.BufferSize;
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public string Basket => settings.Basket;
+    public string Basket => options.Basket;
     public string StorageType => _storageType;
     public bool IsReadOnly => _isReadOnly;
 
