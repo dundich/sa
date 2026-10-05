@@ -67,7 +67,7 @@ await ffmpeg.ConvertToPcmS16Le(
 | `IFFProbeExecutor` | Извлечение метаданных через ffprobe |
 | `GetMetaInfo(filePath)` | Длительность, битрейт, размер файла |
 | `GetChannelsAndSampleRate(filePath)` | Количество каналов и частота дискретизации |
-| `Setup.AddSaFFMpeg()` | Регистрация в DI-контейнере (Generic Host) |
+| `Setup.AddSaFFMpeg(...)` | Регистрация в DI-контейнере (Generic Host) |
 | `FFMpegOptions` | Опции: путь к бинарнику, таймаут, рабочая директория |
 
 ---
@@ -76,7 +76,10 @@ await ffmpeg.ConvertToPcmS16Le(
 
 ```csharp
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddSaFFMpeg();
+builder.Services.AddSaFFMpeg(o => o.Configure(options =>
+{
+    options.WritableDirectory = @"C:\temp\output";
+}));
 var app = builder.Build();
 
 var executor = app.Services.GetRequiredService<IFFMpegExecutor>();

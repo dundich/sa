@@ -175,13 +175,17 @@ Console.WriteLine($"Duration: {meta.Duration}s, Bitrate: {meta.BitRate} bps");
 
 ## With DI
 
+`AddSaFFMpeg` registers FFmpeg through the standard `Microsoft.Extensions.Options` pipeline and
+returns the `IServiceCollection`, so it composes with the other `Add...` calls. The `configure`
+callback receives the `OptionsBuilder<FFMpegOptions>`:
+
 ```csharp
-builder.Services.AddSaFFMpeg(configure: options =>
+builder.Services.AddSaFFMpeg(o => o.Configure(options =>
 {
     options.ExecutablePath = @"C:\tools\ffmpeg.exe"; // optional override
     options.WritableDirectory = @"C:\temp\output";
     options.TimeoutSeconds = 300; // 5 minutes
-});
+}));
 
 // Usage:
 var sp = builder.Services.BuildServiceProvider();
@@ -190,7 +194,27 @@ var probe    = sp.GetRequiredService<IFFProbeExecutor>();
 var manip    = sp.GetRequiredService<IPcmS16LeChannelManipulator>();
 ```
 
-Configuration section binding:
+### Pre- and post-initialisation
+
+The pipeline order is fixed — **`Configure` → `PostConfigure` → validation** — so a value
+normalised in post-initialisation is what validation sees. `Configure` runs first and receives the
+raw values; `PostConfigure` runs after every `Configure` and after the registration's own
+normalisation, so anything you add there sees an already-normalised value:
+
+```csharp
+builder.Services.AddSaFFMpeg(o => o
+    .Configure(options => options.ExecutablePath = @"C:\tools\ffmpeg.exe")
+    .PostConfigure(options => options.WritableDirectory ??= Path.GetTempPath())
+    .Validate(options => options.TimeoutSeconds is null or >= 5, "TimeoutSeconds must be at least 5."));
+```
+
+The registration's own `PostConfigure` resolves `ExecutablePath` and `WritableDirectory` to full
+paths and turns a blank value into "unset". The callback is invoked last, so its `Configure` runs
+after any section binding and its `Validate` adds to — rather than replaces — the built-in checks.
+
+### Configuration section binding
+
+Pass the section path and the options are bound from `IConfiguration`:
 
 ```csharp
 builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
@@ -204,6 +228,15 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 //   }
 // }
 ```
+
+Binding is registered **before** the callback, so a `Configure` call inside the callback has the
+last word when both are used.
+
+### One registration per collection
+
+`AddSaFFMpeg` owns the unnamed `FFMpegOptions` instance, so a second call throws
+`InvalidOperationException` — two registrations would stack both `Configure` callbacks over the
+same options and silently merge the settings.
 
 ---
 

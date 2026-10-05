@@ -148,13 +148,17 @@ await IFFMpegExecutor.Default.ConvertToPcmF32LeRaw(
 
 ## С DI
 
+`AddSaFFMpeg` подключает FFmpeg через стандартный конвейер `Microsoft.Extensions.Options` и
+возвращает `IServiceCollection`, поэтому он складывается в цепочку с остальными вызовами `Add...`.
+В callback `configure` передаётся `OptionsBuilder<FFMpegOptions>`:
+
 ```csharp
-builder.Services.AddSaFFMpeg(configure: options =>
+builder.Services.AddSaFFMpeg(o => o.Configure(options =>
 {
     options.ExecutablePath = @"C:\tools\ffmpeg.exe"; // опциональный override
     options.WritableDirectory = @"C:\temp\output";
     options.TimeoutSeconds = 300; // 5 минут
-});
+}));
 
 // Использование:
 var executor = serviceProvider.GetRequiredService<IFFMpegExecutor>();
@@ -162,7 +166,28 @@ var probe    = serviceProvider.GetRequiredService<IFFProbeExecutor>();
 var manip    = serviceProvider.GetRequiredService<IPcmS16LeChannelManipulator>();
 ```
 
-Привязка секции конфигурации:
+### Pre- и post-инициализация
+
+Порядок конвейера фиксирован — **`Configure` → `PostConfigure` → валидация** — поэтому валидация
+видит уже нормализованные значения. `Configure` выполняется первым и получает «сырые» значения;
+`PostConfigure` выполняется после всех `Configure` и после собственной нормализации регистрации,
+поэтому всё, что добавлено здесь, увидит уже нормализованное значение:
+
+```csharp
+builder.Services.AddSaFFMpeg(o => o
+    .Configure(options => options.ExecutablePath = @"C:\tools\ffmpeg.exe")
+    .PostConfigure(options => options.WritableDirectory ??= Path.GetTempPath())
+    .Validate(options => options.TimeoutSeconds is null or >= 5, "TimeoutSeconds должен быть не меньше 5."));
+```
+
+Собственный `PostConfigure` регистрации приводит `ExecutablePath` и `WritableDirectory` к полным
+путям, а пустое значение превращает в «не задано». Callback вызывается последним, поэтому его
+`Configure` отрабатывает после привязки секции, а его `Validate` добавляется к встроенным
+проверкам, а не заменяет их.
+
+### Привязка секции конфигурации
+
+Передайте путь секции — опции будут привязаны из `IConfiguration`:
 
 ```csharp
 builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
@@ -176,6 +201,15 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 //   }
 // }
 ```
+
+Привязка регистрируется **до** callback'а, поэтому при одновременном использовании последнее
+слово остаётся за `Configure` внутри callback'а.
+
+### Одна регистрация на коллекцию
+
+`AddSaFFMpeg` владеет экземпляром `FFMpegOptions` без имени, поэтому второй вызов выбрасывает
+`InvalidOperationException`: две регистрации наложили бы обе `Configure` на одни и те же опции и
+молча слили настройки.
 
 ---
 

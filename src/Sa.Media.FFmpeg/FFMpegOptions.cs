@@ -1,9 +1,16 @@
-﻿namespace Sa.Media.FFmpeg;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Sa.Media.FFmpeg;
 
 /// <summary>
-/// Настройки библиотеки. Биндиндятся из конфигурации через <c>AddSaFFMpeg("Section")</c> и
-/// валидируются при старте хоста.
+/// Настройки библиотеки. Биндиндятся из конфигурации через <c>AddSaFFMpeg(configSectionPath: "Section")</c>
+/// и валидируются при старте хоста.
 /// </summary>
+/// <remarks>
+/// Единственный тип конфигурации, обслуживаемый стандартным конвейером
+/// <c>Microsoft.Extensions.Options</c>: <c>Configure</c> → <c>PostConfigure</c> (нормализация)
+/// → валидация. Фабрика исполнителей принимает ровно этот тип, отдельной «настроечной» копии нет.
+/// </remarks>
 public sealed record FFMpegOptions
 {
     /// <summary>
@@ -40,5 +47,33 @@ public sealed record FFMpegOptions
     {
         if (!string.IsNullOrWhiteSpace(WritableDirectory))
             Directory.CreateDirectory(WritableDirectory);
+    }
+
+    /// <summary>
+    /// Проверяет настройки и выбрасывает <see cref="ValidationException"/> с описанием первой
+    /// некорректной опции.
+    /// </summary>
+    /// <exception cref="ValidationException">Выбрасывается, если настройки некорректны.</exception>
+    /// <remarks>
+    /// Вызывается <see cref="FFMpegOptionsValidator"/> уже после нормализации, поэтому проверяются
+    /// именно итоговые значения. Явные проверки вместо <c>ValidateDataAnnotations()</c>: тот помечен
+    /// <c>RequiresUnreferencedCode</c> (IL2026) и ломает Native AOT.
+    /// </remarks>
+    public void Validate()
+    {
+        if (TimeoutSeconds is < 0)
+        {
+            throw new ValidationException("FFMpegOptions:TimeoutSeconds must be non-negative or left unset.");
+        }
+
+        // Каталог создаёт фабрика (EnsureWritableDirectory), так что его отсутствие — не ошибка
+        // настройки; настоящая ошибка — путь, указывающий на *файл*, в этом случае CreateDirectory
+        // роняет непонятное IOException при первом resolve.
+        if (WritableDirectory is not null && File.Exists(WritableDirectory))
+        {
+            throw new ValidationException(
+                "FFMpegOptions:WritableDirectory points to a file, not a directory. " +
+                "Leave the option unset to use the default, or point it at a directory (it is created if missing).");
+        }
     }
 }
