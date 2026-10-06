@@ -1,4 +1,6 @@
-﻿namespace Sa.Schedule.Settings;
+﻿using Sa.Schedule.Cron;
+
+namespace Sa.Schedule.Settings;
 
 internal sealed class JobProperties : IJobProperties
 {
@@ -106,6 +108,54 @@ internal sealed class JobProperties : IJobProperties
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
         ShutdownTimeout = timeout;
         return this;
+    }
+
+    /// <summary>
+    /// Applies <see cref="JobOptions"/> from configuration on top of whatever the code set:
+    /// configuration wins in every field, in both directions — including
+    /// <c>Disabled = false</c> re-enabling a job disabled in code. A null property leaves the
+    /// code value untouched.
+    /// </summary>
+    internal void ApplyConfiguration(JobOptions options)
+    {
+        if (options.Disabled is not null)
+        {
+            Disabled = options.Disabled;
+        }
+
+        if (options.Immediate is not null)
+        {
+            Immediate = options.Immediate;
+        }
+
+        if (options.IsRunOnce is not null)
+        {
+            IsRunOnce = options.IsRunOnce;
+        }
+
+        if (options.ConcurrencyLimit is not null)
+        {
+            ConcurrencyLimit = options.ConcurrencyLimit;
+        }
+
+        if (options.MaxConcurrency is not null)
+        {
+            MaxConcurrency = options.MaxConcurrency;
+        }
+
+        if (options.Every is not null)
+        {
+            Timing = JobTiming.EveryTime(options.Every.Value);
+        }
+        else if (options.Cron is not null)
+        {
+            Timing = new CronTimingAdapter(new CronTiming(options.Cron));
+        }
+
+        if (options.InitialDelay is not null)
+        {
+            InitialDelay = options.InitialDelay;
+        }
     }
 
 

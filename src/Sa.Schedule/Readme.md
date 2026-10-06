@@ -113,6 +113,63 @@ b.AddJob((context, ct) =>
 
 ---
 
+## Configuration via appsettings.json
+
+Jobs are usually configured in code (builder API above), but you can also drive them from a configuration file. `AddSaSchedule` takes an optional `configSectionPath`; that section is bound to `ScheduleOptions` on the standard `Microsoft.Extensions.Options` pipeline, and its values are applied **on top of** the code-registered jobs — configuration wins, in both directions (including `Disabled: false` re-enabling a job that was `Disabled()` in code).
+
+```csharp
+services.AddSaSchedule(
+    configure: b =>
+    {
+        b.UseHostedService();
+        b.AddJob<Heartbeat>().WithName("Heartbeat").EverySeconds(30);
+        b.AddJob<SlowReport>().WithName("SlowReport").EverySeconds(2);
+        b.AddJob<NightlyCleanup>().WithName("NightlyCleanup").EveryMinutes(15);
+    },
+    configSectionPath: "Schedule");
+```
+
+```json
+{
+  "Schedule": {
+    "Jobs": {
+      "Heartbeat":      { "Every": "00:00:02" },
+      "SlowReport":     { "Disabled": true },
+      "NightlyCleanup": { "Cron": "0 3 * * *" }
+    }
+  }
+}
+```
+
+`Heartbeat` now runs every 2 seconds (was 30), `SlowReport` is silent (was every 2 s), `NightlyCleanup` runs on cron at 03:00 (was every 15 min).
+
+### Per-job options
+
+| Property | Type | Effect |
+|---|---|---|
+| `Disabled` | `bool?` | `true` stops the job; `false` re-enables a job disabled in code |
+| `Immediate` | `bool?` | `true` runs the job on the first tick, without waiting for its timing; `false` reverts a code `StartImmediate()` |
+| `IsRunOnce` | `bool?` | `true` runs the job exactly once and never again; `false` restores the periodic schedule of a code `RunOnce()` |
+| `Cron` | `string?` | 5-field cron expression — replaces any timing set in code |
+| `Every` | `TimeSpan?` | interval — replaces any timing set in code |
+| `InitialDelay` | `TimeSpan?` | delay before the first run |
+| `ConcurrencyLimit` | `int?` | slots actively running at any moment; not negative; the scheduler clamps it down to `MaxConcurrency` |
+| `MaxConcurrency` | `int?` | absolute number of pre-allocated slots; at least 1 |
+
+All are optional; a property absent from the config leaves the code value untouched. `Cron` and `Every` are mutually exclusive — setting both is a validation error, as are a negative `ConcurrencyLimit` and a `MaxConcurrency` below 1 (the same rules the code mutators enforce). `TimeSpan` uses the constant form `[d.]hh:mm:ss`: `00:05:00` is five **minutes**, `00:00:30` is thirty **seconds**.
+
+### Matching a job to its section
+
+A job is matched to a `Jobs:<key>` entry by its name (`WithName(...)`), falling back to `typeof(Job).FullName` when no name was set. **Renaming a job in code silently detaches it from its section.** Entries whose key matches no registered job — and unknown property names within a job — are ignored.
+
+### Precedence and validation
+
+Within one job the order is code registration → section binding → your `configureOptions` callback (`AddSaSchedule`'s second parameter), so a `Configure` call there has the last word over the file. `ValidateOnStart()` turns an invalid value into an `OptionsValidationException` at host start, and the same check runs the first time the options are read — so a misconfiguration fails fast rather than deep in a job run.
+
+A full working example lives in [`Samples/Schedule.Configuration.Console`](../Samples/Schedule.Configuration.Console).
+
+---
+
 ## Cron Scheduling
 
 5-field expression: `minute hour day-of-month month day-of-week`. Supports `*`, `,`, `-`, `/`.

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Sa.Schedule.Settings;
 
@@ -44,10 +45,42 @@ internal sealed class ScheduleSettings : IScheduleSettings
                     => all.Any(handler => handler(context, exception)),
             };
 
-        return Create(
+        var settings = Create(
             provider.GetServices<JobSettings>(),
             isHostedService: provider.GetService<ScheduleHostedServiceMarker>() is not null,
             handleError: handleError);
+
+        // Applied after the (JobId, JobType) merge, so configuration lands on the single
+        // merged instance and wins over code in every field — including re-enabling a job
+        // disabled in code. The .Value read runs the validators, so invalid options surface
+        // here as an OptionsValidationException, not deep in a job run.
+        settings.ApplyConfiguration(
+            provider.GetService<IOptions<ScheduleOptions>>()?.Value);
+
+        return settings;
+    }
+
+    internal void ApplyConfiguration(ScheduleOptions? options)
+    {
+        if (options is null)
+        {
+            return;
+        }
+
+        foreach (var job in _storage.Values)
+        {
+            // JobName (WithName(...)) when set, otherwise the type's full name — the same
+            // key the configuration section is looked up by.
+            var key = job.Properties.JobName is { Length: > 0 } name
+                ? name
+                : job.JobType.FullName ?? string.Empty;
+
+            if (options.Jobs.TryGetValue(key, out var jobOptions)
+                && jobOptions is not null)
+            {
+                job.Properties.ApplyConfiguration(jobOptions);
+            }
+        }
     }
 
     internal static ScheduleSettings Create(
