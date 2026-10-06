@@ -156,7 +156,7 @@ public sealed class PostgresFileStorageRegistrationTests
         // No database round trip: GetSearchPath parses the connection string.
         var services = new ServiceCollection();
         services.AddSaPostgreSqlFileStorageChained()
-            .AddDataSource(b => b.WithConnectionString(connectionString));
+            .AddDataSource(b => b.Configure(o => o.ConnectionString = connectionString));
 
         using var provider = services.BuildServiceProvider();
 
@@ -168,7 +168,7 @@ public sealed class PostgresFileStorageRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddSaPostgreSqlFileStorageChained(o => o.SchemaName = "explicit")
-            .AddDataSource(b => b.WithConnectionString(
+            .AddDataSource(b => b.Configure(o => o.ConnectionString =
                 "Host=127.0.0.1;Database=postgres;Username=u;Password=p;Search Path=from_search_path"));
 
         using var provider = services.BuildServiceProvider();

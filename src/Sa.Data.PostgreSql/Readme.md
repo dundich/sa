@@ -9,13 +9,63 @@ Lightweight Npgsql wrapper for common PostgreSQL operations — no ORM overhead,
 ```csharp
 // Option 1: direct creation
 var dataSource = IPgDataSource.Create("Host=db;Database=mydb;Username=usr;Password=pwd");
+// or from an existing NpgsqlDataSource — shares its connection pool
+var dataSource = IPgDataSource.Create(new NpgsqlDataSource("Host=db;Database=mydb;Username=usr;Password=pwd"));
 
-// Option 2: via DI
-services.AddSaPostgreSqlDataSource(b => b.WithConnectionString("Host=db;Database=mydb;Username=usr;Password=pwd"));
-// or with factory (e.g., from IConfiguration):
-services.AddSaPostgreSqlDataSource(b => b.WithConnectionString(sp =>
-    sp.GetRequiredService<IConfiguration>().GetConnectionString("Default")));
+// Option 2: via DI — the connection string goes through the standard options pipeline
+services.AddSaPostgreSqlDataSource(b => b
+    .Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd"));
+
+// Option 3: from a configuration section
+services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
 ```
+
+---
+
+## Registration (DI)
+
+### With DI
+
+`AddSaPostgreSqlDataSource` takes the standard options callback, so configuration goes through `Configure` / `PostConfigure` / `Validate` like any other options type — not through a bespoke overload:
+
+```csharp
+services.AddSaPostgreSqlDataSource(b => b
+    .Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd"));
+
+// Usage:
+var dataSource = serviceProvider.GetRequiredService<IPgDataSource>();
+```
+
+The only option is `ConnectionString`. Pooling, timeout, and search path are configured inside the string itself (e.g. `Host=…;Minimum Pool Size=5;Maximum Pool Size=100;Search Path=storage;Timeout=15`).
+
+### From a configuration section
+
+```csharp
+// appsettings.json:
+// { "Postgres": { "ConnectionString": "Host=…;Database=…;Username=…;Password=…" } }
+services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
+```
+
+The section is bound **first**, so a `Configure` call inside the callback has the last word. The callback also runs after the registration's own `PostConfigure` and `Validate`, so your checks add to the built-in ones instead of replacing them.
+
+### Reusing an existing NpgsqlDataSource
+
+When `ConnectionString` is empty, the data source is built from an `NpgsqlDataSource` registered in DI — sharing its connection pool instead of opening a second one. The wrapper never disposes it; ownership stays with the registration:
+
+```csharp
+services.AddSingleton(new NpgsqlDataSource("Host=db;Database=mydb;Username=usr;Password=pwd"));
+services.AddSaPostgreSqlDataSource();
+```
+
+### Validation
+
+The connection string is normalised (trimmed) in `PostConfigure` and then validated on the way out: a non-empty value must parse as a PostgreSQL connection string (checked with the same `NpgsqlConnectionStringBuilder` Npgsql uses, so a typo in `Host=` surfaces as an early `OptionsValidationException` rather than a bare `FormatException` from the middle of the first query); an empty value is only valid when an `NpgsqlDataSource` is registered in the collection.
+
+`ValidateOnStart()` turns a bad configuration into an `OptionsValidationException` at host start, and the same check fires when `IOptions<PgDataSourceOptions>.Value` is first read — i.e. on the first data-source resolve — so even a bare `ServiceCollection` fails fast instead of deep in a query.
+
+The validator is an explicit `IValidateOptions<PgDataSourceOptions>` rather than `ValidateDataAnnotations()`: the latter is marked `RequiresUnreferencedCode` (IL2026) and breaks Native AOT, which this assembly is built for.
+
+Register the data source with configuration only once per service collection — a second *configuring* call (one carrying a `configure` callback or a `configSectionPath`) throws `InvalidOperationException`, because both `Configure` callbacks would otherwise apply to the same unnamed options instance and the settings would silently merge. Bare calls (no callback, no section) may be repeated by design: `AddSaPartitional` and `AddSaOutboxUsingPostgreSql` each register a bare data source, and a single configuring call — wherever it sits — is the one that takes effect.
 
 ---
 

@@ -6,30 +6,56 @@ namespace Sa.Data.PostgreSql;
 /// <summary>
 /// NpgsqlDataSource lite
 /// </summary>
-/// <param name="settings">connection string</param>
-internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSource
+internal sealed class PgDataSource : IPgDataSource
 {
-    private readonly Lazy<NpgsqlDataSource> _dataSource
-        = new(() => NpgsqlDataSource.Create(settings.ConnectionString));
+    private readonly NpgsqlDataSource _dataSource;
+    private readonly string _searchPath;
+    private readonly bool _ownsDataSource;
 
-    public string GetSearchPath() => settings.GetSearchPath();
+    /// <summary>
+    /// Строит собственный <see cref="NpgsqlDataSource"/> из строки подключения и владеет им
+    /// (dispose его). Так собирается data source, когда задана <see cref="PgDataSourceOptions.ConnectionString"/>.
+    /// </summary>
+    /// <param name="connectionString">строка подключения</param>
+    public PgDataSource(string connectionString)
+        : this(NpgsqlDataSource.Create(connectionString), SearchPathOf(connectionString), ownsDataSource: true)
+    {
+    }
+
+    /// <summary>
+    /// Переиспользует уже зарегистрированный <see cref="NpgsqlDataSource"/> (общий pool) и НЕ
+    /// dispose его — владелец им является тот, кто его зарегистрировал.
+    /// </summary>
+    public PgDataSource(NpgsqlDataSource dataSource)
+        : this(dataSource, SearchPathOf(dataSource.ConnectionString), ownsDataSource: false)
+    {
+    }
+
+    private PgDataSource(NpgsqlDataSource dataSource, string searchPath, bool ownsDataSource)
+    {
+        _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _searchPath = searchPath;
+        _ownsDataSource = ownsDataSource;
+    }
+
+    public string GetSearchPath() => _searchPath;
 
     public ValueTask<NpgsqlConnection> OpenDbConnection(CancellationToken cancellationToken)
-        => _dataSource.Value.OpenConnectionAsync(cancellationToken);
+        => _dataSource.OpenConnectionAsync(cancellationToken);
 
     public void Dispose()
     {
-        if (_dataSource.IsValueCreated)
+        if (_ownsDataSource)
         {
-            _dataSource.Value.Dispose();
+            _dataSource.Dispose();
         }
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_dataSource.IsValueCreated)
+        if (_ownsDataSource)
         {
-            await _dataSource.Value.DisposeAsync().ConfigureAwait(false);
+            await _dataSource.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -104,5 +130,21 @@ internal sealed class PgDataSource(PgDataSourceSettings settings) : IPgDataSourc
             rowCount++;
         }
         return rowCount;
+    }
+
+    // Строка подключения → search path. Перенесено из удалённого PgDataSourceSettings.GetSearchPath();
+    // возвращает всю (возможно, списокную) Search Path, а не только первую запись — разбиение на первую
+    // делает потребитель (PostgresFileStorageSchema). Не удалось разобрать → "public".
+    private static string SearchPathOf(string connectionString)
+    {
+        try
+        {
+            var builder = new NpgsqlConnectionStringBuilder(connectionString);
+            return builder.SearchPath ?? "public";
+        }
+        catch
+        {
+            return "public";
+        }
     }
 }

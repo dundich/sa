@@ -9,13 +9,63 @@
 ```csharp
 // Вариант 1: прямое создание
 var dataSource = IPgDataSource.Create("Host=db;Database=mydb;Username=usr;Password=pwd");
+// или из существующего NpgsqlDataSource — общий pool соединений
+var dataSource = IPgDataSource.Create(new NpgsqlDataSource("Host=db;Database=mydb;Username=usr;Password=pwd"));
 
-// Вариант 2: через DI
-services.AddSaPostgreSqlDataSource(b => b.WithConnectionString("Host=db;Database=mydb;Username=usr;Password=pwd"));
-// или с factory (например, из IConfiguration):
-services.AddSaPostgreSqlDataSource(b => b.WithConnectionString(sp =>
-    sp.GetRequiredService<IConfiguration>().GetConnectionString("Default")));
+// Вариант 2: через DI — connection string идёт через стандартный конвейер options
+services.AddSaPostgreSqlDataSource(b => b
+    .Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd"));
+
+// Вариант 3: из секции конфигурации
+services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
 ```
+
+---
+
+## Регистрация (DI)
+
+### Через DI
+
+`AddSaPostgreSqlDataSource` принимает стандартный options-callback, поэтому настройка идёт через `Configure` / `PostConfigure` / `Validate`, как для любого другого типа опций, — а не через особый overload:
+
+```csharp
+services.AddSaPostgreSqlDataSource(b => b
+    .Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd"));
+
+// Использование:
+var dataSource = serviceProvider.GetRequiredService<IPgDataSource>();
+```
+
+Единственная опция — `ConnectionString`. Пулинг, таймауты и search path настраиваются внутри самой строки (например, `Host=…;Minimum Pool Size=5;Maximum Pool Size=100;Search Path=storage;Timeout=15`).
+
+### Из секции конфигурации
+
+```csharp
+// appsettings.json:
+// { "Postgres": { "ConnectionString": "Host=…;Database=…;Username=…;Password=…" } }
+services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
+```
+
+Секция привязывается **первой**, поэтому `Configure`-вызов внутри callback'а имеет последнее слово. Callback также выполняется после собственных `PostConfigure` и `Validate` регистрации, поэтому ваши проверки дополняют встроенные, а не заменяют их.
+
+### Переиспользование существующего NpgsqlDataSource
+
+Если `ConnectionString` пуст, data source строится из зарегистрированного в DI `NpgsqlDataSource` — с общим pool'ом соединений, а не со вторым. Обёртка никогда не dispose его; владельцем остаётся регистрация:
+
+```csharp
+services.AddSingleton(new NpgsqlDataSource("Host=db;Database=mydb;Username=usr;Password=pwd"));
+services.AddSaPostgreSqlDataSource();
+```
+
+### Валидация
+
+Строка подключения нормализуется (trim) в `PostConfigure` и затем валидируется при выходе: непустое значение должно разбираться как connection string PostgreSQL (проверка тем же `NpgsqlConnectionStringBuilder`, что использует Npgsql, — поэтому опечатка в `Host=` всплывает ранним `OptionsValidationException`, а не голым `FormatException` посреди первого запроса); пустое значение валидно только при зарегистрированном в коллекции `NpgsqlDataSource`.
+
+`ValidateOnStart()` превращает некорректную конфигурацию в `OptionsValidationException` на старте хоста; та же проверка срабатывает и при первом чтении `IOptions<PgDataSourceOptions>.Value` — то есть при первом resolve data source, — так что даже «голый» `ServiceCollection` падает быстро, а не посреди запроса.
+
+Валидатор — явный `IValidateOptions<PgDataSourceOptions>`, а не `ValidateDataAnnotations()`: последний помечен `RequiresUnreferencedCode` (IL2026) и ломает Native AOT, ради которого эта сборка и существует.
+
+Data source настраивается один раз на service collection — второй *настраивающий* вызов (с callback'ом `configure` или `configSectionPath`) бросает `InvalidOperationException`, иначе оба `Configure`-callback'а применились бы к одному unnamed-инстансу опций и настройки тихо слитались бы. Повторные «голые» вызовы (без callback'а и секции) разрешены по дизайну: `AddSaPartitional` и `AddSaOutboxUsingPostgreSql` каждый регистрируют «голый» data source, а единственный настраивающий вызов — где бы он ни стоял, — и есть тот, что действует.
 
 ---
 

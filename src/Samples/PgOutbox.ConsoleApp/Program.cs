@@ -40,7 +40,7 @@ IHost host = Host.CreateDefaultBuilder().ConfigureServices(services => services
     )
     // outbox for pg
     .AddSaOutboxUsingPostgreSql(cfg => cfg
-        .WithDataSource(ds => ds.WithConnectionString(connectionString))
+        .WithDataSource(ds => ds.Configure(o => o.ConnectionString = connectionString))
         .WithOutboxSettings((_, settings) =>
         {
             settings.TableSettings.WithSchema("test");

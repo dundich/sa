@@ -74,7 +74,8 @@ builder.Services.AddSaPostgreSqlFileStorageChained(options =>
         options.ExpireDays = 365 * 3;                // drop partitions after 3 years
     })
     .AddDataSource(ds => ds
-        .WithConnectionString("Host=localhost;Database=mydb;Username=postgres;Password=password"));
+        .Configure(o => o.ConnectionString =
+            "Host=localhost;Database=mydb;Username=postgres;Password=password"));
 ```
 
 When the data source is already registered by something else, use the non-chaining overload:

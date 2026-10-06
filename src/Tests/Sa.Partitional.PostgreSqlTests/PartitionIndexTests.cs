@@ -21,7 +21,7 @@ public class PartitionIndexTests(PartitionIndexTests.Fixture fixture) : IClassFi
 
                 });
             })
-            .AddDataSource(configure => configure.WithConnectionString(_ => this.ConnectionString))
+            .AddDataSource(configure => configure.Configure(o => o.ConnectionString = this.ConnectionString))
             ;
         }
     }

@@ -24,7 +24,7 @@ builder.Services
     )
     // Provider registration (example — PostgreSQL)
     .AddSaOutboxUsingPostgreSql(cfg => cfg
-        .WithDataSource(ds => ds.WithConnectionString("Host=localhost;Database=outbox"))
+        .WithDataSource(ds => ds.Configure(o => o.ConnectionString = "Host=localhost;Database=outbox"))
     );
 ```
 

@@ -1,4 +1,5 @@
-﻿using Sa.Data.PostgreSql;
+﻿using Microsoft.Extensions.Options;
+using Sa.Data.PostgreSql;
 
 namespace Sa.Partitional.PostgreSql;
 
@@ -38,9 +39,19 @@ public interface IPartConfiguration
     IPartConfiguration AddPartCleanupSchedule(Action<IServiceProvider, PartCleanupScheduleSettings>? configure = null);
 
     /// <summary>
-    /// Configures the PostgreSQL data source via <see cref="IPgDataSourceSettingsBuilder"/>.
+    /// Configures the PostgreSQL data source through the standard options pipeline
+    /// (<see cref="PgDataSourceOptions"/>).
     /// </summary>
-    /// <param name="configure">Optional action to set connection strings, pooling, retries, etc.</param>
+    /// <param name="configure">
+    /// Optional callback receiving the <see cref="OptionsBuilder{TOptions}"/> for
+    /// <see cref="PgDataSourceOptions"/>. The only option is the connection string; pooling,
+    /// timeout and search path live inside the string itself.
+    /// </param>
+    /// <param name="configSectionPath">
+    /// Optional configuration section to bind <see cref="PgDataSourceOptions"/> from.
+    /// </param>
     /// <returns>The same <see cref="IPartConfiguration"/> for chaining.</returns>
-    IPartConfiguration AddDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null);
+    IPartConfiguration AddDataSource(
+        Action<OptionsBuilder<PgDataSourceOptions>>? configure = null,
+        string? configSectionPath = null);
 }

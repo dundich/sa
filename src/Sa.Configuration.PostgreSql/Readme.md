@@ -62,7 +62,7 @@ builder.Configuration.AddSaPostgreSqlConfiguration(
 ```
 
 If the application already registers `IPgDataSource` through `AddSaPostgreSqlDataSource`
-(`o => o.WithConnectionString(...)`), resolve that instance and hand it to the configuration
+(`b => b.Configure(o => o.ConnectionString = ...)`), resolve that instance and hand it to the configuration
 source as well, so both paths share one pool.
 
 The provider never disposes a data source it did not create — you keep ownership of

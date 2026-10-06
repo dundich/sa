@@ -5,7 +5,10 @@ namespace Sa.Data.PostgreSql;
 public interface IPgDataSource : IDisposable, IAsyncDisposable
 {
     public static IPgDataSource Create(string connectionString)
-        => new PgDataSource(new PgDataSourceSettings(connectionString));
+        => new PgDataSource(connectionString);
+
+    public static IPgDataSource Create(NpgsqlDataSource dataSource)
+        => new PgDataSource(dataSource);
 
     string GetSearchPath();
 

@@ -1,4 +1,5 @@
-﻿using Sa.Data.PostgreSql;
+﻿using Microsoft.Extensions.Options;
+using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
@@ -48,9 +49,19 @@ public interface IPgOutboxConfiguration
     IPgOutboxConfiguration WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null);
 
     /// <summary>
-    /// Configures the PostgreSQL data source connection string and related options.
+    /// Configures the PostgreSQL data source through the standard options pipeline
+    /// (<see cref="PgDataSourceOptions"/>).
     /// </summary>
-    /// <param name="configure">Delegate receiving <see cref="IPgDataSourceSettingsBuilder"/> to set connection string and pooling options.</param>
+    /// <param name="configure">
+    /// Optional callback receiving the <see cref="OptionsBuilder{TOptions}"/> for
+    /// <see cref="PgDataSourceOptions"/> (connection string; pooling, timeout and search path
+    /// live inside the string itself).
+    /// </param>
+    /// <param name="configSectionPath">
+    /// Optional configuration section to bind <see cref="PgDataSourceOptions"/> from.
+    /// </param>
     /// <returns>The same <see cref="IPgOutboxConfiguration"/> for chaining.</returns>
-    IPgOutboxConfiguration WithDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null);
+    IPgOutboxConfiguration WithDataSource(
+        Action<OptionsBuilder<PgDataSourceOptions>>? configure = null,
+        string? configSectionPath = null);
 }

@@ -36,7 +36,8 @@ IHost host = Host.CreateDefaultBuilder()
         // ② Wire up PostgreSQL
         .AddSaOutboxUsingPostgreSql(cfg => cfg
             .WithDataSource(ds => ds
-                .WithConnectionString("Host=localhost;Database=outbox_db;Username=postgres;Password=postgres"))
+                .Configure(o => o.ConnectionString =
+                    "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres"))
             .WithOutboxSettings((_, settings) =>
             {
                 settings.TableSettings.WithSchema("outbox");
@@ -200,9 +201,10 @@ Where inside `AddSaOutboxUsingPostgreSql`:
 ```csharp
 .AddSaOutboxUsingPostgreSql(cfg => cfg
     .WithDataSource(ds => ds
-        .WithConnectionString("Host=...;Database=...;Username=...;Password=...")
-        // .WithMinimumPoolSize(5)
-        // .WithMaximumPoolSize(100)
+        .Configure(o => o.ConnectionString =
+            "Host=...;Database=...;Username=...;Password=...")
+        // Pooling, timeout and search path live inside the connection string itself, e.g.:
+        // "Host=...;Minimum Pool Size=5;Maximum Pool Size=100;Search Path=outbox"
     )
     // ...
 )

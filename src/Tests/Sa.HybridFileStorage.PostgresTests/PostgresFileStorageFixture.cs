@@ -16,6 +16,6 @@ public class PostgresFileStorageFixture : PgDataSourceFixture<IFileStorage>
                 opts.TableName = tableName;
                 configure?.Invoke(opts);
             })
-            .AddDataSource(b => b.WithConnectionString(_ => ConnectionString));
+            .AddDataSource(b => b.Configure(o => o.ConnectionString = ConnectionString));
     }
 }

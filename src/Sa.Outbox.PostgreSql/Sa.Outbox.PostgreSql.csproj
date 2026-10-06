@@ -3,7 +3,7 @@
 	<Import Project="../Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
-		<Version>0.15.0</Version>
+		<Version>0.16.0</Version>
 		<Description>Simple Outbox for Pg (publishing and using messages)</Description>
 	</PropertyGroup>
 
@@ -24,6 +24,8 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.ObjectPool" />
 		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
+		<!-- Публичная сигнатура IPgOutboxConfiguration.WithDataSource ссылается на OptionsBuilder&lt;PgDataSourceOptions&gt; -->
+		<PackageReference Include="Microsoft.Extensions.Options" />
 	</ItemGroup>
 
 	<ItemGroup>

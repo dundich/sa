@@ -51,7 +51,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                 )
                 .AddSaOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.WithDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
+                    cfg.WithDataSource(c => c.Configure(o => o.ConnectionString = this.ConnectionString));
                     cfg.WithOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "test";

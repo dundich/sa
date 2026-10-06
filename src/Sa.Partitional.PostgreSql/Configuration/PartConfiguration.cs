@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Sa.Data.PostgreSql;
 using Sa.Partitional.PostgreSql.Cache;
 using Sa.Partitional.PostgreSql.Cleaning;
@@ -22,9 +23,11 @@ internal sealed class PartConfiguration(IServiceCollection services) : IPartConf
         return this;
     }
 
-    public IPartConfiguration AddDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null)
+    public IPartConfiguration AddDataSource(
+        Action<OptionsBuilder<PgDataSourceOptions>>? configure = null,
+        string? configSectionPath = null)
     {
-        services.AddSaPostgreSqlDataSource(configure);
+        services.AddSaPostgreSqlDataSource(configure, configSectionPath);
 
         // inner
         services.AddPartRepository();

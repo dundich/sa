@@ -16,7 +16,7 @@ var hostBuilder = Host.CreateApplicationBuilder(args);
 hostBuilder.Services
     .AddSingleton<Tester>()
     .AddLogging(c => c.AddConsole())
-    .AddSaPostgreSqlDataSource(builder => builder.WithConnectionString(connectionString))
+    .AddSaPostgreSqlDataSource(builder => builder.Configure(o => o.ConnectionString = connectionString))
     .AddSaPartitional((sp, builder) =>
     {
         builder.AddSchema("public", schema =>

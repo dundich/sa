@@ -51,7 +51,7 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
     public async Task DiDataSourceTest()
     {
         ServiceCollection services = new();
-        services.AddSaPostgreSqlDataSource(b => b.WithConnectionString(fixture.ConnectionString));
+        services.AddSaPostgreSqlDataSource(b => b.Configure(o => o.ConnectionString = fixture.ConnectionString));
         using var serviceProvider = services.BuildServiceProvider();
 
         IPgDataSource dataSource = serviceProvider.GetRequiredService<IPgDataSource>();

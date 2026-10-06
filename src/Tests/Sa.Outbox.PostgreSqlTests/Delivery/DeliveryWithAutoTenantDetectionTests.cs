@@ -60,7 +60,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
                     )
                 )
                 .AddSaOutboxUsingPostgreSql(builder => builder
-                    .WithDataSource(b => b.WithConnectionString(_ => ConnectionString))
+                    .WithDataSource(b => b.Configure(o => o.ConnectionString = ConnectionString))
                     .WithMessageSerializer(_ => OutboxMessageSerializer.Instance)
                     .WithOutboxSettings((_, pg) => pg.TableSettings.WithSchema("auto_detect"))
                 );

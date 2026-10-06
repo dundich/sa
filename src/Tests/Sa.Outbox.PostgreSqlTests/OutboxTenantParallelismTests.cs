@@ -117,7 +117,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                 )
                 .AddSaOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.WithDataSource(c => c.WithConnectionString(_ => ConnectionString));
+                    cfg.WithDataSource(c => c.Configure(o => o.ConnectionString = ConnectionString));
                     cfg.WithOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "parallel_test";

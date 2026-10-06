@@ -3,7 +3,7 @@
 	<Import Project="../Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
-		<Version>0.15.0</Version>
+		<Version>0.16.0</Version>
 		<Description>For managing table partitioning in PostgreSQL</Description>
 	</PropertyGroup>
 
@@ -14,6 +14,11 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
 		<ProjectReference Include="..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Публичная сигнатура IPartConfiguration.AddDataSource ссылается на OptionsBuilder&lt;PgDataSourceOptions&gt; -->
+		<PackageReference Include="Microsoft.Extensions.Options" />
 	</ItemGroup>
 
 	<ItemGroup>

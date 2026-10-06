@@ -38,7 +38,7 @@ public class PartitionManagerTests(PartitionManagerTests.Fixture fixture)
                     ;
                 });
             })
-            .AddDataSource(configure => configure.WithConnectionString(_ => this.ConnectionString))
+            .AddDataSource(configure => configure.Configure(o => o.ConnectionString = this.ConnectionString))
             ;
         }
     }
