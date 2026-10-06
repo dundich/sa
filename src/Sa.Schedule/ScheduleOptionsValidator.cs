@@ -87,8 +87,41 @@ internal sealed class ScheduleOptionsValidator : IValidateOptions<ScheduleOption
                     $"ScheduleOptions:Jobs:{jobName}: 'MaxConcurrency' must be at least 1, " +
                     $"but was '{job.MaxConcurrency.Value}'.");
             }
+
+            if (job.TimeZone is not null && !TryFindTimeZone(job.TimeZone))
+            {
+                return ValidateOptionsResult.Fail(
+                    $"ScheduleOptions:Jobs:{jobName}: 'TimeZone' value '{job.TimeZone}' is not a " +
+                    "known time zone id (IANA like 'Europe/Moscow', or a Windows id like " +
+                    "'Russian Standard Time').");
+            }
+        }
+
+        if (options.TimeZone is not null && !TryFindTimeZone(options.TimeZone))
+        {
+            return ValidateOptionsResult.Fail(
+                $"ScheduleOptions: 'TimeZone' value '{options.TimeZone}' is not a " +
+                "known time zone id (IANA like 'Europe/Moscow', or a Windows id like " +
+                "'Russian Standard Time').");
         }
 
         return ValidateOptionsResult.Success;
+    }
+
+    private static bool TryFindTimeZone(string id)
+    {
+        try
+        {
+            _ = TimeZoneInfo.FindSystemTimeZoneById(id);
+            return true;
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return false;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return false;
+        }
     }
 }

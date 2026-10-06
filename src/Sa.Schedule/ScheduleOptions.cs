@@ -23,6 +23,16 @@
 public class ScheduleOptions
 {
     /// <summary>
+    /// Часовой пояс по умолчанию для <see cref="JobOptions.TimeZone"/> всех задач, у которых
+    /// он не задан ни в коде (<c>WithTimeZone()</c>), ни в собственном разделе
+    /// <c>Jobs:&lt;имя&gt;:TimeZone</c>. Cron-выражения таких задач читаются по «стенным
+    /// часам» этой зоны ("0 9 * * *" — 9:00 локально), а не UTC.
+    /// Id — IANA ("Europe/Moscow") или Windows ("Russian Standard Time"); .NET 8+ понимает оба.
+    /// <c>null</c> = UTC.
+    /// </summary>
+    public string? TimeZone { get; set; }
+
+    /// <summary>
     /// Параметры задач, ключевые по имени задачи. Привязывается из под-раздела <c>Jobs</c>
     /// (например, <c>Schedule:Jobs:&lt;имя задачи&gt;:&lt;свойство&gt;</c>).
     /// </summary>

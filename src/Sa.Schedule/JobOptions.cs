@@ -41,6 +41,16 @@ public class JobOptions
     public TimeSpan? Every { get; set; }
 
     /// <summary>
+    /// Часовой пояс, в котором читается <see cref="Cron"/>: cron-выражение приобретает смысл
+    /// «стенных часов» этой зоны ("0 9 * * *" — это 9:00 там, где вы живёте), а не UTC.
+    /// Заменяет <c>WithTimeZone()</c> из кода; если у задачи нет своего <c>TimeZone</c>,
+    /// применяется <see cref="ScheduleOptions.TimeZone"/> — общий для всего планировщика.
+    /// Id — IANA ("Europe/Moscow") или Windows ("Russian Standard Time"); .NET 8+ понимает
+    /// оба. Интервалы (<see cref="Every"/>) смена часового пояса не касается.
+    /// </summary>
+    public string? TimeZone { get; set; }
+
+    /// <summary>
     /// Задержка перед первым запуском. Формат <c>TimeSpan</c> константной формы, например
     /// <c>00:00:30</c>. Не может быть отрицательной.
     /// </summary>

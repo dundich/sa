@@ -67,6 +67,12 @@ internal sealed class ScheduleSettings : IScheduleSettings
             return;
         }
 
+        // The schedule-wide zone default is validated alongside the per-job ones by the
+        // options validator, so this resolve runs only for ids it already accepted.
+        TimeZoneInfo? defaultTimeZone = options.TimeZone is null
+            ? null
+            : TimeZoneInfo.FindSystemTimeZoneById(options.TimeZone);
+
         foreach (var job in _storage.Values)
         {
             // JobName (WithName(...)) when set, otherwise the type's full name — the same
@@ -75,11 +81,11 @@ internal sealed class ScheduleSettings : IScheduleSettings
                 ? name
                 : job.JobType.FullName ?? string.Empty;
 
-            if (options.Jobs.TryGetValue(key, out var jobOptions)
-                && jobOptions is not null)
-            {
-                job.Properties.ApplyConfiguration(jobOptions);
-            }
+            // jobOptions may be null (no section for this job) — the schedule-wide zone
+            // default must still reach jobs without their own section.
+            options.Jobs.TryGetValue(key, out var jobOptions);
+
+            job.Properties.ApplyConfiguration(jobOptions, defaultTimeZone);
         }
     }
 

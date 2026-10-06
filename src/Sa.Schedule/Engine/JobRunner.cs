@@ -35,7 +35,12 @@ internal sealed class JobRunner() : IJobRunner
 
             if (await controller.CanExecute(cancellationToken) == CanJobExecuteResult.Abort)
             {
-                return controller.AbortedByError;
+                // Any abort exit is "no more work" — the job completed its
+                // run-once, its schedule can never fire, or the error handling
+                // aborted it. The caller (the scheduler) treats every one of
+                // these as a job that has finished, in contrast to a cancelled
+                // run below which is a stop the caller already knows about.
+                return true;
             }
 
             await ExecuteIteration(controller, cancellationToken);

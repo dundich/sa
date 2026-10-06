@@ -82,14 +82,38 @@ internal static class CronFieldParser
             if (part.Length == 0)
                 throw new CronParseException($"Empty value in list '{token}' for {name}.", name, element);
 
+            // A list element may be any single field shape, not just a plain
+            // number — standard cron allows steps ("0,*/15", "1-5/10", "5/10"),
+            // ranges ("0-4,8-12") and "*" inside a list too. Each of those is
+            // parsed exactly like it would be as a whole field.
+            if (part.Contains('/'))
+            {
+                ParseStep(part, kind, name, acc);
+                continue;
+            }
+
+            if (part == "*")
+            {
+                for (int v = FieldMin[(int)kind]; v <= FieldMax[(int)kind]; v++)
+                    acc.Values.Add(v);
+                continue;
+            }
+
             if (TryParseValue(part, kind, name, out int value))
             {
                 acc.Values.Add(value);
                 continue;
             }
 
+            // "L-3"-style specials look like ranges, so specials are probed first.
             if (TryParseSpecial(part, kind, name, acc))
                 continue;
+
+            if (part.Contains('-'))
+            {
+                ParseRange(part, kind, name, acc);
+                continue;
+            }
 
             throw new CronParseException($"Invalid value '{part}' in list for {name}.", name, part);
         }

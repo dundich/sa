@@ -32,6 +32,12 @@ public interface IJobScheduler: IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Gets a change token that can be used to track changes to the active state of the scheduler.
+    /// <para>
+    /// The token fires when the currently <b>running</b> job stops. When the job is already
+    /// stopped (or a start is still in flight) the returned token never fires — there is no
+    /// pending transition — so a subscriber gets no spuriously fired token for a change that
+    /// happened before it subscribed. Poll <see cref="IsStarted"/> to observe a later start.
+    /// </para>
     /// </summary>
     IChangeToken StartChangeToken();
 

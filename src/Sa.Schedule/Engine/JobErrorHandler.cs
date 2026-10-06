@@ -50,9 +50,37 @@ internal sealed class JobErrorHandler(
 
         var scheduler = context.ServiceProvider.GetService<IScheduler>();
 
-        // A fire-and-forget Stop() could not be awaited — its exception (for
-        // example from a job still finishing on shutdown) was silently lost.
-        scheduler?.Stop().GetAwaiter().GetResult();
+        if (scheduler is null) return;
+
+        // This runs on the failing job's own queue reader, and that reader is still
+        // working on the very item that got us here: stopping *this* job would park
+        // in WaitForIdleAsync waiting for its own item — a guaranteed stall for the
+        // whole shutdown timeout before it gives up. The other jobs can go idle, so
+        // they are stopped here; this one stops itself right after, because
+        // DoHandleError always throws below — the controller catches that as
+        // "action applied", sets AbortedByError and the abort path tears its
+        // readers down.
+        Guid self = context.Settings.JobId;
+
+        List<Task> stops = [];
+
+        foreach (IJobScheduler job in scheduler.Jobs)
+        {
+            if (job.JobId == self) continue;
+
+            stops.Add(job.Stop());
+        }
+
+        try
+        {
+            Task.WhenAll(stops).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            // A Stop() that failed must not hide the original error: the configured
+            // action is applied below regardless.
+            logger?.LogStopAllJobsIncomplete(jobName, ex.ToString());
+        }
     }
 
     private void CloseApplication(string jobName, Exception exception)

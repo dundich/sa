@@ -233,6 +233,156 @@ public class JobSchedulerTests
     }
 
 
+    [Fact]
+    public async Task ChangeToken_AfterStart_WaitsForNextStop()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        await scheduler.Start(TestContext.Current.CancellationToken);
+        Assert.True(scheduler.IsStarted);
+
+        // While running, the token waits for the next stop and must not be
+        // fired prematurely.
+        var token = scheduler.StartChangeToken();
+        Assert.False(token.HasChanged);
+
+        await scheduler.Stop();
+
+        Assert.True(token.HasChanged);
+
+        await scheduler.DisposeAsync();
+    }
+
+
+    [Fact]
+    public async Task ChangeToken_StoppedJob_HasNoPendingTransition()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.Stop();
+        Assert.False(scheduler.IsStarted);
+
+        // Previously this returned the already-cancelled (already-fired) source
+        // token, so a subscriber got a phantom "change" for a transition that
+        // happened before it subscribed. A stopped job has no pending
+        // transition — the token must be inert; IsStarted is the state query.
+        var token = scheduler.StartChangeToken();
+        Assert.False(token.HasChanged);
+
+        await scheduler.DisposeAsync();
+    }
+
+
+    [Fact]
+    public async Task RunOnce_NaturalCompletion_StopsAndRefusesToRestart()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        settings.Properties.RunOnce();
+
+        // The runner reports "finished" (the loop ended because there is no
+        // more work) — exactly what happens when a real RunOnce job's gate
+        // closes after its single iteration.
+        var scheduler = new JobScheduler(settings, new FinishedRunner(), i => new TestJobController(i));
+
+        Assert.True(await scheduler.Start(TestContext.Current.CancellationToken));
+
+        // No error happened, yet the job must stop itself — IsStarted must not
+        // be left stuck true over a dead job.
+        await WaitForConditionAsync(() => !scheduler.IsStarted);
+        Assert.False(scheduler.IsStarted);
+
+        // "stop permanently": the RunOnce is consumed, so a later Start is
+        // refused instead of silently re-running the job.
+        Assert.False(await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.False(scheduler.IsStarted);
+
+        await scheduler.DisposeAsync();
+    }
+
+
+    [Fact]
+    public async Task Stop_DuringStart_StopsTheStart()
+    {
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        settings.Properties.WithShutdownTimeout(TimeSpan.FromSeconds(2));
+
+        var runner = new OneShotGateRunner();
+        var scheduler = new JobScheduler(settings, runner, i => new TestJobController(i));
+
+        // Start #1: the reader picks the item and parks on the gate — the queue
+        // is now busy with an item that cannot finish until the gate is released.
+        Assert.True(await scheduler.Start(TestContext.Current.CancellationToken));
+        await runner.Started;
+        Assert.True(scheduler.IsStarted);
+
+        // Stop times out on the parked item (bounded by the shutdown timeout):
+        // nothing can drain the queue while the gate is closed. This also proves
+        // the queue really is busy before we build on that below.
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await scheduler.Stop();
+        sw.Stop();
+        Assert.True(sw.Elapsed >= TimeSpan.FromMilliseconds(1500),
+            $"Stop returned immediately ({sw.ElapsedMilliseconds}ms) — the queue was not busy");
+        Assert.False(scheduler.IsStarted);
+
+        // Start #2 blocks in WaitForIdleAsync while the old item is still in
+        // flight — it cannot finish before the gate is released, so by the time
+        // Stop() runs below the start is guaranteed to be in flight.
+        using var startCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var startTask = scheduler.Start(startCts.Token);
+        Assert.False(startTask.IsCompleted,
+            "Start #2 must wait for the in-flight item — it was not in flight");
+
+        // Stop lands while Start is still starting. It must not be lost: the
+        // in-flight start must see it and cancel itself.
+        await scheduler.Stop();
+
+        runner.Release();
+
+        Assert.False(await startTask);
+        Assert.False(scheduler.IsStarted);
+
+        await scheduler.DisposeAsync();
+    }
+
+
+    [Fact]
+    public async Task ConcurrencyLimit_WithoutMaxConcurrency_DefaultsMaxToLimit()
+    {
+        // Documented contract (IJobProperties.MaxConcurrency): an unset
+        // MaxConcurrency equals the effective ConcurrencyLimit, so a bare
+        // WithConcurrencyLimit(5) allocates 5 slots. Before the fix the queue
+        // was silently capped at 1 because MaxConcurrency defaulted to 1.
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        settings.Properties.WithConcurrencyLimit(5);
+
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        await scheduler.Start(TestContext.Current.CancellationToken);
+        Assert.True(scheduler.IsStarted);
+        Assert.Equal(5, scheduler.ConcurrencyLimit);
+
+        await scheduler.DisposeAsync();
+    }
+
+
+    private static async Task WaitForConditionAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition()) return;
+            await Task.Delay(25, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(condition(), "the condition was not met within the timeout");
+    }
+
+
 
     class TestJob : IJob
     {
@@ -258,6 +408,40 @@ public class JobSchedulerTests
 
         public Task<bool> Run(IJobController controller, CancellationToken cancellationToken)
             => Never;
+    }
+
+
+    // Reports "finished" immediately — the same result a real runner returns
+    // when a RunOnce gate closes or an unsatisfiable schedule ends the loop.
+    class FinishedRunner : IJobRunner
+    {
+        public Task<bool> Run(IJobController controller, CancellationToken cancellationToken)
+            => Task.FromResult(true);
+    }
+
+
+    // An item that stays in flight (ignoring cancellation) until the gate is
+    // released — used to deterministically keep Start #2 waiting in its
+    // WaitForIdleAsync while Stop() lands. Started completes only when the
+    // reader has actually picked the item and entered RunJob, i.e. when the
+    // queue is genuinely busy.
+    class OneShotGateRunner : IJobRunner
+    {
+        private readonly TaskCompletionSource _started =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _gate =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Started => _started.Task;
+
+        public void Release() => _gate.TrySetResult();
+
+        public async Task<bool> Run(IJobController controller, CancellationToken cancellationToken)
+        {
+            _started.TrySetResult();
+            await _gate.Task;
+            return false;
+        }
     }
 
 

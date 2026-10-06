@@ -64,6 +64,49 @@ public class ScheduleSettingsTests
     }
 
     [Fact]
+    public void Merge_ErrorHandling_FirstExplicitWins_ConsistentWithProperties()
+    {
+        // Two registrations of the same (id, type) configure error handling
+        // explicitly but differently. Like every other merged property, the
+        // FIRST (aggregate) registration wins — the reverse, "the later explicit
+        // value overwrites", disagreed with JobProperties.Merge where the first
+        // registration wins.
+        var jobId = Guid.NewGuid();
+
+        var job1 = JobSettings.Create<TestJob>(jobId);
+        job1.ErrorHandling.IfErrorRetry(5).ThenAbortJob();
+        job1.ErrorHandling.DoSuppressError(ex => ex is TimeoutException);
+
+        var job2 = JobSettings.Create<TestJob>(jobId);
+        job2.ErrorHandling.IfErrorRetry(1).ThenStopAllJobs();
+
+        var settings = ScheduleSettings.Create([job1, job2], false, null);
+        var merged = settings.GetJobSettings().Single();
+
+        Assert.Equal(5, merged.ErrorHandling.RetryCount);
+        Assert.Equal(ErrorHandlingAction.AbortJob, merged.ErrorHandling.ThenAction);
+        Assert.NotNull(merged.ErrorHandling.SuppressError);
+    }
+
+    [Fact]
+    public void Merge_ErrorHandling_DefaultsDoNotClobberAnExplicitEarlierRegistration()
+    {
+        var jobId = Guid.NewGuid();
+
+        var job1 = JobSettings.Create<TestJob>(jobId);      // defaults
+        var job2 = JobSettings.Create<TestJob>(jobId);
+        job2.ErrorHandling.IfErrorRetry(3).ThenStopAllJobs();
+
+        // job2 (explicit) merges first, then job1's defaults must NOT overwrite it.
+        var settings = ScheduleSettings.Create([job2, job1], false, null);
+        var merged = settings.GetJobSettings().Single();
+
+        Assert.Equal(3, merged.ErrorHandling.RetryCount);
+        Assert.Equal(ErrorHandlingAction.StopAllJobs, merged.ErrorHandling.ThenAction);
+        Assert.Null(merged.ErrorHandling.SuppressError);
+    }
+
+    [Fact]
     public void JobSettings_CreateGeneratesNewId()
     {
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());

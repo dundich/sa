@@ -102,6 +102,7 @@ b.AddJob((context, ct) =>
 | `.EveryDays(int)` | Convenience alias for days |
 | `.OnceIn(TimeSpan)` | Run once after a delay |
 | `.WithCron(string, string?)` | Schedule using cron expression (minute hour dayOfMonth month dayOfWeek) |
+| `.WithTimeZone(TimeZoneInfo)` / `.WithTimeZone(string id)` | Time zone the cron expression is read in — "0 9 * * *" means 09:00 where you live. IANA (`Europe/Moscow`) or Windows (`Russian Standard Time`) ids; duration timings are unaffected. Unset = UTC |
 | `.WithContextStackSize(int)` | Keep N previous contexts on a stack for debugging |
 | `.WithTag(object)` | Attach arbitrary metadata |
 | `.WithConcurrencyLimit(int)` | Number of concurrent executions |
@@ -110,6 +111,10 @@ b.AddJob((context, ct) =>
 | `.Disabled()` | Register but don't start |
 | `.Merge(IJobProperties)` | Merge another configuration |
 | `.ConfigureErrorHandling(Action<IJobErrorHandlingBuilder>)` | Error recovery policy |
+
+### Jobs without a timing
+
+Registering a job without any timing (`Every*`/`WithCron`) is not an error — the job runs **back-to-back**: as soon as one iteration finishes, the next one starts, with no wait in between. This mode is meant for frequent operations that pace themselves with their own wait inside `IJob.Execute` (draining a queue, polling a channel). If the job has nothing to block on, it will spin and burn CPU — give it a timing, or make the internal wait block.
 
 ---
 
@@ -152,6 +157,7 @@ services.AddSaSchedule(
 | `IsRunOnce` | `bool?` | `true` runs the job exactly once and never again; `false` restores the periodic schedule of a code `RunOnce()` |
 | `Cron` | `string?` | 5-field cron expression — replaces any timing set in code |
 | `Every` | `TimeSpan?` | interval — replaces any timing set in code |
+| `TimeZone` | `string?` | time zone the job's `Cron` is read in (IANA or Windows id), overriding the code zone or a schedule-wide `ScheduleOptions.TimeZone` |
 | `InitialDelay` | `TimeSpan?` | delay before the first run |
 | `ConcurrencyLimit` | `int?` | slots actively running at any moment; not negative; the scheduler clamps it down to `MaxConcurrency` |
 | `MaxConcurrency` | `int?` | absolute number of pre-allocated slots; at least 1 |
@@ -182,12 +188,21 @@ b.AddJob<HealthCheck>().WithCron("*/15 * * * *");    // Every 15 minutes
 b.AddJob<WeekdayCleanup>().WithCron("30 14 * * 1-5"); // Weekdays at 2:30 PM
 ```
 
+By default the expression is evaluated against the scheduler's clock (**UTC**). Use `WithTimeZone` to read it on a local wall clock — the expression then means "9:00 where you live", and a DST transition shifts the moment by the transition delta instead of drifting an hour:
+
+```csharp
+b.AddJob<DailyReport>().WithCron("0 9 * * *").WithTimeZone("Europe/Moscow");
+```
+
+The same effect is available from config via `ScheduleOptions.TimeZone` (all jobs) or a job's `TimeZone` option. The zone applies to cron timings only — `Every*` intervals are durations and are unaffected.
+
 ---
 
 ## Concurrency Model
 
 - **`ConcurrencyLimit`** — how many slots are actively running at any time (initially). Can be changed dynamically via `IJobScheduler.ConcurrencyLimit`.
 - **`MaxConcurrency`** — total number of slot pre-allocated. `ConcurrencyLimit ≤ MaxConcurrency`.
+- **Defaults** — when `MaxConcurrency` is not set it equals the effective `ConcurrencyLimit` (so `WithConcurrencyLimit(5)` alone allocates 5 slots); when neither is set, both default to **1**. An unset `ConcurrencyLimit` defaults to 1 even when `MaxConcurrency` is larger (slots are pre-allocated but only one is active).
 - Dynamic adjustment pauses/resumes individual slots without recreating them.
 
 ---
@@ -329,7 +344,7 @@ public class Controller
 | `IsStarted` | Whether the job is currently running |
 | `QueueTasks` | Tasks in the queue buffer (the pre-allocated slots while running, 0 when stopped) |
 | `ConcurrencyLimit` | Get/set active concurrency |
-| `StartChangeToken()` | Track start/stop state changes |
+| `StartChangeToken()` | Fires when the running job stops; never fires while the job is already stopped (no pending transition — poll `IsStarted` for a later start) |
 | `Start(ct)` | Start this job |
 | `Stop()` | Stop with timeout |
 

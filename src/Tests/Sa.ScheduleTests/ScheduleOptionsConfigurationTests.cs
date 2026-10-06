@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Sa.Schedule;
+using Sa.Schedule.Settings;
 
 namespace Sa.ScheduleTests;
 
@@ -459,5 +460,113 @@ public sealed class ScheduleOptionsConfigurationTests
             .GetRequiredService<IScheduleSettings>());
 
         Assert.Contains("at least 1", ex.Message);
+    }
+
+    [Fact]
+    public void TimeZone_FromJobSection_AppliesToJob()
+    {
+        var settings = BuildSettings(
+            configure: b => b.AddJob<Job1>().WithName("J1").WithCron("0 9 * * *"),
+            entries: new Dictionary<string, string?>
+            {
+                ["Schedule:Jobs:J1:TimeZone"] = "Europe/Moscow",
+            });
+
+        var job = GetJob(settings, "J1");
+
+        Assert.Equal("Europe/Moscow", job.Properties.TimeZone?.Id);
+
+        // The zone must reach the actual timing: the cron adapter now reads the
+        // expression on the Moscow wall clock.
+        var timing = Assert.IsType<CronTimingAdapter>(job.Properties.Timing);
+        Assert.Equal("Europe/Moscow", timing.TimeZone?.Id);
+    }
+
+    [Fact]
+    public void TimeZone_CodeValue_SurvivesWithoutConfig()
+    {
+        var settings = BuildSettings(
+            configure: b => b.AddJob<Job1>()
+                .WithName("J1")
+                .WithCron("0 9 * * *")
+                .WithTimeZone("Europe/Moscow"),
+            // An empty section: the pipeline binds config only when IConfiguration is
+            // registered (NewServices registers it only for a non-null dictionary).
+            entries: new Dictionary<string, string?>());
+
+        var job = GetJob(settings, "J1");
+
+        Assert.Equal("Europe/Moscow", job.Properties.TimeZone?.Id);
+    }
+
+    [Fact]
+    public void ScheduleWideTimeZone_IsTheDefault_JobSectionWins()
+    {
+        var settings = BuildSettings(
+            configure: b =>
+            {
+                b.AddJob<Job1>().WithName("J1").WithCron("0 9 * * *");
+                b.AddJob<Job2>().WithName("J2").WithCron("0 10 * * *");
+            },
+            entries: new Dictionary<string, string?>
+            {
+                ["Schedule:TimeZone"] = "Europe/Moscow",
+                // J1 has no zone of its own → the schedule default; J2 insists on Berlin.
+                ["Schedule:Jobs:J2:TimeZone"] = "Europe/Berlin",
+            });
+
+        var j1 = GetJob(settings, "J1");
+        var j2 = GetJob(settings, "J2");
+
+        Assert.Equal("Europe/Moscow", j1.Properties.TimeZone?.Id);
+        Assert.Equal("Europe/Berlin", j2.Properties.TimeZone?.Id);
+    }
+
+    [Fact]
+    public void ScheduleWideTimeZone_AppliesEvenWithoutJobSection()
+    {
+        var settings = BuildSettings(
+            configure: b => b.AddJob<Job1>().WithName("J1").WithCron("0 9 * * *"),
+            entries: new Dictionary<string, string?>
+            {
+                ["Schedule:TimeZone"] = "Europe/Moscow",
+            });
+
+        var job = GetJob(settings, "J1");
+
+        Assert.Equal("Europe/Moscow", job.Properties.TimeZone?.Id);
+
+        var timing = Assert.IsType<CronTimingAdapter>(job.Properties.Timing);
+        Assert.Equal("Europe/Moscow", timing.TimeZone?.Id);
+    }
+
+    [Fact]
+    public void Validator_InvalidJobTimeZone_FailsOnResolve()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => NewServices(entries: new Dictionary<string, string?>
+            {
+                ["Schedule:Jobs:J1:TimeZone"] = "No/Such_Zone",
+            })
+            .BuildServiceProvider()
+            .GetRequiredService<IScheduleSettings>());
+
+        Assert.Contains("TimeZone", ex.Message);
+        Assert.Contains("not a known", ex.Message);
+    }
+
+    [Fact]
+    public void Validator_InvalidScheduleWideTimeZone_FailsOnResolve()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => NewServices(entries: new Dictionary<string, string?>
+            {
+                ["Schedule:TimeZone"] = "No/Such_Zone",
+            })
+            .BuildServiceProvider()
+            .GetRequiredService<IScheduleSettings>());
+
+        Assert.Contains("TimeZone", ex.Message);
+        Assert.Contains("not a known", ex.Message);
     }
 }

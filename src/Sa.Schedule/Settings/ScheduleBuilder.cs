@@ -54,8 +54,12 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
     {
         Guid id = GetId(jobId);
 
+        // Remove by the actual key being registered (id), not by the raw
+        // parameter: with a null jobId the parameter can never match the
+        // generated key, and the removal would be a silent no-op instead of
+        // replacing a previous registration of the same job.
         _services
-            .RemoveAllKeyed<FuncJob>(jobId)
+            .RemoveAllKeyed<FuncJob>(id)
             .AddKeyedScoped(id, (_, __) => new FuncJob(action));
 
         JobSettings jobSettings = JobSettings.Create<FuncJob>(id);

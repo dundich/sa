@@ -16,6 +16,16 @@ internal sealed class JobScheduler : IJobScheduler
 
     private bool _disposed;
 
+    // Set when a RunOnce job ran its single iteration to a natural end (no
+    // error abort). Per the RunOnce contract ("stop permanently") the job must
+    // not start again, so Start() consults this. Read/written under _lock.
+    private bool _runOnceCompleted;
+
+    // Set when Stop() lands while a Start() is still in flight. Start()'s
+    // completion consumes the flag and treats the start as failed, so the stop
+    // request is never silently dropped.
+    private bool _stopRequested;
+
     // The user-requested concurrency limit (initially the configured one).
     // The queue itself tracks the effective limit; this copy is used to
     // restore readers after they are force-cancelled.
@@ -26,6 +36,10 @@ internal sealed class JobScheduler : IJobScheduler
     private readonly Func<int, IJobController> _createController;
 
     private readonly IJobRunner _runner;
+
+    // Snapshot of settings.Properties.IsRunOnce (the schedule config that could
+    // change it is applied before a scheduler is created).
+    private readonly bool _isRunOnce;
 
     private IReadOnlyList<IJobController> _jobControllers = [];
 
@@ -47,9 +61,19 @@ internal sealed class JobScheduler : IJobScheduler
 
         JobId = settings.JobId;
 
+        // Config overlay is applied before a scheduler is ever created, so the
+        // immutable snapshot below is final for the scheduler's lifetime.
+        _isRunOnce = settings.Properties.IsRunOnce == true;
+
         _shutdownTimeout = settings.Properties.ShutdownTimeout ?? DefaultShutdownTimeout;
 
-        int maxConcurrency = settings.Properties.MaxConcurrency.GetValueOrDefault(1);
+        // MaxConcurrency is the upper bound of the pre-allocated slot pool. It
+        // defaults to the concurrency limit when only the latter is configured
+        // (the documented contract — see IJobProperties.MaxConcurrency), and
+        // both default to 1 when neither is set.
+        int maxConcurrency = settings.Properties.MaxConcurrency
+            ?? settings.Properties.ConcurrencyLimit.GetValueOrDefault(1);
+
         maxConcurrency = Math.Clamp(maxConcurrency, 1, int.MaxValue);
 
         _limit = Math.Clamp(settings.Properties.ConcurrencyLimit.GetValueOrDefault(1), 0, maxConcurrency);
@@ -104,7 +128,14 @@ internal sealed class JobScheduler : IJobScheduler
     {
         lock (_lock)
         {
-            if (_disposed) return NoneChangeToken;
+            // The token signals "the running job stopped". When nothing is
+            // running (or a start is still in flight) there is no pending
+            // transition, so the returned token must not fire: an already-fired
+            // token would claim a change that happened before the caller
+            // subscribed. Poll IsStarted to observe a later start — this is a
+            // change token, not a state query.
+            if (_disposed || !_started.GetValueOrDefault()) return NoneChangeToken;
+
             return new CancellationChangeToken(_stoppingTokenSource.Token);
         }
     }
@@ -116,7 +147,9 @@ internal sealed class JobScheduler : IJobScheduler
 
         lock (_lock)
         {
-            if (_disposed || (_started == null || _started == true))
+            // A naturally completed RunOnce job stays stopped forever — its
+            // Start() is refused, not silently re-run.
+            if (_disposed || _runOnceCompleted || _started == null || _started == true)
             {
                 return false;
             }
@@ -165,13 +198,34 @@ internal sealed class JobScheduler : IJobScheduler
         {
             lock (_lock)
             {
+                // A Stop() that landed while the readers were being spawned wins:
+                // consume the request here and treat the start as failed, so the
+                // job does not run (the request Stop made was not a no-op).
+                if (success && _stopRequested)
+                {
+                    success = false;
+                }
+
+                _stopRequested = false;
+
                 _started = success;
                 _jobControllers = controllers;
             }
 
             if (!success)
             {
-                // Dispose already-created (possibly enqueued) controllers
+                // Cancel the token this start created first, so any loop that
+                // already began unwinds on its next await, then dispose the
+                // already-created (possibly enqueued) controllers.
+                try
+                {
+                    _stoppingTokenSource.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // ignore
+                }
+
                 foreach (var controller in controllers)
                 {
                     controller.Shutdown();
@@ -213,31 +267,60 @@ internal sealed class JobScheduler : IJobScheduler
     /// </summary>
     private async Task RunJob(IJobController controller, CancellationToken ct)
     {
-        bool aborted = await _runner.Run(controller, ct);
+        bool finished = await _runner.Run(controller, ct);
 
-        if (aborted)
+        if (finished)
         {
+            // The loop ended because there is no more work: the run-once job
+            // completed, the schedule can never fire again (unsatisfiable cron),
+            // or the error handling requested an abort. In every such case the
+            // scheduler must reflect the stopped state and release the slot
+            // readers — otherwise IsStarted would stay true over a dead job.
+            if (!controller.AbortedByError && _isRunOnce)
+            {
+                lock (_lock)
+                {
+                    // A naturally completed run-once is consumed permanently:
+                    // per the RunOnce contract the job must not start again.
+                    _runOnceCompleted = true;
+                }
+            }
+
             AbortJob();
         }
     }
 
     /// <summary>
-    /// Stops the whole job after its error handling requested an abort:
+    /// Stops the whole job after its loop ended on its own (run-once completed,
+    /// unsatisfiable schedule) or after its error handling requested an abort:
     /// interrupts the running iterations, force-cancels all readers, and marks
     /// the job as stopped. The queue stays active, so the job can be started
-    /// again with <see cref="Start"/>.
+    /// again with <see cref="Start"/> (unless it was a RunOnce job, which
+    /// refuses to run again).
     /// </summary>
     private void AbortJob()
     {
+        CancellationTokenSource stoppingTokenSource;
+
         lock (_lock)
         {
             if (_disposed) return;
+
+            // Only interrupt a job that is actually running. During an in-flight
+            // Start (null) the brand-new source must not be cancelled out from
+            // under it, and after a Stop there is nothing left to tear down.
+            if (!_started.GetValueOrDefault()) return;
+
             _started = false;
+
+            // Read under the lock: Start() replaces this field, and cancelling
+            // a stale read could hit a just-created source.
+            stoppingTokenSource = _stoppingTokenSource;
         }
 
         try
         {
-            _stoppingTokenSource.Cancel();
+            stoppingTokenSource.Cancel();
         }
         catch (ObjectDisposedException)
         {
@@ -263,10 +346,24 @@ internal sealed class JobScheduler : IJobScheduler
     public async Task Stop()
     {
         CancellationTokenSource stoppingTokenSource;
+        bool? started;
 
         lock (_lock)
         {
-            if (_disposed || !_started.GetValueOrDefault()) return;
+            if (_disposed) return;
+
+            started = _started;
+
+            if (started is null)
+            {
+                // A Start() is in flight — the job has not settled yet, but the
+                // stop request must not be lost: Start()'s completion sees the
+                // flag and cancels itself.
+                _stopRequested = true;
+                return;
+            }
+
+            if (!started.Value) return;
 
             stoppingTokenSource = _stoppingTokenSource;
             stoppingTokenSource.Cancel();
@@ -305,6 +402,23 @@ internal sealed class JobScheduler : IJobScheduler
             // ignore
         }
 
+        // Give in-flight iterations a bounded chance to observe the cancellation
+        // and unwind on their own — their runners shut the controllers down as
+        // they exit. Only the leftovers get their DI scope force-disposed by
+        // ShutdownControllers below, so a cooperative iteration is never
+        // used-after-dispose.
+        using var timeoutCts = new CancellationTokenSource(_shutdownTimeout);
+
+        try
+        {
+            _queue.WaitForIdleAsync(cancellationToken: timeoutCts.Token)
+                .GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            // Timeout — this iteration ignores cancellation; force-dispose below
+        }
+
         ShutdownControllers();
 
         _queue.Dispose();
@@ -333,6 +447,22 @@ internal sealed class JobScheduler : IJobScheduler
         catch (ObjectDisposedException)
         {
             // ignore
+        }
+
+        // Drain before tearing the scopes down: after the cancellation lands the
+        // runners unwind on their own and each disposes its controller (and DI
+        // scope) in its finally. Waiting here (bounded by the shutdown timeout)
+        // means a cooperative iteration finishes inside a live scope instead of
+        // having it disposed from underneath it by ShutdownControllers.
+        using var timeoutCts = new CancellationTokenSource(_shutdownTimeout);
+
+        try
+        {
+            await _queue.WaitForIdleAsync(cancellationToken: timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Timeout — this iteration ignores cancellation; force-dispose below
         }
 
         ShutdownControllers();

@@ -27,4 +27,10 @@ internal static partial class JobErrorHandlerLog
         Level = LogLevel.Error,
         Message = "* Job '{JobName}' triggered stop of all jobs due to error: {Error}")]
     internal static partial void LogStopAllJobs(this ILogger logger, string jobName, string error);
+
+    [LoggerMessage(
+        EventId = 505,
+        Level = LogLevel.Warning,
+        Message = "* Job '{JobName}' could not stop every other job during StopAllJobs: {Error}")]
+    internal static partial void LogStopAllJobsIncomplete(this ILogger logger, string jobName, string error);
 }

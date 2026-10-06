@@ -33,6 +33,14 @@ internal sealed partial class JobController(
 
     private volatile bool _disposed;
     private volatile bool _abortedByError;
+
+    // Armed by ExecutionFailed while the failed attempt still owns its retry
+    // budget, cleared again as soon as the budget is spent or the attempt
+    // succeeds. The RunOnce gate in CanExecute must not stop the loop between
+    // two attempts of the *same* run — otherwise IfErrorRetry/ThenXxx would be
+    // dead code for a RunOnce job (it would abort after the first failure).
+    private volatile bool _retryOwed;
+
     private volatile JobExecutor? _executor;
     private readonly CancellationTokenSource _shutdownCts = new();
 
@@ -50,7 +58,7 @@ internal sealed partial class JobController(
             && settings.Properties.InitialDelay is { } delay
             && delay != TimeSpan.Zero)
         {
-            await Task.Delay(delay, cancellationToken);
+            await JobDelay.Wait(delay, cancellationToken);
         }
     }
 
@@ -163,7 +171,9 @@ internal sealed partial class JobController(
         if (_abortedByError)
             return CanJobExecuteResult.Abort;
 
-        if (settings.Properties.IsRunOnce == true && _context.NumIterations > 0)
+        if (settings.Properties.IsRunOnce == true
+            && _context.NumIterations > 0
+            && !_retryOwed)
             return CanJobExecuteResult.Abort;
 
         if (_context.NumIterations == 0 && settings.Properties.Immediate == true)
@@ -184,7 +194,7 @@ internal sealed partial class JobController(
 
             if (delay.TotalMilliseconds > 0)
             {
-                await Task.Delay(delay, cancellationToken);
+                await JobDelay.Wait(delay, cancellationToken);
             }
         }
 
@@ -217,6 +227,7 @@ internal sealed partial class JobController(
     {
         _context.CompletedIterations++;
         _context.FailedRetries = 0;
+        _retryOwed = false;
     }
 
     public void ExecutionFailed(Exception exception)
@@ -224,6 +235,7 @@ internal sealed partial class JobController(
         JobException error = new(_context, exception);
         _context.FailedIterations++;
         _context.LastError = error;
+        _retryOwed = false;
 
         IJobErrorHandling errorHandling = settings.ErrorHandling;
 
@@ -245,6 +257,7 @@ internal sealed partial class JobController(
         if (_context.FailedRetries < retryCount)
         {
             _context.FailedRetries++;
+            _retryOwed = true;
             LogFailedRetryAttempts(
                 _context.Logger,
                 _context.JobName,
