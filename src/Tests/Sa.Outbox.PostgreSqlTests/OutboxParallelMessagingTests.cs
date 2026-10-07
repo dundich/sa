@@ -104,7 +104,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 .AddSaOutboxUsingPostgreSql(cfg =>
                 {
                     cfg
-                        .WithDataSource(c => c.Configure(o => o.ConnectionString = ConnectionString))
+                        .WithDataSource(c => c.Options(ob => ob.Configure(o => o.ConnectionString = ConnectionString)))
                         .WithOutboxSettings((_, settings) =>
                         {
                             settings.TableSettings.DatabaseSchemaName = "parallel";

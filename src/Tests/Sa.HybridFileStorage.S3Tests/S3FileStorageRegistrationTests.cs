@@ -13,14 +13,14 @@ namespace Sa.HybridFileStorage.S3Tests;
 /// </summary>
 public sealed class S3FileStorageRegistrationTests
 {
-    private static Action<OptionsBuilder<S3FileStorageOptions>> Configure(
+    private static Action<IS3FileStorageBuilder> Configure(
         string bucket = "mybucket",
         string endpoint = "http://localhost:9000",
         string basket = S3FileStorageOptions.DefaultBasket,
         string storageType = "s3",
         string accessKey = "ROOTUSER",
         string secretKey = "ChangeMe123")
-        => o => o.Configure(x =>
+        => b => b.Options(o => o.Configure(x =>
         {
             x.AccessKey = accessKey;
             x.SecretKey = secretKey;
@@ -28,7 +28,7 @@ public sealed class S3FileStorageRegistrationTests
             x.Endpoint = endpoint;
             x.Basket = basket;
             x.StorageType = storageType;
-        });
+        }));
 
     static S3FileStorageOptions Options(IServiceProvider provider)
         => provider.GetRequiredService<IOptions<S3FileStorageOptions>>().Value;
@@ -165,7 +165,7 @@ public sealed class S3FileStorageRegistrationTests
         services.AddSaS3FileStorage(o =>
         {
             Configure(endpoint: "http://localhost:9000/")(o);
-            o.PostConfigure(x => seen = x.Endpoint);
+            o.Options(ob => ob.PostConfigure(x => seen = x.Endpoint));
         });
 
         using var provider = services.BuildServiceProvider();
@@ -181,7 +181,7 @@ public sealed class S3FileStorageRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddSaS3FileStorage(o => o
-            .Configure(x =>
+            .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "ROOTUSER";
                 x.SecretKey = "ChangeMe123";
@@ -189,7 +189,7 @@ public sealed class S3FileStorageRegistrationTests
                 x.Endpoint = "http://localhost:9000";
                 x.TotalRequestTimeout = TimeSpan.FromSeconds(30);
             })
-            .Validate(x => x.TotalRequestTimeout > TimeSpan.FromMinutes(1), "Timeout is too aggressive."));
+            .Validate(x => x.TotalRequestTimeout > TimeSpan.FromMinutes(1), "Timeout is too aggressive.")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -204,7 +204,7 @@ public sealed class S3FileStorageRegistrationTests
         // Validate из callback не заменяет встроенную проверку: сообщаются обе ошибки.
         var services = new ServiceCollection();
         services.AddSaS3FileStorage(o => o
-            .Configure(x =>
+            .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "  ";
                 x.SecretKey = "ChangeMe123";
@@ -212,7 +212,7 @@ public sealed class S3FileStorageRegistrationTests
                 x.Endpoint = "http://localhost:9000";
                 x.TotalRequestTimeout = TimeSpan.FromSeconds(30);
             })
-            .Validate(x => x.TotalRequestTimeout > TimeSpan.FromMinutes(1), "Timeout is too aggressive."));
+            .Validate(x => x.TotalRequestTimeout > TimeSpan.FromMinutes(1), "Timeout is too aggressive.")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -242,7 +242,7 @@ public sealed class S3FileStorageRegistrationTests
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaS3FileStorage(configSectionPath: "S3FileStorage");
+        services.AddSaS3FileStorage(b => b.FromConfiguration("S3FileStorage"));
 
         using var provider = services.BuildServiceProvider();
 
@@ -262,7 +262,7 @@ public sealed class S3FileStorageRegistrationTests
     [Fact]
     public void Register_ConfigureCallback_OverridesTheBoundSection()
     {
-        // Callback вызывается после BindConfiguration, поэтому его Configure — последнее слово.
+        // Options(...) воспроизводится после BindConfiguration, поэтому его Configure — последнее слово.
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -276,9 +276,9 @@ public sealed class S3FileStorageRegistrationTests
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaS3FileStorage(
-            configSectionPath: "S3FileStorage",
-            configure: o => o.Configure(x => x.Basket = "share"));
+        services.AddSaS3FileStorage(o => o
+            .FromConfiguration("S3FileStorage")
+            .Options(ob => ob.Configure(x => x.Basket = "share")));
 
         using var provider = services.BuildServiceProvider();
 

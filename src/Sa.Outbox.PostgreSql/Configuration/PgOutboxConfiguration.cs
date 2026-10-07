@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Options;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Serialization;
 using System.Diagnostics.CodeAnalysis;
@@ -21,11 +20,9 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         return this;
     }
 
-    public IPgOutboxConfiguration WithDataSource(
-        Action<OptionsBuilder<PgDataSourceOptions>>? configure = null,
-        string? configSectionPath = null)
+    public IPgOutboxConfiguration WithDataSource(Action<IDataSourceBuilder>? configure = null)
     {
-        services.AddSaPostgreSqlDataSource(configure, configSectionPath);
+        services.AddSaPostgreSqlDataSource(configure);
         return this;
     }
 

@@ -68,16 +68,16 @@ the `IServiceCollection`, so it composes with the other `Add...` calls:
 ```csharp
 using Sa.HybridFileStorage.FileSystem;
 
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(options =>
 {
     options.BasePath = @"C:\data\files";
     options.Basket = "documents";
-}));
+})));
 ```
 
-The `configure` callback receives the `OptionsBuilder<FileSystemStorageOptions>`, so configuration
-goes through the standard `Configure` / `PostConfigure` / `Validate` methods — there is no bespoke
-options overload.
+The `configure` callback receives the `IFileSystemStorageBuilder`: the section comes from
+`FromConfiguration("…")` and the standard `Configure` / `PostConfigure` / `Validate` methods are
+reached through `Options(...)` — there is no bespoke options overload.
 
 The pipeline runs in a fixed order — **`Configure` → `PostConfigure` → validate** — so a value
 normalised in post-initialisation is what validation sees.
@@ -87,11 +87,11 @@ normalised in post-initialisation is what validation sees.
 `Configure` runs first and receives the raw values:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(options =>
 {
     options.BasePath = @"C:\data\files";
     options.BufferSize = 512 * 1024;
-}));
+})));
 ```
 
 ### Post-initialisation (PostConfigure)
@@ -102,23 +102,23 @@ runs after that, so it sees normalised values:
 
 ```csharp
 builder.Services.AddSaFileSystemFileStorage(o => o
-    .Configure(options => options.BasePath = @"C:\data\files")
-    .PostConfigure(options => options.BufferSize = 1024 * 1024));
+    .Options(ob => ob.Configure(options => options.BasePath = @"C:\data\files")
+    .PostConfigure(options => options.BufferSize = 1024 * 1024)));
 ```
 
 ### From configuration
 
-Pass the section path and the options are bound from `IConfiguration`:
+Pass the section via `FromConfiguration` and the options are bound from `IConfiguration`:
 
 ```csharp
 // appsettings.json
 // { "FileSystemStorage": { "BasePath": "C:\\data\\files", "Basket": "documents" } }
 
-builder.Services.AddSaFileSystemFileStorage(configSectionPath: "FileSystemStorage");
+builder.Services.AddSaFileSystemFileStorage(b => b.FromConfiguration("FileSystemStorage"));
 ```
 
-Binding is registered **before** the callback, so a `Configure` call inside the callback has the
-last word when both are used.
+The section binds in a fixed slot **before** the `Options(...)` actions replay, so their
+`Configure` has the last word when both are used.
 
 ### One storage per collection
 
@@ -238,8 +238,8 @@ succeeds on Unix and would silently create a directory named `"   "`.
 
 ```csharp
 builder.Services.AddSaFileSystemFileStorage(o => o
-    .Configure(options => options.BasePath = @"C:\data\files")
-    .Validate(options => options.BufferSize >= 64 * 1024, "BufferSize must be at least 64 KB."));
+    .Options(ob => ob.Configure(options => options.BasePath = @"C:\data\files")
+    .Validate(options => options.BufferSize >= 64 * 1024, "BufferSize must be at least 64 KB.")));
 ```
 
 Your rule runs in addition to the built-in checks; all failures are reported together in the

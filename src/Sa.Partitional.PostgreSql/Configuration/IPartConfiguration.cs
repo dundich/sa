@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Options;
-using Sa.Data.PostgreSql;
+﻿using Sa.Data.PostgreSql;
 
 namespace Sa.Partitional.PostgreSql;
 
@@ -43,15 +42,11 @@ public interface IPartConfiguration
     /// (<see cref="PgDataSourceOptions"/>).
     /// </summary>
     /// <param name="configure">
-    /// Optional callback receiving the <see cref="OptionsBuilder{TOptions}"/> for
-    /// <see cref="PgDataSourceOptions"/>. The only option is the connection string; pooling,
-    /// timeout and search path live inside the string itself.
-    /// </param>
-    /// <param name="configSectionPath">
-    /// Optional configuration section to bind <see cref="PgDataSourceOptions"/> from.
+    /// Optional callback receiving the <see cref="IDataSourceBuilder"/> for this data source:
+    /// the section via <c>FromConfiguration</c> and the options pipeline via <c>Options</c>.
+    /// The only option is the connection string; pooling, timeout and search path live inside
+    /// the string itself.
     /// </param>
     /// <returns>The same <see cref="IPartConfiguration"/> for chaining.</returns>
-    IPartConfiguration AddDataSource(
-        Action<OptionsBuilder<PgDataSourceOptions>>? configure = null,
-        string? configSectionPath = null);
+    IPartConfiguration AddDataSource(Action<IDataSourceBuilder>? configure = null);
 }

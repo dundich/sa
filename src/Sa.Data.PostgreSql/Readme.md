@@ -14,10 +14,10 @@ var dataSource = IPgDataSource.Create(new NpgsqlDataSource("Host=db;Database=myd
 
 // Option 2: via DI — the connection string goes through the standard options pipeline
 services.AddSaPostgreSqlDataSource(b => b
-    .Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd"));
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd")));
 
 // Option 3: from a configuration section
-services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
+services.AddSaPostgreSqlDataSource(b => b.FromConfiguration("Postgres"));
 ```
 
 ---
@@ -30,7 +30,7 @@ services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
 
 ```csharp
 services.AddSaPostgreSqlDataSource(b => b
-    .Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd"));
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd")));
 
 // Usage:
 var dataSource = serviceProvider.GetRequiredService<IPgDataSource>();
@@ -43,10 +43,10 @@ The only option is `ConnectionString`. Pooling, timeout, and search path are con
 ```csharp
 // appsettings.json:
 // { "Postgres": { "ConnectionString": "Host=…;Database=…;Username=…;Password=…" } }
-services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
+services.AddSaPostgreSqlDataSource(b => b.FromConfiguration("Postgres"));
 ```
 
-The section is bound **first**, so a `Configure` call inside the callback has the last word. The callback also runs after the registration's own `PostConfigure` and `Validate`, so your checks add to the built-in ones instead of replacing them.
+The section binds in a fixed slot **first**, so an `Options(...)` `Configure` has the last word. The `Options(...)` actions replay after the registration's own `PostConfigure` and `Validate`, so your checks add to the built-in ones instead of replacing them.
 
 ### Reusing an existing NpgsqlDataSource
 
@@ -65,7 +65,7 @@ The connection string is normalised (trimmed) in `PostConfigure` and then valida
 
 The validator is an explicit `IValidateOptions<PgDataSourceOptions>` rather than `ValidateDataAnnotations()`: the latter is marked `RequiresUnreferencedCode` (IL2026) and breaks Native AOT, which this assembly is built for.
 
-Register the data source with configuration only once per service collection — a second *configuring* call (one carrying a `configure` callback or a `configSectionPath`) throws `InvalidOperationException`, because both `Configure` callbacks would otherwise apply to the same unnamed options instance and the settings would silently merge. Bare calls (no callback, no section) may be repeated by design: `AddSaPartitional` and `AddSaOutboxUsingPostgreSql` each register a bare data source, and a single configuring call — wherever it sits — is the one that takes effect.
+Register the data source with configuration only once per service collection — a second *configuring* call (one carrying a `configure` callback — the section comes via `FromConfiguration`, the settings via `Options(...)`) throws `InvalidOperationException`, because both `Configure` callbacks would otherwise apply to the same unnamed options instance and the settings would silently merge. Bare calls (no callback at all) may be repeated by design: `AddSaPartitional` and `AddSaOutboxUsingPostgreSql` each register a bare data source, and a single configuring call — wherever it sits — is the one that takes effect.
 
 ---
 

@@ -62,7 +62,7 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
 
                 });
             })
-            .AddDataSource(configure => configure.Configure(o => o.ConnectionString = this.ConnectionString))
+            .AddDataSource(configure => configure.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)))
             ;
         }
     }

@@ -16,18 +16,18 @@ namespace Sa.Data.S3Tests;
 /// </remarks>
 public sealed class SetupBucketClientTests
 {
-    private static Action<OptionsBuilder<S3BucketClientSetupOptions>> Configure(
+    private static Action<IS3BucketClientBuilder> Configure(
         string bucket = "mybucket",
         string endpoint = "http://localhost:9000",
         string accessKey = "ROOTUSER",
         string secretKey = "ChangeMe123")
-        => o => o.Configure(x =>
+        => b => b.Options(o => o.Configure(x =>
         {
             x.AccessKey = accessKey;
             x.SecretKey = secretKey;
             x.Bucket = bucket;
             x.Endpoint = endpoint;
-        });
+        }));
 
     static S3BucketClientSetupOptions Options(IServiceProvider provider)
         => provider.GetRequiredService<IOptions<S3BucketClientSetupOptions>>().Value;
@@ -116,7 +116,7 @@ public sealed class SetupBucketClientTests
     {
         var services = new ServiceCollection();
         services.AddSaS3BucketClient(o => o
-            .Configure(x =>
+            .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "ROOTUSER";
                 x.SecretKey = "ChangeMe123";
@@ -124,7 +124,7 @@ public sealed class SetupBucketClientTests
                 x.Endpoint = "http://localhost:9000";
                 x.Region = "us-east-1";
             })
-            .PostConfigure(x => x.Region = "eu-central-1"));
+            .PostConfigure(x => x.Region = "eu-central-1")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -136,7 +136,7 @@ public sealed class SetupBucketClientTests
     {
         var services = new ServiceCollection();
         services.AddSaS3BucketClient(o => o
-            .Configure(x =>
+            .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "  ";
                 x.SecretKey = "ChangeMe123";
@@ -144,7 +144,7 @@ public sealed class SetupBucketClientTests
                 x.Endpoint = "http://localhost:9000";
                 x.TotalRequestTimeout = TimeSpan.FromSeconds(30);
             })
-            .Validate(x => x.TotalRequestTimeout > TimeSpan.FromMinutes(1), "Timeout is too aggressive."));
+            .Validate(x => x.TotalRequestTimeout > TimeSpan.FromMinutes(1), "Timeout is too aggressive.")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -172,7 +172,7 @@ public sealed class SetupBucketClientTests
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaS3BucketClient(configSectionPath: "S3");
+        services.AddSaS3BucketClient(b => b.FromConfiguration("S3"));
 
         using var provider = services.BuildServiceProvider();
 
@@ -190,6 +190,7 @@ public sealed class SetupBucketClientTests
     [Fact]
     public void Register_ConfigureCallback_OverridesTheBoundSection()
     {
+        // Options(...) воспроизводится после BindConfiguration, поэтому его Configure — последнее слово.
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -202,9 +203,9 @@ public sealed class SetupBucketClientTests
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaS3BucketClient(
-            configSectionPath: "S3",
-            configure: o => o.Configure(x => x.Bucket = "other"));
+        services.AddSaS3BucketClient(o => o
+            .FromConfiguration("S3")
+            .Options(ob => ob.Configure(x => x.Bucket = "other")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -264,14 +265,14 @@ public sealed class SetupBucketClientTests
 
         var services = new ServiceCollection();
         services.AddSaS3BucketClient(o => o
-            .Configure(x =>
+            .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "ROOTUSER";
                 x.SecretKey = "ChangeMe123";
                 x.Bucket = "mybucket";
                 x.Endpoint = "http://localhost:9000";
                 x.HandlerLifetime = lifetime;
-            }));
+            })));
         services.AddHttpClient("another").SetHandlerLifetime(TimeSpan.FromMinutes(7));
 
         using var provider = services.BuildServiceProvider();
@@ -291,14 +292,14 @@ public sealed class SetupBucketClientTests
 
         var services = new ServiceCollection();
         services.AddSaS3BucketClient(o => o
-            .Configure(x =>
+            .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "ROOTUSER";
                 x.SecretKey = "ChangeMe123";
                 x.Bucket = "mybucket";
                 x.Endpoint = "http://localhost:9000";
                 x.TotalRequestTimeout = timeout;
-            }));
+            })));
 
         using var provider = services.BuildServiceProvider();
         var monitor = provider.GetRequiredService<IOptionsMonitor<HttpStandardResilienceOptions>>();

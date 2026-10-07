@@ -46,15 +46,15 @@ builder.Services.AddSaPartitional((sp, builder) =>
 })
 // Источник данных: connection string идёт через стандартный конвейер options
 .AddDataSource(ds => ds
-    .Configure(o => o.ConnectionString =
-        "Host=localhost;Database=mydb;Username=postgres;Password=password"))
+    .Options(ob => ob.Configure(o => o.ConnectionString =
+        "Host=localhost;Database=mydb;Username=postgres;Password=password")))
 // Предварительное создание будущих партиций как фоновая задача
 .AddPartMigrationSchedule((sp, opts) => opts.AsBackgroundJob = true)
 // Удаление партиций старше 30 дней
 .AddPartCleanupSchedule((sp, opts) => opts.AsBackgroundJob = true);
 ```
 
-`AddSaPartitional` всегда регистрирует data source (внутри — «голый» вызов `AddDataSource()`), поэтому цепочка `.AddDataSource(configure, configSectionPath)` выше — единственный *настраивающий* вызов — и задаёт connection string. Если data source уже настроен где-то ещё (например, `services.AddSaPostgreSqlDataSource(...)`), цепочку можно опустить: «голая» регистрация дедуплицируется с ней. Если connection string не задан нигде, data source строится из зарегистрированного в DI `NpgsqlDataSource` (общий pool), иначе валидация не проходит.
+`AddSaPartitional` всегда регистрирует data source (внутри — «голый» вызов `AddDataSource()`), поэтому цепочка `.AddDataSource(...)` выше — единственный *настраивающий* вызов — и задаёт connection string (секция, если нужна, — через `FromConfiguration` в том же callback'е). Если data source уже настроен где-то ещё (например, `services.AddSaPostgreSqlDataSource(...)`), цепочку можно опустить: «голая» регистрация дедуплицируется с ней. Если connection string не задан нигде, data source строится из зарегистрированного в DI `NpgsqlDataSource` (общий pool), иначе валидация не проходит.
 
 ---
 

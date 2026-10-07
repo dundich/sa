@@ -51,10 +51,10 @@ configure?.Invoke(configuration);   // ④ user delegate — always runs last
 
 ### ③ Data source
 
-`WithDataSource(configure, configSectionPath)` delegates to `AddSaPostgreSqlDataSource(configure, configSectionPath)` from `Sa.Data.PostgreSql`, which registers the data source on the standard `Microsoft.Extensions.Options` pipeline:
+`WithDataSource(configure)` delegates to `AddSaPostgreSqlDataSource(configure)` from `Sa.Data.PostgreSql`, which registers the data source on the standard `Microsoft.Extensions.Options` pipeline:
 
 - The configuration surface is the flat options type `PgDataSourceOptions` — its single property is `ConnectionString`; pooling, timeout, and search path live inside the string itself.
-- The bare call in step ③ (no callback, no section) is idempotent: `AddOptions<T>` registers its infrastructure via `TryAdd`, and the normaliser / validator / factory registrations are deduplicated via `TryAddEnumerable`, so a repeated bare call adds nothing. The step ④ `WithDataSource(configure, configSectionPath)` call is the first *configuring* call — it is the one that adds the `Configure` callback / section binding — and it runs last, so it has the last word on the options value.
+- The bare call in step ③ (no callback) is idempotent: `AddOptions<T>` registers its infrastructure via `TryAdd`, and the normaliser / validator / factory registrations are deduplicated via `TryAddEnumerable`, so a repeated bare call adds nothing. The step ④ `WithDataSource(configure)` call is the first *configuring* call — it is the one that adds the `Configure` callbacks / section binding — and it runs last, so it has the last word on the options value.
 - `IPgDataSource` is registered as a singleton; its factory reads `IOptions<PgDataSourceOptions>.Value` (which runs the validators) at first resolve: a non-empty `ConnectionString` builds an owned `NpgsqlDataSource`; an empty string falls back to an `NpgsqlDataSource` registered in DI (sharing its connection pool — the wrapper does not dispose it); neither available → `OptionsValidationException`.
 - The `Search Path` key of the connection string (or `"public"` when absent or unparseable) is the source for the schema auto-inheritance in step ②.
 
@@ -64,7 +64,7 @@ Your `configure` delegate runs **last** (after all defaults). Its three public m
 
 - `WithMessageSerializer(...)` — removes every existing `IOutboxMessageSerializer` registration (`RemoveAll`) and adds exactly one new one (`TryAddSingleton`), so it always wins over the default JSON serializer.
 - `WithOutboxSettings(userAction)` — appends your delegate to the registered list of `Action<IServiceProvider, PgOutboxSettings>`; it will run after any previously registered delegate.
-- `WithDataSource(configure, configSectionPath)` — delegates to `AddSaPostgreSqlDataSource(configure, configSectionPath)`. The step ③ call is bare, so this is the first *configuring* call: its `Configure` callback / section binding is what actually shapes `PgDataSourceOptions`. A second configuring call on the same service collection (e.g. a direct `services.AddSaPostgreSqlDataSource(configure, section)` earlier in your code) throws `InvalidOperationException`, because both `Configure` callbacks would otherwise stack onto the same unnamed options instance and the settings would silently merge.
+- `WithDataSource(configure)` — delegates to `AddSaPostgreSqlDataSource(configure)`. The step ③ call is bare, so this is the first *configuring* call: its `Configure` callbacks / section binding (`Options(...)` / `FromConfiguration(...)` in the same delegate) are what actually shape `PgDataSourceOptions`. A second configuring call on the same service collection (e.g. a direct `services.AddSaPostgreSqlDataSource(configure)` earlier in your code) throws `InvalidOperationException`, because both `Configure` callbacks would otherwise stack onto the same unnamed options instance and the settings would silently merge.
 
 ### Where the values are actually consumed
 
@@ -87,7 +87,7 @@ The public fluent surface received as the `configure` argument of `AddSaOutboxUs
 | `WithMessageSerializer<TService>(TService instance)` | Replace the serializer with a pre-created instance |
 | `WithMessageSerializer<TService>()` | Register a serializer type with a parameterless constructor |
 | `WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>?)` | Register a delegate that customizes `PgOutboxSettings` (table / migration / cleanup / consume) |
-| `WithDataSource(Action<OptionsBuilder<PgDataSourceOptions>>?, string?)` | Configure the PostgreSQL data source (connection string) through the standard options pipeline |
+| `WithDataSource(Action<IDataSourceBuilder>?)` | Configure the PostgreSQL data source (connection string): the section via `FromConfiguration`, the options pipeline via `Options(...)` |
 
 All methods return the same `IPgOutboxConfiguration` for chaining.
 
@@ -107,7 +107,7 @@ Takes an optional `Action<IServiceProvider, PgOutboxSettings>`. When the delegat
 
 ### `WithDataSource`
 
-Takes an optional `Action<OptionsBuilder<PgDataSourceOptions>>` callback and an optional configuration section path, and delegates both to `AddSaPostgreSqlDataSource(...)` from `Sa.Data.PostgreSql` — see its Readme for the full pipeline (normalisation, validation, `ValidateOnStart()`). The only option is `ConnectionString`; pooling and other Npgsql options are configured inside the string itself (e.g. `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` additionally drives the automatic schema inheritance of the outbox tables (step ②); an empty string reuses an `NpgsqlDataSource` registered in DI instead of opening a second pool.
+Takes an optional `Action<IDataSourceBuilder>` callback and delegates it to `AddSaPostgreSqlDataSource(...)` from `Sa.Data.PostgreSql` — the section comes via `FromConfiguration(...)`, the options pipeline via `Options(...)`; see its Readme for the full pipeline (normalisation, validation, `ValidateOnStart()`). The only option is `ConnectionString`; pooling and other Npgsql options are configured inside the string itself (e.g. `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` additionally drives the automatic schema inheritance of the outbox tables (step ②); an empty string reuses an `NpgsqlDataSource` registered in DI instead of opening a second pool.
 
 ---
 
@@ -447,8 +447,8 @@ When to replace it: (a) you are publishing with **Native AOT** and want source-g
 ```csharp
 services.AddSaOutboxUsingPostgreSql(cfg => cfg
     .WithDataSource(ds => ds
-        .Configure(o => o.ConnectionString =
-            "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres"))
+        .Options(ob => ob.Configure(o => o.ConnectionString =
+            "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres")))
     .WithOutboxSettings((_, settings) =>
     {
         // schema + all six table names in one call
@@ -478,7 +478,7 @@ services.AddSaOutboxUsingPostgreSql(cfg => cfg
 
 ```csharp
 services.AddSaOutboxUsingPostgreSql(cfg => cfg
-    .WithDataSource(ds => ds.Configure(o => o.ConnectionString = "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres"))
+    .WithDataSource(ds => ds.Options(ob => ob.Configure(o => o.ConnectionString = "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres")))
     .WithOutboxSettings((_, settings) =>
     {
         settings.MigrationSettings.AsBackgroundJob = false;  // job is Disabled()
@@ -500,7 +500,7 @@ public sealed class OrderMessageSerializer : IOutboxMessageSerializer
 }
 
 services.AddSaOutboxUsingPostgreSql(cfg => cfg
-    .WithDataSource(ds => ds.Configure(o => o.ConnectionString = "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres"))
+    .WithDataSource(ds => ds.Options(ob => ob.Configure(o => o.ConnectionString = "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres")))
     .WithOutboxSettings((_, settings) =>
     {
         // new consumer group starts "from now" — no historical backlog replay

@@ -102,14 +102,14 @@ Console.WriteLine(result.AbsoluteUrl);  // http://localhost:9000/mybucket/upload
 ```csharp
 using Sa.HybridFileStorage.S3;
 
-builder.Services.AddSaS3FileStorage(o => o.Configure(x =>
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.Endpoint = "http://localhost:9000";
     x.AccessKey = "ROOTUSER";
     x.SecretKey = "ChangeMe123";
     x.Bucket = "mybucket";
     x.Basket = "uploads";
-}));
+})));
 
 // AddSaS3FileStorage автоматически регистрирует IS3BucketClient через AddSaS3BucketClient
 ```
@@ -122,12 +122,12 @@ builder.Services.AddSaS3FileStorage(o => o.Configure(x =>
 ```csharp
 // appsettings.json:
 // { "S3FileStorage": { "Endpoint": "http://localhost:9000", "AccessKey": "…", "SecretKey": "…", "Bucket": "mybucket", "Basket": "uploads" } }
-builder.Services.AddSaS3FileStorage(configSectionPath: "S3FileStorage");
+builder.Services.AddSaS3FileStorage(b => b.FromConfiguration("S3FileStorage"));
 ```
 
-Секция биндится **первой**, поэтому `Configure` внутри колбэка имеет последнее слово. Сам колбэк
-вызывается после собственных `PostConfigure` и `Validate` регистрации, так что ваши проверки
-дополняют встроенные, а не заменяют их.
+Секция привязывается в фиксированном слоте **первой**, поэтому `Configure` из `Options(...)`
+имеет последнее слово. Действия `Options(...)` воспроизводятся после собственных `PostConfigure`
+и `Validate` регистрации, так что ваши проверки дополняют встроенные, а не заменяют их.
 
 ---
 

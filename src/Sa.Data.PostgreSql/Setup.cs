@@ -13,50 +13,48 @@ public static class Setup
     /// </summary>
     /// <param name="services">The service collection to add the services to.</param>
     /// <param name="configure">
-    /// An optional callback receiving the <see cref="OptionsBuilder{TOptions}"/> for this data source, so
-    /// configuration goes through the standard <c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>
-    /// methods rather than a bespoke overload.
-    /// </param>
-    /// <param name="configSectionPath">
-    /// An optional configuration section to bind the options from, e.g. <c>"Postgres"</c>.
-    /// Bound first, so a <c>Configure</c> call in <paramref name="configure"/> has the last word.
+    /// The configuration channel: the section via <see cref="IDataSourceBuilder.FromConfiguration"/>
+    /// and the standard pipeline (<c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>) via
+    /// <see cref="IDataSourceBuilder.Options"/>, in the same delegate. Invoked once, immediately;
+    /// its <c>Options(...)</c> actions are replayed after this method's own registrations, so their
+    /// <c>Configure</c> runs last and their <c>Validate</c> adds to — rather than replaces — the
+    /// built-in checks.
     /// </param>
     /// <returns>The same <see cref="IServiceCollection"/> instance with the services added.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when a second *configuring* call (one carrying <paramref name="configure"/> or
-    /// <paramref name="configSectionPath"/>) is made in this collection.
+    /// Thrown when a second *configuring* call (one carrying <paramref name="configure"/>) is made
+    /// in this collection.
     /// </exception>
     /// <remarks>
-    /// The options pipeline runs in a fixed order: <c>Configure</c> (raw values) →
-    /// <c>PostConfigure</c> (normalisation) → <c>PostConfigure</c> calls made in
-    /// <paramref name="configure"/> → validation. <c>ValidateOnStart()</c> turns an invalid
+    /// The options pipeline runs in a fixed order: the section binding
+    /// (<c>FromConfiguration</c>, raw values) and then the caller's <c>Options(...)</c>
+    /// <c>Configure</c> calls → <c>PostConfigure</c> (normalisation) and then the caller's
+    /// <c>Options(...)</c> <c>PostConfigure</c> calls → validation. <c>ValidateOnStart()</c> turns an invalid
     /// configuration into an <see cref="OptionsValidationException"/> at host start, and the same
     /// check also fires when <c>IOptions&lt;PgDataSourceOptions&gt;.Value</c> is first read, so a bare
     /// <c>ServiceCollection</c> fails fast on the first data-source resolve rather than deep in a query.
     /// <para>
-    /// The callback is invoked after this method's own registrations, so its <c>Configure</c> runs last
-    /// and its <c>Validate</c> adds to — rather than replaces — the built-in checks.
-    /// </para>
-    /// <para>
     /// <b>Repeated calls.</b> Unlike the filesystem/S3 providers, this method is legitimately called
     /// more than once per container: <c>AddSaPartitional</c> always registers a data source
     /// (<c>AddDataSource()</c>), and <c>AddSaOutboxUsingPostgreSql</c> does so again for its outbox
-    /// tables. Those internal calls carry no <paramref name="configure"/> and no
-    /// <paramref name="configSectionPath"/>, so they are a no-op on the options pipeline and are
-    /// deliberately not rejected. The guard fires only on a second call that *carries configuration*,
-    /// because that is the one shape that would stack two <c>Configure</c> callbacks onto the same
-    /// unnamed <see cref="PgDataSourceOptions"/> instance and silently merge them.
+    /// tables. Those internal calls carry no <paramref name="configure"/>, so they are a no-op on the
+    /// options pipeline and are deliberately not rejected. The guard fires only on a second call that
+    /// *carries configuration*, because that is the one shape that would stack two <c>Configure</c>
+    /// callbacks onto the same unnamed <see cref="PgDataSourceOptions"/> instance and silently merge
+    /// them.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddSaPostgreSqlDataSource(
         this IServiceCollection services,
-        Action<OptionsBuilder<PgDataSourceOptions>>? configure = null,
-        string? configSectionPath = null)
+        Action<IDataSourceBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var willConfigure = configure is not null || configSectionPath is not null;
+        // Both configuring intents (the section and the Options actions) live inside
+        // `configure`, so `configure is not null` alone answers the guard — a bare call
+        // cannot carry either.
+        var willConfigure = configure is not null;
 
         if (willConfigure
             && services.Any(d => d.ServiceType == typeof(PgDataSourceConfigurationMarker)))
@@ -68,11 +66,23 @@ public static class Setup
                 "Configure the PostgreSQL data source only once per service collection.");
         }
 
-        var builder = services.AddOptions<PgDataSourceOptions>();
+        var optionsBuilder = services.AddOptions<PgDataSourceOptions>();
 
-        if (configSectionPath is not null)
+        DataSourceBuilder? builder = null;
+
+        if (configure is not null)
         {
-            builder.BindConfiguration(configSectionPath);
+            builder = new DataSourceBuilder();
+            configure(builder);
+        }
+
+        // Fixed slot: the section binds after the callback has recorded it, before its
+        // Options(...) actions replay — wherever those calls sit in the callback.
+        var sectionPath = builder?.ConfigSectionPath;
+
+        if (sectionPath is not null)
+        {
+            optionsBuilder.BindConfiguration(sectionPath);
         }
 
         // Registered by type via TryAddEnumerable so a repeated call (bare internal calls are
@@ -82,7 +92,7 @@ public static class Setup
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IPostConfigureOptions<PgDataSourceOptions>, PgDataSourceNormalizer>());
 
-        builder.ValidateOnStart();
+        optionsBuilder.ValidateOnStart();
 
         // IValidateOptions rather than ValidateDataAnnotations(): the latter is marked
         // RequiresUnreferencedCode (IL2026) and breaks Native AOT. The validator is resolved by DI,
@@ -91,9 +101,16 @@ public static class Setup
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IValidateOptions<PgDataSourceOptions>, PgDataSourceOptionsValidator>());
 
-        // Invoked last, so the caller's Configure runs after any section binding and its Validate
-        // runs after this method's own checks.
-        configure?.Invoke(builder);
+        // Replayed in this slot — after the section binding — so an Options(...).Configure
+        // has the last word over configuration, and its Validate runs after this method's
+        // own checks.
+        if (builder is { SettingsActions.Count: > 0 })
+        {
+            foreach (var settingsAction in builder.SettingsActions)
+            {
+                settingsAction(optionsBuilder);
+            }
+        }
 
         if (willConfigure)
         {
@@ -141,10 +158,11 @@ internal sealed class PgDataSourceNormalizer : IPostConfigureOptions<PgDataSourc
 }
 
 /// <summary>
-/// Sentinel marker recording that <see cref="Setup.AddSaPostgreSqlDataSource"/> was configured (with a
-/// <c>configure</c> callback or a configuration section) in this collection, so a second *configuring*
+/// Sentinel marker recording that <see cref="Setup.AddSaPostgreSqlDataSource"/> was configured (a
+/// <c>configure</c> callback — section via <c>FromConfiguration</c>, settings via <c>Options(...)</c>)
+/// in this collection, so a second *configuring*
 /// call fails fast instead of silently stacking two <c>Configure</c> callbacks onto the same options
-/// instance. Bare internal calls (no configure / no section) neither check nor create it.
+/// instance. Bare internal calls (no callback at all) neither check nor create it.
 /// </summary>
 internal sealed class PgDataSourceConfigurationMarker
 {

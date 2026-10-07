@@ -31,14 +31,13 @@ public static class Setup
     /// </summary>
     /// <param name="services">Коллекция сервисов.</param>
     /// <param name="configure">
-    /// Необязательный колбэк, получающий <see cref="OptionsBuilder{TOptions}"/> для этого клиента,
-    /// чтобы конфигурация шла через стандартные <c>Configure</c> / <c>PostConfigure</c> /
-    /// <c>Validate</c>, а не через отдельный перегруженный метод.
-    /// </param>
-    /// <param name="configSectionPath">
-    /// Необязательная секция конфигурации, из которой биндятся настройки, например
-    /// <c>"S3"</c>. Биндится первой, поэтому <c>Configure</c> из <paramref name="configure"/> имеет
-    /// последнее слово.
+    /// Единственный канал конфигурации: секция через
+    /// <see cref="IS3BucketClientBuilder.FromConfiguration"/> и стандартный конвейер
+    /// (<c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>) через
+    /// <see cref="IS3BucketClientBuilder.Options"/> — в одном делегате. Вызывается один
+    /// раз, сразу; его действия <c>Options(...)</c> воспроизводятся после собственных
+    /// регистраций метода, поэтому <c>Configure</c> отрабатывает после биндинга секции,
+    /// а <c>Validate</c> дополняет — а не заменяет — встроенные проверки.
     /// </param>
     /// <returns>Та же коллекция <see cref="IServiceCollection"/> с добавленными сервисами.</returns>
     /// <exception cref="ArgumentNullException">Выбрасывается, если <paramref name="services"/> — <c>null</c>.</exception>
@@ -46,16 +45,13 @@ public static class Setup
     /// Выбрасывается, если клиент S3 уже зарегистрирован в этой коллекции.
     /// </exception>
     /// <remarks>
-    /// Конвейер опций выполняется в фиксированном порядке: <c>Configure</c> (сырые значения) →
-    /// <c>PostConfigure</c> (нормализация этим методом) → <c>PostConfigure</c> из
-    /// <paramref name="configure"/> → валидация. Поэтому валидация видит нормализованный
+    /// Конвейер опций выполняется в фиксированном порядке: привязка секции
+    /// (<c>FromConfiguration</c>, сырые значения) и затем <c>Configure</c> из
+    /// <c>Options(...)</c> → <c>PostConfigure</c> (нормализация этим методом) и затем
+    /// <c>PostConfigure</c> из <c>Options(...)</c> → валидация. Поэтому валидация видит нормализованный
     /// <see cref="S3BucketClientSetupOptions.Endpoint"/>, а <c>ValidateOnStart()</c> превращает
     /// неверную конфигурацию в <see cref="OptionsValidationException"/> на старте хоста, а не в
     /// <see cref="UriFormatException"/> посреди первой загрузки.
-    /// <para>
-    /// Колбэк вызывается последним, поэтому его <c>Configure</c> выполняется после биндинга секции,
-    /// а его <c>Validate</c> дополняет — а не заменяет — встроенные проверки.
-    /// </para>
     /// <para>
     /// Настройки читаются один раз — когда клиент создаётся фабрикой <c>HttpClientFactory</c>. Они не
     /// перечитываются на каждый запрос и не участвуют в hot-reload: пересоздание клиента означало бы и
@@ -64,8 +60,7 @@ public static class Setup
     /// </remarks>
     public static IServiceCollection AddSaS3BucketClient(
         this IServiceCollection services,
-        Action<OptionsBuilder<S3BucketClientSetupOptions>>? configure = null,
-        string? configSectionPath = null)
+        Action<IS3BucketClientBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -84,25 +79,44 @@ public static class Setup
 
         services.AddSingleton(new S3BucketClientRegistration());
 
-        var builder = services.AddOptions<S3BucketClientSetupOptions>();
+        var optsBuilder = services.AddOptions<S3BucketClientSetupOptions>();
 
-        if (configSectionPath is not null)
+        S3BucketClientBuilder? builder = null;
+
+        if (configure is not null)
         {
-            builder.BindConfiguration(configSectionPath);
+            builder = new S3BucketClientBuilder();
+            configure(builder);
+        }
+
+        // Фиксированный слот: секция биндится после того, как колбэк её записал, но до
+        // воспроизведения его действий Options(...) — где бы они ни стояли в колбэке.
+        var sectionPath = builder?.ConfigSectionPath;
+
+        if (sectionPath is not null)
+        {
+            optsBuilder.BindConfiguration(sectionPath);
         }
 
         // Нормализация выполняется до валидации, поэтому проверки видят канонический вид значений.
-        builder.PostConfigure(static options => options.Normalize());
+        optsBuilder.PostConfigure(static options => options.Normalize());
 
-        builder.ValidateOnStart();
+        optsBuilder.ValidateOnStart();
 
         // IValidateOptions вместо ValidateDataAnnotations(): последний помечен RequiresUnreferencedCode
         // (IL2026) и ломает Native AOT.
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IValidateOptions<S3BucketClientSetupOptions>, S3BucketClientSetupOptionsValidator>());
 
-        // Вызывается последним, чтобы Configure пользователя отработал после биндинга секции.
-        configure?.Invoke(builder);
+        // Воспроизводятся в этом слоте — после привязки секции и после нашей нормализации,
+        // поэтому Configure пользователя перебивает секцию, а его Validate идёт после наших.
+        if (builder is { SettingsActions.Count: > 0 })
+        {
+            foreach (var settingsAction in builder.SettingsActions)
+            {
+                settingsAction(optsBuilder);
+            }
+        }
 
         services.AddSaS3BucketClientCore(sp => sp.GetRequiredService<IOptions<S3BucketClientSetupOptions>>().Value);
 

@@ -9,7 +9,7 @@ public class OutboxPostgreSqlFixture<TSub> : PgDataSourceFixture<TSub>
     public OutboxPostgreSqlFixture()
     {
         Services.AddSaOutboxUsingPostgreSql(builder => builder
-            .WithDataSource(b => b.Configure(o => o.ConnectionString = ConnectionString))
+            .WithDataSource(b => b.Options(ob => ob.Configure(o => o.ConnectionString = ConnectionString)))
             .WithMessageSerializer(_ => OutboxMessageSerializer.Instance)
         );
     }

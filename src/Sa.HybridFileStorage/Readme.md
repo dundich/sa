@@ -52,11 +52,11 @@ automatically:
 
 ```csharp
 // Basket "drafts" → local filesystem. Registers its own IFileStorage.
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.BasePath = @"C:\data\drafts";
     x.Basket = "drafts";
-}));
+})));
 
 builder.Services.AddSaHybridFileStorage(cfg => cfg
     // Basket "documents" → PostgreSQL with auto-partitioning.
@@ -212,11 +212,11 @@ var builder = Host.CreateApplicationBuilder(args);
 // Providers that register themselves first — the hybrid container picks up every
 // registered IFileStorage automatically, so no ConfigureStorage call is needed for them.
 builder.Services.AddSaInMemoryFileStorage();
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.BasePath = @"C:\data\files";
     x.Basket = "documents";
-}));
+})));
 
 // Then wire up the container
 builder.Services.AddSaHybridFileStorage(cfg => cfg
@@ -251,21 +251,21 @@ For quick setups, each provider has its own extension method:
 builder.Services.AddSaInMemoryFileStorage();
 
 // File System only
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.BasePath = @"C:\data\files";
     x.Basket = "documents";
-}));
+})));
 
 // S3 only
-builder.Services.AddSaS3FileStorage(o => o.Configure(x =>
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.Endpoint = "http://localhost:9000";
     x.AccessKey = "ROOTUSER";
     x.SecretKey = "ChangeMe123";
     x.Bucket = "mybucket";
     x.Basket = "uploads";
-}));
+})));
 
 // Then register the hybrid layer
 builder.Services.AddSaHybridFileStorage(cfg => cfg.AddLogging());
@@ -487,11 +487,11 @@ Built-in logging interceptors are available via `.AddLogging()`.
 Set `IsReadOnly = true` on any provider to prevent writes. Attempted writes throw `HybridFileStorageWritableException`:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.BasePath = @"C:\readonly\data";
     x.IsReadOnly = true  // uploads/deletes will fail
-}));
+})));
 ```
 
 ---

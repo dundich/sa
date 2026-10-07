@@ -89,11 +89,11 @@ public sealed class RegistrationTests : IDisposable
     public void Register_PostConfigures_ThePathsToFullPaths()
     {
         var services = new ServiceCollection();
-        services.AddSaFFMpeg(o => o.Configure(x =>
+        services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(x =>
         {
             x.WritableDirectory = _testDir;
             x.ExecutablePath = ".";
-        }));
+        })));
 
         using var provider = services.BuildServiceProvider();
 
@@ -112,11 +112,11 @@ public sealed class RegistrationTests : IDisposable
         // Path.GetFullPath("   ") на Unix успешно возвращает путь (пробелы — легальное имя файла),
         // так что без guard'а пустая опция превратилась бы в каталог "   ", а валидация прошла бы.
         var services = new ServiceCollection();
-        services.AddSaFFMpeg(o => o.Configure(x =>
+        services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(x =>
         {
             x.WritableDirectory = value;
             x.ExecutablePath = value;
-        }));
+        })));
 
         using var provider = services.BuildServiceProvider();
 
@@ -132,7 +132,7 @@ public sealed class RegistrationTests : IDisposable
         // Путь из одних пробелов после нормализации становится «не задан», а значит проходит
         // проверку на файл — доказательство, что валидация идёт после PostConfigure.
         var services = new ServiceCollection();
-        services.AddSaFFMpeg(o => o.Configure(x => x.WritableDirectory = "   "));
+        services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(x => x.WritableDirectory = "   ")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -147,8 +147,8 @@ public sealed class RegistrationTests : IDisposable
         var services = new ServiceCollection();
 
         services.AddSaFFMpeg(o => o
-            .Configure(x => x.TimeoutSeconds = 5)
-            .PostConfigure(x => x.TimeoutSeconds = 120));
+            .Options(ob => ob.Configure(x => x.TimeoutSeconds = 5)
+            .PostConfigure(x => x.TimeoutSeconds = 120)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -162,8 +162,8 @@ public sealed class RegistrationTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSaFFMpeg(o => o
-            .Configure(x => x.WritableDirectory = _testDir)
-            .PostConfigure(x => seen = x.WritableDirectory));
+            .Options(ob => ob.Configure(x => x.WritableDirectory = _testDir)
+            .PostConfigure(x => seen = x.WritableDirectory)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -179,8 +179,8 @@ public sealed class RegistrationTests : IDisposable
         var services = new ServiceCollection();
 
         services.AddSaFFMpeg(o => o
-            .Configure(x => x.TimeoutSeconds = 1)
-            .Validate(x => x.TimeoutSeconds >= 60, "TimeoutSeconds must be at least 60."));
+            .Options(ob => ob.Configure(x => x.TimeoutSeconds = 1)
+            .Validate(x => x.TimeoutSeconds >= 60, "TimeoutSeconds must be at least 60.")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -196,8 +196,8 @@ public sealed class RegistrationTests : IDisposable
         var services = new ServiceCollection();
 
         services.AddSaFFMpeg(o => o
-            .Configure(x => { x.TimeoutSeconds = -1; x.ExecutablePath = _testDir; })
-            .Validate(x => x.ExecutablePath is null, "ExecutablePath must be unset."));
+            .Options(ob => ob.Configure(x => { x.TimeoutSeconds = -1; x.ExecutablePath = _testDir; })
+            .Validate(x => x.ExecutablePath is null, "ExecutablePath must be unset.")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -223,7 +223,7 @@ public sealed class RegistrationTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
+        services.AddSaFFMpeg(b => b.FromConfiguration("Ffmpeg"));
 
         using var provider = services.BuildServiceProvider();
 
@@ -238,7 +238,7 @@ public sealed class RegistrationTests : IDisposable
     [Fact]
     public void Register_ConfigureCallback_OverridesTheBoundSection()
     {
-        // Callback вызывается после BindConfiguration, поэтому его Configure — последнее слово.
+        // Options(...) воспроизводится после BindConfiguration, поэтому его Configure — последнее слово.
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -248,9 +248,9 @@ public sealed class RegistrationTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaFFMpeg(
-            configSectionPath: "Ffmpeg",
-            configure: o => o.Configure(x => x.TimeoutSeconds = 30));
+        services.AddSaFFMpeg(o => o
+            .FromConfiguration("Ffmpeg")
+            .Options(ob => ob.Configure(x => x.TimeoutSeconds = 30)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -281,7 +281,7 @@ public sealed class RegistrationTests : IDisposable
     public void Register_FailsValidation_OnResolve_NotOnRegistration()
     {
         var services = new ServiceCollection();
-        services.AddSaFFMpeg(o => o.Configure(x => x.TimeoutSeconds = -1));
+        services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(x => x.TimeoutSeconds = -1)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -294,7 +294,7 @@ public sealed class RegistrationTests : IDisposable
     public void Register_ZeroTimeout_IsAllowed_AndMeansTheDefault()
     {
         var services = new ServiceCollection();
-        services.AddSaFFMpeg(o => o.Configure(x => x.TimeoutSeconds = 0));
+        services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(x => x.TimeoutSeconds = 0)));
 
         using var provider = services.BuildServiceProvider();
 

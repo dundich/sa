@@ -53,7 +53,7 @@ public sealed class ExtensionMethodTests : IAsyncLifetime
         Directory.CreateDirectory(fsPath);
 
         var services = new ServiceCollection()
-            .AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = fsPath))
+            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = fsPath)))
             .AddSaHybridFileStorage();
 
         using var provider = services.BuildServiceProvider();

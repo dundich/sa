@@ -52,11 +52,11 @@
 
 ```csharp
 // Корзина "черновик" → файловая система. Регистрирует собственный IFileStorage.
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.BasePath = @"C:\data\черновик";
     x.Basket = "черновик";
-}));
+})));
 
 builder.Services.AddSaHybridFileStorage(cfg => cfg
     // Корзина "документы" → PostgreSQL с авто-партиционированием.
@@ -212,11 +212,11 @@ var builder = Host.CreateApplicationBuilder(args);
 // Провайдеры, регистрирующие себя сами, — гибридный контейнер подхватывает любой
 // зарегистрированный IFileStorage автоматически, вызов ConfigureStorage для них не нужен.
 builder.Services.AddSaInMemoryFileStorage();
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.BasePath = @"C:\data\files";
     x.Basket = "documents";
-}));
+})));
 
 // Затем собираем контейнер
 builder.Services.AddSaHybridFileStorage(cfg => cfg
@@ -251,21 +251,21 @@ var storage = host.Services.GetRequiredService<IHybridFileStorage>();
 builder.Services.AddSaInMemoryFileStorage();
 
 // Только файловая система
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.BasePath = @"C:\data\files";
     x.Basket = "documents";
-}));
+})));
 
 // Только S3
-builder.Services.AddSaS3FileStorage(o => o.Configure(x =>
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.Endpoint = "http://localhost:9000";
     x.AccessKey = "ROOTUSER";
     x.SecretKey = "ChangeMe123";
     x.Bucket = "mybucket";
     x.Basket = "uploads";
-}));
+})));
 
 // Затем регистрируем гибридный слой
 builder.Services.AddSaHybridFileStorage(cfg => cfg.AddLogging());
@@ -487,11 +487,11 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
 Установите `IsReadOnly = true` для любого провайдера, чтобы запретить запись. Попытки записи вызывают `HybridFileStorageWritableException`:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.BasePath = @"C:\readonly\data";
     x.IsReadOnly = true  // загрузки/удаления будут завершаться ошибкой
-}));
+})));
 ```
 
 ---

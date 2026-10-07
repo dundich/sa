@@ -29,7 +29,7 @@ var client = new S3BucketClient(new HttpClient(), new S3BucketClientSetupOptions
 `AddSaS3BucketClient` принимает стандартный колбэк опций, поэтому конфигурация идёт через `Configure` / `PostConfigure` / `Validate` как у любого другого типа опций, а не через отдельный перегруженный метод:
 
 ```csharp
-services.AddSaS3BucketClient(o => o.Configure(x =>
+services.AddSaS3BucketClient(o => o.Options(ob => ob.Configure(x =>
 {
     x.Bucket = "mybucket";
     x.Endpoint = "http://localhost:9000";
@@ -38,7 +38,7 @@ services.AddSaS3BucketClient(o => o.Configure(x =>
     x.TotalRequestTimeout = TimeSpan.FromSeconds(180);
     x.ConnectionPoolLifetime = TimeSpan.FromMinutes(15);
     x.HandlerLifetime = Timeout.InfiniteTimeSpan; // либо TimeSpan.FromHours(2) для периодического обновления handler'а
-}));
+})));
 
 // Использование:
 var client = serviceProvider.GetRequiredService<IS3BucketClient>();
@@ -49,10 +49,10 @@ var client = serviceProvider.GetRequiredService<IS3BucketClient>();
 ```csharp
 // appsettings.json:
 // { "S3": { "Endpoint": "http://localhost:9000", "AccessKey": "…", "SecretKey": "…", "Bucket": "mybucket" } }
-services.AddSaS3BucketClient(configSectionPath: "S3");
+services.AddSaS3BucketClient(b => b.FromConfiguration("S3"));
 ```
 
-Секция биндится **первой**, поэтому `Configure` внутри колбэка имеет последнее слово. Сам колбэк вызывается после собственных `PostConfigure` и `Validate` регистрации, так что ваши проверки дополняют встроенные, а не заменяют их.
+Секция привязывается в фиксированном слоте **первой**, поэтому `Configure` из `Options(...)` имеет последнее слово. Действия `Options(...)` воспроизводятся после собственных `PostConfigure` и `Validate` регистрации, так что ваши проверки дополняют встроенные, а не заменяют их.
 
 ### Валидация
 

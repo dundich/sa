@@ -48,7 +48,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
 
                 });
             })
-            .AddDataSource(configure => configure.Configure(o => o.ConnectionString = this.ConnectionString))
+            .AddDataSource(configure => configure.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)))
             ;
         }
     }

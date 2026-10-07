@@ -16,32 +16,27 @@ public static class Setup
     /// </summary>
     /// <param name="services">The service collection to add the services to.</param>
     /// <param name="configure">
-    /// An optional callback receiving the <see cref="OptionsBuilder{TOptions}"/> for this provider, so
-    /// configuration goes through the standard <c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>
-    /// methods rather than a bespoke overload.
-    /// </param>
-    /// <param name="configSectionPath">
-    /// An optional configuration section to bind the options from, e.g. <c>"FileSystemStorage"</c>.
-    /// Bound first, so a <c>Configure</c> call in <paramref name="configure"/> has the last word.
+    /// The configuration channel: the section via <see cref="IFileSystemStorageBuilder.FromConfiguration"/>
+    /// and the standard pipeline (<c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>) via
+    /// <see cref="IFileSystemStorageBuilder.Options"/>, in the same delegate. Invoked once, immediately;
+    /// its <c>Options(...)</c> actions are replayed after this method's own registrations, so their
+    /// <c>Configure</c> runs last and their <c>Validate</c> adds to — rather than replaces — the
+    /// built-in checks.
     /// </param>
     /// <returns>The same <see cref="IServiceCollection"/> instance with the services added.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">Thrown when a filesystem storage was already registered in this collection.</exception>
     /// <remarks>
-    /// The options pipeline runs in a fixed order: <c>Configure</c> (pre-initialisation, raw values) →
-    /// <c>PostConfigure</c> (this method's normalisation) → <c>PostConfigure</c> calls made in
-    /// <paramref name="configure"/> → validation. Validation therefore sees the normalised
-    /// <c>BasePath</c>, and <c>ValidateOnStart()</c> turns an invalid configuration into an
-    /// <see cref="OptionsValidationException"/> at host start instead of a failed first upload.
-    /// <para>
-    /// The callback is invoked after this method's own registrations, so its <c>Configure</c> runs last
-    /// and its <c>Validate</c> adds to — rather than replaces — the built-in checks.
-    /// </para>
+    /// The options pipeline runs in a fixed order: the section binding (<c>FromConfiguration</c>,
+    /// raw values) and then the caller's <c>Options(...)</c> <c>Configure</c> calls →
+    /// <c>PostConfigure</c> (this method's normalisation) and then the caller's
+    /// <c>Options(...)</c> <c>PostConfigure</c> calls → validation. Validation therefore sees the
+    /// normalised <c>BasePath</c>, and <c>ValidateOnStart()</c> turns an invalid configuration into
+    /// an <see cref="OptionsValidationException"/> at host start instead of a failed first upload.
     /// </remarks>
     public static IServiceCollection AddSaFileSystemFileStorage(
         this IServiceCollection services,
-        Action<OptionsBuilder<FileSystemStorageOptions>>? configure = null,
-        string? configSectionPath = null)
+        Action<IFileSystemStorageBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -62,9 +57,21 @@ public static class Setup
 
         var builder = services.AddOptions<FileSystemStorageOptions>();
 
-        if (configSectionPath is not null)
+        FileSystemStorageBuilder? storageBuilder = null;
+
+        if (configure is not null)
         {
-            builder.BindConfiguration(configSectionPath);
+            storageBuilder = new FileSystemStorageBuilder();
+            configure(storageBuilder);
+        }
+
+        // Fixed slot: the section binds after the callback has recorded it, before its
+        // Options(...) actions replay — wherever those calls sit in the callback.
+        var sectionPath = storageBuilder?.ConfigSectionPath;
+
+        if (sectionPath is not null)
+        {
+            builder.BindConfiguration(sectionPath);
         }
 
         // Post-configuration: resolve the base path once, here, instead of twice in the storage's field
@@ -92,9 +99,16 @@ public static class Setup
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IValidateOptions<FileSystemStorageOptions>, FileSystemStorageOptionsValidator>());
 
-        // Invoked last, so the caller's Configure runs after any section binding and its PostConfigure
-        // and Validate run after this method's own.
-        configure?.Invoke(builder);
+        // Replayed in this slot — after the section binding and after this method's own
+        // PostConfigure/Validate — so the caller's Configure beats the section and its
+        // Validate runs after ours.
+        if (storageBuilder is { SettingsActions.Count: > 0 })
+        {
+            foreach (var settingsAction in storageBuilder.SettingsActions)
+            {
+                settingsAction(builder);
+            }
+        }
 
         services.TryAddSingleton(TimeProvider.System);
 

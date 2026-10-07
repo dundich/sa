@@ -57,7 +57,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         // Path.GetFullPath("   ") succeeds on Unix, so an unguarded PostConfigure would silently
         // turn a blank BasePath into a directory named "   " and validation would pass.
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = "   "));
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = "   ")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -75,11 +75,11 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         // BufferSize is the property that used to be dropped by the options -> settings mapping and so
         // escaped validation entirely. It is validated now because there is only one type.
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
         {
             x.BasePath = _testDir;
             x.BufferSize = bufferSize;
-        }));
+        })));
 
         using var provider = services.BuildServiceProvider();
 
@@ -93,7 +93,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     public void Register_PostConfigures_TheBasePathToAFullPath()
     {
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -107,12 +107,12 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     public void Register_PostConfigures_TrimsTheNames()
     {
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
         {
             x.BasePath = _testDir;
             x.StorageType = "  fsx  ";
             x.Basket = "  documents  ";
-        }));
+        })));
 
         using var provider = services.BuildServiceProvider();
 
@@ -128,11 +128,11 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         // A basket that is only invalid because of surrounding whitespace must pass once trimmed —
         // proof that validation runs after post-configuration, not before it.
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
         {
             x.BasePath = _testDir;
             x.Basket = "  documents  ";
-        }));
+        })));
 
         using var provider = services.BuildServiceProvider();
 
@@ -151,8 +151,8 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         var services = new ServiceCollection();
 
         services.AddSaFileSystemFileStorage(o => o
-            .Configure(x => x.BasePath = _testDir)
-            .PostConfigure(x => x.BufferSize = 4096));
+            .Options(ob => ob.Configure(x => x.BasePath = _testDir)
+            .PostConfigure(x => x.BufferSize = 4096)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -171,8 +171,8 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSaFileSystemFileStorage(o => o
-            .Configure(x => x.BasePath = _testDir)
-            .PostConfigure(x => seen = x.BasePath));
+            .Options(ob => ob.Configure(x => x.BasePath = _testDir)
+            .PostConfigure(x => seen = x.BasePath)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -188,8 +188,8 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         var services = new ServiceCollection();
 
         services.AddSaFileSystemFileStorage(o => o
-            .Configure(x => { x.BasePath = _testDir; x.BufferSize = 512; })
-            .Validate(x => x.BufferSize >= 1024, "BufferSize must be at least 1 KB."));
+            .Options(ob => ob.Configure(x => { x.BasePath = _testDir; x.BufferSize = 512; })
+            .Validate(x => x.BufferSize >= 1024, "BufferSize must be at least 1 KB.")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -207,8 +207,8 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         var services = new ServiceCollection();
 
         services.AddSaFileSystemFileStorage(o => o
-            .Configure(x => { x.BasePath = _testDir; x.BufferSize = 0; })
-            .Validate(x => x.Basket == "never", "Basket must be 'never'."));
+            .Options(ob => ob.Configure(x => { x.BasePath = _testDir; x.BufferSize = 0; })
+            .Validate(x => x.Basket == "never", "Basket must be 'never'.")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -236,7 +236,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaFileSystemFileStorage(configSectionPath: "FileSystemStorage");
+        services.AddSaFileSystemFileStorage(b => b.FromConfiguration("FileSystemStorage"));
 
         using var provider = services.BuildServiceProvider();
 
@@ -251,7 +251,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     [Fact]
     public void Register_ConfigureCallback_OverridesTheBoundSection()
     {
-        // The callback is invoked after BindConfiguration, so its Configure has the last word.
+        // The Options(...) actions are replayed after BindConfiguration, so their Configure has the last word.
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -262,9 +262,9 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaFileSystemFileStorage(
-            configSectionPath: "FileSystemStorage",
-            configure: o => o.Configure(x => x.BasePath = _testDir));
+        services.AddSaFileSystemFileStorage(o => o
+            .FromConfiguration("FileSystemStorage")
+            .Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -280,7 +280,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         // BindConfiguration is only called when a path is supplied, so a container with no
         // IConfiguration at all must still resolve and keep the defaults.
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -295,14 +295,14 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     public void Register_CarriesEveryPropertyThrough()
     {
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
         {
             x.BasePath = _testDir;
             x.Basket = "documents";
             x.StorageType = "fsx";
             x.IsReadOnly = true;
             x.BufferSize = 4096;
-        }));
+        })));
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -318,11 +318,11 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         // BufferSize feeds FileStreamOptions.BufferSize, so reaching a real file proves the value
         // survived configuration rather than reverting to a default.
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x =>
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
         {
             x.BasePath = _testDir;
             x.BufferSize = 1;
-        }));
+        })));
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -343,7 +343,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     {
         var services = new ServiceCollection();
 
-        var returned = services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+        var returned = services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         Assert.Same(services, returned);
     }
@@ -352,7 +352,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     public void Register_AddsExactlyOneFileStorage()
     {
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         Assert.Single(services, d => d.ServiceType == typeof(IFileStorage));
     }
@@ -361,7 +361,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     public void Register_AddsTheValidator()
     {
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<FileSystemStorageOptions>));
     }
@@ -373,10 +373,10 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         // add a second IFileStorage over those same options and stack both Configure callbacks, so the
         // storage would silently use merged settings. Mirrors AddSaS3FileStorage.
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir)));
+            () => services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir))));
 
         Assert.Contains("already been registered", ex.Message, StringComparison.Ordinal);
         Assert.Single(services, d => d.ServiceType == typeof(IFileStorage));
@@ -388,7 +388,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     public void Register_RegistersTimeProvider()
     {
         var services = new ServiceCollection();
-        services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -402,7 +402,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(fake);
-        services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -416,7 +416,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(new TimeProviderStub(expected));
-        services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+        services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();

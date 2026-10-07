@@ -78,8 +78,8 @@ builder.Services.AddSaPostgreSqlFileStorage(opts =>
 // которая возвращает IPartConfiguration для цепочки настройки подключения:
 builder.Services
     .AddSaPostgreSqlFileStorageChained(opts => opts.TableName = "files")
-    .AddDataSource(ds => ds.Configure(o => o.ConnectionString =
-        "Host=localhost;Database=mydb;Username=postgres;Password=password;Search Path=public"));
+    .AddDataSource(ds => ds.Options(ob => ob.Configure(o => o.ConnectionString =
+        "Host=localhost;Database=mydb;Username=postgres;Password=password;Search Path=public")));
 ```
 
 > **Примечание:** `AddSaPostgreSqlFileStorage` (обычная) и `AddSaPostgreSqlFileStorageChained`

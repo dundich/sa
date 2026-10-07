@@ -68,16 +68,16 @@ dotnet add package Sa.HybridFileStorage.FileSystem
 ```csharp
 using Sa.HybridFileStorage.FileSystem;
 
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(options =>
 {
     options.BasePath = @"C:\data\files";
     options.Basket = "documents";
-}));
+})));
 ```
 
-В callback передаётся `OptionsBuilder<FileSystemStorageOptions>`, поэтому настройка идёт через
-стандартные методы `Configure` / `PostConfigure` / `Validate` — отдельной перегрузки под опции
-нет.
+В callback передаётся `IFileSystemStorageBuilder`: секция — через `FromConfiguration("…")`,
+стандартные методы `Configure` / `PostConfigure` / `Validate` — через `Options(...)`; отдельной
+перегрузки под опции нет.
 
 Конвейер выполняется в фиксированном порядке — **`Configure` → `PostConfigure` → валидация**,
 поэтому валидация видит уже нормализованные значения.
@@ -87,11 +87,11 @@ builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
 `Configure` выполняется первым и получает «сырые» значения:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(options =>
 {
     options.BasePath = @"C:\data\files";
     options.BufferSize = 512 * 1024;
-}));
+})));
 ```
 
 ### Post-инициализация (PostConfigure)
@@ -102,23 +102,23 @@ builder.Services.AddSaFileSystemFileStorage(o => o.Configure(options =>
 
 ```csharp
 builder.Services.AddSaFileSystemFileStorage(o => o
-    .Configure(options => options.BasePath = @"C:\data\files")
-    .PostConfigure(options => options.BufferSize = 1024 * 1024));
+    .Options(ob => ob.Configure(options => options.BasePath = @"C:\data\files")
+    .PostConfigure(options => options.BufferSize = 1024 * 1024)));
 ```
 
 ### Из конфигурации
 
-Передайте путь секции — опции будут привязаны из `IConfiguration`:
+Передайте секцию через `FromConfiguration` — опции будут привязаны из `IConfiguration`:
 
 ```csharp
 // appsettings.json
 // { "FileSystemStorage": { "BasePath": "C:\\data\\files", "Basket": "documents" } }
 
-builder.Services.AddSaFileSystemFileStorage(configSectionPath: "FileSystemStorage");
+builder.Services.AddSaFileSystemFileStorage(b => b.FromConfiguration("FileSystemStorage"));
 ```
 
-Привязка регистрируется **до** callback'а, поэтому при одновременном использовании последнее
-слово остаётся за `Configure` внутри callback'а.
+Привязка выполняется в фиксированном слоте **до** воспроизведения действий `Options(...)`,
+поэтому при одновременном использовании последнее слово остаётся за их `Configure`.
 
 ### Одно хранилище на коллекцию
 
@@ -245,8 +245,8 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 
 ```csharp
 builder.Services.AddSaFileSystemFileStorage(o => o
-    .Configure(options => options.BasePath = @"C:\data\files")
-    .Validate(options => options.BufferSize >= 64 * 1024, "BufferSize должен быть не меньше 64 КБ."));
+    .Options(ob => ob.Configure(options => options.BasePath = @"C:\data\files")
+    .Validate(options => options.BufferSize >= 64 * 1024, "BufferSize должен быть не меньше 64 КБ.")));
 ```
 
 Ваше правило выполняется в дополнение к встроенным проверкам; все ошибки собираются вместе

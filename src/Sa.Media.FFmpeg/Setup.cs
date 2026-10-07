@@ -13,14 +13,12 @@ public static class Setup
     /// </summary>
     /// <param name="services">Коллекция сервисов.</param>
     /// <param name="configure">
-    /// Необязательный callback, получающий <see cref="OptionsBuilder{TOptions}"/>. Настройка идёт
-    /// через стандартные <c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>, отдельной
-    /// перегрузки под опции нет.
-    /// </param>
-    /// <param name="configSectionPath">
-    /// Необязательная секция конфигурации, из которой биндятся опции, например <c>"Ffmpeg"</c>.
-    /// Биндится первым, поэтому <c>Configure</c> из <paramref name="configure"/> имеет последнее
-    /// слово.
+    /// Единственный канал конфигурации: секция через <see cref="IFFMpegBuilder.FromConfiguration"/>
+    /// и стандартный конвейер (<c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>) через
+    /// <see cref="IFFMpegBuilder.Options"/> — в одном делегате. Вызывается один раз, сразу;
+    /// его действия <c>Options(...)</c> воспроизводятся после собственных регистраций метода,
+    /// поэтому <c>Configure</c> отрабатывает последним, а <c>Validate</c> добавляется к
+    /// встроенным проверкам, а не заменяет их.
     /// </param>
     /// <returns>Та же <see cref="IServiceCollection"/> с добавленными сервисами.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> — <c>null</c>.</exception>
@@ -28,20 +26,17 @@ public static class Setup
     /// FFmpeg уже зарегистрирован в этой коллекции.
     /// </exception>
     /// <remarks>
-    /// Порядок конвейера фиксирован: <c>Configure</c> (pre-инициализация, «сырые» значения) →
-    /// <c>PostConfigure</c> (нормализация) → <c>PostConfigure</c> из <paramref name="configure"/> →
-    /// валидация. Поэтому валидация видит уже нормализованные значения, а <c>ValidateOnStart()</c>
-    /// превращает неверную настройку в <see cref="OptionsValidationException"/> на старте хоста
-    /// вместо ошибки посреди конвертации.
-    /// <para>
-    /// Callback вызывается последним, поэтому его <c>Configure</c> отрабатывает после биндинга
-    /// секции, а его <c>Validate</c> добавляется к встроенным проверкам, а не заменяет их.
-    /// </para>
+    /// Порядок конвейера фиксирован: привязка секции (<c>FromConfiguration</c>, «сырые»
+    /// значения) и затем <c>Configure</c> из <c>Options(...)</c> →
+    /// <c>PostConfigure</c> (нормализация) и затем <c>PostConfigure</c> из
+    /// <c>Options(...)</c> → валидация. Поэтому валидация видит уже нормализованные значения,
+    /// а <c>ValidateOnStart()</c> превращает неверную настройку в
+    /// <see cref="OptionsValidationException"/> на старте хоста вместо ошибки посреди
+    /// конвертации.
     /// </remarks>
     public static IServiceCollection AddSaFFMpeg(
         this IServiceCollection services,
-        Action<OptionsBuilder<FFMpegOptions>>? configure = null,
-        string? configSectionPath = null)
+        Action<IFFMpegBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -61,9 +56,21 @@ public static class Setup
 
         var optsBuilder = services.AddOptions<FFMpegOptions>();
 
-        if (configSectionPath is not null)
+        FFMpegBuilder? builder = null;
+
+        if (configure is not null)
         {
-            optsBuilder.BindConfiguration(configSectionPath);
+            builder = new FFMpegBuilder();
+            configure(builder);
+        }
+
+        // Фиксированный слот: секция биндится после того, как колбэк её записал, но до
+        // воспроизведения его действий Options(...) — где бы они ни стояли в колбэке.
+        var sectionPath = builder?.ConfigSectionPath;
+
+        if (sectionPath is not null)
+        {
+            optsBuilder.BindConfiguration(sectionPath);
         }
 
         // Post-инициализация: пути приводятся к единому виду до того, как их увидят валидация и
@@ -83,9 +90,16 @@ public static class Setup
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IValidateOptions<FFMpegOptions>, FFMpegOptionsValidator>());
 
-        // Вызывается последним, чтобы Configure пользователя шёл после биндинга секции, а его
-        // PostConfigure и Validate — после наших.
-        configure?.Invoke(optsBuilder);
+        // Воспроизводятся в этом слоте — после привязки секции и после наших
+        // PostConfigure/Validate, поэтому Configure пользователя перебивает секцию, а его
+        // PostConfigure и Validate идут после наших.
+        if (builder is { SettingsActions.Count: > 0 })
+        {
+            foreach (var settingsAction in builder.SettingsActions)
+            {
+                settingsAction(optsBuilder);
+            }
+        }
 
         // Singleton, а не Transient: FFMpegLocator кэширует найденный путь, и пересоздавать его
         // на каждый resolve — значит заново обходить диск. Оба объекта потокобезопасны

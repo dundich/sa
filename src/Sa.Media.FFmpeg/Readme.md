@@ -177,15 +177,16 @@ Console.WriteLine($"Duration: {meta.Duration}s, Bitrate: {meta.BitRate} bps");
 
 `AddSaFFMpeg` registers FFmpeg through the standard `Microsoft.Extensions.Options` pipeline and
 returns the `IServiceCollection`, so it composes with the other `Add...` calls. The `configure`
-callback receives the `OptionsBuilder<FFMpegOptions>`:
+callback receives the `IFFMpegBuilder`: the section comes from `FromConfiguration("…")`, the
+options pipeline from `Options(...)` — which gets the `OptionsBuilder<FFMpegOptions>`:
 
 ```csharp
-builder.Services.AddSaFFMpeg(o => o.Configure(options =>
+builder.Services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(options =>
 {
     options.ExecutablePath = @"C:\tools\ffmpeg.exe"; // optional override
     options.WritableDirectory = @"C:\temp\output";
     options.TimeoutSeconds = 300; // 5 minutes
-}));
+})));
 
 // Usage:
 var sp = builder.Services.BuildServiceProvider();
@@ -203,21 +204,22 @@ normalisation, so anything you add there sees an already-normalised value:
 
 ```csharp
 builder.Services.AddSaFFMpeg(o => o
-    .Configure(options => options.ExecutablePath = @"C:\tools\ffmpeg.exe")
+    .Options(ob => ob.Configure(options => options.ExecutablePath = @"C:\tools\ffmpeg.exe")
     .PostConfigure(options => options.WritableDirectory ??= Path.GetTempPath())
-    .Validate(options => options.TimeoutSeconds is null or >= 5, "TimeoutSeconds must be at least 5."));
+    .Validate(options => options.TimeoutSeconds is null or >= 5, "TimeoutSeconds must be at least 5.")));
 ```
 
 The registration's own `PostConfigure` resolves `ExecutablePath` and `WritableDirectory` to full
-paths and turns a blank value into "unset". The callback is invoked last, so its `Configure` runs
-after any section binding and its `Validate` adds to — rather than replaces — the built-in checks.
+paths and turns a blank value into "unset". The `Options(...)` actions replay after the section
+binding and the registration's own checks, so their `Configure` runs last and their `Validate`
+adds to — rather than replaces — the built-in checks.
 
 ### Configuration section binding
 
-Pass the section path and the options are bound from `IConfiguration`:
+Pass the section via `FromConfiguration` and the options are bound from `IConfiguration`:
 
 ```csharp
-builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
+builder.Services.AddSaFFMpeg(b => b.FromConfiguration("Ffmpeg"));
 
 // appsettings.json:
 // {
@@ -229,8 +231,8 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 // }
 ```
 
-Binding is registered **before** the callback, so a `Configure` call inside the callback has the
-last word when both are used.
+The section binds in a fixed slot **before** the `Options(...)` actions replay, so their
+`Configure` has the last word when both are used.
 
 ### One registration per collection
 

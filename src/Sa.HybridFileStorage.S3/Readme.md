@@ -114,7 +114,7 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 ```csharp
 using Sa.HybridFileStorage.S3;
 
-builder.Services.AddSaS3FileStorage(o => o.Configure(x =>
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.Endpoint = "http://localhost:9000";
     x.AccessKey = "ROOTUSER";
@@ -122,7 +122,7 @@ builder.Services.AddSaS3FileStorage(o => o.Configure(x =>
     x.Bucket = "mybucket";
     x.Basket = "uploads";
     x.Region = "us-east-1";
-}));
+})));
 
 // The DI container resolves IS3BucketClient automatically
 ```
@@ -136,12 +136,12 @@ from.
 ```csharp
 // appsettings.json:
 // { "S3FileStorage": { "Endpoint": "http://localhost:9000", "AccessKey": "…", "SecretKey": "…", "Bucket": "mybucket", "Basket": "uploads" } }
-builder.Services.AddSaS3FileStorage(configSectionPath: "S3FileStorage");
+builder.Services.AddSaS3FileStorage(b => b.FromConfiguration("S3FileStorage"));
 ```
 
-The section is bound **first**, so a `Configure` call inside the callback has the last word. The
-callback also runs after the registration's own `PostConfigure` and `Validate`, so your checks add
-to the built-in ones instead of replacing them.
+The section binds in a fixed slot **first**, so an `Options(...)` `Configure` has the last word.
+The `Options(...)` actions replay after the registration's own `PostConfigure` and `Validate`, so
+your checks add to the built-in ones instead of replacing them.
 
 ---
 

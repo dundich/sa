@@ -33,7 +33,7 @@ public sealed class FileSystemConcurrencyTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -77,7 +77,7 @@ public sealed class FileSystemConcurrencyTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -111,7 +111,7 @@ public sealed class FileSystemConcurrencyTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = _testDir));
+            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();

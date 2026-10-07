@@ -31,7 +31,7 @@ public sealed class DependencyInjectionTests
         // ValidateOnStart: неверная настройка должна проявиться при первом обращении к
         // опциям (старт хоста / первый resolve), а не посреди конвертации.
         var services = new ServiceCollection();
-        services.AddSaFFMpeg(o => o.Configure(x => x.TimeoutSeconds = -1));
+        services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(x => x.TimeoutSeconds = -1)));
 
         var serviceProvider = services.BuildServiceProvider();
 
@@ -50,7 +50,7 @@ public sealed class DependencyInjectionTests
         try
         {
             var services = new ServiceCollection();
-            services.AddSaFFMpeg(o => o.Configure(x => x.WritableDirectory = dir));
+            services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(x => x.WritableDirectory = dir)));
 
             var serviceProvider = services.BuildServiceProvider();
             serviceProvider.GetRequiredService<IFFMpegExecutor>();
@@ -75,7 +75,7 @@ public sealed class DependencyInjectionTests
             File.WriteAllText(file, "not a directory");
 
             var services = new ServiceCollection();
-            services.AddSaFFMpeg(o => o.Configure(x => x.WritableDirectory = file));
+            services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(x => x.WritableDirectory = file)));
 
             var serviceProvider = services.BuildServiceProvider();
 

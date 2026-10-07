@@ -13,13 +13,13 @@ public class S3BucketClientFixtureDI : S3Fixture<IS3BucketClient>
         {
             var settings = CreateSettings("mybucket");
 
-            services.AddSaS3BucketClient(o => o.Configure(x =>
+            services.AddSaS3BucketClient(o => o.Options(ob => ob.Configure(x =>
             {
                 x.Bucket = settings.Bucket;
                 x.Endpoint = settings.Endpoint;
                 x.AccessKey = settings.AccessKey;
                 x.SecretKey = settings.SecretKey;
-            }));
+            })));
         };
     }
 

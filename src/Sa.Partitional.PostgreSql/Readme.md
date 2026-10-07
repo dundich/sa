@@ -46,15 +46,15 @@ builder.Services.AddSaPartitional((sp, builder) =>
 })
 // Data source: the connection string goes through the standard options pipeline
 .AddDataSource(ds => ds
-    .Configure(o => o.ConnectionString =
-        "Host=localhost;Database=mydb;Username=postgres;Password=password"))
+    .Options(ob => ob.Configure(o => o.ConnectionString =
+        "Host=localhost;Database=mydb;Username=postgres;Password=password")))
 // Pre-create future partitions as a background job
 .AddPartMigrationSchedule((sp, opts) => opts.AsBackgroundJob = true)
 // Drop partitions older than 30 days
 .AddPartCleanupSchedule((sp, opts) => opts.AsBackgroundJob = true);
 ```
 
-`AddSaPartitional` always registers a data source (a bare `AddDataSource()` call inside), so the `.AddDataSource(configure, configSectionPath)` chain above — the single *configuring* call — is what gives it a connection string. If the data source is already configured elsewhere (e.g. `services.AddSaPostgreSqlDataSource(...)`), omit the chain: the bare registration deduplicates against it. With no connection string anywhere, the data source is built from an `NpgsqlDataSource` registered in DI (shared pool); otherwise validation fails.
+`AddSaPartitional` always registers a data source (a bare `AddDataSource()` call inside), so the `.AddDataSource(...)` chain above — the single *configuring* call — is what gives it a connection string (a section, if any, comes via `FromConfiguration` inside the same callback). If the data source is already configured elsewhere (e.g. `services.AddSaPostgreSqlDataSource(...)`), omit the chain: the bare registration deduplicates against it. With no connection string anywhere, the data source is built from an `NpgsqlDataSource` registered in DI (shared pool); otherwise validation fails.
 
 ---
 

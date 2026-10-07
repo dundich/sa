@@ -14,10 +14,10 @@ var dataSource = IPgDataSource.Create(new NpgsqlDataSource("Host=db;Database=myd
 
 // Вариант 2: через DI — connection string идёт через стандартный конвейер options
 services.AddSaPostgreSqlDataSource(b => b
-    .Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd"));
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd")));
 
 // Вариант 3: из секции конфигурации
-services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
+services.AddSaPostgreSqlDataSource(b => b.FromConfiguration("Postgres"));
 ```
 
 ---
@@ -30,7 +30,7 @@ services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
 
 ```csharp
 services.AddSaPostgreSqlDataSource(b => b
-    .Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd"));
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=db;Database=mydb;Username=usr;Password=pwd")));
 
 // Использование:
 var dataSource = serviceProvider.GetRequiredService<IPgDataSource>();
@@ -43,10 +43,10 @@ var dataSource = serviceProvider.GetRequiredService<IPgDataSource>();
 ```csharp
 // appsettings.json:
 // { "Postgres": { "ConnectionString": "Host=…;Database=…;Username=…;Password=…" } }
-services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
+services.AddSaPostgreSqlDataSource(b => b.FromConfiguration("Postgres"));
 ```
 
-Секция привязывается **первой**, поэтому `Configure`-вызов внутри callback'а имеет последнее слово. Callback также выполняется после собственных `PostConfigure` и `Validate` регистрации, поэтому ваши проверки дополняют встроенные, а не заменяют их.
+Секция привязывается в фиксированном слоте **первой**, поэтому `Configure` из `Options(...)` имеет последнее слово. Действия `Options(...)` воспроизводятся после собственных `PostConfigure` и `Validate` регистрации, поэтому ваши проверки дополняют встроенные, а не заменяют их.
 
 ### Переиспользование существующего NpgsqlDataSource
 
@@ -65,7 +65,7 @@ services.AddSaPostgreSqlDataSource();
 
 Валидатор — явный `IValidateOptions<PgDataSourceOptions>`, а не `ValidateDataAnnotations()`: последний помечен `RequiresUnreferencedCode` (IL2026) и ломает Native AOT, ради которого эта сборка и существует.
 
-Data source настраивается один раз на service collection — второй *настраивающий* вызов (с callback'ом `configure` или `configSectionPath`) бросает `InvalidOperationException`, иначе оба `Configure`-callback'а применились бы к одному unnamed-инстансу опций и настройки тихо слитались бы. Повторные «голые» вызовы (без callback'а и секции) разрешены по дизайну: `AddSaPartitional` и `AddSaOutboxUsingPostgreSql` каждый регистрируют «голый» data source, а единственный настраивающий вызов — где бы он ни стоял, — и есть тот, что действует.
+Data source настраивается один раз на service collection — второй *настраивающий* вызов (с callback'ом `configure` — секция через `FromConfiguration`, настройки через `Options(...)`) бросает `InvalidOperationException`, иначе оба `Configure`-callback'а применились бы к одному unnamed-инстансу опций и настройки тихо слитались бы. Повторные «голые» вызовы (без callback'а) разрешены по дизайну: `AddSaPartitional` и `AddSaOutboxUsingPostgreSql` каждый регистрируют «голый» data source, а единственный настраивающий вызов — где бы он ни стоял, — и есть тот, что действует.
 
 ---
 

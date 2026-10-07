@@ -3,7 +3,7 @@
 namespace Sa.Media.FFmpeg;
 
 /// <summary>
-/// Настройки библиотеки. Биндиндятся из конфигурации через <c>AddSaFFMpeg(configSectionPath: "Section")</c>
+/// Настройки библиотеки. Биндиндятся из конфигурации через <c>AddSaFFMpeg(b => b.FromConfiguration("Section"))</c>
 /// и валидируются при старте хоста.
 /// </summary>
 /// <remarks>

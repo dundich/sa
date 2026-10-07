@@ -70,7 +70,7 @@ builder.Configuration.AddSaPostgreSqlConfiguration(
 ```
 
 Если приложение уже регистрирует `IPgDataSource` через `AddSaPostgreSqlDataSource`
-(`b => b.Configure(o => o.ConnectionString = ...)`), получите этот экземпляр и передайте его источнику
+(`b => b.Options(o => o.Configure(x => x.ConnectionString = ...))`), получите этот экземпляр и передайте его источнику
 конфигурации — так оба пути используют один пул соединений.
 
 Провайдер никогда не освобождает источник данных, который не создавал — владение

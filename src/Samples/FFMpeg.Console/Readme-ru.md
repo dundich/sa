@@ -76,10 +76,10 @@ await ffmpeg.ConvertToPcmS16Le(
 
 ```csharp
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddSaFFMpeg(o => o.Configure(options =>
+builder.Services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(options =>
 {
     options.WritableDirectory = @"C:\temp\output";
-}));
+})));
 var app = builder.Build();
 
 var executor = app.Services.GetRequiredService<IFFMpegExecutor>();

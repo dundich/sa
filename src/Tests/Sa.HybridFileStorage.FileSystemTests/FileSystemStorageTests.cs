@@ -19,7 +19,7 @@ public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
             })
         {
             SetupServices = (services, cfg)
-                => services.AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = Settings.BasePath));
+                => services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = Settings.BasePath)));
         }
 
         public override ValueTask DisposeAsync()

@@ -150,15 +150,16 @@ await IFFMpegExecutor.Default.ConvertToPcmF32LeRaw(
 
 `AddSaFFMpeg` подключает FFmpeg через стандартный конвейер `Microsoft.Extensions.Options` и
 возвращает `IServiceCollection`, поэтому он складывается в цепочку с остальными вызовами `Add...`.
-В callback `configure` передаётся `OptionsBuilder<FFMpegOptions>`:
+В callback `configure` передаётся `IFFMpegBuilder`: секция — через `FromConfiguration("…")`,
+конвейер опций — через `Options(...)`, который получает `OptionsBuilder<FFMpegOptions>`:
 
 ```csharp
-builder.Services.AddSaFFMpeg(o => o.Configure(options =>
+builder.Services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(options =>
 {
     options.ExecutablePath = @"C:\tools\ffmpeg.exe"; // опциональный override
     options.WritableDirectory = @"C:\temp\output";
     options.TimeoutSeconds = 300; // 5 минут
-}));
+})));
 
 // Использование:
 var executor = serviceProvider.GetRequiredService<IFFMpegExecutor>();
@@ -175,22 +176,22 @@ var manip    = serviceProvider.GetRequiredService<IPcmS16LeChannelManipulator>()
 
 ```csharp
 builder.Services.AddSaFFMpeg(o => o
-    .Configure(options => options.ExecutablePath = @"C:\tools\ffmpeg.exe")
+    .Options(ob => ob.Configure(options => options.ExecutablePath = @"C:\tools\ffmpeg.exe")
     .PostConfigure(options => options.WritableDirectory ??= Path.GetTempPath())
-    .Validate(options => options.TimeoutSeconds is null or >= 5, "TimeoutSeconds должен быть не меньше 5."));
+    .Validate(options => options.TimeoutSeconds is null or >= 5, "TimeoutSeconds должен быть не меньше 5.")));
 ```
 
 Собственный `PostConfigure` регистрации приводит `ExecutablePath` и `WritableDirectory` к полным
-путям, а пустое значение превращает в «не задано». Callback вызывается последним, поэтому его
-`Configure` отрабатывает после привязки секции, а его `Validate` добавляется к встроенным
-проверкам, а не заменяет их.
+путям, а пустое значение превращает в «не задано». Действия `Options(...)` воспроизводятся после
+привязки секции и собственных проверок регистрации, поэтому их `Configure` отрабатывает
+последним, а их `Validate` добавляется к встроенным проверкам, а не заменяет их.
 
 ### Привязка секции конфигурации
 
-Передайте путь секции — опции будут привязаны из `IConfiguration`:
+Передайте секцию через `FromConfiguration` — опции будут привязаны из `IConfiguration`:
 
 ```csharp
-builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
+builder.Services.AddSaFFMpeg(b => b.FromConfiguration("Ffmpeg"));
 
 // appsettings.json:
 // {
@@ -202,8 +203,8 @@ builder.Services.AddSaFFMpeg(configSectionPath: "Ffmpeg");
 // }
 ```
 
-Привязка регистрируется **до** callback'а, поэтому при одновременном использовании последнее
-слово остаётся за `Configure` внутри callback'а.
+Привязка выполняется в фиксированном слоте **до** воспроизведения действий `Options(...)`,
+поэтому при одновременном использовании последнее слово остаётся за их `Configure`.
 
 ### Одна регистрация на коллекцию
 

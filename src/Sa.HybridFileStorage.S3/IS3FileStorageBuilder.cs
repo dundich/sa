@@ -1,0 +1,50 @@
+using Microsoft.Extensions.Options;
+
+namespace Sa.HybridFileStorage.S3;
+
+/// <summary>
+/// Collects the configuration of the S3 provider registered through
+/// <see cref="Setup.AddSaS3FileStorage"/>: the standard options pipeline
+/// (<c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>) and the configuration
+/// section, in one registration delegate.
+/// </summary>
+/// <remarks>
+/// Both configuring intents live here — <see cref="FromConfiguration"/> for the section
+/// and <see cref="Options"/> for the pipeline — so <c>AddSaS3FileStorage</c> takes a
+/// single <c>configure</c> parameter. The section binds in the fixed slot before the
+/// <see cref="Options"/> actions, so a <c>Configure</c> there always wins over
+/// configuration, wherever these calls sit in the callback.
+/// </remarks>
+public interface IS3FileStorageBuilder
+{
+    /// <summary>
+    /// Binds <see cref="S3FileStorageOptions"/> from the given configuration section,
+    /// e.g. <c>"S3FileStorage"</c> — the section otherwise passed as
+    /// <c>AddSaS3FileStorage</c>'s <c>configSectionPath</c> argument, moved into the one
+    /// registration delegate.
+    /// </summary>
+    /// <remarks>
+    /// Recorded on the builder; <c>AddSaS3FileStorage</c> binds it in the fixed slot
+    /// before the <see cref="Options"/> actions — so an <see cref="Options"/>
+    /// <c>Configure</c> always wins over configuration, no matter where this call sits in
+    /// the callback. May be called several times; the last path wins.
+    /// </remarks>
+    /// <param name="configSectionPath">Configuration section path, e.g. <c>"S3FileStorage"</c>.</param>
+    IS3FileStorageBuilder FromConfiguration(string configSectionPath);
+
+    /// <summary>
+    /// Hands the standard <see cref="OptionsBuilder{TOptions}"/> for
+    /// <see cref="S3FileStorageOptions"/> to the callback — the <c>Configure</c> /
+    /// <c>PostConfigure</c> / <c>Validate</c> surface of the options pipeline, in one
+    /// registration channel next to the section binding.
+    /// </summary>
+    /// <remarks>
+    /// Runs in the options pipeline <b>after</b> the <c>BindConfiguration</c> call made for
+    /// <see cref="FromConfiguration"/>, so a <c>Configure</c> here is the settings-level
+    /// escape hatch that beats configuration, while a <c>Validate</c> adds to — rather than
+    /// replaces — the built-in checks. May be called several times; the actions run in
+    /// call order.
+    /// </remarks>
+    /// <param name="configureSettings">Callback receiving the settings options builder.</param>
+    IS3FileStorageBuilder Options(Action<OptionsBuilder<S3FileStorageOptions>> configureSettings);
+}

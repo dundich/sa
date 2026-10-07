@@ -20,7 +20,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         {
             SetupServices = (services, cfg) =>
                 services
-                    .AddSaFileSystemFileStorage(o => o.Configure(x => x.BasePath = Settings.BasePath))
+                    .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = Settings.BasePath)))
                     .AddSaInMemoryFileStorage()
                     .AddSaHybridFileStorage(b
                         => b.ConfigureInterceptors((_, c)

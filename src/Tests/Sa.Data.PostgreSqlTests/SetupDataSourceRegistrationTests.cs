@@ -37,10 +37,10 @@ public sealed class SetupDataSourceRegistrationTests
         // безымянному PgDataSourceOptions, и оба Configure применились бы — настройки молча
         // склеились бы.
         var services = new ServiceCollection();
-        services.AddSaPostgreSqlDataSource(o => o.Configure(x => x.ConnectionString = ValidConnectionString));
+        services.AddSaPostgreSqlDataSource(o => o.Options(ob => ob.Configure(x => x.ConnectionString = ValidConnectionString)));
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            services.AddSaPostgreSqlDataSource(o => o.Configure(x => x.ConnectionString = ValidConnectionString)));
+            services.AddSaPostgreSqlDataSource(o => o.Options(ob => ob.Configure(x => x.ConnectionString = ValidConnectionString))));
 
         Assert.Contains("already been configured", ex.Message, StringComparison.Ordinal);
     }
@@ -68,7 +68,7 @@ public sealed class SetupDataSourceRegistrationTests
         // Внутренний «голый» вызов (например, из AddSaPartitional) после пользовательского
         // конфигурирования обязан пройти мимо guard'а.
         var services = new ServiceCollection();
-        services.AddSaPostgreSqlDataSource(o => o.Configure(x => x.ConnectionString = ValidConnectionString));
+        services.AddSaPostgreSqlDataSource(o => o.Options(ob => ob.Configure(x => x.ConnectionString = ValidConnectionString)));
 
         services.AddSaPostgreSqlDataSource();
 
@@ -90,7 +90,7 @@ public sealed class SetupDataSourceRegistrationTests
     public void Register_AddsTheValidatorOnce()
     {
         var services = new ServiceCollection();
-        services.AddSaPostgreSqlDataSource(o => o.Configure(x => x.ConnectionString = ValidConnectionString));
+        services.AddSaPostgreSqlDataSource(o => o.Options(ob => ob.Configure(x => x.ConnectionString = ValidConnectionString)));
 
         Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<PgDataSourceOptions>));
     }
@@ -101,7 +101,7 @@ public sealed class SetupDataSourceRegistrationTests
     public void Register_NormalisesTheConnectionString()
     {
         var services = new ServiceCollection();
-        services.AddSaPostgreSqlDataSource(o => o.Configure(x => x.ConnectionString = $"  {ValidConnectionString}  "));
+        services.AddSaPostgreSqlDataSource(o => o.Options(ob => ob.Configure(x => x.ConnectionString = $"  {ValidConnectionString}  ")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -122,7 +122,7 @@ public sealed class SetupDataSourceRegistrationTests
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaPostgreSqlDataSource(configSectionPath: "Postgres");
+        services.AddSaPostgreSqlDataSource(b => b.FromConfiguration("Postgres"));
 
         using var provider = services.BuildServiceProvider();
 
@@ -132,7 +132,7 @@ public sealed class SetupDataSourceRegistrationTests
     [Fact]
     public void Register_ConfigureCallback_OverridesTheBoundSection()
     {
-        // Callback вызывается после BindConfiguration, поэтому его Configure — последнее слово.
+        // Options(...) воспроизводится после BindConfiguration, поэтому его Configure — последнее слово.
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -142,9 +142,9 @@ public sealed class SetupDataSourceRegistrationTests
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaPostgreSqlDataSource(
-            configSectionPath: "Postgres",
-            configure: o => o.Configure(x => x.ConnectionString = ValidConnectionString + ";Search Path=storage"));
+        services.AddSaPostgreSqlDataSource(o => o
+            .FromConfiguration("Postgres")
+            .Options(ob => ob.Configure(x => x.ConnectionString = ValidConnectionString + ";Search Path=storage")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -175,7 +175,7 @@ public sealed class SetupDataSourceRegistrationTests
         // Неправильная строка всплывает как OptionsValidationException на первом resolve, а не
         // как ArgumentException изнутри Npgsql при первом соединении.
         var services = new ServiceCollection();
-        services.AddSaPostgreSqlDataSource(o => o.Configure(x => x.ConnectionString = "Host=127.0.0.1;Port=abc"));
+        services.AddSaPostgreSqlDataSource(o => o.Options(ob => ob.Configure(x => x.ConnectionString = "Host=127.0.0.1;Port=abc")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -233,8 +233,8 @@ public sealed class SetupDataSourceRegistrationTests
         // PostConfigure из callback выполняется после нормализации этим методом.
         var services = new ServiceCollection();
         services.AddSaPostgreSqlDataSource(o => o
-            .Configure(x => x.ConnectionString = ValidConnectionString)
-            .PostConfigure(x => x.ConnectionString += ";Search Path=storage"));
+            .Options(ob => ob.Configure(x => x.ConnectionString = ValidConnectionString)
+            .PostConfigure(x => x.ConnectionString += ";Search Path=storage")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -247,8 +247,8 @@ public sealed class SetupDataSourceRegistrationTests
         // Validate из callback не заменяет встроенную проверку: сообщаются обе ошибки.
         var services = new ServiceCollection();
         services.AddSaPostgreSqlDataSource(o => o
-            .Configure(x => x.ConnectionString = "Port=abc")
-            .Validate(x => x.ConnectionString.Length > 200, "Connection string is too long."));
+            .Options(ob => ob.Configure(x => x.ConnectionString = "Port=abc")
+            .Validate(x => x.ConnectionString.Length > 200, "Connection string is too long.")));
 
         using var provider = services.BuildServiceProvider();
 

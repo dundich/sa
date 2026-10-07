@@ -29,7 +29,7 @@ var client = new S3BucketClient(new HttpClient(), new S3BucketClientSetupOptions
 `AddSaS3BucketClient` takes the standard options callback, so configuration goes through `Configure` / `PostConfigure` / `Validate` like any other options type — not through a bespoke overload:
 
 ```csharp
-services.AddSaS3BucketClient(o => o.Configure(x =>
+services.AddSaS3BucketClient(o => o.Options(ob => ob.Configure(x =>
 {
     x.Bucket = "mybucket";
     x.Endpoint = "http://localhost:9000";
@@ -38,7 +38,7 @@ services.AddSaS3BucketClient(o => o.Configure(x =>
     x.TotalRequestTimeout = TimeSpan.FromSeconds(180);
     x.ConnectionPoolLifetime = TimeSpan.FromMinutes(15);
     x.HandlerLifetime = Timeout.InfiniteTimeSpan; // or TimeSpan.FromHours(2) for periodic handler refresh
-}));
+})));
 
 // Usage:
 var client = serviceProvider.GetRequiredService<IS3BucketClient>();
@@ -49,10 +49,10 @@ var client = serviceProvider.GetRequiredService<IS3BucketClient>();
 ```csharp
 // appsettings.json:
 // { "S3": { "Endpoint": "http://localhost:9000", "AccessKey": "…", "SecretKey": "…", "Bucket": "mybucket" } }
-services.AddSaS3BucketClient(configSectionPath: "S3");
+services.AddSaS3BucketClient(b => b.FromConfiguration("S3"));
 ```
 
-The section is bound **first**, so a `Configure` call inside the callback has the last word. The callback also runs after the registration's own `PostConfigure` and `Validate`, so your checks add to the built-in ones instead of replacing them.
+The section binds in a fixed slot **first**, so an `Options(...)` `Configure` has the last word. The `Options(...)` actions replay after the registration's own `PostConfigure` and `Validate`, so your checks add to the built-in ones instead of replacing them.
 
 ### Validation
 
