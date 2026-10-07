@@ -19,25 +19,17 @@ public static class Setup
     /// <param name="configure">
     /// An action to configure the scheduling system. Invoked with a fresh
     /// <see cref="IScheduleBuilder"/> per call, so jobs from every call end up in the same
-    /// schedule.
-    /// </param>
-    /// <param name="configureOptions">
-    /// An optional callback receiving the <see cref="OptionsBuilder{TOptions}"/> for
-    /// <see cref="ScheduleOptions"/>, so options go through the standard
-    /// <c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c> methods rather than a bespoke
-    /// overload. Invoked last, so its <c>Configure</c> runs after any section binding and its
-    /// <c>Validate</c> adds to — rather than replaces — the built-in checks.
-    /// </param>
-    /// <param name="configSectionPath">
-    /// An optional configuration section to bind <see cref="ScheduleOptions"/> from, e.g.
-    /// <c>"Schedule"</c>. Bound first, so a <c>Configure</c> call in
-    /// <paramref name="configureOptions"/> has the last word.
+    /// schedule. Serializable settings go through <see cref="IScheduleBuilder.FromConfiguration"/>
+    /// (the configuration section) and <see cref="IScheduleBuilder.Options"/> (the pipeline
+    /// escape hatch) on the same builder — a call that uses either counts as a *configuring*
+    /// call, while job-only calls stay repeatable.
     /// </param>
     /// <returns>The <see cref="IServiceCollection"/> with the scheduling system added.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when a second *configuring* call (one carrying <paramref name="configureOptions"/>
-    /// or <paramref name="configSectionPath"/>) is made in this collection.
+    /// Thrown when a second *configuring* call — one whose builder calls
+    /// <see cref="IScheduleBuilder.FromConfiguration"/> or <see cref="IScheduleBuilder.Options"/> —
+    /// is made in this collection.
     /// </exception>
     /// <remarks>
     /// Safe to call more than once: the core services are registered with <c>TryAdd</c> and jobs
@@ -53,8 +45,8 @@ public static class Setup
     /// </para>
     /// <para>
     /// <b>Configuration precedence.</b> The options pipeline runs in a fixed order:
-    /// <c>BindConfiguration</c> (raw values) → <c>Configure</c>/<c>PostConfigure</c> calls made in
-    /// <paramref name="configureOptions"/> → validation, so configuration wins over code — for
+    /// <c>BindConfiguration</c> (raw values) → <c>Configure</c>/<c>PostConfigure</c> calls made
+    /// through <see cref="IScheduleBuilder.Options"/> → validation, so configuration wins over code — for
     /// every job, <see cref="JobOptions.Disabled"/>, <see cref="JobOptions.Immediate"/> and
     /// <see cref="JobOptions.IsRunOnce"/> (all three in both directions — e.g. <c>Disabled: false</c>
     /// re-enables a job disabled in code, <c>Immediate: false</c> reverts a code
@@ -75,9 +67,9 @@ public static class Setup
     /// <para>
     /// <b>Repeated calls.</b> This method is legitimately called more than once per container by
     /// libraries that contribute jobs (<c>AddSaPartitional</c> and
-    /// <c>AddSaOutboxUsingPostgreSql</c> each do so by design). Those internal calls are bare —
-    /// no <paramref name="configure"/>, no <paramref name="configureOptions"/>, no
-    /// <paramref name="configSectionPath"/> — so they deduplicate on the options pipeline and are
+    /// <c>AddSaOutboxUsingPostgreSql</c> each do so by design). Those internal calls carry no
+    /// options configuration — no <see cref="IScheduleBuilder.FromConfiguration"/>, no
+    /// <see cref="IScheduleBuilder.Options"/> — so they deduplicate on the options pipeline and are
     /// deliberately not rejected. The guard fires only on a second call that *carries options
     /// configuration*, because that is the one shape that would stack two
     /// <c>Configure</c> callbacks onto the same <see cref="ScheduleOptions"/> instance and
@@ -90,35 +82,43 @@ public static class Setup
     /// </remarks>
     public static IServiceCollection AddSaSchedule(
         this IServiceCollection services,
-        Action<IScheduleBuilder>? configure = null,
-        Action<OptionsBuilder<ScheduleOptions>>? configureOptions = null,
-        string? configSectionPath = null)
+        Action<IScheduleBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var willConfigure = configureOptions is not null || configSectionPath is not null;
-
-        if (willConfigure
-            && services.Any(d => d.ServiceType == typeof(ScheduleOptionsConfigurationMarker)))
-        {
-            throw new InvalidOperationException(
-                "AddSaSchedule options have already been configured in this service collection. " +
-                "A second configuring call would stack another Configure callback onto the same " +
-                "ScheduleOptions instance, so the settings would silently merge. " +
-                "Configure the schedule options only once per service collection.");
-        }
+        var markerExists = services.Any(d => d.ServiceType == typeof(ScheduleOptionsConfigurationMarker));
 
         // Registered before `configure` so a caller can Replace any of them from inside the
         // callback — TryAdd would not undo a later Add, and Replace needs a prior registration.
         AddSaScheduleCore(services);
 
-        // The options pipeline, in the house order: raw values (section binding) → the caller's
-        // Configure/PostConfigure → validation.
         var optionsBuilder = services.AddOptions<ScheduleOptions>();
 
-        if (configSectionPath is not null)
+        ScheduleBuilder? builder = null;
+
+        if (configure is not null)
         {
-            optionsBuilder.BindConfiguration(configSectionPath);
+            builder = new ScheduleBuilder(services);
+            configure(builder);
+        }
+
+        // Both configuring intents — FromConfiguration(...) and Options(...) — live inside
+        // `configure`, so they are only knowable once it has run: the guard fires here, before
+        // either is applied to the pipeline. By this point the call has already registered
+        // its jobs; the exception still aborts the registration, so no provider is ever built
+        // from the half-configured collection.
+        var sectionPath = builder?.ConfigSectionPath;
+
+        if (markerExists && (sectionPath is not null || builder is { SettingsActions.Count: > 0 }))
+        {
+            throw SecondConfiguringCall();
+        }
+
+        // The options pipeline, in the house order: raw values (section binding) → the caller's
+        // Configure/PostConfigure → validation.
+        if (sectionPath is not null)
+        {
+            optionsBuilder.BindConfiguration(sectionPath);
         }
 
         optionsBuilder.ValidateOnStart();
@@ -129,19 +129,30 @@ public static class Setup
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IValidateOptions<ScheduleOptions>, ScheduleOptionsValidator>());
 
-        configure?.Invoke(new ScheduleBuilder(services));
+        // Replayed in this slot — after the section binding — so an Options(...).Configure
+        // has the last word over configuration, and its Validate runs after this method's
+        // own checks.
+        if (builder is { SettingsActions.Count: > 0 })
+        {
+            foreach (var settingsAction in builder.SettingsActions)
+            {
+                settingsAction(optionsBuilder);
+            }
+        }
 
-        // Invoked last, so the caller's Configure runs after any section binding and its
-        // Validate runs after this method's own checks.
-        configureOptions?.Invoke(optionsBuilder);
-
-        if (willConfigure)
+        if (sectionPath is not null || builder is { SettingsActions.Count: > 0 })
         {
             services.TryAddSingleton(new ScheduleOptionsConfigurationMarker());
         }
 
         return services;
     }
+
+    private static InvalidOperationException SecondConfiguringCall() => new(
+        "AddSaSchedule options have already been configured in this service collection. " +
+        "A second configuring call would stack another Configure callback onto the same " +
+        "ScheduleOptions instance, so the settings would silently merge. " +
+        "Configure the schedule options only once per service collection.");
 
     private static void AddSaScheduleCore(IServiceCollection services)
     {
@@ -160,10 +171,10 @@ public static class Setup
 
 /// <summary>
 /// Sentinel marker recording that <see cref="Setup.AddSaSchedule"/> was configured (with a
-/// <c>configureOptions</c> callback or a <c>configSectionPath</c>) in this collection, so a
-/// second *configuring* call fails fast instead of silently stacking two
-/// <c>Configure</c> callbacks onto the same <see cref="ScheduleOptions"/> instance. Bare calls —
-/// the way downstream libraries contribute jobs — neither check nor create it.
+/// builder whose <c>FromConfiguration(...)</c> or <c>Options(...)</c> was used) in this collection,
+/// so a second *configuring* call fails fast instead of silently stacking two
+/// <c>Configure</c> callbacks onto the same <see cref="ScheduleOptions"/> instance. Job-only
+/// calls — the way downstream libraries contribute jobs — neither check nor create it.
 /// </summary>
 internal sealed class ScheduleOptionsConfigurationMarker
 {

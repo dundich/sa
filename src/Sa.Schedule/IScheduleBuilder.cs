@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.Options;
 
 namespace Sa.Schedule;
 
@@ -64,4 +65,45 @@ public interface IScheduleBuilder
     /// </remarks>
     /// <returns>The schedule builder.</returns>
     IScheduleBuilder AddErrorHandler(Func<IJobContext, Exception, bool> handler);
+
+    // ---------- settings: the standard options pipeline ----------
+
+    /// <summary>
+    /// Binds <see cref="ScheduleOptions"/> from the given configuration section, e.g.
+    /// <c>"Schedule"</c> — the section otherwise passed as <c>AddSaSchedule</c>'s
+    /// <c>configSectionPath</c> argument, moved into the one registration delegate.
+    /// </summary>
+    /// <remarks>
+    /// Recorded on the builder; <c>AddSaSchedule</c> binds it in the fixed slot before the
+    /// <see cref="Options"/> actions — so configuration wins over code, and an
+    /// <see cref="Options"/> <c>Configure</c> always wins over configuration, no matter
+    /// where this call sits in the callback. May be called several times; the last path
+    /// wins. A call whose builder uses this method (or <see cref="Options"/>) is a
+    /// *configuring* call: it counts toward the one-configuring-call-per-collection
+    /// guard, while job-only calls stay repeatable.
+    /// </remarks>
+    /// <param name="configSectionPath">Configuration section path, e.g. <c>"Schedule"</c>.</param>
+    IScheduleBuilder FromConfiguration(string configSectionPath);
+
+    /// <summary>
+    /// Hands the standard <see cref="OptionsBuilder{TOptions}"/> for
+    /// <see cref="ScheduleOptions"/> to the callback — the <c>Configure</c> /
+    /// <c>PostConfigure</c> / <c>Validate</c> surface of the options pipeline, in one
+    /// registration channel next to the jobs.
+    /// </summary>
+    /// <remarks>
+    /// Runs in the options pipeline <b>after</b> the <c>BindConfiguration</c> call made
+    /// for <see cref="FromConfiguration"/>, so a <c>Configure</c> here is the settings-level
+    /// escape hatch that beats configuration, while a <c>Validate</c> adds to — rather
+    /// than replaces — the built-in checks. May be called several times; the actions run
+    /// in call order.
+    /// <para>
+    /// A <see cref="Setup.AddSaSchedule"/> call whose builder uses this method is a
+    /// *configuring* call: it counts toward the one-configuring-call-per-collection
+    /// guard, while job-only calls stay repeatable (that is how libraries contribute
+    /// jobs to a shared schedule).
+    /// </para>
+    /// </remarks>
+    /// <param name="configureSettings">Callback receiving the settings options builder.</param>
+    IScheduleBuilder Options(Action<OptionsBuilder<ScheduleOptions>> configureSettings);
 }

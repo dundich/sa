@@ -31,8 +31,9 @@ var host = Host.CreateDefaultBuilder(args)
                 builder.AddJob<NightlyCleanupJob>()
                     .WithName("NightlyCleanup")
                     .EveryMinutes(15);
-            },
-            configSectionPath: "Schedule");
+
+                builder.FromConfiguration("Schedule");
+            });
     })
     .Build();
 

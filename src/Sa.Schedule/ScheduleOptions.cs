@@ -3,7 +3,8 @@
 /// <summary>
 /// Настройки планировщика, обслуживаемые стандартным конвейером
 /// <c>Microsoft.Extensions.Options</c>: привязка из конфигурационного раздела
-/// (<see cref="Setup.AddSaSchedule"/> с <c>configSectionPath</c>) → валидация.
+/// (<see cref="IScheduleBuilder.FromConfiguration"/> в
+/// <see cref="Setup.AddSaSchedule"/>) → валидация.
 /// </summary>
 /// <remarks>
 /// Единственное содержимое — словарь <see cref="Jobs"/>: ключ — имя задачи, значение — её

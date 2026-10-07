@@ -120,7 +120,7 @@ b.AddJob((context, ct) =>
 
 ## Конфигурация через appsettings.json
 
-Задачи обычно настраиваются в коде (Builder API выше), но их можно вести и из конфигурационного файла. `AddSaSchedule` принимает необязательный `configSectionPath`; этот раздел привязывается к `ScheduleOptions` стандартным конвейером `Microsoft.Extensions.Options`, и его значения применяются **поверх** задач, зарегистрированных в коде — конфигурация важнее, в обе стороны (включая `Disabled: false`, которое включает задачу, отключённую в коде через `Disabled()`).
+Задачи обычно настраиваются в коде (Builder API выше), но их можно вести и из конфигурационного файла. `AddSaSchedule` привязывает необязательный раздел — записанный через `b.FromConfiguration("Schedule")` в том же `configure`-делегате — к `ScheduleOptions` стандартным конвейером `Microsoft.Extensions.Options`, и его значения применяются **поверх** задач, зарегистрированных в коде — конфигурация важнее, в обе стороны (включая `Disabled: false`, которое включает задачу, отключённую в коде через `Disabled()`).
 
 ```csharp
 services.AddSaSchedule(
@@ -130,8 +130,8 @@ services.AddSaSchedule(
         b.AddJob<Heartbeat>().WithName("Heartbeat").EverySeconds(30);
         b.AddJob<SlowReport>().WithName("SlowReport").EverySeconds(2);
         b.AddJob<NightlyCleanup>().WithName("NightlyCleanup").EveryMinutes(15);
-    },
-    configSectionPath: "Schedule");
+        b.FromConfiguration("Schedule");
+    });
 ```
 
 ```json
@@ -147,6 +147,21 @@ services.AddSaSchedule(
 ```
 
 `Heartbeat` теперь выполняется каждые 2 секунды (было 30), `SlowReport` молчит (было каждые 2 с), `NightlyCleanup` работает по cron в 03:00 (было каждые 15 минут).
+
+Тот же делегат `configure` владеет и конвейером настроек — `.Options(...)` отдаёт стандартный
+`OptionsBuilder<ScheduleOptions>`, так что для всего один канал конфигурации:
+
+```csharp
+services.AddSaSchedule(
+    configure: b =>
+    {
+        b.AddJob<Heartbeat>().WithName("Heartbeat").EverySeconds(30);
+        b.FromConfiguration("Schedule");
+        b.Options(o => o                             // escape hatch — перебивает конфиг
+            .Configure(x => x.TimeZone = "UTC")
+            .Validate(x => x.Jobs.Count <= 32, "Не больше 32 задач в конфигурации."));
+    });
+```
 
 ### Параметры задачи
 
@@ -170,7 +185,7 @@ services.AddSaSchedule(
 
 ### Приоритет и валидация
 
-В рамках одной задачи порядок: регистрация в коде → привязка раздела → ваш `configureOptions`-колбэк (второй параметр `AddSaSchedule`), поэтому `Configure` в нём имеет последнее слово над файлом. `ValidateOnStart()` превращает некорректное значение в `OptionsValidationException` при старте хоста, и та же проверка срабатывает при первом чтении options — так ошибка конфигурации всплывает сразу, а не внутри задачи.
+В рамках одной задачи порядок: регистрация в коде → привязка раздела → ваш `Options(...)`-колбэк (`b.Options(o => ...)` на том же билдере), поэтому `Configure` в нём имеет последнее слово над файлом. `ValidateOnStart()` превращает некорректное значение в `OptionsValidationException` при старте хоста, и та же проверка срабатывает при первом чтении options — так ошибка конфигурации всплывает сразу, а не внутри задачи.
 
 Полный работающий пример — в [`Samples/Schedule.Configuration.Console`](../Samples/Schedule.Configuration.Console).
 

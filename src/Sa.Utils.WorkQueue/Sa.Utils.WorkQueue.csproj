@@ -3,9 +3,20 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.15.0</Version>
+        <Version>0.16.0</Version>
         <Description>WorkQueue wrapper for Channels</Description>
     </PropertyGroup>
+
+    <ItemGroup>
+        <!--
+          Options + Options.ConfigurationExtensions дают AddOptions (named) /
+          IValidateOptions / ValidateOnStart и BindConfiguration. Source-generated binder
+          включается в .NET SDK автоматически при PublishAot=true, поэтому
+          BindConfiguration не тянет reflection и собирается под Native AOT.
+        -->
+        <PackageReference Include="Microsoft.Extensions.Options" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    </ItemGroup>
 
     <ItemGroup>
         <InternalsVisibleTo Include="Sa.Utils.WorkQueue.Tests" />

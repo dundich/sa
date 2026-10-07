@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Sa.Schedule.Engine;
 using System.Diagnostics.CodeAnalysis;
 
@@ -16,6 +17,24 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
         _services = services;
 
         ScheduleSettingsRegistration.AddTo(_services);
+    }
+
+    // ---------- settings: the standard options pipeline ----------
+
+    /// <summary>Pipeline actions collected via <see cref="Options"/>; replayed by Setup after section binding.</summary>
+    private readonly List<Action<OptionsBuilder<ScheduleOptions>>> _settingsActions = [];
+
+    /// <summary>Pipeline actions collected via <see cref="Options"/>, in call order.</summary>
+    public IReadOnlyList<Action<OptionsBuilder<ScheduleOptions>>> SettingsActions => _settingsActions;
+
+    /// <summary>Section recorded via <see cref="FromConfiguration"/>; bound by Setup before the <see cref="Options"/> actions.</summary>
+    public string? ConfigSectionPath { get; private set; }
+
+    public IScheduleBuilder FromConfiguration(string configSectionPath)
+    {
+        ArgumentNullException.ThrowIfNull(configSectionPath);
+        ConfigSectionPath = configSectionPath;
+        return this;
     }
 
 
@@ -102,6 +121,13 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
     {
         _services.AddSingleton<JobInterceptorSettings>(new JobInterceptorSettings(typeof(T), key));
         _services.TryAddKeyedScoped<T>(key);
+        return this;
+    }
+
+    public IScheduleBuilder Options(Action<OptionsBuilder<ScheduleOptions>> configureSettings)
+    {
+        ArgumentNullException.ThrowIfNull(configureSettings);
+        _settingsActions.Add(configureSettings);
         return this;
     }
 }

@@ -120,7 +120,7 @@ Registering a job without any timing (`Every*`/`WithCron`) is not an error — t
 
 ## Configuration via appsettings.json
 
-Jobs are usually configured in code (builder API above), but you can also drive them from a configuration file. `AddSaSchedule` takes an optional `configSectionPath`; that section is bound to `ScheduleOptions` on the standard `Microsoft.Extensions.Options` pipeline, and its values are applied **on top of** the code-registered jobs — configuration wins, in both directions (including `Disabled: false` re-enabling a job that was `Disabled()` in code).
+Jobs are usually configured in code (builder API above), but you can also drive them from a configuration file. `AddSaSchedule` binds an optional section — recorded with `b.FromConfiguration("Schedule")` inside the same `configure` delegate — to `ScheduleOptions` on the standard `Microsoft.Extensions.Options` pipeline, and its values are applied **on top of** the code-registered jobs — configuration wins, in both directions (including `Disabled: false` re-enabling a job that was `Disabled()` in code).
 
 ```csharp
 services.AddSaSchedule(
@@ -130,8 +130,8 @@ services.AddSaSchedule(
         b.AddJob<Heartbeat>().WithName("Heartbeat").EverySeconds(30);
         b.AddJob<SlowReport>().WithName("SlowReport").EverySeconds(2);
         b.AddJob<NightlyCleanup>().WithName("NightlyCleanup").EveryMinutes(15);
-    },
-    configSectionPath: "Schedule");
+        b.FromConfiguration("Schedule");
+    });
 ```
 
 ```json
@@ -147,6 +147,21 @@ services.AddSaSchedule(
 ```
 
 `Heartbeat` now runs every 2 seconds (was 30), `SlowReport` is silent (was every 2 s), `NightlyCleanup` runs on cron at 03:00 (was every 15 min).
+
+The same `configure` delegate also owns the settings pipeline — `.Options(...)` hands you the
+standard `OptionsBuilder<ScheduleOptions>`, so there is one configuration channel for everything:
+
+```csharp
+services.AddSaSchedule(
+    configure: b =>
+    {
+        b.AddJob<Heartbeat>().WithName("Heartbeat").EverySeconds(30);
+        b.FromConfiguration("Schedule");
+        b.Options(o => o                             // escape hatch — beats config
+            .Configure(x => x.TimeZone = "UTC")
+            .Validate(x => x.Jobs.Count <= 32, "At most 32 configured jobs."));
+    });
+```
 
 ### Per-job options
 
@@ -170,7 +185,7 @@ A job is matched to a `Jobs:<key>` entry by its name (`WithName(...)`), falling 
 
 ### Precedence and validation
 
-Within one job the order is code registration → section binding → your `configureOptions` callback (`AddSaSchedule`'s second parameter), so a `Configure` call there has the last word over the file. `ValidateOnStart()` turns an invalid value into an `OptionsValidationException` at host start, and the same check runs the first time the options are read — so a misconfiguration fails fast rather than deep in a job run.
+Within one job the order is code registration → section binding → your `Options(...)` callback (`b.Options(o => ...)` on the same builder), so a `Configure` call there has the last word over the file. `ValidateOnStart()` turns an invalid value into an `OptionsValidationException` at host start, and the same check runs the first time the options are read — so a misconfiguration fails fast rather than deep in a job run.
 
 A full working example lives in [`Samples/Schedule.Configuration.Console`](../Samples/Schedule.Configuration.Console).
 

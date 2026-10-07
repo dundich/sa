@@ -32,7 +32,6 @@ public sealed class ScheduleOptionsConfigurationTests
     private static IServiceCollection NewServices(
         Action<IScheduleBuilder>? configure = null,
         IDictionary<string, string?>? entries = null,
-        Action<OptionsBuilder<ScheduleOptions>>? configureOptions = null,
         string? configSectionPath = "Schedule")
     {
         var services = new ServiceCollection();
@@ -43,7 +42,15 @@ public sealed class ScheduleOptionsConfigurationTests
                 new ConfigurationBuilder().AddInMemoryCollection(entries).Build());
         }
 
-        services.AddSaSchedule(configure, configureOptions, configSectionPath);
+        // Сахар: секция теперь живёт внутри того же configure-делегата.
+        services.AddSaSchedule(
+            configSectionPath is null
+                ? configure
+                : b =>
+                {
+                    configure?.Invoke(b);
+                    b.FromConfiguration(configSectionPath);
+                });
 
         return services;
     }
@@ -51,9 +58,8 @@ public sealed class ScheduleOptionsConfigurationTests
     private static IScheduleSettings BuildSettings(
         Action<IScheduleBuilder>? configure = null,
         IDictionary<string, string?>? entries = null,
-        Action<OptionsBuilder<ScheduleOptions>>? configureOptions = null,
         string? configSectionPath = "Schedule")
-        => NewServices(configure, entries, configureOptions, configSectionPath)
+        => NewServices(configure, entries, configSectionPath)
             .BuildServiceProvider()
             .GetRequiredService<IScheduleSettings>();
 
@@ -186,12 +192,15 @@ public sealed class ScheduleOptionsConfigurationTests
     public void UserConfigure_HasLastWordOverSection()
     {
         var settings = BuildSettings(
-            configure: b => b.AddJob<Job1>().WithName("J1").EveryTime(TimeSpan.FromSeconds(10)),
+            configure: b =>
+            {
+                b.AddJob<Job1>().WithName("J1").EveryTime(TimeSpan.FromSeconds(10));
+                b.Options(o => o.Configure(opts => opts.Jobs["J1"].Every = TimeSpan.FromMinutes(1)));
+            },
             entries: new Dictionary<string, string?>
             {
                 ["Schedule:Jobs:J1:Every"] = "00:30:00",
-            },
-            configureOptions: o => o.Configure(opts => opts.Jobs["J1"].Every = TimeSpan.FromMinutes(1)));
+            });
 
         Assert.Equal(From.AddMinutes(1), Next(GetJob(settings, "J1")));
     }
@@ -276,10 +285,61 @@ public sealed class ScheduleOptionsConfigurationTests
         var services = NewServices(configSectionPath: "Schedule");
 
         Assert.Throws<InvalidOperationException>(
-            () => services.AddSaSchedule(configSectionPath: "Schedule"));
+            () => services.AddSaSchedule(b => b.FromConfiguration("Schedule")));
 
         Assert.Throws<InvalidOperationException>(
-            () => services.AddSaSchedule(configureOptions: o => o.Configure(_ => { })));
+            () => services.AddSaSchedule(b => b.Options(o => o.Configure(_ => { }))));
+    }
+
+    [Fact]
+    public void OptionsOnlyFirstCall_TripsTheGuard_ButJobOnlyCallsStayRepeatable()
+    {
+        // An Options(...) on the builder is what makes a call *configuring*: it creates the
+        // marker even without a FromConfiguration, a second such call throws — and job-only
+        // calls remain free to contribute jobs to the shared schedule afterwards.
+        var services = new ServiceCollection();
+
+        services.AddSaSchedule(b => b.Options(o => o.Configure(_ => { })));
+
+        Assert.Throws<InvalidOperationException>(
+            () => services.AddSaSchedule(b => b.Options(o => o.Configure(_ => { }))));
+
+        var exception = Record.Exception(
+            () => services.AddSaSchedule(b =>
+            {
+                b.AddJob<Job1>().WithName("J1").EveryTime(TimeSpan.FromSeconds(1));
+            }));
+
+        Assert.Null(exception);
+
+        var job = services.BuildServiceProvider()
+            .GetRequiredService<IScheduleSettings>()
+            .GetJobSettings()
+            .Single();
+
+        Assert.Equal(From.AddSeconds(1), Next(job));
+    }
+
+    [Fact]
+    public void OptionsCallback_Validate_AddsToTheBuiltInChecks()
+    {
+        // Validate from Options(...) rides the same pipeline as Configure — a plain
+        // IValidateOptions, so a violation surfaces as an OptionsValidationException on the
+        // first options read, adding to (not replacing) the built-in checks.
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => NewServices(
+                configure: b => b.Options(o => o.Validate(
+                    x => x.Jobs.Count <= 1,
+                    "Only one configured job is allowed.")),
+                entries: new Dictionary<string, string?>
+                {
+                    ["Schedule:Jobs:J1:Every"] = "00:00:10",
+                    ["Schedule:Jobs:J2:Every"] = "00:00:20",
+                })
+                .BuildServiceProvider()
+                .GetRequiredService<IScheduleSettings>());
+
+        Assert.Contains("Only one configured job is allowed.", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
