@@ -123,9 +123,12 @@ builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
     x.Basket = "uploads";
     x.Region = "us-east-1";
 })));
-
-// The DI container resolves IS3BucketClient automatically
 ```
+
+The bucket client is created per registration — keyed by the registration's name and built from
+its very options — and resolved together with its storage. A shared bare `IS3BucketClient` is not
+provided by the hybrid registration; register a named client with `AddSaS3BucketClient(name, ...)`
+and resolve it via `GetRequiredKeyedService<IS3BucketClient>(name)` if you need one.
 
 Transport tuning is not a nested object here — `TotalRequestTimeout`, `ConnectionPoolLifetime`
 and `HandlerLifetime` are properties of the same options instance the bucket client is built
@@ -262,13 +265,38 @@ The same checks stay usable from a non-DI path:
 options.Validate(); // throws DataAnnotations.ValidationException naming the offending option
 ```
 
-### One registration per service collection
+### Several S3 storages per service collection
 
-A second `AddSaS3FileStorage` call throws `InvalidOperationException`. The provider owns the
-unnamed options instance: a second call would register another `IFileStorage` over it, and both
-`Configure` callbacks would apply, so the storage would silently use merged settings.
+Registration is additive: every `AddSaS3FileStorage` call registers one `IFileStorage` with its
+own named options instance and its own keyed bucket client. Several S3 storages — even several
+in the same basket, which is how two buckets back one folder — coexist in one collection:
 
-Rotate credentials or retarget the bucket by editing the one registration, not by adding another.
+```csharp
+// Two buckets, one folder: reads probe bucket-a first and continue to bucket-b on a miss
+// (same storage type), uploads are first-wins into bucket-a.
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "bucket-a";
+})));
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "bucket-b";
+})));
+```
+
+Each registration's options live under a unique name, and the bucket client is built from that
+very instance and keyed by the same name — so no two storages ever share a client or an options
+instance, and the settings of one registration can never merge into another. The registration
+order is the probing order of the basket's chain.
+
+Rotate credentials or retarget a bucket by editing that storage's registration, not by adding
+another that would compete for the same play.
 
 ---
 
@@ -280,7 +308,9 @@ Rotate credentials or retarget the bucket by editing the one registration, not b
 | `Sa.Data.S3` | S3 client (`IS3BucketClient`, `S3BucketClient`) |
 | `Sa` | Shared utilities (`MimeTypeMap`) |
 
-The `AddSaS3FileStorage` extension method automatically registers `IS3BucketClient` via `AddSaS3BucketClient`.
+The `AddSaS3FileStorage` extension method registers one `IS3BucketClient` per call — keyed by the
+registration's name and built from its very options — through the same internal HTTP wiring
+(pool, resilience, handler lifetime) that the public named `AddSaS3BucketClient(name, ...)` uses.
 
 ---
 

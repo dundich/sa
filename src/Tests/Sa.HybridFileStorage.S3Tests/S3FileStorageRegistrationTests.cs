@@ -9,7 +9,8 @@ namespace Sa.HybridFileStorage.S3Tests;
 
 /// <summary>
 /// Registration-level behaviour of the S3 provider: the options pipeline the caller configures, and
-/// what the single registration ends up putting in the container.
+/// what one registration ends up putting in the container — including several storages in one
+/// collection, each with its own named options instance and its own keyed bucket client.
 /// </summary>
 public sealed class S3FileStorageRegistrationTests
 {
@@ -30,8 +31,14 @@ public sealed class S3FileStorageRegistrationTests
             x.StorageType = storageType;
         }));
 
-    static S3FileStorageOptions Options(IServiceProvider provider)
-        => provider.GetRequiredService<IOptions<S3FileStorageOptions>>().Value;
+    private static S3FileStorageOptions Options(IServiceProvider provider)
+        => Options(provider, provider.GetServices<S3FileStorageRegistration>().Single());
+
+    private static S3FileStorageOptions Options(IServiceProvider provider, S3FileStorageRegistration registration)
+        => provider.GetRequiredService<IOptionsMonitor<S3FileStorageOptions>>().Get(registration.OptionsName);
+
+    private static S3BucketClient Client(IServiceProvider provider, S3FileStorageRegistration registration)
+        => (S3BucketClient)provider.GetRequiredKeyedService<IS3BucketClient>(registration.OptionsName);
 
     // ---------- null / повторная регистрация ----------
 
@@ -44,19 +51,72 @@ public sealed class S3FileStorageRegistrationTests
     }
 
     [Fact]
-    public void Register_RejectsASecondCall()
+    public void Register_TwoStorages_EachGetTheirOwnOptionsAndClient()
     {
-        // Безымянный S3FileStorageOptions принадлежит регистрации: второй вызов добавил бы ещё один
-        // IConfigureOptions в тот же экземпляр, и обе Configure-функции применились бы — настройки
-        // молча слились бы, а IFileStorage появился бы в двух экземплярах.
+        // Two S3 storages of one basket, backed by different buckets: the failover pair the
+        // multi-instance stage is for. Each registration owns its named options instance and its
+        // keyed bucket client, so no settings ever merge between them.
         var services = new ServiceCollection();
-        services.AddSaS3FileStorage(Configure());
+        services.AddSaS3FileStorage(Configure(bucket: "bucket-a"));
+        services.AddSaS3FileStorage(Configure(bucket: "bucket-b"));
 
-        var ex = Assert.Throws<InvalidOperationException>(() => services.AddSaS3FileStorage(Configure()));
+        using var provider = services.BuildServiceProvider();
 
-        Assert.Contains("already been registered", ex.Message, StringComparison.Ordinal);
-        Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<S3FileStorageOptions>));
-        Assert.Single(services, d => d.ServiceType == typeof(IFileStorage));
+        var registrations = provider.GetServices<S3FileStorageRegistration>().ToArray();
+        Assert.Equal(2, registrations.Length);
+        Assert.NotEqual(registrations[0].OptionsName, registrations[1].OptionsName);
+
+        var storages = provider.GetServices<IFileStorage>().ToArray();
+        Assert.Equal(2, storages.Length);
+        Assert.NotSame(storages[0], storages[1]);
+        Assert.Equal("share", storages[0].Basket);
+        Assert.Equal("share", storages[1].Basket);
+
+        var clientA = Client(provider, registrations[0]);
+        var clientB = Client(provider, registrations[1]);
+
+        Assert.Equal("bucket-a", clientA.Bucket);
+        Assert.Equal("bucket-b", clientB.Bucket);
+        Assert.NotSame(clientA, clientB);
+        Assert.NotSame(Options(provider, registrations[0]), Options(provider, registrations[1]));
+    }
+
+    [Fact]
+    public void Register_TwoStorages_KeepTheirBasketsIsolated()
+    {
+        // Different baskets stay independent: each storage resolves its own options and client,
+        // and the chain of a basket never reaches the other storage's client.
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure(bucket: "bucket-a", basket: "uploads"));
+        services.AddSaS3FileStorage(Configure(bucket: "bucket-b", basket: "archive"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var registrations = provider.GetServices<S3FileStorageRegistration>().ToArray();
+        var storages = provider.GetServices<IFileStorage>().ToArray();
+
+        Assert.Equal("uploads", storages[0].Basket);
+        Assert.Equal("archive", storages[1].Basket);
+        Assert.NotSame(Options(provider, registrations[0]), Options(provider, registrations[1]));
+        Assert.NotSame(Client(provider, registrations[0]), Client(provider, registrations[1]));
+    }
+
+    [Fact]
+    public void Register_TwoStoragesInOneBasket_CanProcessTheSameFileIdScheme()
+    {
+        // The premise of two-bucket failover: both storages answer CanProcess for the same fileId
+        // scheme, so a read probes the first bucket and continues on a miss to the second.
+        var services = new ServiceCollection();
+        services.AddSaS3FileStorage(Configure(bucket: "first"));
+        services.AddSaS3FileStorage(Configure(bucket: "second"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var storages = provider.GetServices<IFileStorage>().ToArray();
+
+        const string fileId = "s3://share/1/hello.txt";
+        Assert.True(storages[0].CanProcess(fileId));
+        Assert.True(storages[1].CanProcess(fileId));
     }
 
     [Fact]
@@ -90,17 +150,16 @@ public sealed class S3FileStorageRegistrationTests
     }
 
     [Fact]
-    public void Register_AddsExactlyOneBucketClient()
+    public void Register_OneCallRegistersOneKeyedClientDescriptor()
     {
         var services = new ServiceCollection();
         services.AddSaS3FileStorage(Configure());
-        int after = services.Count;
+        services.AddSaS3FileStorage(Configure(bucket: "other"));
 
-        // The AddHttpClient pipeline must be registered exactly once: first-wins would otherwise
-        // depend on registration order rather than on the guard.
-        Assert.Throws<InvalidOperationException>(() => services.AddSaS3FileStorage(Configure()));
+        int keyedClientDescriptors = services.Count(d =>
+            d.ServiceType == typeof(IS3BucketClient) && d.IsKeyedService);
 
-        Assert.Equal(after, services.Count);
+        Assert.Equal(2, keyedClientDescriptors);
     }
 
     [Fact]
@@ -349,18 +408,20 @@ public sealed class S3FileStorageRegistrationTests
     [Fact]
     public void Register_GivesTheBucketClient_TheSameNormalisedOptions()
     {
-        // Один набор значений на оба слоя: S3FileStorageOptions сам наследует
-        // S3BucketClientSetupOptions, поэтому проекции, которая могла бы что-то потерять, нет.
+        // One set of values on both layers: S3FileStorageOptions itself inherits
+        // S3BucketClientSetupOptions, so the keyed client of the registration is built from the
+        // very instance its storage holds — there is no projection that could drop a property.
         var services = new ServiceCollection();
         services.AddSaS3FileStorage(Configure(endpoint: "http://localhost:9000/"));
 
         using var provider = services.BuildServiceProvider();
 
-        var options = Options(provider);
-        var clientSettings = provider.GetRequiredService<S3BucketSettings>();
+        var registration = provider.GetServices<S3FileStorageRegistration>().Single();
+        var options = Options(provider, registration);
+        var client = Client(provider, registration);
 
-        Assert.Same(options, clientSettings);
-        Assert.Equal("http://localhost:9000", clientSettings.Endpoint);
+        Assert.Equal(options.Bucket, client.Bucket);
+        Assert.Equal(options.Endpoint, client.Endpoint.ToString().TrimEnd('/'));
     }
 
     private sealed class TimeProviderStub : TimeProvider;

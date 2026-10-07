@@ -10,7 +10,8 @@ namespace Sa.HybridFileStorage;
 public interface IHybridFileStorage
 {
     /// <summary>
-    /// Gets the collection of registered file storage providers.
+    /// Gets the collection of registered file storage providers in registration order —
+    /// the default failover chain of every basket.
     /// </summary>
     IEnumerable<IFileStorage> Storages { get; }
 
@@ -33,7 +34,12 @@ public interface IHybridFileStorage
     /// <param name="fileId">The unique identifier for the file to be downloaded.</param>
     /// <param name="loadStream">A function that processes the downloaded file stream.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
-    /// <returns>True if the file was successfully downloaded; otherwise, false.</returns>
+    /// <returns>
+    /// <c>true</c> if a storage served the file; <c>false</c> when no candidate had it — the
+    /// probing continues after a miss but only within one storage type. Errors fail over to the
+    /// next storage of any type and are thrown as <see cref="HybridFileStorageAggregateException"/>
+    /// when no storage answered; an empty chain throws <see cref="HybridFileStorageNoAvailableException"/>.
+    /// </returns>
     Task<bool> DownloadAsync(
         string fileId,
         Func<Stream, CancellationToken, Task> loadStream,
@@ -45,7 +51,10 @@ public interface IHybridFileStorage
     /// </summary>
     /// <param name="fileId">The unique identifier for the file to be deleted.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
-    /// <returns>True if the file was successfully deleted; otherwise, false.</returns>
+    /// <returns>
+    /// <c>true</c> if a storage deleted the file; <c>false</c> when no candidate had it — the
+    /// same probing and error rules as <see cref="DownloadAsync"/> apply.
+    /// </returns>
     Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -11,11 +11,11 @@ public class PostgresFileStorageFixture : PgDataSourceFixture<IFileStorage>
         string tableName,
         Action<PostgresFileStorageOptions>? configure = null)
     {
-        Services.AddSaPostgreSqlFileStorageChained(opts =>
+        Services.AddSaPostgreSqlFileStorageChained(b => b.Options(ob => ob.Configure(opts =>
             {
                 opts.TableName = tableName;
                 configure?.Invoke(opts);
-            })
+            })))
             .AddDataSource(b => b.Options(ob => ob.Configure(o => o.ConnectionString = ConnectionString)));
     }
 }

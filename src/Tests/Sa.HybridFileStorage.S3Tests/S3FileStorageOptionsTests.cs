@@ -226,8 +226,8 @@ public sealed class S3FileStorageOptionsTests
     [Fact]
     public void Region_DefaultsToTheS3ProviderValue_NotTheBaseClassOne()
     {
-        // The base class defaults to us-east-1 for the standalone client; the storage provider has
-        // always defaulted to eu-central-1, and setting it in the constructor (rather than
+        // The base class (S3BucketClientSetupOptions) defaults to us-east-1; the storage provider
+        // has always defaulted to eu-central-1, and setting it in the constructor (rather than
         // redeclaring the property) keeps a single Region on the instance.
         Assert.Equal("us-east-1", new S3BucketClientSetupOptions().Region);
         Assert.Equal(S3Defaults.DefaultRegion, new S3FileStorageOptions().Region);

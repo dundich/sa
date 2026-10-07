@@ -57,10 +57,12 @@ public sealed record PostgresFileStorageOptions
     /// </summary>
     /// <exception cref="ArgumentException">Thrown when any property is invalid.</exception>
     /// <remarks>
-    /// Called from the registration extension so that a bad table name or storage type fails at
-    /// startup. Without it, an over-long or illegal <see cref="TableName"/> reaches the DDL and the
-    /// <c>Sanitize</c> rewrite in the provider produces a *different* name than the one registered,
-    /// and the mismatch only surfaces as <c>relation does not exist</c> on the first upload.
+    /// Called through the standard options pipeline (<c>IValidateOptions</c>) when the options
+    /// materialise — the first read (storage, DDL or schema resolver), or host start with
+    /// <c>ValidateOnStart()</c>. Without it, an over-long or illegal <see cref="TableName"/>
+    /// reaches the DDL and the <c>Sanitize</c> rewrite in the provider produces a *different*
+    /// name than the one registered, and the mismatch only surfaces as <c>relation does not
+    /// exist</c> on the first upload. Callers holding their own instance may invoke it directly.
     /// </remarks>
     public void Validate()
     {
@@ -94,16 +96,26 @@ public sealed record PostgresFileStorageOptions
     /// </summary>
     internal PostgresFileStorageOptions Copy()
     {
-        return new()
-        {
-            SchemaName = SchemaName,
-            TableName = TableName,
-            StorageType = StorageType,
-            IsReadOnly = IsReadOnly,
-            Basket = Basket,
-            ExpireDays = ExpireDays,
-            MigrationScheduleForwardDays = MigrationScheduleForwardDays,
-            PgPartBy = PgPartBy,
-        };
+        PostgresFileStorageOptions copy = new();
+        CopyTo(copy);
+        return copy;
+    }
+
+    /// <summary>
+    /// Writes every property of these options into <paramref name="target"/> — used to seed
+    /// the pipeline's fresh instance from an explicit instance without touching the caller's object.
+    /// </summary>
+    internal void CopyTo(PostgresFileStorageOptions target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        target.SchemaName = SchemaName;
+        target.TableName = TableName;
+        target.StorageType = StorageType;
+        target.IsReadOnly = IsReadOnly;
+        target.Basket = Basket;
+        target.ExpireDays = ExpireDays;
+        target.MigrationScheduleForwardDays = MigrationScheduleForwardDays;
+        target.PgPartBy = PgPartBy;
     }
 }

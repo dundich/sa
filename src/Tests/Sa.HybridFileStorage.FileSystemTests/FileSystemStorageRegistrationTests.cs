@@ -22,6 +22,10 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         try { Directory.Delete(_testDir, true); } catch { /* best effort */ }
     }
 
+    private static FileSystemStorageOptions Options(IServiceProvider provider)
+        => provider.GetRequiredService<IOptionsMonitor<FileSystemStorageOptions>>()
+            .Get(provider.GetRequiredService<FileSystemStorageRegistration>().OptionsName);
+
     // ---------- null / argument checking ----------
 
     [Fact]
@@ -97,7 +101,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<IOptions<FileSystemStorageOptions>>().Value;
+        var options = Options(provider);
 
         Assert.True(Path.IsPathFullyQualified(options.BasePath), $"'{options.BasePath}' is not rooted.");
         Assert.Equal(Path.GetFullPath(_testDir), options.BasePath);
@@ -116,7 +120,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<IOptions<FileSystemStorageOptions>>().Value;
+        var options = Options(provider);
 
         Assert.Equal("fsx", options.StorageType);
         Assert.Equal("documents", options.Basket);
@@ -156,7 +160,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<IOptions<FileSystemStorageOptions>>().Value;
+        var options = Options(provider);
 
         Assert.Equal(4096, options.BufferSize);
         Assert.Equal(Path.GetFullPath(_testDir), options.BasePath);
@@ -240,7 +244,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<IOptions<FileSystemStorageOptions>>().Value;
+        var options = Options(provider);
 
         Assert.Equal(Path.GetFullPath(_testDir), options.BasePath);
         Assert.Equal("documents", options.Basket);
@@ -268,7 +272,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
 
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<IOptions<FileSystemStorageOptions>>().Value;
+        var options = Options(provider);
 
         Assert.Equal(Path.GetFullPath(_testDir), options.BasePath);
         Assert.Equal("from_config", options.Basket);

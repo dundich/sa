@@ -26,8 +26,11 @@ public static class Setup
     /// </param>
     /// <returns>The same <see cref="IServiceCollection"/> instance with the services added.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <c>null</c>.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when an S3 storage was already registered in this collection.</exception>
     /// <remarks>
+    /// Registration is additive: every call registers one <see cref="IFileStorage"/> with its own
+    /// named options instance and its own bucket client, so several S3 storages — even several in
+    /// one basket, which is how two buckets back one folder — can coexist in one collection.
+    /// <para>
     /// The options pipeline runs in a fixed order: the section binding (<c>FromConfiguration</c>,
     /// raw values) and then the caller's <c>Options(...)</c> <c>Configure</c> calls →
     /// <c>PostConfigure</c> (this method's normalisation) and then the caller's
@@ -39,7 +42,9 @@ public static class Setup
     /// <para>
     /// The bucket client is built from these very options (see <see cref="S3BucketClientSetupOptions"/>),
     /// so there is a single set of values from the configuration section all the way down to the HTTP
-    /// pipeline.
+    /// pipeline. The client is keyed by this registration's name — its own endpoint, bucket,
+    /// credentials, timeouts and pool lifetime — so two storages never share a client or an options
+    /// instance, however similar their baskets and endpoints are.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddSaS3FileStorage(
@@ -47,23 +52,6 @@ public static class Setup
         Action<IS3FileStorageBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
-
-        // The provider owns the unnamed S3FileStorageOptions instance. A second call would add a second
-        // IFileStorage built from those same options, and its Configure callback would stack on top of
-        // the first one's — one storage with a mangled basket plus a copy of it. Fail here, where the
-        // cause is visible, mirroring AddSaFileSystemFileStorage.
-        if (services.Any(d => d.ServiceType == typeof(S3FileStorageRegistration)))
-        {
-            throw new InvalidOperationException(
-                "AddSaS3FileStorage has already been registered in this service collection. " +
-                "The second call would register another IFileStorage over the same options instance, " +
-                "and both Configure callbacks would apply, so the storage would silently use merged " +
-                "settings. Register only one S3 storage per service collection.");
-        }
-
-        services.AddSingleton(new S3FileStorageRegistration());
-
-        var builder = services.AddOptions<S3FileStorageOptions>();
 
         S3FileStorageBuilder? storageBuilder = null;
 
@@ -76,6 +64,16 @@ public static class Setup
         // Fixed slot: the section binds after the callback has recorded it, before its
         // Options(...) actions replay — wherever those calls sit in the callback.
         var sectionPath = storageBuilder?.ConfigSectionPath;
+
+        // One registration, one unique name: this registration's named options instance and its
+        // keyed bucket client share it, so a storage and its client always resolve together. The
+        // name is an internal detail (the section path when one was given, the provider label plus
+        // a sequence number otherwise) — tests reach it through the registration marker.
+        string optionsName = NextOptionsName(sectionPath);
+
+        services.AddSingleton(new S3FileStorageRegistration(optionsName));
+
+        var builder = services.AddOptions<S3FileStorageOptions>(optionsName);
 
         if (sectionPath is not null)
         {
@@ -103,26 +101,48 @@ public static class Setup
             }
         }
 
-        // The bucket client is configured from the same instance — same endpoint, credentials,
-        // timeouts and pool lifetime — so there is no second place to keep in sync.
-        services.AddSaS3BucketClientCore(sp => sp.GetRequiredService<IOptions<S3FileStorageOptions>>().Value);
+        // The bucket client is configured from this very options instance — its endpoint, bucket,
+        // credentials, timeouts and pool lifetime — and is keyed by the registration name, so each
+        // S3 storage gets its own client (even two storages with the same basket never share one).
+        // IOptionsMonitor caches one instance per name, so both consumers below receive the same
+        // reference.
+        services.AddSaS3BucketClientCore(optionsName, sp =>
+            sp.GetRequiredService<IOptionsMonitor<S3FileStorageOptions>>().Get(optionsName));
 
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddSingleton<IFileStorage>(sp => new S3FileStorage(
-            sp.GetRequiredService<IS3BucketClient>(),
-            sp.GetRequiredService<IOptions<S3FileStorageOptions>>().Value,
+            sp.GetRequiredKeyedService<IS3BucketClient>(optionsName),
+            sp.GetRequiredService<IOptionsMonitor<S3FileStorageOptions>>().Get(optionsName),
             sp.GetRequiredService<TimeProvider>()));
 
         return services;
     }
+
+    /// <summary>
+    /// Sequence for unique options-instance names within this assembly — one registration,
+    /// one named instance (the name is an internal detail: tests read it back through the
+    /// registration marker, never by hardcoding it).
+    /// </summary>
+    private static int s_optionsSequence;
+
+    /// <summary>
+    /// Names this registration's options instance: the section path when one was given
+    /// (readable in diagnostics), the provider label otherwise, plus a sequence number that
+    /// makes the name unique per registration.
+    /// </summary>
+    private static string NextOptionsName(string? sectionPath)
+        => $"{sectionPath ?? "S3FileStorage"}#{Interlocked.Increment(ref s_optionsSequence)}";
 }
 
 /// <summary>
-/// Sentinel marker recording that the S3 provider is already registered in this collection, so a
-/// second <see cref="Setup.AddSaS3FileStorage"/> call fails fast instead of silently stacking a
-/// second <see cref="IFileStorage"/> over the same options instance.
+/// Per-registration handle: records the registration's options-instance name — the key its named
+/// options and its keyed bucket client share. Tests resolve the named instance and the client by
+/// reading this name back, never by hardcoding it.
 /// </summary>
-internal sealed class S3FileStorageRegistration
+internal sealed class S3FileStorageRegistration(string optionsName)
 {
+    /// <summary>The name of this registration's named options instance.</summary>
+    public string OptionsName { get; } =
+        optionsName ?? throw new ArgumentNullException(nameof(optionsName));
 }

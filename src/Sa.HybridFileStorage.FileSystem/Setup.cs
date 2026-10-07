@@ -40,22 +40,17 @@ public static class Setup
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // The provider owns the unnamed FileSystemStorageOptions instance. A second call would add a
-        // second IFileStorage built from those same options, and its Configure callback would stack
-        // on top of the first one's — one storage with a mangled BasePath plus a copy of it. Fail
-        // here, where the cause is visible, mirroring AddSaS3FileStorage.
+        // One filesystem storage per collection until the multi-instance stage formalises several:
+        // today a second call would register a second IFileStorage over its own options instance and
+        // silently change the chain every basket probes. Fail here, where the cause is visible,
+        // mirroring AddSaS3FileStorage.
         if (services.Any(d => d.ServiceType == typeof(FileSystemStorageRegistration)))
         {
             throw new InvalidOperationException(
                 "AddSaFileSystemFileStorage has already been registered in this service collection. " +
-                "The second call would register another IFileStorage over the same options instance, " +
-                "and both Configure callbacks would apply, so the storage would silently use merged " +
-                "settings. Register only one filesystem storage per service collection.");
+                "A second filesystem storage in one collection is not supported yet — register only " +
+                "one, or configure the shared storage's basket per operation.");
         }
-
-        services.AddSingleton(new FileSystemStorageRegistration());
-
-        var builder = services.AddOptions<FileSystemStorageOptions>();
 
         FileSystemStorageBuilder? storageBuilder = null;
 
@@ -68,6 +63,17 @@ public static class Setup
         // Fixed slot: the section binds after the callback has recorded it, before its
         // Options(...) actions replay — wherever those calls sit in the callback.
         var sectionPath = storageBuilder?.ConfigSectionPath;
+
+        // One registration, one named options instance — the name is unique per registration, not
+        // derived from anything the caller passes, so two calls never stack their Configure
+        // actions on one shared instance. The factory below resolves it through IOptionsMonitor,
+        // which is what makes a validation failure surface at first read / host start rather
+        // than at registration.
+        string optionsName = NextOptionsName(sectionPath);
+
+        services.AddSingleton(new FileSystemStorageRegistration(optionsName));
+
+        var builder = services.AddOptions<FileSystemStorageOptions>(optionsName);
 
         if (sectionPath is not null)
         {
@@ -113,18 +119,36 @@ public static class Setup
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddSingleton<IFileStorage>(sp => new FileSystemStorage(
-            sp.GetRequiredService<IOptions<FileSystemStorageOptions>>().Value,
+            sp.GetRequiredService<IOptionsMonitor<FileSystemStorageOptions>>().Get(optionsName),
             sp.GetRequiredService<TimeProvider>()));
 
         return services;
     }
+
+    /// <summary>
+    /// Sequence for unique options-instance names within this assembly — one registration,
+    /// one named instance (the name is an internal detail: tests read it back through the
+    /// registration marker, never by hardcoding it).
+    /// </summary>
+    private static int s_optionsSequence;
+
+    /// <summary>
+    /// Names this registration's options instance: the section path when one was given
+    /// (readable in diagnostics), the provider label otherwise, plus a sequence number that
+    /// makes the name unique per registration.
+    /// </summary>
+    private static string NextOptionsName(string? sectionPath)
+        => $"{sectionPath ?? "FileSystemStorage"}#{Interlocked.Increment(ref s_optionsSequence)}";
 }
 
 /// <summary>
 /// Sentinel marker recording that the filesystem provider is already registered in this collection,
-/// so a second <see cref="Setup.AddSaFileSystemFileStorage"/> call fails fast instead of silently
-/// stacking a second <see cref="IFileStorage"/> over the same options instance.
+/// so a second <see cref="Setup.AddSaFileSystemFileStorage"/> call fails fast. Carries the
+/// registration's options-instance name — the handle tests resolve the named instance by.
 /// </summary>
-internal sealed class FileSystemStorageRegistration
+internal sealed class FileSystemStorageRegistration(string optionsName)
 {
+    /// <summary>The name of this registration's named options instance.</summary>
+    public string OptionsName { get; } =
+        optionsName ?? throw new ArgumentNullException(nameof(optionsName));
 }

@@ -1,5 +1,5 @@
-using System.Text;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Sa.HybridFileStorage.Domain;
 using Sa.HybridFileStorage.Postgres;
 
@@ -11,7 +11,7 @@ namespace Sa.HybridFileStorage.PostgresTests;
 /// </summary>
 public sealed class PostgresFileStorageRegistrationTests
 {
-    // ---------- validation happens at registration, without touching the database ----------
+    // ---------- validation happens through the options pipeline, without touching the database ----------
 
     [Fact]
     public void Register_Rejects_QuotedTableName()
@@ -19,60 +19,78 @@ public sealed class PostgresFileStorageRegistrationTests
         // Used to be silently Trim('"')-ed, and the storage then queried a *rewritten* name
         // ("my_files") that the DDL had never created.
         var services = new ServiceCollection();
+        services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.TableName = "\"files\"")));
 
-        var ex = Assert.Throws<ArgumentException>(() =>
-            services.AddSaPostgreSqlFileStorage(o => o.TableName = "\"files\""));
-        Assert.Equal(nameof(PostgresFileStorageOptions.TableName), ex.ParamName);
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IFileStorage>());
+        Assert.Contains(nameof(PostgresFileStorageOptions.TableName), ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Register_Rejects_TableNameWithSpaces()
     {
         var services = new ServiceCollection();
+        services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.TableName = "my files")));
 
-        Assert.Throws<ArgumentException>(() =>
-            services.AddSaPostgreSqlFileStorage(o => o.TableName = "my files"));
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IFileStorage>());
+        Assert.Contains(nameof(PostgresFileStorageOptions.TableName), ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Register_Rejects_StorageTypeThatWouldBreakFileIds()
     {
         var services = new ServiceCollection();
+        services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.StorageType = "pg:1")));
 
-        var ex = Assert.Throws<ArgumentException>(() =>
-            services.AddSaPostgreSqlFileStorage(o => o.StorageType = "pg:1"));
-        Assert.Equal(nameof(PostgresFileStorageOptions.StorageType), ex.ParamName);
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IFileStorage>());
+        Assert.Contains(nameof(PostgresFileStorageOptions.StorageType), ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Register_Rejects_CommaSeparatedSchemaName()
     {
         var services = new ServiceCollection();
+        services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.SchemaName = "storage,public")));
 
-        var ex = Assert.Throws<ArgumentException>(() =>
-            services.AddSaPostgreSqlFileStorage(o => o.SchemaName = "storage,public"));
-        Assert.Equal(nameof(PostgresFileStorageOptions.SchemaName), ex.ParamName);
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IFileStorage>());
+        Assert.Contains(nameof(PostgresFileStorageOptions.SchemaName), ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Register_Rejects_NonPositiveExpireDays()
     {
         var services = new ServiceCollection();
+        services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.ExpireDays = 0)));
 
-        Assert.Throws<ArgumentException>(() =>
-            services.AddSaPostgreSqlFileStorage(o => o.ExpireDays = 0));
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IFileStorage>());
+        Assert.Contains(nameof(PostgresFileStorageOptions.ExpireDays), ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Register_LeavesTheServiceCollectionUntouched_WhenValidationFails()
+    public void Register_KeepsValidationForThePipeline_FailsAtFirstRead_NotAtRegistration()
     {
+        // Under the options pipeline the failure moves to the first read (or host start with
+        // ValidateOnStart) — registration itself must succeed, like for fs/s3.
         var services = new ServiceCollection();
+        services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.TableName = "\"files\"")));
 
-        Assert.Throws<ArgumentException>(() =>
-            services.AddSaPostgreSqlFileStorage(o => o.TableName = "\"files\""));
+        // Registration did not throw — the collection is fully wired.
+        Assert.Contains(services, d => d.ServiceType == typeof(IFileStorage));
 
-        Assert.Empty(services);
+        using var provider = services.BuildServiceProvider();
+        Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IFileStorage>());
     }
+
+    // ---------- null / argument checking ----------
 
     [Fact]
     public void Register_Rejects_NullServices()
@@ -94,96 +112,89 @@ public sealed class PostgresFileStorageRegistrationTests
             services.AddSaPostgreSqlFileStorage((PostgresFileStorageOptions)null!));
     }
 
-    // ---------- idempotency guard ----------
-
-    [Fact]
-    public void Register_IsIdempotent_ForEqualOptions()
-    {
-        var services = new ServiceCollection();
-        services.AddSaPostgreSqlFileStorage(o => o.TableName = "files");
-        int after = services.Count;
-
-        services.AddSaPostgreSqlFileStorage(o => o.TableName = "files");
-
-        Assert.Equal(after, services.Count);
-    }
+    // ---------- duplicate registration ----------
 
     [Fact]
     public void Register_Throws_ForDifferentOptions()
     {
         var services = new ServiceCollection();
-        services.AddSaPostgreSqlFileStorage(o => o.TableName = "files");
+        services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.TableName = "files")));
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            services.AddSaPostgreSqlFileStorage(o => o.TableName = "other"));
-        Assert.Contains("already been registered with different options", ex.Message, StringComparison.Ordinal);
+            services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.TableName = "other"))));
+        Assert.Contains("already been registered", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Register_Throws_ForEqualOptionsToo()
+    {
+        // The value-comparison idempotency is gone with the options pipeline: under a lazy
+        // section the options are not materialisable at registration time, and two configuring
+        // calls would stack their Configure actions on one instance anyway. The marker makes
+        // any second call fail fast; the multi-basket stage replaces this guard.
+        var services = new ServiceCollection();
+        services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.TableName = "files")));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            services.AddSaPostgreSqlFileStorage(b => b.Options(ob => ob.Configure(o => o.TableName = "files"))));
+        Assert.Contains("already been registered", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Register_Throws_WhenTheChainedOverloadIsMixedWithAnother()
     {
-        // The guard keys on the marker, so the two entry points cannot be used to register twice.
         var services = new ServiceCollection();
-        services.AddSaPostgreSqlFileStorage(o => o.TableName = "files");
+        services.AddSaPostgreSqlFileStorage();
 
-        Assert.Throws<InvalidOperationException>(() =>
-            services.AddSaPostgreSqlFileStorageChained(o => o.TableName = "other"));
+        Assert.Throws<InvalidOperationException>(() => services.AddSaPostgreSqlFileStorageChained());
     }
+
+    // ---------- explicit instance ----------
 
     [Fact]
     public void Register_DoesNotMutateTheSuppliedOptionsInstance()
     {
-        var options = new PostgresFileStorageOptions { TableName = "files" };
         var services = new ServiceCollection();
+        var options = new PostgresFileStorageOptions { TableName = "files" };
 
         services.AddSaPostgreSqlFileStorage(options);
 
         Assert.Equal("files", options.TableName);
-        Assert.Null(options.SchemaName);
+    }
+
+    [Fact]
+    public void Register_AcceptsReadyMadeIOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddSaPostgreSqlFileStorage(Options.Create(new PostgresFileStorageOptions { TableName = "files" }));
+
+        using var provider = services.BuildServiceProvider();
+        Assert.Contains(services, d => d.ServiceType == typeof(IFileStorage));
     }
 
     // ---------- schema resolution ----------
 
-    [Theory]
-    [InlineData("Host=127.0.0.1;Database=postgres;Username=u;Password=p", "public")]
-    [InlineData("Host=127.0.0.1;Database=postgres;Username=u;Password=p;Search Path=storage", "storage")]
-    [InlineData("Host=127.0.0.1;Database=postgres;Username=u;Password=p;Search Path=storage,public", "storage")]
-    [InlineData("Host=127.0.0.1;Database=postgres;Username=u;Password=p;Search Path= storage , audit", "storage")]
-    [InlineData("Host=127.0.0.1;Database=postgres;Username=u;Password=p;Search Path=,", "public")]
-    public void Schema_FallsBackToTheFirstSearchPathEntry(
-        string connectionString, string expected)
+    [Fact]
+    public void Schema_UsesTheExplicitNameFromOptions()
     {
-        // No database round trip: GetSearchPath parses the connection string.
         var services = new ServiceCollection();
-        services.AddSaPostgreSqlFileStorageChained()
-            .AddDataSource(b => b.Options(ob => ob.Configure(o => o.ConnectionString = connectionString)));
+        services.AddSaPostgreSqlFileStorageChained(b => b.Options(ob => ob.Configure(o => o.SchemaName = "explicit")));
 
         using var provider = services.BuildServiceProvider();
+        var schema = provider.GetRequiredService<PostgresFileStorageSchema>();
 
-        Assert.Equal(expected, provider.GetRequiredService<PostgresFileStorageSchema>().Value);
+        Assert.Equal("explicit", schema.Value);
     }
 
     [Fact]
-    public void Schema_PrefersTheExplicitName()
+    public void Schema_FallsBackToPublic_WhenNoDataSourceAndNoExplicitSchema()
     {
         var services = new ServiceCollection();
-        services.AddSaPostgreSqlFileStorageChained(o => o.SchemaName = "explicit")
-            .AddDataSource(b => b.Options(ob => ob.Configure(o => o.ConnectionString =
-                "Host=127.0.0.1;Database=postgres;Username=u;Password=p;Search Path=from_search_path")));
+        services.AddSaPostgreSqlFileStorageChained();
 
         using var provider = services.BuildServiceProvider();
+        var schema = provider.GetRequiredService<PostgresFileStorageSchema>();
 
-        Assert.Equal("explicit", provider.GetRequiredService<PostgresFileStorageSchema>().Value);
-    }
-
-    [Fact]
-    public void Schema_FallsBackToPublic_WhenNoDataSourceIsRegistered()
-    {
-        var services = new ServiceCollection();
-        services.AddSaPostgreSqlFileStorage();
-
-        using var provider = services.BuildServiceProvider();
-
-        Assert.Equal("public", provider.GetRequiredService<PostgresFileStorageSchema>().Value);
+        Assert.Equal(PostgresFileStorageSchema.FallbackSchema, schema.Value);
     }
 }

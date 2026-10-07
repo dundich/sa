@@ -7,4 +7,16 @@
     <Description>File storage management</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!--
+      Options + Options.ConfigurationExtensions дают AddOptions/Configure/IOptionsMonitor/
+      BindConfiguration для канала InMemory-настроек и секции порядка типов.
+      Источник конфигурации (source-generated binder) включается в .NET SDK по умолчанию
+      (EnableConfigurationBindingGenerator), поэтому BindConfiguration не тянет
+      reflection и собирается под Native AOT — см. Sa.Media.FFmpeg/Setup.cs.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
+
 </Project>

@@ -35,17 +35,23 @@ internal sealed class PostgresFileStorageSchema
     public string Value { get; }
 
     /// <summary>
-    /// Registers the schema resolver, deriving the value from <paramref name="explicitSchema"/>
-    /// when set and otherwise from the first entry of the data source's search path.
+    /// Registers the schema resolver, deriving the value from the function's result when it
+    /// returns a name and otherwise from the first entry of the data source's search path.
     /// </summary>
     /// <param name="services">The service collection to add the resolver to.</param>
-    /// <param name="explicitSchema">The schema configured by the user, or <c>null</c> to auto-detect.</param>
+    /// <param name="explicitSchema">
+    /// Reads the schema configured by the user from the live options instance, or <c>null</c> to
+    /// auto-detect. A function rather than a value: under the options pipeline the schema is only
+    /// known once the named instance materialises (and reading it is what runs validation).
+    /// </param>
     /// <returns>The same <see cref="IServiceCollection"/> instance.</returns>
-    public static IServiceCollection Register(IServiceCollection services, string? explicitSchema)
+    public static IServiceCollection Register(
+        IServiceCollection services, Func<IServiceProvider, string?> explicitSchema)
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(explicitSchema);
 
-        services.TryAddSingleton(sp => new PostgresFileStorageSchema(Resolve(sp, explicitSchema)));
+        services.TryAddSingleton(sp => new PostgresFileStorageSchema(Resolve(sp, explicitSchema(sp))));
         return services;
     }
 

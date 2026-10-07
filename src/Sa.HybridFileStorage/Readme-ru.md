@@ -58,6 +58,16 @@ builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x 
     x.Basket = "черновик";
 })));
 
+// Корзина "архив" → S3 облачное хранилище: bucket-клиент — именованная регистрация
+// под техническим ключом "archive", резолв по нему же.
+builder.Services.AddSaS3BucketClient("archive", o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://minio:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "company-archive";
+})));
+
 builder.Services.AddSaHybridFileStorage(cfg => cfg
     // Корзина "документы" → PostgreSQL с авто-партиционированием.
     // Зависимости (IPgDataSource, IPartitionManager, RecyclableMemoryStreamManager)
@@ -74,7 +84,7 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
 
     // Корзина "архив" → S3 облачное хранилище
     .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(
-        sp.GetRequiredService<IS3BucketClient>(),
+        sp.GetRequiredKeyedService<IS3BucketClient>("archive"),
         new S3FileStorageOptions
         {
             Endpoint = "http://minio:9000",
@@ -203,6 +213,7 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 
 ```csharp
 using Microsoft.Extensions.Hosting;
+using Sa.Data.S3;
 using Sa.HybridFileStorage;
 using Sa.HybridFileStorage.FileSystem;
 using Sa.HybridFileStorage.S3;
@@ -218,12 +229,21 @@ builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x 
     x.Basket = "documents";
 })));
 
+// Bucket-клиент S3 — именованная регистрация: по одному имени на клиент, резолв по ключу.
+builder.Services.AddSaS3BucketClient("uploads", o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "mybucket";
+})));
+
 // Затем собираем контейнер
 builder.Services.AddSaHybridFileStorage(cfg => cfg
     // S3 провайдер — здесь показан ручной вариант
     .ConfigureStorage((sp, c) => c.AddStorage(
         new S3FileStorage(
-            sp.GetRequiredService<IS3BucketClient>(),
+            sp.GetRequiredKeyedService<IS3BucketClient>("uploads"),
             new S3FileStorageOptions
             {
                 Endpoint = "http://localhost:9000",

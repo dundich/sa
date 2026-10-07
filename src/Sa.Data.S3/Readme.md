@@ -26,10 +26,10 @@ var client = new S3BucketClient(new HttpClient(), new S3BucketClientSetupOptions
 
 ### With DI
 
-`AddSaS3BucketClient` takes the standard options callback, so configuration goes through `Configure` / `PostConfigure` / `Validate` like any other options type — not through a bespoke overload:
+`AddSaS3BucketClient(name, ...)` takes the standard options callback, so configuration goes through `Configure` / `PostConfigure` / `Validate` like any other options type — not through a bespoke overload. The name identifies the client everywhere: it keys the named `HttpClient` (connection pool, resilience, handler lifetime), the settings, the options instance and the client itself — and it is what you resolve by:
 
 ```csharp
-services.AddSaS3BucketClient(o => o.Options(ob => ob.Configure(x =>
+services.AddSaS3BucketClient("my-client", o => o.Options(ob => ob.Configure(x =>
 {
     x.Bucket = "mybucket";
     x.Endpoint = "http://localhost:9000";
@@ -40,8 +40,8 @@ services.AddSaS3BucketClient(o => o.Options(ob => ob.Configure(x =>
     x.HandlerLifetime = Timeout.InfiniteTimeSpan; // or TimeSpan.FromHours(2) for periodic handler refresh
 })));
 
-// Usage:
-var client = serviceProvider.GetRequiredService<IS3BucketClient>();
+// Usage — resolve by the registration name:
+var client = serviceProvider.GetRequiredKeyedService<IS3BucketClient>("my-client");
 ```
 
 ### From a configuration section
@@ -49,7 +49,7 @@ var client = serviceProvider.GetRequiredService<IS3BucketClient>();
 ```csharp
 // appsettings.json:
 // { "S3": { "Endpoint": "http://localhost:9000", "AccessKey": "…", "SecretKey": "…", "Bucket": "mybucket" } }
-services.AddSaS3BucketClient(b => b.FromConfiguration("S3"));
+services.AddSaS3BucketClient("my-client", b => b.FromConfiguration("S3"));
 ```
 
 The section binds in a fixed slot **first**, so an `Options(...)` `Configure` has the last word. The `Options(...)` actions replay after the registration's own `PostConfigure` and `Validate`, so your checks add to the built-in ones instead of replacing them.
@@ -62,7 +62,50 @@ Values are normalised (`PostConfigure`) and then validated on the way out, with 
 options.Validate(); // throws DataAnnotations.ValidationException
 ```
 
-Register only one S3 bucket client per service collection — a second call throws `InvalidOperationException`, because both `Configure` callbacks would otherwise apply to the same unnamed options instance and the settings would silently merge.
+### One registration per name, many named clients per host
+
+Every registration is keyed by its name, and the name must be unique in the service collection: a
+second `AddSaS3BucketClient` call **under the same name** throws `InvalidOperationException`, because
+the second `Configure` would stack on the same named options instance and a second keyed client
+under the same key would make resolution ambiguous. Different names, however, are fully independent —
+each gets its own named `HttpClient` (connection pool, resilience, handler lifetime), its own keyed
+`S3BucketSettings`, its own keyed `IS3BucketClient` and its own named options instance:
+
+```csharp
+services.AddSaS3BucketClient("orders", o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://minio:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "orders-bucket";
+})));
+
+services.AddSaS3BucketClient("archive", o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://minio:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "archive-bucket";
+})));
+```
+
+Two clients never share credentials, timeouts or a connection pool. The HTTP wiring underneath is
+shared code exposed internally as `AddSaS3BucketClientCore(services, clientName, settingsFactory)`.
+The S3 provider of `Sa.HybridFileStorage.S3` (`AddSaS3FileStorage`, call it once per storage) keys
+each storage's client by the registration's name the same way, so two storages — even two with the
+same endpoint — stay isolated, and a read that misses the first bucket continues to the next one of
+the same storage type.
+
+Resolving the client — keyed by the registration name; there are no unkeyed aliases, so an unkeyed
+`GetRequiredService<IS3BucketClient>()` returns `null`:
+
+```csharp
+IS3BucketClient ordersClient = serviceProvider.GetRequiredKeyedService<IS3BucketClient>("orders");
+S3BucketSettings ordersSettings = serviceProvider.GetRequiredKeyedService<S3BucketSettings>("orders");
+```
+
+For `AddSaS3FileStorage` the registration name is an internal detail — the storage resolves its own
+client together with its options, so consumers never hardcode the key.
 
 ---
 

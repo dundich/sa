@@ -8,7 +8,7 @@ using Sa.Data.S3;
 namespace Sa.Data.S3Tests;
 
 /// <summary>
-/// Регистрация клиента S3: конвейер опций и то, что из него доходит до HTTP-обвязки.
+/// Регистрация именованного клиента S3: конвейер опций и то, что из него доходит до HTTP-обвязки.
 /// </summary>
 /// <remarks>
 /// Тесты не поднимают контейнер: проверяется только конфигурация — она полностью отделена от
@@ -16,6 +16,9 @@ namespace Sa.Data.S3Tests;
 /// </remarks>
 public sealed class SetupBucketClientTests
 {
+    /// <summary>Имя клиента в тестах: все регистрации идут под ним, пока не проверяется multi-name.</summary>
+    private const string ClientName = "test-client";
+
     private static Action<IS3BucketClientBuilder> Configure(
         string bucket = "mybucket",
         string endpoint = "http://localhost:9000",
@@ -29,26 +32,35 @@ public sealed class SetupBucketClientTests
             x.Endpoint = endpoint;
         }));
 
+    // Опции читаются по имени клиента — ровно тому имени, под которым зарегистрирован клиент.
     static S3BucketClientSetupOptions Options(IServiceProvider provider)
-        => provider.GetRequiredService<IOptions<S3BucketClientSetupOptions>>().Value;
+        => provider.GetRequiredService<IOptionsMonitor<S3BucketClientSetupOptions>>().Get(ClientName);
 
-    // ---------- null / повторная регистрация ----------
+    // ---------- null / пустое имя / повторная регистрация ----------
 
     [Fact]
     public void Register_Rejects_NullServices()
     {
         IServiceCollection services = null!;
 
-        Assert.Throws<ArgumentNullException>(() => services.AddSaS3BucketClient());
+        Assert.Throws<ArgumentNullException>(() => services.AddSaS3BucketClient(ClientName));
     }
 
     [Fact]
-    public void Register_RejectsASecondCall()
+    public void Register_RejectsAnEmptyName()
     {
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(Configure());
 
-        var ex = Assert.Throws<InvalidOperationException>(() => services.AddSaS3BucketClient(Configure()));
+        Assert.Throws<ArgumentException>(() => services.AddSaS3BucketClient("   ", Configure()));
+    }
+
+    [Fact]
+    public void Register_RejectsASecondCallUnderTheSameName()
+    {
+        var services = new ServiceCollection();
+        services.AddSaS3BucketClient(ClientName, Configure());
+
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddSaS3BucketClient(ClientName, Configure()));
 
         Assert.Contains("already been registered", ex.Message, StringComparison.Ordinal);
         Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<S3BucketClientSetupOptions>));
@@ -59,7 +71,7 @@ public sealed class SetupBucketClientTests
     {
         var services = new ServiceCollection();
 
-        var returned = services.AddSaS3BucketClient(Configure());
+        var returned = services.AddSaS3BucketClient(ClientName, Configure());
 
         Assert.Same(services, returned);
     }
@@ -68,19 +80,19 @@ public sealed class SetupBucketClientTests
     public void Register_AddsTheValidatorOnce()
     {
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(Configure());
+        services.AddSaS3BucketClient(ClientName, Configure());
 
         Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<S3BucketClientSetupOptions>));
     }
 
     [Fact]
-    public void Register_AddsExactlyOneBucketClient()
+    public void Register_AddsExactlyOneBucketClientPerName()
     {
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(Configure());
+        services.AddSaS3BucketClient(ClientName, Configure());
         int after = services.Count;
 
-        Assert.Throws<InvalidOperationException>(() => services.AddSaS3BucketClient(Configure()));
+        Assert.Throws<InvalidOperationException>(() => services.AddSaS3BucketClient(ClientName, Configure()));
 
         Assert.Equal(after, services.Count);
     }
@@ -91,11 +103,11 @@ public sealed class SetupBucketClientTests
         // S3BucketClientSetupOptions сам наследует S3BucketSettings, поэтому клиент получает ровно
         // тот же объект — копировать поля вручную не нужно, а значит и забыть поле невозможно.
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(Configure());
+        services.AddSaS3BucketClient(ClientName, Configure());
 
         using var provider = services.BuildServiceProvider();
 
-        Assert.Same(Options(provider), provider.GetRequiredService<S3BucketSettings>());
+        Assert.Same(Options(provider), provider.GetRequiredKeyedService<S3BucketSettings>(ClientName));
     }
 
     // ---------- конвейер опций ----------
@@ -104,7 +116,7 @@ public sealed class SetupBucketClientTests
     public void Register_NormalisesTheEndpoint()
     {
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(Configure(endpoint: "  HTTP://Localhost:9000/  "));
+        services.AddSaS3BucketClient(ClientName, Configure(endpoint: "  HTTP://Localhost:9000/  "));
 
         using var provider = services.BuildServiceProvider();
 
@@ -115,7 +127,7 @@ public sealed class SetupBucketClientTests
     public void Register_CallbackCanAddAPostConfigure()
     {
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(o => o
+        services.AddSaS3BucketClient(ClientName, o => o
             .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "ROOTUSER";
@@ -135,7 +147,7 @@ public sealed class SetupBucketClientTests
     public void Register_CallbackValidation_AddsToTheBuiltInChecks()
     {
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(o => o
+        services.AddSaS3BucketClient(ClientName, o => o
             .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "  ";
@@ -172,7 +184,7 @@ public sealed class SetupBucketClientTests
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaS3BucketClient(b => b.FromConfiguration("S3"));
+        services.AddSaS3BucketClient(ClientName, b => b.FromConfiguration("S3"));
 
         using var provider = services.BuildServiceProvider();
 
@@ -203,7 +215,7 @@ public sealed class SetupBucketClientTests
 
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
-        services.AddSaS3BucketClient(o => o
+        services.AddSaS3BucketClient(ClientName, o => o
             .FromConfiguration("S3")
             .Options(ob => ob.Configure(x => x.Bucket = "other")));
 
@@ -219,7 +231,7 @@ public sealed class SetupBucketClientTests
         // IConfiguration обязан работать. Важно, что падает именно валидация опций, а не поиск
         // IConfiguration в контейнере.
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient();
+        services.AddSaS3BucketClient(ClientName);
 
         using var provider = services.BuildServiceProvider();
 
@@ -236,7 +248,7 @@ public sealed class SetupBucketClientTests
         // Раньше клиент вообще ничем не проверялся, и неверный адрес всплывал как UriFormatException
         // изнутри new Uri(...) при первом обращении.
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(Configure(endpoint: "localhost:9000"));
+        services.AddSaS3BucketClient(ClientName, Configure(endpoint: "localhost:9000"));
 
         using var provider = services.BuildServiceProvider();
 
@@ -264,7 +276,7 @@ public sealed class SetupBucketClientTests
         var lifetime = TimeSpan.FromHours(2);
 
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(o => o
+        services.AddSaS3BucketClient(ClientName, o => o
             .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "ROOTUSER";
@@ -278,7 +290,7 @@ public sealed class SetupBucketClientTests
         using var provider = services.BuildServiceProvider();
         var monitor = provider.GetRequiredService<IOptionsMonitor<HttpClientFactoryOptions>>();
 
-        Assert.Equal(lifetime, monitor.Get(Setup.ClientName).HandlerLifetime);
+        Assert.Equal(lifetime, monitor.Get(ClientName).HandlerLifetime);
         Assert.Equal(TimeSpan.FromMinutes(7), monitor.Get("another").HandlerLifetime);
     }
 
@@ -291,7 +303,7 @@ public sealed class SetupBucketClientTests
         var timeout = TimeSpan.FromSeconds(42);
 
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(o => o
+        services.AddSaS3BucketClient(ClientName, o => o
             .Options(ob => ob.Configure(x =>
             {
                 x.AccessKey = "ROOTUSER";
@@ -317,10 +329,10 @@ public sealed class SetupBucketClientTests
     public void Register_HandsTheClientABaseAddress()
     {
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(Configure());
+        services.AddSaS3BucketClient(ClientName, Configure());
 
         using var provider = services.BuildServiceProvider();
-        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(Setup.ClientName);
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(ClientName);
 
         Assert.Equal(new Uri("http://localhost:9000"), client.BaseAddress);
     }
@@ -332,11 +344,92 @@ public sealed class SetupBucketClientTests
         // Timeout.InfiniteTimeSpan: дедлайн должен задавать Polly, иначе клиент отвалился бы по
         // таймауту HttpClient раньше, чем отработают ретраи.
         var services = new ServiceCollection();
-        services.AddSaS3BucketClient(Configure());
+        services.AddSaS3BucketClient(ClientName, Configure());
 
         using var provider = services.BuildServiceProvider();
-        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(Setup.ClientName);
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(ClientName);
 
         Assert.Equal(Timeout.InfiniteTimeSpan, client.Timeout);
+    }
+
+    // ---------- несколько именованных клиентов ----------
+
+    [Fact]
+    public void Register_Named_TwoNames_TwoIndependentClients()
+    {
+        // Публичный именованный путь: два вызова с разными именами дают двух полностью
+        // независимых клиентов — свой keyed-клиент, свои keyed-настройки, свой HttpClient.
+        var services = new ServiceCollection();
+        services.AddSaS3BucketClient("orders", Configure(bucket: "orders-bucket"));
+        services.AddSaS3BucketClient("archive", Configure(bucket: "archive-bucket"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var orders = (S3BucketClient)provider.GetRequiredKeyedService<IS3BucketClient>("orders");
+        var archive = (S3BucketClient)provider.GetRequiredKeyedService<IS3BucketClient>("archive");
+
+        Assert.Equal("orders-bucket", orders.Bucket);
+        Assert.Equal("archive-bucket", archive.Bucket);
+        Assert.NotSame(orders, archive);
+        Assert.NotSame(
+            provider.GetRequiredKeyedService<S3BucketSettings>("orders"),
+            provider.GetRequiredKeyedService<S3BucketSettings>("archive"));
+
+        var factory = provider.GetRequiredService<IHttpClientFactory>();
+        Assert.Equal("http://localhost:9000", factory.CreateClient("orders").BaseAddress?.ToString().TrimEnd('/'));
+        Assert.Equal("http://localhost:9000", factory.CreateClient("archive").BaseAddress?.ToString().TrimEnd('/'));
+    }
+
+    [Fact]
+    public void Register_Named_RegistersNoUnkeyedAliases()
+    {
+        // У именованной регистрации нет unkeyed-псевдонимов: unkeyed-резолв обязан отдавать null,
+        // а не «какого-то» клиента из списка.
+        var services = new ServiceCollection();
+        services.AddSaS3BucketClient(ClientName, Configure());
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Null(provider.GetService<IS3BucketClient>());
+        Assert.Null(provider.GetService<S3BucketSettings>());
+    }
+
+    [Fact]
+    public void Core_RegistersTwoClients_EachWithItsOwnKeyedClientAndSettings()
+    {
+        // The multi-instance capability of the HTTP wiring: two calls with different names yield
+        // two independent clients — own named HttpClient, own keyed settings, own keyed client.
+        var services = new ServiceCollection();
+
+        services.AddSaS3BucketClientCore("first", _ => new S3BucketClientSetupOptions
+        {
+            AccessKey = "ROOTUSER",
+            SecretKey = "ChangeMe123",
+            Bucket = "bucket-a",
+            Endpoint = "http://localhost:9000",
+        });
+        services.AddSaS3BucketClientCore("second", _ => new S3BucketClientSetupOptions
+        {
+            AccessKey = "ROOTUSER",
+            SecretKey = "ChangeMe123",
+            Bucket = "bucket-b",
+            Endpoint = "http://localhost:9000",
+        });
+
+        using var provider = services.BuildServiceProvider();
+
+        var first = (S3BucketClient)provider.GetRequiredKeyedService<IS3BucketClient>("first");
+        var second = (S3BucketClient)provider.GetRequiredKeyedService<IS3BucketClient>("second");
+
+        Assert.Equal("bucket-a", first.Bucket);
+        Assert.Equal("bucket-b", second.Bucket);
+        Assert.NotSame(first, second);
+        Assert.NotSame(
+            provider.GetRequiredKeyedService<S3BucketSettings>("first"),
+            provider.GetRequiredKeyedService<S3BucketSettings>("second"));
+
+        var factory = provider.GetRequiredService<IHttpClientFactory>();
+        Assert.Equal("http://localhost:9000", factory.CreateClient("first").BaseAddress?.ToString().TrimEnd('/'));
+        Assert.Equal("http://localhost:9000", factory.CreateClient("second").BaseAddress?.ToString().TrimEnd('/'));
     }
 }

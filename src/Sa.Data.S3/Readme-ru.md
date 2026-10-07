@@ -26,10 +26,10 @@ var client = new S3BucketClient(new HttpClient(), new S3BucketClientSetupOptions
 
 ### С DI
 
-`AddSaS3BucketClient` принимает стандартный колбэк опций, поэтому конфигурация идёт через `Configure` / `PostConfigure` / `Validate` как у любого другого типа опций, а не через отдельный перегруженный метод:
+`AddSaS3BucketClient(имя, ...)` принимает стандартный колбэк опций, поэтому конфигурация идёт через `Configure` / `PostConfigure` / `Validate` как у любого другого типа опций, а не через отдельный перегруженный метод. Имя однозначно идентифицирует клиента: это ключ именованного `HttpClient` (пул соединений, resilience, время жизни handler'а), настроек, экземпляра опций и самого клиента — и именно по нему происходит резолв:
 
 ```csharp
-services.AddSaS3BucketClient(o => o.Options(ob => ob.Configure(x =>
+services.AddSaS3BucketClient("my-client", o => o.Options(ob => ob.Configure(x =>
 {
     x.Bucket = "mybucket";
     x.Endpoint = "http://localhost:9000";
@@ -40,8 +40,8 @@ services.AddSaS3BucketClient(o => o.Options(ob => ob.Configure(x =>
     x.HandlerLifetime = Timeout.InfiniteTimeSpan; // либо TimeSpan.FromHours(2) для периодического обновления handler'а
 })));
 
-// Использование:
-var client = serviceProvider.GetRequiredService<IS3BucketClient>();
+// Использование — резолв по имени регистрации:
+var client = serviceProvider.GetRequiredKeyedService<IS3BucketClient>("my-client");
 ```
 
 ### Из секции конфигурации
@@ -49,7 +49,7 @@ var client = serviceProvider.GetRequiredService<IS3BucketClient>();
 ```csharp
 // appsettings.json:
 // { "S3": { "Endpoint": "http://localhost:9000", "AccessKey": "…", "SecretKey": "…", "Bucket": "mybucket" } }
-services.AddSaS3BucketClient(b => b.FromConfiguration("S3"));
+services.AddSaS3BucketClient("my-client", b => b.FromConfiguration("S3"));
 ```
 
 Секция привязывается в фиксированном слоте **первой**, поэтому `Configure` из `Options(...)` имеет последнее слово. Действия `Options(...)` воспроизводятся после собственных `PostConfigure` и `Validate` регистрации, так что ваши проверки дополняют встроенные, а не заменяют их.
@@ -62,7 +62,50 @@ services.AddSaS3BucketClient(b => b.FromConfiguration("S3"));
 options.Validate(); // бросает DataAnnotations.ValidationException
 ```
 
-Регистрируйте только один клиент S3 на коллекцию сервисов: второй вызов бросает `InvalidOperationException`, иначе оба `Configure`-колбэка применились бы к одному безымянному экземпляру опций и настройки молча слились.
+### Одна регистрация на имя, много именованных клиентов на хост
+
+Каждая регистрация ключуется по имени, и имя обязано быть уникальным в коллекции: второй вызов
+`AddSaS3BucketClient` **под тем же именем** бросает `InvalidOperationException` — второй `Configure`
+налёг бы на тот же именованный экземпляр опций, а второй keyed-клиент под тем же ключом сделал бы
+резолв неоднозначным. Разные же имена дают полностью независимых клиентов: свой именованный
+`HttpClient` (пул соединений, resilience, время жизни handler'а), свои keyed `S3BucketSettings`,
+свой keyed `IS3BucketClient` и свой именованный экземпляр опций:
+
+```csharp
+services.AddSaS3BucketClient("orders", o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://minio:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "orders-bucket";
+})));
+
+services.AddSaS3BucketClient("archive", o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://minio:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "archive-bucket";
+})));
+```
+
+Два клиента никогда не делят учётные данные, таймауты и пул соединений. Общая HTTP-обвязка под
+ними — внутренний `AddSaS3BucketClientCore(services, clientName, settingsFactory)`. S3-провайдер
+`Sa.HybridFileStorage.S3` (`AddSaS3FileStorage` — по одному вызову на хранилище) ключует клиента
+каждой папки по имени регистрации точно так же, поэтому два хранилища — даже с одним эндпоинтом —
+остаются изолированными, а чтение, не нашедшее файл в первом бакете, продолжает пробор в
+следующем хранилище того же типа.
+
+Резолв клиента — по имени регистрации; unkeyed-псевдонимов нет, поэтому
+`GetRequiredService<IS3BucketClient>()` без ключа возвращает `null`:
+
+```csharp
+IS3BucketClient ordersClient = serviceProvider.GetRequiredKeyedService<IS3BucketClient>("orders");
+S3BucketSettings ordersSettings = serviceProvider.GetRequiredKeyedService<S3BucketSettings>("orders");
+```
+
+Для `AddSaS3FileStorage` имя регистрации — внутренняя деталь: хранилище само резолвит свой клиент
+вместе со своими опциями, поэтому потребители никогда не зашивают ключ в код.
 
 ---
 

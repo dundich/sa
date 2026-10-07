@@ -111,7 +111,7 @@ builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
     x.Basket = "uploads";
 })));
 
-// AddSaS3FileStorage автоматически регистрирует IS3BucketClient через AddSaS3BucketClient
+// AddSaS3FileStorage автоматически регистрирует именованный IS3BucketClient под именем регистрации
 ```
 
 Настройки транспорта здесь не вложенный объект: `TotalRequestTimeout`, `ConnectionPoolLifetime`
@@ -268,7 +268,7 @@ options.Validate(); // бросает DataAnnotations.ValidationException с и�
 | `Sa.Data.S3` | S3 клиент (`IS3BucketClient`, `S3BucketClient`) |
 | `Sa` | Общие утилиты (`MimeTypeMap`) |
 
-Метод расширения `AddSaS3FileStorage` автоматически регистрирует `IS3BucketClient` через `AddSaS3BucketClient`.
+Метод расширения `AddSaS3FileStorage` автоматически регистрирует `IS3BucketClient` под именем регистрации — через ту же внутреннюю HTTP-обвязку (пул, resilience, время жизни handler'а), которую использует публичный `AddSaS3BucketClient(name, ...)`.
 
 ---
 
