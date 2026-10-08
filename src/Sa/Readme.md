@@ -133,6 +133,44 @@ if (MimeTypeMap.TryGetMimeType("document.pdf", out mime))
 string ext = MimeTypeMap.GetExtension("image/png"); // ".png"
 ```
 
+### FilePathResolver / IFilePathResolver
+
+Resolves fuzzy / imprecise paths (as stored in a database) into real paths on the file system.
+Every discovered mapping is cached per database path, so subsequent lookups are a dictionary
+read plus a single file probe.
+
+Resolution cascade (first hit wins):
+
+1. **Direct** — the database path is an absolute path that literally exists.
+2. **Relative** — the path exists relative to `ConfiguredPath`.
+3. **Incremental** — trailing components of the database directory are matched against
+   directories under `ConfiguredPath`, innermost first — so a lost leading prefix
+   (`/storage/usbdisk1/mikopbx/astspool/monitor/2021/06/16/15/file.mp3` →
+   `<root>/2021/06/16/15/file.mp3`) still resolves.
+4. **Deep search** (opt-in) — recursive search by file name. Hits are *not* cached:
+   a file found anywhere in the tree carries no directory mapping.
+
+| Method | Description |
+|--------|-------------|
+| `ResolvePath(string, bool asRelativePath = false)` | Resolves the database path, or returns `null` when the file cannot be located. Throws `ArgumentException` on null/whitespace. |
+| `WithPossibleExtensions(params string[])` | Extensions tried during fuzzy search when the exact name misses (`"mp3"` and `".mp3"` are equivalent). |
+| `WithDeepSearch(bool)` | Enables / disables recursive search by file name. |
+| `WithForceSearch(bool)` | When enabled, every call re-runs the full cascade instead of reading the per-file cache. |
+| `WithMap(string)` | Explicit global mapping applied before the cascade: database paths starting with `map` are looked up directly under `ConfiguredPath`. |
+| `IsResolved` / `IsDeepSearch` / `IsForceSearchEnabled` | Current resolver state. |
+| `Resolved` (event) | Raised once, when the first mapping is established. |
+
+```csharp
+var resolver = FilePathResolver.Create("/records")
+    .WithPossibleExtensions("mp3", "wav")
+    .WithDeepSearch(true);
+
+// "/storage/usbdisk1/mikopbx/astspool/monitor/2021/06/16/15/has-root.mp3"
+//   → /records/2021/06/16/15/has-root.mp3  (directory-suffix match)
+string? full = resolver.ResolvePath(dbPath);
+string? rel  = resolver.ResolvePath(dbPath, asRelativePath: true); // "2021/06/16/15/has-root.mp3"
+```
+
 ### ProcessExecutor / IProcessExecutor
 
 Asynchronous process executor with real-time output handling, stdin piping, and robust lifecycle management.
