@@ -10,6 +10,9 @@
   <Folder Name="/Data/S3/">
     <Project Path="Sa.Data.S3/Sa.Data.S3.csproj" />
   </Folder>
+  <Folder Name="/Data/TempFolder/">
+    <Project Path="Sa.Data.TempFolder/Sa.Data.TempFolder.csproj" />
+  </Folder>
   <Folder Name="/HybridFileStorage/">
     <Project Path="Sa.HybridFileStorage.FileSystem/Sa.HybridFileStorage.FileSystem.csproj" />
     <Project Path="Sa.HybridFileStorage.Postgres/Sa.HybridFileStorage.Postgres.csproj" />
@@ -57,6 +60,7 @@
     <Project Path="Tests/Sa.ConfigurationTests/Sa.ConfigurationTests.csproj" />
     <Project Path="Tests/Sa.Data.PostgreSqlTests/Sa.Data.PostgreSqlTests.csproj" />
     <Project Path="Tests/Sa.Data.S3Tests/Sa.Data.S3Tests.csproj" />
+    <Project Path="Tests/Sa.Data.TempFolderTests/Sa.Data.TempFolderTests.csproj" />
     <Project Path="Tests/Sa.HybridFileStorage.FileSystemTests/Sa.HybridFileStorage.FileSystemTests.csproj" />
     <Project Path="Tests/Sa.HybridFileStorage.PostgresTests/Sa.HybridFileStorage.PostgresTests.csproj" />
     <Project Path="Tests/Sa.HybridFileStorage.S3Tests/Sa.HybridFileStorage.S3Tests.csproj" />
