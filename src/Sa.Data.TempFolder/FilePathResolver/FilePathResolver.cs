@@ -1,13 +1,17 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 
-namespace Sa.Classes;
+namespace Sa.Data.TempFolder.FilePathResolver;
 
 /// <summary>
 /// Resolves a path stored in a database into a real path on the file system,
 /// optionally returning the result relative to a configured root.
 /// </summary>
-internal interface IFilePathResolver
+/// <remarks>
+/// Registered through <see cref="Setup"/> (<c>AddFilePathResolver</c>) and resolved by key:
+/// <c>sp.GetRequiredKeyedService&lt;IFilePathResolver&gt;(name)</c>.
+/// </remarks>
+public interface IFilePathResolver
 {
     /// <summary>
     /// Resolves the system path from the database path.
@@ -22,10 +26,12 @@ internal interface IFilePathResolver
 }
 
 /// <summary>
-/// A minimal abstraction over file-system probes so <see cref="FilePathResolver"/> can be
-/// unit-tested without touching the real disk.
+/// A minimal abstraction over file-system probes: all disk access of
+/// <see cref="FilePathResolver"/> goes through it, so it can be unit-tested without touching
+/// the real disk — and swapped per DI registration (a keyed instance first, then a plain one,
+/// else <see cref="DefaultFileSystemService"/>).
 /// </summary>
-internal interface IFileSystemService
+public interface IFileSystemService
 {
     /// <summary>True when <paramref name="path"/> refers to an existing file.</summary>
     bool FileExists(string path);
@@ -63,7 +69,7 @@ internal sealed class DefaultFileSystemService : IFileSystemService
 /// </para>
 /// </summary>
 [DebuggerStepThrough]
-internal sealed class FilePathResolver : IFilePathResolver
+public sealed class FilePathResolver : IFilePathResolver
 {
     /// <summary>Enum representing the kind of mapping used to resolve a path.</summary>
     public enum ResolvedPathType

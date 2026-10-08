@@ -1,7 +1,7 @@
-﻿using Sa.Classes;
+﻿using Sa.Data.TempFolder.FilePathResolver;
 using System.Collections.Concurrent;
 
-namespace SaTests.Classes;
+namespace Sa.Data.TempFolderTests;
 
 public class FilePathResolverTests
 {

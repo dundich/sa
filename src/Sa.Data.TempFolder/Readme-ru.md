@@ -22,6 +22,7 @@
 - [Режим read-only](#режим-read-only)
 - [Справочник опций](#справочник-опций)
 - [Обработка ошибок](#обработка-ошибок)
+- [FilePathResolver](#filepathresolver)
 
 ---
 
@@ -283,3 +284,75 @@ builder.Services.AddSaTempFolder("uploads", b => b.Options(ob => ob.Configure(o 
 | Обработчик `OnFreeSpaceReached` бросил | Перехвачено и залогировано; проверка завершается. |
 | Замер свободного места не удался (том пропал, нет прав) | Логируется циклом; повтор на следующем интервале — хост остаётся жив. |
 
+---
+
+## FilePathResolver
+
+Компонент этого же пакета, пространство имён `Sa.Data.TempFolder.FilePathResolver`.
+
+Резолвит нечёткие / неточные пути (как они хранятся в базе данных) в реальные пути файловой системы.
+Каждый найденный маппинг кэшируется по пути из БД, поэтому повторный запрос — это чтение словаря
+и один файловый пробник.
+
+Публичный контур: `IFilePathResolver` (тип сервиса для DI), `FilePathResolver` (реализация по
+умолчанию, включая флент-настройку) и `IFileSystemService` (шов к диску; дисковая
+`DefaultFileSystemService` остаётся `internal`).
+
+Каскад резолва (побеждает первое совпадение):
+
+1. **Direct** — путь из БД существует в файловой системе буквально.
+2. **Relative** — путь существует относительно `ConfiguredPath`.
+3. **Incremental** — завершающие компоненты каталога из БД сопоставляются с
+   каталогами под `ConfiguredPath`, от внутреннего к внешнему — поэтому потерянный
+   ведущий префикс (`/storage/usbdisk1/mikopbx/astspool/monitor/2021/06/16/15/file.mp3` →
+   `<root>/2021/06/16/15/file.mp3`) всё равно резолвится.
+4. **Deep search** (по включению) — рекурсивный поиск по имени файла. Совпадения **не** кэшируются:
+   файл, найденный где угодно в дереве, не несёт маппинга каталога.
+
+| Метод | Описание |
+|--------|-------------|
+| `ResolvePath(string, bool asRelativePath = false)` | Резолвит путь из БД или возвращает `null`, если файл найти не удалось. Бросает `ArgumentException` при `null`/пробелах. |
+| `WithPossibleExtensions(params string[])` | Расширения, перебираемые при нечётком поиске, если точное имя не найдено (`"mp3"` и `".mp3"` эквивалентны). |
+| `WithDeepSearch(bool)` | Включает / выключает рекурсивный поиск по имени файла. |
+| `WithForceSearch(bool)` | Если включён, каждый вызов заново прогоняет весь каскад вместо чтения пофайлового кэша. |
+| `WithMap(string)` | Явный глобальный маппинг, применяемый до каскада: пути из БД, начинающиеся с `map`, ищутся напрямую под `ConfiguredPath`. |
+| `IsResolved` / `IsDeepSearch` / `IsForceSearchEnabled` | Текущее состояние резолвера. |
+| `Resolved` (событие) | Срабатывает один раз — при установке первого маппинга. |
+
+```csharp
+var resolver = FilePathResolver.Create("/records")
+    .WithPossibleExtensions("mp3", "wav")
+    .WithDeepSearch(true);
+
+// "/storage/usbdisk1/mikopbx/astspool/monitor/2021/06/16/15/has-root.mp3"
+//   → /records/2021/06/16/15/has-root.mp3  (совпадение по суффиксу каталога)
+string? full = resolver.ResolvePath(dbPath);
+string? rel  = resolver.ResolvePath(dbPath, asRelativePath: true); // "2021/06/16/15/has-root.mp3"
+```
+
+### Регистрация (keyed, как `AddSaTempFolder`)
+
+| Вызов | Описание |
+|------|-------------|
+| `services.AddFilePathResolver(name, configuredPath, configure?)` | Регистрирует `IFilePathResolver` под ключом `name` — один хост может обслуживать несколько именованных корней. |
+| `services.AddFilePathResolver(configuredPath, configure?)` | То же под ключом по умолчанию `Setup.DefaultName` (`"default"`, класс `Setup` резолвера в `Sa.Data.TempFolder.FilePathResolver`). |
+| `sp.GetRequiredKeyedService<IFilePathResolver>(name)` | Резолвит инстанс — обычный `GetRequiredService<IFilePathResolver>()` keyed-сервисы не находит. |
+
+- Имена регистрации должны быть уникальны: дубликат бросает `InvalidOperationException` при
+  регистрации; `null`/пробелы в `name` или `configuredPath` → `ArgumentException`.
+- Регистрация ленивая: отсутствующий корень проявится как `DirectoryNotFoundException` при
+  первом резолве — но не при регистрации.
+- `configure` выполняется один раз, при построении инстанса, и — та же флент-цепочка, что и
+  при прямой сборке: `r => r.WithMap(...).WithPossibleExtensions(...).WithDeepSearch(true)`.
+- Шов к диску: сначала keyed `IFileSystemService` (на конкретную регистрацию), затем обычный,
+  иначе — дисковая реализация по умолчанию.
+
+```csharp
+builder.Services.AddFilePathResolver("records", "/data/records",
+    r => r.WithPossibleExtensions("mp3", "wav").WithDeepSearch(true));
+
+// где-то дальше:
+var resolver = sp.GetRequiredKeyedService<IFilePathResolver>("records");
+string? full = resolver.ResolvePath(dbPath);
+string? rel  = resolver.ResolvePath(dbPath, asRelativePath: true);
+```

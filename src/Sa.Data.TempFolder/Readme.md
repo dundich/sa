@@ -22,6 +22,7 @@ Temporary directory management: path-guarded subfolders under a root, debounced 
 - [Read-only mode](#read-only-mode)
 - [Options Reference](#options-reference)
 - [Error Handling](#error-handling)
+- [FilePathResolver](#filepathresolver)
 
 ---
 
@@ -283,3 +284,75 @@ Validation is an explicit `IValidateOptions` (`ValidateOnStart()`), not `Validat
 | `OnFreeSpaceReached` handler throws | Caught and logged; the check completes. |
 | Free-space probe fails (volume gone, permission denied) | Logged by the loop; retried at the next interval — the host stays up. |
 
+---
+
+## FilePathResolver
+
+Companion component of this package, namespace `Sa.Data.TempFolder.FilePathResolver`.
+
+Resolves fuzzy / imprecise paths (as stored in a database) into real paths on the file system.
+Every discovered mapping is cached per database path, so subsequent lookups are a dictionary
+read plus a single file probe.
+
+Public surface: `IFilePathResolver` (the DI service type), `FilePathResolver` (the default
+implementation, fluent configuration included) and `IFileSystemService` (the disk seam; the
+disk-backed `DefaultFileSystemService` stays `internal`).
+
+Resolution cascade (first hit wins):
+
+1. **Direct** — the database path is an absolute path that literally exists.
+2. **Relative** — the path exists relative to `ConfiguredPath`.
+3. **Incremental** — trailing components of the database directory are matched against
+   directories under `ConfiguredPath`, innermost first — so a lost leading prefix
+   (`/storage/usbdisk1/mikopbx/astspool/monitor/2021/06/16/15/file.mp3` →
+   `<root>/2021/06/16/15/file.mp3`) still resolves.
+4. **Deep search** (opt-in) — recursive search by file name. Hits are *not* cached:
+   a file found anywhere in the tree carries no directory mapping.
+
+| Method | Description |
+|--------|-------------|
+| `ResolvePath(string, bool asRelativePath = false)` | Resolves the database path, or returns `null` when the file cannot be located. Throws `ArgumentException` on null/whitespace. |
+| `WithPossibleExtensions(params string[])` | Extensions tried during fuzzy search when the exact name misses (`"mp3"` and `".mp3"` are equivalent). |
+| `WithDeepSearch(bool)` | Enables / disables recursive search by file name. |
+| `WithForceSearch(bool)` | When enabled, every call re-runs the full cascade instead of reading the per-file cache. |
+| `WithMap(string)` | Explicit global mapping applied before the cascade: database paths starting with `map` are looked up directly under `ConfiguredPath`. |
+| `IsResolved` / `IsDeepSearch` / `IsForceSearchEnabled` | Current resolver state. |
+| `Resolved` (event) | Raised once, when the first mapping is established. |
+
+```csharp
+var resolver = FilePathResolver.Create("/records")
+    .WithPossibleExtensions("mp3", "wav")
+    .WithDeepSearch(true);
+
+// "/storage/usbdisk1/mikopbx/astspool/monitor/2021/06/16/15/has-root.mp3"
+//   → /records/2021/06/16/15/has-root.mp3  (directory-suffix match)
+string? full = resolver.ResolvePath(dbPath);
+string? rel  = resolver.ResolvePath(dbPath, asRelativePath: true); // "2021/06/16/15/has-root.mp3"
+```
+
+### Registration (keyed, as `AddSaTempFolder`)
+
+| Call | Description |
+|------|-------------|
+| `services.AddFilePathResolver(name, configuredPath, configure?)` | Registers `IFilePathResolver` under `name` — one host can serve several named roots. |
+| `services.AddFilePathResolver(configuredPath, configure?)` | The same under the default key `Setup.DefaultName` (`"default"`, the resolver's `Setup` class in `Sa.Data.TempFolder.FilePathResolver`). |
+| `sp.GetRequiredKeyedService<IFilePathResolver>(name)` | Resolves the instance — a bare `GetRequiredService<IFilePathResolver>()` does not resolve keyed services. |
+
+- Registration names must be unique: a duplicate throws `InvalidOperationException` at
+  registration; a null/whitespace `name` or `configuredPath` throws `ArgumentException`.
+- Registration is lazy: a root that does not exist surfaces as `DirectoryNotFoundException`
+  at first resolve — never at registration.
+- `configure` runs once, when the instance is built, and is the same fluent chain as direct
+  construction: `r => r.WithMap(...).WithPossibleExtensions(...).WithDeepSearch(true)`.
+- The disk seam resolves a keyed `IFileSystemService` first (per registration), then a plain
+  one, and falls back to the disk-backed default.
+
+```csharp
+builder.Services.AddFilePathResolver("records", "/data/records",
+    r => r.WithPossibleExtensions("mp3", "wav").WithDeepSearch(true));
+
+// somewhere later:
+var resolver = sp.GetRequiredKeyedService<IFilePathResolver>("records");
+string? full = resolver.ResolvePath(dbPath);
+string? rel  = resolver.ResolvePath(dbPath, asRelativePath: true);
+```
