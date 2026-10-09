@@ -47,7 +47,8 @@ public interface ITempFolder : IDisposable
     /// cleanup pass: a concurrent pass is cancelled rather than allowed to race it (see
     /// <see cref="CleanupExpiredAsync"/>). When the source's remaining length is known
     /// (<see cref="Stream.CanSeek"/>), the target file is preallocated to exactly that size so it
-    /// never grows in chunks during the copy.
+    /// never grows in chunks during the copy. A failed or cancelled copy removes the partially
+    /// written target — no half-written file is left behind for a reader to take for complete.
     /// </summary>
     /// <param name="source">The stream to copy from; its current position is respected.</param>
     /// <param name="path">
@@ -105,7 +106,10 @@ public interface ITempFolder : IDisposable
     /// deletion always gives way (see <see cref="CleanupExpiredAsync"/>). A successful read also
     /// counts as activity: like a write it refreshes (debounced) the last write time of the file's
     /// own directory and every ancestor up to the root, so a folder that is only ever read from
-    /// does not age out. Reading is allowed on a read-only instance.
+    /// does not age out. Only the open of the file may race a vanish (that reads as
+    /// <see langword="false"/>); exceptions the callback itself raises — a
+    /// <see cref="FileNotFoundException"/> from the caller's own code, say — propagate unchanged.
+    /// Reading is allowed on a read-only instance.
     /// </summary>
     /// <param name="path">
     /// File path, including the file name: relative to the root or absolute — an absolute path
@@ -173,7 +177,9 @@ public interface ITempFolder : IDisposable
 
     /// <summary>
     /// Asynchronously enumerates files matching <paramref name="pattern"/> and returns their
-    /// absolute paths.
+    /// absolute paths. The whole enumeration is one activity against the cleanup pass: a pass
+    /// cannot start or keep deleting while the walk is in flight, so the caller sees a consistent
+    /// snapshot of the tree (see <see cref="CleanupExpiredAsync"/>).
     /// </summary>
     /// <param name="pattern">File pattern, e.g. <c>"*.dat"</c> or <c>"report_?.csv"</c> — the
     /// pattern is a pattern, not a path, so <c>*</c>/<c>?</c> are allowed there.</param>
@@ -200,17 +206,19 @@ public interface ITempFolder : IDisposable
     /// <remarks>
     /// The pass always yields to file activity: it does not start while a
     /// <see cref="WriteAsync"/> / <see cref="CopyFileAsync"/> / <see cref="ReadAsync"/> /
-    /// <see cref="DeleteFileAsync"/> / <see cref="CreateSubfolder"/> is in flight (returns 0; the next
-    /// pass retries), a read, write or delete arriving mid-pass ends the deletion by cancellation
-    /// at its next checkpoint, and a folder whose debounced activity marker has not landed yet is
+    /// <see cref="DeleteFileAsync"/> / <see cref="CreateSubfolder"/> /
+    /// <see cref="EnumerateFilesAsync"/> is in flight (returns 0; the next pass retries), a read,
+    /// write, delete or enumeration arriving mid-pass ends the deletion by cancellation at its next
+    /// checkpoint, and a folder whose debounced activity marker has not landed yet is
     /// skipped — a just-accessed (written or read) file is never deleted.
     /// </remarks>
     /// <param name="cancellationToken">Cancellation token; also surfaces as the pass token that an
     /// arriving write cancels (an interruption by activity does not throw — the partial count is
     /// returned instead).</param>
     /// <returns>
-    /// The number of subfolders deleted by this pass. Always 0 for a read-only instance, and for a
-    /// pass that was cancelled before deleting anything.
+    /// The number of subfolders this pass actually deleted. Always 0 for a read-only instance, for
+    /// a pass that was cancelled before deleting anything, and for candidates that vanished
+    /// out-of-band between selection and deletion — a vanished folder is not counted as deleted.
     /// </returns>
     ValueTask<int> CleanupExpiredAsync(CancellationToken cancellationToken = default);
 

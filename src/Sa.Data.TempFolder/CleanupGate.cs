@@ -2,10 +2,11 @@ namespace Sa.Data.TempFolder;
 
 /// <summary>
 /// Serialises cleanup deletion against the instance's file activity: <c>WriteAsync</c> /
-/// <c>CopyFileAsync</c> / <c>ReadAsync</c> / <c>DeleteFileAsync</c> / <c>CreateSubfolder</c> and
-/// the debounced activity-marker walk enter through <see cref="EnterActivityAsync"/> (shared —
-/// operations run side by side), while a cleanup pass enters through <see cref="TryEnterCleanup"/>
-/// (exclusive) — and deletion is always the side that gives way.
+/// <c>CopyFileAsync</c> / <c>ReadAsync</c> / <c>DeleteFileAsync</c> / <c>CreateSubfolder</c> /
+/// <c>EnumerateFilesAsync</c> and the debounced activity-marker walk enter through
+/// <see cref="EnterActivityAsync"/> (shared — operations run side by side), while a cleanup pass
+/// enters through <see cref="TryEnterCleanup"/> (exclusive) — and deletion is always the side that
+/// gives way.
 /// </summary>
 /// <remarks>
 /// Two rules make the exclusion complete:

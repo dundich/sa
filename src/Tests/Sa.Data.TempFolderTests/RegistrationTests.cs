@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Sa.Data.TempFolder;
-using TempFolderImpl = Sa.Data.TempFolder.TempFolder;
+using Sa.Data.TempFolder.Cleanup;
 
 namespace Sa.Data.TempFolderTests;
 
@@ -108,6 +108,57 @@ public sealed class RegistrationTests : IDisposable
     }
 
     [Fact]
+    public void Register_SystemTempRootWithoutPrefix_FailsValidation()
+    {
+        // The system temp folder is shared: an unscoped (empty-prefix) instance would treat every
+        // top-level folder there as its own and age-based-clean it away. Reject at validation.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("sysscope",
+            b => b.Options(o => o.Configure(x => x.RootPath = Path.GetTempPath())));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredKeyedService<ITempFolder>("sysscope"));
+
+        Assert.Contains("FolderPrefix", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("system temp", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Register_SystemTempRootWithPrefix_Resolves()
+    {
+        // A prefix scopes the instance to its own folders — the system temp root is then usable.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("sysscope", b => b.Options(o => o.Configure(x =>
+        {
+            x.RootPath = Path.GetTempPath();
+            x.FolderPrefix = "sa_";
+        })));
+
+        using var provider = services.BuildServiceProvider();
+        var folder = provider.GetRequiredKeyedService<ITempFolder>("sysscope");
+
+        // Resolving constructs only — nothing is created in the system temp folder.
+        Assert.Equal(
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())),
+            Path.TrimEndingDirectorySeparator(folder.RootPath));
+    }
+
+    [Fact]
+    public void Register_PrivateRootWithoutPrefix_Resolves()
+    {
+        // A dedicated root needs no prefix: its folders all belong to this instance anyway.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("private", b => b.Options(o => o.Configure(x => x.RootPath = _root)));
+
+        using var provider = services.BuildServiceProvider();
+        var folder = provider.GetRequiredKeyedService<ITempFolder>("private");
+
+        Assert.Equal(Path.GetFullPath(_root), folder.RootPath);
+    }
+
+    [Fact]
     public void Register_PostConfiguresRootToAFullPath()
     {
         var services = new ServiceCollection();
@@ -141,7 +192,7 @@ public sealed class RegistrationTests : IDisposable
         services.AddSaTempFolder("cfg", b => b.FromConfiguration("TempFolder"));
 
         using var provider = services.BuildServiceProvider();
-        var folder = (TempFolderImpl)provider.GetRequiredKeyedService<ITempFolder>("cfg");
+        var folder = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("cfg");
         var options = folder.OptionsSnapshot;
 
         Assert.Equal(Path.GetFullPath(_root), options.RootPath);
@@ -179,7 +230,7 @@ public sealed class RegistrationTests : IDisposable
             })));
 
         using var provider = services.BuildServiceProvider();
-        var folder = (TempFolderImpl)provider.GetRequiredKeyedService<ITempFolder>("code");
+        var folder = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("code");
 
         Assert.Equal("from_code_", folder.OptionsSnapshot.FolderPrefix);
         Assert.NotNull(folder.OptionsSnapshot.OnVolumeExceeded);
@@ -192,10 +243,12 @@ public sealed class RegistrationTests : IDisposable
     public void Register_Defaults_ApplyWhenNothingElseSetsTheValue()
     {
         var services = new ServiceCollection();
-        services.AddSaTempFolder("seed", b => b.Defaults(x => x.MaxAge = TimeSpan.FromDays(30)));
+        services.AddSaTempFolder("seed", b => b
+            .Defaults(x => x.MaxAge = TimeSpan.FromDays(30))
+            .Options(o => o.Configure(x => x.RootPath = _root)));
 
         using var provider = services.BuildServiceProvider();
-        var folder = (TempFolderImpl)provider.GetRequiredKeyedService<ITempFolder>("seed");
+        var folder = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("seed");
 
         Assert.Equal(TimeSpan.FromDays(30), folder.OptionsSnapshot.MaxAge);
     }
@@ -207,6 +260,7 @@ public sealed class RegistrationTests : IDisposable
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["TempFolder:RootPath"] = _root,
                 ["TempFolder:MaxAge"] = "1.00:00:00",
             })
             .Build();
@@ -218,7 +272,7 @@ public sealed class RegistrationTests : IDisposable
             .FromConfiguration("TempFolder"));
 
         using var provider = services.BuildServiceProvider();
-        var folder = (TempFolderImpl)provider.GetRequiredKeyedService<ITempFolder>("layered");
+        var folder = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("layered");
 
         Assert.Equal(TimeSpan.FromDays(1), folder.OptionsSnapshot.MaxAge);
     }
@@ -229,10 +283,14 @@ public sealed class RegistrationTests : IDisposable
         var services = new ServiceCollection();
         services.AddSaTempFolder("beats", b => b
             .Defaults(x => x.MaxAge = TimeSpan.FromDays(30))
-            .Options(ob => ob.Configure(x => x.MaxAge = TimeSpan.FromDays(60))));
+            .Options(ob => ob.Configure(x =>
+            {
+                x.RootPath = _root;
+                x.MaxAge = TimeSpan.FromDays(60);
+            })));
 
         using var provider = services.BuildServiceProvider();
-        var folder = (TempFolderImpl)provider.GetRequiredKeyedService<ITempFolder>("beats");
+        var folder = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("beats");
 
         Assert.Equal(TimeSpan.FromDays(60), folder.OptionsSnapshot.MaxAge);
     }
@@ -279,5 +337,33 @@ public sealed class RegistrationTests : IDisposable
 
         var folder = provider.GetRequiredKeyedService<ITempFolder>(Setup.DefaultName);
         Assert.Equal(Path.GetFullPath(_root), folder.RootPath);
+    }
+
+    [Fact]
+    public void Register_CodeOverrideStrategies_AreOneInstancePerRegistration()
+    {
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("one", b => b
+            .Options(o => o.Configure(x => x.RootPath = _root))
+            .UseCleanupStrategy<TrackingCleanupStrategy>());
+        services.AddSaTempFolder("two", b => b
+            .Options(o => o.Configure(x => x.RootPath = _root))
+            .UseCleanupStrategy<TrackingCleanupStrategy>());
+
+        using var provider = services.BuildServiceProvider();
+
+        var first = provider.GetRequiredKeyedService<TrackingCleanupStrategy>("one");
+        var second = provider.GetRequiredKeyedService<TrackingCleanupStrategy>("two");
+
+        // A stateful strategy must not leak its state across instances: each registration owns
+        // its own instance, while resolving the same key twice stays a singleton.
+        Assert.NotSame(first, second);
+        Assert.Same(first, provider.GetRequiredKeyedService<TrackingCleanupStrategy>("one"));
+    }
+
+    /// <summary>Code-override sample with no behaviour — only identity matters here.</summary>
+    private sealed class TrackingCleanupStrategy : ICleanupStrategy
+    {
+        public IReadOnlyList<string> SelectForDeletion(CleanupContext context) => [];
     }
 }

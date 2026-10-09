@@ -9,8 +9,9 @@ namespace Sa.Data.TempFolder;
 /// <summary>
 /// Guards every path handed to a temp-folder operation: resolves it against the instance root —
 /// absolute or relative — and rejects everything hostile: results that land outside the root,
-/// <c>..</c> segments (even when they would stay inside), and injection-style characters
-/// (<c>~</c>, <c>&gt;</c>, shell metacharacters, control and invisible Unicode characters).
+/// <c>..</c> segments (even when they would stay inside), injection-style characters
+/// (<c>~</c>, <c>&gt;</c>, shell metacharacters, control and invisible Unicode characters), and
+/// paths that pass through a symbolic link inside the root.
 /// </summary>
 /// <remarks>
 /// Every public entry point that takes a path goes through <see cref="Resolve"/> (or
@@ -26,6 +27,11 @@ namespace Sa.Data.TempFolder;
 /// tricks such as U+202E), the <c>..</c> segment on either separator, and — on Windows — a colon
 /// outside the <c>C:</c> drive spec (NTFS alternate data streams). Tilde is never expanded to a
 /// home directory, it is rejected outright.
+/// </para>
+/// <para>
+/// <b>Symlinks.</b> Resolving is textual, so creation paths are additionally checked component by
+/// component (<see cref="AssertNoSymlinkComponents"/>): a link planted inside the root must not
+/// redirect a write to its target, wherever that target lives.
 /// </para>
 /// </remarks>
 public static class PathGuard
@@ -179,6 +185,85 @@ public static class PathGuard
             : root + Path.DirectorySeparatorChar;
 
         return full.StartsWith(rootWithSeparator, s_comparison);
+    }
+
+    /// <summary>
+    /// Determines whether <paramref name="path"/> is a symbolic link or junction.
+    /// </summary>
+    /// <remarks>
+    /// A path that does not exist — or that cannot be inspected — is reported as <b>not</b> a
+    /// link: there is no link to follow, and a later filesystem operation will either create the
+    /// entry or fail on its own terms. <see cref="FileSystemInfo.LinkTarget"/> is used because it
+    /// works for both files and directories and, unlike <c>File.Exists</c>/<c>Directory.Exists</c>,
+    /// also recognises a link whose target is missing.
+    /// </remarks>
+    public static bool IsSymlink(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+
+        try
+        {
+            if (new DirectoryInfo(path).LinkTarget is not null)
+            {
+                return true;
+            }
+
+            return new FileInfo(path).LinkTarget is not null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Rejects <paramref name="absolutePath"/> when any component between
+    /// <paramref name="rootPath"/> and the target — the target included — is a symbolic link or
+    /// junction.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Resolve"/> alone is not enough: it normalises the <i>textual</i> path, while the
+    /// filesystem may still redirect a component through a link. <c>root/payload → /etc</c>,
+    /// followed by a write to <c>root/payload/app.conf</c>, lands outside the root — no <c>..</c>
+    /// required. Components that do not exist yet (about to be created) are skipped, which is why
+    /// a freshly created name can never be a pre-planted link; the root itself is trusted
+    /// (validated configuration) and is not probed.
+    /// </remarks>
+    /// <exception cref="SecurityException">
+    /// A component of the path is a symlink or junction, or the path is outside the root.
+    /// </exception>
+    public static void AssertNoSymlinkComponents(string rootPath, string absolutePath)
+    {
+        ArgumentNullException.ThrowIfNull(rootPath);
+        ArgumentNullException.ThrowIfNull(absolutePath);
+
+        var root = Path.GetFullPath(rootPath);
+        var full = Path.GetFullPath(absolutePath);
+
+        if (!IsInside(root, full))
+        {
+            throw new SecurityException(
+                $"Path '{absolutePath}' is outside the temp root '{root}'.");
+        }
+
+        var relative = Path.GetRelativePath(root, full);
+        if (relative is "." or "")
+        {
+            return; // the root itself — trusted
+        }
+
+        var current = root;
+        foreach (var segment in relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+        {
+            current = Path.Combine(current, segment);
+
+            if (IsSymlink(current))
+            {
+                throw new SecurityException(
+                    $"Path '{absolutePath}' passes through symlink '{current}'; temp-folder paths " +
+                    $"must stay physically inside the root '{root}'.");
+            }
+        }
     }
 
     /// <summary>

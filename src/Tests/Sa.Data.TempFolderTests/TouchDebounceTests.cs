@@ -203,4 +203,16 @@ public sealed class TouchDebounceTests : IDisposable
         Assert.Equal(stale, Directory.GetLastWriteTimeUtc(foo));
         provider.Dispose();
     }
+
+    [Fact]
+    public void RootNormalisation_KeepsAFilesystemOrDriveRootIntact()
+    {
+        // A root that is itself "/" or "C:\" must keep its separator: trimming it would leave the
+        // relative-looking "C:" and the upward walk would stop at the wrong string.
+        var filesystemRoot = Path.GetPathRoot(Path.GetFullPath(_root))!;
+
+        using var debouncer = new TouchDebouncer(new CleanupGate(), filesystemRoot, TimeSpan.Zero);
+
+        Assert.Equal(filesystemRoot, debouncer.NormalisedRootPath);
+    }
 }

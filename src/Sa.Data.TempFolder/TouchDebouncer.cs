@@ -46,14 +46,16 @@ internal sealed class TouchDebouncer : IDisposable
         _timeProvider = timeProvider ?? TimeProvider.System;
 
         // Trimmed, so the upward walk recognises its stop even when the configured root kept a
-        // trailing separator.
-        var root = Path.GetFullPath(rootPath);
-        _rootPath = root.Length > 1
-            ? root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            : root;
+        // trailing separator — while a drive/filesystem root ("C:\", "/") keeps its separator
+        // (TrimEnd would have turned "C:\" into the relative-looking "C:").
+        _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
 
         _delay = delay;
     }
+
+    /// <summary>The normalised root the upward walk stops at — exposed so the drive/filesystem
+    /// root case (<c>"C:\"</c>, <c>"/"</c>) can be asserted.</summary>
+    internal string NormalisedRootPath => _rootPath;
 
     /// <summary>
     /// Schedules (or re-arms) the debounced touch of <paramref name="absoluteFolderPath"/> — a

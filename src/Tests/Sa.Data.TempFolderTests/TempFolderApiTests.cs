@@ -670,6 +670,39 @@ public sealed class TempFolderApiTests : IDisposable
     // ---------- EnumerateFilesAsync ----------
 
     [Fact]
+    public async Task Enumerate_HoldsTheActivityGate_SoCleanupYields()
+    {
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        var expired = Path.Combine(_root, "up_exp");
+        Directory.CreateDirectory(expired);
+        await File.WriteAllTextAsync(Path.Combine(expired, "a.bin"), "a", TestTemp.Token);
+        TestTemp.MakeExpired(expired);
+
+        // The token is captured into a local: the analyzer cannot track
+        // TestContext.Current.CancellationToken through a wrapper property, and the
+        // IAsyncEnumerable extension's token argument is what xUnit wants to see.
+#pragma warning disable xUnit1051 // TestTemp.Token is TestContext.Current.CancellationToken
+        await using var enumerator = folder.EnumerateFilesAsync(
+            "*.bin", recursive: true).GetAsyncEnumerator(TestTemp.Token);
+#pragma warning restore xUnit1051
+
+        Assert.True(await enumerator.MoveNextAsync()); // enumeration in flight — lease held
+
+        // A cleanup pass does not start while the enumeration is running: the tree the caller is
+        // walking cannot be deleted out from under it.
+        Assert.Equal(0, await folder.CleanupExpiredAsync(TestTemp.Token));
+        Assert.True(Directory.Exists(expired));
+
+        await enumerator.DisposeAsync(); // lease released
+
+        // …and the very next pass does its job (the yield was the gate, not a failure).
+        Assert.Equal(1, await folder.CleanupExpiredAsync(TestTemp.Token));
+        Assert.False(Directory.Exists(expired));
+    }
+
+    [Fact]
     public async Task Enumerate_MatchesPattern_AndScopesToTheSubfolder()
     {
         using var provider = Build();
@@ -738,6 +771,38 @@ public sealed class TempFolderApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Download_CallbackFileNotFoundException_Propagates()
+    {
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        await File.WriteAllTextAsync(Path.Combine(_root, "f.txt"), "payload", TestTemp.Token);
+
+        // The file exists and its stream is handed to the callback; a FileNotFoundException the
+        // callback itself raises is the callback's business and must reach the caller — not be
+        // turned into this folder's "no file".
+        await Assert.ThrowsAsync<FileNotFoundException>(async () =>
+            await folder.ReadAsync(
+                "f.txt",
+                (_, _) => throw new FileNotFoundException("raised by the callback"),
+                TestTemp.Token));
+    }
+
+    [Fact]
+    public async Task Upload_FailedCopy_RemovesThePartialFile()
+    {
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        await Assert.ThrowsAsync<IOException>(async () =>
+            await folder.WriteAsync(new FailsAfterFirstReadStream(), "partial.bin", TestTemp.Token));
+
+        // No half-written file is left behind for a reader to mistake for a complete one (and for
+        // a later CreateNew write to trip over).
+        Assert.False(File.Exists(Path.Combine(_root, "partial.bin")));
+    }
+
+    [Fact]
     public void Operations_AfterDispose_AreRejected()
     {
         var provider = Build();
@@ -747,6 +812,50 @@ public sealed class TempFolderApiTests : IDisposable
 
         Assert.Throws<ObjectDisposedException>(() => folder.CreateSubfolder());
         provider.Dispose();
+    }
+
+    /// <summary>
+    /// Non-seekable source that hands out one byte and then fails — a copy interrupted mid-flight
+    /// (no preallocation, so the target only ever holds the bytes the failed copy wrote).
+    /// </summary>
+    private sealed class FailsAfterFirstReadStream : Stream
+    {
+        private int _reads;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_reads++ == 0)
+            {
+                buffer.Span[0] = 1;
+                return ValueTask.FromResult(1);
+            }
+
+            throw new IOException("copy failed mid-stream");
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+            => ReadAsync(buffer.AsMemory(offset, count), CancellationToken.None)
+                .AsTask().GetAwaiter().GetResult();
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     /// <summary>

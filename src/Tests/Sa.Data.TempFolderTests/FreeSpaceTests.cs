@@ -4,10 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sa.Data.TempFolder;
 
-// Inside Sa.Data.TempFolderTests the simple name "TempFolder" binds to the sibling *namespace*
-// Sa.Data.TempFolder before any using comes into play — the implementation class needs an alias.
-using TempFolderImpl = Sa.Data.TempFolder.TempFolder;
-
 namespace Sa.Data.TempFolderTests;
 
 /// <summary>
@@ -172,11 +168,11 @@ public sealed class FreeSpaceTests : IDisposable
     public void FreeSpaceCheck_IsGatedOnAMinFreeSpaceLimit()
     {
         using var off = Build(); // по умолчанию лимита нет
-        var offFolder = (TempFolderImpl)off.GetRequiredKeyedService<ITempFolder>("fs");
+        var offFolder = (Sa.Data.TempFolder.TempFolder)off.GetRequiredKeyedService<ITempFolder>("fs");
         Assert.False(offFolder.HasFreeSpaceCheck());
 
         using var on = Build(o => o.MinFreeSpace = 1024);
-        var onFolder = (TempFolderImpl)on.GetRequiredKeyedService<ITempFolder>("fs");
+        var onFolder = (Sa.Data.TempFolder.TempFolder)on.GetRequiredKeyedService<ITempFolder>("fs");
         Assert.True(onFolder.HasFreeSpaceCheck());
     }
 

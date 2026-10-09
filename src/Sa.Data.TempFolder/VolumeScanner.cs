@@ -18,8 +18,15 @@ namespace Sa.Data.TempFolder;
 /// <para>
 /// <b>Cache.</b> A subfolder whose last write time is unchanged since the previous scan reuses its
 /// cached size — only touched or modified folders are re-walked. Entries for folders that vanished
-/// are dropped. Nothing is ever measured unless <see cref="TempFolderOptions.TrackVolume"/> is on
+/// are dropped, and deletions performed through the instance additionally invalidate the affected
+/// top-level entry right away (see <see cref="Invalidate"/>), since a deep delete alone never
+/// moves that folder's stamp. Nothing is ever measured unless <see cref="TempFolderOptions.TrackVolume"/> is on
 /// and a positive <see cref="TempFolderOptions.MaxTotalSize"/> is configured.
+/// </para>
+/// <para>
+/// <b>Symlinks.</b> Symbolic links are neither followed nor counted — at the top level or nested.
+/// Their content belongs to the link's target (which may even cycle back), so following one would
+/// both inflate the total with someone else's bytes and risk a walk that never ends.
 /// </para>
 /// <para>
 /// <b>Edge-triggered event.</b> The delegate fires once on the transition into "over the limit"
@@ -66,6 +73,14 @@ internal sealed class VolumeScanner
             foreach (var dir in Directory.EnumerateDirectories(_rootPath))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (PathGuard.IsSymlink(dir))
+                {
+                    // Not our tree: the folder is a link and its content lives elsewhere — never
+                    // measured (nor cached), so a planted link cannot inflate the total and a
+                    // link cycle cannot spin the walk.
+                    continue;
+                }
 
                 seen.Add(dir);
                 total += MeasureFolder(dir, cancellationToken);
@@ -202,6 +217,33 @@ internal sealed class VolumeScanner
         return total;
     }
 
+    /// <summary>
+    /// Drops the cached size of the top-level subfolder <paramref name="absolutePath"/> belongs to,
+    /// so the next scan re-walks it. Called after a successful deletion: deleting deep inside a
+    /// hierarchy does not move the top-level folder's last write time — the cache is keyed by
+    /// exactly that stamp — and would otherwise keep serving the pre-delete total until some later
+    /// write happens to touch the ancestor chain. A path directly in the root needs no help: the
+    /// root's own stamp moves with it.
+    /// </summary>
+    /// <exception cref="SecurityException">The path is outside the root — nothing to invalidate.</exception>
+    public void Invalidate(string absolutePath)
+    {
+        var top = PathGuard.TopSegment(_rootPath, absolutePath);
+        if (top is null)
+        {
+            return; // sits directly in the root — its stamp already moved
+        }
+
+        // Same construction as Directory.EnumerateDirectories(_rootPath) uses for its results,
+        // so the key matches the cache textually.
+        var key = Path.Combine(_rootPath, top);
+
+        lock (_gate)
+        {
+            _cache.Remove(key);
+        }
+    }
+
     private void PruneCache(HashSet<string> seenFolders)
     {
         lock (_gate)
@@ -230,6 +272,15 @@ internal sealed class VolumeScanner
             }
 
             var exceeded = total > options.MaxTotalSize;
+
+            if (_exceeded is null && !exceeded)
+            {
+                // First reading and already within the limit: record the state silently — there is
+                // no "recovery" to announce (FreeSpaceMonitor does the same). A first reading *over*
+                // the limit falls through: that is a real entry into the state and does fire.
+                _exceeded = false;
+                return;
+            }
 
             if (_exceeded == exceeded)
             {
@@ -315,20 +366,26 @@ internal sealed class VolumeScanner
 
     /// <summary>
     /// Every file, including hidden and system ones: <see cref="EnumerationOptions"/> skips
-    /// <c>Hidden|System</c> by default, which would silently under-count the volume.
+    /// <c>Hidden|System</c> by default, which would silently under-count the volume. Reparse
+    /// points are skipped explicitly: following a linked directory would count — and recurse
+    /// into — content outside the root, and a link cycle would never finish.
     /// </summary>
     private static readonly EnumerationOptions AllFiles = new()
     {
         RecurseSubdirectories = true,
         IgnoreInaccessible = true,
-        AttributesToSkip = 0,
+        AttributesToSkip = FileAttributes.ReparsePoint,
     };
 
+    /// <summary>
+    /// Loose files directly in the root: hidden and system ones count, links do not (their
+    /// length is the target's, which is not this instance's volume).
+    /// </summary>
     private static readonly EnumerationOptions TopLevelFiles = new()
     {
         RecurseSubdirectories = false,
         IgnoreInaccessible = true,
-        AttributesToSkip = 0,
+        AttributesToSkip = FileAttributes.ReparsePoint,
     };
 
     private readonly record struct CachedFolder(DateTimeOffset Stamp, long Size);

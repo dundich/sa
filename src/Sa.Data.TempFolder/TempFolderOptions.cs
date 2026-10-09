@@ -305,5 +305,43 @@ public sealed class TempFolderOptions
         {
             throw new ValidationException($"Unknown Naming strategy value: {Naming}.");
         }
+
+        // Cross-field scope check — deliberately last, so the single-field messages above are
+        // reported first. The system temp directory is shared with every other process: with an
+        // empty FolderPrefix the age-based cleanup would treat *every* top-level folder under it
+        // as this instance's own and delete it. Require an explicit scope instead of silently
+        // cleaning up other applications' files.
+        if (string.IsNullOrEmpty(FolderPrefix) && IsSystemTempDirectory(RootPath))
+        {
+            throw new ValidationException(
+                $"RootPath '{RootPath}' is the system temp directory ('{Path.GetTempPath()}'), which is " +
+                "shared with other processes — age-based cleanup without a scope would delete their folders. " +
+                "Set FolderPrefix so only this instance's folders are in scope, or point RootPath at a " +
+                "dedicated directory.");
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="rootPath"/> normalises to the machine's system temp directory
+    /// (the shared folder an unscoped cleanup would treat as this instance's own). A malformed
+    /// path is not this check's problem — <see cref="Validate"/> already reported it.
+    /// </summary>
+    private static bool IsSystemTempDirectory(string rootPath)
+    {
+        try
+        {
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            return string.Equals(
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath)),
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())),
+                comparison);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 }

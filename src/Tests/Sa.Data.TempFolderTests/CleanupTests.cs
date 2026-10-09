@@ -339,6 +339,17 @@ public sealed class CleanupTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Cleanup_VanishedCandidate_IsNotCountedAsDeleted()
+    {
+        // The strategy points at a folder that is not there: nothing is deleted, so the pass must
+        // report 0 — a phantom "deleted" would inflate the metrics and the log line.
+        using var provider = Build(configure: b => b.UseCleanupStrategy<PhantomPathStrategy>());
+        var folder = Resolve(provider);
+
+        Assert.Equal(0, await folder.CleanupExpiredAsync(TestTemp.Token));
+    }
+
     /// <summary>Code-override sample: no age filter at all — everything top-level goes.</summary>
     private sealed class DeleteEverythingStrategy : ICleanupStrategy
     {
@@ -358,5 +369,12 @@ public sealed class CleanupTests : IDisposable
             var escape = Path.Combine(context.RootPath, "..", TargetName ?? "victim");
             return [Path.Combine(context.RootPath, "inside"), escape];
         }
+    }
+
+    /// <summary>Code-override sample: points at a folder that was never there.</summary>
+    private sealed class PhantomPathStrategy : ICleanupStrategy
+    {
+        public IReadOnlyList<string> SelectForDeletion(CleanupContext context)
+            => [Path.Combine(context.RootPath, "never_existed")];
     }
 }

@@ -74,6 +74,10 @@ internal sealed class TempFolder : ITempFolder
             full = PathGuard.Resolve(RootPath, subfolder);
         }
 
+        // A link planted inside the root must not redirect the new folder: creation and every
+        // later write through the returned path would otherwise land in the link's target.
+        PathGuard.AssertNoSymlinkComponents(RootPath, full);
+
         // Shared activity side: a concurrent cleanup pass can neither start while this creation
         // runs nor survive one already under way, so the returned folder cannot be taken back
         // mid-call. The wait only bites when a pass is active (and cancels it); otherwise the
@@ -144,6 +148,10 @@ internal sealed class TempFolder : ITempFolder
         var directory = string.IsNullOrWhiteSpace(subfolder)
             ? CreateSubfolder()
             : PathGuard.Resolve(RootPath, subfolder);
+
+        // Same guard as CreateSubfolder/WriteAsync: the directory (and the file name below) must
+        // not traverse a link — CreateDirectory would create the tree inside the link's target.
+        PathGuard.AssertNoSymlinkComponents(RootPath, directory);
         Directory.CreateDirectory(directory);
 
         var destination = Path.Combine(directory, fileName);
@@ -204,19 +212,15 @@ internal sealed class TempFolder : ITempFolder
             return false;
         }
 
+        // Only the open may race a vanish. The callback runs outside any catch: a
+        // FileNotFoundException raised by the caller's own code reaches it unchanged — "no file"
+        // here means *this file* is gone, not that the callback could not find something it wanted.
+        FileStream stream;
         try
         {
-            await using var stream = new FileStream(
+            stream = new FileStream(
                 full, FileMode.Open, FileAccess.Read, FileShare.Read,
                 CopyBufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-            await loadStream(stream, cancellationToken).ConfigureAwait(false);
-
-            // A read counts as activity too: without this a folder that is only ever read from
-            // would age out exactly like an unused one.
-            RequestActivity(full);
-
-            return true;
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
@@ -225,6 +229,17 @@ internal sealed class TempFolder : ITempFolder
             _logger.LogDebug(ex, "Temp folder '{Name}': read of '{Path}' found no file.", Name, full);
             return false;
         }
+
+        await using (stream)
+        {
+            await loadStream(stream, cancellationToken).ConfigureAwait(false);
+        }
+
+        // A read counts as activity too: without this a folder that is only ever read from
+        // would age out exactly like an unused one.
+        RequestActivity(full);
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -280,6 +295,11 @@ internal sealed class TempFolder : ITempFolder
                 shouldRetry: static (ex, _) => ex is IOException or UnauthorizedAccessException,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
+            // The delete does not move the top-level folder's stamp — drop the cached size so the
+            // next scan re-measures instead of serving the pre-delete total (deep deletes would
+            // otherwise never reach the recovery edge of the volume event).
+            _volumeScanner.Invalidate(full);
+
             return true;
         }
         catch (OperationCanceledException)
@@ -317,6 +337,11 @@ internal sealed class TempFolder : ITempFolder
         {
             yield break;
         }
+
+        // The whole enumeration is one activity: no cleanup pass can delete folders out from under
+        // the walk, so the caller always sees a consistent tree. Like every activity it cancels a
+        // running pass (and waits for it to unwind) instead of racing it.
+        using var lease = await _cleanupGate.EnterActivityAsync(cancellationToken).ConfigureAwait(false);
 
         var enumerationOptions = new EnumerationOptions
         {
@@ -426,6 +451,10 @@ internal sealed class TempFolder : ITempFolder
                 if (await TryDeleteAsync(path, pass.Token).ConfigureAwait(false))
                 {
                     deleted++;
+
+                    // A nested candidate's deletion leaves the top-level folder's stamp (the cache
+                    // key) untouched — invalidate so the next scan reports the real total.
+                    _volumeScanner.Invalidate(path);
                 }
             }
         }
@@ -580,6 +609,11 @@ internal sealed class TempFolder : ITempFolder
     {
         var full = PathGuard.Resolve(RootPath, path);
 
+        // Before anything is created or opened: no component — the file name included — may be a
+        // link. Overwriting through a file symlink would truncate its target, and a linked
+        // directory would take the new file outside the root.
+        PathGuard.AssertNoSymlinkComponents(RootPath, full);
+
         if (Directory.Exists(full))
         {
             throw new InvalidOperationException(
@@ -621,9 +655,19 @@ internal sealed class TempFolder : ITempFolder
             }
         }
 
-        await using (var target = new FileStream(full, targetOptions))
+        try
         {
-            await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+            await using (var target = new FileStream(full, targetOptions))
+            {
+                await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            // A failed or cancelled copy must not leave a half-written file behind: a reader
+            // would take it for complete, and a later CreateNew write would trip over the name.
+            DeletePartialWrite(full);
+            throw;
         }
 
         // Debounced activation of the file's own directory and every ancestor up to the root:
@@ -632,6 +676,23 @@ internal sealed class TempFolder : ITempFolder
         RequestActivity(full);
 
         return (Path.GetRelativePath(RootPath, full), full);
+    }
+
+    /// <summary>
+    /// Best-effort removal of a partially written target after a failed or cancelled copy. The
+    /// file is already doomed (its content is incomplete); this only stops it from masquerading as
+    /// a complete file or blocking a later <c>CreateNew</c> write.
+    /// </summary>
+    private void DeletePartialWrite(string full)
+    {
+        try
+        {
+            File.Delete(full);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        {
+            _logger.LogDebug(ex, "Temp folder '{Name}': partial file '{Path}' could not be removed.", Name, full);
+        }
     }
 
     /// <summary>
@@ -650,15 +711,21 @@ internal sealed class TempFolder : ITempFolder
 
     private async ValueTask<bool> TryDeleteAsync(string path, CancellationToken cancellationToken)
     {
+        var found = false;
+
         try
         {
             await Retry.Linear(
-                static (string target, CancellationToken token) =>
+                (string target, CancellationToken token) =>
                 {
                     // Re-check per attempt: a concurrent cleaner may have removed it already,
                     // which is success, not a retryable failure.
                     if (Directory.Exists(target))
                     {
+                        // It was there, so the removal is ours to report. Marked before the call:
+                        // an attempt that throws mid-delete and a retry that then finds it gone
+                        // must still count (the folder has effectively been removed).
+                        found = true;
                         Directory.Delete(target, recursive: true);
                     }
 
@@ -670,7 +737,9 @@ internal sealed class TempFolder : ITempFolder
                 shouldRetry: static (ex, _) => ex is IOException or UnauthorizedAccessException,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            return true;
+            // A folder that vanished between selection and deletion (or was removed by an
+            // out-of-band process) is not a deletion this pass performed — no phantom count.
+            return found;
         }
         catch (OperationCanceledException)
         {

@@ -111,6 +111,75 @@ public sealed class VolumeTests : IDisposable
     }
 
     [Fact]
+    public async Task DeepDelete_InvalidatesTheCache_AndFiresTheRecoveryEdge()
+    {
+        var events = new List<TempFolderVolumeArgs>();
+        using var provider = Build(options: o =>
+        {
+            o.TrackVolume = true;
+            o.MaxTotalSize = 10;
+            o.OnVolumeExceeded = e => { lock (events) events.Add(e); };
+        });
+        var folder = Resolve(provider);
+
+        // A payload two levels down: deleting it changes only its own directory's stamp — the
+        // top-level folder's stamp (the cache key) stays put, so without the explicit invalidation
+        // on the delete path the next scan would keep serving 100 bytes and never recover.
+        var deep = Path.Combine(_root, "2026", "10", "08");
+        Directory.CreateDirectory(deep);
+        await File.WriteAllBytesAsync(Path.Combine(deep, "payload.bin"), new byte[100], TestTemp.Token);
+
+        await folder.CleanupExpiredAsync(TestTemp.Token);
+        lock (events) Assert.Single(events); // over the limit — entry edge (fresh folders survive)
+
+        Assert.True(await folder.DeleteFileAsync(Path.Combine("2026", "10", "08", "payload.bin"), TestTemp.Token));
+
+        await folder.CleanupExpiredAsync(TestTemp.Token);
+
+        TempFolderVolumeArgs[] all;
+        lock (events) all = events.ToArray();
+
+        Assert.Equal(2, all.Length);
+        Assert.True(all[0].Exceeded);
+        Assert.False(all[1].Exceeded);
+        Assert.Equal(0, all[1].TotalSize);
+    }
+
+    [Fact]
+    public async Task FirstScanUnderTheLimit_StaysSilent_AndTheNextCrossingStillFires()
+    {
+        var events = new List<TempFolderVolumeArgs>();
+        using var provider = Build(options: o =>
+        {
+            o.TrackVolume = true;
+            o.MaxTotalSize = 1000;
+            o.OnVolumeExceeded = e => { lock (events) events.Add(e); };
+        });
+        var folder = Resolve(provider);
+
+        // Starting already within the limit: no "recovery" has happened, so nothing is announced.
+        MakeSizedFolder("small", bytes: 100);
+
+        await folder.CleanupExpiredAsync(TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
+
+        lock (events) Assert.Empty(events);
+
+        // A later crossing is still a real edge: fires exactly once, no repeats.
+        MakeSizedFolder("big", bytes: 2000);
+
+        await folder.CleanupExpiredAsync(TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
+
+        TempFolderVolumeArgs[] all;
+        lock (events) all = events.ToArray();
+
+        var fired = Assert.Single(all);
+        Assert.True(fired.Exceeded);
+        Assert.Equal(2100, fired.TotalSize);
+    }
+
+    [Fact]
     public async Task TrackVolumeOff_NeverMeasures_NeverFires()
     {
         var events = 0;

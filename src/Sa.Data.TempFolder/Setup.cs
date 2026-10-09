@@ -185,9 +185,9 @@ public static class Setup
         => services.AddSaTempFolder(DefaultName, configure);
 
     /// <summary>
-    /// Binds the strategy overrides: the overridden type is registered as a plain singleton
-    /// (its own dependencies resolve from the container) and mapped onto this instance's keyed
-    /// strategy slot; without an override the built-in named by the instance's
+    /// Binds the strategy overrides: the overridden type is registered as one instance per
+    /// registration (its own dependencies resolve from the container) and mapped onto this
+    /// instance's keyed strategy slot; without an override the built-in named by the instance's
     /// <see cref="TempFolderOptions.Naming"/> / <see cref="TempFolderOptions.Cleanup"/> enum is
     /// selected for the key — at resolve time, because the enum may come from configuration.
     /// The name-unique guard in <see cref="AddSaTempFolder"/> guarantees exactly one mapping per key.
@@ -196,20 +196,38 @@ public static class Setup
     {
         if (builder?.CleanupStrategyType is { } cleanupType)
         {
-            services.TryAdd(ServiceDescriptor.Singleton(cleanupType, cleanupType));
+            // One instance per registration: a stateful strategy must not be shared across
+            // instances (each has its own root). Its dependencies resolve from the container.
+            services.AddKeyedSingleton(serviceType: cleanupType, serviceKey: name);
             services.AddKeyedSingleton<ICleanupStrategy>(name,
-                (provider, _) => (ICleanupStrategy)provider.GetRequiredService(cleanupType));
+                (provider, _) => (ICleanupStrategy)provider.GetRequiredKeyedService(cleanupType, name));
         }
         else
         {
-            services.AddKeyedSingleton<ICleanupStrategy, AgeBasedCleanupStrategy>(name);
+            var registeredOptionsName = optionsName;
+            services.AddKeyedSingleton<ICleanupStrategy>(name, (provider, _) =>
+            {
+                // IOptionsMonitor.Get runs validation, so the enum and the format are known-good
+                // here; the switch then only picks the built-in — mirrors the naming strategy
+                // below, so the Cleanup enum is honoured like Naming.
+                var options = provider.GetRequiredService<IOptionsMonitor<TempFolderOptions>>()
+                    .Get(registeredOptionsName);
+
+                return options.Cleanup switch
+                {
+                    TempFolderCleanupKind.AgeBased => new AgeBasedCleanupStrategy(),
+                    _ => throw new InvalidOperationException(
+                        $"Unknown cleanup strategy value: {options.Cleanup}."),
+                };
+            });
         }
 
         if (builder?.NamingStrategyType is { } namingType)
         {
-            services.TryAdd(ServiceDescriptor.Singleton(namingType, namingType));
+            // One instance per registration (see the cleanup override above).
+            services.AddKeyedSingleton(serviceType: namingType, serviceKey: name);
             services.AddKeyedSingleton<IFolderNameStrategy>(name,
-                (provider, _) => (IFolderNameStrategy)provider.GetRequiredService(namingType));
+                (provider, _) => (IFolderNameStrategy)provider.GetRequiredKeyedService(namingType, name));
         }
         else
         {

@@ -21,7 +21,9 @@ namespace Sa.Data.TempFolder.Cleanup;
 /// of its ancestors) and therefore survives cleanup at every level.
 /// <para>
 /// The descent stops at <see cref="MaxSearchDepth"/> and skips folders that vanish or turn
-/// unreadable mid-pass — one bad subtree must not cost the whole cleanup.
+/// unreadable mid-pass — one bad subtree must not cost the whole cleanup. Symbolic links
+/// (and junctions) are skipped entirely: neither selected nor descended into, because their
+/// content lives in the link's target, outside the instance's ownership.
 /// </para>
 /// </remarks>
 public sealed class AgeBasedCleanupStrategy : ICleanupStrategy
@@ -85,6 +87,15 @@ public sealed class AgeBasedCleanupStrategy : ICleanupStrategy
         TempFolderOptions options,
         List<(string Path, DateTime Stamp)> candidates)
     {
+        // A symlinked (or junction) folder is neither selected nor descended into: its content
+        // belongs to the target, which may live anywhere on disk (root/cache -> /var/www).
+        // Deleting a candidate *inside* such a folder would delete in the target's tree — and a
+        // link back to an ancestor would walk a cycle. The link itself is left alone too.
+        if (PathGuard.IsSymlink(dir))
+        {
+            return;
+        }
+
         DateTime stamp;
         try
         {
