@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sa.HybridFileStorage.Domain;
 
@@ -69,14 +68,7 @@ public static class Setup
     public static IServiceCollection AddSaInMemoryFileStorage(
         this IServiceCollection services,
         InMemoryFileStorageOptions? options = null)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-
-        InMemoryFileStorageOptions captured = options ?? new();
-
-        RegisterInMemory(services, _ => captured);
-        return services;
-    }
+        => HybridStorageRegistrar.Register(services, options);
 
     /// <summary>
     /// Registers the in-memory file storage provider from the standard options pipeline:
@@ -98,13 +90,7 @@ public static class Setup
     public static IServiceCollection AddSaInMemoryFileStorage(
         this IServiceCollection services,
         Action<IInMemoryFileStorageBuilder> configure)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configure);
-
-        RegisterInMemory(services, CreateInMemoryOptionsFactory(services, configure));
-        return services;
-    }
+        => HybridStorageRegistrar.Register(services, configure);
 
     /// <summary>
     /// Registers the in-memory file storage provider from a ready-made options instance,
@@ -117,13 +103,7 @@ public static class Setup
     public static IServiceCollection AddSaInMemoryFileStorage(
         this IServiceCollection services,
         IOptions<InMemoryFileStorageOptions> options)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(options);
-
-        RegisterInMemory(services, _ => options.Value);
-        return services;
-    }
+        => HybridStorageRegistrar.Register(services, options);
 
     /// <summary>
     /// Registers the in-memory file storage provider as part of the hybrid file storage configuration
@@ -143,10 +123,7 @@ public static class Setup
     public static IHybridFileStorageConfiguration AddSaInMemoryFileStorage(
         this IHybridFileStorageConfiguration configuration,
         InMemoryFileStorageOptions? options = null)
-    {
-        InMemoryFileStorageOptions captured = options ?? new();
-        return AddInMemoryPipeline(configuration, services => RegisterInMemory(services, _ => captured));
-    }
+        => HybridStorageRegistrar.RegisterPipeline(configuration, options);
 
     /// <summary>
     /// Registers the in-memory file storage provider from the standard options pipeline as part
@@ -161,13 +138,7 @@ public static class Setup
     public static IHybridFileStorageConfiguration AddSaInMemoryFileStorage(
         this IHybridFileStorageConfiguration configuration,
         Action<IInMemoryFileStorageBuilder> configure)
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-
-        return AddInMemoryPipeline(
-            configuration,
-            services => RegisterInMemory(services, CreateInMemoryOptionsFactory(services, configure)));
-    }
+        => HybridStorageRegistrar.RegisterPipeline(configuration, configure);
 
     /// <summary>
     /// Registers the in-memory file storage provider from a ready-made options instance as part
@@ -180,97 +151,5 @@ public static class Setup
     public static IHybridFileStorageConfiguration AddSaInMemoryFileStorage(
         this IHybridFileStorageConfiguration configuration,
         IOptions<InMemoryFileStorageOptions> options)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-
-        return AddInMemoryPipeline(configuration, services => RegisterInMemory(services, _ => options.Value));
-    }
-
-    /// <summary>
-    /// Sequence for unique options-instance names within this assembly — one registration,
-    /// one named instance. See the plan for the naming scheme (unique instance name).
-    /// </summary>
-    private static int s_optionsSequence;
-
-    /// <summary>
-    /// Names this registration's options instance: the section path when one was given
-    /// (readable in diagnostics), the provider label otherwise, plus a sequence number that
-    /// makes the name unique per registration. The name is an internal detail — tests read
-    /// it back through the registration markers, never by hardcoding it.
-    /// </summary>
-    private static string NextOptionsName(string? sectionPath)
-        => $"{sectionPath ?? "InMemoryFileStorage"}#{Interlocked.Increment(ref s_optionsSequence)}";
-
-    /// <summary>
-    /// Builds the options factory for the pipeline channel: binds the section in the fixed
-    /// slot, replays the caller's pipeline actions after it, and returns a reader for the
-    /// named instance.
-    /// </summary>
-    private static Func<IServiceProvider, InMemoryFileStorageOptions> CreateInMemoryOptionsFactory(
-        IServiceCollection services, Action<IInMemoryFileStorageBuilder> configure)
-    {
-        InMemoryFileStorageBuilder storageBuilder = new();
-        configure(storageBuilder);
-
-        string optionsName = NextOptionsName(storageBuilder.ConfigSectionPath);
-        OptionsBuilder<InMemoryFileStorageOptions> builder =
-            services.AddOptions<InMemoryFileStorageOptions>(optionsName);
-
-        // Fixed slot: the section binds after the callback has recorded it, before its
-        // Options(...) actions replay — wherever those calls sit in the callback.
-        if (storageBuilder.ConfigSectionPath is { } sectionPath)
-        {
-            builder.BindConfiguration(sectionPath);
-        }
-
-        foreach (var settingsAction in storageBuilder.SettingsActions)
-        {
-            settingsAction(builder);
-        }
-
-        return sp => sp.GetRequiredService<IOptionsMonitor<InMemoryFileStorageOptions>>().Get(optionsName);
-    }
-
-    /// <summary>
-    /// The one place that registers the TimeProvider and the <see cref="IFileStorage"/>
-    /// descriptor for the in-memory provider — every channel differs only in how the
-    /// options are read.
-    /// </summary>
-    private static void RegisterInMemory(
-        IServiceCollection services, Func<IServiceProvider, InMemoryFileStorageOptions> options)
-    {
-        services.TryAddSingleton(TimeProvider.System);
-        services.AddSingleton<IFileStorage>(sp =>
-            new InMemoryFileStorage(options(sp), sp.GetRequiredService<TimeProvider>()));
-    }
-
-    /// <summary>
-    /// Shared wiring of the pipeline channel: the provider registers through
-    /// <see cref="HybridStorageBuilder.ConfigureServices"/>, so it is part of
-    /// <c>sp.GetServices&lt;IFileStorage&gt;()</c> when the container is built.
-    /// </summary>
-    private static IHybridFileStorageConfiguration AddInMemoryPipeline(
-        IHybridFileStorageConfiguration configuration,
-        Action<IServiceCollection> register)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        // HybridStorageBuilder is the only implementation of the interface; the fallback keeps a
-        // hypothetical external implementation working, at the cost of requiring the provider to
-        // have been registered separately as an IFileStorage.
-        if (configuration is HybridStorageBuilder builder)
-        {
-            builder.ConfigureServices(register);
-
-            // Adding the resolved instance is a no-op when the container has already picked it up
-            // from sp.GetServices<IFileStorage>() — HybridFileStorageContainer de-duplicates by
-            // reference — and it keeps the pipeline's intent explicit.
-            return builder.ConfigureStorage((sp, container) =>
-                container.AddStorage(sp.GetServices<IFileStorage>()
-                    .First(s => s is InMemoryFileStorage)));
-        }
-
-        return configuration.ConfigureStorage((sp, container) =>
-            container.AddStorage(sp.GetRequiredService<IFileStorage>()));
-    }
+        => HybridStorageRegistrar.RegisterPipeline(configuration, options);
 }
