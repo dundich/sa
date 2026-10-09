@@ -57,13 +57,13 @@ internal sealed class TempFolder : ITempFolder
     public string RootPath { get; }
 
     /// <inheritdoc />
-    public string CreateSubfolder(string? relativeSubfolder = null)
+    public string CreateSubfolder(string? subfolder = null)
     {
         ThrowIfDisposed();
         ThrowIfReadOnly(nameof(CreateSubfolder));
 
         string full;
-        if (string.IsNullOrWhiteSpace(relativeSubfolder))
+        if (string.IsNullOrWhiteSpace(subfolder))
         {
             // The strategy's output goes through the guard too: a hostile or buggy strategy
             // cannot hand out a name that escapes the root.
@@ -71,7 +71,7 @@ internal sealed class TempFolder : ITempFolder
         }
         else
         {
-            full = PathGuard.Resolve(RootPath, relativeSubfolder);
+            full = PathGuard.Resolve(RootPath, subfolder);
         }
 
         // Shared activity side: a concurrent cleanup pass can neither start while this creation
@@ -89,28 +89,28 @@ internal sealed class TempFolder : ITempFolder
     }
 
     /// <inheritdoc />
-    public async ValueTask<(string RelativePath, string AbsolutePath)> SaveStreamAsync(
-        Stream source, string relativePath, CancellationToken cancellationToken = default)
+    public async ValueTask<(string RelativePath, string AbsolutePath)> WriteAsync(
+        Stream source, string path, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        ThrowIfReadOnly(nameof(SaveStreamAsync));
+        ThrowIfReadOnly(nameof(WriteAsync));
         ArgumentNullException.ThrowIfNull(source);
 
-        if (string.IsNullOrWhiteSpace(relativePath))
+        if (string.IsNullOrWhiteSpace(path))
         {
-            throw new ArgumentException("A file path relative to the root is required.", nameof(relativePath));
+            throw new ArgumentException("A file path relative to the root is required.", nameof(path));
         }
 
         // The whole write is one activity: no cleanup pass can run between the parent creation
         // and the last byte (a running one is cancelled by this very entry).
         using var lease = await _cleanupGate.EnterActivityAsync(cancellationToken).ConfigureAwait(false);
 
-        return await WriteAsync(source, relativePath, cancellationToken).ConfigureAwait(false);
+        return await WriteCoreAsync(source, path, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async ValueTask<(string RelativePath, string AbsolutePath)> CopyFileAsync(
-        string sourcePath, string? relativeSubfolder = null, CancellationToken cancellationToken = default)
+        string sourcePath, string? subfolder = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         ThrowIfReadOnly(nameof(CopyFileAsync));
@@ -137,13 +137,13 @@ internal sealed class TempFolder : ITempFolder
 
         // Source file name validated; from here on everything — directory creation, the
         // overwrite policy check, opening the source and the copy itself — is one activity
-        // against the cleanup pass (see SaveStreamAsync).
+        // against the cleanup pass (see WriteAsync).
         using var lease = await _cleanupGate.EnterActivityAsync(cancellationToken).ConfigureAwait(false);
 
         // No subfolder given → build one from the naming strategy, per spec.
-        var directory = string.IsNullOrWhiteSpace(relativeSubfolder)
+        var directory = string.IsNullOrWhiteSpace(subfolder)
             ? CreateSubfolder()
-            : PathGuard.Resolve(RootPath, relativeSubfolder);
+            : PathGuard.Resolve(RootPath, subfolder);
         Directory.CreateDirectory(directory);
 
         var destination = Path.Combine(directory, fileName);
@@ -155,7 +155,7 @@ internal sealed class TempFolder : ITempFolder
 
         if (!_options.OverwriteFiles && File.Exists(destination))
         {
-            // Same policy as SaveStreamAsync, checked before the source is even opened.
+            // Same policy as WriteAsync, checked before the source is even opened.
             throw new IOException(
                 $"File '{destination}' already exists and OverwriteFiles is false.");
         }
@@ -166,13 +166,139 @@ internal sealed class TempFolder : ITempFolder
             sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read,
             CopyBufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-        return await WriteAsync(source, relative, cancellationToken).ConfigureAwait(false);
+        return await WriteCoreAsync(source, relative, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ReadAsync(
+        string path,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(loadStream);
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("A file path relative to the root is required.", nameof(path));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Validated before the gate: a hostile or wrong path must not cancel a running pass.
+        var full = PathGuard.Resolve(RootPath, path);
+
+        if (Directory.Exists(full))
+        {
+            throw new InvalidOperationException(
+                $"Path '{path}' points at a directory ('{full}'); a file path is required.");
+        }
+
+        // The whole read is one activity: no cleanup pass can run between the existence check
+        // and the end of the callback (a running one is cancelled by this very entry), so the
+        // file is never deleted under the open stream.
+        using var lease = await _cleanupGate.EnterActivityAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!File.Exists(full))
+        {
+            return false;
+        }
+
+        try
+        {
+            await using var stream = new FileStream(
+                full, FileMode.Open, FileAccess.Read, FileShare.Read,
+                CopyBufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+            await loadStream(stream, cancellationToken).ConfigureAwait(false);
+
+            // A read counts as activity too: without this a folder that is only ever read from
+            // would age out exactly like an unused one.
+            RequestActivity(full);
+
+            return true;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // Deleted out-of-band between the check and the open — a vanished file reads as
+            // "not found" instead of failing the caller.
+            _logger.LogDebug(ex, "Temp folder '{Name}': read of '{Path}' found no file.", Name, full);
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> DeleteFileAsync(string path, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ThrowIfReadOnly(nameof(DeleteFileAsync));
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("A file path relative to the root is required.", nameof(path));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Validated before the gate: a hostile or wrong path must not cancel a running pass.
+        var full = PathGuard.Resolve(RootPath, path);
+
+        if (Directory.Exists(full))
+        {
+            throw new InvalidOperationException(
+                $"Path '{path}' points at a directory ('{full}'); a file path is required.");
+        }
+
+        // The whole delete is one activity: no cleanup pass can run between the existence check
+        // and the last attempt (a running one is cancelled by this very entry), so the pass can
+        // neither take the folder's contents mid-delete nor be taken by surprise.
+        using var lease = await _cleanupGate.EnterActivityAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!File.Exists(full))
+        {
+            return false;
+        }
+
+        try
+        {
+            await Retry.Linear(
+                static (string target, CancellationToken token) =>
+                {
+                    // Re-check per attempt: a concurrent cleaner or caller may have removed it
+                    // already — and File.Delete is a no-op on a missing file, so a vanish under
+                    // the attempt reads as success, not as a retryable failure.
+                    if (File.Exists(target))
+                    {
+                        File.Delete(target);
+                    }
+
+                    return ValueTask.FromResult(true);
+                },
+                full,
+                retryCount: 3,
+                initialDelay: 100,
+                shouldRetry: static (ex, _) => ex is IOException or UnauthorizedAccessException,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // The file (or its directory) vanished out-of-band between the check and the delete
+            // — a vanished file reads as "not deleted" instead of failing the caller.
+            _logger.LogDebug(ex, "Temp folder '{Name}': delete of '{Path}' found no file.", Name, full);
+            return false;
+        }
     }
 
     /// <inheritdoc />
     public async IAsyncEnumerable<string> EnumerateFilesAsync(
         string pattern,
-        string? relativeSubfolder = null,
+        string? subfolder = null,
         bool recursive = false,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -183,9 +309,9 @@ internal sealed class TempFolder : ITempFolder
             throw new ArgumentException("A file pattern is required.", nameof(pattern));
         }
 
-        var directory = string.IsNullOrWhiteSpace(relativeSubfolder)
+        var directory = string.IsNullOrWhiteSpace(subfolder)
             ? RootPath
-            : PathGuard.Resolve(RootPath, relativeSubfolder);
+            : PathGuard.Resolve(RootPath, subfolder);
 
         if (!Directory.Exists(directory))
         {
@@ -208,7 +334,7 @@ internal sealed class TempFolder : ITempFolder
     }
 
     /// <inheritdoc />
-    public async ValueTask<int> CleanupAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<int> CleanupExpiredAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
 
@@ -235,16 +361,16 @@ internal sealed class TempFolder : ITempFolder
             }
         }
 
-        // Deletion yields to activity: the pass does not start while a write is in flight
-        // (TryEnterCleanup → null → this pass is cancelled, the next interval retries), and a
-        // write arriving mid-pass cancels pass.Token — the deletion then ends by cancellation
+        // Deletion yields to activity: the pass does not start while a read or write is in
+        // flight (TryEnterCleanup → null → this pass is cancelled, the next interval retries),
+        // and an arriving operation cancels pass.Token — the deletion then ends by cancellation
         // at its next checkpoint instead of racing the operation.
         using var pass = _cleanupGate.TryEnterCleanup(cancellationToken);
 
         if (pass is null)
         {
             _logger.LogDebug(
-                "Temp folder '{Name}': cleanup pass cancelled — a write or a marker walk is in progress.",
+                "Temp folder '{Name}': cleanup pass cancelled — file activity or a marker walk is in progress.",
                 Name);
             return 0;
         }
@@ -305,9 +431,9 @@ internal sealed class TempFolder : ITempFolder
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            // An arriving write interrupted the pass — the expected outcome, not an error.
+            // An arriving read or write interrupted the pass — the expected outcome, not an error.
             _logger.LogInformation(
-                "Temp folder '{Name}': cleanup pass cancelled by concurrent write activity " +
+                "Temp folder '{Name}': cleanup pass cancelled by concurrent file activity " +
                 "({Deleted} deleted, {Skipped} skipped).",
                 Name, deleted, skipped);
             return deleted;
@@ -337,7 +463,7 @@ internal sealed class TempFolder : ITempFolder
     }
 
     /// <inheritdoc />
-    public ValueTask CheckAccessAsync(CancellationToken cancellationToken = default)
+    public ValueTask EnsureAccessAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -449,15 +575,15 @@ internal sealed class TempFolder : ITempFolder
     /// <summary>Options snapshot this instance was constructed with (reloads do not rebind it).</summary>
     internal TempFolderOptions OptionsSnapshot => _options;
 
-    private async ValueTask<(string RelativePath, string AbsolutePath)> WriteAsync(
-        Stream source, string relativePath, CancellationToken cancellationToken)
+    private async ValueTask<(string RelativePath, string AbsolutePath)> WriteCoreAsync(
+        Stream source, string path, CancellationToken cancellationToken)
     {
-        var full = PathGuard.Resolve(RootPath, relativePath);
+        var full = PathGuard.Resolve(RootPath, path);
 
         if (Directory.Exists(full))
         {
             throw new InvalidOperationException(
-                $"Path '{relativePath}' points at a directory ('{full}'); a file path is required.");
+                $"Path '{path}' points at a directory ('{full}'); a file path is required.");
         }
 
         if (!_options.OverwriteFiles && File.Exists(full))
@@ -472,24 +598,54 @@ internal sealed class TempFolder : ITempFolder
             Directory.CreateDirectory(parent);
         }
 
-        await using (var target = new FileStream(
-            full,
-            _options.OverwriteFiles ? FileMode.Create : FileMode.CreateNew,
-            FileAccess.Write, FileShare.None,
-            CopyBufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan))
+        // Smart preallocation: an already-sized source reserves its length up front so the file
+        // never grows in chunks while the copy runs; a stream of unknown length writes through
+        // the normal buffered path (the copy is going to fill it anyway).
+        var targetOptions = new FileStreamOptions
+        {
+            Mode = _options.OverwriteFiles ? FileMode.Create : FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None,
+            BufferSize = CopyBufferSize,
+            Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+        };
+
+        if (source.CanSeek)
+        {
+            // The copy writes from the current position to the end — reserve exactly what will
+            // land, or a partially-advanced source would leave zero padding at the tail.
+            var remaining = source.Length - source.Position;
+            if (remaining > 0 && remaining <= int.MaxValue)
+            {
+                targetOptions.PreallocationSize = (int)remaining;
+            }
+        }
+
+        await using (var target = new FileStream(full, targetOptions))
         {
             await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
         }
 
-        // Debounced activation of the written file's own directory and every ancestor up to the
-        // root: nested cleanup ages those levels too, and overwrites alone never move a
-        // directory's mtime. A file lying directly in the root has no aging parent — no request.
-        if (PathGuard.TopSegment(RootPath, full) is not null)
-        {
-            _debouncer.Request(Path.GetDirectoryName(full)!);
-        }
+        // Debounced activation of the file's own directory and every ancestor up to the root:
+        // nested cleanup ages those levels too, and overwrites alone never move a directory's
+        // mtime. A file lying directly in the root has no aging parent — no request.
+        RequestActivity(full);
 
         return (Path.GetRelativePath(RootPath, full), full);
+    }
+
+    /// <summary>
+    /// Schedules the debounced refresh of the activity markers of <paramref name="absoluteFilePath"/>'s
+    /// directory chain — the file's own directory and every ancestor up to (excluding) the root.
+    /// A file lying directly in the root has no aging parent, so nothing is scheduled. Shared by
+    /// writes (<see cref="WriteCoreAsync"/>) and reads (<see cref="ReadAsync"/>).
+    /// </summary>
+    private void RequestActivity(string absoluteFilePath)
+    {
+        if (PathGuard.TopSegment(RootPath, absoluteFilePath) is not null)
+        {
+            _debouncer.Request(Path.GetDirectoryName(absoluteFilePath)!);
+        }
     }
 
     private async ValueTask<bool> TryDeleteAsync(string path, CancellationToken cancellationToken)

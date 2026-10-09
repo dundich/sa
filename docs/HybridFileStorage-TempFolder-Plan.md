@@ -9,7 +9,7 @@
    уходит.
 2. `Setup` провайдера переделывается на keyed с настройками TempFolder
    (регистрация **только с именем**, обязательный канал `.TempFolder(...)`).
-3. Доделывается delete: новый `ITempFolder.DeleteAsync` + перенаправление на него
+3. Доделывается delete: новый `ITempFolder.DeleteFileAsync` + перенаправление на него
    `FileSystemStorage.DeleteAsync`.
 
 Базовый проект `src/Sa.HybridFileStorage` не трогаем: его
@@ -21,23 +21,23 @@
 | # | Вопрос | Решение |
 |---|--------|---------|
 | 1 | Область | только `src/Sa.HybridFileStorage.FileSystem` + `src/Sa.Data.TempFolder` |
-| 2 | Delete | добавить `ITempFolder.DeleteAsync`, `FileSystemStorage.DeleteAsync` делегирует ему |
+| 2 | Delete | добавить `ITempFolder.DeleteFileAsync`, `FileSystemStorage.DeleteAsync` делегирует ему |
 | 3 | Корень | `FileSystemStorageOptions.BasePath` **удалить**; корень = `TempFolderOptions.RootPath` через канал `.TempFolder(...)` |
 | 4 | TTL | для storage-регистраций **свой дефолт: `MaxAge = 30 дней`**, если не задан ни в конфигурации, ни пользователем |
 | 5 | Канал `.TempFolder(...)` | **обязательный**: без него — `InvalidOperationException` на регистрации |
 | 6 | `BufferSize` | **убрать** из `FileSystemStorageOptions` (I/O владеет TempFolder, буфер фиксированный 81920) |
 | 7 | Форма Setup | **только с именем**: `AddSaFileSystemFileStorage(string name, ...)` (breaking, как named-only в S3) |
-| 8 | Delete: директория | `InvalidOperationException` (контракт един с `DownloadAsync`) |
-| 9 | Прекаллокация | **перенести** эвристику FS-провайдера в `TempFolder.SaveStreamAsync` |
+| 8 | Delete: директория | `InvalidOperationException` (контракт един с `ReadAsync`) |
+| 9 | Прекаллокация | **перенести** эвристику FS-провайдера в `TempFolder.WriteAsync` |
 | 10 | Коммиты | **два**, каждый собирается и зелёный сам по себе |
 
 ---
 
-## Коммит 1 — `feat(Sa.Data.TempFolder)`: `DeleteAsync` + прекаллокация
+## Коммит 1 — `feat(Sa.Data.TempFolder)`: `DeleteFileAsync` + прекаллокация
 
-### 1. `ITempFolder.DeleteAsync(string path, CancellationToken ct = default)` → `Task<bool>`
+### 1. `ITempFolder.DeleteFileAsync(string path, CancellationToken ct = default)` → `Task<bool>`
 
-Контракт (прототип — `DownloadAsync` из прошлого раунда):
+Контракт (прототип — `ReadAsync` из прошлого раунда):
 
 - путь abs/rel → `PathGuard`: escape/инъекция → `SecurityException`;
   blank → `ArgumentException`; **директория → `InvalidOperationException`**;
@@ -52,7 +52,7 @@
 
 Файлы: `src/Sa.Data.TempFolder/ITempFolder.cs`, `TempFolder.cs`.
 
-### 2. Прекаллокация в `SaveStreamAsync`
+### 2. Прекаллокация в `WriteAsync`
 
 Перенос эвристики `FileSystemStorage.UploadAsync`: если входящий поток
 `CanSeek && Length > 0 && Length ≤ int.MaxValue` → `PreallocationSize = (int)Length`
@@ -68,9 +68,9 @@
 
 ### 4. Readme EN/RU (`src/Sa.Data.TempFolder/Readme.md`, `Readme-ru.md`)
 
-Строка API `DeleteAsync`, буллет «cleanup уступает чтению, записи и удалению»,
+Строка API `DeleteFileAsync`, буллет «cleanup уступает чтению, записи и удалению»,
 Cleanup §4, таблица ошибок, read-only секция (delete отклоняется), упоминание
-прекаллокации в строке `SaveStreamAsync`.
+прекаллокации в строке `WriteAsync`.
 
 ---
 
@@ -94,11 +94,11 @@ CPM: без `<Version/>`).
 - `_root = tempFolder.RootPath`; containment/`CanProcess` — по нему
   (локальный helper вместо `IsPathWithinBase`);
 - `UploadAsync` → sanitize + `metadata.Validate()` →
-  `tempFolder.SaveStreamAsync(stream, "{Basket}/{tenant}/{file}", ct)` →
+  `tempFolder.WriteAsync(stream, "{Basket}/{tenant}/{file}", ct)` →
   `StorageResult` (`AbsoluteUrl` = абсолютный путь из Save);
-- `DownloadAsync` → `tempFolder.DownloadAsync(...)` (false если нет файла —
+- `ReadAsync` → `tempFolder.ReadAsync(...)` (false если нет файла —
   контракт уже совпадает);
-- `DeleteAsync` → `EnsureWritable` → `tempFolder.DeleteAsync(...)`; локальный
+- `DeleteAsync` → `EnsureWritable` → `tempFolder.DeleteFileAsync(...)`; локальный
   `catch IOException → false` остаётся у провайдера (поведение не меняется);
 - `GetMetadataAsync` — без изменений.
 
@@ -122,11 +122,11 @@ services.AddSaFileSystemFileStorage("share", b => b
   вызовите `.TempFolder(...)`»);
 - внутри: `services.AddSaTempFolder(name, tb)` → keyed `ITempFolder` +
   `TempFolderCleanerHost` (`TryAddEnumerable`);
-- **TTL-дефолт 30 дней — трюк с сентинелом** (порядок действий в
-  `Sa.Data.TempFolder.Setup`: биндинг секции → наши действия → PostConfigure):
-  1. FS записывает **первым** `Configure(o => o.MaxAge = СЕНТИНЕЛ)` —
-     выполняется сразу после биндинга секции (значение из секции его перетирает)
-     и **до** `Configure` пользователя (пользовательский MaxAge тоже перетирает);
+- **TTL-дефолт 30 дней — трюк с сентинелом** (порядок в `Sa.Data.TempFolder.Setup`:
+  `Defaults` → биндинг секции → наши действия → PostConfigure):
+  1. FS засевает сентинел **первым** через `ITempFolderBuilder.Defaults(...)` —
+     это канал низшего приоритета, выполняется **до** биндинга секции; значение
+     из секции его перетирает, и `Configure` пользователя тоже;
   2. после пользовательских действий — финальный `PostConfigure`:
      `if (MaxAge == СЕНТИНЕЛ) MaxAge = 30 дней`;
   - СЕНТИНЕЛ: `TimeSpan.FromTicks(-1)` (валидация MaxAge выполняется после всех
@@ -151,7 +151,7 @@ services.AddSaFileSystemFileStorage("share", b => b
   - keyed: дубль имени → throw; два имени → две независимые регистрации;
     `ITempFolder` резолвится по ключу; нет `.TempFolder()` → throw;
   - нет имени (старая перегрузка) → compile-break, вызовы обновлены;
-  - e2e TTL: файл протухает → `CleanupAsync` → `DownloadAsync` = false;
+  - e2e TTL: файл протухает → `CleanupExpiredAsync` → `ReadAsync` = false;
   - upload реально лежит под `RootPath` (не в системном temp);
 - `FileRetryBehaviorTests`: ретраи delete теперь на уровне TempFolder (коммит 1) —
   поведенческие кейсы (есть → true, нет → false) остаются здесь, детерминированные
@@ -196,7 +196,7 @@ services.AddSaFileSystemFileStorage("share", b => b
 - старые `fs://` fileId валидны только при `RootPath` = прежнем `BasePath`
   (задокументировать);
 - чистка стареет только top-level папки под `FolderPrefix` (default `""`) —
-  если prefix непустой, `{Basket}` выпадет из TTL; `SaveStreamAsync`
+  если prefix непустой, `{Basket}` выпадет из TTL; `WriteAsync`
   debounced-touch держит `{Basket}/{tenant}` свежим.
 
 **Статус: план, не реализован.**

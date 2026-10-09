@@ -1,11 +1,11 @@
 namespace Sa.Data.TempFolder;
 
 /// <summary>
-/// Serialises cleanup deletion against the instance's file activity: <c>SaveStreamAsync</c> /
-/// <c>CopyFileAsync</c> / <c>CreateSubfolder</c> and the debounced activity-marker walk enter
-/// through <see cref="EnterActivityAsync"/> (shared — operations run side by side), while a
-/// cleanup pass enters through <see cref="TryEnterCleanup"/> (exclusive) — and deletion is always
-/// the side that gives way.
+/// Serialises cleanup deletion against the instance's file activity: <c>WriteAsync</c> /
+/// <c>CopyFileAsync</c> / <c>ReadAsync</c> / <c>DeleteFileAsync</c> / <c>CreateSubfolder</c> and
+/// the debounced activity-marker walk enter through <see cref="EnterActivityAsync"/> (shared —
+/// operations run side by side), while a cleanup pass enters through <see cref="TryEnterCleanup"/>
+/// (exclusive) — and deletion is always the side that gives way.
 /// </summary>
 /// <remarks>
 /// Two rules make the exclusion complete:
@@ -15,7 +15,7 @@ namespace Sa.Data.TempFolder;
 /// (the caller reports 0 deleted) and the next interval simply retries.</item>
 /// <item><b>An arriving activity cancels a running pass.</b> <see cref="EnterActivityAsync"/>
 /// cancels the pass token — the deletion ends by cancellation at its next checkpoint instead of
-/// racing the write — and waits only for the pass to unwind before proceeding.</item>
+/// racing the operation — and waits only for the pass to unwind before proceeding.</item>
 /// </list>
 /// The debounced marker walk rides the activity side too, and its pending entry clears only once
 /// the walk has landed — so a pass always sees either a refreshed marker (the folder is not

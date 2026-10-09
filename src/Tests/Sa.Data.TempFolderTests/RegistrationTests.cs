@@ -189,6 +189,55 @@ public sealed class RegistrationTests : IDisposable
     }
 
     [Fact]
+    public void Register_Defaults_ApplyWhenNothingElseSetsTheValue()
+    {
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("seed", b => b.Defaults(x => x.MaxAge = TimeSpan.FromDays(30)));
+
+        using var provider = services.BuildServiceProvider();
+        var folder = (TempFolderImpl)provider.GetRequiredKeyedService<ITempFolder>("seed");
+
+        Assert.Equal(TimeSpan.FromDays(30), folder.OptionsSnapshot.MaxAge);
+    }
+
+    [Fact]
+    public void Register_Defaults_LoseToTheSection()
+    {
+        // The defaults channel is the lowest precedence: a value bound from the section wins.
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TempFolder:MaxAge"] = "1.00:00:00",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddSaTempFolder("layered", b => b
+            .Defaults(x => x.MaxAge = TimeSpan.FromDays(30))
+            .FromConfiguration("TempFolder"));
+
+        using var provider = services.BuildServiceProvider();
+        var folder = (TempFolderImpl)provider.GetRequiredKeyedService<ITempFolder>("layered");
+
+        Assert.Equal(TimeSpan.FromDays(1), folder.OptionsSnapshot.MaxAge);
+    }
+
+    [Fact]
+    public void Register_Defaults_LoseToACodeConfigure()
+    {
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("beats", b => b
+            .Defaults(x => x.MaxAge = TimeSpan.FromDays(30))
+            .Options(ob => ob.Configure(x => x.MaxAge = TimeSpan.FromDays(60))));
+
+        using var provider = services.BuildServiceProvider();
+        var folder = (TempFolderImpl)provider.GetRequiredKeyedService<ITempFolder>("beats");
+
+        Assert.Equal(TimeSpan.FromDays(60), folder.OptionsSnapshot.MaxAge);
+    }
+
+    [Fact]
     public void Register_ValidationSeesTheNormalisedRoot()
     {
         // RootPath is normalised (trimmed, made absolute) before validation runs — a value that

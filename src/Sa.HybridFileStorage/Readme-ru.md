@@ -51,12 +51,12 @@
 контейнером автоматически:
 
 ```csharp
-// Корзина "черновик" → файловая система. Регистрирует собственный IFileStorage.
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-{
-    x.BasePath = @"C:\data\черновик";
-    x.Basket = "черновик";
-})));
+// Корзина "черновик" → файловая система. Регистрирует собственный IFileStorage под
+// именем "черновик"; корень и ввод-вывод живут на temp-folder с тем же именем.
+builder.Services.AddSaFileSystemFileStorage("черновик", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "черновик"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\черновик"))));
 
 // Корзина "архив" → S3 облачное хранилище: bucket-клиент — именованная регистрация
 // под техническим ключом "archive", резолв по нему же.
@@ -223,11 +223,10 @@ var builder = Host.CreateApplicationBuilder(args);
 // Провайдеры, регистрирующие себя сами, — гибридный контейнер подхватывает любой
 // зарегистрированный IFileStorage автоматически, вызов ConfigureStorage для них не нужен.
 builder.Services.AddSaInMemoryFileStorage();
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-{
-    x.BasePath = @"C:\data\files";
-    x.Basket = "documents";
-})));
+builder.Services.AddSaFileSystemFileStorage("files", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\files"))));
 
 // Bucket-клиент S3 — именованная регистрация: по одному имени на клиент, резолв по ключу.
 builder.Services.AddSaS3BucketClient("uploads", o => o.Options(ob => ob.Configure(x =>
@@ -271,11 +270,10 @@ var storage = host.Services.GetRequiredService<IHybridFileStorage>();
 builder.Services.AddSaInMemoryFileStorage();
 
 // Только файловая система
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-{
-    x.BasePath = @"C:\data\files";
-    x.Basket = "documents";
-})));
+builder.Services.AddSaFileSystemFileStorage("files", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\files"))));
 
 // Только S3
 builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
@@ -507,11 +505,13 @@ builder.Services.AddSaHybridFileStorage(cfg => cfg
 Установите `IsReadOnly = true` для любого провайдера, чтобы запретить запись. Попытки записи вызывают `HybridFileStorageWritableException`:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-{
-    x.BasePath = @"C:\readonly\data";
-    x.IsReadOnly = true  // загрузки/удаления будут завершаться ошибкой
-})));
+builder.Services.AddSaFileSystemFileStorage("readonly", b => b
+    .Options(ob => ob.Configure(x =>
+    {
+        x.IsReadOnly = true; // загрузки/удаления будут завершаться ошибкой
+    }))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\readonly\data"))));
 ```
 
 ---
@@ -522,15 +522,15 @@ builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x 
 
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
-| `BasePath` | Корневая директория для файлов | *(обязательно)* |
 | `Basket` | Имя контейнера (scopes) | `"share"` |
 | `StorageType` | Префикс схемы в File ID | `"fs"` |
 | `IsReadOnly` | Запрет записи | `false` |
-| `BufferSize` | Размер буфера чтения/записи в байтах | `262144` (256 КБ) |
 
-Настраивается через стандартный конвейер options — см.
+Корень хранилища и политика ввода-вывода настраиваются на именованном temp-folder через
+обязательный канал `TempFolder(...)` (`RootPath`, `MaxAge`, `TouchDebounce`, ...). Регистрация
+только именованная: `AddSaFileSystemFileStorage(name, b => b…TempFolder(…))`. См.
 [`Sa.HybridFileStorage.FileSystem/Readme-ru.md`](../Sa.HybridFileStorage.FileSystem/Readme-ru.md)
-про pre/post-инициализацию и привязку конфигурации.
+про pre/post-инициализацию, привязку конфигурации и миграцию с `BasePath`.
 
 ### S3FileStorageOptions
 

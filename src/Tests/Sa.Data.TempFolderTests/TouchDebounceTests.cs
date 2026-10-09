@@ -4,9 +4,9 @@ using Sa.Data.TempFolder;
 namespace Sa.Data.TempFolderTests;
 
 /// <summary>
-/// Debounced activation: a write refreshes the top-level folder's activity marker only after a
-/// quiet period of <c>TouchDebounce</c>, and a burst of writes coalesces into one touch.
-/// Virtual clock — no sleeping.
+/// Debounced activation: a write or successful read refreshes the top-level folder's activity
+/// marker only after a quiet period of <c>TouchDebounce</c>, and a burst of accesses coalesces
+/// into one touch. Virtual clock — no sleeping.
 /// </summary>
 public sealed class TouchDebounceTests : IDisposable
 {
@@ -43,7 +43,7 @@ public sealed class TouchDebounceTests : IDisposable
         var stale = Base.AddHours(-1).UtcDateTime;
         Directory.SetLastWriteTimeUtc(foo, stale);
 
-        await folder.SaveStreamAsync(
+        await folder.WriteAsync(
             new MemoryStream("x"u8.ToArray()), Path.Combine("foo", "sub", "f.txt"), TestTemp.Token);
 
         Assert.Equal(stale, Directory.GetLastWriteTimeUtc(foo)); // no immediate touch
@@ -65,13 +65,13 @@ public sealed class TouchDebounceTests : IDisposable
         Directory.SetLastWriteTimeUtc(foo, stale);
 
         // Write #1 arms the timer for t=5s.
-        await folder.SaveStreamAsync(
+        await folder.WriteAsync(
             new MemoryStream("x"u8.ToArray()), Path.Combine("foo", "sub", "a.txt"), TestTemp.Token);
 
         _clock.Advance(TimeSpan.FromSeconds(2));
 
         // Write #2 at t=2s re-arms: the touch moves to t=7s.
-        await folder.SaveStreamAsync(
+        await folder.WriteAsync(
             new MemoryStream("x"u8.ToArray()), Path.Combine("foo", "sub", "b.txt"), TestTemp.Token);
 
         _clock.Advance(TimeSpan.FromSeconds(4)); // t=6s — still inside the window
@@ -99,7 +99,7 @@ public sealed class TouchDebounceTests : IDisposable
         Directory.SetLastWriteTimeUtc(a, stale);
         Directory.SetLastWriteTimeUtc(Path.Combine(a, "b"), stale);
 
-        await folder.SaveStreamAsync(
+        await folder.WriteAsync(
             new MemoryStream("x"u8.ToArray()), Path.Combine("a", "b", "c", "f.txt"), TestTemp.Token);
 
         // Немедленного касания нет ни на одном уровне.
@@ -121,12 +121,65 @@ public sealed class TouchDebounceTests : IDisposable
         using var provider = Build();
         var folder = provider.GetRequiredKeyedService<ITempFolder>("debounce");
 
-        await folder.SaveStreamAsync(new MemoryStream("x"u8.ToArray()), "loose.txt", TestTemp.Token);
+        await folder.WriteAsync(new MemoryStream("x"u8.ToArray()), "loose.txt", TestTemp.Token);
 
         // No top-level folder is involved; nothing to schedule — the clock has no armed timers
         // beyond what the write itself created (none).
         Assert.Equal(0, _clock.ArmedCount);
         Assert.True(File.Exists(Path.Combine(_root, "loose.txt")));
+    }
+
+    [Fact]
+    public async Task Read_TouchesTheFileDirectoryAndEveryAncestor()
+    {
+        using var provider = Build();
+        var folder = provider.GetRequiredKeyedService<ITempFolder>("debounce");
+
+        // A read is activity too: a folder that is only ever read from keeps its marker fresh at
+        // every level the nested cleanup ages, exactly like a written-to folder.
+        var a = Path.Combine(_root, "a");
+        Directory.CreateDirectory(Path.Combine(a, "b", "c"));
+        File.WriteAllText(Path.Combine(a, "b", "c", "f.txt"), "content");
+
+        var stale = Base.AddHours(-1).UtcDateTime;
+        Directory.SetLastWriteTimeUtc(a, stale);
+        Directory.SetLastWriteTimeUtc(Path.Combine(a, "b"), stale);
+
+        var read = await folder.ReadAsync(
+            Path.Combine("a", "b", "c", "f.txt"),
+            async (stream, ct) => await stream.CopyToAsync(Stream.Null, ct),
+            TestTemp.Token);
+
+        Assert.True(read);
+        Assert.Equal(stale, Directory.GetLastWriteTimeUtc(a)); // no immediate touch
+        Assert.Equal(stale, Directory.GetLastWriteTimeUtc(Path.Combine(a, "b")));
+
+        _clock.Advance(TimeSpan.FromSeconds(5));
+
+        var expected = Base.AddSeconds(5).UtcDateTime;
+        Assert.Equal(expected, Directory.GetLastWriteTimeUtc(Path.Combine(a, "b", "c")));
+        Assert.Equal(expected, Directory.GetLastWriteTimeUtc(Path.Combine(a, "b")));
+        Assert.Equal(expected, Directory.GetLastWriteTimeUtc(a));
+        Assert.NotEqual(expected, Directory.GetLastWriteTimeUtc(_root)); // корень не трогаем
+    }
+
+    [Fact]
+    public async Task ReadOfMissingFile_SchedulesNoTouch()
+    {
+        using var provider = Build();
+        var folder = provider.GetRequiredKeyedService<ITempFolder>("debounce");
+
+        Directory.CreateDirectory(Path.Combine(_root, "foo"));
+
+        var read = await folder.ReadAsync(
+            Path.Combine("foo", "missing.txt"),
+            (_, _) => throw new InvalidOperationException("callback must not run for a missing file"),
+            TestTemp.Token);
+
+        // Nothing was handed to the callback and no marker walk was armed — a vanished file is
+        // not activity.
+        Assert.False(read);
+        Assert.Equal(0, _clock.ArmedCount);
     }
 
     [Fact]
@@ -140,7 +193,7 @@ public sealed class TouchDebounceTests : IDisposable
         var stale = Base.AddHours(-1).UtcDateTime;
         Directory.SetLastWriteTimeUtc(foo, stale);
 
-        await folder.SaveStreamAsync(
+        await folder.WriteAsync(
             new MemoryStream("x"u8.ToArray()), Path.Combine("foo", "sub", "f.txt"), TestTemp.Token);
 
         folder.Dispose(); // pending touch is cancelled — safe direction: the folder only stays older

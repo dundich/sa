@@ -1,6 +1,6 @@
 # Sa.HybridFileStorage.FileSystem
 
-Провайдер локальной файловой системы для `Sa.HybridFileStorage`. Хранит файлы как физические файлы на диске с санитизацией путей, проверками безопасности и логикой повтора при преходящих ошибках ввода-вывода.
+Провайдер локальной файловой системы для `Sa.HybridFileStorage`. Хранит файлы как физические файлы на диске, делегируя чтение, запись и удаление экземпляру `Sa.Data.TempFolder`, которому принадлежат корень, защита путей, маркер активности очистки и политика повторов.
 
 ---
 
@@ -13,27 +13,30 @@
   - [Pre-инициализация (Configure)](#pre-инициализация-configure)
   - [Post-инициализация (PostConfigure)](#post-инициализация-postconfigure)
   - [Из конфигурации](#из-конфигурации)
-  - [Одно хранилище на коллекцию](#одно-хранилище-на-коллекцию)
+  - [Несколько хранилищ в одном хосте](#несколько-хранилищ-в-одном-хосте)
 - [Примеры CRUD](#примеры-crud)
 - [Справочник опций](#справочник-опций)
 - [Безопасность](#безопасность)
 - [Обработка ошибок](#обработка-ошибок)
+- [Миграция с `BasePath`](#миграция-с-basepath)
 
 ---
 
 ## Обзор
 
-Провайдер файловой системы регистрирует `IFileStorage` поверх локальной файловой системы. Файлы хранятся в настраиваемой корневой директории по структуре:
+Провайдер файловой системы регистрирует `IFileStorage` поверх локальной файловой системы. Файлы хранятся в корне именованного экземпляра `Sa.Data.TempFolder` по структуре:
 
 ```
-{BasePath}/{Basket}/{TenantId}/{FileName}
+{RootPath}/{Basket}/{TenantId}/{FileName}
 ```
+
+Сам провайдер лишь отображает File ID в этот относительный путь и формирует результат. Корень, защита путей, маркер активности очистки и повторы при преходящих ошибках ввода-вывода — во владении temp-folder: провайдер больше не открывает `FileStream` и не вызывает `File.Delete` напрямую.
 
 Ключевые особенности:
-- **Санитизация путей** — предотвращает атаки через обход директорий
-- **Умная преаллокация** — использует `FileStreamOptions.PreallocationSize`, когда длина потока известна
-- **Повтор (retry)** — повторяет `IOException` при операциях удаления
-- **Потоковое чтение/запись** — настраиваемый размер буфера для эффективности памяти
+- **Защита путей** — каждый путь разрешается относительно корня temp-folder; обход директорий и инъекционные символы отклоняются
+- **Время жизни** — файлы живут под экземпляром temp-folder с очисткой по возрасту (по умолчанию 30 дней; см. ниже)
+- **Преаллокация** — temp-folder преаллоцирует целевой файл, когда длина источника известна
+- **Повторы** — преходящие `IOException` / `UnauthorizedAccessException` повторяются temp-folder
 
 ---
 
@@ -48,7 +51,7 @@ fs://{basket}/{tenantId}/{fileName}
 - `fs://uploads/7/avatar.png`
 - `fs://share/100/data.bin`
 
-> Примечание: слеши и обратные слеши в `FileName` санитизируются в прямые слеши и очищаются от ведущих разделителей.
+> Примечание: слеши и обратные слеши в `FileName` санитизируются в разделитель платформы и очищаются от ведущих разделителей.
 
 ---
 
@@ -62,73 +65,73 @@ dotnet add package Sa.HybridFileStorage.FileSystem
 
 ## Быстрый старт
 
-Провайдер подключается через стандартный конвейер `Microsoft.Extensions.Options`. Метод возвращает
-`IServiceCollection`, поэтому он складывается в цепочку с остальными вызовами `Add...`:
+Провайдер регистрируется **по имени**, потому что его корень и политика ввода-вывода живут на temp-folder, зарегистрированном под тем же именем. В callback передаётся `IFileSystemStorageBuilder`: секция опций — через `FromConfiguration("…")`, стандартные `Configure` / `PostConfigure` / `Validate` — через `Options(...)`, а **обязательный** канал корня и ввода-вывода — `TempFolder(...)`:
 
 ```csharp
 using Sa.HybridFileStorage.FileSystem;
 
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(options =>
-{
-    options.BasePath = @"C:\data\files";
-    options.Basket = "documents";
-})));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(options => options.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+    {
+        folder.RootPath = @"C:\data\files";
+    }))));
 ```
 
-В callback передаётся `IFileSystemStorageBuilder`: секция — через `FromConfiguration("…")`,
-стандартные методы `Configure` / `PostConfigure` / `Validate` — через `Options(...)`; отдельной
-перегрузки под опции нет.
+Хранилище без канала `TempFolder(...)` выбрасывает `InvalidOperationException` прямо на вызове
+`AddSaFileSystemFileStorage` — файловому хранилищу без корня некуда положить файл.
 
-Конвейер выполняется в фиксированном порядке — **`Configure` → `PostConfigure` → валидация**,
-поэтому валидация видит уже нормализованные значения.
+Конвейер опций хранилища выполняется в фиксированном порядке — **`Configure` → `PostConfigure` → валидация**, поэтому валидация видит уже нормализованные значения.
 
 ### Pre-инициализация (Configure)
 
 `Configure` выполняется первым и получает «сырые» значения:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(options =>
-{
-    options.BasePath = @"C:\data\files";
-    options.BufferSize = 512 * 1024;
-})));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(options => options.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder => folder.RootPath = @"C:\data\files"))));
 ```
 
 ### Post-инициализация (PostConfigure)
 
-`PostConfigure` выполняется после всех `Configure` и до валидации. Регистрация уже нормализует
-`BasePath` в полный путь и обрезает `StorageType` / `Basket`; всё, что добавите здесь, выполнится
-после этого и увидит уже нормализованные значения:
+`PostConfigure` выполняется после всех `Configure` и до валидации. Регистрация уже обрезает `StorageType` / `Basket`; всё, что добавите здесь, выполнится после этого и увидит уже нормализованные значения:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o
-    .Options(ob => ob.Configure(options => options.BasePath = @"C:\data\files")
-    .PostConfigure(options => options.BufferSize = 1024 * 1024)));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(options => options.Basket = "documents")
+        .PostConfigure(options => options.IsReadOnly = false))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder => folder.RootPath = @"C:\data\files"))));
 ```
 
 ### Из конфигурации
 
-Передайте секцию через `FromConfiguration` — опции будут привязаны из `IConfiguration`:
+Передайте секции через `FromConfiguration` — опции хранилища и опции temp-folder привяжутся из `IConfiguration`:
 
 ```csharp
 // appsettings.json
-// { "FileSystemStorage": { "BasePath": "C:\\data\\files", "Basket": "documents" } }
+// {
+//   "FileSystemStorage": { "Basket": "documents" },
+//   "TempFolder":        { "RootPath": "C:\\data\\files", "MaxAge": "30.00:00:00" }
+// }
 
-builder.Services.AddSaFileSystemFileStorage(b => b.FromConfiguration("FileSystemStorage"));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .FromConfiguration("FileSystemStorage")
+    .TempFolder(tb => tb.FromConfiguration("TempFolder")));
 ```
 
 Привязка выполняется в фиксированном слоте **до** воспроизведения действий `Options(...)`,
 поэтому при одновременном использовании последнее слово остаётся за их `Configure`.
 
-### Одно хранилище на коллекцию
+### Несколько хранилищ в одном хосте
 
-`AddSaFileSystemFileStorage` владеет экземпляром `FileSystemStorageOptions` без имени, поэтому
-второй вызов выбрасывает `InvalidOperationException`. Регистрируйте файловый провайдер один раз,
-а остальные корзины отдайте другим провайдерам.
+Каждый вызов регистрирует одно хранилище под своим именем; разные имена независимы, поэтому один
+хост может обслуживать несколько файловых корней. Повтор имени выбрасывает
+`InvalidOperationException` — имя ключует и хранилище, и его temp-folder
+(`sp.GetRequiredKeyedService<ITempFolder>(name)`).
 
-Опции валидируются лениво, при первом разрешении, а `ValidateOnStart()` дополнительно форсирует
-проверку при старте хоста. Поэтому пустой `BasePath`, некорректный `Basket` или неположительный
-`BufferSize` приводят к `OptionsValidationException` — на старте хоста либо на первом разрешении
+Пустой или отсутствующий `RootPath`, либо указывающий на системную временную директорию, приводит к
+`OptionsValidationException` — на старте хоста (`ValidateOnStart()`) либо на первом разрешении
 контейнера, собранного вручную, — а не при первой загрузке файла.
 
 ---
@@ -150,7 +153,7 @@ var result = await storage.UploadAsync(
     new UploadFileInput { FileName = "hello.txt", TenantId = 1 },
     stream, ct);
 
-// Файл создан: {BasePath}/documents/1/hello.txt
+// Файл создан: {RootPath}/documents/1/hello.txt
 // File ID: fs://documents/1/hello.txt
 ```
 
@@ -203,7 +206,8 @@ if (metadata != null)
 
 ```csharp
 bool deleted = await storage.DeleteAsync(result.FileId, ct);
-// Возвращает false, если файл не существует
+// true  — файл существовал и удалён
+// false — файла нет, или преходящий сбой пережил все повторы temp-folder
 ```
 
 ---
@@ -214,39 +218,50 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 
 Один изменяемый тип, обслуживаемый конвейером options. Все свойства биндятся и устанавливаются, и
 именно этот же экземпляр передаётся в хранилище — второго типа настроек и шага копирования,
-который мог бы потерять свойство, больше нет.
+который мог бы потерять свойство, больше нет. Корень хранилища и политика ввода-вывода переехали в
+`TempFolderOptions` и доступны через обязательный канал `TempFolder(...)`.
 
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
-| `BasePath` | Корневая директория для всех файлов | *(обязательно)* |
-| `Basket` | Имя контейнера, добавляемое к `BasePath` | `"share"` |
+| `Basket` | Имя контейнера, добавляемое к корню | `"share"` |
 | `StorageType` | Префикс схемы в File ID | `"fs"` |
 | `IsReadOnly` | Запрет операций записи/удаления | `false` |
-| `BufferSize` | Размер буфера чтения/записи в байтах | `262144` (256 КБ) |
 
 `FileSystemStorageOptions.DefaultStorageType` и `FileSystemStorageOptions.DefaultBasket`
 опубликованы как константы. Значения по умолчанию живут на самом типе, поэтому частичная
 привязка конфигурации не затирает остальные свойства.
 
+### TempFolderOptions (корень хранилища)
+
+Канал `TempFolder(...)` настраивает именованный `ITempFolder`, через который хранилище читает и
+пишет. Свойства, значимые для файлового хранилища:
+
+| Свойство | Описание | По умолчанию |
+|----------|----------|-------------|
+| `RootPath` | Корневая директория хранилища; **не** должна быть пустой или системной временной директорией | `Path.GetTempPath()` (отклоняется) |
+| `MaxAge` | Возраст, после которого стратегия очистки удаляет просроченную подпапку | **30 дней** (дефолт хранилища) |
+| `TouchDebounce` | Задержка перед обновлением маркера активности папки после записи | 5 секунд |
+| `OverwriteFiles` | Перезаписывать ли существующий файл при записи | `true` |
+
+`Sa.HybridFileStorage.FileSystem` поднимает `MaxAge` хранилища с дефолтных для temp-folder 24 часов
+до **30 дней**, потому что файлы хранилища должны жить дольше черновой папки. Значение из секции
+или из `Configure` в коде всё равно побеждает.
+
 Валидация выполняется после post-конфигурации и проверяет:
 
 | Требование | К чему относится |
 |------------|------------------|
-| `BasePath` не null и не пустой | `BasePath` |
-| `BasePath` — абсолютный путь, который можно создать | `BasePath` |
 | `StorageType` не длиннее 10 символов, без `:`, `/` и `\` | `StorageType` |
 | `Basket` 3–63 символа, начинается с буквы или `_`, без разделителя пути | `Basket` |
-| `BufferSize` больше нуля | `BufferSize` |
-
-Пустой `BasePath` намеренно **не** нормализуется в post-конфигурации: `Path.GetFullPath("   ")`
-на Unix успешно отрабатывает и молча создал бы директорию с именем `"   "`.
+| `RootPath` задан и не указывает на системную временную директорию | `TempFolderOptions` |
 
 ### Своя валидация
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o
-    .Options(ob => ob.Configure(options => options.BasePath = @"C:\data\files")
-    .Validate(options => options.BufferSize >= 64 * 1024, "BufferSize должен быть не меньше 64 КБ.")));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(options => options.Basket = "documents")
+        .Validate(options => options.StorageType == "fs", "Поддерживается только схема 'fs'."))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder => folder.RootPath = @"C:\data\files"))));
 ```
 
 Ваше правило выполняется в дополнение к встроенным проверкам; все ошибки собираются вместе
@@ -256,19 +271,23 @@ builder.Services.AddSaFileSystemFileStorage(o => o
 
 ## Безопасность
 
-Провайдер защищает от атак через обход директорий:
+Провайдер защищает от обхода директорий и инъекций через защиту путей temp-folder:
 
-1. **Санитизация путей** — ведущие символы `/` или `\` в `FileName` удаляются; все обратные слеши конвертируются в прямые
-2. **Контейнирование базового пути** — каждый разрешённый путь файла проверяется на принадлежность `{BasePath}/{Basket}`. Попытки побега через `../` отклоняются с `SecurityException`
-3. **Детерминированные пути** — File ID отображаются в относительные пути без вычисления, предотвращая атаки через симлинки
+1. **Санитизация путей** — ведущие символы `/` или `\` в `FileName` удаляются; все разделители конвертируются в разделитель платформы
+2. **Контейнирование корня** — каждый разрешённый путь файла должен попадать в `{RootPath}/{Basket}`. Попытки побега через `..` отклоняются с `SecurityException`
+3. **Отклонение инъекций** — `~`, shell/glob-метасимволы (`< > | & ; ` $ ^ * ? " ' %`), управляющие и невидимые Unicode-символы отклоняются с `SecurityException`
+4. **Детерминированные пути** — File ID отображаются в относительные пути без вычисления, предотвращая атаки через симлинки
 
 ```csharp
 // Безопасно — нормализуется до "report.pdf"
 new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
-// Создаёт: {BasePath}/documents/1/report.pdf
+// Создаёт: {RootPath}/documents/1/report.pdf
 
 // Заблокировано — обнаружен обход пути
 // fileName = "../../../etc/passwd" → выбрасывается SecurityException
+
+// Заблокировано — инъекционный символ (процент из query-строки)
+// fileName = "file%name.txt" → выбрасывается SecurityException
 ```
 
 ---
@@ -279,13 +298,40 @@ new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
 |----------|----------|
 | `IsReadOnly = true` + загрузка/удаление | Выбрасывает `HybridFileStorageWritableException` |
 | Файл не найден при скачивании/удалении | Возвращает `false` (без исключения) |
-| IOException при удалении | Повторяется внутренне; возвращает `false`, если все повторы неудачны |
-| Попытка обхода пути | Выбрасывает `SecurityException` |
+| Путь указывает на директорию при скачивании/удалении | Выбрасывает `InvalidOperationException` |
+| IOException при удалении | Повторяется temp-folder; возвращает `false`, если все повторы неудачны |
+| Попытка обхода пути или инъекции | Выбрасывает `SecurityException` |
 | Неверный формат File ID | Выбрасывает `ArgumentException` |
 | Невалидные опции | Выбрасывает `OptionsValidationException` на старте хоста (`ValidateOnStart`) или при первом разрешении |
 
 ---
 
+## Миграция с `BasePath`
+
+`FileSystemStorageOptions.BasePath` удалён: корень теперь живёт на temp-folder, за обязательным
+каналом `TempFolder(...)`. Чтобы существующие File ID остались валидными, укажите в новом корне
+прежнее значение:
+
+```csharp
+// Было
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
+{
+    x.BasePath = @"C:\data\files";
+    x.Basket = "documents";
+})));
+
+// Стало
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\files"))));
+```
+
+`FileSystemStorageOptions.BufferSize` тоже удалён — буфером копирования владеет temp-folder
+(81920 байт). Регистрация стала только именованной: каждый существующий вызов
+`AddSaFileSystemFileStorage(configure)` нуждается в имени и канале `TempFolder(...)`.
+
+---
 
 ## Лицензия
 

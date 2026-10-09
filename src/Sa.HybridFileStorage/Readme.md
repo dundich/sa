@@ -51,12 +51,12 @@ themselves with an `Add...` method — filesystem, in-memory — are picked up b
 automatically:
 
 ```csharp
-// Basket "drafts" → local filesystem. Registers its own IFileStorage.
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-{
-    x.BasePath = @"C:\data\drafts";
-    x.Basket = "drafts";
-})));
+// Basket "drafts" → local filesystem. Registers its own IFileStorage under the name
+// "drafts"; the root and the file I/O live on a temp folder registered under the same name.
+builder.Services.AddSaFileSystemFileStorage("drafts", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "drafts"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\drafts"))));
 
 // Basket "archive" → S3 cloud storage: the bucket client is a named registration,
 // resolve it by that name.
@@ -223,11 +223,10 @@ var builder = Host.CreateApplicationBuilder(args);
 // Providers that register themselves first — the hybrid container picks up every
 // registered IFileStorage automatically, so no ConfigureStorage call is needed for them.
 builder.Services.AddSaInMemoryFileStorage();
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-{
-    x.BasePath = @"C:\data\files";
-    x.Basket = "documents";
-})));
+builder.Services.AddSaFileSystemFileStorage("files", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\files"))));
 
 // The S3 bucket client is a named registration — one per name, keyed resolve.
 builder.Services.AddSaS3BucketClient("uploads", o => o.Options(ob => ob.Configure(x =>
@@ -271,11 +270,10 @@ For quick setups, each provider has its own extension method:
 builder.Services.AddSaInMemoryFileStorage();
 
 // File System only
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-{
-    x.BasePath = @"C:\data\files";
-    x.Basket = "documents";
-})));
+builder.Services.AddSaFileSystemFileStorage("files", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\files"))));
 
 // S3 only
 builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
@@ -507,11 +505,13 @@ Built-in logging interceptors are available via `.AddLogging()`.
 Set `IsReadOnly = true` on any provider to prevent writes. Attempted writes throw `HybridFileStorageWritableException`:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-{
-    x.BasePath = @"C:\readonly\data";
-    x.IsReadOnly = true  // uploads/deletes will fail
-})));
+builder.Services.AddSaFileSystemFileStorage("readonly", b => b
+    .Options(ob => ob.Configure(x =>
+    {
+        x.IsReadOnly = true; // uploads/deletes will fail
+    }))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\readonly\data"))));
 ```
 
 ---
@@ -522,15 +522,15 @@ builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x 
 
 | Property | Description | Default |
 |----------|-------------|---------|
-| `BasePath` | Root directory for files | *(required)* |
 | `Basket` | Scope/container name | `"share"` |
 | `StorageType` | Scheme prefix in File ID | `"fs"` |
 | `IsReadOnly` | Prevent writes | `false` |
-| `BufferSize` | Read/write buffer size in bytes | `262144` (256 KB) |
 
-Configured through the standard options pipeline — see
+The storage root and the file-I/O policy are configured on the keyed temp folder through the
+mandatory `TempFolder(...)` channel (`RootPath`, `MaxAge`, `TouchDebounce`, ...). The registration
+is named-only: `AddSaFileSystemFileStorage(name, b => b…TempFolder(…))`. See
 [`Sa.HybridFileStorage.FileSystem/Readme.md`](../Sa.HybridFileStorage.FileSystem/Readme.md)
-for pre/post-initialisation and configuration binding.
+for pre/post-initialisation, configuration binding, and migration from `BasePath`.
 
 ### S3FileStorageOptions
 

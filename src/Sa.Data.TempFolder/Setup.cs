@@ -27,8 +27,9 @@ public static class Setup
     /// <c>sp.GetRequiredKeyedService&lt;ITempFolder&gt;(name)</c>. Must be unique per registration.
     /// </param>
     /// <param name="configure">
-    /// The configuration channel: the section via <see cref="ITempFolderBuilder.FromConfiguration"/>
-    /// and the standard pipeline via <see cref="ITempFolderBuilder.Options"/>, plus strategy
+    /// The configuration channel: the section via <see cref="ITempFolderBuilder.FromConfiguration"/>,
+    /// the lowest-precedence defaults via <see cref="ITempFolderBuilder.Defaults"/>, and the standard
+    /// pipeline via <see cref="ITempFolderBuilder.Options"/>, plus strategy
     /// overrides via <c>UseCleanupStrategy&lt;T&gt;()</c> / <c>UseNamingStrategy&lt;T&gt;()</c>.
     /// Invoked once, immediately; the <c>Options(...)</c> actions are replayed after this method's
     /// own registrations, so their <c>Configure</c> runs last and their <c>Validate</c> adds to —
@@ -47,10 +48,10 @@ public static class Setup
     /// is first resolved or at host start (<c>ValidateOnStart()</c>), never at registration.
     /// </para>
     /// <para>
-    /// The pipeline order is the house order: section binding → the caller's
-    /// <c>Configure</c>/<c>PostConfigure</c> → this method's normalisation (root to a full path,
-    /// trimmed prefix) → the caller's actions again → validation, so validation sees normalised
-    /// values.
+    /// The pipeline order is the house order: the caller's <see cref="ITempFolderBuilder.Defaults"/>
+    /// → section binding → the caller's <c>Configure</c>/<c>PostConfigure</c> → this method's
+    /// normalisation (root to a full path, trimmed prefix) → validation, so validation sees
+    /// normalised values and a configured value always beats a default.
     /// </para>
     /// <para>
     /// A <see cref="BackgroundService"/> performing access checks at start and the periodic
@@ -99,6 +100,16 @@ public static class Setup
         services.AddSingleton(new TempFolderRegistration(name, optionsName));
 
         var optionsBuilder = services.AddOptions<TempFolderOptions>(optionsName);
+
+        // Lowest precedence: the caller's Defaults(...) seed the instance first, so a value in the
+        // bound section (and any Options(...) Configure) overrides it.
+        if (builder is { DefaultsActions.Count: > 0 })
+        {
+            foreach (var defaultsAction in builder.DefaultsActions)
+            {
+                optionsBuilder.Configure(defaultsAction);
+            }
+        }
 
         if (sectionPath is not null)
         {

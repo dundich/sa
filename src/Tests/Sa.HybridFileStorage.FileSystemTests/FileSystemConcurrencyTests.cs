@@ -9,7 +9,8 @@ namespace Sa.HybridFileStorage.FileSystemTests;
 
 public sealed class FileSystemConcurrencyTests : IAsyncLifetime
 {
-    private readonly string _testDir = $"concurrency_{Path.GetRandomFileName()}";
+    private readonly string _testDir =
+        Path.Combine(Path.GetTempPath(), $"concurrency_{Path.GetRandomFileName()}");
     private readonly CancellationTokenSource _cts = new();
 
     public ValueTask InitializeAsync()
@@ -33,7 +34,7 @@ public sealed class FileSystemConcurrencyTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -77,7 +78,7 @@ public sealed class FileSystemConcurrencyTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -111,7 +112,7 @@ public sealed class FileSystemConcurrencyTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();

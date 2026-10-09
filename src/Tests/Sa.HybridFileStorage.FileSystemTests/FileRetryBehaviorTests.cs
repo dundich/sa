@@ -8,12 +8,15 @@ using Sa.HybridFileStorage.FileSystem;
 namespace Sa.HybridFileStorage.FileSystemTests;
 
 /// <summary>
-/// Tests that exercise FileRetryHelper behavior through FileSystemStorage operations.
-/// FileRetryHelper is used internally by FileSystemStorage for file operations.
+/// Behaviour the provider keeps now that file I/O — and with it the transient-failure retries —
+/// belongs to <see cref="Sa.Data.TempFolder.TempFolder"/>. The deterministic retry mechanics are
+/// covered there; this class only pins the contract the storage still exposes to its callers:
+/// a normal operation succeeds, an existing file deletes, a missing one reports <c>false</c>.
 /// </summary>
 public sealed class FileRetryBehaviorTests : IAsyncLifetime
 {
-    private readonly string _testDir = $"retry_{Path.GetRandomFileName()}";
+    private readonly string _testDir =
+        Path.Combine(Path.GetTempPath(), $"retry_{Path.GetRandomFileName()}");
     private readonly CancellationTokenSource _cts = new();
 
     public ValueTask InitializeAsync()
@@ -37,7 +40,7 @@ public sealed class FileRetryBehaviorTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -60,7 +63,7 @@ public sealed class FileRetryBehaviorTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -94,7 +97,7 @@ public sealed class FileRetryBehaviorTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -119,7 +122,7 @@ public sealed class FileRetryBehaviorTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -138,7 +141,7 @@ public sealed class FileRetryBehaviorTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();

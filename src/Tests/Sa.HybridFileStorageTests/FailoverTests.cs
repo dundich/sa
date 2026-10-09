@@ -45,11 +45,10 @@ public sealed class FailoverTests : IAsyncLifetime
         var interceptor = new CountingBlockInterceptor(() => { blockedCount++; });
 
         var services = new ServiceCollection()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-            {
-                x.BasePath = $"failover_{Path.GetRandomFileName()}";
-                x.Basket = "shared";
-            })))
+            .AddSaFileSystemFileStorage("fs-failover", b => b
+                .Options(ob => ob.Configure(x => x.Basket = "shared"))
+                .TempFolder(tb => tb.Options(ob => ob.Configure(x =>
+                    x.RootPath = $"failover_{Path.GetRandomFileName()}"))))
             .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("shared"))
             .AddSaHybridFileStorage(b => b.ConfigureInterceptors((sp, c) => c.AddUploadInterceptor(interceptor)));
 
@@ -135,7 +134,9 @@ public sealed class FailoverTests : IAsyncLifetime
     {
         // Arrange
         var services = new ServiceCollection()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = $"download_{Path.GetRandomFileName()}")))
+            .AddSaFileSystemFileStorage("fs-download", b => b
+                .TempFolder(tb => tb.Options(ob => ob.Configure(x =>
+                    x.RootPath = $"download_{Path.GetRandomFileName()}"))))
             .AddSaInMemoryFileStorage()
             .AddSaHybridFileStorage();
 

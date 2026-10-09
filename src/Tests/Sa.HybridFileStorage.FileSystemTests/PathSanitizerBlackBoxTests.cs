@@ -14,7 +14,8 @@ namespace Sa.HybridFileStorage.FileSystemTests;
 /// </summary>
 public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
 {
-    private readonly string _testDir = $"pathsanity_{Path.GetRandomFileName()}";
+    private readonly string _testDir =
+        Path.Combine(Path.GetTempPath(), $"pathsanity_{Path.GetRandomFileName()}");
     private readonly CancellationTokenSource _cts = new();
 
     public ValueTask InitializeAsync()
@@ -38,7 +39,7 @@ public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -55,7 +56,7 @@ public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -74,7 +75,7 @@ public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -93,7 +94,7 @@ public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
@@ -110,25 +111,25 @@ public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UploadAsync_InvalidCharsInFileName_ReplacedWithUnderscore()
+    public async Task UploadAsync_InjectionCharsInFileName_RejectedByPathGuard()
     {
-        // Arrange
+        // The storage now writes through the temp folder, whose PathGuard rejects injection-style
+        // characters outright instead of silently rewriting them. `%` is rejected on every platform
+        // (it is neither a platform-invalid filename char nor a sanitizer trigger), so this is
+        // deterministic rather than depending on the OS invalid-char set.
         var services = new ServiceCollection()
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = _testDir)));
+            .AddFsStorage(_testDir);
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
 
-        // Act — upload with invalid chars (< > : " | ? *)
-        var result = await storage.UploadAsync(
-            new UploadFileInput { FileName = "file<>:\"|?*name.txt", TenantId = 1 },
-            FixtureHelper.GetByteStream(),
-            _cts.Token);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.NotEmpty(result.FileId);
+        // Act & Assert — an injection-style character never reaches the disk.
+        await Assert.ThrowsAnyAsync<SecurityException>(() =>
+            storage.UploadAsync(
+                new UploadFileInput { FileName = "file%name.txt", TenantId = 1 },
+                FixtureHelper.GetByteStream(),
+                _cts.Token));
     }
 }

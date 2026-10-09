@@ -16,9 +16,9 @@ namespace Sa.Data.TempFolder.Cleanup;
 /// folders <b>only</b>: nested folders are the instance's own structure (the date path under a
 /// prefixed first segment), so re-filtering them by prefix would exempt every inner level.
 /// The age is measured from <see cref="TempFolderOptions.AgeSource"/>; with the default
-/// <see cref="TempFolderAgeSource.LastWriteTime"/> an actively written folder keeps refreshing its
-/// marker (debounced — the written file's own directory and all of its ancestors) and therefore
-/// survives cleanup at every level.
+/// <see cref="TempFolderAgeSource.LastWriteTime"/> an actively accessed folder (written to or
+/// read from) keeps refreshing its marker (debounced — the accessed file's own directory and all
+/// of its ancestors) and therefore survives cleanup at every level.
 /// <para>
 /// The descent stops at <see cref="MaxSearchDepth"/> and skips folders that vanish or turn
 /// unreadable mid-pass — one bad subtree must not cost the whole cleanup.

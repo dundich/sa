@@ -5,10 +5,10 @@ using Sa.Data.TempFolder.Cleanup;
 namespace Sa.Data.TempFolderTests;
 
 /// <summary>
-/// Deletion yields to writes: a pass never starts while Save/Copy/CreateSubfolder is in flight,
-/// an arriving write cancels a running pass (the deletion ends by cancellation), and a folder
-/// whose debounced marker touch has not landed yet is skipped — a just-written file is never
-/// deleted by cleanup.
+/// Deletion yields to reads and writes: a pass never starts while Save/Copy/Download/Delete/CreateSubfolder
+/// is in flight, an arriving read, write or delete cancels a running pass (the deletion ends by
+/// cancellation), and a folder whose debounced marker touch has not landed yet is skipped — a
+/// just-written file is never deleted by cleanup.
 /// </summary>
 public sealed class CleanupProtectionTests : IDisposable
 {
@@ -106,13 +106,13 @@ public sealed class CleanupProtectionTests : IDisposable
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var token = TestTemp.Token;
 
-        var save = folder.SaveStreamAsync(
+        var save = folder.WriteAsync(
             new GatedStream("payload"u8.ToArray(), entered, release.Task), "expired/f.bin", token).AsTask();
 
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
 
         // The write is in flight: the pass does not start at all — the folder is untouched.
-        var removed = await folder.CleanupAsync(token);
+        var removed = await folder.CleanupExpiredAsync(token);
         Assert.Equal(0, removed);
         Assert.True(Directory.Exists(expired));
 
@@ -123,7 +123,7 @@ public sealed class CleanupProtectionTests : IDisposable
 
         // Even after the write completed its marker touch is still pending — the next pass
         // skips the folder again rather than taking the fresh file.
-        removed = await folder.CleanupAsync(token);
+        removed = await folder.CleanupExpiredAsync(token);
         Assert.Equal(0, removed);
         Assert.True(File.Exists(Path.Combine(expired, "f.bin")));
     }
@@ -146,7 +146,7 @@ public sealed class CleanupProtectionTests : IDisposable
 
             // The copy completed under the activity lease; its marker touch is pending, so the
             // pass skips the folder instead of taking the fresh file.
-            var removed = await folder.CleanupAsync(TestTemp.Token);
+            var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
             Assert.Equal(0, removed);
             Assert.True(File.Exists(absolute));
@@ -155,6 +155,46 @@ public sealed class CleanupProtectionTests : IDisposable
         {
             File.Delete(source);
         }
+    }
+
+    [Fact]
+    public async Task Download_HoldsTheActivityLease_CleanupYieldsAndTheFileSurvives()
+    {
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        var data = MakeSubfolder("data");
+        var file = Path.Combine(data, "payload.bin");
+        File.WriteAllBytes(file, [1, 2, 3]);
+        TestTemp.MakeExpired(data); // expired with no pending touch — a legitimate candidate
+
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var token = TestTemp.Token;
+
+        var download = folder.ReadAsync(
+            Path.Combine("data", "payload.bin"),
+            async (stream, ct) =>
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(ct);
+
+                var buffer = new byte[3];
+                Assert.Equal(3, await stream.ReadAsync(buffer, ct));
+                Assert.Equal(new byte[] { 1, 2, 3 }, buffer);
+            },
+            token);
+
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
+
+        // The read is in flight: the pass does not start at all — the folder is untouched.
+        var removed = await folder.CleanupExpiredAsync(token);
+        Assert.Equal(0, removed);
+        Assert.True(Directory.Exists(data));
+
+        release.SetResult();
+        Assert.True(await download);
+        Assert.True(File.Exists(file));
     }
 
     [Fact]
@@ -170,13 +210,13 @@ public sealed class CleanupProtectionTests : IDisposable
             var victim = MakeSubfolder("victim");
             var token = TestTemp.Token;
 
-            var cleanup = Task.Run(async () => await folder.CleanupAsync(token), token);
+            var cleanup = Task.Run(async () => await folder.CleanupExpiredAsync(token), token);
 
             // The pass is now inside the selection — the gate is held.
             await BlockingStrategy.Entered!.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
 
             // The write interrupts the pass and waits only for it to unwind.
-            var save = folder.SaveStreamAsync(
+            var save = folder.WriteAsync(
                 new MemoryStream("x"u8.ToArray()), "victim/f.txt", token).AsTask();
             Assert.False(save.IsCompleted);
 
@@ -199,6 +239,141 @@ public sealed class CleanupProtectionTests : IDisposable
     }
 
     [Fact]
+    public async Task ReadArrivingMidPass_CancelsTheDeletion_AndTheFileSurvives()
+    {
+        BlockingStrategy.Entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        BlockingStrategy.Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            using var provider = Build(configure: b => b.UseCleanupStrategy<BlockingStrategy>());
+            var folder = Resolve(provider);
+            var victim = MakeSubfolder("victim");
+            var file = Path.Combine(victim, "f.txt");
+            File.WriteAllText(file, "payload");
+            var token = TestTemp.Token;
+
+            var cleanup = Task.Run(async () => await folder.CleanupExpiredAsync(token), token);
+
+            // The pass is now inside the selection — the gate is held.
+            await BlockingStrategy.Entered!.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
+
+            // The read interrupts the pass and waits only for it to unwind.
+            var download = folder.ReadAsync(
+                Path.Combine("victim", "f.txt"),
+                (stream, ct) => stream.CopyToAsync(Stream.Null, ct),
+                token);
+            Assert.False(download.IsCompleted);
+
+            BlockingStrategy.Release!.SetResult();
+
+            var removed = await cleanup;
+            Assert.True(await download);
+
+            // The deletion ended by cancellation before touching anything; the read landed after.
+            Assert.Equal(0, removed);
+            Assert.True(Directory.Exists(victim));
+            Assert.True(File.Exists(file));
+        }
+        finally
+        {
+            BlockingStrategy.Release?.TrySetResult();
+            BlockingStrategy.Entered = null;
+            BlockingStrategy.Release = null;
+        }
+    }
+
+    [Fact]
+    public async Task DeleteArrivingMidPass_CancelsTheDeletion_AndTheFileIsRemoved()
+    {
+        BlockingStrategy.Entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        BlockingStrategy.Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            using var provider = Build(configure: b => b.UseCleanupStrategy<BlockingStrategy>());
+            var folder = Resolve(provider);
+            var victim = MakeSubfolder("victim");
+            var file = Path.Combine(victim, "f.txt");
+            File.WriteAllText(file, "payload");
+            var token = TestTemp.Token;
+
+            var cleanup = Task.Run(async () => await folder.CleanupExpiredAsync(token), token);
+
+            // The pass is now inside the selection — the gate is held.
+            await BlockingStrategy.Entered!.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
+
+            // The delete interrupts the pass and waits only for it to unwind.
+            var delete = folder.DeleteFileAsync(Path.Combine("victim", "f.txt"), token);
+            Assert.False(delete.IsCompleted);
+
+            BlockingStrategy.Release!.SetResult();
+
+            var removed = await cleanup;
+            Assert.True(await delete);
+
+            // The deletion ended by cancellation before touching anything; the file is gone,
+            // its folder (an empty directory) is not — delete only takes files.
+            Assert.Equal(0, removed);
+            Assert.False(File.Exists(file));
+            Assert.True(Directory.Exists(victim));
+        }
+        finally
+        {
+            BlockingStrategy.Release?.TrySetResult();
+            BlockingStrategy.Entered = null;
+            BlockingStrategy.Release = null;
+        }
+    }
+
+    [Fact]
+    public async Task Delete_RunsSideBySideWithAnOpenRead_AndCleanupYieldsToBoth()
+    {
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        var reader = MakeSubfolder("reader");
+        var readTarget = Path.Combine(reader, "payload.bin");
+        File.WriteAllBytes(readTarget, [1, 2, 3]);
+        TestTemp.MakeExpired(reader);
+
+        var victim = MakeSubfolder("victim");
+        var deleteTarget = Path.Combine(victim, "f.txt");
+        File.WriteAllText(deleteTarget, "payload");
+        TestTemp.MakeExpired(victim);
+
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var token = TestTemp.Token;
+
+        var download = folder.ReadAsync(
+            Path.Combine("reader", "payload.bin"),
+            async (stream, ct) =>
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(ct);
+            },
+            token);
+
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
+
+        // Reads and deletes share the activity side — the delete completes while the read is
+        // still open instead of queueing behind it.
+        Assert.True(await folder.DeleteFileAsync(Path.Combine("victim", "f.txt"), token)
+            .WaitAsync(TimeSpan.FromSeconds(10), token));
+        Assert.False(File.Exists(deleteTarget));
+
+        // The read lease is still held: neither expired folder is a legitimate candidate now.
+        var removed = await folder.CleanupExpiredAsync(token);
+        Assert.Equal(0, removed);
+        Assert.True(Directory.Exists(reader));
+        Assert.True(Directory.Exists(victim));
+
+        release.SetResult();
+        Assert.True(await download);
+    }
+
+    [Fact]
     public async Task Cleanup_SkipsAFolderWhoseMarkerTouchIsStillPending()
     {
         var clock = new ManualTimeProvider(Base);
@@ -210,23 +385,23 @@ public sealed class CleanupProtectionTests : IDisposable
         // Expired by the virtual clock (and the real FS timestamp keeps it expired regardless).
         Directory.SetLastWriteTimeUtc(busy, clock.GetUtcNow().UtcDateTime.AddHours(-48));
 
-        await folder.SaveStreamAsync(new MemoryStream("x"u8.ToArray()), "busy/f.txt", TestTemp.Token);
+        await folder.WriteAsync(new MemoryStream("x"u8.ToArray()), "busy/f.txt", TestTemp.Token);
 
         // The write just happened; its debounce touch is armed but has not fired — the pass
         // must not take the folder with the fresh file inside.
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
         Assert.Equal(0, removed);
         Assert.True(Directory.Exists(busy));
 
         clock.Advance(TimeSpan.FromSeconds(5)); // TouchDebounce default: the walk lands
 
-        removed = await folder.CleanupAsync(TestTemp.Token);
+        removed = await folder.CleanupExpiredAsync(TestTemp.Token);
         Assert.Equal(0, removed);
         Assert.True(Directory.Exists(busy)); // marker refreshed → no longer expired
 
         // Expire it again with no pending touch — now the pass may take it.
         Directory.SetLastWriteTimeUtc(busy, clock.GetUtcNow().UtcDateTime.AddHours(-48));
-        removed = await folder.CleanupAsync(TestTemp.Token);
+        removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(1, removed);
         Assert.False(Directory.Exists(busy));

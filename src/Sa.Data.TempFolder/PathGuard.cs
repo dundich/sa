@@ -187,7 +187,7 @@ public static class PathGuard
     /// <see langword="null"/> when the path sits directly in the root.
     /// </summary>
     /// <remarks>
-    /// The activity marker (debounced touch) is maintained for the written file's own directory
+    /// The activity marker (debounced touch) is maintained for an accessed file's own directory
     /// and all of its ancestors up to the root — every one of those levels is aged by the nested
     /// cleanup. This method only reports the top-level segment, i.e. whether the path has any
     /// aging parent at all (a file directly in the root has none).

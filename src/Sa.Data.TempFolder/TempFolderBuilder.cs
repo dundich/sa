@@ -9,8 +9,14 @@ namespace Sa.Data.TempFolder;
 /// </summary>
 internal sealed class TempFolderBuilder : ITempFolderBuilder
 {
+    /// <summary>Lowest-precedence defaults collected via <see cref="Defaults"/>; replayed by Setup before section binding.</summary>
+    private readonly List<Action<TempFolderOptions>> _defaultsActions = [];
+
     /// <summary>Pipeline actions collected via <see cref="Options"/>; replayed by Setup after section binding.</summary>
     private readonly List<Action<OptionsBuilder<TempFolderOptions>>> _settingsActions = [];
+
+    /// <summary>Defaults collected via <see cref="Defaults"/>, in call order.</summary>
+    public IReadOnlyList<Action<TempFolderOptions>> DefaultsActions => _defaultsActions;
 
     /// <summary>Pipeline actions collected via <see cref="Options"/>, in call order.</summary>
     public IReadOnlyList<Action<OptionsBuilder<TempFolderOptions>>> SettingsActions => _settingsActions;
@@ -23,6 +29,13 @@ internal sealed class TempFolderBuilder : ITempFolderBuilder
 
     /// <summary>Naming-strategy override recorded via <see cref="ITempFolderBuilder.UseNamingStrategy{T}"/>.</summary>
     public Type? NamingStrategyType { get; private set; }
+
+    public ITempFolderBuilder Defaults(Action<TempFolderOptions> configureDefaults)
+    {
+        ArgumentNullException.ThrowIfNull(configureDefaults);
+        _defaultsActions.Add(configureDefaults);
+        return this;
+    }
 
     public ITempFolderBuilder FromConfiguration(string configSectionPath)
     {

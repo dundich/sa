@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
+    <!-- File I/O (write/read/delete, path guard, cleanup activity) is delegated to the temp folder. -->
+    <ProjectReference Include="..\Sa.Data.TempFolder\Sa.Data.TempFolder.csproj" />
   </ItemGroup>
 
 </Project>

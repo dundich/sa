@@ -27,7 +27,7 @@ public interface ITempFolder : IDisposable
     /// <summary>
     /// Creates a subfolder under the root and returns its absolute path.
     /// </summary>
-    /// <param name="relativeSubfolder">
+    /// <param name="subfolder">
     /// An optional caller-chosen subfolder — relative to the root or absolute (when absolute it
     /// must still land inside the root) — possibly nested, e.g. <c>"job/42"</c>; parents are
     /// created as needed. When <see langword="null"/> or blank, the name comes from the
@@ -38,17 +38,19 @@ public interface ITempFolder : IDisposable
     /// <exception cref="System.Security.SecurityException">
     /// The path escapes the root, or contains an injection-style construct (see the remarks above).
     /// </exception>
-    string CreateSubfolder(string? relativeSubfolder = null);
+    string CreateSubfolder(string? subfolder = null);
 
     /// <summary>
     /// Writes <paramref name="source"/> into a file inside the temp folder, creating parent
     /// directories as needed, and (debounced) activates the touched folder chain — the file's own
     /// directory and every ancestor up to the root. The whole write is one activity against the
     /// cleanup pass: a concurrent pass is cancelled rather than allowed to race it (see
-    /// <see cref="CleanupAsync"/>).
+    /// <see cref="CleanupExpiredAsync"/>). When the source's remaining length is known
+    /// (<see cref="Stream.CanSeek"/>), the target file is preallocated to exactly that size so it
+    /// never grows in chunks during the copy.
     /// </summary>
     /// <param name="source">The stream to copy from; its current position is respected.</param>
-    /// <param name="relativePath">
+    /// <param name="path">
     /// Target file path, including the file name: relative to the root or absolute — an absolute
     /// path is accepted when it resolves inside the root (see the remarks above).
     /// </param>
@@ -57,7 +59,7 @@ public interface ITempFolder : IDisposable
     /// The canonical relative path (relative to the root) and the absolute path of the written file.
     /// </returns>
     /// <exception cref="InvalidOperationException">The instance is read-only, or the path points at a directory.</exception>
-    /// <exception cref="ArgumentException"><paramref name="relativePath"/> is empty or whitespace.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace.</exception>
     /// <exception cref="IOException">
     /// A file already exists at the target path and <see cref="TempFolderOptions.OverwriteFiles"/>
     /// is <see langword="false"/> — the original is left intact.
@@ -65,16 +67,16 @@ public interface ITempFolder : IDisposable
     /// <exception cref="System.Security.SecurityException">
     /// The path resolves outside the root, or contains an injection-style construct (see the remarks above).
     /// </exception>
-    ValueTask<(string RelativePath, string AbsolutePath)> SaveStreamAsync(
-        Stream source, string relativePath, CancellationToken cancellationToken = default);
+    ValueTask<(string RelativePath, string AbsolutePath)> WriteAsync(
+        Stream source, string path, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Copies an external file into the temp folder. Shares the same activity exclusion as
-    /// <see cref="SaveStreamAsync"/>: the copy never overlaps a cleanup pass.
+    /// <see cref="WriteAsync"/>: the copy never overlaps a cleanup pass.
     /// </summary>
     /// <param name="sourcePath">Path of the file to copy from; must exist. Its file name must be
     /// free of injection-style characters — the name is reused inside the temp folder.</param>
-    /// <param name="relativeSubfolder">
+    /// <param name="subfolder">
     /// Target subfolder under the root — relative or absolute (when absolute it must still land
     /// inside the root). When <see langword="null"/> or blank, a fresh strategy-named subfolder
     /// is created and the file keeps its own name inside it.
@@ -94,7 +96,80 @@ public interface ITempFolder : IDisposable
     /// above), or the source file's own name contains such a construct.
     /// </exception>
     ValueTask<(string RelativePath, string AbsolutePath)> CopyFileAsync(
-        string sourcePath, string? relativeSubfolder = null, CancellationToken cancellationToken = default);
+        string sourcePath, string? subfolder = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads a file from the temp folder, handing the open stream to <paramref name="loadStream"/>.
+    /// The whole read is one activity against the cleanup pass: at the moment the file is being
+    /// read a concurrent pass is cancelled rather than allowed to delete under the open stream —
+    /// deletion always gives way (see <see cref="CleanupExpiredAsync"/>). A successful read also
+    /// counts as activity: like a write it refreshes (debounced) the last write time of the file's
+    /// own directory and every ancestor up to the root, so a folder that is only ever read from
+    /// does not age out. Reading is allowed on a read-only instance.
+    /// </summary>
+    /// <param name="path">
+    /// File path, including the file name: relative to the root or absolute — an absolute path
+    /// is accepted when it resolves inside the root (see the remarks above).
+    /// </param>
+    /// <param name="loadStream">
+    /// Receives the open read stream — owned by this method, disposed when the callback
+    /// completes — together with <paramref name="cancellationToken"/>. Invoked once, and only
+    /// when a file actually exists at <paramref name="path"/>.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation token: cancels waiting for a running cleanup pass and is passed on to
+    /// <paramref name="loadStream"/>.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a file existed at the path and was handed to
+    /// <paramref name="loadStream"/>; <see langword="false"/> when there is no file there —
+    /// the callback is not invoked.
+    /// </returns>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The path points at a directory.</exception>
+    /// <exception cref="System.Security.SecurityException">
+    /// The path resolves outside the root, or contains an injection-style construct (see the remarks above).
+    /// </exception>
+    Task<bool> ReadAsync(
+        string path,
+        Func<Stream, CancellationToken, Task> loadStream,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a single <b>file</b> from the temp folder. Folders are never removed here: a path
+    /// that points at a directory is rejected with <see cref="InvalidOperationException"/> —
+    /// removing an expired subfolder is the cleanup pass's job (see
+    /// <see cref="CleanupExpiredAsync"/>). The whole delete is one activity against the cleanup
+    /// pass: at the moment the file is being removed a concurrent pass is cancelled rather than
+    /// allowed to race it — deletion is a mutation, so it is allowed only on a read-write
+    /// instance (see <see cref="TempFolderOptions.ReadOnly"/>).
+    /// </summary>
+    /// <remarks>
+    /// Only the file is removed; its containing subfolder is left in place until the cleanup pass
+    /// ages it out. Transient failures (<see cref="IOException"/>,
+    /// <see cref="UnauthorizedAccessException"/>) are retried linearly (3 attempts, 100 ms step,
+    /// like <see cref="CleanupExpiredAsync"/>); if the retries are exhausted the last exception is
+    /// rethrown for the caller to decide. The delete itself is idempotent — a file that vanishes
+    /// under it counts as deleted.
+    /// </remarks>
+    /// <param name="path">
+    /// File path, including the file name: relative to the root or absolute — an absolute path
+    /// is accepted when it resolves inside the root (see the remarks above).
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// <see langword="true"/> when a file existed at the path and was deleted;
+    /// <see langword="false"/> when there is no file there (or it vanished concurrently).
+    /// </returns>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The instance is read-only, or the path points at a directory.</exception>
+    /// <exception cref="IOException">
+    /// A transient failure persisted through all retry attempts.
+    /// </exception>
+    /// <exception cref="System.Security.SecurityException">
+    /// The path resolves outside the root, or contains an injection-style construct (see the remarks above).
+    /// </exception>
+    Task<bool> DeleteFileAsync(string path, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Asynchronously enumerates files matching <paramref name="pattern"/> and returns their
@@ -102,7 +177,7 @@ public interface ITempFolder : IDisposable
     /// </summary>
     /// <param name="pattern">File pattern, e.g. <c>"*.dat"</c> or <c>"report_?.csv"</c> — the
     /// pattern is a pattern, not a path, so <c>*</c>/<c>?</c> are allowed there.</param>
-    /// <param name="relativeSubfolder">Subfolder to search — relative or absolute (when absolute
+    /// <param name="subfolder">Subfolder to search — relative or absolute (when absolute
     /// it must still land inside the root); <see langword="null"/> or blank searches the root.</param>
     /// <param name="recursive">Whether to descend into nested subfolders. Defaults to <see langword="false"/>.</param>
     /// <param name="cancellationToken">Cancellation token; also surfaces as the iterator's token.</param>
@@ -111,7 +186,7 @@ public interface ITempFolder : IDisposable
     /// </exception>
     IAsyncEnumerable<string> EnumerateFilesAsync(
         string pattern,
-        string? relativeSubfolder = null,
+        string? subfolder = null,
         bool recursive = false,
         CancellationToken cancellationToken = default);
 
@@ -124,10 +199,11 @@ public interface ITempFolder : IDisposable
     /// </summary>
     /// <remarks>
     /// The pass always yields to file activity: it does not start while a
-    /// <see cref="SaveStreamAsync"/> / <see cref="CopyFileAsync"/> / <see cref="CreateSubfolder"/>
-    /// is in flight (returns 0; the next pass retries), a write arriving mid-pass ends the
-    /// deletion by cancellation at its next checkpoint, and a folder whose debounced activity
-    /// marker has not landed yet is skipped — a just-written file is never deleted.
+    /// <see cref="WriteAsync"/> / <see cref="CopyFileAsync"/> / <see cref="ReadAsync"/> /
+    /// <see cref="DeleteFileAsync"/> / <see cref="CreateSubfolder"/> is in flight (returns 0; the next
+    /// pass retries), a read, write or delete arriving mid-pass ends the deletion by cancellation
+    /// at its next checkpoint, and a folder whose debounced activity marker has not landed yet is
+    /// skipped — a just-accessed (written or read) file is never deleted.
     /// </remarks>
     /// <param name="cancellationToken">Cancellation token; also surfaces as the pass token that an
     /// arriving write cancels (an interruption by activity does not throw — the partial count is
@@ -136,7 +212,7 @@ public interface ITempFolder : IDisposable
     /// The number of subfolders deleted by this pass. Always 0 for a read-only instance, and for a
     /// pass that was cancelled before deleting anything.
     /// </returns>
-    ValueTask<int> CleanupAsync(CancellationToken cancellationToken = default);
+    ValueTask<int> CleanupExpiredAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Verifies the root is usable: it is created when missing (read-write instances only),
@@ -146,5 +222,5 @@ public interface ITempFolder : IDisposable
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="InvalidOperationException">The root failed one of the access checks.</exception>
-    ValueTask CheckAccessAsync(CancellationToken cancellationToken = default);
+    ValueTask EnsureAccessAsync(CancellationToken cancellationToken = default);
 }

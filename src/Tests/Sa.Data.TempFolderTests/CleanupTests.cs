@@ -56,7 +56,7 @@ public sealed class CleanupTests : IDisposable
         File.WriteAllText(loose, "old");
         File.SetLastWriteTimeUtc(loose, DateTime.UtcNow.AddHours(-48));
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(1, removed);
         Assert.False(Directory.Exists(expired));
@@ -75,7 +75,7 @@ public sealed class CleanupTests : IDisposable
         var other = MakeSubfolder("other_old");
         TestTemp.MakeExpired(other);
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(1, removed);
         Assert.False(Directory.Exists(prefixed));
@@ -95,7 +95,7 @@ public sealed class CleanupTests : IDisposable
         var youngest = MakeSubfolder("e3_youngest");
         TestTemp.MakeExpired(youngest, TimeSpan.FromHours(70));
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(2, removed);
         Assert.False(Directory.Exists(oldest));
@@ -120,7 +120,7 @@ public sealed class CleanupTests : IDisposable
         // is assertable. Where a real creation time exists, the forged write time is ignored.
         var platformDistinguishes = Directory.GetCreationTimeUtc(dir) != Directory.GetLastWriteTimeUtc(dir);
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         if (platformDistinguishes)
         {
@@ -142,7 +142,7 @@ public sealed class CleanupTests : IDisposable
         var dir = MakeSubfolder("backdated");
         TestTemp.MakeExpired(dir);
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(1, removed);
         Assert.False(Directory.Exists(dir));
@@ -159,7 +159,7 @@ public sealed class CleanupTests : IDisposable
         var young = MakeSubfolder("ten_minutes");
         TestTemp.MakeExpired(young, TimeSpan.FromMinutes(10));
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(1, removed);
         Assert.False(Directory.Exists(tooOld));
@@ -175,7 +175,7 @@ public sealed class CleanupTests : IDisposable
         var expired = MakeSubfolder("expired");
         TestTemp.MakeExpired(expired);
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(0, removed);
         Assert.True(Directory.Exists(expired));
@@ -199,7 +199,7 @@ public sealed class CleanupTests : IDisposable
         Directory.CreateDirectory(freshMonth);
         TestTemp.MakeExpired(oldMonth); // только месяц; год остаётся свежим
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(1, removed);
         Assert.False(Directory.Exists(oldMonth));
@@ -222,7 +222,7 @@ public sealed class CleanupTests : IDisposable
         Directory.CreateDirectory(freshDay);
         TestTemp.MakeExpired(oldDay);
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(1, removed);
         Assert.False(Directory.Exists(oldDay));
@@ -244,7 +244,7 @@ public sealed class CleanupTests : IDisposable
         Directory.CreateDirectory(freshChild);
         TestTemp.MakeExpired(top); // только топ
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(1, removed);
         Assert.False(Directory.Exists(top));
@@ -265,7 +265,7 @@ public sealed class CleanupTests : IDisposable
         TestTemp.MakeExpired(foreignOld);
         var mine = MakeSubfolder("p_new");
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(0, removed);
         Assert.True(Directory.Exists(foreign));
@@ -285,7 +285,7 @@ public sealed class CleanupTests : IDisposable
         var deep = Path.Combine(mid, "fresh_deep");
         Directory.CreateDirectory(deep);
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(0, removed);
         Assert.True(Directory.Exists(deep));
@@ -302,7 +302,7 @@ public sealed class CleanupTests : IDisposable
         var first = MakeSubfolder("f1");
         var second = MakeSubfolder("f2");
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(2, removed);
         Assert.False(Directory.Exists(first));
@@ -325,7 +325,7 @@ public sealed class CleanupTests : IDisposable
 
         try
         {
-            var removed = await folder.CleanupAsync(TestTemp.Token);
+            var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
             // The legitimate candidate goes, the escaping one is skipped (and logged):
             // nothing outside the root is ever touched.

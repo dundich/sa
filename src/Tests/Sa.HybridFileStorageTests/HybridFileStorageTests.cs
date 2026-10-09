@@ -10,34 +10,27 @@ namespace Sa.HybridFileStorageTests;
 public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
     : IClassFixture<HybridFileStorageTests.Fixture>
 {
-    public sealed class Fixture : SaFixture<IHybridFileStorage, FileSystemStorageOptions>
+    public sealed class Fixture : SaFixture<IHybridFileStorage>
     {
+        private readonly string _root =
+            Path.Combine(Path.GetTempPath(), $"hybrid_test_{Path.GetRandomFileName()}");
+
         public Fixture()
-            : base(new FileSystemStorageOptions
-            {
-                BasePath = "hybrid_test"
-            })
         {
             SetupServices = (services, cfg) =>
                 services
-                    .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = Settings.BasePath)))
+                    .AddSaFileSystemFileStorage("fs-main", b => b
+                        .TempFolder(tb => tb.Options(ob => ob.Configure(x => x.RootPath = _root))))
                     .AddSaInMemoryFileStorage()
                     .AddSaHybridFileStorage(b
                         => b.ConfigureInterceptors((_, c)
                             => c.AddUploadInterceptor(new MemUploadSomeInterceptor())));
         }
 
-        public override ValueTask DisposeAsync()
+        public override async ValueTask DisposeAsync()
         {
-            try
-            {
-                Directory.Delete(Settings.BasePath, true);
-            }
-            catch
-            {
-                // suppress error
-            }
-            return base.DisposeAsync();
+            await base.DisposeAsync();
+            try { Directory.Delete(_root, true); } catch { /* best effort */ }
         }
     }
 

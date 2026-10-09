@@ -57,7 +57,7 @@ public sealed class VolumeTests : IDisposable
         var dir = MakeSizedFolder("big", bytes: 100);
         Assert.True(Directory.Exists(dir));
 
-        await folder.CleanupAsync(TestTemp.Token); // fresh folders survive; the scan runs first
+        await folder.CleanupExpiredAsync(TestTemp.Token); // fresh folders survive; the scan runs first
 
         TempFolderVolumeArgs[] afterFirst;
         lock (events) afterFirst = events.ToArray();
@@ -69,7 +69,7 @@ public sealed class VolumeTests : IDisposable
         Assert.Equal(Key, over.Name);
 
         // Second pass: same state → no repeated notification (edge-triggered).
-        await folder.CleanupAsync(TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
 
         lock (events) Assert.Single(events);
     }
@@ -88,7 +88,7 @@ public sealed class VolumeTests : IDisposable
 
         var dir = MakeSizedFolder("big", bytes: 100);
 
-        await folder.CleanupAsync(TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
         lock (events) Assert.Single(events);
 
         // Drop under the limit: deleting the payload changes the folder's last write time,
@@ -99,7 +99,7 @@ public sealed class VolumeTests : IDisposable
         await Task.Delay(50, TestTemp.Token);
         File.Delete(Path.Combine(dir, "payload.bin"));
 
-        await folder.CleanupAsync(TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
 
         TempFolderVolumeArgs[] all;
         lock (events) all = events.ToArray();
@@ -124,8 +124,8 @@ public sealed class VolumeTests : IDisposable
 
         MakeSizedFolder("big", bytes: 100);
 
-        await folder.CleanupAsync(TestTemp.Token);
-        await folder.CleanupAsync(TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(0, events);
     }
@@ -144,7 +144,7 @@ public sealed class VolumeTests : IDisposable
 
         MakeSizedFolder("big", bytes: 100);
 
-        await folder.CleanupAsync(TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(0, events);
     }
@@ -162,7 +162,7 @@ public sealed class VolumeTests : IDisposable
 
         MakeSizedFolder("big", bytes: 100);
 
-        var removed = await folder.CleanupAsync(TestTemp.Token);
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(0, removed); // fresh folder kept — the throwing handler did not kill the pass
     }
@@ -183,7 +183,7 @@ public sealed class VolumeTests : IDisposable
         MakeSizedFolder("part", bytes: 30);
         await File.WriteAllBytesAsync(Path.Combine(_root, "loose.bin"), new byte[30], TestTemp.Token);
 
-        await folder.CleanupAsync(TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
 
         TempFolderVolumeArgs[] over;
         lock (events) over = events.ToArray();

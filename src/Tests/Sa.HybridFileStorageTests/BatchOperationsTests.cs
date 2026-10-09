@@ -19,15 +19,15 @@ public sealed class BatchOperationsTests : IAsyncLifetime
         Directory.CreateDirectory(_tempDir);
 
         var services = new ServiceCollection();
-        
+
         // Register FileSystem with "share" basket
-        services.AddSingleton<IFileStorage>(new FileSystemStorage(
-            new FileSystemStorageOptions { BasePath = _tempDir }));
-        
+        services.AddSaFileSystemFileStorage("fs-batch", b => b
+            .TempFolder(tb => tb.Options(ob => ob.Configure(x => x.RootPath = _tempDir!))));
+
         // Register InMemory with "memory" basket
         services.AddSingleton<IFileStorage>(new InMemoryFileStorage(
             new InMemoryFileStorageOptions("memory")));
-        
+
         services.AddSaHybridFileStorage();
 
         _provider = services.BuildServiceProvider(true);

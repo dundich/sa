@@ -121,11 +121,9 @@ public sealed class InterceptorTests : IAsyncLifetime
         var interceptor = new CountingUploadInterceptor(() => uploadBlocked = true);
 
         var services = new ServiceCollection()
-            .AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
-            {
-                x.BasePath = "interceptor_test";
-                x.Basket = "shared_basket";
-            })))
+            .AddSaFileSystemFileStorage("fs-interceptor", b => b
+                .Options(ob => ob.Configure(x => x.Basket = "shared_basket"))
+                .TempFolder(tb => tb.Options(ob => ob.Configure(x => x.RootPath = "interceptor_test"))))
             .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("shared_basket"))
             .AddSaHybridFileStorage(b => b.ConfigureInterceptors((_, c) =>
                 c.AddUploadInterceptor(interceptor)));

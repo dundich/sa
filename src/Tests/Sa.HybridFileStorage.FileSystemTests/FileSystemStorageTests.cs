@@ -7,25 +7,20 @@ namespace Sa.HybridFileStorage.FileSystemTests;
 public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
     : IClassFixture<FileSystemStorageTests.Fixture>
 {
-    // `Settings` is a template, not the instance the container builds: AddOptions creates its own, and
-    // post-configuration rewrites that one's BasePath to a full path. This instance stays untouched, so
-    // Settings.BasePath is still the relative path written and is safe to delete here.
-    public sealed class Fixture : SaFixture<IFileStorage, FileSystemStorageOptions>
+    public sealed class Fixture : SaFixture<IFileStorage>
     {
+        private readonly string _root =
+            Path.Combine(Path.GetTempPath(), $"fs_storage_{Path.GetRandomFileName()}");
+
         public Fixture()
-            : base(new FileSystemStorageOptions
-            {
-                BasePath = "mytemp"
-            })
         {
-            SetupServices = (services, cfg)
-                => services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x => x.BasePath = Settings.BasePath)));
+            SetupServices = (services, cfg) => services.AddFsStorage(_root);
         }
 
-        public override ValueTask DisposeAsync()
+        public override async ValueTask DisposeAsync()
         {
-            Directory.Delete(Settings.BasePath, true);
-            return base.DisposeAsync();
+            await base.DisposeAsync();
+            try { Directory.Delete(_root, true); } catch { /* best effort */ }
         }
     }
 

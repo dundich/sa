@@ -1,6 +1,6 @@
 # Sa.HybridFileStorage.FileSystem
 
-Local filesystem provider for `Sa.HybridFileStorage`. Stores files as physical files on disk with path sanitisation, security checks, and retry logic for transient I/O errors.
+Local filesystem provider for `Sa.HybridFileStorage`. Stores files as physical files on disk, delegating every read, write and delete to a `Sa.Data.TempFolder` instance that owns the root, the path guard, the cleanup activity and the retry policy.
 
 ---
 
@@ -13,27 +13,30 @@ Local filesystem provider for `Sa.HybridFileStorage`. Stores files as physical f
   - [Pre-initialisation (Configure)](#pre-initialisation-configure)
   - [Post-initialisation (PostConfigure)](#post-initialisation-postconfigure)
   - [From configuration](#from-configuration)
-  - [One storage per collection](#one-storage-per-collection)
+  - [Several storages in one host](#several-storages-in-one-host)
 - [CRUD Examples](#crud-examples)
 - [Options Reference](#options-reference)
 - [Security](#security)
 - [Error Handling](#error-handling)
+- [Migrating from `BasePath`](#migrating-from-basepath)
 
 ---
 
 ## Overview
 
-The filesystem provider registers an `IFileStorage` backed by the local file system. Files are stored under a configurable base directory using the structure:
+The filesystem provider registers an `IFileStorage` backed by the local file system. Files are stored under the root of a keyed `Sa.Data.TempFolder` instance using the structure:
 
 ```
-{BasePath}/{Basket}/{TenantId}/{FileName}
+{RootPath}/{Basket}/{TenantId}/{FileName}
 ```
+
+The storage itself only maps a File ID to that relative path and shapes the result. The root, the path guard, the cleanup activity marker and the transient-I/O retries are the temp folder's — the provider no longer opens `FileStream`s or calls `File.Delete` directly.
 
 Key characteristics:
-- **Path sanitisation** — prevents directory traversal attacks
-- **Smart preallocation** — uses `FileStreamOptions.PreallocationSize` when stream length is known
-- **Retry helper** — retries `IOException` on delete operations
-- **Streaming reads/writes** — configurable buffer size for memory efficiency
+- **Path guarding** — every path is resolved against the temp-folder root; traversal and injection-style characters are rejected
+- **Cleanup lifetime** — files live under a temp-folder instance with an age-based cleanup (30 days by default; see below)
+- **Preallocated writes** — the temp folder preallocates the target file when the source length is known
+- **Retries** — transient `IOException` / `UnauthorizedAccessException` failures are retried by the temp folder
 
 ---
 
@@ -48,7 +51,7 @@ fs://{basket}/{tenantId}/{fileName}
 - `fs://uploads/7/avatar.png`
 - `fs://share/100/data.bin`
 
-> Note: slashes and backslashes in `FileName` are sanitized to forward slashes and stripped of leading separators.
+> Note: slashes and backslashes in `FileName` are sanitized to the platform separator and stripped of leading separators.
 
 ---
 
@@ -62,73 +65,71 @@ dotnet add package Sa.HybridFileStorage.FileSystem
 
 ## Quick Start
 
-The provider is registered through the standard `Microsoft.Extensions.Options` pipeline. It returns
-the `IServiceCollection`, so it composes with the other `Add...` calls:
+The provider is registered **by name**, because its root and I/O policy live on a temp folder registered under the same name. The callback receives the `IFileSystemStorageBuilder`: the options section comes from `FromConfiguration("…")`, the standard `Configure` / `PostConfigure` / `Validate` methods are reached through `Options(...)`, and the **mandatory** root/I-O channel is `TempFolder(...)`:
 
 ```csharp
 using Sa.HybridFileStorage.FileSystem;
 
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(options =>
-{
-    options.BasePath = @"C:\data\files";
-    options.Basket = "documents";
-})));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(options => options.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+    {
+        folder.RootPath = @"C:\data\files";
+    }))));
 ```
 
-The `configure` callback receives the `IFileSystemStorageBuilder`: the section comes from
-`FromConfiguration("…")` and the standard `Configure` / `PostConfigure` / `Validate` methods are
-reached through `Options(...)` — there is no bespoke options overload.
+A storage without the `TempFolder(...)` channel throws `InvalidOperationException` at the
+`AddSaFileSystemFileStorage` call — a filesystem storage with no root has nowhere to put a file.
 
-The pipeline runs in a fixed order — **`Configure` → `PostConfigure` → validate** — so a value
-normalised in post-initialisation is what validation sees.
+The storage options pipeline runs in a fixed order — **`Configure` → `PostConfigure` → validate** — so a value normalised in post-initialisation is what validation sees.
 
 ### Pre-initialisation (Configure)
 
 `Configure` runs first and receives the raw values:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(options =>
-{
-    options.BasePath = @"C:\data\files";
-    options.BufferSize = 512 * 1024;
-})));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(options => options.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder => folder.RootPath = @"C:\data\files"))));
 ```
 
 ### Post-initialisation (PostConfigure)
 
-`PostConfigure` runs after every `Configure` and before validation. The registration already
-normalises `BasePath` to a full path and trims `StorageType` / `Basket`; anything you add here
-runs after that, so it sees normalised values:
+`PostConfigure` runs after every `Configure` and before validation. The registration already trims `StorageType` / `Basket`; anything you add here runs after that, so it sees normalised values:
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o
-    .Options(ob => ob.Configure(options => options.BasePath = @"C:\data\files")
-    .PostConfigure(options => options.BufferSize = 1024 * 1024)));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(options => options.Basket = "documents")
+        .PostConfigure(options => options.IsReadOnly = false))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder => folder.RootPath = @"C:\data\files"))));
 ```
 
 ### From configuration
 
-Pass the section via `FromConfiguration` and the options are bound from `IConfiguration`:
+Pass the sections via `FromConfiguration`; the storage options and the temp-folder options bind from `IConfiguration`:
 
 ```csharp
 // appsettings.json
-// { "FileSystemStorage": { "BasePath": "C:\\data\\files", "Basket": "documents" } }
+// {
+//   "FileSystemStorage": { "Basket": "documents" },
+//   "TempFolder":        { "RootPath": "C:\\data\\files", "MaxAge": "30.00:00:00" }
+// }
 
-builder.Services.AddSaFileSystemFileStorage(b => b.FromConfiguration("FileSystemStorage"));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .FromConfiguration("FileSystemStorage")
+    .TempFolder(tb => tb.FromConfiguration("TempFolder")));
 ```
 
-The section binds in a fixed slot **before** the `Options(...)` actions replay, so their
-`Configure` has the last word when both are used.
+The section binds in a fixed slot **before** the `Options(...)` actions replay, so their `Configure` has the last word when both are used.
 
-### One storage per collection
+### Several storages in one host
 
-`AddSaFileSystemFileStorage` owns the unnamed `FileSystemStorageOptions` instance, so a second call
-throws `InvalidOperationException`. Register the filesystem provider once and route the remaining
-baskets to other providers.
+Each call registers one storage under its own name; different names are independent, so one host can
+run several filesystem roots. Repeating a name throws `InvalidOperationException` — the name keys
+both the storage and its temp folder (`sp.GetRequiredKeyedService<ITempFolder>(name)`).
 
-Options are validated lazily on first resolve, and `ValidateOnStart()` also forces validation when
-the host starts. A blank `BasePath`, a malformed `Basket` or a non-positive `BufferSize` therefore
-surfaces as `OptionsValidationException` — at host start, or at the first resolve in a container
+A blank or missing `RootPath`, or one pointing at the system temp directory, surfaces as
+`OptionsValidationException` — at host start (`ValidateOnStart()`) or at first resolve in a container
 built by hand — rather than on the first upload.
 
 ---
@@ -150,7 +151,7 @@ var result = await storage.UploadAsync(
     new UploadFileInput { FileName = "hello.txt", TenantId = 1 },
     stream, ct);
 
-// File created at: {BasePath}/documents/1/hello.txt
+// File created at: {RootPath}/documents/1/hello.txt
 // File ID: fs://documents/1/hello.txt
 ```
 
@@ -186,6 +187,14 @@ await storage.DownloadAsync(result.FileId, async (source, token) =>
     ct);
 ```
 
+### Delete
+
+```csharp
+var deleted = await storage.DeleteAsync(result.FileId, ct);
+// true  — a file existed and was removed
+// false — no file there, or a transient failure survived the temp folder's retries
+```
+
 ### Get Metadata
 
 ```csharp
@@ -207,39 +216,50 @@ if (metadata != null)
 
 One mutable type, served by the options pipeline. Every property is bindable and settable, and the
 same instance is what the storage is constructed from — there is no second settings type and no
-copy step that could drop a property.
+copy step that could drop a property. The storage root and the file-I/O policy now live on
+`TempFolderOptions`, reached through the mandatory `TempFolder(...)` channel.
 
 | Property | Description | Default |
 |----------|-------------|---------|
-| `BasePath` | Root directory for all files | *(required)* |
-| `Basket` | Container name appended to `BasePath` | `"share"` |
+| `Basket` | Container name appended to the root | `"share"` |
 | `StorageType` | Scheme prefix in File ID | `"fs"` |
 | `IsReadOnly` | Prevent write/delete operations | `false` |
-| `BufferSize` | Read/write buffer size in bytes | `262144` (256 KB) |
 
 `FileSystemStorageOptions.DefaultStorageType` and `FileSystemStorageOptions.DefaultBasket` are
 exposed as constants. The defaults live on the type itself, so binding a partial configuration
 leaves the rest intact.
 
+### TempFolderOptions (the storage root)
+
+The `TempFolder(...)` channel configures the keyed `ITempFolder` the storage reads and writes
+through. The properties that matter to a filesystem storage:
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `RootPath` | Root directory of the storage; **must not** be blank or the system temp directory | `Path.GetTempPath()` (rejected) |
+| `MaxAge` | Age after which the cleanup strategy removes an expired subfolder | **30 days** (storage default) |
+| `TouchDebounce` | Debounce before a write refreshes the folder's activity marker | 5 seconds |
+| `OverwriteFiles` | Whether an existing file is replaced on write | `true` |
+
+`Sa.HybridFileStorage.FileSystem` raises a storage's `MaxAge` from the temp-folder default of 24
+hours to **30 days**, because storage files are meant to outlive a scratch folder. A section value
+or a code `Configure` that sets `MaxAge` still wins.
+
 Validation runs after post-configuration and enforces:
 
 | Requirement | Applies to |
 |-------------|------------|
-| `BasePath` not null or blank | `BasePath` |
-| `BasePath` is an absolute, creatable path | `BasePath` |
 | `StorageType` at most 10 characters, no `:`, `/` or `\` | `StorageType` |
 | `Basket` 3-63 characters, starts with a letter or `_`, no path separator | `Basket` |
-| `BufferSize` greater than zero | `BufferSize` |
-
-A blank `BasePath` is deliberately **not** normalised in post-configuration: `Path.GetFullPath("   ")`
-succeeds on Unix and would silently create a directory named `"   "`.
+| `RootPath` set, outside the system temp directory | `TempFolderOptions` |
 
 ### Adding your own validation
 
 ```csharp
-builder.Services.AddSaFileSystemFileStorage(o => o
-    .Options(ob => ob.Configure(options => options.BasePath = @"C:\data\files")
-    .Validate(options => options.BufferSize >= 64 * 1024, "BufferSize must be at least 64 KB.")));
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(options => options.Basket = "documents")
+        .Validate(options => options.StorageType == "fs", "Only the 'fs' scheme is supported."))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder => folder.RootPath = @"C:\data\files"))));
 ```
 
 Your rule runs in addition to the built-in checks; all failures are reported together in the
@@ -249,19 +269,24 @@ resulting `OptionsValidationException`.
 
 ## Security
 
-The provider protects against directory traversal attacks:
+The provider protects against directory traversal and injection attacks through the temp folder's
+path guard:
 
-1. **Path sanitisation** — leading `/` or `\` characters in `FileName` are stripped; all backslashes are converted to forward slashes
-2. **Base path containment** — every resolved file path is checked for belonging to `{BasePath}/{Basket}`. Attempts to escape via `../` are rejected with `SecurityException`
-3. **Deterministic paths** — File IDs map to relative paths without resolution, preventing symlink-based attacks
+1. **Path sanitisation** — leading `/` or `\` characters in `FileName` are stripped; all separators are converted to the platform's directory separator
+2. **Root containment** — every resolved file path must land inside `{RootPath}/{Basket}`. Attempts to escape via `..` are rejected with `SecurityException`
+3. **Injection rejection** — `~`, shell/glob metacharacters (`< > | & ; ` $ ^ * ? " ' %`), control and invisible Unicode characters are rejected with `SecurityException`
+4. **Deterministic paths** — File IDs map to relative paths without resolution, preventing symlink-based attacks
 
 ```csharp
 // Safe — normalised to "report.pdf"
 new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
-// Creates: {BasePath}/documents/1/report.pdf
+// Creates: {RootPath}/documents/1/report.pdf
 
 // Blocked — directory traversal detected
 // fileName = "../../../etc/passwd" → throws SecurityException
+
+// Blocked — injection-style character (query-string percent)
+// fileName = "file%name.txt" → throws SecurityException
 ```
 
 ---
@@ -272,10 +297,38 @@ new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
 |----------|----------|
 | `IsReadOnly = true` + upload/delete | Throws `HybridFileStorageWritableException` |
 | File not found during download/delete | Returns `false` (no exception) |
-| IOException on delete | Retries internally; returns `false` if all retries fail |
-| Path escape attempt | Throws `SecurityException` |
+| Path points at a directory during download/delete | Throws `InvalidOperationException` |
+| IOException on delete | Retried by the temp folder; returns `false` if all retries fail |
+| Path escape or injection attempt | Throws `SecurityException` |
 | Invalid File ID format | Throws `ArgumentException` |
 | Invalid options | Throws `OptionsValidationException` at host start (`ValidateOnStart`) or on first resolve |
+
+---
+
+## Migrating from `BasePath`
+
+`FileSystemStorageOptions.BasePath` was removed: the root now lives on the temp folder behind the
+mandatory `TempFolder(...)` channel. To keep existing File IDs valid, point the new root at the old
+value:
+
+```csharp
+// Before
+builder.Services.AddSaFileSystemFileStorage(o => o.Options(ob => ob.Configure(x =>
+{
+    x.BasePath = @"C:\data\files";
+    x.Basket = "documents";
+})));
+
+// After
+builder.Services.AddSaFileSystemFileStorage("documents", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\files"))));
+```
+
+`FileSystemStorageOptions.BufferSize` was also removed — the temp folder owns the copy buffer
+(81920 bytes). The registration is now named-only: every existing
+`AddSaFileSystemFileStorage(configure)` call needs a name and a `TempFolder(...)` channel.
 
 ---
 

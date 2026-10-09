@@ -26,7 +26,7 @@ public sealed class AccessAndHostTests : IDisposable
         return services.BuildServiceProvider();
     }
 
-    // ---------- CheckAccessAsync ----------
+    // ---------- EnsureAccessAsync ----------
 
     [Fact]
     public async Task CheckAccess_ReadWrite_CreatesAMissingRoot()
@@ -38,7 +38,7 @@ public sealed class AccessAndHostTests : IDisposable
             using var provider = Build(options: o => o.RootPath = missing);
             var folder = provider.GetRequiredKeyedService<ITempFolder>("access");
 
-            await folder.CheckAccessAsync(TestTemp.Token);
+            await folder.EnsureAccessAsync(TestTemp.Token);
 
             Assert.True(Directory.Exists(missing));
         }
@@ -63,7 +63,7 @@ public sealed class AccessAndHostTests : IDisposable
             var folder = provider.GetRequiredKeyedService<ITempFolder>("access");
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => folder.CheckAccessAsync(TestTemp.Token).AsTask());
+                () => folder.EnsureAccessAsync(TestTemp.Token).AsTask());
 
             Assert.Contains("read-only", ex.Message, StringComparison.Ordinal);
             Assert.False(Directory.Exists(missing)); // RO never creates anything
@@ -84,7 +84,7 @@ public sealed class AccessAndHostTests : IDisposable
         });
         var folder = provider.GetRequiredKeyedService<ITempFolder>("access");
 
-        await folder.CheckAccessAsync(TestTemp.Token);
+        await folder.EnsureAccessAsync(TestTemp.Token);
 
         Assert.Empty(Directory.GetFileSystemEntries(_root)); // no probe file/folder left behind
     }
@@ -101,7 +101,7 @@ public sealed class AccessAndHostTests : IDisposable
             var folder = provider.GetRequiredKeyedService<ITempFolder>("access");
 
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => folder.CheckAccessAsync(TestTemp.Token).AsTask());
+                () => folder.EnsureAccessAsync(TestTemp.Token).AsTask());
         }
         finally
         {
@@ -115,13 +115,13 @@ public sealed class AccessAndHostTests : IDisposable
         using var provider = Build(options: o => o.RootPath = _root);
         var folder = provider.GetRequiredKeyedService<ITempFolder>("access");
 
-        await folder.CheckAccessAsync(TestTemp.Token);
+        await folder.EnsureAccessAsync(TestTemp.Token);
 
         Assert.Empty(Directory.GetFileSystemEntries(_root));
     }
 
     [Fact]
-    public async Task ReadOnlyInstance_RejectsMutations_ButAllowsEnumeration()
+    public async Task ReadOnlyInstance_RejectsMutations_ButAllowsReadsAndEnumeration()
     {
         File.WriteAllText(Path.Combine(_root, "existing.txt"), "data");
 
@@ -134,9 +134,16 @@ public sealed class AccessAndHostTests : IDisposable
 
         Assert.Throws<InvalidOperationException>(() => folder.CreateSubfolder());
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => folder.SaveStreamAsync(new MemoryStream(), "x.txt", TestTemp.Token).AsTask());
+            () => folder.WriteAsync(new MemoryStream(), "x.txt", TestTemp.Token).AsTask());
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => folder.CopyFileAsync(Path.Combine(_root, "existing.txt"), null, TestTemp.Token).AsTask());
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => folder.DeleteFileAsync("existing.txt", TestTemp.Token));
+
+        // Reading mutates nothing — a read-only instance serves ReadAsync like any other.
+        var found = await folder.ReadAsync(
+            "existing.txt", (stream, ct) => stream.CopyToAsync(Stream.Null, ct), TestTemp.Token);
+        Assert.True(found);
 
         var seen = 0;
         await foreach (var _ in folder.EnumerateFilesAsync("*.txt", cancellationToken: TestTemp.Token))

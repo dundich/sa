@@ -1,13 +1,13 @@
 namespace Sa.Data.TempFolder;
 
 /// <summary>
-/// Coalesces a burst of writes into a single delayed refresh of the activity markers of a written
-/// file's folder <b>and every ancestor up to the root</b>: every <see cref="Request"/> re-arms one
-/// timer per folder, and only a quiet period of <c>TouchDebounce</c> length actually touches the
-/// last write times.
+/// Coalesces a burst of file accesses — writes and successful reads — into a single delayed
+/// refresh of the activity markers of an accessed file's folder <b>and every ancestor up to the
+/// root</b>: every <see cref="Request"/> re-arms one timer per folder, and only a quiet period of
+/// <c>TouchDebounce</c> length actually touches the last write times.
 /// </summary>
 /// <remarks>
-/// One entry per folder — the directory holding the written files; the timer is recreated on every
+/// One entry per folder — the directory holding the accessed files; the timer is recreated on every
 /// request and carries its own generation, so a callback already in flight for a superseded
 /// request recognises itself and does nothing. The touch runs outside the lock — file-system calls
 /// have no business serialising the dictionary — and walks upward one ancestor at a time, so both
@@ -19,7 +19,7 @@ namespace Sa.Data.TempFolder;
 /// The walk itself rides the instance's <see cref="CleanupGate"/> activity side, and the pending
 /// entry is only cleared <b>after</b> the walk has landed. A cleanup pass therefore sees either a
 /// refreshed marker (the folder is not expired) or a still-pending entry (the folder is skipped —
-/// see <see cref="HasPendingWithin"/>): a just-written file is never deleted in the quiet window
+/// see <see cref="HasPendingWithin"/>): a just-accessed file is never deleted in the quiet window
 /// before its touch fires.
 /// </para>
 /// <para>
@@ -57,9 +57,9 @@ internal sealed class TouchDebouncer : IDisposable
 
     /// <summary>
     /// Schedules (or re-arms) the debounced touch of <paramref name="absoluteFolderPath"/> — a
-    /// directory under the instance root that received a write (never the root itself). A zero
-    /// delay touches immediately. When the quiet period elapses, the folder and every ancestor up
-    /// to (excluding) the root get their last write time refreshed.
+    /// directory under the instance root that received a write or a successful read (never the root
+    /// itself). A zero delay touches immediately. When the quiet period elapses, the folder and
+    /// every ancestor up to (excluding) the root get their last write time refreshed.
     /// </summary>
     public void Request(string absoluteFolderPath)
     {
@@ -160,7 +160,7 @@ internal sealed class TouchDebouncer : IDisposable
                 if (!_disposed && entry.Generation == generation && _entries.Remove(path))
                 {
                     // Cleared only now, after the walk landed: until this point a cleanup pass
-                    // still treats the folder as just-written and skips it. A failed walk leaves
+                    // still treats the folder as just-accessed and skips it. A failed walk leaves
                     // the entry pending — the folder then stays older (the safe direction) until
                     // the next successful touch or dispose.
                     entry.Timer?.Dispose();

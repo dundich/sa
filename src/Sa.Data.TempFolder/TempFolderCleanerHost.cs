@@ -42,7 +42,7 @@ internal sealed class TempFolderCleanerHost : BackgroundService
         foreach (var registration in _registrations)
         {
             var folder = _services.GetRequiredKeyedService<ITempFolder>(registration.Name);
-            await folder.CheckAccessAsync(cancellationToken).ConfigureAwait(false);
+            await folder.EnsureAccessAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await base.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -73,7 +73,7 @@ internal sealed class TempFolderCleanerHost : BackgroundService
                 $"{registration.Name}:cleanup",
                 options.CleanupInterval,
                 runFirstImmediately: false,
-                () => folder.CleanupAsync(stoppingToken).AsTask(),
+                () => folder.CleanupExpiredAsync(stoppingToken).AsTask(),
                 stoppingToken));
 
             if (folder.HasPeriodicVolumeScan())

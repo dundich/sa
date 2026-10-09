@@ -1,4 +1,5 @@
-﻿using Sa.HybridFileStorage.Domain;
+﻿using Sa.Data.TempFolder;
+using Sa.HybridFileStorage.Domain;
 using System.Runtime.CompilerServices;
 
 
@@ -8,29 +9,30 @@ namespace Sa.HybridFileStorage.FileSystem;
 /// fs://share/tenant/filename
 /// </summary>
 /// <remarks>
-/// Takes the concrete <see cref="FileSystemStorageOptions"/> rather than <c>IOptions&lt;T&gt;</c> so the
-/// type carries no dependency on Microsoft.Extensions.Options and stays constructible in a test without a
-/// container. When it comes from <see cref="Setup.AddSaFileSystemFileStorage"/> the value has already been
-/// through the pipeline's post-configuration step.
+/// All file I/O — writing, reading and deleting — is delegated to the keyed
+/// <see cref="ITempFolder"/> this storage was registered with (see
+/// <see cref="Setup.AddSaFileSystemFileStorage"/>), so the storage no longer opens
+/// <c>FileStream</c>s or calls <c>File.Delete</c> itself: path guarding, cleanup activity and
+/// retries belong to the temp folder, and this type only maps a file ID to a relative path and
+/// shapes the result.
 /// </remarks>
 internal sealed class FileSystemStorage(
+    ITempFolder tempFolder,
     FileSystemStorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
     private const string SchemeSeparator = "://";
 
-    // GetFullPath is idempotent, so the post-configured absolute path passes through unchanged; it stays
-    // because a hand-constructed instance may carry a relative one.
-    private readonly string _basePath = Path.TrimEndingDirectorySeparator(
-        Path.GetFullPath(options.BasePath));
+    // The temp folder hands out a fully qualified root; the trim keeps the prefix comparisons
+    // below free of a trailing separator.
+    private readonly string _root = Path.TrimEndingDirectorySeparator(tempFolder.RootPath);
 
     private readonly string _basePathScope = Path.TrimEndingDirectorySeparator(
-        Path.GetFullPath(Path.Combine(options.BasePath, options.Basket)));
+        Path.Combine(tempFolder.RootPath, options.Basket));
 
     private readonly string _schemePrefix = $"{options.StorageType}{SchemeSeparator}";
     private readonly string _storageType = options.StorageType;
     private readonly bool _isReadOnly = options.IsReadOnly;
-    private readonly int _bufferSize = options.BufferSize;
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     public string Basket => options.Basket;
@@ -67,42 +69,23 @@ internal sealed class FileSystemStorage(
 
         string filename = PathSanitizer.SanitizeRelativePath(metadata.FileName);
 
+        // The layout and the file ID stay exactly as before: {Basket}/{tenant}/{file}, joined
+        // with forward slashes so the fs:// prefix reads the same on every platform. The temp
+        // folder resolves and guards the path against its root.
         string relativePath = string.Concat(Basket, "/", metadata.TenantId.ToString(), "/", filename);
-        string filePath = Path.Combine(_basePath, relativePath);
 
-        EnsurePathWithinBase(filePath);
-
-        string? directory = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(directory))
-            EnsureDirectory(directory);
-
-        // Smart preallocation: use actual length when available, fall back to 0 for unknown sizes
-        long preallocationSize = 1024 * 1024;
-        if (fileStream.CanSeek && fileStream.Length > 0 && fileStream.Length <= int.MaxValue)
-        {
-            preallocationSize = fileStream.Length;
-        }
-
-        await using var fileStreamOutput = new FileStream(filePath, new FileStreamOptions
-        {
-            Mode = FileMode.Create,
-            Access = FileAccess.Write,
-            Share = FileShare.None,
-            BufferSize = _bufferSize,
-            Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
-            PreallocationSize = (int)preallocationSize
-        });
-
-        await fileStream.CopyToAsync(fileStreamOutput, cancellationToken).ConfigureAwait(false);
+        var (_, absolutePath) = await tempFolder
+            .WriteAsync(fileStream, relativePath, cancellationToken)
+            .ConfigureAwait(false);
 
         return new StorageResult(
             FileId: string.Concat(_schemePrefix, relativePath),
-            AbsoluteUrl: Path.GetFullPath(filePath),
+            AbsoluteUrl: absolutePath,
             StorageType: _storageType,
             UploadedAt: _timeProvider.GetUtcNow());
     }
 
-    public async Task<bool> DownloadAsync(
+    public Task<bool> DownloadAsync(
         string fileId,
         Func<Stream, CancellationToken, Task> loadStream,
         CancellationToken cancellationToken)
@@ -110,52 +93,12 @@ internal sealed class FileSystemStorage(
         ArgumentNullException.ThrowIfNull(fileId);
         ArgumentNullException.ThrowIfNull(loadStream);
 
-
         if (!CanProcess(fileId))
-            return false;
+            return Task.FromResult(false);
 
-        string filePath = GetFullPath(fileId);
-        EnsurePathWithinBase(filePath);
-
-        try
-        {
-            await using var fs = new FileStream(filePath, new FileStreamOptions
-            {
-                Mode = FileMode.Open,
-                Access = FileAccess.Read,
-                Share = FileShare.Read,
-                BufferSize = _bufferSize,
-                Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
-            });
-
-            await loadStream(fs, cancellationToken).ConfigureAwait(false);
-            return true;
-        }
-        catch (FileNotFoundException)
-        {
-            return false;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return false;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private string GetFullPath(string fileId)
-    {
-        var filePath = FileIdToPath(fileId);
-        return Path.IsPathRooted(filePath)
-            ? filePath
-            : Path.Combine(_basePath, filePath);
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private string GetFullPathFast(string fileId)
-    {
-        var relativePath = FileIdToPath(fileId);
-        return Path.Combine(_basePath, relativePath);
+        // The temp folder already reads a missing file as `false` and rejects a directory path;
+        // a non-existent file therefore keeps the provider's historical "return false" contract.
+        return tempFolder.ReadAsync(FileIdToPath(fileId), loadStream, cancellationToken);
     }
 
     public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
@@ -166,32 +109,25 @@ internal sealed class FileSystemStorage(
         if (!CanProcess(fileId))
             return false;
 
-        var filePath = GetFullPath(fileId);
-        EnsurePathWithinBase(filePath);
-
-        if (!File.Exists(filePath))
-            return false;
-
         try
         {
-            await FileRetryHelper.RetryAsync(
-                () => File.Delete(filePath),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            return true;
+            return await tempFolder
+                .DeleteFileAsync(FileIdToPath(fileId), cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (IOException)
         {
+            // A transient failure that survived the temp folder's retries reads as "not deleted"
+            // here — the same contract the provider had when it deleted files itself.
             return false;
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void EnsureDirectory(string? dir)
+    private string GetFullPathFast(string fileId)
     {
-        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-        {
-            Directory.CreateDirectory(dir);
-        }
+        var relativePath = FileIdToPath(fileId);
+        return Path.Combine(_root, relativePath);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -214,15 +150,6 @@ internal sealed class FileSystemStorage(
         return Path.GetFullPath(path)
             .AsSpan()
             .StartsWith(_basePathScope.AsSpan(), StringComparison.Ordinal);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void EnsurePathWithinBase(string path)
-    {
-        if (!IsPathWithinBase(path))
-        {
-            HybridFileStorageThrowHelper.ThrowSecurityException(path, _basePath);
-        }
     }
 
     public Task<FileMetadata?> GetMetadataAsync(

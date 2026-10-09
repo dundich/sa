@@ -33,7 +33,7 @@ public sealed class TempFolderOptions
     /// <summary>
     /// Gets or sets the timestamp used to age subfolders. Defaults to
     /// <see cref="TempFolderAgeSource.LastWriteTime"/> — a marker the instance refreshes itself
-    /// (debounced) after writes, so active folders survive cleanup.
+    /// (debounced) after writes and successful reads, so active folders survive cleanup.
     /// </summary>
     public TempFolderAgeSource AgeSource { get; set; } = TempFolderAgeSource.LastWriteTime;
 
@@ -60,7 +60,7 @@ public sealed class TempFolderOptions
     public string FolderNameFormat { get; set; } = "yyyy-MM-dd";
 
     /// <summary>
-    /// Gets or sets whether <see cref="ITempFolder.SaveStreamAsync"/> and
+    /// Gets or sets whether <see cref="ITempFolder.WriteAsync"/> and
     /// <see cref="ITempFolder.CopyFileAsync"/> replace a file that already exists at the target
     /// path. Defaults to <see langword="true"/> — the file is overwritten. When
     /// <see langword="false"/>, an existing file fails the write with <see cref="IOException"/>
@@ -92,8 +92,8 @@ public sealed class TempFolderOptions
     /// <summary>
     /// Gets or sets a value indicating whether this instance is read-only. Defaults to
     /// <see langword="false"/>. Read-only instances reject every mutating operation
-    /// (<c>CreateSubfolder</c> / <c>SaveStreamAsync</c> / <c>CopyFileAsync</c> /
-    /// <c>CleanupAsync</c>) and the background service ignores them completely: no cleanup,
+    /// (<c>CreateSubfolder</c> / <c>WriteAsync</c> / <c>CopyFileAsync</c> /
+    /// <c>CleanupExpiredAsync</c>) and the background service ignores them completely: no cleanup,
     /// no volume scan, no <see cref="OnVolumeExceeded"/>, no free-space check. Startup access
     /// validation then only checks that the root exists and can be listed.
     /// </summary>
@@ -117,9 +117,10 @@ public sealed class TempFolderOptions
     public bool TrackVolume { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the debounce delay before a write refreshes the activity markers of the
-    /// touched folder chain (the written file's directory and every ancestor up to the root).
-    /// Defaults to 5 seconds: a burst of writes re-arms one timer per folder, and only a quiet
+    /// Gets or sets the debounce delay before a file access (write or successful read) refreshes
+    /// the activity markers of the touched folder chain (the accessed file's directory and every
+    /// ancestor up to the root).
+    /// Defaults to 5 seconds: a burst of accesses re-arms one timer per folder, and only a quiet
     /// period of this length actually updates the folders' last write times. Must not be
     /// negative.
     /// </summary>
