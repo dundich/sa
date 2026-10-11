@@ -12,21 +12,38 @@ namespace Sa.Outbox.PostgreSql;
 
 public static class Setup
 {
+    /// <summary>
+    /// Registers the PostgreSQL-backed Outbox.
+    /// </summary>
+    /// <param name="services">The service collection to add outbox services to.</param>
+    /// <param name="configure">An optional action to configure the outbox through <see cref="IPgOutboxConfiguration"/>.</param>
+    /// <param name="scopeKey">
+    /// The dependency-injection scope of the outbox — the key under which its internal
+    /// <c>Sa.Partitional.PostgreSql</c> module and its named <c>Sa.Schedule</c> schedule (migration,
+    /// cleanup and delivery jobs) are registered. Defaults to <see cref="OutboxScope.DefaultKey"/>.
+    /// Pass the same value to <c>AddSaOutbox</c> when you override it.
+    /// </param>
+    /// <returns>The updated <see cref="IServiceCollection"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="scopeKey"/> is null, empty,
+    /// whitespace, or <see cref="Sa.Schedule.Setup.DefaultName"/>.</exception>
     public static IServiceCollection AddSaOutboxUsingPostgreSql(
         this IServiceCollection services,
-        Action<IPgOutboxConfiguration>? configure = null)
+        Action<IPgOutboxConfiguration>? configure = null,
+        string scopeKey = OutboxScope.DefaultKey)
     {
+        OutboxScope.EnsureValid(scopeKey);
+
         services
             .AddOutboxSqlBuilder(configure)
-            .AddOutboxRepositories()
-            .AddOutboxPartitional()
+            .AddOutboxRepositories(scopeKey)
+            .AddOutboxPartitional(scopeKey)
             .AddOutboxIdGen()
             .AddOutboxCommands()
             .AddOutboxTypeResolver()
-            .AddOutboxJobInterceptors()
+            .AddOutboxJobInterceptors(scopeKey)
             ;
 
-        services.AddSaOutbox();
+        services.AddSaOutbox(scopeKey: scopeKey);
 
         return services;
     }

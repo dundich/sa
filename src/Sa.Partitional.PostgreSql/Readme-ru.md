@@ -54,7 +54,82 @@ builder.Services.AddSaPartitional((sp, builder) =>
 .AddPartCleanupSchedule((sp, opts) => opts.AsBackgroundJob = true);
 ```
 
-`AddSaPartitional` всегда регистрирует data source (внутри — «голый» вызов `AddDataSource()`), поэтому цепочка `.AddDataSource(...)` выше — единственный *настраивающий* вызов — и задаёт connection string (секция, если нужна, — через `FromConfiguration` в том же callback'е). Если data source уже настроен где-то ещё (например, `services.AddSaPostgreSqlDataSource(...)`), цепочку можно опустить: «голая» регистрация дедуплицируется с ней. Если connection string не задан нигде, data source строится из зарегистрированного в DI `NpgsqlDataSource` (общий pool), иначе валидация не проходит.
+Keyless-перегрузка `AddSaPartitional` всегда регистрирует data source (внутри — «голый» вызов `AddDataSource()`), поэтому цепочка `.AddDataSource(...)` выше — единственный *настраивающий* вызов — и задаёт connection string (секция, если нужна, — через `FromConfiguration` в том же callback'е). Если data source уже настроен где-то ещё (например, `services.AddSaPostgreSqlDataSource(...)`), цепочку можно опустить: «голая» регистрация дедуплицируется с ней. Если connection string не задан нигде, data source строится из зарегистрированного в DI `NpgsqlDataSource` (общий pool), иначе валидация не проходит. Keyed-модули своего data source не регистрируют — см. раздел *Ключевая регистрация* ниже.
+
+---
+
+## Ключевая регистрация — несколько модулей в одном контейнере
+
+Один вызов `AddSaPartitional` регистрирует один *модуль*: свой набор партиционированных таблиц,
+свою политику миграции и очистки, свой кэш и свой планировщик. Чтобы в одном контейнере жили
+**несколько независимых модулей**, регистрируйте каждый под своим ключом:
+
+```csharp
+services.AddSaPartitional("outbox", (sp, builder) =>
+{
+    builder.AddSchema(schema => schema.AddTable("outbox_messages",
+        "id bigint NOT NULL",
+        "created_at timestamptz NOT NULL").PartByRange(PgPartBy.Day));
+}, AsBackgroundJob: true);
+
+services.AddSaPartitional("audit", (sp, builder) =>
+{
+    builder.AddSchema(schema => schema.AddTable("audit_events",
+        "id bigint NOT NULL",
+        "created_at timestamptz NOT NULL").PartByRange(PgPartBy.Month));
+}, AsBackgroundJob: true);
+```
+
+Все сервисы модуля регистрируются **keyed под ключом модуля** — `IPartitionManager`,
+`IPartRepository`, `IMigrationService`, `IPartCleanupService`, `ISettingsBuilder`, `ISqlBuilder`,
+`IPartCache` и настройки (`PartCacheSettings`, `MigrationScheduleSettings`,
+`PartCleanupScheduleSettings`) — плюс собственный **именованный планировщик** (`Sa.Schedule`),
+задачи которого носят имена с ключом модуля (`Migration job [outbox]`, `Cleanup job [outbox]`).
+
+```csharp
+IPartitionManager outbox = sp.GetRequiredKeyedService<IPartitionManager>("outbox");
+IMigrationService audit  = sp.GetRequiredKeyedService<IMigrationService>("audit");
+IScheduler outboxSched   = sp.GetRequiredKeyedService<IScheduler>("outbox");
+```
+
+- **Повторные вызовы с тем же ключом объединяют** объявления таблиц и настройки (ровно так же,
+  как keyless-перегрузка для модуля по умолчанию), но **не дублируют** задачи миграции/очистки —
+  per-key маркер оставляет по одной задаче каждого вида.
+- **Ключ валидируется**: он должен быть непустым и не равен `"default"`
+  (`Sa.Schedule.Setup.DefaultName`, имя планировщика keyless-модуля) — иначе `ArgumentException`.
+
+### Data source: именованный, если задан, иначе default
+
+По умолчанию keyed-модуль не несёт собственный data source. Его репозиторий резолвит:
+
+1. **именованный** data source, зарегистрированный под ключом модуля
+   (`sp.GetKeyedService<IPgDataSource>(key)`), если он есть;
+2. иначе — **default** (безымянный) data source.
+
+Именно это позволяет нескольким модулям партиционировать таблицы **в одной БД** — достаточно один
+раз зарегистрировать общий data source, и каждый модуль его подхватит:
+
+```csharp
+services.AddSaPostgreSqlDataSource(ds => ds
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=...;Database=shared")));
+
+services.AddSaPartitional("outbox", ...);   // берёт default data source
+services.AddSaPartitional("audit", ...);    // берёт default data source
+```
+
+Чтобы закрепить за модулем **свою** БД, допишите `.AddDataSource(...)` (или зарегистрируйте
+`services.AddSaPostgreSqlDataSource("<key>", ...)` напрямую); именованный data source лежит под
+ключом модуля:
+
+```csharp
+services.AddSaPartitional("audit", ...)
+    .AddDataSource(ds => ds
+        .Options(ob => ob.Configure(o => o.ConnectionString = "Host=...;Database=audit_db")));
+```
+
+> Keyed-цепочка `AddSaPartitional` **не** вызывает `AddDataSource()` сама — этот «голый» вызов
+> есть только в keyless-перегрузке, которая всегда регистрирует default data source. Keyed-модуль
+> остаётся без собственного data source, пока ему не зададут именованный, иначе берёт default.
 
 ---
 

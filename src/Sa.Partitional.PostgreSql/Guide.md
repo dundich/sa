@@ -425,6 +425,48 @@ schema is declared and declaration order matters.
 
 ---
 
+## Multiple Modules (Keyed Registration)
+
+`AddSaPartitional` also has a **keyed** overload: it registers an independent module — its own
+partition tables, its own migration/cleanup/cache settings and its own `Sa.Schedule` schedule —
+under a key. Two modules registered under different keys never see each other's services.
+
+```csharp
+builder.Services.AddSaPartitional("outbox", (sp, builder) =>
+{
+    builder.AddSchema(schema => schema.AddTable("outbox_messages",
+            "id bigint NOT NULL",
+            "created_at timestamptz NOT NULL")
+        .PartByRange(PgPartBy.Day));
+}, AsBackgroundJob: true);
+
+builder.Services.AddSaPartitional("audit", (sp, builder) =>
+{
+    builder.AddSchema(schema => schema.AddTable("audit_events",
+            "id bigint NOT NULL",
+            "created_at timestamptz NOT NULL")
+        .PartByRange(PgPartBy.Month));
+}, AsBackgroundJob: true);
+```
+
+```csharp
+var outbox      = sp.GetRequiredKeyedService<IPartitionManager>("outbox");
+var audit       = sp.GetRequiredKeyedService<IMigrationService>("audit");
+var outboxSched = sp.GetRequiredKeyedService<IScheduler>("outbox");
+```
+
+- Repeated calls with the **same key** merge tables and settings but keep a single migration and a
+  single cleanup job per module.
+- The key must be non-empty and not `"default"` (`Sa.Schedule.Setup.DefaultName`).
+- **Data source:** a module resolves a **named** data source registered under its key
+  (`.AddDataSource(...)` on the chain, or `services.AddSaPostgreSqlDataSource(key, ...)`), and
+  otherwise falls back to the **default** (unkeyed) one. Several modules can therefore share one
+  database; pin a module to its own database with `.AddDataSource(...)`.
+
+See the Readme's *Keyed Registration* section for the full description.
+
+---
+
 ## Custom Primary Key Constraint
 
 `AddConstraintPkSql` overrides the **name** of the generated primary-key constraint (default `pk_{table}`). The

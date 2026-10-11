@@ -99,6 +99,13 @@ Everything flows through two registration calls:
 | `AddSaOutbox(...)` | Core: tenants, consumers, schedules |
 | `AddSaOutboxUsingPostgreSql(...)` | PostgreSQL: connection, tables, migration, cleanup |
 
+> **Isolation.** The Outbox registers its internal `Sa.Schedule` schedule and its
+> `Sa.Partitional.PostgreSql` module under the scope key `"outbox"`
+> (`Sa.Outbox.OutboxScope.DefaultKey`), and never touches the application's default schedule or
+> partitional module. Both entry points take an optional trailing `scopeKey` parameter — pass the
+> same value to `AddSaOutbox` and `AddSaOutboxUsingPostgreSql` to move the Outbox to a different
+> scope. The reserved `"default"` key is rejected.
+
 ### 1. Tenant Configuration
 
 Where inside `AddSaOutbox`:
@@ -323,7 +330,8 @@ Where inside `AddSaOutboxUsingPostgreSql`:
 By default migration and cleanup run as background jobs via `Sa.Schedule`. You can also trigger them on demand:
 
 ```csharp
-var migrationService = host.Services.GetRequiredService<IMigrationService>();
+// The outbox migration service lives in the outbox's own DI scope ("outbox").
+var migrationService = host.Services.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
 bool ok = await migrationService.WaitMigration(TimeSpan.FromSeconds(30), ct);
 
 // Or check current state

@@ -100,6 +100,13 @@ public sealed class OrderConsumer : IConsumer<OrderCreated>
 | `AddSaOutbox(...)` | Ядро: тенанты, консьюмеры, расписание |
 | `AddSaOutboxUsingPostgreSql(...)` | PostgreSQL: подключение, таблицы, миграция, очистка |
 
+> **Изоляция.** Outbox регистрирует своё внутреннее расписание `Sa.Schedule` и свой модуль
+> `Sa.Partitional.PostgreSql` под ключом скопа `"outbox"` (`Sa.Outbox.OutboxScope.DefaultKey`) и
+> никогда не трогает расписание/партициальный модуль приложения по умолчанию. Оба входных метода
+> принимают необязательный последний параметр `scopeKey` — передайте одно и то же значение в
+> `AddSaOutbox` и `AddSaOutboxUsingPostgreSql`, чтобы перенести Outbox в другой скоп. Зарезервированный
+> ключ `"default"` отклоняется.
+
 ### 1. Настройка тенантов
 
 Внутри `AddSaOutbox`:
@@ -332,7 +339,8 @@ public class OrderSerializer : IOutboxMessageSerializer
 По умолчанию миграция и очистка работают как фоновые задания через `Sa.Schedule`. Можно управлять вручную:
 
 ```csharp
-var migrationService = host.Services.GetRequiredService<IMigrationService>();
+// Сервис миграции outbox живёт в собственном DI-скопе outbox ("outbox").
+var migrationService = host.Services.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
 bool ok = await migrationService.WaitMigration(TimeSpan.FromSeconds(30), ct);
 
 // Или проверить состояние

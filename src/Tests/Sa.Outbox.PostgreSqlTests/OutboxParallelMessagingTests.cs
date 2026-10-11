@@ -123,7 +123,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
         // start cron schedules
-        IScheduler scheduler = ServiceProvider.GetRequiredService<IScheduler>();
+        IScheduler scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
         int i = await scheduler.Start(CancellationToken.None);
         Assert.True(i > 0);
 

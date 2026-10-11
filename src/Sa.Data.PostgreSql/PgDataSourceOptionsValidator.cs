@@ -36,16 +36,29 @@ internal sealed class PgDataSourceOptionsValidator : IValidateOptions<PgDataSour
 
         if (string.IsNullOrWhiteSpace(options.ConnectionString))
         {
-            // IsService проверяет *наличие* регистрации любого lifetime, не создавая экземпляр и
-            // не открывая scope, поэтому сработает и для scoped-регистрации.
-            if (_serviceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(NpgsqlDataSource)) == true)
+            // IsService/IsKeyedService проверяют *наличие* регистрации любого lifetime, не
+            // создавая экземпляр и не открывая scope, поэтому сработают и для scoped-регистрации.
+            // (GetKeyedService нельзя: он *создал бы* NpgsqlDataSource и открыл pool ради проверки.)
+            //
+            // For the default (unnamed) instance the fallback is an unkeyed NpgsqlDataSource; for a
+            // named/keyed instance it is a keyed NpgsqlDataSource registered with the same key. The
+            // `name` argument carries the key (null/empty = default), so the check follows it.
+            var isDefault = string.IsNullOrEmpty(name);
+
+            var hasBorrowed = isDefault
+                ? _serviceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(NpgsqlDataSource)) == true
+                : _serviceProvider.GetService<IServiceProviderIsKeyedService>()?.IsKeyedService(typeof(NpgsqlDataSource), name) == true;
+
+            if (hasBorrowed)
             {
                 return ValidateOptionsResult.Success;
             }
 
-            return ValidateOptionsResult.Fail(
-                "PgDataSourceOptions:ConnectionString cannot be empty unless an NpgsqlDataSource is " +
-                "registered in the service collection.");
+            return ValidateOptionsResult.Fail(isDefault
+                ? "PgDataSourceOptions:ConnectionString cannot be empty unless an NpgsqlDataSource is " +
+                    "registered in the service collection."
+                : $"PgDataSourceOptions[{name}]:ConnectionString cannot be empty unless an NpgsqlDataSource is " +
+                    $"registered with key \"{name}\" in the service collection.");
         }
 
         // NpgsqlDataSource.Create() разбирает строку тем же NpgsqlConnectionStringBuilder, поэтому

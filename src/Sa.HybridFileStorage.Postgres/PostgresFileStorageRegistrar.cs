@@ -10,37 +10,51 @@ namespace Sa.HybridFileStorage.Postgres;
 
 /// <summary>
 /// The one place that knows how the PostgreSQL provider is registered: every public
-/// <c>AddSaPostgreSqlFileStorage</c> overload in <see cref="Setup"/> delegates here — the
-/// fail-fast duplicate guard, the options pipeline, and the partitioning/schedule/DI wiring.
+/// <c>AddSaPostgreSqlFileStorage</c> overload in <see cref="Setup"/> delegates here — the per-key
+/// duplicate guard, the options pipeline, the keyed partitional module (its own table, migration
+/// and cleanup schedules) and the <see cref="IFileStorage"/> descriptors.
 /// </summary>
+/// <remarks>
+/// Registration is <b>keyed</b>: every call registers one storage under its own key, with its own
+/// named options instance, its own partitional module (and therefore its own retention) and its own
+/// keyed <see cref="IFileStorage"/>. The same instance is also aliased as an unkeyed
+/// <see cref="IFileStorage"/>, so the hybrid container's failover chain picks it up without extra
+/// wiring — several registrations are tried in registration order and the first success ends the
+/// operation.
+/// </remarks>
 internal static class PostgresFileStorageRegistrar
 {
     /// <summary>
     /// Performs the shared registration logic for all <see cref="Setup.AddSaPostgreSqlFileStorage"/>
     /// overloads.
-    /// Exactly one registration per service collection: the marker makes a second call fail fast —
-    /// it would duplicate the partitioning setup, schedules and schema resolver (which
-    /// <c>TryAdd</c>-based registrations would only half-ignore, leaving an ambiguous
-    /// <see cref="IFileStorage"/>). Per-basket registrations arrive with the multi-basket stage,
-    /// which replaces this guard.
     /// </summary>
     public static IPartConfiguration Register(
         IServiceCollection services,
+        string key,
         Action<IPostgresFileStorageBuilder>? configure,
         PostgresFileStorageOptions? instance)
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
-        if (services.Any(d => d.ServiceType == typeof(PostgresFileStorageRegistration)))
+        // One registration per key: a second call would collide on the named options instance, the
+        // keyed partitional module (its schedules and jobs) and the keyed IFileStorage descriptor.
+        if (services.Any(d =>
+                d.ServiceType == typeof(PostgresFileStorageRegistration) && Equals(d.ServiceKey, key)))
         {
             throw new InvalidOperationException(
-                "AddSaPostgreSqlFileStorage has already been registered in this service collection. " +
-                "A second call would duplicate the partitioning setup, schedules and schema resolver. " +
-                "Register the PostgreSQL file storage provider only once per service collection.");
+                $"A PostgreSQL file storage with key \"{key}\" is already registered in this service " +
+                "collection. Registration keys must be unique — pick another key for the second " +
+                "instance.");
         }
 
-        // The builder channel: invoke the callback first, so the section path it records can
-        // shape the options-instance name below.
+        // The partitional module lives in its own key namespace, derived from the storage key, so a
+        // file storage never collides with a user-registered partitional module that happens to use
+        // the same key.
+        string moduleKey = ModuleKey(key);
+
+        // The builder channel: invoke the callback first, so the section path it records shapes the
+        // options pipeline below.
         PostgresFileStorageBuilder? builder = null;
 
         if (instance is null && configure is not null)
@@ -49,11 +63,9 @@ internal static class PostgresFileStorageRegistrar
             configure(builder);
         }
 
-        // One registration, one named options instance — unique per registration, so two calls
-        // never stack their Configure actions on one shared instance. The reader below resolves
-        // it through IOptionsMonitor, which is also what makes a validation failure surface at
-        // first read / host start rather than at registration.
-        string optionsName = NextOptionsName(builder?.ConfigSectionPath);
+        // One registration, one named options instance, named after the registration key (unique by
+        // the guard above and readable in diagnostics).
+        string optionsName = key;
 
         var optionsBuilder = services.AddOptions<PostgresFileStorageOptions>(optionsName);
 
@@ -75,7 +87,9 @@ internal static class PostgresFileStorageRegistrar
         optionsBuilder.ValidateOnStart();
 
         // IValidateOptions rather than ValidateDataAnnotations(): the latter is marked
-        // RequiresUnreferencedCode (IL2026) and breaks Native AOT.
+        // RequiresUnreferencedCode (IL2026) and breaks Native AOT. The registry is shared, so the
+        // single validator sees every registration and rejects two storages owning one table.
+        services.TryAddSingleton<PostgresFileStorageTableRegistry>();
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IValidateOptions<PostgresFileStorageOptions>, PostgresFileStorageOptionsValidator>());
 
@@ -98,68 +112,75 @@ internal static class PostgresFileStorageRegistrar
         // 1. RecyclableMemoryStreamManager (singleton, shared across all instances)
         services.TryAddSingleton<RecyclableMemoryStreamManager>();
 
-        // 2. Resolve the schema once, so the DDL and the storage cannot disagree about it.
-        //    A function now: the schema only materialises with the options instance.
-        PostgresFileStorageSchema.Register(services, sp => readOptions(sp).SchemaName);
+        // 2. TimeProvider (singleton, shared)
+        services.TryAddSingleton(TimeProvider.System);
 
-        // 3. Partitioning setup + DataSource configuration
-        IPartConfiguration partConfig = services.AddSaPartitional((sp, partBuilder) =>
+        // 3. Resolve the schema once per registration, so the DDL and the storage cannot disagree.
+        PostgresFileStorageSchema.Register(services, key, moduleKey, sp => readOptions(sp).SchemaName);
+
+        // 4. The keyed partitional module: one table declaration, one migration schedule and one
+        //    cleanup schedule — the storage's own retention. The data source is the module's named
+        //    one when the chain configures it (AddDataSource), the shared default one otherwise.
+        IPartConfiguration partConfig = services.AddSaPartitional(moduleKey, (sp, partBuilder) =>
         {
             PostgresFileStorageOptions options = readOptions(sp);
-            string schema = sp.GetRequiredService<PostgresFileStorageSchema>().Value;
+            string schema = sp.GetRequiredKeyedService<PostgresFileStorageSchema>(key).Value;
 
-            partBuilder.AddSchema(schema, table =>
+            partBuilder.AddSchema(schema, schemaBuilder =>
             {
-                table.AddTable(options.TableName, PostgresFileStorageTable.Columns)
+                schemaBuilder.AddTable(options.TableName, PostgresFileStorageTable.Columns)
                     .PartByList("tenant_id", "basket")
-                    .PartByRange(options.PgPartBy, PostgresFileStorageTable.PartByRangeFieldName);
+                    .PartByRange(PgPartBy.FromRange(options.PartByRange), PostgresFileStorageTable.PartByRangeFieldName);
             });
         });
 
-        // 4. Schedule for creating new partitions
+        // Migration: pre-create this storage's upcoming partitions.
         partConfig.AddPartMigrationSchedule((sp, opts) =>
         {
             opts.AsBackgroundJob = true;
             opts.ForwardDays = readOptions(sp).MigrationScheduleForwardDays;
         })
-        // Schedule for removing old partitions
+        // Cleanup: drop this storage's old partitions after its own retention.
         .AddPartCleanupSchedule((sp, opts) =>
         {
             opts.AsBackgroundJob = true;
             opts.DropPartsAfterRetention = TimeSpan.FromDays(readOptions(sp).ExpireDays);
         });
 
-        // 5. Register IFileStorage singleton. readOptions runs first, so an invalid options
-        //    instance fails here — before IPgDataSource and the rest are even touched.
-        services.AddSingleton<IFileStorage>(sp =>
-        {
-            PostgresFileStorageOptions options = readOptions(sp);
+        // 5. Register the keyed IFileStorage — resolvable by key — and alias it as an unkeyed
+        //    IFileStorage, which is what the hybrid container collects via
+        //    sp.GetServices<IFileStorage>() and orders into the failover chain.
+        services.AddKeyedSingleton<IFileStorage>(key, CreateStorage);
+        services.AddSingleton<IFileStorage>(sp => sp.GetRequiredKeyedService<IFileStorage>(key));
 
-            return new PostgresFileStorage(
-                dataSource: sp.GetRequiredService<IPgDataSource>(),
-                partManager: sp.GetRequiredService<IPartitionManager>(),
-                streamManager: sp.GetRequiredService<RecyclableMemoryStreamManager>(),
-                options: options with { SchemaName = sp.GetRequiredService<PostgresFileStorageSchema>().Value },
-                timeProvider: sp.GetRequiredService<TimeProvider>());
-        });
-
-        services.AddSingleton(new PostgresFileStorageRegistration(optionsName, partConfig));
+        services.AddKeyedSingleton(key, new PostgresFileStorageRegistration(key, moduleKey, optionsName, partConfig));
 
         return partConfig;
+
+        IFileStorage CreateStorage(IServiceProvider sp, object? _)
+        {
+            // readOptions runs first, so an invalid options instance fails here — before
+            // IPgDataSource and the rest are even touched.
+            PostgresFileStorageOptions options = readOptions(sp);
+
+            // The module's own named source when the chain pinned one, the shared default source
+            // next, and an application-registered NpgsqlDataSource last — so a container that only
+            // called AddNpgsqlDataSource(...) needs no separate AddDataSource(...) here.
+            IPgDataSource dataSource = PgDataSourceResolver.Resolve(sp, moduleKey);
+
+            return new PostgresFileStorage(
+                dataSource: dataSource,
+                partManager: sp.GetRequiredKeyedService<IPartitionManager>(moduleKey),
+                streamManager: sp.GetRequiredService<RecyclableMemoryStreamManager>(),
+                options: options with { SchemaName = sp.GetRequiredKeyedService<PostgresFileStorageSchema>(key).Value },
+                timeProvider: sp.GetRequiredService<TimeProvider>());
+        }
     }
 
     /// <summary>
-    /// Sequence for unique options-instance names within this assembly — one registration,
-    /// one named instance (the name is an internal detail: tests read it back through the
-    /// registration marker, never by hardcoding it).
+    /// The partitional module key of a file-storage registration: the namespaced, derived identity
+    /// that keeps the storage's own module apart from any user-registered module.
     /// </summary>
-    private static int s_optionsSequence;
-
-    /// <summary>
-    /// Names this registration's options instance: the section path when one was given
-    /// (readable in diagnostics), the provider label otherwise, plus a sequence number that
-    /// makes the name unique per registration.
-    /// </summary>
-    private static string NextOptionsName(string? sectionPath)
-        => $"{sectionPath ?? "PostgresFileStorage"}#{Interlocked.Increment(ref s_optionsSequence)}";
+    public static string ModuleKey(string key)
+        => $"{nameof(PostgresFileStorage)}:{key}";
 }

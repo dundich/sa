@@ -272,9 +272,19 @@ internal sealed partial class JobController(
         // Returning normally means the global handler consumed the error and
         // the job continues; throwing means the configured action was applied
         // (abort job / stop all jobs / close application) and this job must stop.
+        //
+        // A keyed (named) schedule registers its handler keyed: the job scope can resolve it
+        // because the schedule key was stamped onto the merged JobSettings. The resolution
+        // itself stays in the try: a handler whose factory throws must also abort this job.
+        string? scheduleKey = (settings as JobSettings)?.ScheduleKey;
+
         try
         {
-            _context.ServiceProvider.GetService<IJobErrorHandler>()?.HandleError(_context, error);
+            IJobErrorHandler? errorHandler = scheduleKey is null
+                ? _context.ServiceProvider.GetService<IJobErrorHandler>()
+                : _context.ServiceProvider.GetKeyedService<IJobErrorHandler>(scheduleKey);
+
+            errorHandler?.HandleError(_context, error);
         }
         catch
         {

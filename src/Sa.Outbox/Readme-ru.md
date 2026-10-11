@@ -52,6 +52,14 @@ builder.Services
 | **Publication** | Сообщения записываются в таблицу outbox внутри транзакции бизнес-операции через `IOutboxBulkWriter.InsertBulk()` |
 | **Delivery** | Фоновые задания (`Sa.Schedule`) захватывают заблокированные сообщения, вызывают консьюмеры, обновляют статус |
 
+> **Изоляция.** Задания доставки работают в **собственном** именованном расписании `Sa.Schedule`
+> под ключом скопа `OutboxScope.DefaultKey` (`"outbox"`), поэтому они никогда не делят расписание с
+> `AddSaSchedule()` приложения. Интеграция с PostgreSQL регистрирует свой модуль
+> `Sa.Partitional.PostgreSql` под тем же ключом. Оба метода — `AddSaOutbox` и
+> `AddSaOutboxUsingPostgreSql` — принимают необязательный последний аргумент `scopeKey`; передайте
+> одно и то же значение в оба, чтобы перенести Outbox в другой скоп. Зарезервированный ключ
+> `"default"` отклоняется.
+
 ---
 
 ## Основные типы
@@ -66,6 +74,7 @@ builder.Services
 | `OutboxConsumerSettingsBuilder` | Fluent-билдер для создания и частичного обновления `OutboxConsumerSettings` |
 | `IOutboxConsumerManager` | Runtime-менеджер: атомарный свап, пауза/возобновление, изменение подписок |
 | `IDeliverySnapshot` | Read-only представление зарегистрированных доставок для диагностики |
+| `OutboxScope` | Ключ DI-скопа (`"outbox"`), под которым Outbox регистрирует своё внутреннее расписание / партициальный модуль |
 | `DeliveryStatus` / `DeliveryStatusCode` | HTTP-подобные коды статуса доставки |
 | `ExponentialBackoffRetryStrategy` | Экспоненциальный backoff с jitter |
 | `OutboxPartInfo` | Информация о партиции: TenantId, PartName |

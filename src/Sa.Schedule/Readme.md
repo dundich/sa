@@ -14,6 +14,7 @@ A .NET task scheduler — periodic and one-shot jobs, dynamic concurrency contro
 - **[Lambda jobs](#lambda-jobs)** — anonymous delegates without dedicated classes.
 - **[Graceful shutdown](#runtime-management)** — configurable timeout for running iterations.
 - **[Scoped services](#defining-jobs)** — DbContext, IDbConnection, etc. resolved in a DI scope per execution.
+- **[Multiple independent schedules](#multiple-schedules-keyed)** — several keyed schedules in one container, each with its own jobs, options, interceptors and handlers.
 
 ---
 
@@ -41,6 +42,52 @@ builder.Services.AddSaSchedule(b =>
 
 var app = builder.Build();
 await app.RunAsync();
+```
+
+---
+
+## Multiple Schedules (Keyed)
+
+`AddSaSchedule` can be called with a schedule name to register a **fully independent** schedule under that DI key — its own jobs, own interceptors, own global error handlers and its own `ScheduleOptions` (bound from its own configuration section, applied to its own named options instance). Resolve it as a keyed service:
+
+```csharp
+services.AddSaSchedule("reports", b =>
+{
+    b.UseHostedService()
+     .AddJob<ReportGenerationJob>()
+        .EveryHours(1);
+});
+
+services.AddSaSchedule("cleanup", b =>
+{
+    b.UseHostedService()
+     .AddJob<CleanupJob>((sp, job) => job.EveryMinutes(5));
+});
+
+var reports = sp.GetRequiredKeyedService<IScheduler>("reports");
+var cleanup = sp.GetRequiredKeyedService<IScheduler>("cleanup");
+```
+
+Each schedule is a self-contained nest: `IScheduler`, `IScheduleSettings`, `IJobFactory`, `IJobErrorHandler` and the named `ScheduleOptions` are all registered keyed by the schedule name, and every job, interceptor and error handler lands in that schedule's own slot. A job in one schedule never sees another schedule's settings, and starting/stopping one scheduler leaves the other untouched.
+
+Everything else — `TimeProvider`, `IJobRunner`, `IServiceScopeFactory` — stays shared and unkeyed.
+
+### Rules
+
+- **Repeated calls with the same name accumulate.** Like the keyless overload, several `AddSaSchedule("name", ...)` calls fold their jobs/interceptors/handlers into the same schedule — that is how libraries that contribute jobs compose into one named schedule. A second *configuring* call (one whose builder calls `FromConfiguration(...)` or `Options(...)`) for the same name throws, per name: the guard is tracked per schedule, not globally.
+- **The keyless overload registers the default schedule.** It is resolved unkeyed (`GetRequiredService<IScheduler>()`) and is also registered as a keyed alias under `Setup.DefaultName` (`"default"`), so both resolution styles work for it. `AddSaSchedule(Setup.DefaultName, ...)` is exactly the keyless call — it does **not** create a second, separately keyed schedule.
+- **Some libraries use a named schedule, not the default one.** `AddDeliveryJob`, `AddPartCleaning` and `AddPartMigration` register into whichever schedule the calling module is scoped to. `Sa.Outbox` scopes its delivery jobs to its own named schedule (`OutboxScope.DefaultKey`, `"outbox"`) so they never collide with the application's default one; the partitional modules register into the default schedule when used directly and into the caller's named schedule when a keyed module is used.
+- **Explicit `jobId`s must stay unique across the container.** Two schedules sharing a `jobId` would also share the keyed job registration (auto-generated ids never clash).
+- **`IValidateOptions<ScheduleOptions>` runs for every named options instance**, so per-schedule validation fires the same way the default schedule's does.
+
+```csharp
+// Named options per schedule, each bound from its own section
+services.AddSaSchedule("a", b =>
+{
+    b.AddJob<JobA>().WithName("JA").EveryMinutes(1);
+    b.FromConfiguration("ScheduleA");       // binds ScheduleOptions("a")
+    b.Options(o => o.Configure(...));        // same pipeline as the keyless overload
+});
 ```
 
 ---

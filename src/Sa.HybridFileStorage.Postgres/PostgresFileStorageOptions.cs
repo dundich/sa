@@ -15,11 +15,18 @@ public sealed record PostgresFileStorageOptions
     public string? SchemaName { get; set; }
 
     /// <summary>
-    /// Gets or sets the database table name for storing file metadata. Defaults to <c>"files"</c>.
-    /// Must be a bare SQL identifier — quoting it (<c>"\"files\""</c>) is rejected rather than
-    /// silently trimmed, because the same value is used for both the DDL and the queries.
+    /// Gets or sets the database table name for storing file metadata.
+    /// <b>Required</b>: every keyed registration owns its own table, so there is no default — an
+    /// unset (empty) value fails validation. Must be a bare SQL identifier — quoting it
+    /// (<c>"\"files\""</c>) is rejected rather than silently trimmed, because the same value is used
+    /// for both the DDL and the queries.
+    /// <para>
+    /// The name is also the identity that keeps two registrations apart: two keyed storages may not
+    /// declare the same <see cref="TableName"/> (they would run migration and cleanup over one
+    /// physical table), and the collision is reported at startup.
+    /// </para>
     /// </summary>
-    public string TableName { get; set; } = "files";
+    public string TableName { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the storage type identifier. Defaults to <c>"pg"</c>.
@@ -47,9 +54,14 @@ public sealed record PostgresFileStorageOptions
     public int MigrationScheduleForwardDays { get; set; } = 2;
 
     /// <summary>
-    /// Gets or sets the partitioning granularity (day, month, or year). Defaults to <see cref="PgPartBy.Day"/>.
+    /// Gets or sets the range-partitioning granularity (day, month, or year). Defaults to
+    /// <see cref="PartByRange.Day"/>. This is the property the configuration binder reads: it is a
+    /// real enum, so <c>FromConfiguration</c> can bind it. (A <see cref="PgPartBy"/> value is not
+    /// constructible from a configuration string — the source-generated binder would emit
+    /// SYSLIB1100/SYSLIB1101 and silently ignore it — so the options surface only the enum; map it
+    /// to a <see cref="PgPartBy"/> with <see cref="PgPartBy.FromRange"/>.)
     /// </summary>
-    public PgPartBy PgPartBy { get; set; } = PgPartBy.Day;
+    public PartByRange PartByRange { get; set; } = PartByRange.Day;
 
     /// <summary>
     /// Validates the current configuration and throws an <see cref="ArgumentException"/> describing
@@ -116,6 +128,6 @@ public sealed record PostgresFileStorageOptions
         target.Basket = Basket;
         target.ExpireDays = ExpireDays;
         target.MigrationScheduleForwardDays = MigrationScheduleForwardDays;
-        target.PgPartBy = PgPartBy;
+        target.PartByRange = PartByRange;
     }
 }

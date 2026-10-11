@@ -60,6 +60,51 @@ internal sealed class ScheduleSettings : IScheduleSettings
         return settings;
     }
 
+    /// <summary>
+    /// Builds the settings of a keyed (named) schedule from everything registered in the
+    /// container under that key — its own job settings, its own error handlers, its own
+    /// hosted-service marker and its own named <see cref="ScheduleOptions"/> instance.
+    /// </summary>
+    /// <remarks>
+    /// The merged instances are re-stamped with the schedule key: <see cref="Create(IEnumerable{JobSettings}, bool, Func{IJobContext, Exception, bool}?)"/>
+    /// aggregates several registrations into a fresh <see cref="JobSettings"/>, so the key the
+    /// builder stamped on the registrations would otherwise be lost — and
+    /// <c>JobController</c> resolves the keyed <c>IJobErrorHandler</c> by it at execution time.
+    /// </remarks>
+    internal static ScheduleSettings Create(IServiceProvider provider, string name)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(name);
+
+        Func<IJobContext, Exception, bool>? handleError =
+            provider.GetKeyedServices<ErrorHandlerRegistration>(name)
+                .Select(c => c.Handler)
+                .ToArray() switch
+            {
+                [] => null,
+                [var single] => single,
+                var all => (IJobContext context, Exception exception)
+                    => all.Any(handler => handler(context, exception)),
+            };
+
+        var settings = Create(
+            provider.GetKeyedServices<JobSettings>(name),
+            isHostedService: provider.GetKeyedService<ScheduleHostedServiceMarker>(name) is not null,
+            handleError: handleError);
+
+        foreach (JobSettings job in settings._storage.Values)
+        {
+            job.ScheduleKey = name;
+        }
+
+        // Named options of this schedule: configuration was bound to the same name, so the
+        // overlay (and its validation) applies per schedule.
+        settings.ApplyConfiguration(
+            provider.GetService<IOptionsMonitor<ScheduleOptions>>()?.Get(name));
+
+        return settings;
+    }
+
     internal void ApplyConfiguration(ScheduleOptions? options)
     {
         if (options is null)

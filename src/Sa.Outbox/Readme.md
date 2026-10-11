@@ -52,6 +52,13 @@ builder.Services
 | **Publication** | Messages are written to the outbox table inside the business operation's transaction via `IOutboxBulkWriter.InsertBulk()` |
 | **Delivery** | Background jobs (`Sa.Schedule`) acquire locked messages, invoke consumers, update status |
 
+> **Isolation.** Delivery jobs run in the Outbox's **own** named `Sa.Schedule` schedule under the
+> scope key `OutboxScope.DefaultKey` (`"outbox"`), so they never share a schedule with the
+> application's `AddSaSchedule()`. The PostgreSQL integration registers its
+> `Sa.Partitional.PostgreSql` module under the same key. Both `AddSaOutbox` and
+> `AddSaOutboxUsingPostgreSql` accept an optional trailing `scopeKey` argument — pass the same value
+> to both to move the Outbox to a different scope. The reserved `"default"` key is rejected.
+
 ---
 
 ## Key Types
@@ -66,6 +73,7 @@ builder.Services
 | `OutboxConsumerSettingsBuilder` | Fluent builder for creating and partially updating `OutboxConsumerSettings` |
 | `IOutboxConsumerManager` | Runtime manager: atomic swap, pause/resume, change subscriptions |
 | `IDeliverySnapshot` | Read-only view of registered deliveries for diagnostics |
+| `OutboxScope` | The DI scope key (`"outbox"`) under which the Outbox registers its internal schedule / partitional module |
 | `DeliveryStatus` / `DeliveryStatusCode` | HTTP-like delivery status codes |
 | `ExponentialBackoffRetryStrategy` | Exponential backoff with jitter |
 | `OutboxPartInfo` | Part info: TenantId, PartName |

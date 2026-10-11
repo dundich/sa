@@ -73,7 +73,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         Console.WriteLine(fixture.ConnectionString);
 
         // start cron schedules
-        var scheduler = ServiceProvider.GetRequiredService<IScheduler>();
+        var scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
         int i = await scheduler.Start(CancellationToken.None);
         Assert.True(i > 0);
 
@@ -107,7 +107,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 
     private async Task Migrate()
     {
-        var migrationService = ServiceProvider.GetRequiredService<IMigrationService>();
+        var migrationService = ServiceProvider.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
         bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.True(r, "none migration");
     }

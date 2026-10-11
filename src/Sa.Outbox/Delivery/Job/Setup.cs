@@ -12,7 +12,8 @@ internal static class Setup
             string consumerGroupId,
             bool isSingleton,
             Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
-            Guid? jobId = null)
+            Guid? jobId = null,
+            string scopeKey = OutboxScope.DefaultKey)
                 where TConsumer : class, IConsumer<TMessage>
     {
 
@@ -36,7 +37,7 @@ internal static class Setup
 
         Registered<TConsumer, TMessage>(services, isSingleton, settings.ConsumerGroupId);
 
-        services.AddSaSchedule(builder =>
+        services.AddSaSchedule(scopeKey, builder =>
         {
             builder.UseHostedService();
 

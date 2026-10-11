@@ -57,6 +57,27 @@ services.AddSingleton(new NpgsqlDataSource("Host=db;Database=mydb;Username=usr;P
 services.AddSaPostgreSqlDataSource();
 ```
 
+On a keyed instance, an empty string likewise falls back to the `NpgsqlDataSource` registered with the same key.
+
+### Multiple databases (keyed)
+
+One container can hold several independent data sources — one per key. Each key gets its own named `PgDataSourceOptions` instance (its own connection string) and its own keyed `IPgDataSource`; resolve with `GetRequiredKeyedService<IPgDataSource>(key)`:
+
+```csharp
+services.AddSaPostgreSqlDataSource("orders", b => b
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=orders;Database=orders;Username=usr;Password=pwd")));
+services.AddSaPostgreSqlDataSource("billing", b => b
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=billing;Database=billing;Username=usr;Password=pwd")));
+
+// Usage:
+var orders = serviceProvider.GetRequiredKeyedService<IPgDataSource>("orders");
+var billing = serviceProvider.GetRequiredKeyedService<IPgDataSource>("billing");
+```
+
+Named options are read through `IOptionsMonitor<PgDataSourceOptions>.Get(key)`. The default data source (the `string.Empty` key, also what the keyless call registers) additionally gets an unnamed alias, so `GetRequiredService<IPgDataSource>()` and `GetRequiredKeyedService<IPgDataSource>(string.Empty)` return the same instance.
+
+The `string.Empty` key is the original unnamed data source: the one-argument `AddSaPostgreSqlDataSource(configure)` delegates to `AddSaPostgreSqlDataSource(string.Empty, configure)`, so existing code is unchanged.
+
 ### Validation
 
 The connection string is normalised (trimmed) in `PostConfigure` and then validated on the way out: a non-empty value must parse as a PostgreSQL connection string (checked with the same `NpgsqlConnectionStringBuilder` Npgsql uses, so a typo in `Host=` surfaces as an early `OptionsValidationException` rather than a bare `FormatException` from the middle of the first query); an empty value is only valid when an `NpgsqlDataSource` is registered in the collection.
@@ -65,7 +86,7 @@ The connection string is normalised (trimmed) in `PostConfigure` and then valida
 
 The validator is an explicit `IValidateOptions<PgDataSourceOptions>` rather than `ValidateDataAnnotations()`: the latter is marked `RequiresUnreferencedCode` (IL2026) and breaks Native AOT, which this assembly is built for.
 
-Register the data source with configuration only once per service collection — a second *configuring* call (one carrying a `configure` callback — the section comes via `FromConfiguration`, the settings via `Options(...)`) throws `InvalidOperationException`, because both `Configure` callbacks would otherwise apply to the same unnamed options instance and the settings would silently merge. Bare calls (no callback at all) may be repeated by design: `AddSaPartitional` and `AddSaOutboxUsingPostgreSql` each register a bare data source, and a single configuring call — wherever it sits — is the one that takes effect.
+Register the data source with configuration only once **per key** — a second *configuring* call (one carrying a `configure` callback — the section comes via `FromConfiguration`, the settings via `Options(...)`) for the same key throws `InvalidOperationException`, because both `Configure` callbacks would otherwise apply to the same options instance and the settings would silently merge. A call for a different key is always allowed — that is the point of keyed registration. Bare calls (no callback at all) may be repeated by design: `AddSaPartitional` and `AddSaOutboxUsingPostgreSql` each register a bare data source, and a single configuring call — wherever it sits — is the one that takes effect.
 
 ---
 

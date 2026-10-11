@@ -57,6 +57,27 @@ services.AddSingleton(new NpgsqlDataSource("Host=db;Database=mydb;Username=usr;P
 services.AddSaPostgreSqlDataSource();
 ```
 
+На keyed-инстансе пустая строка так же берёт `NpgsqlDataSource`, зарегистрированный с тем же ключом.
+
+### Несколько баз данных (keyed)
+
+Один контейнер может держать несколько независимых data source'ов — по одному на ключ. Каждый ключ получает свой именованный инстанс `PgDataSourceOptions` (свой connection string) и свою keyed-регистрацию `IPgDataSource`; разрешаются через `GetRequiredKeyedService<IPgDataSource>(key)`:
+
+```csharp
+services.AddSaPostgreSqlDataSource("orders", b => b
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=orders;Database=orders;Username=usr;Password=pwd")));
+services.AddSaPostgreSqlDataSource("billing", b => b
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=billing;Database=billing;Username=usr;Password=pwd")));
+
+// Использование:
+var orders = serviceProvider.GetRequiredKeyedService<IPgDataSource>("orders");
+var billing = serviceProvider.GetRequiredKeyedService<IPgDataSource>("billing");
+```
+
+Именованные опции читаются через `IOptionsMonitor<PgDataSourceOptions>.Get(key)`. Дефолтный data source (ключ `string.Empty`, он же результат вызова без ключа) дополнительно получает безымянный alias, поэтому `GetRequiredService<IPgDataSource>()` и `GetRequiredKeyedService<IPgDataSource>(string.Empty)` возвращают один и тот же инстанс.
+
+Ключ `string.Empty` — это исходный безымянный data source: одноаргументная форма `AddSaPostgreSqlDataSource(configure)` делегирует в `AddSaPostgreSqlDataSource(string.Empty, configure)`, поэтому существующий код не меняется.
+
 ### Валидация
 
 Строка подключения нормализуется (trim) в `PostConfigure` и затем валидируется при выходе: непустое значение должно разбираться как connection string PostgreSQL (проверка тем же `NpgsqlConnectionStringBuilder`, что использует Npgsql, — поэтому опечатка в `Host=` всплывает ранним `OptionsValidationException`, а не голым `FormatException` посреди первого запроса); пустое значение валидно только при зарегистрированном в коллекции `NpgsqlDataSource`.
@@ -65,7 +86,7 @@ services.AddSaPostgreSqlDataSource();
 
 Валидатор — явный `IValidateOptions<PgDataSourceOptions>`, а не `ValidateDataAnnotations()`: последний помечен `RequiresUnreferencedCode` (IL2026) и ломает Native AOT, ради которого эта сборка и существует.
 
-Data source настраивается один раз на service collection — второй *настраивающий* вызов (с callback'ом `configure` — секция через `FromConfiguration`, настройки через `Options(...)`) бросает `InvalidOperationException`, иначе оба `Configure`-callback'а применились бы к одному unnamed-инстансу опций и настройки тихо слитались бы. Повторные «голые» вызовы (без callback'а) разрешены по дизайну: `AddSaPartitional` и `AddSaOutboxUsingPostgreSql` каждый регистрируют «голый» data source, а единственный настраивающий вызов — где бы он ни стоял, — и есть тот, что действует.
+Data source настраивается один раз **на ключ** — второй *настраивающий* вызов (с callback'ом `configure` — секция через `FromConfiguration`, настройки через `Options(...)`) для того же ключа бросает `InvalidOperationException`, иначе оба `Configure`-callback'а применились бы к одному инстансу опций и настройки тихо слитались бы. Вызов для другого ключа всегда разрешён — это и есть смысл keyed-регистрации. Повторные «голые» вызовы (без callback'а) разрешены по дизайну: `AddSaPartitional` и `AddSaOutboxUsingPostgreSql` каждый регистрируют «голый» data source, а единственный настраивающий вызов — где бы он ни стоял, — и есть тот, что действует.
 
 ---
 

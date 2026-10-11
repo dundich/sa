@@ -9,14 +9,14 @@ using Sa.Partitional.PostgreSql.SqlBuilder;
 
 namespace Sa.Partitional.PostgreSql.Configuration;
 
-internal sealed class PartConfiguration(IServiceCollection services) : IPartConfiguration
+internal sealed class PartConfiguration(IServiceCollection services, string? key = null) : IPartConfiguration
 {
 
     public IPartConfiguration AddPartTables(Action<IServiceProvider, ISettingsBuilder> configure)
     {
         services
-            .AddSettings(configure)
-            .AddSqlBuilder()
+            .AddSettings(key, configure)
+            .AddSqlBuilder(key)
             ;
 
         return this;
@@ -24,28 +24,39 @@ internal sealed class PartConfiguration(IServiceCollection services) : IPartConf
 
     public IPartConfiguration AddDataSource(Action<IDataSourceBuilder>? configure = null)
     {
-        services.AddSaPostgreSqlDataSource(configure);
+        if (key is null)
+        {
+            services.AddSaPostgreSqlDataSource(configure);
+        }
+        else if (configure is not null)
+        {
+            // A configuring call: this module pins its own named data source under the module key.
+            // Without it the module falls back to the shared default data source (PgDataSourceResolver),
+            // so several keyed modules can partition tables inside the same database. The keyed
+            // chain of AddSaPartitional does not call this method by itself.
+            services.AddSaPostgreSqlDataSource(key, configure);
+        }
 
-        // inner
-        services.AddPartRepository();
+        // inner (idempotent: the keyed AddSaPartitional chain already registered it)
+        services.AddPartRepository(key);
         return this;
     }
 
     public IPartConfiguration AddPartCache(Action<IServiceProvider, PartCacheSettings>? configure = null)
     {
-        services.AddPartCache(configure);
+        services.AddPartCache(key, configure);
         return this;
     }
 
     public IPartConfiguration AddPartMigrationSchedule(Action<IServiceProvider, MigrationScheduleSettings>? configure = null)
     {
-        services.AddMigration(configure);
+        services.AddMigration(key, configure);
         return this;
     }
 
     public IPartConfiguration AddPartCleanupSchedule(Action<IServiceProvider, PartCleanupScheduleSettings>? configure = null)
     {
-        services.AddPartCleaning(configure);
+        services.AddPartCleaning(key, configure);
         return this;
     }
 }

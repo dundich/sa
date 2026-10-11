@@ -483,7 +483,7 @@ services.AddSaOutboxUsingPostgreSql(cfg => cfg
     {
         settings.MigrationSettings.AsBackgroundJob = false;  // job is Disabled()
         // IMigrationService stays resolvable — run migrations manually:
-        // var migration = host.Services.GetRequiredService<IMigrationService>();
+        // var migration = host.Services.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
         // await migration.WaitMigration(TimeSpan.FromSeconds(30), ct);
     })
 );

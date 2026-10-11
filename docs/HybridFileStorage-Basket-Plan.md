@@ -126,40 +126,61 @@
 **Файлы:** `Sa.HybridFileStorage.FileSystem/Setup.cs`, `FileSystemStorageOptions*`,
 `FileSystemStorage.cs` (мало: он уже инстанс-ориентирован).
 
-## Этап 3 — PostgreSQL: несколько папок, партиции одной таблицы
+## Этап 3 — PostgreSQL: несколько keyed-хранилищ (своя таблица на хранилище)
 
-**Цель:** N pg-папок; папка = ветка `LIST (basket)` **одной** таблицы
+**Статус: ✅ реализовано** (2026-10-10). Итоговый механизм (отклонения от текста ниже —
+решения владельца): **breaking-переход на keyed-регистрацию**. Каждое хранилище —
+своя таблица (`TableName` задаёт пользователь), свой named options-экземпляр, свой
+keyed-модуль `Sa.Partitional.PostgreSql` (своя миграция и очистка), свой keyed
+`IFileStorage` + безымянный alias (hybrid-цепочка собирает их через
+`GetServices<IFileStorage>()` — первый успех — ок). Дубль ключа — guard на регистрации,
+дубль `TableName` у двух ключей — `OptionsValidationException` на первом чтении
+(общий `PostgresFileStorageTableRegistry` в validator'е). `TableName` обязателен
+(дефолт `"files"` снят). Data source: keyed-модуль → дефолтный `IPgDataSource` →
+существующий `NpgsqlDataSource` (общий `PgDataSourceResolver` в `Sa.Data.PostgreSql`,
+переиспользует пул, не диспозится) — chained `AddDataSource(...)` необязателен.
+
+**Цель (первоначальная):** N pg-папок; папка = ветка `LIST (basket)` **одной** таблицы
 (решение 7 концепции; две pg в одной папке — не проектируются).
 
 1. Снять guard `PostgresFileStorageRegistration` («different options throws»):
    разрешать N регистраций с разным `Basket`; конфликт = та же папка второй раз.
+   — *Отклонено: вместо N-папок одной таблицы — N keyed-хранилищ, каждое со своей
+   таблицей (решение владельца), guard стал per-key.*
 2. **Одна таблица — один DDL-граф** (проверено в коде): `SchemaBuilder.AddTable`
    возвращает существующий `TableBuilder` и **дописывает** поля/партиции
    повторно (`AddFields` → `AddRange`, `PartByList` → `AddRange`), а `SqlBuilder`
    строит `Dictionary` по `FullName` — повторный `AddTable` той же таблицы из
-   второго вызова даст дубли колонок в DDL. Значит: делегат `AddSaPartitional`,
-   регистрирующий таблицу, выполняется **один раз на таблицу** (guarded по
-   `(schema, tableName)` в pg-провайдере), каждый вызов добавляет только
-   `IFileStorage` со своим `Basket`.
+   второго вызова даст дубли колонок в DDL.
+   — *Не актуально: каждой таблице — свой keyed-модуль, `AddTable` одной таблицы
+   вызывается один раз.*
 3. `PostgresFileStorageSchema` — singleton, схема одна на БД — **оставить**,
    документировать.
+   — *Актуально: schema-резолвер keyed по ключу регистрации, значение одно на
+   регистрацию (DDL-граф и хранилище не могут разойтись).*
 4. Расписания: `AddPartMigrationSchedule`/`AddPartCleanupSchedule` — один раз на
    таблицу; `ExpireDays`/`ForwardDays` общие на таблицу (last-wins) —
-   задокументировать (решение 7: retention один на таблицу). Spike подтверждён:
-   `AddSettings`/`AddSchedule` аккумулируют делегаты (`AddSingleton(configure)`),
-   `JobSettings` мержатся по `(JobId, JobType)` — дубль-джобов не будет.
+   задокументировать (решение 7: retention один на таблицу).
+   — *Отклонено: retention теперь per-хранилище (per-ключ) — свой модуль, свои
+   расписания.*
 5. `IPartitionManager` один на таблицу — ок: `EnsureParts(table, day, [tenantId, basket])`
    создаёт ветку папки на лету.
+   — *Стало: keyed `IPartitionManager` на хранилище.*
 6. Тесты: две папки pg на одну таблицу (DDL зарегистрирован один раз, ветки обеих
    папок создаются), повторная папка — guard, failover pg→fs, изоляция папок
    (fileId папки A не читается папкой B).
+   — *Стало: `PostgresFileStorageRegistrationTests` (валидация/guard),
+   `PostgresFileStorageOptionsTests`, `PostgresFileStorageKeyedRegistrationTests`
+   (несколько ключей, unique-TableName, alias в hybrid-цепочку, автоматический
+   `NpgsqlDataSource`), Docker-сьюты `PostgresFileStorageTests` /
+   `PostgresFileStorageCustomNamesTests` - все по ключу.*
 
-**Файлы:** `Sa.HybridFileStorage.Postgres/Setup.cs`, `PostgresFileStorage*`;
-возможно идемпотентность `AddTable` в `Sa.Partitional.PostgreSql/Configuration/Builder/SchemaBuilder.cs`
-(только если не решится guarded'ом в pg-провайдере).
+**Файлы:** `Sa.HybridFileStorage.Postgres/Setup.cs` (keyed overload'ы),
+`PostgresFileStorage*`, `PostgresFileStorageTableRegistry.cs`, общий
+`Sa.Data.PostgreSql/PgDataSourceResolver.cs`.
 
-**Вне скоупа:** `Sa.Data.PostgreSql` (одна БД — data source не трогаем),
-второй pg в одной папке (решение 7).
+**Вне скоупа:** два хранилища с одинаковым `TableName` (запрещено), миграция
+существующей общей таблицы из прежней single-регистрации.
 
 ## Этап 4 — S3: несколько инстансов (выход в Sa.Data.S3)
 
@@ -208,7 +229,7 @@ cd src && dotnet test --max-parallel-test-modules 2 --solution Sa.slnx --no-buil
 | 0 | Ядро (пробор, порядок, реестр) | — | средняя |
 | 1 | Options (все провайдеры) | 0 (имена папок) | средняя |
 | 2 | FS multi-instance | 1 | малая |
-| 3 | PG multi-basket (партиции одной таблицы) | 1 (спайк done — аккумуляция делегатов работает; **но** `AddTable` недидемпотентен → один DDL-граф на таблицу) | средняя |
+| 3 | PG multi-instance (keyed, своя таблица на хранилище) | 1, keyed `Sa.Partitional.PostgreSql` (спайк done), `PgDataSourceResolver` | средняя |
 | 4 | S3 multi-instance | 1, спайк `Sa.Data.S3` (keyed/named clients) | крупная |
 | 5 | Readme | 0–4 (итоговый API) | малая |
 | 6 | Финальная сборка + все тесты | 0–5 | малая |

@@ -57,9 +57,12 @@ public sealed class SetupDataSourceRegistrationTests
         services.AddSaPostgreSqlDataSource();
 
         // Дескрипторы конвейера не копируются: normalizer и validator — по одному.
+        // Data source регистрируется keyed-дескриптором на каждый вызов плюс безымянным
+        // alias'ом; при N «голых» вызовах без ключа keyed-дескрипторы имеют один и тот же
+        // ключ и складываются, а безымянный alias — один.
         Assert.Single(services, d => d.ServiceType == typeof(IPostConfigureOptions<PgDataSourceOptions>));
         Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<PgDataSourceOptions>));
-        Assert.Single(services, d => d.ServiceType == typeof(IPgDataSource));
+        Assert.Single(services, d => d.ServiceType == typeof(IPgDataSource) && d.ServiceKey is null);
     }
 
     [Fact]

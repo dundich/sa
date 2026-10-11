@@ -35,10 +35,16 @@ internal sealed class PostgresFileStorageSchema
     public string Value { get; }
 
     /// <summary>
-    /// Registers the schema resolver, deriving the value from the function's result when it
-    /// returns a name and otherwise from the first entry of the data source's search path.
+    /// Registers the schema resolver for a keyed registration, deriving the value from the function's
+    /// result when it returns a name and otherwise from the first entry of the module data source's
+    /// search path.
     /// </summary>
     /// <param name="services">The service collection to add the resolver to.</param>
+    /// <param name="key">The registration key the resolver is registered under.</param>
+    /// <param name="dataSourceKey">
+    /// The key the module's data source is registered under (the partitional module key), or the
+    /// default (unkeyed) data source when no named one exists.
+    /// </param>
     /// <param name="explicitSchema">
     /// Reads the schema configured by the user from the live options instance, or <c>null</c> to
     /// auto-detect. A function rather than a value: under the options pipeline the schema is only
@@ -46,16 +52,23 @@ internal sealed class PostgresFileStorageSchema
     /// </param>
     /// <returns>The same <see cref="IServiceCollection"/> instance.</returns>
     public static IServiceCollection Register(
-        IServiceCollection services, Func<IServiceProvider, string?> explicitSchema)
+        IServiceCollection services,
+        string key,
+        string dataSourceKey,
+        Func<IServiceProvider, string?> explicitSchema)
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataSourceKey);
         ArgumentNullException.ThrowIfNull(explicitSchema);
 
-        services.TryAddSingleton(sp => new PostgresFileStorageSchema(Resolve(sp, explicitSchema(sp))));
+        services.TryAddKeyedSingleton(key, (sp, _) =>
+            new PostgresFileStorageSchema(Resolve(sp, dataSourceKey, explicitSchema(sp))));
+
         return services;
     }
 
-    private static string Resolve(IServiceProvider sp, string? explicitSchema)
+    private static string Resolve(IServiceProvider sp, string dataSourceKey, string? explicitSchema)
     {
         if (explicitSchema is not null)
         {
@@ -65,7 +78,7 @@ internal sealed class PostgresFileStorageSchema
         // The first schema of a comma-separated search path is the effective one for table
         // resolution. GetSearchPath() parses the connection string rather than opening a
         // connection, and already falls back to "public" when it cannot parse one.
-        string? searchPath = TryGetSearchPath(sp);
+        string? searchPath = TryGetSearchPath(sp, dataSourceKey);
 
         if (string.IsNullOrWhiteSpace(searchPath))
         {
@@ -76,11 +89,16 @@ internal sealed class PostgresFileStorageSchema
         return string.IsNullOrWhiteSpace(first) ? FallbackSchema : first;
     }
 
-    private static string? TryGetSearchPath(IServiceProvider sp)
+    private static string? TryGetSearchPath(IServiceProvider sp, string dataSourceKey)
     {
         try
         {
-            return sp.GetService<IPgDataSource>()?.GetSearchPath();
+            // Same rule as the partitional module's data-source resolution: the named source pinned
+            // under the module key when one exists, the shared default source next, and an
+            // application-registered NpgsqlDataSource last (see PgDataSourceResolver). The last step
+            // is what lets a container with only AddNpgsqlDataSource(...) report its Search Path
+            // instead of silently falling back to "public".
+            return PgDataSourceResolver.Resolve(sp, dataSourceKey).GetSearchPath();
         }
         catch
         {

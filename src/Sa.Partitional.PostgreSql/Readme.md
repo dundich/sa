@@ -54,7 +54,83 @@ builder.Services.AddSaPartitional((sp, builder) =>
 .AddPartCleanupSchedule((sp, opts) => opts.AsBackgroundJob = true);
 ```
 
-`AddSaPartitional` always registers a data source (a bare `AddDataSource()` call inside), so the `.AddDataSource(...)` chain above — the single *configuring* call — is what gives it a connection string (a section, if any, comes via `FromConfiguration` inside the same callback). If the data source is already configured elsewhere (e.g. `services.AddSaPostgreSqlDataSource(...)`), omit the chain: the bare registration deduplicates against it. With no connection string anywhere, the data source is built from an `NpgsqlDataSource` registered in DI (shared pool); otherwise validation fails.
+The keyless `AddSaPartitional` always registers a data source (a bare `AddDataSource()` call inside), so the `.AddDataSource(...)` chain above — the single *configuring* call — is what gives it a connection string (a section, if any, comes via `FromConfiguration` inside the same callback). If the data source is already configured elsewhere (e.g. `services.AddSaPostgreSqlDataSource(...)`), omit the chain: the bare registration deduplicates against it. With no connection string anywhere, the data source is built from an `NpgsqlDataSource` registered in DI (shared pool); otherwise validation fails. Keyed modules do not register a data source of their own — see *Keyed Registration* below.
+
+---
+
+## Keyed Registration — Several Modules in One Container
+
+One `AddSaPartitional` call registers one *module*: one set of partition tables, one migration and
+cleanup policy, one cache and one schedule. To run **several independent modules** in one container,
+register each under a key:
+
+```csharp
+services.AddSaPartitional("outbox", (sp, builder) =>
+{
+    builder.AddSchema(schema => schema.AddTable("outbox_messages",
+        "id bigint NOT NULL",
+        "created_at timestamptz NOT NULL").PartByRange(PgPartBy.Day));
+}, AsBackgroundJob: true);
+
+services.AddSaPartitional("audit", (sp, builder) =>
+{
+    builder.AddSchema(schema => schema.AddTable("audit_events",
+        "id bigint NOT NULL",
+        "created_at timestamptz NOT NULL").PartByRange(PgPartBy.Month));
+}, AsBackgroundJob: true);
+```
+
+Every service of a module is registered **keyed under its module key** — `IPartitionManager`,
+`IPartRepository`, `IMigrationService`, `IPartCleanupService`, `ISettingsBuilder`, `ISqlBuilder`,
+`IPartCache` and the settings (`PartCacheSettings`, `MigrationScheduleSettings`,
+`PartCleanupScheduleSettings`) — plus its own **named schedule** (`Sa.Schedule`), whose jobs carry
+module-scoped names (`Migration job [outbox]`, `Cleanup job [outbox]`).
+
+```csharp
+IPartitionManager outbox = sp.GetRequiredKeyedService<IPartitionManager>("outbox");
+IMigrationService audit  = sp.GetRequiredKeyedService<IMigrationService>("audit");
+IScheduler outboxSched   = sp.GetRequiredKeyedService<IScheduler>("outbox");
+```
+
+- **Repeated calls with the same key merge** the table declarations and the settings (exactly like
+  the keyless overload does for the default module) but do **not** duplicate the migration/cleanup
+  jobs — a per-key marker keeps one job of each kind.
+- **The key is validated**: it must be non-empty and must not be `"default"`
+  (`Sa.Schedule.Setup.DefaultName`, the name of the keyless module's schedule) — that call throws
+  `ArgumentException`.
+
+### Data source: named when configured, otherwise the default
+
+A keyed module does not carry its own data source by default. Its repository resolves
+
+1. the **named** data source registered under the module key
+   (`sp.GetKeyedService<IPgDataSource>(key)`), if one exists;
+2. otherwise the **default** (unkeyed) data source.
+
+That is what lets several modules partition tables **inside the same database** — register the
+shared data source once and every module picks it up:
+
+```csharp
+services.AddSaPostgreSqlDataSource(ds => ds
+    .Options(ob => ob.Configure(o => o.ConnectionString = "Host=...;Database=shared")));
+
+services.AddSaPartitional("outbox", ...);   // uses the default data source
+services.AddSaPartitional("audit", ...);    // uses the default data source
+```
+
+To pin a module to **its own** database, chain `.AddDataSource(...)` (or register
+`services.AddSaPostgreSqlDataSource("<key>", ...)` directly); the named data source lives under the
+module key:
+
+```csharp
+services.AddSaPartitional("audit", ...)
+    .AddDataSource(ds => ds
+        .Options(ob => ob.Configure(o => o.ConnectionString = "Host=...;Database=audit_db")));
+```
+
+> The keyed chain of `AddSaPartitional` does **not** call `AddDataSource()` by itself — that bare
+> call belongs to the keyless overload, which always registers the default data source. A keyed
+> module stays data-source-free until it is given a named one, and falls back to the default otherwise.
 
 ---
 

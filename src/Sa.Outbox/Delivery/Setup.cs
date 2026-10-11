@@ -2,13 +2,16 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
+using Sa.Schedule;
 
 namespace Sa.Outbox.Delivery;
 
 internal static class Setup
 {
     public static IServiceCollection AddOutboxDelivery(
-        this IServiceCollection services, Action<IDeliveryBuilder>? configure = null)
+        this IServiceCollection services,
+        Action<IDeliveryBuilder>? configure = null,
+        string scopeKey = OutboxScope.DefaultKey)
     {
         services.AddMessagesMetadata();
 
@@ -30,11 +33,14 @@ internal static class Setup
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
-        // DeliverySnapshot теперь собирает настройки из AddDeliveryJob через статический регистр
-        services.TryAddSingleton<IDeliverySnapshot, DeliverySnapshot>();
+        // DeliverySnapshot reads the outbox's own (keyed) schedule, not the application's default one.
+        services.TryAddSingleton<IDeliverySnapshot>(sp => new DeliverySnapshot(
+            sp.GetRequiredKeyedService<IScheduleSettings>(scopeKey),
+            sp.GetRequiredService<IOutboxConsumerManager>(),
+            sp.GetRequiredService<IOutboxMessageMetadataProvider>()));
         services.TryAddSingleton<IOutboxConsumerManager, OutboxConsumerManager>();
 
-        configure?.Invoke(new DeliveryBuilder(services));
+        configure?.Invoke(new DeliveryBuilder(services, scopeKey));
 
         return services;
     }

@@ -7,7 +7,8 @@ namespace Sa.Schedule.Engine;
 internal sealed class JobErrorHandler(
     IScheduleSettings settings,
     IHostApplicationLifetime? lifetime,
-    ILogger<JobErrorHandler>? logger) : IJobErrorHandler
+    ILogger<JobErrorHandler>? logger,
+    string? scheduleKey = null) : IJobErrorHandler
 {
     public void HandleError(IJobContext context, Exception exception)
     {
@@ -48,7 +49,11 @@ internal sealed class JobErrorHandler(
     {
         logger?.LogStopAllJobs(jobName, exception.ToString());
 
-        var scheduler = context.ServiceProvider.GetService<IScheduler>();
+        // This handler is registered per schedule (keyed for a named one, unkeyed for the
+        // default), so it stops only the jobs of its own schedule.
+        var scheduler = scheduleKey is null
+            ? context.ServiceProvider.GetService<IScheduler>()
+            : context.ServiceProvider.GetKeyedService<IScheduler>(scheduleKey);
 
         if (scheduler is null) return;
 

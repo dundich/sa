@@ -8,12 +8,16 @@ namespace Sa.Outbox.PostgreSql.Partitional;
 
 internal static class Setup
 {
-    public static IServiceCollection AddOutboxPartitional(this IServiceCollection services)
+    public static IServiceCollection AddOutboxPartitional(this IServiceCollection services, string scopeKey)
     {
         services.TryAddTransient<MsgMigrationSupport>();
         services.TryAddTransient<TaskMigrationSupport>();
 
-        _ = services.AddSaPartitional((sp, builder) =>
+        // Keyed module: the outbox tables, migration/cleanup settings and the migration/cleanup
+        // jobs live in the outbox's own scope, never in the application's default partitional
+        // module. The module falls back to the shared (unkeyed) outbox data source because it does
+        // not pin a named one.
+        _ = services.AddSaPartitional(scopeKey, (sp, builder) =>
         {
             SqlOutboxBuilder sql = sp.GetRequiredService<SqlOutboxBuilder>();
             var tableSettings = sql.TableSettings;

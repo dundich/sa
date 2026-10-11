@@ -90,7 +90,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
         SomeMessageConsumerGr1.Counter = 0;
         SomeMessageConsumerGr2.Counter = 0;
 
-        var scheduler = ServiceProvider.GetRequiredService<IScheduler>();
+        var scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
         int startedSchedules = await scheduler.Start(CancellationToken.None);
         Assert.True(startedSchedules >= 2, "Ожидалось как минимум 2 расписания (по одному на группу)");
 
