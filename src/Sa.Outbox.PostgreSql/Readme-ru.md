@@ -91,6 +91,56 @@ public sealed class OrderConsumer : IConsumer<OrderCreated>
 
 ---
 
+## Публикация внутри транзакции вызывающего кода
+
+Обычно каждый `Publish(...)` пишет на собственном подключении и сразу коммитится (auto-commit).
+Когда запись в outbox должна закоммититься **атомарно** с вашими собственными изменениями в БД
+(классическая транзакционность outbox), публикуйте внутри `NpgsqlTransaction`, которым управляете вы:
+
+```csharp
+using Sa.Outbox.PostgreSql;      // PgOutboxPublishExtensions
+using Sa.Outbox.Publication;
+using Sa.Data.PostgreSql;        // IPgDataSource / PgTransaction
+
+// Транзакцию открывает базовый data source PostgreSQL:
+IPgDataSource dataSource = services.GetRequiredService<IPgDataSource>();
+await using PgTransaction sqlTx = await dataSource.BeginTransaction(ct);
+
+// Строки outbox уходят в транзакцию вызывающего кода:
+await publisher.Publish(events, tenantId: 1, sqlTx.Transaction, ct);
+
+// ... ваши собственные INSERT на sqlTx.Connection / sqlTx.Transaction ...
+
+await sqlTx.CommitAsync(ct);     // строки outbox становятся видимыми атомарно с вашими изменениями
+// -- dispose без commit (или RollbackAsync) откатывает всё, включая строки outbox
+```
+
+`PgOutboxPublishExtensions` добавляет перегрузки `Publish(...)` / `PublishSingle(...)`, принимающие
+`NpgsqlTransaction`. Тогда binary COPY выполняется на подключении этой транзакции, внутри неё,
+и **обходит слой автоматических повторов** — повторять поверх чужой или прерванной транзакции
+недопустимо, поэтому ошибки пробрасываются вызывающему коду.
+
+Если контекст не передан — работает обычный auto-commit. Специально **нет никакого ambient/implicit
+scope** — транзакция всегда передаётся явным аргументом.
+
+Проверки:
+
+- Транзакция обязана принадлежать **той же базе данных** (host / port / database), что и data source
+  outbox — чужая транзакция выбрасывает `InvalidOperationException` до записи чего-либо.
+- Подключение должно быть открытым, а транзакция — его собственной активной транзакцией; иначе
+  `InvalidOperationException`.
+
+> **Служебные записи** (`EnsureMsgParts`) всегда выполняются на собственном подключении outbox,
+> вне вашей транзакции, поэтому после отката публикации могут остаться пустая партиция (или строка
+> в реестре типов) — безвредный мусор, который убирают штатные задачи очистки.
+>
+> **Про блокировки:** пока ваша транзакция открыта и уже писала в партицию, DDL-партиционирование из
+> другой публикации на том же data source (например, первое сообщение нового тенанта) может ждать
+> завершения вашей транзакции. Коммитьте (или откатывайте) до того, как продолжите публиковать вне
+> транзакции.
+
+---
+
 ## Руководство по настройке
 
 Вся конфигурация разбивается на два вызова регистрации:

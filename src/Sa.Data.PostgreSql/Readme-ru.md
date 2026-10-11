@@ -164,14 +164,16 @@ var activeUsers = await dataSource.ExecuteReaderList<(int Id, string Name)>(
 
 ## ExecuteReaderFirst
 
-Возвращает первое значение из первого столбца первой строки. Возвращает `default(T)` если результат пуст.
+Возвращает значение первого столбца **первой** строки. С сервера вычитывается только эта строка — остальной результат не читается. Возвращает `default(T)`, если строк нет или значение `NULL`.
+
+Поддерживаемые типы: `int`, `long`, `short`, `byte`, `bool`, `double`, `float`, `decimal`, `char`, `string`, `DateTime`, `Guid`, `DateTimeOffset`, `TimeSpan`, `DateOnly`, `TimeOnly`, а также enum, любой `Nullable<T>` из перечисленных и любой другой `IConvertible`-тип.
 
 ```csharp
 string name = await dataSource.ExecuteReaderFirst<string>("SELECT name FROM users WHERE id = 42");
 // → "Tom" или default(string) если не найдено
-```
 
-Поддерживаемые типы: `int`, `long`, `short`, `bool`, `double`, `decimal`, `char`, `string`, `DateTime`, `Guid`, `DateTimeOffset`.
+int? age = await dataSource.ExecuteReaderFirst<int?>("SELECT age FROM users WHERE id = 42");
+```
 
 ---
 
@@ -248,9 +250,8 @@ var cmd = new NpgsqlCommand("SELECT * FROM users WHERE name = @name0 AND age > @
 | `ExecuteScalarTyped<T>` | `T` | Одиночное значение с авто-кастомом (Guid, DateTime, DateTimeOffset, DateOnly) |
 | `ExecuteReader` | `int` (строки) | Потоковая обработка, много строк |
 | `ExecuteReaderList<T>` | `List<T>` | Маленький результат, собрать всё |
-| `ExecuteReaderFirst<T>` | `T` | Одна строка, одна колонка |
+| `ExecuteReaderFirst<T>` | `T` | Первая строка, первый столбец |
 | `BeginBinaryImport` | `ulong` (строки) | Массовый импорт через COPY BINARY |
-| `ExecuteTransactionAsync` | `void` | Атомарные операции с rollback |
 
 ---
 

@@ -90,6 +90,43 @@ That's it. The library handles:
 
 ---
 
+## Publishing inside a Caller Transaction
+
+Normally every `Publish(...)` writes on its own connection and commits immediately (auto-commit). When the outbox write must commit **atomically** with your own database changes (the classic outbox transactionality), publish inside an `NpgsqlTransaction` you control:
+
+```csharp
+using Sa.Outbox.PostgreSql;      // PgOutboxPublishExtensions
+using Sa.Outbox.Publication;
+using Sa.Data.PostgreSql;        // IPgDataSource / PgTransaction
+
+// Open the transaction through the base PostgreSQL data source:
+IPgDataSource dataSource = services.GetRequiredService<IPgDataSource>();
+await using PgTransaction sqlTx = await dataSource.BeginTransaction(ct);
+
+// Outbox rows go into the caller's transaction:
+await publisher.Publish(events, tenantId: 1, sqlTx.Transaction, ct);
+
+// ... your own inserts on sqlTx.Connection / sqlTx.Transaction ...
+
+await sqlTx.CommitAsync(ct);     // outbox rows become visible atomically with your changes
+// -- dispose without commit (or RollbackAsync) discards everything, outbox rows included
+```
+
+`PgOutboxPublishExtensions` adds `Publish(...)` / `PublishSingle(...)` overloads that accept an `NpgsqlTransaction`. The binary COPY then runs on that transaction's connection, inside that transaction, and **bypasses the automatic retry layer** — retrying over a foreign or aborted transaction is invalid, so failures bubble to the caller.
+
+Passing no context keeps the default auto-commit behavior. There is deliberately **no ambient/implicit scope** — the transaction is always an explicit argument.
+
+Guards:
+
+- The transaction must belong to the **same database** (host / port / database) as the outbox data source — a foreign transaction throws `InvalidOperationException` before anything is written.
+- The connection must be open and the transaction must be its own active transaction; otherwise `InvalidOperationException`.
+
+> **Partition bookkeeping** (`EnsureMsgParts`) always runs on the outbox's own connection, outside your transaction, so a rolled-back publish can leave an empty partition (or a type registry row) behind — harmless leftovers, cleaned up by the normal retention jobs.
+>
+> **Locking note:** while your transaction is open and has written to a partition, partition DDL from another publish on the same data source (e.g., a first message of a new tenant) can block until your transaction finishes. Commit (or roll back) before publishing more outside the transaction.
+
+---
+
 ## Configuration Guide
 
 Everything flows through two registration calls:

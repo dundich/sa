@@ -6,6 +6,7 @@ using Sa.Outbox.PostgreSql.IdGen;
 using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Outbox.PostgreSql.TypeResolve;
+using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Commands;
 
@@ -27,6 +28,35 @@ internal sealed class BulkInsertMsgCommand(
         long typeCode = await hashResolver.GetHashCode(typeof(TMessage).Name, cancellationToken);
 
         return await BulkWithRetry(messages, typeCode, cancellationToken);
+    }
+
+    public async ValueTask<ulong> Execute<TMessage>(
+        ReadOnlyMemory<OutboxMessage<TMessage>> messages,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+
+        NpgsqlConnection connection = transaction.Connection
+            ?? throw new InvalidOperationException(
+                "The supplied transaction is not associated with a connection. " +
+                "The transaction may already be completed.");
+
+        if (connection.State != ConnectionState.Open)
+        {
+            throw new InvalidOperationException(
+                "The connection of the supplied transaction is not open.");
+        }
+
+        long typeCode = await hashResolver.GetHashCode(typeof(TMessage).Name, cancellationToken);
+
+        await using NpgsqlBinaryImporter writer = await connection
+            .BeginBinaryImportAsync(sql.SqlBulkMsgCopy, cancellationToken)
+            .ConfigureAwait(false);
+
+        WriteRows(writer, typeCode, messages);
+
+        return await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ulong> BulkWithRetry<TMessage>(

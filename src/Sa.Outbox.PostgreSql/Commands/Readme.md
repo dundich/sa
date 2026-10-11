@@ -6,7 +6,7 @@ This folder contains the data-access commands that translate high-level outbox o
 
 | File | Responsibility |
 |---|---|
-| `BulkInsertMsgCommand.cs` | Bulk-inserts messages into the outbox table via PostgreSQL BINARY COPY |
+| `BulkInsertMsgCommand.cs` | Bulk-inserts messages into the outbox table via PostgreSQL BINARY COPY (optionally inside a caller-supplied transaction, bypassing the retry layer) |
 | `FinishDeliveryCommand.cs` | Marks delivered messages as finished (OK / Accepted / NoContent) |
 | `ErrorDeliveryCommand.cs` | Records permanent errors from failed deliveries |
 | `ExtendDeliveryCommand.cs` | Extends the lock duration on in-flight delivery records |

@@ -164,51 +164,22 @@ var activeUsers = await dataSource.ExecuteReaderList<(int Id, string Name)>(
 
 ## ExecuteReaderFirst
 
-Returns the first value from the first column of the first row. Returns `default(T)` if the result is empty.
+Returns the value of the first column of the **first** row. Only that row is fetched from the server — the rest of the result set is not read. Returns `default(T)` if the query returns no rows or the value is `NULL`.
 
-Supported types: `int`, `long`, `short`, `bool`, `double`, `decimal`, `char`, `string`, `DateTime`, `Guid`, `DateTimeOffset`.
+Supported types: `int`, `long`, `short`, `byte`, `bool`, `double`, `float`, `decimal`, `char`, `string`, `DateTime`, `Guid`, `DateTimeOffset`, `TimeSpan`, `DateOnly`, `TimeOnly`, plus enums, any `Nullable<T>` of these and any other `IConvertible` type.
 
 ```csharp
 // Returns 0 if the table is empty
 int errorCount = await dataSource.ExecuteReaderFirst<int>(
     "SELECT COUNT(*) FROM outbox_errors");
 
-// Guid — automatic casting works
+// Guid — automatic casting works (LIMIT is no longer required: only the first row is read)
 Guid firstTenantId = await dataSource.ExecuteReaderFirst<Guid>(
-    "SELECT tenant_id FROM tenants LIMIT 1");
-```
+    "SELECT tenant_id FROM tenants ORDER BY created_at");
 
----
-
-## ExecuteTransactionAsync
-
-Atomic transaction with automatic rollback on error.
-
-```csharp
-await dataSource.ExecuteTransactionAsync(async (transaction, ct) =>
-{
-    // All commands inside use one transaction
-    await dataSource.ExecuteNonQuery(
-        "INSERT INTO accounts (balance) VALUES (0)", ct);
-
-    await dataSource.ExecuteNonQuery(
-        "INSERT INTO transactions (account_id, amount) VALUES (1, 100)", ct);
-
-    // On success — auto-commit
-}, IsolationLevel.ReadCommitted, ct);
-
-// On any exception — auto-rollback
-try
-{
-    await dataSource.ExecuteTransactionAsync(async (tx, ct) =>
-    {
-        throw new InvalidOperationException("Oops");
-    }, ct);
-}
-catch (InvalidOperationException)
-{
-    // Transaction rolled back automatically
-}
+// Nullable and enums are supported too
+int? maybeAge = await dataSource.ExecuteReaderFirst<int?>(
+    "SELECT age FROM users WHERE id = 42");
 ```
 
 ---
@@ -258,6 +229,33 @@ var result = await PgRetryStrategy.ExecuteWithRetry(
 
 ---
 
+## PgTransaction (IPgDataSource.BeginTransaction)
+
+`IPgDataSource.BeginTransaction(...)` opens a PostgreSQL transaction on the data source without juggling connection lifetime — the returned `PgTransaction` owns the connection and the transaction, and returns the connection to the pool on dispose.
+
+```csharp
+using Sa.Data.PostgreSql;
+
+IPgDataSource dataSource = services.GetRequiredService<IPgDataSource>();
+
+await using PgTransaction sqlTx = await dataSource.BeginTransaction(ct);
+
+// Reuse the same connection + transaction for several components of one unit of work,
+// e.g. an outbox write that must commit atomically with your own inserts:
+await somethingWritingInTheTransaction(sqlTx.Transaction, ct);
+
+await sqlTx.CommitAsync(ct);        // commit → all writes visible together
+// dispose without commit → rollback, connection returned to the pool
+```
+
+- `BeginTransaction` is a regular member of the `IPgDataSource` contract; `PgDataSource` implements it on top of `OpenDbConnection`.
+- The transaction targets whichever data source the `IPgDataSource` instance represents — for the default (unnamed) data source that is the shared/default one.
+- `PgTransaction.Connection` — the open connection, `PgTransaction.Transaction` — its active transaction.
+- Dispose rolls back an uncommitted transaction (best effort) and returns the connection to the pool; `CommitAsync` / `RollbackAsync` mark it completed so dispose is then a no-op for the transaction itself.
+- `IPgDataSource.GetConnectionString()` returns the underlying connection string of the data source (Npgsql omits the password unless `Persist Security Info` is set) — used, for example, to verify that a caller-supplied transaction targets the same database.
+
+---
+
 ## DbCommandExtensions + INamePrefixProvider
 
 Optimized API for adding parameterized commands with pre-cached parameter names (minimal allocations).
@@ -287,9 +285,8 @@ var cmd = new NpgsqlCommand("SELECT * FROM users WHERE name = @name0 AND age > @
 | `ExecuteScalarTyped<T>` | `T` | Single value with auto-cast (Guid, DateTime, DateTimeOffset, DateOnly) |
 | `ExecuteReader` | `int` (rows) | Streaming processing, many rows |
 | `ExecuteReaderList<T>` | `List<T>` | Small result, collect everything |
-| `ExecuteReaderFirst<T>` | `T` | One row, one column |
+| `ExecuteReaderFirst<T>` | `T` | First row, first column |
 | `BeginBinaryImport` | `ulong` (rows) | Mass import via COPY BINARY |
-| `ExecuteTransactionAsync` | `void` | Atomic operations with rollback |
 
 ---
 
