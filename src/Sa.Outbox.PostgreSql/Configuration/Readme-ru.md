@@ -384,6 +384,92 @@ settings.CleanupSettings.ExecutionInterval = TimeSpan.FromHours(2);
 
 ---
 
+## PgOutboxDeliveryOptions
+
+Настройки доставки per-consumer-group, биндятся из одной секции `IConfiguration` — секция адресуется через `configurationKey`, переданный в `AddDelivery(..., configurationKey: ...)` / `AddDeliveryScoped(..., configurationKey: ...)`. Public, sealed.
+
+### Приоритеты
+
+Финальные `OutboxConsumerSettings` группы складываются из трёх слоёв, от низшего к высшему:
+
+```
+OutboxDefaults  →  эта секция (только если задан configurationKey)  →  callback configure
+```
+
+- **Частично заполненная** секция переопределяет только названные в ней свойства; остальные свойства сохраняют то, что билдер уже несёт (значение из `OutboxDefaults` или более раннее переопределение).
+- Группа, зарегистрированная **без** `configurationKey`, настраивается только `OutboxDefaults` + `configure` — совпадающая по имени секция не читается, даже если существует.
+- **Отсутствующая** или **существующая, но пустая** секция — no-op (все свойства биндятся в null → ничего не применяется).
+
+### Свойства, которые можно задать
+
+Все 16 скаляров `OutboxConsumerSettings` биндируемы и **nullable** — `null` означает «не задано, оставить как есть»:
+
+| Свойство | Тип | Примечание |
+|---|---|---|
+| `Interval` | `TimeSpan?` | Период запуска job'а |
+| `InitialDelay` | `TimeSpan?` | Задержка перед первым запуском после старта |
+| `ConcurrencyLimit` | `int?` | Предел конкурентности расписания группы |
+| `MaxConcurrency` | `int?` | Макс. одновременно работающих job'ов в группе |
+| `RetryCountOnError` | `int?` | Повторы job'а при ошибке (`-1` = бесконечно) |
+| `MaxBatchSize` | `int?` | Верхняя граница арендуемого батча |
+| `MaxProcessingIterations` | `int?` | Итераций за цикл (`-1` = до опустошения) |
+| `IterationDelay` | `TimeSpan?` | Задержка между итерациями в цикле |
+| `LockDuration` | `TimeSpan?` | TTL блокировки арендуемой задачи |
+| `LockRenewal` | `TimeSpan?` | Период продления блокировки |
+| `LookbackInterval` | `TimeSpan?` | Насколько далеко назад искать необработанные |
+| `MaxDeliveryAttempts` | `int?` | Бюджет попыток доставки перед dead-lettering |
+| `BatchingWindow` | `TimeSpan?` | Окно накопления сообщений в батч |
+| `PerTenantTimeout` | `TimeSpan?` | Таймаут обработки одного тенанта (`0` = нет) |
+| `PerTenantMaxDegreeOfParallelism` | `int?` | Параллельность по тенантам (`1` = последовательно, `-1` = по ядру) |
+| `IdleMaxInterval` | `TimeSpan?` | Верхняя граница адаптивного backoff-а пустой очереди (`0` = выключен) |
+
+Значения `TimeSpan` биндятся из стандартного формата `HH:mm:ss` (`00:00:30`); `int` — из обычного целого.
+
+### Намеренно исключены
+
+Два члена `OutboxConsumerSettings` **не** биндируются — и намеренно:
+
+- **`Paused`** — runtime-состояние, управляется через `IOutboxConsumerManager.Pause` / `Resume`, а не через конфигурацию.
+- **`AsSingleton`** — lifetime-контракт регистрации: `AddDelivery` регистрирует keyed *singleton*-консьюмер, `AddDeliveryScoped` — keyed *scoped*-консьюмер. Оно фиксируется тем, какой метод вы вызываете; идентность группы, соответственно, привязана к явному аргументу `consumerGroupId`.
+
+### Как применяется
+
+`PgOutboxDeliveryOptionsProvider` — реализация `IDeliveryGroupOptionsProvider`, которую регистрирует этот пакет (заменяя базовый no-op) — резолвит `IConfiguration` один раз при конструировании (опционально: нет `IConfiguration` в контейнере — провайдер no-op), затем на группу:
+
+1. `PgOutboxDeliveryOptions.FromConfiguration(configuration, configurationKey)` — возвращает `null`, когда ключ пуст или секция отсутствует; иначе биндит секцию через source-generated `IConfigurationSection.Bind` (AOT-safe, тот же выбор, что у partitional PostgreSql-настроек).
+2. `PgOutboxDeliveryOptions.ApplyTo(builder)` — применяет все non-null свойства к билдеру настроек, null-свойства не трогает; `IdleMaxInterval == 0` маппится в `WithFixedInterval()`, положительное значение — в `WithIdleBackoff(...)`.
+
+Провайдер опрашивается только в **stage-2 (startup)** сборке настроек — stage-1 snapshot времени регистрации регистрируется раньше (он не видит секцию, т.к. `IConfiguration` нужен live-провайдер).
+
+### Пример
+
+```jsonc
+// appsettings.json
+{
+  "DeliveryGroups": {
+    "cg_order_consumer": {
+      "MaxBatchSize": 64,
+      "Interval": "00:00:30",
+      "IdleMaxInterval": "00:00:30",
+      "MaxDeliveryAttempts": 5
+    }
+  }
+}
+```
+
+```csharp
+services.AddSaOutbox(builder => builder
+    .WithDeliveries(b => b
+        .AddDelivery<OrderConsumer, OrderCreated>(
+            "cg_order_consumer",
+            (_, settings) => settings.StartImmediately(),   // последнее слово поверх секции
+            configurationKey: "DeliveryGroups:cg_order_consumer")));
+```
+
+Здесь `MaxBatchSize` / `Interval` / `IdleMaxInterval` / `MaxDeliveryAttempts` берутся из секции (поверх `OutboxDefaults`), а `StartImmediately()` из callback'а — последнее слово по `InitialDelay`.
+
+---
+
 ## OutboxFieldDefaults
 
 Static-класс с именами колонок по умолчанию, которые используются каждым свойством `Fields`. Сгруппировано по таблицам, к которым они принадлежат:

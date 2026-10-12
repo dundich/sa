@@ -202,6 +202,32 @@ scope** — транзакция всегда передаётся явным а
 )
 ```
 
+#### Настройки группы из конфигурации (`configurationKey`)
+
+Явные перегрузки `AddDelivery` / `AddDeliveryScoped` с `consumerGroupId` принимают опциональный `configurationKey` — путь к секции `IConfiguration` с настройками этой группы (биндится в `PgOutboxDeliveryOptions`; см. [Configuration/Readme-ru.md](Configuration/Readme-ru.md#pgoutboxdeliveryoptions)):
+
+```csharp
+.AddDeliveryScoped<OrderConsumer, OrderCreated>(
+    "cg_order_consumer",
+    (_, settings) => settings
+        .StartImmediately()
+        .WithMaxBatchSize(16),
+    configurationKey: "DeliveryGroups:cg_order_consumer")
+```
+
+Настройки группы складываются из трёх слоёв, от низшего к высшему:
+
+```
+OutboxDefaults  →  секция конфигурации (только если задан ключ)  →  callback configure
+```
+
+- **Ключ задан** — non-null значения секции вставляются между дефолтами и callback `configure`; частично заполненная секция переопределяет только то, что в ней названо.
+- **Ключа нет** — группа настраивается только `OutboxDefaults` + `configure`; совпадающая по имени секция (даже если существует) не читается.
+- Отсутствующая или пустая секция — no-op.
+- `Paused` — runtime-состояние (`IOutboxConsumerManager`), `AsSingleton` фиксируется тем, какой метод вы вызываете, а identность группы привязана к явному аргументу `consumerGroupId` — ни одно из них не берётся из секции.
+
+Достаточно, чтобы секция входила в `IConfiguration`, зарегистрированный в DI (например, appsettings.json при `Host.CreateDefaultBuilder`); провайдер читает её лениво при старте — изменение секции и рестарт и есть workflow конфигурации.
+
 #### Справочник настроек `OutboxConsumerSettingsBuilder`
 
 Единый fluent-билдер для всех параметров consumer group:
@@ -228,8 +254,8 @@ scope** — транзакция всегда передаётся явным а
 | `WithIterationDelay(span)` | 0 с | Задержка между итерациями |
 | `WithPerTenantTimeout(span)` | 0 | Таймаут обработки одного тенанта |
 | `WithPerTenantMaxDegreeOfParallelism(n)` | 1 | Параллельность по тенантам (1 = последовательно, -1 = все ядра) |
-| `WithSequentialProcessing()` | 1 | Последовательная обработка по тенантам |
-| `WithMaxParallelism()` | -1 | Максимальная параллельность по тенантам |
+| `WithTenantSequentialProcessing()` | 1 | Последовательная обработка по тенантам |
+| `WithTenantMaxParallelism()` | -1 | Максимальная параллельность по тенантам |
 | `Paused(bool)` | false | Пауза consumer group |
 | `Resumed()` | — | Снять с паузы |
 | `AsSingleton(bool)` | true | Singleton (один на кластер) vs Scoped |

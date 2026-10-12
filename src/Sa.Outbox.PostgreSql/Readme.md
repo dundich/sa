@@ -188,53 +188,89 @@ Where inside `AddSaOutbox`:
 )
 ```
 
-### Настройки consumer group
+### Per-group Settings from Configuration (`configurationKey`)
 
-`OutboxConsumerSettingsBuilder` — единый fluent-билдер для всех параметров:
+The explicit-`consumerGroupId` overloads of `AddDelivery` / `AddDeliveryScoped` take an optional `configurationKey` — the path of an `IConfiguration` section holding that group's settings (bound to `PgOutboxDeliveryOptions`; see [Configuration/Readme.md](Configuration/Readme.md#pgoutboxdeliveryoptions)):
 
-| Метод | По умолчанию | Описание |
+```csharp
+.AddDeliveryScoped<OrderConsumer, OrderCreated>(
+    "cg_order_consumer",
+    (_, settings) => settings
+        .StartImmediately()
+        .WithMaxBatchSize(16),
+    configurationKey: "DeliveryGroups:cg_order_consumer")
+```
+
+The group's settings are composed in three layers, lowest → highest:
+
+```
+OutboxDefaults  →  configuration section (only when a key is given)  →  configure callback
+```
+
+- **Key given** — the section's non-null values land between the defaults and the `configure` callback; a partially-filled section overrides only what it names.
+- **No key** — the group is shaped by `OutboxDefaults` + `configure` only; a matching section (if any exists) is never read.
+- An absent or empty section is a no-op.
+- `Paused` is runtime state (`IOutboxConsumerManager`), `AsSingleton` is fixed by which method you call, and the group identity is pinned to the explicit `consumerGroupId` argument — none of them comes from the section.
+
+The section just has to be part of the `IConfiguration` registered in DI (e.g. appsettings.json under `Host.CreateDefaultBuilder`); the provider reads it lazily at startup, so editing the section and restarting is the configuration workflow.
+
+### Consumer group settings
+
+`OutboxConsumerSettingsBuilder` — the single fluent builder for all consumer group settings:
+
+| Method | Default | Description |
 |---|---|---|
-| `WithInterval(span)` | 5 с | Период опроса |
-| `StartImmediately()` | — | Старт без ожидания первого интервала |
-| `WithMaxBatchSize(n)` | 16 | Макс. сообщений за батч |
-| `WithMaxDeliveryAttempts(n)` | 3 | Стоп-повторы после N попыток |
-| `WithLockDuration(span)` | 10 с | TTL блокировки сообщения |
-| `WithLockRenewal(span)` | 3 с | Период продления блокировки |
-| `WithLookbackInterval(span)` | 7 дн | История поиска необработанных |
-| `WithBatchingWindow(span)` | 3 с | Окно агрегации сообщений |
-| `WithNoBatchingWindow()` | — | Взять всё доступное сейчас |
-| `WithConcurrencyLimit(n)` | 1 | Одновременных задач |
-| `WithMaxConcurrency(n)` | 1 | Макс. параллельных процессоров |
-| `WithRetryCountOnError(n)` | 0 | Повторы при ошибке (-1 = бесконечно) |
-| `WithMaxProcessingIterations(n)` | -1 | Итераций за цикл (-1 = безлимитно) |
-| `WithSingleIteration()` | — | Одна итерация (тестирование) |
-| `WithUnlimitedIterations()` | — | Безлимитные итерации |
-| `WithSequentialProcessing()` | 1 | Последовательная обработка по тенантам |
-| `WithMaxParallelism()` | CPU count | Максимальная параллельность по тенантам |
-| `WithPerTenantTimeout(span)` | 0 | Таймаут обработки одного тенанта |
-| `Paused(bool)` | false | Пауза consumer group |
+| `WithInterval(span)` | 1 min | Polling interval |
+| `WithInitialDelay(span)` | 10 s | Delay before the first run after startup |
+| `StartImmediately()` | — | Start without waiting for the first interval |
+| `WithConcurrencyLimit(n)` | 1 | Concurrent jobs in the group |
+| `WithMaxConcurrency(n)` | 48 | Max simultaneously running jobs within the group (high — for cloud deployments with connection pooling; override for local/small deployments) |
+| `WithRetryCountOnError(n)` | 0 | Job retries on error (`-1` = infinite) |
+| `WithNoRetries()` | — | Disable retries |
+| `WithInfiniteRetries()` | — | Infinite retries |
+| `WithMaxBatchSize(n)` | 16 | Max messages per batch |
+| `WithMaxProcessingIterations(n)` | 10 | Iterations per cycle (`-1` = drain until empty) |
+| `WithSingleIteration()` | — | One iteration (testing) |
+| `WithUnlimitedIterations()` | — | Drain until empty |
+| `WithIterationDelay(span)` | 0 s | Delay between iterations within a cycle |
+| `WithIdleBackoff(span)` | — | Enable adaptive empty-queue back-off up to `maxInterval` (must be `>= Interval`) |
+| `WithFixedInterval()` | — | Explicitly keep a fixed poll interval (no back-off) |
+| `WithLockDuration(span)` | 10 s | Lock TTL for a rented message |
+| `WithLockRenewal(span)` | 3 s | Lock renewal interval |
+| `WithLookbackInterval(span)` | 7 days | How far back to scan for unprocessed messages |
+| `WithMaxDeliveryAttempts(n)` | 3 | Stop retrying a message after N attempts |
+| `WithBatchingWindow(span)` | 3 s | Window for accumulating messages into a batch |
+| `WithNoBatchingWindow()` | — | Take everything available now |
+| `WithPerTenantTimeout(span)` | 0 (none) | Per-tenant processing timeout |
+| `WithPerTenantMaxDegreeOfParallelism(n)` | 1 (sequential) | Per-tenant parallelism (`-1` = one per CPU) |
+| `WithTenantSequentialProcessing()` | 1 | Sequential processing per tenant |
+| `WithTenantMaxParallelism()` | -1 | Max parallelism per tenant |
+| `Paused(bool)` | false | Pause the consumer group |
+| `Resumed()` | — | Unpause |
+| `AsSingleton(bool)` | true | Singleton (one per cluster) vs scoped consumer |
+| `WithTag(object)` | — | Free-form tag for the group (diagnostics) |
 
-### Runtime-управление настройками
+### Runtime settings management
 
-Настройки автоматически регистрируются в `IOutboxConsumerManager` при первом запуске job'а. Для runtime-изменений:
+Settings are automatically registered in `IOutboxConsumerManager` on first job startup. For runtime changes:
 
 ```csharp
 var manager = host.Services.GetRequiredService<IOutboxConsumerManager>();
 
-// Atomic swap — новый снимок применяется на следующей итерации
+// Atomic swap — the new snapshot is applied on the next iteration
 manager.Apply("cg_order_consumer", s => s with { MaxBatchSize = 64 });
 
 // Pause / Resume
 manager.Pause("cg_order_consumer");
 manager.Resume("cg_order_consumer");
 
-// Подписка на изменения
+// Subscribe to changes
 using var sub = manager.Subscribe("cg_order_consumer", updated =>
 {
-    // реакция на изменение настроек
+    // react to settings changes
 });
 
-// Проверка состояния
+// Check state
 bool paused = manager.IsPaused("cg_order_consumer");
 ```
 

@@ -34,6 +34,12 @@ internal static class Setup
         // support - messaging to each tenant
         services.AddOutboxPartitional();
 
+        // Delivery-group options provider: the base no-op — a provider package replaces it
+        // with its own implementation. Resolved from the delivery job body, so a group
+        // without a configurationKey (or with the base package only) is shaped purely by
+        // OutboxDefaults and the user configure callback — nothing implicit sits in between.
+        services.AddDefaultDeliveryGroupOptionsProvider();
+
         services.TryAddSingleton<IDeliveryTenant, DeliveryTenant>();
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
@@ -43,7 +49,9 @@ internal static class Setup
             sp.GetRequiredKeyedService<IScheduleSettings>(scopeKey),
             sp.GetRequiredService<IOutboxConsumerManager>(),
             sp.GetRequiredService<IOutboxMessageMetadataProvider>()));
-        services.TryAddSingleton<IOutboxConsumerManager, OutboxConsumerManager>();
+        services.TryAddSingleton<IOutboxConsumerManager>(sp => new OutboxConsumerManager(
+            sp.GetServices<DeliveryGroupSettingsRegistration>(),
+            sp));
 
         configure?.Invoke(new DeliveryBuilder(services, scopeKey));
 

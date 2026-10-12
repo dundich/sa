@@ -90,12 +90,16 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(500))
+                            // StartImmediately: the old delivery pre-seed did this implicitly; the
+                            // default InitialDelay is 10s, beyond this test's wait budget.
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(500))
                              .WithMaxBatchSize(1024);
                         })
                         .AddDelivery<SomeMessageConsumer2, SomeMessage2>("test7_1", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(500))
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(500))
                              .WithMaxBatchSize(1024);
                         })
                     )

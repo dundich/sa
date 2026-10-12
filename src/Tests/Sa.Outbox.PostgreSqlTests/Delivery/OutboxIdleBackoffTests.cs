@@ -50,7 +50,10 @@ public sealed class OutboxIdleBackoffTests(OutboxIdleBackoffTests.Fixture fixtur
                 .WithDeliveries(deliveryBuilder => deliveryBuilder
                     .AddDeliveryScoped<IdleConsumer, TestMessage>(GroupName, (_, b) =>
                     {
-                        b.WithInterval(BaseInterval)
+                        // StartImmediately: the default InitialDelay is 10s, beyond this test's
+                        // 8s wait budget for the scheduled job's first run.
+                        b.StartImmediately()
+                         .WithInterval(BaseInterval)
                          .WithIdleBackoff(MaxInterval)
                          .WithNoBatchingWindow();
 

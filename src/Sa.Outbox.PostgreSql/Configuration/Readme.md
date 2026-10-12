@@ -392,6 +392,92 @@ settings.ConsumeSettings
 
 ---
 
+## PgOutboxDeliveryOptions
+
+Per-consumer-group delivery settings bound from a single `IConfiguration` section — the section is addressed by the `configurationKey` passed to `AddDelivery(..., configurationKey: ...)` / `AddDeliveryScoped(..., configurationKey: ...)`. Public, sealed.
+
+### Precedence
+
+Each group's final `OutboxConsumerSettings` is composed in three layers, lowest → highest:
+
+```
+OutboxDefaults  →  this section (only when a configurationKey is given)  →  the configure callback
+```
+
+- A **partially-filled** section overrides only the properties it names; every other property keeps whatever the builder already carries (the `OutboxDefaults` value, or an earlier override).
+- A group registered **without** a `configurationKey` is shaped by `OutboxDefaults` + `configure` only — a matching section is never read, even if it exists.
+- An **absent** or **present-but-empty** section is a no-op (every property binds to null → nothing is applied).
+
+### Bindable properties
+
+All 16 `OutboxConsumerSettings` scalars are bindable and **nullable** — `null` means "not specified, keep current":
+
+| Property | Type | Notes |
+|---|---|---|
+| `Interval` | `TimeSpan?` | Job execution period |
+| `InitialDelay` | `TimeSpan?` | Delay before the first run after startup |
+| `ConcurrencyLimit` | `int?` | Group-level schedule concurrency limit |
+| `MaxConcurrency` | `int?` | Max simultaneously running jobs within the group |
+| `RetryCountOnError` | `int?` | Job retries on error (`-1` = infinite) |
+| `MaxBatchSize` | `int?` | Upper bound for the rented batch size |
+| `MaxProcessingIterations` | `int?` | Iterations per cycle (`-1` = drain until empty) |
+| `IterationDelay` | `TimeSpan?` | Delay between processing iterations within a cycle |
+| `LockDuration` | `TimeSpan?` | Lock TTL for a rented task |
+| `LockRenewal` | `TimeSpan?` | Lock renewal interval |
+| `LookbackInterval` | `TimeSpan?` | How far back to scan for unprocessed messages |
+| `MaxDeliveryAttempts` | `int?` | Delivery-attempt budget before dead-lettering |
+| `BatchingWindow` | `TimeSpan?` | Window for accumulating messages into a batch |
+| `PerTenantTimeout` | `TimeSpan?` | Per-tenant processing timeout (`0` = none) |
+| `PerTenantMaxDegreeOfParallelism` | `int?` | Per-tenant parallelism (`1` = sequential, `-1` = one per CPU) |
+| `IdleMaxInterval` | `TimeSpan?` | Upper bound for the adaptive empty-queue back-off (`0` = disabled) |
+
+`TimeSpan` values bind from the standard `HH:mm:ss` form (`00:00:30`); `int` from a plain integer.
+
+### Deliberately excluded
+
+Two `OutboxConsumerSettings` members are **not** bindable, and on purpose:
+
+- **`Paused`** — runtime state, controlled at runtime via `IOutboxConsumerManager.Pause` / `Resume`, not configuration.
+- **`AsSingleton`** — the lifetime contract of the registration: `AddDelivery` registers a keyed *singleton* consumer, `AddDeliveryScoped` a keyed *scoped* consumer. It is fixed by which method you call; the group identity is likewise pinned to the explicit `consumerGroupId` argument.
+
+### How it is applied
+
+`PgOutboxDeliveryOptionsProvider` — the `IDeliveryGroupOptionsProvider` this package registers (replacing the base no-op) — resolves the `IConfiguration` once at construction (optional: no `IConfiguration` in the container makes the provider a no-op), then per delivery group:
+
+1. `PgOutboxDeliveryOptions.FromConfiguration(configuration, configurationKey)` — returns `null` when the key is empty or the section is absent; otherwise binds the section via the source-generated `IConfigurationSection.Bind` (AOT-safe, the same choice as the partitional PostgreSql settings).
+2. `PgOutboxDeliveryOptions.ApplyTo(builder)` — applies every non-null property to the settings builder, leaving nulls untouched; `IdleMaxInterval == 0` maps to `WithFixedInterval()`, a positive value to `WithIdleBackoff(...)`.
+
+The provider is consulted only in the **stage-2 (startup)** settings build — the stage-1 registration-time snapshot is pre-registered first (it cannot see the section, since `IConfiguration` needs a live provider).
+
+### Example
+
+```jsonc
+// appsettings.json
+{
+  "DeliveryGroups": {
+    "cg_order_consumer": {
+      "MaxBatchSize": 64,
+      "Interval": "00:00:30",
+      "IdleMaxInterval": "00:00:30",
+      "MaxDeliveryAttempts": 5
+    }
+  }
+}
+```
+
+```csharp
+services.AddSaOutbox(builder => builder
+    .WithDeliveries(b => b
+        .AddDelivery<OrderConsumer, OrderCreated>(
+            "cg_order_consumer",
+            (_, settings) => settings.StartImmediately(),   // the final word over the section
+            configurationKey: "DeliveryGroups:cg_order_consumer")));
+```
+
+Here `MaxBatchSize` / `Interval` / `IdleMaxInterval` / `MaxDeliveryAttempts` come from the section (over `OutboxDefaults`), while `StartImmediately()` from the callback is the final word on `InitialDelay`.
+
+---
+
 ## OutboxFieldDefaults
 
 Static class with the default column names used by every `Fields` property. Grouped by the table they belong to:

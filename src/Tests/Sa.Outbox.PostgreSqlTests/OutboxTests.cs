@@ -43,7 +43,10 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(100))
+                            // StartImmediately: the old delivery pre-seed did this implicitly; the
+                            // default InitialDelay is 10s, beyond this test's wait budget.
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(100))
                              .WithMaxBatchSize(1)
                              .WithNoBatchingWindow();
                         })

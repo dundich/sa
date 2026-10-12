@@ -65,7 +65,10 @@ public sealed class OutboxBorrowedDataSourceTests(OutboxBorrowedDataSourceTests.
                     .WithDeliveries(b => b.AddDeliveryScoped<BorrowedConsumer, BorrowedMessage>(
                         "borrowed", (_, o) =>
                         {
-                            o.WithInterval(TimeSpan.FromMilliseconds(100))
+                            // StartImmediately: the old delivery pre-seed did this implicitly; the
+                            // default InitialDelay is 10s, beyond this test's wait budget.
+                            o.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(100))
                              .WithMaxBatchSize(1)
                              .WithNoBatchingWindow();
                         })))

@@ -57,12 +57,16 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
 
                         .AddDeliveryScoped<SomeMessageConsumerGr1, SomeMessage>("test_gr1", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(100))
+                            // StartImmediately: the old delivery pre-seed did this implicitly; the
+                            // default InitialDelay is 10s, beyond this test's wait budget.
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(100))
                              .WithNoBatchingWindow();
                         })
                         .AddDelivery<SomeMessageConsumerGr2, SomeMessage>("test_gr2", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(100))
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(100))
                              .WithNoBatchingWindow();
                         })
                     )

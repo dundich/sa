@@ -26,6 +26,12 @@
 		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
 		<!-- Публичная сигнатура IPgOutboxConfiguration.WithDataSource ссылается на OptionsBuilder&lt;PgDataSourceOptions&gt; -->
 		<PackageReference Include="Microsoft.Extensions.Options" />
+		<!--
+		  PgOutboxDeliveryOptions/Provider читает секцию конфигурации группы (IConfiguration +
+		  instance IConfigurationSection.Bind). Source-generated binder включается SDK
+		  автоматически при PublishAot=true, поэтому Bind не тянет reflection.
+		-->
+		<PackageReference Include="Microsoft.Extensions.Configuration" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -1,4 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Commands;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.IdGen;
@@ -44,6 +47,16 @@ public static class Setup
             ;
 
         services.AddSaOutbox(scopeKey: scopeKey);
+
+        // Replace the base no-op delivery-group options provider with the PostgreSQL
+        // implementation: it binds a group's settings from the IConfiguration section
+        // named by the configurationKey passed to AddDelivery/AddDeliveryScoped. The
+        // IConfiguration is resolved as an optional service — absent, the provider is a
+        // no-op and the group is shaped purely by OutboxDefaults and the configure callback.
+        services
+            .RemoveAll<IDeliveryGroupOptionsProvider>()
+            .AddSingleton<IDeliveryGroupOptionsProvider>(
+                sp => new PgOutboxDeliveryOptionsProvider(sp.GetService<IConfiguration>()));
 
         return services;
     }
