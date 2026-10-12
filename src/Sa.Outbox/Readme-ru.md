@@ -62,22 +62,13 @@ builder.Services
 
 ---
 
-## Основные типы
+## Критические изменения
 
-| Тип | Назначение |
-|-----|-----------|
-| `IOutboxBuilder` | Fluent-билдер конфигурации |
-| `IOutboxMessagePublisher` | Публикация сообщений в outbox |
-| `IConsumer\<TMessage\>` | Интерфейс консьюмера сообщений |
-| `IOutboxContextOperations\<TMessage\>` | Операции изменения статуса доставки (`Ok`, `Error`, `Warn`, `Postpone` и т.д.) |
-| `OutboxConsumerSettings` | Immutable-снимок настроек группы консьюмера (интервал, батчи, параллелизм, повторы…) |
-| `OutboxConsumerSettingsBuilder` | Fluent-билдер для создания и частичного обновления `OutboxConsumerSettings` |
-| `IOutboxConsumerManager` | Runtime-менеджер: атомарный свап, пауза/возобновление, изменение подписок |
-| `IDeliverySnapshot` | Read-only представление зарегистрированных доставок для диагностики |
-| `OutboxScope` | Ключ DI-скопа (`"outbox"`), под которым Outbox регистрирует своё внутреннее расписание / партициальный модуль |
-| `DeliveryStatus` / `DeliveryStatusCode` | HTTP-подобные коды статуса доставки |
-| `ExponentialBackoffRetryStrategy` | Экспоненциальный backoff с jitter |
-| `OutboxPartInfo` | Информация о партиции: TenantId, PartName |
+### 0.16.0
+
+- **`IRetryStrategy` → `IDeliveryBackoffStrategy`** (жёсткое переименование, без shim-а с `[Obsolete]`). Контракт вычисляет задержку backoff-а между ретраями одного упавшего сообщения, а не сам ретрай; новое имя также отличает его от `OutboxConsumerSettings.RetryCountOnError` (повторы задачи) и `Sa.Data.PostgreSql.PgRetryStrategy` (повторы операций с БД). Метод `GetBackoff(int attempt)` не изменился.
+- **`ExponentialBackoffRetryStrategy` → `ExponentialDeliveryBackoffStrategy`** (включая `Shared`).
+- **Новое: `IEmptyQueueWaitStrategy`** управляет ожиданием между опросами пустой очереди потребителя. Backoff стратегии `ExponentialIdleWaitStrategy` по умолчанию неактивен, пока группа не включит его через `WithIdleBackoff(maxInterval)`; существующие конфигурации работают в точности как раньше.
 
 ---
 
@@ -198,6 +189,50 @@ var allGroups = manager.GetAllConsumerGroupIds();
 | `PerTenantMaxDegreeOfParallelism` | 1 | Параллелизм по арендаторам (1 = последовательно, -1 = все ядра) |
 | `RetryCountOnError` | 0 | Повторы при ошибке (-1 = бесконечно) |
 | `Paused` | false | Флаг паузы |
+| `IdleMaxInterval` | 0 (выключено) | Верхняя граница адаптивного backoff-а пустой очереди; при установке должен быть `>= Interval` |
+
+### Политика ожидания пустой очереди
+
+Backoff пустой очереди включается на каждую группу отдельно. Задайте базовый `Interval` (пока идёт работа) и предел `IdleMaxInterval` (пока пусто):
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveries(d => d
+        .AddDelivery<OrderConsumer, OrderPlaced>("orders", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(5))      // 5 с, пока идёт работа
+            .WithIdleBackoff(TimeSpan.FromMinutes(2))   // рост до 2 мин, пока пусто
+        )
+        .AddDelivery<AuditConsumer, AuditEvent>("audit", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(1))
+            .WithFixedInterval()                        // оставить группу отзывчивой
+        )
+    ));
+```
+
+DI-значение по умолчанию — `ExponentialIdleWaitStrategy` (x2 за пустой опрос, джиттер 20%); он неактивен, пока группа не вызовет `WithIdleBackoff`. Переопределить алгоритм глобально можно по типу или экземпляром:
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryBatcher<MyBatcher>()                                   // свой расчёт размера батча
+    .WithIdleWaitStrategy(new ExponentialIdleWaitStrategy(1.5, 0.3))   // свои multiplier / jitter
+    // или: .WithIdleWaitStrategy<MyIdleStrategy>()                     // полностью своя IEmptyQueueWaitStrategy
+);
+```
+
+Пример собственной реализации `IEmptyQueueWaitStrategy` — в `Delivery/Readme-ru.md` → *Настройка политики ожидания*.
+
+---
+
+### Глобальные переопределения DI
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryBatcher<MyBatcher>()          // свой расчёт размера батча
+    .WithIdleWaitStrategy<MyIdleStrategy>()    // своя стратегия ожидания пустой очереди
+);
+```
+
+Оба необязательны: `IDeliveryBatcher` по умолчанию — `DeliveryBatcher` (проброс `MaxBatchSize`), `IEmptyQueueWaitStrategy` — `ExponentialIdleWaitStrategy`. Стратегия ожидания по умолчанию неактивна, пока группа не включит её через `WithIdleBackoff(maxInterval)`, поэтому «из коробки» опрос идёт с фиксированным `Interval`.
 
 ---
 

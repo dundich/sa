@@ -106,8 +106,8 @@ public class DeliveryCourierTests
         var testException = new InvalidOperationException("processor broke");
         var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromException(testException));
 
-        var retryStrategy = new FakeRetryStrategy(_ => TimeSpan.FromSeconds(5));
-        var courier = new DeliveryCourier(processor, retryStrategy);
+        var backoffStrategy = new FakeDeliveryBackoffStrategy(_ => TimeSpan.FromSeconds(5));
+        var courier = new DeliveryCourier(processor, backoffStrategy);
 
         var result = await courier.Deliver(
             CreateSettings(),
@@ -131,7 +131,7 @@ public class DeliveryCourierTests
         var processor = new FakeDeliveryLifetimeInvoker(
             _ => Task.FromException(new InvalidOperationException("processor broke")));
 
-        var courier = new DeliveryCourier(processor, new FakeRetryStrategy(_ => TimeSpan.FromSeconds(5)));
+        var courier = new DeliveryCourier(processor, new FakeDeliveryBackoffStrategy(_ => TimeSpan.FromSeconds(5)));
 
         var result = await courier.Deliver(
             CreateSettings(maxDeliveryAttempts: 3),
@@ -154,7 +154,7 @@ public class DeliveryCourierTests
         var processor = new FakeDeliveryLifetimeInvoker(
             _ => Task.FromException(new InvalidOperationException("processor broke")));
 
-        var courier = new DeliveryCourier(processor, new FakeRetryStrategy(_ => TimeSpan.FromSeconds(5)));
+        var courier = new DeliveryCourier(processor, new FakeDeliveryBackoffStrategy(_ => TimeSpan.FromSeconds(5)));
 
         var result = await courier.Deliver(
             CreateSettings(maxDeliveryAttempts: 3),
@@ -180,13 +180,13 @@ public class DeliveryCourierTests
 
         var callCount = 0;
         var expectedBackoffs = new[] { TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(20) };
-        var retryStrategy = new FakeRetryStrategy(attempt =>
+        var backoffStrategy = new FakeDeliveryBackoffStrategy(attempt =>
         {
             var backoff = expectedBackoffs[callCount++];
             return backoff;
         });
 
-        var courier = new DeliveryCourier(processor, retryStrategy);
+        var courier = new DeliveryCourier(processor, backoffStrategy);
 
         var result = await courier.Deliver(
             CreateSettings(),
@@ -207,7 +207,7 @@ public class DeliveryCourierTests
     }
 
     [Fact]
-    public async Task Deliver_ProcessorThrows_UseDefaultRetryStrategy()
+    public async Task Deliver_ProcessorThrows_UseDefaultBackoffStrategy()
     {
         var ctx = new FakeOutboxContext<TestMessage>(payloadId: "msg-default-retry", attempt: 1);
         var messages = ToMessages(ctx);
@@ -215,7 +215,7 @@ public class DeliveryCourierTests
         var testException = new InvalidOperationException("fail");
         var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromException(testException));
 
-        // No custom retry strategy — should use ExponentialBackoffRetryStrategy.Shared
+        // No custom backoff strategy — should use ExponentialDeliveryBackoffStrategy.Shared
         var courier = new DeliveryCourier(processor, null);
 
         var result = await courier.Deliver(
@@ -378,7 +378,7 @@ public class DeliveryCourierTests
         var processor = new FakeDeliveryLifetimeInvoker(
             _ => Task.FromException(new InvalidOperationException("processor broke")));
 
-        var courier = new DeliveryCourier(processor, new FakeRetryStrategy(_ => TimeSpan.FromSeconds(5)));
+        var courier = new DeliveryCourier(processor, new FakeDeliveryBackoffStrategy(_ => TimeSpan.FromSeconds(5)));
 
         var result = await courier.Deliver(
             CreateSettings(maxDeliveryAttempts: 3),
@@ -462,7 +462,7 @@ public class DeliveryCourierTests
         var testException = new InvalidOperationException("fail");
         var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromException(testException));
 
-        var customStrategy = new FakeRetryStrategy(_ => TimeSpan.FromMilliseconds(42));
+        var customStrategy = new FakeDeliveryBackoffStrategy(_ => TimeSpan.FromMilliseconds(42));
         var courier = new DeliveryCourier(processor, customStrategy);
 
         var result = await courier.Deliver(
@@ -484,13 +484,13 @@ public class DeliveryCourierTests
         var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromException(testException));
 
         var recordedAttempts = new List<int>();
-        var retryStrategy = new FakeRetryStrategy(attempt =>
+        var backoffStrategy = new FakeDeliveryBackoffStrategy(attempt =>
         {
             recordedAttempts.Add(attempt);
             return TimeSpan.FromSeconds(attempt * 5);
         });
 
-        var courier = new DeliveryCourier(processor, retryStrategy);
+        var courier = new DeliveryCourier(processor, backoffStrategy);
 
         await courier.Deliver(
             CreateSettings(),
@@ -518,8 +518,8 @@ public class DeliveryCourierTests
 
         var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromCanceled(cts.Token));
 
-        var retryStrategy = new FakeRetryStrategy(_ => TimeSpan.FromSeconds(1));
-        var courier = new DeliveryCourier(processor, retryStrategy);
+        var backoffStrategy = new FakeDeliveryBackoffStrategy(_ => TimeSpan.FromSeconds(1));
+        var courier = new DeliveryCourier(processor, backoffStrategy);
 
         var result = await courier.Deliver(
             CreateSettings(),
@@ -545,7 +545,7 @@ public class DeliveryCourierTests
         var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromException(testException));
 
         // Strategy that always returns exactly 1 second regardless of attempt
-        var deterministicStrategy = new FakeRetryStrategy(_ => TimeSpan.FromSeconds(1));
+        var deterministicStrategy = new FakeDeliveryBackoffStrategy(_ => TimeSpan.FromSeconds(1));
         var courier = new DeliveryCourier(processor, deterministicStrategy);
 
         var result = await courier.Deliver(
@@ -571,8 +571,8 @@ public class DeliveryCourierTests
         var testException = new CustomTestException("specific error");
         var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromException(testException));
 
-        var retryStrategy = new FakeRetryStrategy(_ => TimeSpan.Zero);
-        var courier = new DeliveryCourier(processor, retryStrategy);
+        var backoffStrategy = new FakeDeliveryBackoffStrategy(_ => TimeSpan.Zero);
+        var courier = new DeliveryCourier(processor, backoffStrategy);
 
         await courier.Deliver(
             CreateSettings(),

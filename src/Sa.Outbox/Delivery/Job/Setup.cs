@@ -46,8 +46,17 @@ internal static class Setup
                 var manager = sp.GetRequiredService<IOutboxConsumerManager>();
                 manager.TryRegister(settings.ConsumerGroupId, settings);
 
+                // Timing is adaptive: the job reports each run's outcome into this state and the
+                // timing reads it back here. Fixed-interval behavior is preserved when
+                // IdleMaxInterval is zero.
+                var idleStates = sp.GetRequiredService<IOutboxIdleStateRegistry>();
+                OutboxIdleState idleState = idleStates.GetOrAdd(
+                    settings.ConsumerGroupId,
+                    settings.Interval,
+                    settings.IdleMaxInterval);
+
                 jobBuilder
-                    .EveryTime(settings.Interval)
+                    .WithTiming(new AdaptiveIdleTiming(idleState))
                     .WithInitialDelay(settings.InitialDelay)
                     .WithConcurrencyLimit(settings.ConcurrencyLimit)
                     .WithMaxConcurrency(settings.MaxConcurrency)

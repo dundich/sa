@@ -61,22 +61,13 @@ builder.Services
 
 ---
 
-## Key Types
+## Breaking Changes
 
-| Type | Purpose |
-|------|---------|
-| `IOutboxBuilder` | Fluent configuration builder |
-| `IOutboxMessagePublisher` | Publish messages to outbox |
-| `IConsumer\<TMessage\>` | Message consumer interface |
-| `IOutboxContextOperations\<TMessage\>` | Delivery status change operations (`Ok`, `Error`, `Warn`, `Postpone`, etc.) |
-| `OutboxConsumerSettings` | Immutable snapshot of consumer group settings (interval, batches, concurrency, retries…) |
-| `OutboxConsumerSettingsBuilder` | Fluent builder for creating and partially updating `OutboxConsumerSettings` |
-| `IOutboxConsumerManager` | Runtime manager: atomic swap, pause/resume, change subscriptions |
-| `IDeliverySnapshot` | Read-only view of registered deliveries for diagnostics |
-| `OutboxScope` | The DI scope key (`"outbox"`) under which the Outbox registers its internal schedule / partitional module |
-| `DeliveryStatus` / `DeliveryStatusCode` | HTTP-like delivery status codes |
-| `ExponentialBackoffRetryStrategy` | Exponential backoff with jitter |
-| `OutboxPartInfo` | Part info: TenantId, PartName |
+### 0.16.0
+
+- **`IRetryStrategy` → `IDeliveryBackoffStrategy`** (hard rename, no obsolete shim). The contract computes a backoff delay between retries of a single failed message, not the retry itself; the new name also disambiguates it from `OutboxConsumerSettings.RetryCountOnError` (job retries) and `Sa.Data.PostgreSql.PgRetryStrategy` (database retries). Method `GetBackoff(int attempt)` is unchanged.
+- **`ExponentialBackoffRetryStrategy` → `ExponentialDeliveryBackoffStrategy`** (including `Shared`).
+- **New: `IEmptyQueueWaitStrategy`** controls the wait between polls of an empty consumer queue. Default `ExponentialIdleWaitStrategy` back-off is inert until a group opts in via `WithIdleBackoff(maxInterval)`; existing configurations behave exactly as before.
 
 ---
 
@@ -197,6 +188,50 @@ var allGroups = manager.GetAllConsumerGroupIds();
 | `PerTenantMaxDegreeOfParallelism` | 1 | Tenant parallelism (1 = sequential, -1 = all cores) |
 | `RetryCountOnError` | 0 | Retries on error (-1 = infinite) |
 | `Paused` | false | Pause flag |
+| `IdleMaxInterval` | 0 (disabled) | Upper bound of the adaptive empty-queue poll back-off; must be `>= Interval` when set |
+
+### Empty-Queue Wait Policy
+
+Empty-queue back-off is opt-in per consumer group. Set the base `Interval` (used while work flows) and the cap `IdleMaxInterval` (used while empty):
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveries(d => d
+        .AddDelivery<OrderConsumer, OrderPlaced>("orders", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(5))      // 5 s while work is flowing
+            .WithIdleBackoff(TimeSpan.FromMinutes(2))   // grow up to 2 min while empty
+        )
+        .AddDelivery<AuditConsumer, AuditEvent>("audit", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(1))
+            .WithFixedInterval()                        // keep this group responsive
+        )
+    ));
+```
+
+The DI default is `ExponentialIdleWaitStrategy` (x2 per empty poll, 20% jitter); it is inert until a group calls `WithIdleBackoff`. Override the algorithm globally by type or by instance:
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryBatcher<MyBatcher>()                                   // custom batch-size calculator
+    .WithIdleWaitStrategy(new ExponentialIdleWaitStrategy(1.5, 0.3))   // custom multiplier / jitter
+    // or: .WithIdleWaitStrategy<MyIdleStrategy>()                      // fully custom IEmptyQueueWaitStrategy
+);
+```
+
+See `Delivery/Readme.md` → *Configuring the wait policy* for a custom `IEmptyQueueWaitStrategy` implementation.
+
+---
+
+### Global DI Overrides
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryBatcher<MyBatcher>()          // custom batch-size calculator
+    .WithIdleWaitStrategy<MyIdleStrategy>()    // custom empty-queue wait strategy
+);
+```
+
+Both are optional: `IDeliveryBatcher` defaults to `DeliveryBatcher` (passthrough of `MaxBatchSize`), and `IEmptyQueueWaitStrategy` defaults to `ExponentialIdleWaitStrategy`. The default idle strategy is inert until a group opts in with `WithIdleBackoff(maxInterval)`, so out-of-the-box behavior is a fixed `Interval` poll.
 
 ---
 

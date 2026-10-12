@@ -60,4 +60,10 @@ public static class OutboxDefaults
 
     /// <summary>Default paused state (false — running).</summary>
     public static bool Paused => false;
+
+    /// <summary>
+    /// Default upper bound for the adaptive empty-queue poll interval (zero — adaptive back-off
+    /// disabled, the poll period stays at <see cref="Interval"/>).
+    /// </summary>
+    public static TimeSpan IdleMaxInterval => TimeSpan.Zero;
 }

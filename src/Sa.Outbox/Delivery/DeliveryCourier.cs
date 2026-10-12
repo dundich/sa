@@ -8,10 +8,10 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 internal sealed class DeliveryCourier(
     IDeliveryLifetimeInvoker processor,
-     IRetryStrategy? retryStrategy = null) : IDeliveryCourier
+     IDeliveryBackoffStrategy? backoffStrategy = null) : IDeliveryCourier
 {
 
-    private readonly IRetryStrategy _retryStrategy = retryStrategy ?? ExponentialBackoffRetryStrategy.Shared;
+    private readonly IDeliveryBackoffStrategy _backoffStrategy = backoffStrategy ?? ExponentialDeliveryBackoffStrategy.Shared;
 
     /// <summary>
     /// Asynchronous method to deliver messages
@@ -45,7 +45,7 @@ internal sealed class DeliveryCourier(
             if (message.DeliveryResult.Code.IsPending())
             {
                 var attempt = message.DeliveryInfo.Attempt + 1;
-                var backoff = _retryStrategy.GetBackoff(attempt);
+                var backoff = _backoffStrategy.GetBackoff(attempt);
 
                 message.Warn(
                     error,

@@ -18,7 +18,7 @@ The whole pipeline is three layers:
 |---|---|
 | `IDeliveryBuilder.cs` / `DeliveryBuilder.cs` | Fluent registration of consumer groups (`AddDelivery` / `AddDeliveryScoped`) |
 | `Job/Setup.cs` | `AddDeliveryJob` — builds settings, registers the keyed consumer, wires the Sa.Schedule job |
-| `Job/DeliveryJob.cs` | `DeliveryJob<TMessage>` — the `IJob` entry point; resolves settings by job name and calls `ProcessMessages` |
+| `Job/DeliveryJob.cs` | `DeliveryJob<TMessage>` — the `IJob` entry point; resolves settings by job name, calls `ProcessMessages` and reports the run outcome to the idle state |
 | `Job/DeliveryJobInterceptor.cs` | Sa.Schedule interceptor hooked into every delivery job |
 | `IDeliveryProcessor.cs` / `DeliveryProcessor.cs` | The greedy loop over tenants; owns iteration and batch bookkeeping |
 | `IDeliveryTenant.cs` / `DeliveryTenant.cs` | One tenant pass: build filter → size the batch → rent → deliver → return |
@@ -34,7 +34,11 @@ The whole pipeline is three layers:
 | `OutboxDefaults.cs` | Default value for every setting, in one place |
 | `IOutboxConsumerManager.cs` / `OutboxConsumerManager.cs` | Thread-safe runtime registry: register / apply / pause / resume / subscribe |
 | `IDeliverySnapshot.cs` / `DeliverySnapshot.cs` | Lazily materialised view of jobs, message parts and consumer settings (used by the outbox load step) |
-| `IRetryStrategy.cs` / `ExponentialBackoffRetryStrategy.cs` | Default backoff with jitter: `min(maxDelay, baseDelay * 2^(attempt-1)) * jitter` |
+| `IDeliveryBackoffStrategy.cs` / `ExponentialDeliveryBackoffStrategy.cs` | Default backoff with jitter: `min(maxDelay, baseDelay * 2^(attempt-1)) * jitter` |
+| `IEmptyQueueWaitStrategy.cs` / `FixedIntervalWaitStrategy.cs` / `ExponentialIdleWaitStrategy.cs` | Wait between polls of an empty queue: fixed (default) or exponential with jitter |
+| `OutboxIdleState.cs` | Per-group consecutive-empty counter feeding the adaptive schedule |
+| `AdaptiveIdleTiming.cs` | `IJobTiming` reading `OutboxIdleState.CurrentInterval` for the next occurrence |
+| `OutboxIdleStateRegistry.cs` | Registry of `OutboxIdleState` per consumer group (interface + default impl) |
 | `FilterFactory.cs` | Builds an `OutboxMessageFilter` from settings |
 | `OutboxDeliveryMessage.cs` | A rented row: message payload plus delivery info |
 | `OutboxTaskDeliveryInfo.cs` | Task-level delivery info (`TaskId`, `DeliveryId`, `Attempt`, `LastErrorId`, `Status`) |
@@ -43,7 +47,7 @@ The whole pipeline is three layers:
 
 ## The delivery pipeline
 
-1. **`DeliveryJob<TMessage>.Execute`** resolves `OutboxConsumerSettings` from `IOutboxConsumerManager` by job name and calls `IDeliveryProcessor.ProcessMessages`. A missing registration is a hard error, not a silent no-op.
+1. **`DeliveryJob<TMessage>.Execute`** resolves `OutboxConsumerSettings` from `IOutboxConsumerManager` by job name and calls `IDeliveryProcessor.ProcessMessages`. A missing registration is a hard error, not a silent no-op. After the run it reports the handled count to the group's `OutboxIdleState`, which the adaptive timing reads on the next iteration (see *Empty-queue back-off* below).
 2. **`DeliveryProcessor.ProcessMessages`** runs the greedy loop. Each iteration: optionally delay `IterationDelay`, process every tenant, then ask `ShouldContinueProcessing`. When the group is `Paused` the loop waits 5 s and returns instead of polling.
 3. **`DeliveryTenant.ProcessInTenant`** builds the filter, asks `IDeliveryBatcher` for a size, rents a `MemoryPool` buffer, calls `RentDelivery` (which flips rows to `Processing` under `FOR UPDATE SKIP LOCKED`), starts a `LockRenewer` on `LockRenewal`, delivers, then calls `ReturnDelivery`.
 4. **`DeliveryCourier.Deliver`** calls the consumer, converts a thrown exception into `Warn` + backoff, then runs `PostHandle` — see below.
@@ -105,6 +109,72 @@ A tenant pass returns a plain `int` — the number of messages the pass handled.
 
 The split is deliberate: a batch where every message failed still has `Processed > 0`, so the greedy loop keeps draining the backlog instead of mistaking a fully-failed batch for an empty queue.
 
+## Empty-queue back-off
+
+The delivery job is timer-driven by `Sa.Schedule`. On every tick it drains the backlog greedily; when nothing is found the wait until the following tick is otherwise a fixed `Interval`. `IEmptyQueueWaitStrategy` lets a consumer group back off while its queue stays empty, instead of polling the database at the base rate forever.
+
+- **`FixedIntervalWaitStrategy`** (default) always returns `Interval` — the pre-existing behavior.
+- **`ExponentialIdleWaitStrategy`** (the DI default) grows the wait per consecutive empty poll: after `n` empty polls it returns `min(IdleMaxInterval, Interval * multiplier^(n-1))`, jittered downwards and clamped to `[Interval, IdleMaxInterval]`.
+
+Adaptive back-off is **off by default**: `IdleMaxInterval` defaults to `TimeSpan.Zero`, and both strategies return `Interval` unchanged in that case. Enable it per group with `WithIdleBackoff(maxInterval)` (or disable explicitly with `WithFixedInterval()`); `maxInterval` must be `>= Interval`. Swap the algorithm globally through DI or `IOutboxBuilder.WithIdleWaitStrategy<T>()` (or `WithIdleWaitStrategy(instance)`).
+
+Group state lives in one `OutboxIdleState` per consumer group (`IOutboxIdleStateRegistry`). `DeliveryJob` reports the handled count after each run: any work resets the state to `Interval`, an empty run advances it by one step, and a run while `Paused` resets it so resuming starts from `Interval`. `AdaptiveIdleTiming` (an `IJobTiming`) reads `CurrentInterval` before every iteration. The settings snapshot stays fixed for the cycle, so a runtime `Apply` is honored on the next iteration.
+
+### Configuring the wait policy
+
+A wait policy has two independent parts: the **per-group cap** (`IdleMaxInterval`) that opts a consumer group into back-off, and the **global algorithm** (`IEmptyQueueWaitStrategy`) that computes each step.
+
+**1. Per-group opt-in with the built-in exponential policy.** Short base interval while work is flowing, growth up to a cap while the queue stays empty:
+
+```csharp
+services.AddSaOutbox(builder => builder
+    .WithDeliveries(d => d
+        .AddDelivery<OrderConsumer, OrderPlaced>("orders", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(5))      // poll every 5 s while work is flowing
+            .WithIdleBackoff(TimeSpan.FromMinutes(2))   // grow (x2) up to 2 min while empty
+        )
+    ));
+```
+
+Waiting sequence: `5 s → 10 s → 20 s → 40 s → 80 s → 120 s → 120 s …` (each step jittered downwards by up to 20%). The first delivered message resets it to `5 s`.
+
+**2. Keep one group fixed.** Back-off is opt-in, so a group that must stay responsive simply omits `WithIdleBackoff`; `WithFixedInterval()` states that intent explicitly:
+
+```csharp
+.AddDelivery<OrderConsumer, OrderPlaced>("orders", (_, cs) => cs
+    .WithInterval(TimeSpan.FromSeconds(1))
+    .WithFixedInterval());     // always 1 s — equivalent to not opting in
+```
+
+**3. Tune the built-in algorithm globally.** Pass an instance to change its parameters (slower growth, more jitter):
+
+```csharp
+services.AddSaOutbox(builder => builder
+    .WithIdleWaitStrategy(new ExponentialIdleWaitStrategy(multiplier: 1.5, jitter: 0.3))
+    .WithDeliveries(/* … groups that call WithIdleBackoff … */));
+```
+
+**4. Plug in a custom algorithm.** Implement `IEmptyQueueWaitStrategy` and register it by type; every opted-in group uses it:
+
+```csharp
+public sealed class LinearIdleWaitStrategy : IEmptyQueueWaitStrategy
+{
+    public TimeSpan GetNextWait(TimeSpan baseInterval, TimeSpan maxInterval, int consecutiveEmptyPolls)
+    {
+        if (maxInterval <= baseInterval) return baseInterval;            // disabled
+
+        var grown = baseInterval * Math.Max(1, consecutiveEmptyPolls);   // linear step
+        return grown >= maxInterval ? maxInterval : grown;
+    }
+}
+
+services.AddSaOutbox(builder => builder
+    .WithIdleWaitStrategy<LinearIdleWaitStrategy>()
+    .WithDeliveries(/* … */));
+```
+
+> Use `WithIdleWaitStrategy<T>()` to let the DI container create the algorithm; use `WithIdleWaitStrategy(instance)` only to pass constructor arguments to a built-in type. With neither call the DI default is `ExponentialIdleWaitStrategy.Shared` — which is inert until a group opts in.
+
 ## Consumer settings
 
 `OutboxConsumerSettings` is an immutable `record`; `OutboxConsumerManager` stores and replaces whole snapshots, so a setting can never change under an in-flight delivery.
@@ -129,6 +199,7 @@ The split is deliberate: a batch where every message failed still has `Processed
 | `PerTenantTimeout` | zero | `WithPerTenantTimeout` | Zero = no timeout |
 | `PerTenantMaxDegreeOfParallelism` | 1 | `WithPerTenantMaxDegreeOfParallelism` / `WithTenantSequentialProcessing` / `WithTenantMaxParallelism` | `1` = sequential, `-1` = one per CPU; `0` is rejected |
 | `Paused` | `false` | `Paused` / `Resumed` | Checked on every loop iteration |
+| `IdleMaxInterval` | zero (disabled) | `WithIdleBackoff(max)` / `WithFixedInterval` | Upper bound of the empty-queue poll back-off; must be `>= Interval` when set |
 
 Note that `AddDeliveryJob` pre-seeds the builder with `StartImmediately()`, `ConcurrencyLimit(1)`, `MaxConcurrency(1)`, `MaxProcessingIterations(-1)` and `PerTenantTimeout(Zero)` **before** invoking your `configure` callback, so those defaults win over `OutboxDefaults`.
 
@@ -171,6 +242,8 @@ IDeliveryTenant            → DeliveryTenant
 IDeliveryLifetimeInvoker   → DeliveryLifetimeInvoker
 IDeliverySnapshot          → DeliverySnapshot
 IOutboxConsumerManager     → OutboxConsumerManager
+IEmptyQueueWaitStrategy    → ExponentialIdleWaitStrategy
+IOutboxIdleStateRegistry   → OutboxIdleStateRegistry
 ```
 
 It also calls `AddOutboxPartitional()` (tenant support) and `AddMessagesMetadata()`, then invokes your `IDeliveryBuilder` callback.

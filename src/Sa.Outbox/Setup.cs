@@ -31,7 +31,7 @@ public static class Setup
         OutboxBuilder builder = OutboxBuilder.Create(services, scopeKey);
         build?.Invoke(builder);
 
-        services.TryAddSingleton<IRetryStrategy, ExponentialBackoffRetryStrategy>();
+        services.TryAddSingleton<IDeliveryBackoffStrategy, ExponentialDeliveryBackoffStrategy>();
 
         return services;
     }

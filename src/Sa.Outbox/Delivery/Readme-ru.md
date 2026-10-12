@@ -18,7 +18,7 @@
 |---|---|
 | `IDeliveryBuilder.cs` / `DeliveryBuilder.cs` | Fluent-регистрация групп потребителей (`AddDelivery` / `AddDeliveryScoped`) |
 | `Job/Setup.cs` | `AddDeliveryJob` — строит настройки, регистрирует потребителя по ключу, подключает задачу Sa.Schedule |
-| `Job/DeliveryJob.cs` | `DeliveryJob<TMessage>` — точка входа `IJob`; находит настройки по имени задачи и вызывает `ProcessMessages` |
+| `Job/DeliveryJob.cs` | `DeliveryJob<TMessage>` — точка входа `IJob`; находит настройки по имени задачи, вызывает `ProcessMessages` и сообщает исход прогона в idle-состояние |
 | `Job/DeliveryJobInterceptor.cs` | Интерцептор Sa.Schedule, навешенный на каждую задачу доставки |
 | `IDeliveryProcessor.cs` / `DeliveryProcessor.cs` | Жадный цикл по тенантам; владеет учётом итераций и батчей |
 | `IDeliveryTenant.cs` / `DeliveryTenant.cs` | Один проход по тенанту: фильтр → размер батча → аренда → доставка → возврат |
@@ -34,7 +34,11 @@
 | `OutboxDefaults.cs` | Значения по умолчанию для всех настроек в одном месте |
 | `IOutboxConsumerManager.cs` / `OutboxConsumerManager.cs` | Потокобезопасный реестр времени выполнения: регистрация / изменение / пауза / возобновление / подписка |
 | `IDeliverySnapshot.cs` / `DeliverySnapshot.cs` | Лениво материализуемое представление задач, частей сообщений и настроек потребителей (используется на этапе загрузки outbox) |
-| `IRetryStrategy.cs` / `ExponentialBackoffRetryStrategy.cs` | Экспоненциальный backoff с джиттером по умолчанию: `min(maxDelay, baseDelay * 2^(attempt-1)) * jitter` |
+| `IDeliveryBackoffStrategy.cs` / `ExponentialDeliveryBackoffStrategy.cs` | Экспоненциальный backoff с джиттером по умолчанию: `min(maxDelay, baseDelay * 2^(attempt-1)) * jitter` |
+| `IEmptyQueueWaitStrategy.cs` / `FixedIntervalWaitStrategy.cs` / `ExponentialIdleWaitStrategy.cs` | Ожидание между опросами пустой очереди: фиксированное (по умолчанию) или экспоненциальное с джиттером |
+| `OutboxIdleState.cs` | Счётчик пустых опросов на группу, питающий адаптивное расписание |
+| `AdaptiveIdleTiming.cs` | `IJobTiming`, читающий `OutboxIdleState.CurrentInterval` для следующего запуска |
+| `OutboxIdleStateRegistry.cs` | Реестр `OutboxIdleState` по группам потребителей (интерфейс + реализация по умолчанию) |
 | `FilterFactory.cs` | Собирает `OutboxMessageFilter` из настроек |
 | `OutboxDeliveryMessage.cs` | Арендованная строка: полезная нагрузка плюс информация о доставке |
 | `OutboxTaskDeliveryInfo.cs` | Информация о доставке на уровне задачи (`TaskId`, `DeliveryId`, `Attempt`, `LastErrorId`, `Status`) |
@@ -43,7 +47,7 @@
 
 ## Конвейер доставки
 
-1. **`DeliveryJob<TMessage>.Execute`** находит `OutboxConsumerSettings` в `IOutboxConsumerManager` по имени задачи и вызывает `IDeliveryProcessor.ProcessMessages`. Отсутствие регистрации — жёсткая ошибка, а не молчаливый no-op.
+1. **`DeliveryJob<TMessage>.Execute`** находит `OutboxConsumerSettings` в `IOutboxConsumerManager` по имени задачи и вызывает `IDeliveryProcessor.ProcessMessages`. Отсутствие регистрации — жёсткая ошибка, а не молчаливый no-op. После прогона он сообщает число обработанных в `OutboxIdleState` группы, откуда его читает адаптивный тайминг на следующей итерации (см. *Backoff пустой очереди* ниже).
 2. **`DeliveryProcessor.ProcessMessages`** выполняет жадный цикл. Каждая итерация: при необходимости пауза `IterationDelay`, обработка всех тенантов, затем `ShouldContinueProcessing`. Если группа на паузе, цикл ждёт 5 с и возвращается, не опрашивая базу.
 3. **`DeliveryTenant.ProcessInTenant`** строит фильтр, спрашивает у `IDeliveryBatcher` размер, арендует буфер из `MemoryPool`, вызывает `RentDelivery` (переводя строки в `Processing` под `FOR UPDATE SKIP LOCKED`), запускает `LockRenewer` с интервалом `LockRenewal`, доставляет, затем вызывает `ReturnDelivery`.
 4. **`DeliveryCourier.Deliver`** вызывает потребителя, превращает брошенное исключение в `Warn` с backoff, затем выполняет `PostHandle` — см. ниже.
@@ -105,6 +109,72 @@
 
 Один счётчик вместо двух — тоже намеренно: «успех» в 200–299 ничего не решал вверх по стеку. Раньше он попадал в `Succeeded`, но на решение о продолжении цикла не влиял, а наверх уезжал как «доставлено», хотя батч из сплошных `Warn` отчитывался нулём.
 
+## Backoff пустой очереди
+
+Задача доставки запускается по таймеру `Sa.Schedule`. На каждом тике она жадно сливает бэклог; когда работы нет, ожидание до следующего тика иначе было бы фиксированным `Interval`. `IEmptyQueueWaitStrategy` позволяет группе потребителей откатываться назад, пока её очередь пуста, вместо вечного опроса базы с базовой частотой.
+
+- **`FixedIntervalWaitStrategy`** (по умолчанию) всегда возвращает `Interval` — прежнее поведение.
+- **`ExponentialIdleWaitStrategy`** (DI-значение по умолчанию) увеличивает ожидание с каждым пустым опросом: после `n` пустых опросов возвращает `min(IdleMaxInterval, Interval * multiplier^(n-1))`, со сдвигом вниз на джиттер и зажимом в `[Interval, IdleMaxInterval]`.
+
+Адаптивный backoff **по умолчанию выключен**: `IdleMaxInterval` по умолчанию равен `TimeSpan.Zero`, и обе стратегии в этом случае возвращают `Interval` без изменений. Включается на группу через `WithIdleBackoff(maxInterval)` (или явно выключается через `WithFixedInterval()`); `maxInterval` обязан быть `>= Interval`. Заменить алгоритм глобально можно через DI или `IOutboxBuilder.WithIdleWaitStrategy<T>()` (или `WithIdleWaitStrategy(instance)`).
+
+Состояние группы живёт по одному `OutboxIdleState` на группу потребителей (`IOutboxIdleStateRegistry`). `DeliveryJob` после каждого прогона сообщает число обработанных: любая работа сбрасывает состояние к `Interval`, пустой прогон продвигает его на шаг, а прогон на паузе сбрасывает, чтобы после возобновления стартовать с `Interval`. `AdaptiveIdleTiming` (реализация `IJobTiming`) читает `CurrentInterval` перед каждой итерацией. Снимок настроек фиксирован на цикл, поэтому изменение во время работы учитывается на следующей итерации.
+
+### Настройка политики ожидания
+
+Политика состоит из двух независимых частей: **верхняя граница на группу** (`IdleMaxInterval`), которая включает backoff для группы, и **глобальный алгоритм** (`IEmptyQueueWaitStrategy`), вычисляющий каждый шаг.
+
+**1. Включение на группу со встроенной экспоненциальной политикой.** Короткий базовый интервал, пока идёт работа, и рост до предела, пока очередь пуста:
+
+```csharp
+services.AddSaOutbox(builder => builder
+    .WithDeliveries(d => d
+        .AddDelivery<OrderConsumer, OrderPlaced>("orders", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(5))      // опрос раз в 5 с, пока идёт работа
+            .WithIdleBackoff(TimeSpan.FromMinutes(2))   // рост (x2) до 2 мин, пока пусто
+        )
+    ));
+```
+
+Последовательность ожиданий: `5 с → 10 с → 20 с → 40 с → 80 с → 120 с → 120 с …` (каждый шаг со сдвигом вниз на джиттер до 20%). Первое доставленное сообщение сбрасывает её к `5 с`.
+
+**2. Оставить группу с фиксированным интервалом.** Backoff включается по желанию, поэтому группа, которой важна отзывчивость, просто не вызывает `WithIdleBackoff`; `WithFixedInterval()` выражает это намерение явно:
+
+```csharp
+.AddDelivery<OrderConsumer, OrderPlaced>("orders", (_, cs) => cs
+    .WithInterval(TimeSpan.FromSeconds(1))
+    .WithFixedInterval());     // всегда 1 с — то же, что не включать backoff
+```
+
+**3. Настроить встроенный алгоритм глобально.** Передайте экземпляр, чтобы изменить параметры (медленнее рост, больше джиттер):
+
+```csharp
+services.AddSaOutbox(builder => builder
+    .WithIdleWaitStrategy(new ExponentialIdleWaitStrategy(multiplier: 1.5, jitter: 0.3))
+    .WithDeliveries(/* … группы, вызывающие WithIdleBackoff … */));
+```
+
+**4. Подключить свой алгоритм.** Реализуйте `IEmptyQueueWaitStrategy` и зарегистрируйте его по типу — его будут использовать все включившие backoff группы:
+
+```csharp
+public sealed class LinearIdleWaitStrategy : IEmptyQueueWaitStrategy
+{
+    public TimeSpan GetNextWait(TimeSpan baseInterval, TimeSpan maxInterval, int consecutiveEmptyPolls)
+    {
+        if (maxInterval <= baseInterval) return baseInterval;            // выключено
+
+        var grown = baseInterval * Math.Max(1, consecutiveEmptyPolls);   // линейный шаг
+        return grown >= maxInterval ? maxInterval : grown;
+    }
+}
+
+services.AddSaOutbox(builder => builder
+    .WithIdleWaitStrategy<LinearIdleWaitStrategy>()
+    .WithDeliveries(/* … */));
+```
+
+> `WithIdleWaitStrategy<T>()` поручает создание алгоритма DI-контейнеру; `WithIdleWaitStrategy(instance)` нужен только чтобы передать аргументы конструктора встроенному типу. Если не вызывать ни один из них, DI-значение по умолчанию — `ExponentialIdleWaitStrategy.Shared`, и он неактивен, пока группа не включит backoff.
+
 ## Настройки потребителя
 
 `OutboxConsumerSettings` — неизменяемый `record`; `OutboxConsumerManager` хранит и подменяет целые снимки, поэтому настройка не может измениться посреди доставки.
@@ -129,6 +199,7 @@
 | `PerTenantTimeout` | ноль | `WithPerTenantTimeout` | Ноль = без таймаута |
 | `PerTenantMaxDegreeOfParallelism` | 1 | `WithPerTenantMaxDegreeOfParallelism` / `WithTenantSequentialProcessing` / `WithTenantMaxParallelism` | `1` — последовательно, `-1` — по ядрам; `0` отклоняется |
 | `Paused` | `false` | `Paused` / `Resumed` | Проверяется на каждой итерации цикла |
+| `IdleMaxInterval` | ноль (выключено) | `WithIdleBackoff(max)` / `WithFixedInterval` | Верхняя граница backoff-а пустой очереди; при установке должен быть `>= Interval` |
 
 Обратите внимание: `AddDeliveryJob` заранее заполняет билдер значениями `StartImmediately()`, `ConcurrencyLimit(1)`, `MaxConcurrency(1)`, `MaxProcessingIterations(-1)` и `PerTenantTimeout(Zero)` **до** вызова вашего `configure`, поэтому эти значения выигрывают у `OutboxDefaults`.
 
@@ -171,6 +242,8 @@ IDeliveryTenant            → DeliveryTenant
 IDeliveryLifetimeInvoker   → DeliveryLifetimeInvoker
 IDeliverySnapshot          → DeliverySnapshot
 IOutboxConsumerManager     → OutboxConsumerManager
+IEmptyQueueWaitStrategy    → ExponentialIdleWaitStrategy
+IOutboxIdleStateRegistry   → OutboxIdleStateRegistry
 ```
 
 Дополнительно вызываются `AddOutboxPartitional()` (поддержка тенантов) и `AddMessagesMetadata()`, затем выполняется ваш колбэк `IDeliveryBuilder`.

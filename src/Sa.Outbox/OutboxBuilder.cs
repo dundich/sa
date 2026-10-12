@@ -64,4 +64,26 @@ internal sealed class OutboxBuilder : IOutboxBuilder
 
         return this;
     }
+
+    public IOutboxBuilder WithIdleWaitStrategy<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
+            where TImplementation : class, IEmptyQueueWaitStrategy
+    {
+        _services
+            .RemoveAll<IEmptyQueueWaitStrategy>()
+            .AddSingleton<IEmptyQueueWaitStrategy, TImplementation>();
+
+        return this;
+    }
+
+    public IOutboxBuilder WithIdleWaitStrategy(IEmptyQueueWaitStrategy strategy)
+    {
+        ArgumentNullException.ThrowIfNull(strategy);
+
+        _services
+            .RemoveAll<IEmptyQueueWaitStrategy>()
+            .AddSingleton(strategy);
+
+        return this;
+    }
 }

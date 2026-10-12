@@ -2,18 +2,18 @@
 
 namespace Sa.Outbox.Tests;
 
-public class ExponentialBackoffRetryStrategyTests
+public class ExponentialDeliveryBackoffStrategyTests
 {
     [Fact]
     public void Shared_Instance_Is_Not_Null()
     {
-        Assert.NotNull(ExponentialBackoffRetryStrategy.Shared);
+        Assert.NotNull(ExponentialDeliveryBackoffStrategy.Shared);
     }
 
     [Fact]
     public void GetBackoff_FirstAttempt_Returns_Base_Delay_Range()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.FromSeconds(5),
             maxDelay: TimeSpan.FromMinutes(30));
 
@@ -27,7 +27,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void GetBackoff_SecondAttempt_Returns_Double_Base_Delay_Range()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.FromSeconds(5),
             maxDelay: TimeSpan.FromMinutes(30));
 
@@ -41,7 +41,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void GetBackoff_HighAttempt_Capped_At_MaxDelay()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.FromSeconds(1),
             maxDelay: TimeSpan.FromSeconds(10));
 
@@ -55,7 +55,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void GetBackoff_IncreasingAttempts_Yield_IncreasingDelays_UntilCap()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.FromSeconds(1),
             maxDelay: TimeSpan.FromMinutes(5));
 
@@ -72,7 +72,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void GetBackoff_AttemptZero_Treated_As_One()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.FromSeconds(5),
             maxDelay: TimeSpan.FromMinutes(30));
 
@@ -87,7 +87,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void Constructor_Clamps_Jitter_Factors()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             jitterFactorMin: -0.5,  // clamped to 0
             jitterFactorMax: 1.5);  // clamped to 1.0
 
@@ -99,7 +99,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void GetBackoff_Custom_Jitter_Produces_Narrower_Range()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.FromSeconds(10),
             maxDelay: TimeSpan.FromMinutes(1),
             jitterFactorMin: 0.9,
@@ -115,7 +115,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void GetBackoff_DeterministicWithFixedJitter_ProducesConsistentPattern()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.FromSeconds(1),
             maxDelay: TimeSpan.FromMinutes(1),
             jitterFactorMin: 0.95,
@@ -137,7 +137,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void GetBackoff_ZeroAttempts_ReturnsSameRange_AsFirstAttempt()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.FromSeconds(2),
             maxDelay: TimeSpan.FromMinutes(5));
 
@@ -154,7 +154,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void GetBackoff_VeryLargeAttemptNumber_CappedAtMaxDelay()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.FromSeconds(1),
             maxDelay: TimeSpan.FromSeconds(5));
 
@@ -168,7 +168,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void Constructor_JitterMaxLessThanMin_SwapsCorrectly()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             jitterFactorMin: 0.8,
             jitterFactorMax: 0.3);
 
@@ -179,7 +179,7 @@ public class ExponentialBackoffRetryStrategyTests
     [Fact]
     public void Constructor_ZeroBaseDelay_UsesDefaultFiveSeconds()
     {
-        var strategy = new ExponentialBackoffRetryStrategy(
+        var strategy = new ExponentialDeliveryBackoffStrategy(
             baseDelay: TimeSpan.Zero,
             maxDelay: TimeSpan.Zero);
 
@@ -195,7 +195,7 @@ public class ExponentialBackoffRetryStrategyTests
     {
         for (int i = 1; i <= 10; i++)
         {
-            var backoff = ExponentialBackoffRetryStrategy.Shared.GetBackoff(i);
+            var backoff = ExponentialDeliveryBackoffStrategy.Shared.GetBackoff(i);
             Assert.True(backoff > TimeSpan.Zero);
         }
     }

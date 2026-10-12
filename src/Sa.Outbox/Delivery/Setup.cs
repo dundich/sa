@@ -21,6 +21,11 @@ internal static class Setup
 
         services.TryAddSingleton<IDeliveryBatcher, DeliveryBatcher>();
 
+        // Empty-queue back-off: the strategy decides the wait between polls, the registry holds
+        // one idle state per consumer group shared by the job and its adaptive timing.
+        services.TryAddSingleton<IEmptyQueueWaitStrategy, ExponentialIdleWaitStrategy>();
+        services.TryAddSingleton<IOutboxIdleStateRegistry, OutboxIdleStateRegistry>();
+
         // looper - job processor
         services.TryAddSingleton<IDeliveryProcessor, DeliveryProcessor>();
         // sender - sending to scope consumer
