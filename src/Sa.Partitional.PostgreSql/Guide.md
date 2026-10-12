@@ -22,11 +22,11 @@ builder.Services.AddSaPartitional((sp, builder) =>
             .WithFillFactor(90);
     });
 })
-.AddPartMigrationSchedule((sp, opts) =>
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
 {
     opts.AsBackgroundJob = true;
     opts.ForwardDays = 2;
-});
+}));
 ```
 
 This generates:
@@ -61,16 +61,16 @@ builder.Services.AddSaPartitional((sp, builder) =>
             .AddMigration("FR", new StrOrNum[] { "Paris", "Lyon" });
     });
 })
-.AddPartMigrationSchedule((sp, opts) =>
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
 {
     opts.AsBackgroundJob = true;
     opts.ForwardDays = 2;
-})
-.AddPartCleanupSchedule((sp, opts) =>
+}))
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
 {
     opts.AsBackgroundJob = true;
     opts.DropPartsAfterRetention = TimeSpan.FromDays(30);
-});
+}));
 ```
 
 This generates a multi-level hierarchy (separator `"_"` in this example):
@@ -101,6 +101,40 @@ emitted raw). The range column `created_at` is not declared in this example, so 
 ---
 
 ## Configuration Options
+
+### Configuring the settings — section, code, options
+
+Each `AddPart*` method takes a builder callback that collects three kinds of intent:
+
+| Call | Purpose |
+|------|---------|
+| `FromConfiguration("Partitional:Migration")` | Bind the settings from a configuration section (last call wins) |
+| `Configure((sp, settings) => ...)` | Apply code settings — the `(IServiceProvider, TSettings)` delegate |
+| `Options(ob => ...)` | The raw `OptionsBuilder<T>` (`Configure` / `PostConfigure` / `Validate`) |
+
+The pipeline order is fixed — **section → code → `Options(...)` actions → validation** — regardless
+of how the calls are split across the fluent chain, so configuration is the baseline, code wins over
+it, and `Options(...)` has the final word.
+
+```csharp
+.AddPartMigrationSchedule(b => b
+    .FromConfiguration("Partitional:Migration")
+    .Configure((_, s) => s.AsBackgroundJob = true)
+    .Options(ob => ob.Validate(s => s.ForwardDays <= 31, "ForwardDays must stay within a month")));
+```
+
+The settings are stored as **named options**, one instance per module: the module key for a keyed
+module, the unnamed instance for the keyless one. A keyed module therefore binds its own section —
+`Partitional:outbox:Migration` — and never sees another module's values.
+
+Validation runs at host start (`ValidateOnStart()`) and on the first read, so an invalid section or
+`Configure` value fails fast with an `OptionsValidationException`. The built-in checks are
+`ForwardDays >= 1`, positive `ExecutionInterval` / `CacheTtl` / `RunTimeout`, non-negative
+`WaitMigrationTimeout` / `CachedFromDate` / `DropPartsAfterRetention` / `InitialDelay`, and a
+non-blank `MigrationJobName` when it is set.
+
+`FromConfiguration` requires an `IConfiguration` in DI (any host provides it); a missing section
+simply leaves the class defaults and the code settings in place.
 
 ### Migration Schedule (`MigrationScheduleSettings`)
 
@@ -378,16 +412,17 @@ close the whole application, which is not a sane reaction to a failing `DROP`.
 Services log with structured `[LoggerMessage]` events, so they can be filtered by `EventId` — `601`–`605` for the
 migration, `101` / `102` / `202`–`501` for the repository.
 
-Settings actions are collected via `IServiceProvider.GetServices<>()` and applied in registration order, so an
-action registered after `AddSaPartitional` overrides what it set:
+Settings are served by the standard options pipeline: the configuration section binds first, then the
+code `Configure` delegates apply in registration order, then any `Options(...)` actions. So code
+overrides configuration, and `Options(...)` overrides both — see *Configuring the settings* above:
 
 ```csharp
-.AddPartMigrationSchedule((sp, opts) =>
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
 {
     opts.AsBackgroundJob = true;
     opts.ForwardDays = 3;
-    // Additional overrides apply after defaults
-})
+    // Applied after the configuration section
+}))
 ```
 
 ---
