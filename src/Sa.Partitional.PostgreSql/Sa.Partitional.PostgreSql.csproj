@@ -17,8 +17,15 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!-- Публичная сигнатура IPartConfiguration.AddDataSource ссылается на OptionsBuilder&lt;PgDataSourceOptions&gt; -->
+		<!--
+		  Публичные сигнатуры IPartConfiguration.AddDataSource / AddPartCache / ... ссылаются на
+		  OptionsBuilder&lt;T&gt;, настройки обслуживаются стандартным конвейером Options:
+		  AddOptions/Configure/PostConfigure/IValidateOptions/ValidateOnStart и BindConfiguration.
+		  Источник конфигурации (source-generated binder) включается .NET SDK автоматически при
+		  PublishAot=true, поэтому BindConfiguration не тянет reflection и собирается под Native AOT.
+		-->
 		<PackageReference Include="Microsoft.Extensions.Options" />
+		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
 	</ItemGroup>
 
 	<ItemGroup>

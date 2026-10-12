@@ -86,14 +86,14 @@ public sealed class KeyedRegistrationTests
         ServiceCollection services = CreateServices();
 
         AddKeyedModule(services, "one", "t_one")
-            .AddPartMigrationSchedule((_, s) => s.ForwardDays = 7)
-            .AddPartCleanupSchedule((_, s) => s.DropPartsAfterRetention = TimeSpan.FromDays(14))
-            .AddPartCache((_, s) => s.CacheTtl = TimeSpan.FromMinutes(1));
+            .AddPartMigrationSchedule(b => b.Configure((_, s) => s.ForwardDays = 7))
+            .AddPartCleanupSchedule(b => b.Configure((_, s) => s.DropPartsAfterRetention = TimeSpan.FromDays(14)))
+            .AddPartCache(b => b.Configure((_, s) => s.CacheTtl = TimeSpan.FromMinutes(1)));
 
         AddKeyedModule(services, "two", "t_two")
-            .AddPartMigrationSchedule((_, s) => s.ForwardDays = 1)
-            .AddPartCleanupSchedule((_, s) => s.DropPartsAfterRetention = TimeSpan.FromDays(60))
-            .AddPartCache((_, s) => s.CacheTtl = TimeSpan.FromMinutes(9));
+            .AddPartMigrationSchedule(b => b.Configure((_, s) => s.ForwardDays = 1))
+            .AddPartCleanupSchedule(b => b.Configure((_, s) => s.DropPartsAfterRetention = TimeSpan.FromDays(60)))
+            .AddPartCache(b => b.Configure((_, s) => s.CacheTtl = TimeSpan.FromMinutes(9)));
 
         using ServiceProvider sp = services.BuildServiceProvider();
 

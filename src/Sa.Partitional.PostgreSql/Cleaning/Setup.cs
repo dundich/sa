@@ -1,6 +1,9 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Sa.Partitional.PostgreSql.Cache;
+using Sa.Partitional.PostgreSql.Configuration;
 using Sa.Schedule;
 
 namespace Sa.Partitional.PostgreSql.Cleaning;
@@ -12,44 +15,26 @@ internal static class Setup
     public static IServiceCollection AddPartCleaning(
         this IServiceCollection services,
         string? key = null,
-        Action<IServiceProvider, PartCleanupScheduleSettings>? configure = null)
+        Action<IPartSettingsBuilder<PartCleanupScheduleSettings>>? configure = null)
     {
-        if (configure != null)
-        {
-            if (key is null) services.AddSingleton(configure);
-            else services.AddKeyedSingleton(key, configure);
-        }
+        string name = PartOptions.Name(key);
+
+        // Named options instance per module; the order is fixed by PartOptions:
+        // section → code → Options(...) actions → validation.
+        PartOptions.Configure(services, name, BindFromConfiguration, configure);
+
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<PartCleanupScheduleSettings>, PartCleanupScheduleSettingsValidator>());
 
         if (key is null)
         {
-            services.TryAddSingleton<PartCleanupScheduleSettings>(sp =>
-            {
-                var settings = new PartCleanupScheduleSettings();
-
-                var configurators = sp.GetServices<Action<IServiceProvider, PartCleanupScheduleSettings>>();
-                foreach (var config in configurators)
-                {
-                    config(sp, settings);
-                }
-
-                return settings;
-            });
-
+            services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<PartCleanupScheduleSettings>>().Value);
             services.TryAddSingleton<IPartCleanupService, PartCleanupService>();
         }
         else
         {
-            services.TryAddKeyedSingleton<PartCleanupScheduleSettings>(key, (sp, _) =>
-            {
-                var settings = new PartCleanupScheduleSettings();
-
-                foreach (var config in sp.GetKeyedServices<Action<IServiceProvider, PartCleanupScheduleSettings>>(key))
-                {
-                    config(sp, settings);
-                }
-
-                return settings;
-            });
+            services.TryAddKeyedSingleton(key, (sp, _) =>
+                sp.GetRequiredService<IOptionsMonitor<PartCleanupScheduleSettings>>().Get(key));
 
             services.TryAddKeyedSingleton<IPartCleanupService>(key, (sp, _) => new PartCleanupService(
                 sp.GetRequiredKeyedService<IPartRepository>(key),
@@ -62,6 +47,15 @@ internal static class Setup
 
         return services;
     }
+
+    /// <summary>
+    /// Concrete binder for <see cref="PartCleanupScheduleSettings"/>, called by the module's
+    /// configurator. The call site names the settings type, which is what lets the configuration
+    /// source generator bake the binding logic under Native AOT.
+    /// </summary>
+    private static void BindFromConfiguration(
+        PartCleanupScheduleSettings options, IConfiguration configuration, string sectionPath)
+        => configuration.GetSection(sectionPath).Bind(options);
 
     private static void RegisterScheduleJob(IServiceCollection services, string? key)
     {

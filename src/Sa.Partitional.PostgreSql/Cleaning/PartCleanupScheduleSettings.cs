@@ -1,9 +1,16 @@
-﻿namespace Sa.Partitional.PostgreSql;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// Represents the settings for scheduling the cleanup of Outbox message parts.
 /// This class contains configuration options related to how and when parts should be cleaned up.
 /// </summary>
+/// <remarks>
+/// Served by the standard <c>Microsoft.Extensions.Options</c> pipeline (one named instance per
+/// module): section binding → code delegates → validation. Mutable POCO with scalar values only, so
+/// it binds straight from <c>appsettings.json</c> and stays Native AOT friendly.
+/// </remarks>
 public sealed class PartCleanupScheduleSettings
 {
     /// <summary>
@@ -31,4 +38,35 @@ public sealed class PartCleanupScheduleSettings
     /// Default is set to 1 minute.
     /// </summary>
     public TimeSpan InitialDelay { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Validates the current settings and throws a <see cref="ValidationException"/> for the first
+    /// unusable value. Called by <c>PartCleanupScheduleSettingsValidator</c> after the pipeline has
+    /// bound and applied the code settings, so it validates the final values.
+    /// </summary>
+    /// <exception cref="ValidationException">Thrown when a value is not usable.</exception>
+    /// <remarks>
+    /// Explicit checks rather than <c>ValidateDataAnnotations()</c>: the latter is marked
+    /// <c>RequiresUnreferencedCode</c> (IL2026) and breaks Native AOT.
+    /// </remarks>
+    public void Validate()
+    {
+        if (DropPartsAfterRetention < TimeSpan.Zero)
+        {
+            throw new ValidationException(
+                $"PartCleanupScheduleSettings:DropPartsAfterRetention must not be negative, but was '{DropPartsAfterRetention}'.");
+        }
+
+        if (ExecutionInterval <= TimeSpan.Zero)
+        {
+            throw new ValidationException(
+                $"PartCleanupScheduleSettings:ExecutionInterval must be positive, but was '{ExecutionInterval}'.");
+        }
+
+        if (InitialDelay < TimeSpan.Zero)
+        {
+            throw new ValidationException(
+                $"PartCleanupScheduleSettings:InitialDelay must not be negative, but was '{InitialDelay}'.");
+        }
+    }
 }

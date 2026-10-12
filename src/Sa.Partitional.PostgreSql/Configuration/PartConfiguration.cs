@@ -42,19 +42,19 @@ internal sealed class PartConfiguration(IServiceCollection services, string? key
         return this;
     }
 
-    public IPartConfiguration AddPartCache(Action<IServiceProvider, PartCacheSettings>? configure = null)
+    public IPartConfiguration AddPartCache(Action<IPartSettingsBuilder<PartCacheSettings>>? configure = null)
     {
         services.AddPartCache(key, configure);
         return this;
     }
 
-    public IPartConfiguration AddPartMigrationSchedule(Action<IServiceProvider, MigrationScheduleSettings>? configure = null)
+    public IPartConfiguration AddPartMigrationSchedule(Action<IPartSettingsBuilder<MigrationScheduleSettings>>? configure = null)
     {
         services.AddMigration(key, configure);
         return this;
     }
 
-    public IPartConfiguration AddPartCleanupSchedule(Action<IServiceProvider, PartCleanupScheduleSettings>? configure = null)
+    public IPartConfiguration AddPartCleanupSchedule(Action<IPartSettingsBuilder<PartCleanupScheduleSettings>>? configure = null)
     {
         services.AddPartCleaning(key, configure);
         return this;

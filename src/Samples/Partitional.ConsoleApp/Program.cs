@@ -40,18 +40,18 @@ hostBuilder.Services
 
     })
     // Schedule for creating new partitions
-    .AddPartMigrationSchedule((sp, opts) =>
+    .AddPartMigrationSchedule(b => b.Configure((sp, opts) =>
     {
         opts.AsBackgroundJob = true;
         opts.ExecutionInterval = TimeSpan.FromHours(2);
         opts.ForwardDays = 2;
-    })
+    }))
     // Schedule for removing old partitions
-    .AddPartCleanupSchedule((sp, opts) =>
+    .AddPartCleanupSchedule(b => b.Configure((sp, opts) =>
     {
         opts.AsBackgroundJob = true;
         opts.DropPartsAfterRetention = TimeSpan.FromDays(21);
-    });
+    }));
 
 
 using IHost host = hostBuilder.Build();

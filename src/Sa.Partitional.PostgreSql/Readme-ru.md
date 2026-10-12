@@ -49,12 +49,76 @@ builder.Services.AddSaPartitional((sp, builder) =>
     .Options(ob => ob.Configure(o => o.ConnectionString =
         "Host=localhost;Database=mydb;Username=postgres;Password=password")))
 // Предварительное создание будущих партиций как фоновая задача
-.AddPartMigrationSchedule((sp, opts) => opts.AsBackgroundJob = true)
+.AddPartMigrationSchedule(b => b.Configure((_, opts) => opts.AsBackgroundJob = true))
 // Удаление партиций старше 30 дней
-.AddPartCleanupSchedule((sp, opts) => opts.AsBackgroundJob = true);
+.AddPartCleanupSchedule(b => b.Configure((_, opts) => opts.AsBackgroundJob = true));
 ```
 
 Keyless-перегрузка `AddSaPartitional` всегда регистрирует data source (внутри — «голый» вызов `AddDataSource()`), поэтому цепочка `.AddDataSource(...)` выше — единственный *настраивающий* вызов — и задаёт connection string (секция, если нужна, — через `FromConfiguration` в том же callback'е). Если data source уже настроен где-то ещё (например, `services.AddSaPostgreSqlDataSource(...)`), цепочку можно опустить: «голая» регистрация дедуплицируется с ней. Если connection string не задан нигде, data source строится из зарегистрированного в DI `NpgsqlDataSource` (общий pool), иначе валидация не проходит. Keyed-модули своего data source не регистрируют — см. раздел *Ключевая регистрация* ниже.
+
+---
+
+## Настройка — конвейер options
+
+Три типа скалярных настроек — `PartCacheSettings`, `MigrationScheduleSettings`,
+`PartCleanupScheduleSettings` — обслуживаются стандартным конвейером
+`Microsoft.Extensions.Options`, по **одному именованному экземпляру на модуль** (имя — ключ модуля,
+для keyless — безымянный экземпляр). Каждый метод `AddPart*` принимает один callback, собирающий
+три вида намерений:
+
+| Вызов | Назначение |
+|-------|------------|
+| `FromConfiguration(path)` | Привязать настройки к секции конфигурации, например `"Partitional:Cache"` или `"Partitional:outbox:Cache"` (побеждает последний вызов) |
+| `Configure((sp, settings) => ...)` | Задать настройки кодом — тот же делегат `(IServiceProvider, TSettings)`, что и раньше |
+| `Options(ob => ...)` | Запасной выход: «сырой» `OptionsBuilder<T>` (`Configure` / `PostConfigure` / `Validate`) |
+
+Порядок конвейера фиксирован — **секция → код → действия `Options(...)` → валидация** — независимо
+от того, как вызовы разложены по fluent-цепочке: конфигурация это база, код её перекрывает, а
+`Options(...)` принимает окончательное решение.
+
+```csharp
+builder.Services.AddSaPartitional((sp, builder) => { /* объявления таблиц */ })
+    .AddPartCache(b => b
+        .FromConfiguration("Partitional:Cache")
+        .Configure((_, s) => s.CacheTtl = TimeSpan.FromMinutes(10)))
+    .AddPartMigrationSchedule(b => b
+        .FromConfiguration("Partitional:Migration")
+        .Configure((_, s) => s.AsBackgroundJob = true))
+    .AddPartCleanupSchedule(b => b.FromConfiguration("Partitional:Cleanup"));
+```
+
+```json
+{
+  "Partitional": {
+    "Cache":     { "CacheTtl": "00:10:00", "CachedFromDate": "1.00:00:00" },
+    "Migration": { "ForwardDays": 3, "AsBackgroundJob": true, "ExecutionInterval": "02:00:00" },
+    "Cleanup":   { "DropPartsAfterRetention": "14.00:00:00", "InitialDelay": "00:05:00" }
+  }
+}
+```
+
+Keyed-модуль привязывается к своей секции — по одному именованному экземпляру на модуль, поэтому
+модули изолированы:
+
+```csharp
+services.AddSaPartitional("outbox", ...)
+    .AddPartCache(b => b.FromConfiguration("Partitional:outbox:Cache"));
+```
+
+**Валидация — fail-fast.** Для каждого типа настроек регистрируется `IValidateOptions<T>` вместе с
+`ValidateOnStart()`, поэтому плохая секция всплывает как `OptionsValidationException` при старте
+хоста — и повторно при первом чтении настроек в «голом» `ServiceCollection`. `ForwardDays` должен
+быть `>= 1`, временные интервалы — положительными / неотрицательными, а пустой `MigrationJobName`
+отвергается.
+
+`FromConfiguration` требует `IConfiguration` в DI (любой хост его предоставляет); без него первое
+чтение бросает исключение. Если секции нет, применяются только присутствующие ключи — так что
+значения по умолчанию и настройки кодом сохраняются. Вызов `AddPartCache()` без callback'а
+оставляет дефолты класса — именно так и поступает сама keyless-цепочка `AddSaPartitional`.
+
+> **Параметр `AsBackgroundJob`.** Аргумент `AsBackgroundJob` у `AddSaPartitional` применяется как
+> настройка кодом, поэтому он побеждает ключ `AsBackgroundJob` из секции — даже несмотря на то, что
+> фреймворк записывает его раньше, чем вы прицепляете `FromConfiguration`.
 
 ---
 
@@ -297,6 +361,8 @@ StrOrNum.TryFromFmtStr("n:x", out _);  // false — строгий вариан�
 ---
 
 ## Настройки планировщика
+
+Все три типа настроек привязываются к конфигурации и валидируются при старте — см. раздел *Настройка — конвейер options*.
 
 ### MigrationScheduleSettings
 

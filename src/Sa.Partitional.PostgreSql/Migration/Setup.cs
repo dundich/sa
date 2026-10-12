@@ -1,7 +1,10 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Sa.Partitional.PostgreSql.Cache;
+using Sa.Partitional.PostgreSql.Configuration;
 using Sa.Schedule;
 
 namespace Sa.Partitional.PostgreSql.Migration;
@@ -11,45 +14,27 @@ internal static class Setup
     public static IServiceCollection AddMigration(
         this IServiceCollection services,
         string? key = null,
-        Action<IServiceProvider, MigrationScheduleSettings>? configure = null)
+        Action<IPartSettingsBuilder<MigrationScheduleSettings>>? configure = null)
     {
-        if (configure != null)
-        {
-            if (key is null) services.AddSingleton(configure);
-            else services.AddKeyedSingleton(key, configure);
-        }
+        string name = PartOptions.Name(key);
+
+        // Named options instance per module (name = module key); the order is fixed by PartOptions:
+        // section → code → Options(...) actions → validation. The concrete settings the services and
+        // tests consume are materialised from it below.
+        PartOptions.Configure(services, name, BindFromConfiguration, configure);
+
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<MigrationScheduleSettings>, MigrationScheduleSettingsValidator>());
 
         if (key is null)
         {
-            services.TryAddSingleton<MigrationScheduleSettings>(sp =>
-            {
-                var settings = new MigrationScheduleSettings();
-
-                var configurators = sp.GetServices<Action<IServiceProvider, MigrationScheduleSettings>>();
-
-                foreach (var config in configurators)
-                {
-                    config(sp, settings);
-                }
-
-                return settings;
-            });
-
+            services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<MigrationScheduleSettings>>().Value);
             services.TryAddSingleton<IMigrationService, PartMigrationService>();
         }
         else
         {
-            services.TryAddKeyedSingleton<MigrationScheduleSettings>(key, (sp, _) =>
-            {
-                var settings = new MigrationScheduleSettings();
-
-                foreach (var config in sp.GetKeyedServices<Action<IServiceProvider, MigrationScheduleSettings>>(key))
-                {
-                    config(sp, settings);
-                }
-
-                return settings;
-            });
+            services.TryAddKeyedSingleton(key, (sp, _) =>
+                sp.GetRequiredService<IOptionsMonitor<MigrationScheduleSettings>>().Get(key));
 
             services.TryAddKeyedSingleton<IMigrationService>(key, (sp, _) => new PartMigrationService(
                 sp.GetRequiredKeyedService<IPartRepository>(key),
@@ -62,6 +47,15 @@ internal static class Setup
 
         return services;
     }
+
+    /// <summary>
+    /// Concrete binder for <see cref="MigrationScheduleSettings"/>, called by the module's
+    /// configurator. The call site names the settings type, which is what lets the configuration
+    /// source generator bake the binding logic under Native AOT.
+    /// </summary>
+    private static void BindFromConfiguration(
+        MigrationScheduleSettings options, IConfiguration configuration, string sectionPath)
+        => configuration.GetSection(sectionPath).Bind(options);
 
     private static void RegisterScheduleJob(IServiceCollection services, string? key)
     {

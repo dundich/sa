@@ -49,12 +49,74 @@ builder.Services.AddSaPartitional((sp, builder) =>
     .Options(ob => ob.Configure(o => o.ConnectionString =
         "Host=localhost;Database=mydb;Username=postgres;Password=password")))
 // Pre-create future partitions as a background job
-.AddPartMigrationSchedule((sp, opts) => opts.AsBackgroundJob = true)
+.AddPartMigrationSchedule(b => b.Configure((_, opts) => opts.AsBackgroundJob = true))
 // Drop partitions older than 30 days
-.AddPartCleanupSchedule((sp, opts) => opts.AsBackgroundJob = true);
+.AddPartCleanupSchedule(b => b.Configure((_, opts) => opts.AsBackgroundJob = true));
 ```
 
 The keyless `AddSaPartitional` always registers a data source (a bare `AddDataSource()` call inside), so the `.AddDataSource(...)` chain above — the single *configuring* call — is what gives it a connection string (a section, if any, comes via `FromConfiguration` inside the same callback). If the data source is already configured elsewhere (e.g. `services.AddSaPostgreSqlDataSource(...)`), omit the chain: the bare registration deduplicates against it. With no connection string anywhere, the data source is built from an `NpgsqlDataSource` registered in DI (shared pool); otherwise validation fails. Keyed modules do not register a data source of their own — see *Keyed Registration* below.
+
+---
+
+## Configuration — the Options Pipeline
+
+The three scalar settings types — `PartCacheSettings`, `MigrationScheduleSettings`,
+`PartCleanupScheduleSettings` — are served by the standard `Microsoft.Extensions.Options`
+pipeline, one **named instance per module** (the module key, or the unnamed instance for the
+keyless module). Each `AddPart*` method takes one callback that collects three kinds of intent:
+
+| Call | Purpose |
+|------|---------|
+| `FromConfiguration(path)` | Bind the settings from a configuration section, e.g. `"Partitional:Cache"` or `"Partitional:outbox:Cache"` (last call wins) |
+| `Configure((sp, settings) => ...)` | Apply code settings — the same `(IServiceProvider, TSettings)` delegate as before |
+| `Options(ob => ...)` | Escape hatch: the raw `OptionsBuilder<T>` (`Configure` / `PostConfigure` / `Validate`) |
+
+The pipeline order is fixed — **section → code → `Options(...)` actions → validation** — no matter
+how the calls are split across the fluent chain: configuration is the baseline, code wins over it,
+and `Options(...)` has the final word.
+
+```csharp
+builder.Services.AddSaPartitional((sp, builder) => { /* table declarations */ })
+    .AddPartCache(b => b
+        .FromConfiguration("Partitional:Cache")
+        .Configure((_, s) => s.CacheTtl = TimeSpan.FromMinutes(10)))
+    .AddPartMigrationSchedule(b => b
+        .FromConfiguration("Partitional:Migration")
+        .Configure((_, s) => s.AsBackgroundJob = true))
+    .AddPartCleanupSchedule(b => b.FromConfiguration("Partitional:Cleanup"));
+```
+
+```json
+{
+  "Partitional": {
+    "Cache":     { "CacheTtl": "00:10:00", "CachedFromDate": "1.00:00:00" },
+    "Migration": { "ForwardDays": 3, "AsBackgroundJob": true, "ExecutionInterval": "02:00:00" },
+    "Cleanup":   { "DropPartsAfterRetention": "14.00:00:00", "InitialDelay": "00:05:00" }
+  }
+}
+```
+
+A keyed module binds its own section — one named instance per module keeps the modules isolated:
+
+```csharp
+services.AddSaPartitional("outbox", ...)
+    .AddPartCache(b => b.FromConfiguration("Partitional:outbox:Cache"));
+```
+
+**Validation is fail-fast.** Each settings type has an `IValidateOptions<T>` validator registered
+together with `ValidateOnStart()`, so a bad section surfaces as an `OptionsValidationException` at
+host start — and again when the settings are first read on a bare `ServiceCollection`.
+`ForwardDays` must be `>= 1`, the time spans must be positive / non-negative, and a blank
+`MigrationJobName` is rejected.
+
+`FromConfiguration` needs an `IConfiguration` in DI (any host provides one); without it the first
+read throws. When the section is absent, only the keys that are present are applied, so the class
+defaults and the code settings stand. A bare `AddPartCache()` (no callback) keeps the class
+defaults — which is exactly what the keyless `AddSaPartitional` chain itself uses.
+
+> **`AsBackgroundJob` parameter.** The `AsBackgroundJob` argument of `AddSaPartitional` is applied
+> as a code setting, so it beats an `AsBackgroundJob` key found in the section — even though the
+> framework records it before your chained `FromConfiguration` call.
 
 ---
 
@@ -298,6 +360,8 @@ StrOrNum.TryFromFmtStr("n:x", out _);  // false — strict counterpart, no fallb
 ---
 
 ## Schedule Settings
+
+All three settings types are bindable from configuration and validated on start — see *Configuration — the Options Pipeline*.
 
 ### MigrationScheduleSettings
 

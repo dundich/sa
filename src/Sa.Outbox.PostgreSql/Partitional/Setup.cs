@@ -68,20 +68,20 @@ internal static class Setup
             })
             ;
         })
-        .AddPartMigrationSchedule((sp, opts) =>
+        .AddPartMigrationSchedule(b => b.Configure((sp, opts) =>
         {
             PgOutboxMigrationSettings settings = sp.GetRequiredService<PgOutboxMigrationSettings>();
             opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.ForwardDays = settings.ForwardDays;
-        })
-        .AddPartCleanupSchedule((sp, opts) =>
+        }))
+        .AddPartCleanupSchedule(b => b.Configure((sp, opts) =>
         {
             PgOutboxCleanupSettings settings = sp.GetRequiredService<PgOutboxCleanupSettings>();
             opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.DropPartsAfterRetention = settings.DropPartsAfterRetention;
-        })
+        }))
         ;
 
         return services;

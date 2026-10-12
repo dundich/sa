@@ -135,17 +135,17 @@ internal static class PostgresFileStorageRegistrar
         });
 
         // Migration: pre-create this storage's upcoming partitions.
-        partConfig.AddPartMigrationSchedule((sp, opts) =>
+        partConfig.AddPartMigrationSchedule(b => b.Configure((sp, opts) =>
         {
             opts.AsBackgroundJob = true;
             opts.ForwardDays = readOptions(sp).MigrationScheduleForwardDays;
-        })
+        }))
         // Cleanup: drop this storage's old partitions after its own retention.
-        .AddPartCleanupSchedule((sp, opts) =>
+        .AddPartCleanupSchedule(b => b.Configure((sp, opts) =>
         {
             opts.AsBackgroundJob = true;
             opts.DropPartsAfterRetention = TimeSpan.FromDays(readOptions(sp).ExpireDays);
-        });
+        }));
 
         // 5. Register the keyed IFileStorage — resolvable by key — and alias it as an unkeyed
         //    IFileStorage, which is what the hybrid container collects via

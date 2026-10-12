@@ -33,8 +33,22 @@ public static class Setup
             .AddDataSource()
             .AddPartTables(configure)
             .AddPartCache()
-            .AddPartMigrationSchedule((_, settings) => settings.AsBackgroundJob = AsBackgroundJob ?? settings.AsBackgroundJob)
-            .AddPartCleanupSchedule((_, settings) => settings.AsBackgroundJob = AsBackgroundJob ?? settings.AsBackgroundJob)
+            .AddPartMigrationSchedule(b =>
+            {
+                // "null" means "keep the section value / component default"; an explicit true/false
+                // is applied as a code setting, so it beats configuration.
+                if (AsBackgroundJob is { } flag)
+                {
+                    b.Configure((_, settings) => settings.AsBackgroundJob = flag);
+                }
+            })
+            .AddPartCleanupSchedule(b =>
+            {
+                if (AsBackgroundJob is { } flag)
+                {
+                    b.Configure((_, settings) => settings.AsBackgroundJob = flag);
+                }
+            })
             ;
     }
 
@@ -100,8 +114,22 @@ public static class Setup
             // defaults
             .AddPartTables(configure)
             .AddPartCache()
-            .AddPartMigrationSchedule((_, settings) => settings.AsBackgroundJob = AsBackgroundJob ?? settings.AsBackgroundJob)
-            .AddPartCleanupSchedule((_, settings) => settings.AsBackgroundJob = AsBackgroundJob ?? settings.AsBackgroundJob)
+            .AddPartMigrationSchedule(b =>
+            {
+                // "null" means "keep the section value / component default"; an explicit true/false
+                // is applied as a code setting, so it beats configuration.
+                if (AsBackgroundJob is { } flag)
+                {
+                    b.Configure((_, settings) => settings.AsBackgroundJob = flag);
+                }
+            })
+            .AddPartCleanupSchedule(b =>
+            {
+                if (AsBackgroundJob is { } flag)
+                {
+                    b.Configure((_, settings) => settings.AsBackgroundJob = flag);
+                }
+            })
             ;
     }
 }

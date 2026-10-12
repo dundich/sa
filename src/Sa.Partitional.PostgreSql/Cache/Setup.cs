@@ -1,5 +1,8 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+using Sa.Partitional.PostgreSql.Configuration;
 
 namespace Sa.Partitional.PostgreSql.Cache;
 
@@ -8,48 +11,31 @@ internal static class Setup
     public static IServiceCollection AddPartCache(
         this IServiceCollection services,
         string? key = null,
-        Action<IServiceProvider, PartCacheSettings>? configure = null)
+        Action<IPartSettingsBuilder<PartCacheSettings>>? configure = null)
     {
-        // Configure delegates accumulate (exactly like the migration/cleanup settings): the
-        // AddSaPartitional chain registers the cache with no configure first, so a caller's later
-        // AddPartCache(cfg) still has to take effect.
-        //
-        // The settings registration itself stays TryAdd*: a repeated call must not replace the
-        // settings instance that an already constructed PartCache (registered below as a singleton)
-        // captured in its constructor. The surviving factory reads every accumulated delegate.
+        string name = PartOptions.Name(key);
+
+        // Named options instance per module (name = module key). The order is fixed by PartOptions:
+        // section → code → Options(...) actions → validation, collected across every configuring
+        // call of the module. The binder runs at this concretely typed call site, so the
+        // configuration source generator sees it (Native AOT).
+        PartOptions.Configure(services, name, BindFromConfiguration, configure);
+
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<PartCacheSettings>, PartCacheSettingsValidator>());
+
+        // The concrete settings the services and tests consume, materialised from the named options
+        // instance. TryAdd: a repeated AddSaPartitional(...) call must not replace the instance an
+        // already constructed PartCache captured in its constructor.
         if (key is null)
         {
-            if (configure is not null) services.AddSingleton(configure);
-
-            services.TryAddSingleton(sp =>
-            {
-                PartCacheSettings cacheSettings = new();
-
-                foreach (var config in sp.GetServices<Action<IServiceProvider, PartCacheSettings>>())
-                {
-                    config(sp, cacheSettings);
-                }
-
-                return cacheSettings;
-            });
-
+            services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<PartCacheSettings>>().Value);
             services.TryAddSingleton<IPartCache, PartCache>();
         }
         else
         {
-            if (configure is not null) services.AddKeyedSingleton(key, configure);
-
-            services.TryAddKeyedSingleton<PartCacheSettings>(key, (sp, _) =>
-            {
-                PartCacheSettings cacheSettings = new();
-
-                foreach (var config in sp.GetKeyedServices<Action<IServiceProvider, PartCacheSettings>>(key))
-                {
-                    config(sp, cacheSettings);
-                }
-
-                return cacheSettings;
-            });
+            services.TryAddKeyedSingleton(key, (sp, _) =>
+                sp.GetRequiredService<IOptionsMonitor<PartCacheSettings>>().Get(key));
 
             services.TryAddKeyedSingleton<IPartCache>(key, (sp, _) => new PartCache(
                 sp.GetRequiredKeyedService<IPartRepository>(key),
@@ -60,4 +46,13 @@ internal static class Setup
 
         return services;
     }
+
+    /// <summary>
+    /// Concrete binder for <see cref="PartCacheSettings"/>, called by the module's configurator. The
+    /// call site names the settings type, which is what lets the configuration source generator bake
+    /// the binding logic under Native AOT.
+    /// </summary>
+    private static void BindFromConfiguration(
+        PartCacheSettings options, IConfiguration configuration, string sectionPath)
+        => configuration.GetSection(sectionPath).Bind(options);
 }

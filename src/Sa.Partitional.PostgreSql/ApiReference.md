@@ -55,6 +55,38 @@ public static IPartConfiguration AddSaPartitional(
 `key` must be non-empty and must not be `Sa.Schedule.Setup.DefaultName` (`"default"`), otherwise
 `AddSaPartitional` throws `ArgumentException`.
 
+## Settings Configuration
+
+`IPartConfiguration` exposes one method per scalar settings type; each takes a builder callback:
+
+```csharp
+public interface IPartConfiguration
+{
+    IPartConfiguration AddPartCache(
+        Action<IPartSettingsBuilder<PartCacheSettings>>? configure = null);
+
+    IPartConfiguration AddPartMigrationSchedule(
+        Action<IPartSettingsBuilder<MigrationScheduleSettings>>? configure = null);
+
+    IPartConfiguration AddPartCleanupSchedule(
+        Action<IPartSettingsBuilder<PartCleanupScheduleSettings>>? configure = null);
+}
+
+public interface IPartSettingsBuilder<TSettings> where TSettings : class
+{
+    IPartSettingsBuilder<TSettings> FromConfiguration(string sectionPath);
+    IPartSettingsBuilder<TSettings> Configure(Action<IServiceProvider, TSettings> configure);
+    IPartSettingsBuilder<TSettings> Options(Action<OptionsBuilder<TSettings>> configureSettings);
+}
+```
+
+The settings are standard **named options** — one instance per module: the module key for a keyed
+module, the unnamed instance (`Options.DefaultName`) for the keyless one. The pipeline order is
+**section → code → `Options(...)` actions → validation**, fixed regardless of where the calls sit in
+the fluent chain. Validation is fail-fast through an `IValidateOptions<T>` validator registered
+together with `ValidateOnStart()`, so an invalid section or code value surfaces as an
+`OptionsValidationException` at host start and on the first read.
+
 ## Key Interfaces
 
 ### `IPartitionManager`
