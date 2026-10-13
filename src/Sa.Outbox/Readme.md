@@ -237,14 +237,29 @@ Both are optional: `IDeliveryBatcher` defaults to `DeliveryBatcher` (passthrough
 
 ### Multi-Tenancy
 
+The tenant source is set by choosing **one** of the modes below — they are mutually
+exclusive, so pick a single chain per registration.
+
 ```csharp
+// Mode 1: explicit static list of tenant IDs
+.WithTenants((_, ts) => ts.WithTenantIds(1, 2, 3))
+```
+
+```csharp
+// Mode 2: auto-detect tenants from messages at runtime
 .WithTenants((_, ts) => ts
-    .WithTenantIds(1, 2, 3)                          // Explicit list
-    .WithAutoDetect()                                // Auto-detect from messages at runtime
-    .WithTenantDetector<TenantDetector>()            // Custom detector
-    .WithTenantParallelProcessing(3)                 // Parallel processing per tenant
+    .WithAutoDetect()                                // auto-detect from messages
+    .WithTenantDetector<TenantDetector>()            // custom detector
+    .WithTenantParallelProcessing(3)                 // parallel processing per tenant
 )
 ```
+
+> **Note:** `WithTenantIds`, `WithTenantSource`, and `WithTenantProvider` all mark the
+> tenant source as authoritative by disabling auto-detection internally
+> (equivalent to appending `.WithNoAutoDetect()`). Any of them can be combined with
+> `WithTenantParallelProcessing`, but never with the auto-detect chain above. Once any of them is called, the
+> plug-service auto-detect branch is skipped and the supplied list/source/provider is
+> used verbatim. To opt back into auto-detection, call `WithAutoDetect()` afterward.
 
 ---
 

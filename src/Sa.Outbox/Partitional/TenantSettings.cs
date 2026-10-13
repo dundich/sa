@@ -25,7 +25,9 @@ public sealed class TenantSettings
     {
         ArgumentNullException.ThrowIfNull(getTenantIds);
         GetTenantIds = getTenantIds;
-        return this;
+        // An explicit provider is authoritative: it must not fall through to plug-service
+        // auto-detection (which would ignore the provider and return []).
+        return WithNoAutoDetect();
     }
 
     /// <summary>
@@ -35,7 +37,9 @@ public sealed class TenantSettings
     {
         ArgumentNullException.ThrowIfNull(source);
         GetTenantIds = source.GetTenantIds;
-        return this;
+        // An explicit source is authoritative: it must not fall through to plug-service
+        // auto-detection (which would ignore the source and return []).
+        return WithNoAutoDetect();
     }
 
     /// <summary>
@@ -45,7 +49,9 @@ public sealed class TenantSettings
     {
         ArgumentNullException.ThrowIfNull(tenantIds);
         GetTenantIds = _ => ValueTask.FromResult(tenantIds);
-        return this;
+        // An explicit static list is authoritative: it must not fall through to
+        // plug-service auto-detection (which would ignore the list and return []).
+        return WithNoAutoDetect();
     }
 
     /// <summary>
