@@ -461,7 +461,7 @@ Partitions follow predictable naming patterns (separator defaults to `"__"`):
 |----------|----------|
 | [Guide](Guide.md) | Detailed setup, builder DSL, `StrOrNum`, date ranges, generated DDL |
 | [API Reference](ApiReference.md) | Interface signatures, architecture diagram, internal components |
-| [Improvements](Improvements.md) | Audit of the package: what was fixed, what was deliberately left |
+
 
 ---
 
