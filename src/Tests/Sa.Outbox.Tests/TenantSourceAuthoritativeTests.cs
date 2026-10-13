@@ -122,4 +122,37 @@ public class TenantSourceAuthoritativeTests
 
         Assert.Equal(Array.Empty<int>(), ids);
     }
+
+    /// <summary>
+    /// Regression guard: enabling auto-detection after an explicit source must fail fast rather
+    /// than silently ignoring the source.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    public async Task WithAutoDetectAfterExplicitSourceThrows(int _)
+    {
+        Assert.Throws<InvalidOperationException>(() => new TenantSettings().WithTenantIds(1, 2, 3).WithAutoDetect());
+    }
+
+    [Fact]
+    public async Task WithAutoDetectAfterTenantSourceThrows()
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => new TenantSettings().WithTenantSource(new FakeDetector(1)).WithAutoDetect());
+    }
+
+    [Fact]
+    public async Task WithAutoDetectAfterTenantProviderThrows()
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => new TenantSettings().WithTenantProvider(_ => ValueTask.FromResult(new[] { 1 })).WithAutoDetect());
+    }
+
+    [Fact]
+    public async Task WithAutoDetectStaysOpenWhenNoSourceSet()
+    {
+        var settings = new TenantSettings().WithAutoDetect();
+
+        Assert.True(settings.AutoDetect);
+    }
 }

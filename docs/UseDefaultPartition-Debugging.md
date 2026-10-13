@@ -55,6 +55,10 @@ tenant list is authoritative and does not fall through to auto-detection. `WithT
 and `WithTenantProvider` were fixed the same way — they set the delegate but previously left
 `AutoDetect` untouched, so the same silent-empty branch applied to them too.
 
+All three source setters now set an internal `_explicitSourceSet` flag. `WithAutoDetect()`
+now throws `InvalidOperationException` if that flag is already set, so the two modes are
+enforced at configuration time instead of silently ignoring the explicit source.
+
 ### Result
 `MsgMigrationSupport.GetParts()` resolves `[[1, "root"]]` → migration builds the full
 hierarchy (root, `__1`, `__1__root`, and every `__def$`). All 4 positive tests pass.

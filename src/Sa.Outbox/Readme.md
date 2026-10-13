@@ -257,9 +257,13 @@ exclusive, so pick a single chain per registration.
 > **Note:** `WithTenantIds`, `WithTenantSource`, and `WithTenantProvider` all mark the
 > tenant source as authoritative by disabling auto-detection internally
 > (equivalent to appending `.WithNoAutoDetect()`). Any of them can be combined with
-> `WithTenantParallelProcessing`, but never with the auto-detect chain above. Once any of them is called, the
-> plug-service auto-detect branch is skipped and the supplied list/source/provider is
-> used verbatim. To opt back into auto-detection, call `WithAutoDetect()` afterward.
+> `WithTenantParallelProcessing`, but never with the auto-detect chain above. Once any of
+> them is called, the plug-service auto-detect branch is skipped and the supplied
+> list/source/provider is used verbatim.
+>
+> The two modes are mutually exclusive and enforced at configuration time: calling
+> `WithAutoDetect()` after any of these throws <c>InvalidOperationException</c> instead of
+> silently ignoring the explicit source. Choose one mode per registration.
 
 ---
 
