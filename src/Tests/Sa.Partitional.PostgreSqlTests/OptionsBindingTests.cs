@@ -79,6 +79,26 @@ public sealed class OptionsBindingTests
         PartCleanupScheduleSettings cleanup = sp.GetRequiredService<PartCleanupScheduleSettings>();
         Assert.Equal(TimeSpan.FromDays(30), cleanup.DropPartsAfterRetention);
         Assert.Equal(TimeSpan.FromMinutes(1), cleanup.InitialDelay);
+        Assert.Equal(PartCleanupMode.Drop, cleanup.CleanupMode);
+        Assert.Equal("archive", cleanup.ArchiveSchemaName);
+    }
+
+    [Fact]
+    public void CleanupModeAndArchiveSchema_BindFromSection()
+    {
+        ServiceCollection services = NewServices(new Dictionary<string, string?>
+        {
+            ["Partitional:Cleanup:CleanupMode"] = "Archive",
+            ["Partitional:Cleanup:ArchiveSchemaName"] = "cold_storage",
+        });
+
+        AddModule(services).AddPartCleanupSchedule(b => b.FromConfiguration("Partitional:Cleanup"));
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        PartCleanupScheduleSettings cleanup = sp.GetRequiredService<PartCleanupScheduleSettings>();
+        Assert.Equal(PartCleanupMode.Archive, cleanup.CleanupMode);
+        Assert.Equal("cold_storage", cleanup.ArchiveSchemaName);
     }
 
     [Fact]
@@ -248,6 +268,40 @@ public sealed class OptionsBindingTests
         IStartupValidator validator = sp.GetRequiredService<IStartupValidator>();
         OptionsValidationException ex = Assert.Throws<OptionsValidationException>(() => validator.Validate());
         Assert.Contains("ExecutionInterval", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ArchiveMode_WithBlankSchema_FailsOnRead()
+    {
+        ServiceCollection services = NewServices();
+        AddModule(services).AddPartCleanupSchedule(b => b.Configure((_, s) =>
+        {
+            s.CleanupMode = PartCleanupMode.Archive;
+            s.ArchiveSchemaName = "   ";
+        }));
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        OptionsValidationException ex = Assert.Throws<OptionsValidationException>(
+            () => sp.GetRequiredService<PartCleanupScheduleSettings>());
+        Assert.Contains("ArchiveSchemaName", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BlankSchema_IsAllowed_WhenModeIsDrop()
+    {
+        ServiceCollection services = NewServices();
+        AddModule(services).AddPartCleanupSchedule(b => b.Configure((_, s) =>
+        {
+            s.CleanupMode = PartCleanupMode.Drop;
+            s.ArchiveSchemaName = "";
+        }));
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        // Drop mode ignores the archive schema, so a blank value must not fail validation.
+        PartCleanupScheduleSettings cleanup = sp.GetRequiredService<PartCleanupScheduleSettings>();
+        Assert.Equal(PartCleanupMode.Drop, cleanup.CleanupMode);
     }
 
     [Fact]

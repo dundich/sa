@@ -9,10 +9,16 @@ internal sealed class PartCleanupService(
     public async Task<int> Clean(DateTimeOffset toDate, CancellationToken cancellationToken)
     {
         int cnt = 0;
+        bool archive = settings.CleanupMode == PartCleanupMode.Archive;
+
         foreach (string tableName in sqlBuilder.Tables.Select(c => c.FullName))
         {
-            cnt += await repository.DropPartsToDate(tableName, toDate, cancellationToken).ConfigureAwait(false);
+            cnt += archive
+                ? await repository.ArchivePartsToDate(
+                    tableName, toDate, settings.ArchiveSchemaName, cancellationToken).ConfigureAwait(false)
+                : await repository.DropPartsToDate(tableName, toDate, cancellationToken).ConfigureAwait(false);
         }
+
         return cnt;
     }
 

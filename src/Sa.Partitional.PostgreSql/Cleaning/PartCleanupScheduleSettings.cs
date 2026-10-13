@@ -26,6 +26,24 @@ public sealed class PartCleanupScheduleSettings
     public TimeSpan DropPartsAfterRetention { get; set; } = TimeSpan.FromDays(30);
 
     /// <summary>
+    /// Gets or sets how expired parts are retired. Default is <see cref="PartCleanupMode.Drop"/> —
+    /// the historical behaviour. <see cref="PartCleanupMode.Archive"/> moves them into
+    /// <see cref="ArchiveSchemaName"/> instead of dropping them.
+    /// </summary>
+    public PartCleanupMode CleanupMode { get; set; } = PartCleanupMode.Drop;
+
+    /// <summary>
+    /// Gets or sets the schema that archived parts are moved into when
+    /// <see cref="CleanupMode"/> is <see cref="PartCleanupMode.Archive"/>. Default is <c>archive</c>.
+    /// </summary>
+    /// <remarks>
+    /// The archived table keeps its name — only the schema changes — so every module that archives
+    /// into the same schema must use distinct table names (an archive schema is shared, and a name
+    /// collision would fail the move). The property is ignored in <see cref="PartCleanupMode.Drop"/> mode.
+    /// </remarks>
+    public string ArchiveSchemaName { get; set; } = "archive";
+
+    /// <summary>
     /// Gets or sets the interval at which the cleanup job will be executed.
     /// Default is set to every 4 hours, with a random additional delay of up to 59 minutes.
     /// </summary>
@@ -55,6 +73,12 @@ public sealed class PartCleanupScheduleSettings
         {
             throw new ValidationException(
                 $"PartCleanupScheduleSettings:DropPartsAfterRetention must not be negative, but was '{DropPartsAfterRetention}'.");
+        }
+
+        if (CleanupMode == PartCleanupMode.Archive && string.IsNullOrWhiteSpace(ArchiveSchemaName))
+        {
+            throw new ValidationException(
+                $"PartCleanupScheduleSettings:ArchiveSchemaName must not be blank when CleanupMode is '{nameof(PartCleanupMode.Archive)}'.");
         }
 
         if (ExecutionInterval <= TimeSpan.Zero)

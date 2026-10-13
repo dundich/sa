@@ -317,6 +317,9 @@ internal sealed class FakePartRepository : IPartRepository
 
     public Task<int> DropPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
         => Task.FromResult(0);
+
+    public Task<int> ArchivePartsToDate(string tableName, DateTimeOffset toDate, string archiveSchemaName, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
 }
 
 internal sealed class FakeSqlBuilder : ISqlBuilder
