@@ -2,6 +2,7 @@
 using Sa.Fixture;
 using Sa.Partitional.PostgreSql;
 using Sa.Partitional.PostgreSql.Configuration.Builder;
+using Sa.Partitional.PostgreSql.SqlBuilder;
 
 namespace Sa.Partitional.PostgreSqlTests.Configuration;
 
@@ -90,6 +91,9 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
 
         internal ISqlBuilder SqlBuilder => ServiceProvider.GetRequiredService<ISqlBuilder>();
     }
+
+    /// <summary>Fixed instant used by the DDL-shape tests.</summary>
+    private static readonly DateTimeOffset Date = new(2026, 9, 26, 0, 0, 0, TimeSpan.Zero);
 
 
 
@@ -333,5 +337,129 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
         table.PartByRange(PgPartBy.Month, "created_at");
 
         Assert.Equal("created_at", builder.Build().Single().PartByRangeFieldName);
+    }
+
+    [Fact]
+    public void WithDefaultPartition_IsOffByDefault()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "part TEXT NOT NULL").PartByList("part");
+
+        ITableSettings settings = builder.Build().Single();
+
+        Assert.False(settings.DefaultPartition);
+        Assert.DoesNotContain("-- DEFAULT PARTITION", settings.CreateRootSql());
+    }
+
+    [Fact]
+    public void WithDefaultPartition_CreatesARootDefaultPartition()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "part TEXT NOT NULL")
+            .PartByList("part")
+            .WithDefaultPartition();
+
+        ITableSettings settings = builder.Build().Single();
+
+        Assert.True(settings.DefaultPartition);
+
+        string sql = settings.CreateRootSql();
+
+        // A partitioned table holds at most one DEFAULT partition per parent; the root one is emitted
+        // together with the root DDL.
+        Assert.Contains("-- DEFAULT PARTITION", sql);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS \"public\".\"t__def$\"", sql);
+        Assert.Contains("PARTITION OF \"public\".\"t\"\nDEFAULT", sql);
+    }
+
+    [Fact]
+    public void WithDefaultPartition_UsesTheConfiguredSeparator()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "part TEXT NOT NULL")
+            .PartByList("part")
+            .WithPartSeparator("-")
+            .WithDefaultPartition();
+
+        string sql = builder.Build().Single().CreateRootSql();
+
+        Assert.Contains("CREATE TABLE IF NOT EXISTS \"public\".\"t-def$\"", sql);
+    }
+
+    [Fact]
+    public void WithDefaultPartition_WorksForARangeOnlyTable()
+    {
+        // No list columns: the root is range-partitioned, so the default catches out-of-range dates.
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "created_at BIGINT NOT NULL")
+            .PartByRange(PgPartBy.Day)
+            .WithDefaultPartition();
+
+        ITableSettings settings = builder.Build().Single();
+
+        Assert.True(settings.DefaultPartition);
+
+        string sql = settings.CreateRootSql();
+
+        Assert.Contains("PARTITION BY RANGE (\"created_at\")", sql);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS \"public\".\"t__def$\"", sql);
+        Assert.Contains("PARTITION OF \"public\".\"t\"\nDEFAULT", sql);
+    }
+
+    [Fact]
+    public void WithDefaultPartition_EmitsADefaultAtEveryLevel()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t",
+                "id INT NOT NULL",
+                "country TEXT NOT NULL",
+                "city TEXT NOT NULL",
+                "created_at BIGINT NOT NULL")
+            .PartByList("country", "city")
+            .PartByRange(PgPartBy.Day, "created_at")
+            .WithDefaultPartition();
+
+        ITableSettings settings = builder.Build().Single();
+        string sql = new SqlTableBuilder(settings).CreateSql(Date, "RU", "Moscow");
+
+        // One DEFAULT per partitioned parent: root, the country level, and the range level.
+        Assert.Contains("CREATE TABLE IF NOT EXISTS \"public\".\"t__def$\"", sql);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS \"public\".\"t__RU__def$\"", sql);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS \"public\".\"t__RU__Moscow__def$\"", sql);
+    }
+
+    [Fact]
+    public void WithDefaultPartition_MoveBackIsOVERRIDINGSystemValue()
+    {
+        // The reconciliation's move-back re-inserts the staged id explicitly; an OVERRIDING clause
+        // keeps it insertable when the id column is a GENERATED ALWAYS identity.
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t",
+                "id BIGINT GENERATED ALWAYS AS IDENTITY",
+                "created_at BIGINT NOT NULL")
+            .PartByRange(PgPartBy.Day, "created_at")
+            .WithDefaultPartition();
+
+        string sql = new SqlTableBuilder(builder.Build().Single()).CreateSql(Date);
+
+        Assert.Contains("INSERT INTO \"public\".\"t__y2026m09d26\" OVERRIDING SYSTEM VALUE", sql);
+    }
+
+    [Fact]
+    public void WithoutDefaultPartition_NoReconciliationIsEmitted()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t",
+                "id INT NOT NULL",
+                "country TEXT NOT NULL",
+                "created_at BIGINT NOT NULL")
+            .PartByList("country")
+            .PartByRange(PgPartBy.Day, "created_at");
+
+        ITableSettings settings = builder.Build().Single();
+        string sql = new SqlTableBuilder(settings).CreateSql(Date, "RU");
+
+        Assert.DoesNotContain("DEFAULT reconciliation", sql);
+        Assert.DoesNotContain("DEFAULT PARTITION", sql);
     }
 }

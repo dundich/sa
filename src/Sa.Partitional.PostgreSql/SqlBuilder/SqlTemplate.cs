@@ -45,6 +45,16 @@ internal static class SqlTemplate
         => value.Match(s => QuoteLiteral(s), n => n.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>
+    /// Name token of the optional <c>DEFAULT</c> partition. It is a reserved name, not a partition
+    /// value: the table is emitted with <c>PARTITION OF ... DEFAULT</c> and captures every row that
+    /// does not match any explicitly created sibling partition. Kept short (<c>def$</c>, marked with
+    /// <c>$</c> like the <c>part$</c> cache table) because it is appended to the full list prefix and
+    /// eats into the 63-byte identifier budget. A list value literally named <c>def$</c> would
+    /// therefore generate the same table name.
+    /// </summary>
+    internal const string DefaultPartitionName = "def$";
+
+    /// <summary>
     /// public.customer
     /// </summary>
     public static string CreateRootSql(this ITableSettings settings)
@@ -56,6 +66,13 @@ internal static class SqlTemplate
             ? string.Empty
             : $"{QuoteIdentifier(settings.PartByRangeFieldName)} bigint NOT NULL,";
 
+        // A partitioned table may hold at most one DEFAULT partition per parent, so the optional
+        // catch-all sits directly under the root and is emitted from the root DDL (idempotent).
+        // Deeper levels get their own default when their partition is created (see SqlPartListBuilder).
+        string defaultPartDefinition = settings.DefaultPartition
+            ? settings.CreateDefaultPartSql(ReadOnlySpan<StrOrNum>.Empty)
+            : string.Empty;
+
         return $"""
 CREATE SCHEMA IF NOT EXISTS {QuoteIdentifier(settings.DatabaseSchemaName)};
 
@@ -64,12 +81,123 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTableName()} (
   {rangeFieldDefinition}
   CONSTRAINT {QuoteIdentifier(settings.Pk())} PRIMARY KEY ({pkColumns},{QuoteIdentifier(settings.PartByRangeFieldName)})
 ) {settings.GetPartitionalSql(0)};
-
+{defaultPartDefinition}
 -- post sql
 {settings.PostRootSql?.Invoke()}
 
 """;
     }
+
+    /// <summary>
+    /// public.customer__def$  /  public.customer__FR__def$
+    /// </summary>
+    /// <remarks>
+    /// DDL of the optional <c>DEFAULT</c> partition of the parent identified by <paramref name="values"/>:
+    /// the root when the span is empty, otherwise the list prefix. The catch-all is a plain leaf — it is
+    /// <i>not</i> further partitioned, so a row reaches it because its list value did not match any
+    /// explicit sibling partition, or, at the deepest (range) level, because its date fell outside every
+    /// created range. Only meaningful when <see cref="ITableSettings.DefaultPartition"/> is set; the
+    /// caller decides whether to emit it.
+    /// </remarks>
+    public static string CreateDefaultPartSql(this ITableSettings settings, params StrOrNum[] values)
+        => settings.CreateDefaultPartSql(values.AsSpan());
+
+    /// <summary>
+    /// Span view of <see cref="CreateDefaultPartSql(ITableSettings, StrOrNum[])"/>.
+    /// </summary>
+    public static string CreateDefaultPartSql(this ITableSettings settings, ReadOnlySpan<StrOrNum> values)
+    {
+        string qualifiedDefaultName = settings.GetQualifiedDefaultTableName(values);
+
+        return $"""
+
+
+-- DEFAULT PARTITION
+
+CREATE TABLE IF NOT EXISTS {qualifiedDefaultName}
+PARTITION OF {settings.GetQualifiedTableName(values)}
+DEFAULT
+;
+""";
+    }
+
+    /// <summary>
+    /// Qualified name of the DEFAULT partition that catches rows of the parent identified by
+    /// <paramref name="values"/> (the root when the span is empty).
+    /// </summary>
+    internal static string GetQualifiedDefaultTableName(this ITableSettings settings, ReadOnlySpan<StrOrNum> values)
+        => settings.GetQualifiedTableNameCore(settings.GetPartTableName(values, DefaultPartitionName));
+
+    /// <summary>
+    /// <c>field = 'value'</c> — the rows a list partition of <paramref name="fieldIndex"/> with
+    /// <paramref name="value"/> owns, regardless of the deeper keys.
+    /// </summary>
+    internal static string ListPartPredicate(this ITableSettings settings, int fieldIndex, StrOrNum value)
+        => $"{QuoteIdentifier(settings.PartByListFieldNames[fieldIndex])} = {QuoteValue(value)}";
+
+    /// <summary>
+    /// <c>range_field &gt;= start AND range_field &lt; end</c> — the rows the range leaf of
+    /// <paramref name="date"/> owns. The range column is the bigint unix-seconds key the library
+    /// partitions on, so the bounds are integers.
+    /// </summary>
+    internal static string RangePartPredicate(this ITableSettings settings, DateTimeOffset date)
+    {
+        LimSection<DateTimeOffset> range = settings.PartBy.GetRange(date);
+        string column = QuoteIdentifier(settings.PartByRangeFieldName);
+
+        return $"{column} >= {range.Start.ToUnixTimeSeconds()} AND {column} < {range.End.ToUnixTimeSeconds()}";
+    }
+
+    /// <summary>
+    /// Moves the rows of the parent's DEFAULT partition that belong to a soon-to-be-created sibling
+    /// (selected by <paramref name="predicate"/>) into a transaction-scoped temporary table.
+    /// </summary>
+    /// <remarks>
+    /// PostgreSQL refuses to create a partition while the existing DEFAULT partition holds rows that
+    /// would belong to it (<c>updated partition constraint for default partition would be violated by
+    /// some row</c>). Pulling them out first — and putting them back with
+    /// <see cref="MoveRowsBackSql"/> after the partition exists — keeps the migration a single,
+    /// self-healing transaction. <c>ON COMMIT DROP</c> ties the staging table to the implicit
+    /// transaction of the batch, so an interrupted run leaves neither the table nor half-moved rows.
+    /// </remarks>
+    internal static string MoveRowsOutOfDefaultSql(string defaultQualifiedName, string predicate, string tempTableName)
+    {
+        string temp = QuoteIdentifier(tempTableName);
+        // Qualify the defensive drop with pg_temp so a real table that happens to share the staging
+        // name is never touched; the create/reference stay unqualified and resolve to the temp table.
+        string tempDrop = QuoteIdentifier("pg_temp") + "." + temp;
+
+        return $"""
+
+
+-- DEFAULT reconciliation: pull rows that belong to the new partition out of the default
+DROP TABLE IF EXISTS {tempDrop};
+
+CREATE TEMP TABLE {temp} (LIKE {defaultQualifiedName}) ON COMMIT DROP;
+
+INSERT INTO {temp}
+SELECT * FROM {defaultQualifiedName} WHERE {predicate};
+
+DELETE FROM {defaultQualifiedName} WHERE {predicate};
+""";
+    }
+
+    /// <summary>
+    /// Puts the rows staged by <see cref="MoveRowsOutOfDefaultSql"/> back, now into the partition that
+    /// has just been created. Must run in the same batch so it sees the staging table.
+    /// </summary>
+    /// <remarks>
+    /// <c>OVERRIDING SYSTEM VALUE</c> keeps an identity key column insertable: <c>SELECT *</c> carries
+    /// the staged <c>id</c> explicitly, and PostgreSQL refuses an explicit value into a
+    /// <c>GENERATED ALWAYS AS IDENTITY</c> column without it (<c>22014</c>). For a <c>BY DEFAULT</c>
+    /// identity or a plain column the clause is a no-op, so it is emitted unconditionally.
+    /// </remarks>
+    internal static string MoveRowsBackSql(string newPartitionQualifiedName, string tempTableName)
+        => $"""
+
+INSERT INTO {newPartitionQualifiedName} OVERRIDING SYSTEM VALUE
+SELECT * FROM {QuoteIdentifier(tempTableName)};
+""";
 
     private static string GetPrimaryKeyColumns(ITableSettings settings)
     {
@@ -271,7 +399,7 @@ SELECT
     /// <c>DETACH PARTITION CONCURRENTLY</c> inside a transaction block.
     /// </summary>
     public static string DetachPartSql(this ITableSettings settings, StrOrNum[] partValues, string qualifiedPartName)
-        => $"ALTER TABLE {settings.GetQualifiedTableName(partValues.AsSpan())} DETACH PARTITION CONCURRENTLY {qualifiedPartName};\n";
+        => $"ALTER TABLE {settings.GetQualifiedTableName(partValues.AsSpan())} DETACH PARTITION {qualifiedPartName} CONCURRENTLY;\n";
 
     /// <summary>
     /// Completes a <c>DETACH PARTITION CONCURRENTLY</c> that an earlier run left pending (the

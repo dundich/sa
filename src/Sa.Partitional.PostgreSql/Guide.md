@@ -198,6 +198,7 @@ schema.AddTable("orders",
     .WithFillFactor(85)                    // WITH (fillfactor = 85) on the range leaves; clamped to 10..100
     .WithPartSeparator("_")                // separator in partition names (default: __)
     .WithPartTablePostfix("__part")        // postfix of the CACHE table name (default: part$)
+    .WithDefaultPartition()                // optional DEFAULT catch-all at every level (rows whose key was never migrated)
 
     // 4. Custom SQL hooks
     .AddPostSql(() => "INCLUDE (extra_column)")
@@ -279,6 +280,8 @@ A partition name is `{table}{separator}{value}...`, where the separator defaults
 | Range (year) | `{table}{sep}y{YYYY}` | `events__y2026` |
 | List (nested) | `{table}{sep}{val1}{sep}{val2}` | `customer_RU_Moscow` |
 | List + range leaf | `{table}{sep}{val1}...{sep}y{YYYY}m{MM}d{DD}` | `customer_RU_Moscow_y2026m06d26` |
+| Default (root) | `{table}{sep}def$` | `events__def$` |
+| Default (nested) | `{table}{sep}{val}...{sep}def$` | `customer_RU_def$` |
 | Cache table | `{table}{sep}{postfix}` | `events__part$` |
 
 The range suffix comes from the **UTC** calendar, and the key values sit between the table name and it — there is no

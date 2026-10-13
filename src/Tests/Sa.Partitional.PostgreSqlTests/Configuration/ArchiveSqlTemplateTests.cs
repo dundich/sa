@@ -85,9 +85,10 @@ public class ArchiveSqlTemplateTests(ArchiveSqlTemplateTests.Fixture fixture) : 
         string sql = Settings.DetachPartSql(Moscow, "\"public\".\"events__Moscow__y2026m09d26\"");
 
         // Single statement: CONCURRENTLY is illegal inside a transaction block, so it cannot be
-        // batched with the SET SCHEMA that follows.
+        // batched with the SET SCHEMA that follows. PostgreSQL spells it `DETACH PARTITION name
+        // CONCURRENTLY` — the qualifier trails the partition name.
         Assert.Equal(
-            "ALTER TABLE \"public\".\"events__Moscow\" DETACH PARTITION CONCURRENTLY \"public\".\"events__Moscow__y2026m09d26\";\n",
+            "ALTER TABLE \"public\".\"events__Moscow\" DETACH PARTITION \"public\".\"events__Moscow__y2026m09d26\" CONCURRENTLY;\n",
             sql);
     }
 
@@ -100,7 +101,7 @@ public class ArchiveSqlTemplateTests(ArchiveSqlTemplateTests.Fixture fixture) : 
         string sql = settings.DetachPartSql([], "\"public\".\"events__y2026m09d26\"");
 
         Assert.Equal(
-            "ALTER TABLE \"public\".\"events\" DETACH PARTITION CONCURRENTLY \"public\".\"events__y2026m09d26\";\n",
+            "ALTER TABLE \"public\".\"events\" DETACH PARTITION \"public\".\"events__y2026m09d26\" CONCURRENTLY;\n",
             sql);
     }
 

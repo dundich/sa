@@ -86,4 +86,13 @@ public interface ITableSettings
     /// part of the partition names themselves.
     /// </summary>
     string PartTablePostfix { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether optional <c>DEFAULT</c> partitions are created at every
+    /// partitioning level. Each is named <c>{parent}{SqlPartSeparator}def$</c> and is emitted with
+    /// <c>PARTITION OF {parent} DEFAULT</c>, so it captures rows whose list value (or, at the deepest
+    /// level, whose date) does not match any of the explicitly created partitions.
+    /// Defaults to <see langword="false"/>.
+    /// </summary>
+    bool DefaultPartition { get; }
 }

@@ -33,6 +33,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     private string? _separator = null;
     private string? _postfix = null;
     private int? _fillFactor = null;
+    private bool _defaultPartition = false;
 
     private Func<string>? _postSql = null;
     private Func<string>? _pkSql = null;
@@ -114,6 +115,12 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         return this;
     }
 
+    public ITableBuilder WithDefaultPartition()
+    {
+        _defaultPartition = true;
+        return this;
+    }
+
     public ITableSettings Build()
     {
         var databaseTableName = tableName.Trim('"');
@@ -155,7 +162,9 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
             ConstraintPkSql: _pkSql,
 
             FillFactor: _fillFactor,
-            PartTablePostfix: partTablePostfix
+            PartTablePostfix: partTablePostfix,
+
+            DefaultPartition: _defaultPartition
         );
     }
 
