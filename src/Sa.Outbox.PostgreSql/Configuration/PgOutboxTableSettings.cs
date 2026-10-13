@@ -16,6 +16,13 @@ public sealed class PgOutboxTableSettings
     /// <summary>Gets or sets the database schema name that owns all six outbox tables. Default is "public".</summary>
     public string DatabaseSchemaName { get; set; } = Defaults.DatabaseSchemaName;
 
+    /// <summary>
+    /// Whether to create a DEFAULT catch-all partition on every outbox table.
+    /// When enabled, rows whose key was never migrated are kept instead of rejected.
+    /// Default is false.
+    /// </summary>
+    public bool UseDefaultPartition { get; set; } = false;
+
     /// <summary>The active task queue table (read-write, SKIP LOCKED). Table name equals the base table name.</summary>
     public TaskQueueTable TaskQueue { get; } = new();
 

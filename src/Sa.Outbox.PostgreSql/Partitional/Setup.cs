@@ -8,6 +8,9 @@ namespace Sa.Outbox.PostgreSql.Partitional;
 
 internal static class Setup
 {
+    private static ITableBuilder WithDefaultPartitionIf(this ITableBuilder b, bool enable) =>
+        enable ? b.WithDefaultPartition() : b;
+
     public static IServiceCollection AddOutboxPartitional(this IServiceCollection services, string scopeKey)
     {
         services.TryAddTransient<MsgMigrationSupport>();
@@ -29,6 +32,7 @@ internal static class Setup
                     .PartByList(tableSettings.Message.Fields.TenantId, tableSettings.Message.Fields.MsgPart)
                     .TimestampAs(tableSettings.Message.Fields.MsgCreatedAt)
                     .WithFillFactor(tableSettings.Message.FillFactor) // insert only
+                    .WithDefaultPartitionIf(tableSettings.UseDefaultPartition)
                     .AddPostSql(() => $"""
                         {sql.SqlCreateTypeTable}
                         {sql.SqlAddMsgSeqColumnToMsgTable}
@@ -40,6 +44,7 @@ internal static class Setup
                     .PartByList(tableSettings.TaskQueue.Fields.TenantId, tableSettings.TaskQueue.Fields.ConsumerGroup)
                     .TimestampAs(tableSettings.TaskQueue.Fields.TaskCreatedAt)
                     .WithFillFactor(tableSettings.TaskQueue.FillFactor)
+                    .WithDefaultPartitionIf(tableSettings.UseDefaultPartition)
                     .AddPostSql(() => $"""
                         {sql.SqlCreateOffsetTable}
                         {sql.SqlAddMsgSeqColumnToTaskTable}
@@ -52,12 +57,14 @@ internal static class Setup
                     .PartByList(tableSettings.Delivery.Fields.TenantId, tableSettings.Delivery.Fields.ConsumerGroup)
                     .TimestampAs(tableSettings.Delivery.Fields.DeliveryCreatedAt)
                     .WithFillFactor(tableSettings.Delivery.FillFactor)
+                    .WithDefaultPartitionIf(tableSettings.UseDefaultPartition)
                 ;
 
                 ITableBuilder errorTableBuilder = schema
                     .AddTable(tableSettings.Error.TableName, tableSettings.Error.Fields.All())
                     .TimestampAs(tableSettings.Error.Fields.ErrorCreatedAt)
                     .WithFillFactor(tableSettings.Error.FillFactor)
+                    .WithDefaultPartitionIf(tableSettings.UseDefaultPartition)
                 ;
 
 
@@ -81,6 +88,8 @@ internal static class Setup
             opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.DropPartsAfterRetention = settings.DropPartsAfterRetention;
+            opts.CleanupMode = settings.CleanupMode;
+            opts.ArchiveSchemaName = settings.ArchiveSchemaName;
         }))
         ;
 
