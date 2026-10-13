@@ -1,5 +1,4 @@
-﻿using Sa.Extensions;
-using Sa.Partitional.PostgreSql.Classes;
+﻿using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
@@ -9,10 +8,18 @@ namespace Sa.Partitional.PostgreSql.SqlBuilder;
 internal sealed class SqlPartListBuilder(ITableSettings settings)
 {
     public string CreateSql(StrOrNum[] partValues)
-        => partValues.Length > 0
-            ? partValues
-                .Select((c, i) => settings.CreateNestedSql(partValues[0..(i + 1)]))
-                .JoinByString(Environment.NewLine)
-            : string.Empty
-            ;
+    {
+        if (partValues.Length == 0)
+            return string.Empty;
+
+        // Each nested level is built from a growing prefix <i>view</i> of the caller's array —
+        // `values[..(i + 1)]` is a zero-copy span slice, so no per-level `StrOrNum[]` copy. The
+        // resulting SQL strings are collected into one buffer that `string.Join` consumes.
+        ReadOnlySpan<StrOrNum> values = partValues;
+        string[] parts = new string[values.Length];
+        for (int i = 0; i < values.Length; i++)
+            parts[i] = settings.CreateNestedSql(values[..(i + 1)]);
+
+        return string.Join(Environment.NewLine, parts);
+    }
 }
