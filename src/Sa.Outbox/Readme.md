@@ -61,16 +61,6 @@ builder.Services
 
 ---
 
-## Breaking Changes
-
-### 0.16.0
-
-- **`IRetryStrategy` → `IDeliveryBackoffStrategy`** (hard rename, no obsolete shim). The contract computes a backoff delay between retries of a single failed message, not the retry itself; the new name also disambiguates it from `OutboxConsumerSettings.RetryCountOnError` (job retries) and `Sa.Data.PostgreSql.PgRetryStrategy` (database retries). Method `GetBackoff(int attempt)` is unchanged.
-- **`ExponentialBackoffRetryStrategy` → `ExponentialDeliveryBackoffStrategy`** (including `Shared`).
-- **New: `IEmptyQueueWaitStrategy`** controls the wait between polls of an empty consumer queue. Default `ExponentialIdleWaitStrategy` back-off is inert until a group opts in via `WithIdleBackoff(maxInterval)`; existing configurations behave exactly as before.
-
----
-
 ## Delivery Status Codes
 
 Full set of HTTP-like status codes:
@@ -89,25 +79,6 @@ Full set of HTTP-like status codes:
 | 508 | `ErrorMaxAttempts()` | Max attempts exhausted |
 | 103 | `Postpone()` | Deferred processing |
 | 104 | `Retry()` | Retry now |
-
----
-
-## Status Methods
-
-After processing each message, call exactly one method from `IOutboxContextOperations<T>`:
-
-| Method | Description |
-|--------|-------------|
-| `msg.Ok(message?)` | Successfully processed (200 OK) |
-| `msg.Created(message?)` | Side-effect resource created (201 Created) |
-| `msg.Accepted(message?)` | Accepted for async processing (202 Accepted) |
-| `msg.NoContent(message?)` | Processed, no data (204 No Content) |
-| `msg.Aborted(message?)` | Intentionally skipped (299 Aborted) |
-| `msg.Warn(exception, message?, postpone?)` | Transient error → retry (400 Warn) |
-| `msg.Error(exception, message?)` | Permanent error (500 Error) |
-| `msg.ErrorMaxAttempts()` | Max attempts exhausted (508) |
-| `msg.Postpone(delay, message?)` | Defer processing (103 Postpone) |
-| `msg.Retry(delay, message?)` | Retry with metadata (104 Retry) |
 
 ---
 
@@ -284,7 +255,6 @@ options.AddMetadata<MyMessage>();
 | Provider | Package | Status |
 |----------|---------|--------|
 | PostgreSQL | `Sa.Outbox.PostgreSql` | ✅ production-ready |
-| SQL Server | `Sa.Outbox.SqlServer` | 🔧 in development |
 | Redis | `Sa.Outbox.Redis` | 🔧 in development |
 
 ---

@@ -62,16 +62,6 @@ builder.Services
 
 ---
 
-## Критические изменения
-
-### 0.16.0
-
-- **`IRetryStrategy` → `IDeliveryBackoffStrategy`** (жёсткое переименование, без shim-а с `[Obsolete]`). Контракт вычисляет задержку backoff-а между ретраями одного упавшего сообщения, а не сам ретрай; новое имя также отличает его от `OutboxConsumerSettings.RetryCountOnError` (повторы задачи) и `Sa.Data.PostgreSql.PgRetryStrategy` (повторы операций с БД). Метод `GetBackoff(int attempt)` не изменился.
-- **`ExponentialBackoffRetryStrategy` → `ExponentialDeliveryBackoffStrategy`** (включая `Shared`).
-- **Новое: `IEmptyQueueWaitStrategy`** управляет ожиданием между опросами пустой очереди потребителя. Backoff стратегии `ExponentialIdleWaitStrategy` по умолчанию неактивен, пока группа не включит его через `WithIdleBackoff(maxInterval)`; существующие конфигурации работают в точности как раньше.
-
----
-
 ## Коды статуса доставки
 
 Полный набор HTTP-подобных кодов статуса:
@@ -93,24 +83,6 @@ builder.Services
 
 ---
 
-## Методы статуса
-
-После обработки каждого сообщения вызовите ровно один метод из `IOutboxContextOperations<T>`:
-
-| Метод | Описание |
-|-------|---------|
-| `msg.Ok(message?)` | Успешно обработано (200 OK) |
-| `msg.Created(message?)` | Создан ресурс побочного эффекта (201 Created) |
-| `msg.Accepted(message?)` | Принято для асинхронной обработки (202 Accepted) |
-| `msg.NoContent(message?)` | Обработано, нет данных (204 No Content) |
-| `msg.Aborted(message?)` | Намеренно пропущено (299 Aborted) |
-| `msg.Warn(exception, message?, postpone?)` | Временная ошибка → повтор (400 Warn) |
-| `msg.Error(exception, message?)` | Постоянная ошибка (500 Error) |
-| `msg.ErrorMaxAttempts()` | Исчерпан макс. число попыток (508) |
-| `msg.Postpone(delay, message?)` | Отложить обработку (103 Postpone) |
-| `msg.Retry(delay, message?)` | Повторить с метаданными (104 Retry) |
-
----
 
 ## Конфигурация
 
@@ -285,7 +257,6 @@ options.AddMetadata<MyMessage>();
 | Провайдер | Пакет | Статус |
 |-----------|-------|--------|
 | PostgreSQL | `Sa.Outbox.PostgreSql` | ✅ production-ready |
-| SQL Server | `Sa.Outbox.SqlServer` | 🔧 в разработке |
 | Redis | `Sa.Outbox.Redis` | 🔧 в разработке |
 
 ---

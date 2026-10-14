@@ -2,6 +2,8 @@
 
 Переиспользуемые инфраструктурные библиотек для .NET 10, совместимые с **Native AOT**, с включённым `nullable`, построенные на современных примитивах .NET.
 
+> ⚠️ **Стабильность.** Все пакеты пока в major-version `0` (`0.x.y`), поэтому публичные API могут меняться ломающим образом между релизами без предупреждения — используйте на свой страх и риск.
+
 ---
 
 ## Библиотеки
@@ -22,6 +24,12 @@
 ### [Sa.Data.S3](src/Sa.Data.S3) — S3-клиент для данных
 
 Minio-compatible S3-клиент для операций с данными.
+
+---
+
+### [Sa.Data.TempFolder](src/Sa.Data.TempFolder) — Управление временными каталогами
+
+`AddSaTempFolder` регистрирует ключевой `ITempFolder` (корневой каталог + стратегии): защищённые путём подпапки, отложенная фиксация активности записью, возрастная фоновая очистка с «спуском» по уровням, учёт объёма и контроль свободного места с edge-событиями, режим read-only и keyed-мультиинстансальную регистрацию.
 
 ---
 
@@ -81,6 +89,7 @@ Minio-compatible S3-клиент для операций с данными.
 | [Partitational.ConsoleApp](src/Samples/Partitational.ConsoleApp) | Декларативное партиционирование |
 | [PgOutbox.ConsoleApp](src/Samples/PgOutbox.ConsoleApp) | Паттерн Outbox |
 | [Schedule.Console](src/Samples/Schedule.Console) | Планировщик задач |
+| [Schedule.Configuration.Console](src/Samples/Schedule.Configuration.Console) | Задачи по расписанию с подтягиванием настроек из appsettings.json |
 | [Echo](src/Samples/Echo) | Разделение аудиоканалов на базе Sa.Media |
 | [WorkQueue.Console](src/Samples/WorkQueue.Console) | Демо Sa.WorkQueue с изменением параллелизма на лету |
 

@@ -4,18 +4,49 @@ Declarative PostgreSQL table partitioning library for .NET 10 — supports **ran
 
 ---
 
-## Overview
+## Properties
 
-Large PostgreSQL tables lose performance as they grow. This library automates the full partition lifecycle:
+The library gathers everything needed for partitioning into three setting types, a fluent builder, and three public services. Below is a tour of the features with links to the details.
 
-1. **Declare** partitioned tables declaratively via a fluent builder.
-2. **Migrate** — automatically create missing partitions before data arrives.
-3. **Cache** — keep partition metadata in memory so a lookup does not hit the database (the metadata itself is read from the cache table, not from the catalog).
-4. **Clean up** — drop old partitions past a configurable retention window, or move them into an archive schema.
+### Partition management
 
-Everything wires into ASP.NET Core `IServiceCollection` through a single extension method.
+- **Auto-migration** — a background job pre-creates future partitions so INSERT does not stall on CREATE. [`MigrationScheduleSettings`](#migration), [`IMigrationService`](#api-migration)
+- **Guard against gaps.** A *gap* is an INSERT into a partition that does not yet exist — either the insert fails, or (with [`WithDefaultPartition()`](#fluent-builder-api)) it lands in the catch-all. Migration creates partitions ahead of time — for several days/months forward (`ForwardDays`) — so traffic never falls into a void. [`MigrationScheduleSettings`](#migration)
+- **Auto-cleanup** — moves old partitions out of circulation: [`Drop`](#cleanup-mode-drop) (delete) or [`Archive`](#cleanup-mode-archive) (move into an archive schema). [`PartCleanupScheduleSettings`](#cleanup), [`IPartCleanupService`](#api-cleanup)
+- **In-memory cache** of partition metadata — a lookup never hits the database. [`PartCacheSettings`](#partcache)
+- **Programmatic control** — [`IPartitionManager`](#api-manager): `Migrate`, `EnsureParts`, manual window control.
 
-All date arithmetic — partition names, day/month/year boundaries, cache windows — is done in **UTC**, so a partition name never depends on the host time zone.
+### Fluent Builder
+
+- **Range and list partitioning**, combinable hierarchically to any nesting level. [`Supported strategies`](#supported-strategies)
+- **Multiple levels on one table**: `PartByList` + `PartByRange` + `TimestampAs`. [`Fluent Builder API`](#fluent-builder-api)
+- **Tuning**: `WithFillFactor`, `WithPartSeparator`, `WithPartTablePostfix`, custom constraint and post-SQL hooks.
+
+### Default partition
+
+- **Catch-all** for rows that matched no partition, enabled via [`WithDefaultPartition()`](#fluent-builder-api). [`Fluent Builder API`](#fluent-builder-api)
+- Needed when other services write into the table without knowing about partitioning: while the right partition does not exist yet, those rows accumulate in `def$` instead of breaking the insert. [`Quick start`](#quick-start)
+- **Removes the conflict on partition creation.** When the migration creates the real partition, PostgreSQL refuses if `def$` already holds rows that belong to it. The library moves those rows out of `def$` into the new partition without collisions — through a staging table inside a transaction — so the catch-all never blocks later migrations. [`Behaviour notes`](#behaviour-notes)
+
+### Cleanup modes
+
+- **Drop** — physical removal (`DROP TABLE`). Good for ephemeral data (outbox, audit, logs). [`CleanupMode = Drop`](#cleanup-mode-drop)
+- **Archive** — move into a separate schema (`ALTER TABLE ... SET SCHEMA`). The archive schema is created automatically; the table keeps its name. [`CleanupMode = Archive`](#cleanup-mode-archive)
+
+### Named modules
+
+- Each module has its own tables, cache, and migration/cleanup schedulers. Split them by database (`AddDataSource`) or by business logic (keyed `AddSaPartitional("name", ...)`). [`Quick start`](#quick-start)
+
+### Settings
+
+- Bind to [`configuration`](#configuration-the-options-pipeline) or [`code`](#settings-in-code-full-reference) through one pipeline (`Microsoft.Extensions.Options`), one named instance per module.
+- All three setting types: [`PartCacheSettings`](#partcache), [`MigrationScheduleSettings`](#migration), [`PartCleanupScheduleSettings`](#cleanup).
+
+### General
+
+- **Everything computes in UTC** — partition names, range boundaries, and cache windows do not depend on the host time zone. [`Behaviour notes`](#behaviour-notes)
+- **Cache consistency, transient-retry, and DDL serialization** are described in [`Behaviour notes`](#behaviour-notes).
+- Partition name formats — in [`Naming conventions`](#naming-conventions).
 
 ---
 
