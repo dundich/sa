@@ -157,7 +157,7 @@ nu_push() {
   # Find both *.nupkg and *.snupkg files
   while IFS= read -r -d '' package; do
     _step "Push $(basename "$package") to $nuget_source"
-    dotnet nuget push "$package" --source "$nuget_source" || { _assert_exec; return; }
+    dotnet nuget push "$package" --source "$nuget_source" --skip-duplicate || { _assert_exec; return; }
     _assert_exec
   done < <(find "$DIST_FOLDER" -maxdepth 1 \( -name "*.nupkg" -o -name "*.snupkg" \) -print0 | sort -z)
 }
@@ -169,7 +169,7 @@ nu_push_ex() {
 
   while IFS= read -r -d '' package; do
     _step "Push $(basename "$package") to $nuget_source"
-    dotnet nuget push "$package" -k "$nuget_key" -s "$nuget_source" || { _assert_exec; return; }
+    dotnet nuget push "$package" -k "$nuget_key" -s "$nuget_source" --skip-duplicate || { _assert_exec; return; }
     _assert_exec
   done < <(find "$DIST_FOLDER" -maxdepth 1 \( -name "*.nupkg" -o -name "*.snupkg" \) -print0 | sort -z)
 }

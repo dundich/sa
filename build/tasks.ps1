@@ -138,7 +138,7 @@ function NuPush($nuget_source) {
 	# find both *.nupkg and *.snupkg files
 	foreach ($package in Get-ChildItem $dist_folder -filter "*.nupkg" -name) {
 		_Step "Push $package to $nuget_source"
-		& dotnet nuget push "$dist_folder\$package" --source $nuget_source
+		& dotnet nuget push "$dist_folder\$package" --source $nuget_source --skip-duplicate
 		_AssertExec
 	}
 }
@@ -147,8 +147,8 @@ function NuPushEx($nuget_key) {
 	$nuget_source = "https://api.nuget.org/v3/index.json"
 	# find both *.nupkg and *.snupkg files
 	foreach ($package in Get-ChildItem $dist_folder -filter "*.nupkg" -name) {
-		_Step "dotnet nuget push $dist_folder\$package -k $nuget_key -s $nuget_source"
-		& dotnet nuget push "$dist_folder\$package" -k $nuget_key -s "$nuget_source"
+		_Step "dotnet nuget push $dist_folder\$package -k $nuget_key -s $nuget_source" --skip-duplicate
+		& dotnet nuget push "$dist_folder\$package" -k $nuget_key -s "$nuget_source" --skip-duplicate
 		_AssertExec
 	}
 }
