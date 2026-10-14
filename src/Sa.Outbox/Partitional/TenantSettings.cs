@@ -29,40 +29,40 @@ public sealed class TenantSettings
     /// <summary>
     /// Sets the function to retrieve tenant IDs asynchronously.
     /// </summary>
-    public TenantSettings WithTenantProvider(Func<CancellationToken, ValueTask<int[]>> getTenantIds)
+    public void WithTenantProvider(Func<CancellationToken, ValueTask<int[]>> getTenantIds)
     {
         ArgumentNullException.ThrowIfNull(getTenantIds);
         GetTenantIds = getTenantIds;
         _explicitSourceSet = true;
         // An explicit provider is authoritative: it must not fall through to plug-service
         // auto-detection (which would ignore the provider and return []).
-        return WithNoAutoDetect();
+        WithNoAutoDetect();
     }
 
     /// <summary>
     /// Sets the interface to retrieve tenant IDs asynchronously.
     /// </summary>
-    public TenantSettings WithTenantSource(ITenantSource source)
+    public void WithTenantSource(ITenantSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
         GetTenantIds = source.GetTenantIds;
         _explicitSourceSet = true;
         // An explicit source is authoritative: it must not fall through to plug-service
         // auto-detection (which would ignore the source and return []).
-        return WithNoAutoDetect();
+        WithNoAutoDetect();
     }
 
     /// <summary>
     /// Sets static tenant IDs.
     /// </summary>
-    public TenantSettings WithTenantIds(params int[] tenantIds)
+    public void WithTenantIds(params int[] tenantIds)
     {
         ArgumentNullException.ThrowIfNull(tenantIds);
         GetTenantIds = _ => ValueTask.FromResult(tenantIds);
         _explicitSourceSet = true;
         // An explicit static list is authoritative: it must not fall through to
         // plug-service auto-detection (which would ignore the list and return []).
-        return WithNoAutoDetect();
+        WithNoAutoDetect();
     }
 
     /// <summary>
@@ -74,7 +74,7 @@ public sealed class TenantSettings
     /// <see cref="WithTenantProvider"/>. The two modes are mutually exclusive, so turning
     /// auto-detection on after an explicit source would silently ignore that source.
     /// </exception>
-    public TenantSettings WithAutoDetect()
+    public void WithAutoDetect()
     {
         if (_explicitSourceSet)
         {
@@ -85,12 +85,10 @@ public sealed class TenantSettings
         }
 
         AutoDetect = true;
-        return this;
     }
 
-    public TenantSettings WithNoAutoDetect()
+    public void WithNoAutoDetect()
     {
         AutoDetect = false;
-        return this;
     }
 }

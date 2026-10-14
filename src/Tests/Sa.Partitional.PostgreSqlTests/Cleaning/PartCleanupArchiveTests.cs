@@ -70,7 +70,7 @@ public class PartCleanupArchiveTests(PartCleanupArchiveTests.Fixture fixture) : 
     {
         DateTimeOffset migrated = await MigrateTest();
 
-        List<PartByRangeInfo> partsBefore = await GetPartRep().GetPartsFromDate("cleanup_archive", DateTimeOffset.UtcNow.AddDays(-100));
+        List<PartByRangeInfo> partsBefore = await GetPartRep().GetPartsFromDate("cleanup_archive", DateTimeOffset.UtcNow.AddDays(-100), TestContext.Current.CancellationToken);
         Assert.NotEmpty(partsBefore);
         int totalBefore = partsBefore.Count;
 

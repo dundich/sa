@@ -10,13 +10,15 @@ namespace Sa.Outbox.Tests;
 /// </summary>
 public class OutboxBulkWriterDefaultTests
 {
+    private static CancellationToken TestToken => TestContext.Current.CancellationToken;
+
     [Fact]
     public void InsertBulk_NullContext_ForwardsToContextlessOverload()
     {
         var fake = new FakeBulkWriter();
         IOutboxBulkWriter writer = fake;
 
-        ValueTask<ulong> task = writer.InsertBulk(Messages(), context: null);
+        ValueTask<ulong> task = writer.InsertBulk(Messages(), context: null, cancellationToken: TestToken);
 
         Assert.Equal(1UL, task.GetAwaiter().GetResult());
         Assert.Equal(1, fake.Calls);
@@ -30,7 +32,7 @@ public class OutboxBulkWriterDefaultTests
 
         Assert.Throws<NotSupportedException>(() =>
         {
-            _ = writer.InsertBulk(Messages(), context: "ctx");
+            _ = writer.InsertBulk(Messages(), context: "ctx", cancellationToken: TestToken);
         });
 
         Assert.Equal(0, fake.Calls);

@@ -44,7 +44,7 @@ public class ArchiveSqlTemplateTests(ArchiveSqlTemplateTests.Fixture fixture) : 
     {
         get
         {
-            ISqlTableBuilder builder = fixture.SqlBuilder["public.events"];
+            ISqlTableBuilder builder = fixture.SqlBuilder["public.events"]!;
             return builder.Settings;
         }
     }
@@ -54,7 +54,7 @@ public class ArchiveSqlTemplateTests(ArchiveSqlTemplateTests.Fixture fixture) : 
     [Fact]
     public void CacheCreate_CarriesArchivedColumn()
     {
-        ISqlTableBuilder builder = fixture.SqlBuilder["public.events"];
+        ISqlTableBuilder builder = fixture.SqlBuilder["public.events"]!;
 
         string sql = builder.CreateSql(FixedDate, "Moscow");
 

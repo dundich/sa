@@ -28,7 +28,8 @@ public class TenantSourceAuthoritativeTests
     [Fact]
     public async Task WithTenantIdsDisablesAutoDetect()
     {
-        var settings = new TenantSettings().WithTenantIds(1, 2, 3);
+        var settings = new TenantSettings();
+        settings.WithTenantIds(1, 2, 3);
 
         Assert.False(settings.AutoDetect);
     }
@@ -36,7 +37,8 @@ public class TenantSourceAuthoritativeTests
     [Fact]
     public async Task WithTenantSourceDisablesAutoDetect()
     {
-        var settings = new TenantSettings().WithTenantSource(new FakeDetector(42));
+        var settings = new TenantSettings();
+        settings.WithTenantSource(new FakeDetector(42));
 
         Assert.False(settings.AutoDetect);
     }
@@ -44,7 +46,8 @@ public class TenantSourceAuthoritativeTests
     [Fact]
     public async Task WithTenantProviderDisablesAutoDetect()
     {
-        var settings = new TenantSettings().WithTenantProvider(_ => ValueTask.FromResult(new[] { 7 }));
+        var settings = new TenantSettings();
+        settings.WithTenantProvider(_ => ValueTask.FromResult(new[] { 7 }));
 
         Assert.False(settings.AutoDetect);
     }
@@ -57,7 +60,9 @@ public class TenantSourceAuthoritativeTests
     [Fact]
     public async Task WithTenantIdsWinsOverAPresentDetector()
     {
-        var provider = Provider(new TenantSettings().WithTenantIds(1, 2, 3), new FakeDetector(999));
+        var settings = new TenantSettings();
+        settings.WithTenantIds(1, 2, 3);
+        var provider = Provider(settings, new FakeDetector(999));
 
         var ids = await provider.GetTenantIds(TestToken);
 
@@ -72,7 +77,9 @@ public class TenantSourceAuthoritativeTests
     public async Task WithTenantSourceWinsOverAPresentDetector()
     {
         var source = new FakeDetector(999);
-        var provider = Provider(new TenantSettings().WithTenantSource(source), new FakeDetector(1, 2, 3));
+        var settings = new TenantSettings();
+        settings.WithTenantSource(source);
+        var provider = Provider(settings, new FakeDetector(1, 2, 3));
 
         var ids = await provider.GetTenantIds(TestToken);
 
@@ -85,9 +92,9 @@ public class TenantSourceAuthoritativeTests
     [Fact]
     public async Task WithTenantProviderWinsOverAPresentDetector()
     {
-        var provider = Provider(
-            new TenantSettings().WithTenantProvider(_ => ValueTask.FromResult(new[] { 5, 6 })),
-            new FakeDetector(999));
+        var settings = new TenantSettings();
+        settings.WithTenantProvider(_ => ValueTask.FromResult(new[] { 5, 6 }));
+        var provider = Provider(settings, new FakeDetector(999));
 
         var ids = await provider.GetTenantIds(TestToken);
 
@@ -101,7 +108,9 @@ public class TenantSourceAuthoritativeTests
     [Fact]
     public async Task AutoDetectStillConsultsTheDetectorWhenEnabled()
     {
-        var provider = Provider(new TenantSettings().WithAutoDetect(), new FakeDetector(11, 22));
+        var settings = new TenantSettings();
+        settings.WithAutoDetect();
+        var provider = Provider(settings, new FakeDetector(11, 22));
 
         var ids = await provider.GetTenantIds(TestToken);
 
@@ -116,7 +125,9 @@ public class TenantSourceAuthoritativeTests
     [Fact]
     public async Task AutoDetectWithoutDetectorReturnsEmpty()
     {
-        var provider = Provider(new TenantSettings().WithAutoDetect());
+        var settings = new TenantSettings();
+        settings.WithAutoDetect();
+        var provider = Provider(settings);
 
         var ids = await provider.GetTenantIds(TestToken);
 
@@ -131,27 +142,35 @@ public class TenantSourceAuthoritativeTests
     [InlineData(0)]
     public async Task WithAutoDetectAfterExplicitSourceThrows(int _)
     {
-        Assert.Throws<InvalidOperationException>(() => new TenantSettings().WithTenantIds(1, 2, 3).WithAutoDetect());
+        var settings = new TenantSettings();
+        settings.WithTenantIds(1, 2, 3);
+
+        Assert.Throws<InvalidOperationException>(() => settings.WithAutoDetect());
     }
 
     [Fact]
     public async Task WithAutoDetectAfterTenantSourceThrows()
     {
-        Assert.Throws<InvalidOperationException>(
-            () => new TenantSettings().WithTenantSource(new FakeDetector(1)).WithAutoDetect());
+        var settings = new TenantSettings();
+        settings.WithTenantSource(new FakeDetector(1));
+
+        Assert.Throws<InvalidOperationException>(() => settings.WithAutoDetect());
     }
 
     [Fact]
     public async Task WithAutoDetectAfterTenantProviderThrows()
     {
-        Assert.Throws<InvalidOperationException>(
-            () => new TenantSettings().WithTenantProvider(_ => ValueTask.FromResult(new[] { 1 })).WithAutoDetect());
+        var settings = new TenantSettings();
+        settings.WithTenantProvider(_ => ValueTask.FromResult(new[] { 1 }));
+
+        Assert.Throws<InvalidOperationException>(() => settings.WithAutoDetect());
     }
 
     [Fact]
     public async Task WithAutoDetectStaysOpenWhenNoSourceSet()
     {
-        var settings = new TenantSettings().WithAutoDetect();
+        var settings = new TenantSettings();
+        settings.WithAutoDetect();
 
         Assert.True(settings.AutoDetect);
     }
