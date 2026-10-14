@@ -7,6 +7,14 @@
 public sealed class TenantSettings
 {
     /// <summary>
+    /// Tracks that an explicit tenant source (see <see cref="WithTenantIds"/>,
+    /// <see cref="WithTenantSource"/> or <see cref="WithTenantProvider"/>) has been set. Used to
+    /// reject <see cref="WithAutoDetect"/> once a source is authoritative, since the two modes are
+    /// mutually exclusive and a later call would silently ignore the source.
+    /// </summary>
+    private bool _explicitSourceSet;
+
+    /// <summary>
     /// Gets or sets a value indicating whether the system should automatically detect tenants
     /// by scanning incoming database messages
     /// </summary>
@@ -21,45 +29,66 @@ public sealed class TenantSettings
     /// <summary>
     /// Sets the function to retrieve tenant IDs asynchronously.
     /// </summary>
-    public TenantSettings WithTenantProvider(Func<CancellationToken, ValueTask<int[]>> getTenantIds)
+    public void WithTenantProvider(Func<CancellationToken, ValueTask<int[]>> getTenantIds)
     {
         ArgumentNullException.ThrowIfNull(getTenantIds);
         GetTenantIds = getTenantIds;
-        return this;
+        _explicitSourceSet = true;
+        // An explicit provider is authoritative: it must not fall through to plug-service
+        // auto-detection (which would ignore the provider and return []).
+        WithNoAutoDetect();
     }
 
     /// <summary>
     /// Sets the interface to retrieve tenant IDs asynchronously.
     /// </summary>
-    public TenantSettings WithTenantSource(ITenantSource source)
+    public void WithTenantSource(ITenantSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
         GetTenantIds = source.GetTenantIds;
-        return this;
+        _explicitSourceSet = true;
+        // An explicit source is authoritative: it must not fall through to plug-service
+        // auto-detection (which would ignore the source and return []).
+        WithNoAutoDetect();
     }
 
     /// <summary>
     /// Sets static tenant IDs.
     /// </summary>
-    public TenantSettings WithTenantIds(params int[] tenantIds)
+    public void WithTenantIds(params int[] tenantIds)
     {
         ArgumentNullException.ThrowIfNull(tenantIds);
         GetTenantIds = _ => ValueTask.FromResult(tenantIds);
-        return this;
+        _explicitSourceSet = true;
+        // An explicit static list is authoritative: it must not fall through to
+        // plug-service auto-detection (which would ignore the list and return []).
+        WithNoAutoDetect();
     }
 
     /// <summary>
-    /// Sets auto detect mode
+    /// Enables auto-detection mode.
     /// </summary>
-    public TenantSettings WithAutoDetect()
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when an explicit tenant source has already been set with
+    /// <see cref="WithTenantIds"/>, <see cref="WithTenantSource"/> or
+    /// <see cref="WithTenantProvider"/>. The two modes are mutually exclusive, so turning
+    /// auto-detection on after an explicit source would silently ignore that source.
+    /// </exception>
+    public void WithAutoDetect()
     {
+        if (_explicitSourceSet)
+        {
+            throw new InvalidOperationException(
+                "Auto-detection cannot be enabled after an explicit tenant source has been set " +
+                "(WithTenantIds, WithTenantSource or WithTenantProvider). The two modes are " +
+                "mutually exclusive — call one of them, or WithAutoDetect, but not both.");
+        }
+
         AutoDetect = true;
-        return this;
     }
 
-    public TenantSettings WithNoAutoDetect()
+    public void WithNoAutoDetect()
     {
         AutoDetect = false;
-        return this;
     }
 }

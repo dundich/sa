@@ -91,4 +91,27 @@ public interface IPartRepository
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of partitions dropped.</returns>
     Task<int> DropPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Archives all partitions whose <see cref="PartByRangeInfo.FromDate"/> is less than or equal to
+    /// <paramref name="toDate"/>: each one is detached from its parent and moved — under the same name —
+    /// into <paramref name="archiveSchemaName"/>, and its metadata row is marked as archived instead of
+    /// being deleted. Already archived rows are not returned by the underlying query, so a repeated run
+    /// is a no-op.
+    /// </summary>
+    /// <remarks>
+    /// Requires PostgreSQL 13+ (<c>DETACH PARTITION CONCURRENTLY</c> is 12+, but moving a partition to
+    /// another schema is 13+). The archive schema is created when missing. The archived table keeps its
+    /// name, so all modules sharing an archive schema need distinct table names.
+    /// </remarks>
+    /// <param name="tableName">The root table name.</param>
+    /// <param name="toDate">Upper-bound date — partitions up to and including this date will be archived.</param>
+    /// <param name="archiveSchemaName">The schema the detached partitions are moved into.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>The number of partitions archived.</returns>
+    Task<int> ArchivePartsToDate(
+        string tableName,
+        DateTimeOffset toDate,
+        string archiveSchemaName,
+        CancellationToken cancellationToken = default);
 }

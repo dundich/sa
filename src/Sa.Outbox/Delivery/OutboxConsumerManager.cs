@@ -12,6 +12,48 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
     private readonly Dictionary<string, List<Action<OutboxConsumerSettings>>> _listeners = [];
     private readonly Lock _lock = new();
 
+    /// <summary>
+    /// Creates an empty manager (no delivery groups). Used by unit tests and anywhere a manager
+    /// is constructed directly rather than through DI.
+    /// </summary>
+    internal OutboxConsumerManager()
+    {
+    }
+
+    /// <summary>
+    /// DI entry point: pre-populates the manager with the per-group registration descriptors
+    /// contributed by <c>AddDeliveryJob</c>.
+    /// <para>
+    /// For each group the stage-1 snapshot (built at registration time from
+    /// <see cref="OutboxDefaults"/> and the user <c>configure</c> callback, without the
+    /// configuration section) is registered first — so the group is known the moment the manager
+    /// is resolved, even before the scheduler starts. The full chain is then built with a live
+    /// provider (configuration section included, when a key was given) and, when it differs from
+    /// the stage-1 snapshot, swapped in via <see cref="Apply(string, Func{OutboxConsumerSettings,
+    /// OutboxConsumerSettings})"/> — which also runs the final <see cref="OutboxConsumerSettings.
+    /// ThrowIfInvalid()"/> validation over the fully-composed settings.
+    /// </para>
+    /// <para>
+    /// A group that is already known (e.g. two delivery registrations sharing one group id) is
+    /// left as-is — the first registration wins, exactly as <see cref="TryRegister(string,
+    /// OutboxConsumerSettings)"/> guarantees elsewhere.
+    /// </para>
+    /// </summary>
+    internal OutboxConsumerManager(
+        IEnumerable<DeliveryGroupSettingsRegistration> registrations,
+        IServiceProvider sp)
+    {
+        foreach (var registration in registrations)
+        {
+            if (!TryRegister(registration.ConsumerGroupId, registration.RegistrationTimeSettings))
+                continue;
+
+            OutboxConsumerSettings full = registration.BuildFull(sp);
+            if (full != registration.RegistrationTimeSettings)
+                Apply(registration.ConsumerGroupId, _ => full);
+        }
+    }
+
     /// <inheritdoc/>
     public bool TryRegister(string consumerGroupId, OutboxConsumerSettings settings)
     {

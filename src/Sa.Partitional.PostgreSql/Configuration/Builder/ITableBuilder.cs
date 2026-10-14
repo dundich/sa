@@ -71,6 +71,31 @@ public interface ITableBuilder
     ITableBuilder WithPartTablePostfix(string postfix);
 
     /// <summary>
+    /// Enables an optional <c>DEFAULT</c> partition at every partitioning level, so rows that do not
+    /// match any explicitly created partition are kept instead of rejected.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A catch-all is created under the root and under each list prefix (for example
+    /// <c>{table}{partSeparator}def$</c>, <c>{table}{partSeparator}FR{partSeparator}def$</c>),
+    /// plus one under the deepest list prefix for dates outside the created ranges. Each is a plain
+    /// leaf: it is not itself further partitioned.
+    /// </para>
+    /// <para>
+    /// PostgreSQL refuses to create a partition while an existing <c>DEFAULT</c> holds rows that would
+    /// belong to it (<c>updated partition constraint for default partition would be violated by some
+    /// row</c>). When this option is on, the migration moves those rows out of the default into a
+    /// transaction-scoped staging table, creates the partition, and moves them back — so a catch-all
+    /// that already holds data does not block later migrations.
+    /// </para>
+    /// <para>
+    /// A list value literally named <c>def$</c> would collide with the generated name.
+    /// </para>
+    /// </remarks>
+    /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
+    ITableBuilder WithDefaultPartition();
+
+    /// <summary>
     /// Registers a callback that produces extra SQL to run after the root-table <c>CREATE TABLE</c> statement.
     /// </summary>
     /// <param name="postSql">A factory producing the SQL fragment.</param>

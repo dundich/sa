@@ -12,9 +12,10 @@ internal sealed class S3FileStorage(
 {
     private const string SchemeSeparator = "://";
 
-    // The options reach this type only via Setup.AddSaS3FileStorage, which calls
-    // S3FileStorageOptions.Validate() first, so Basket is a non-empty validated word and the
-    // previous IsNullOrWhiteSpace fallback to "share" was unreachable.
+    // The options reach this type only via Setup.AddSaS3FileStorage, whose ValidateOnStart() +
+    // IValidateOptions<S3FileStorageOptions> make Basket a non-empty validated word, and the
+    // pipeline only hands over a fully validated instance. The previous IsNullOrWhiteSpace
+    // fallback to "share" was unreachable.
     private readonly string _pathPrefix = options.Basket;
     private readonly string _schemePrefix = $"{options.StorageType}{SchemeSeparator}";
     private readonly string _storageType = options.StorageType;

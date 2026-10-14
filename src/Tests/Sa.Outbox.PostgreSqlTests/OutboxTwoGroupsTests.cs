@@ -57,19 +57,23 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
 
                         .AddDeliveryScoped<SomeMessageConsumerGr1, SomeMessage>("test_gr1", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(100))
+                            // StartImmediately: the old delivery pre-seed did this implicitly; the
+                            // default InitialDelay is 10s, beyond this test's wait budget.
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(100))
                              .WithNoBatchingWindow();
                         })
                         .AddDelivery<SomeMessageConsumerGr2, SomeMessage>("test_gr2", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(100))
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(100))
                              .WithNoBatchingWindow();
                         })
                     )
                 )
                 .AddSaOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.WithDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
+                    cfg.WithDataSource(c => c.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)));
                     cfg.WithOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "test_gr";
@@ -90,7 +94,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
         SomeMessageConsumerGr1.Counter = 0;
         SomeMessageConsumerGr2.Counter = 0;
 
-        var scheduler = ServiceProvider.GetRequiredService<IScheduler>();
+        var scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
         int startedSchedules = await scheduler.Start(CancellationToken.None);
         Assert.True(startedSchedules >= 2, "Ожидалось как минимум 2 расписания (по одному на группу)");
 

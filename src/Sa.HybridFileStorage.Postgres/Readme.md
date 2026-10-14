@@ -10,8 +10,9 @@ PostgreSQL-backed file storage provider for `Sa.HybridFileStorage`. Stores files
 - [File ID Format](#file-id-format)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+  - [Several keyed storages](#several-keyed-storages)
+  - [Reusing an NpgsqlDataSource](#reusing-an-npgsqldatasource)
   - [Without DI](#without-di)
-  - [With DI](#with-di)
 - [CRUD Examples](#crud-examples)
 - [Partitioning](#partitioning)
 - [Scheduled Maintenance](#scheduled-maintenance)
@@ -24,7 +25,9 @@ PostgreSQL-backed file storage provider for `Sa.HybridFileStorage`. Stores files
 
 `PostgresFileStorage` implements `IFileStorage` backed by PostgreSQL. File binary data is stored as `BYTEA` columns in a partitioned table. Key characteristics:
 
+- **Keyed registration** — every registration owns its table, its settings, its migration and its cleanup schedule; several independent storages coexist in one container
 - **Automatic partitioning** — declarative list + range partitioning via `Sa.Partitional.PostgreSql`
+- **Automatic data source** — a chained `AddDataSource(...)` is optional: without one the storage reuses the default `IPgDataSource` or an already-registered `NpgsqlDataSource`
 - **Upsert semantics** — `ON CONFLICT DO UPDATE` handles re-uploads transparently
 - **Scheduled migrations** — background job pre-creates future partitions
 - **Background cleanup** — drops old partitions beyond retention period
@@ -60,33 +63,92 @@ This package depends on `Sa.Data.PostgreSql` and `Sa.Partitional.PostgreSql`.
 
 ## Quick Start
 
-The provider is registered with `AddSaPostgreSqlFileStorage`, and the data source is
-configured on the returned `IPartConfiguration`:
+Registration is **keyed**: every call takes a registration key, and each key produces an
+independent storage with its own options (its own `TableName`, retention and partition
+settings), its own partitional module, and its own keyed `IFileStorage`. The same instance is
+also aliased as an *unkeyed* `IFileStorage`, which is what the hybrid container collects into
+the failover chain — several keyed storages are tried in registration order and the first
+success ends the operation.
 
 ```csharp
 using Sa.HybridFileStorage.Postgres;
 
-builder.Services.AddSaPostgreSqlFileStorageChained(options =>
+// One storage per key, each owning its table.
+builder.Services.AddSaPostgreSqlFileStorageChained("files", b => b
+    .Options(ob => ob.Configure(o =>
     {
-        options.TableName = "files";
-        options.StorageType = "pg";
-        options.Basket = "share";
-        options.ExpireDays = 365 * 3;                // drop partitions after 3 years
-    })
+        o.TableName = "files";
+        o.StorageType = "pg";
+        o.Basket = "share";
+        o.ExpireDays = 365 * 3;               // drop this storage's partitions after 3 years
+    })))
     .AddDataSource(ds => ds
-        .WithConnectionString("Host=localhost;Database=mydb;Username=postgres;Password=password"));
+        .Options(ob => ob.Configure(o => o.ConnectionString =
+            "Host=localhost;Database=mydb;Username=postgres;Password=password")));
 ```
 
-When the data source is already registered by something else, use the non-chaining overload:
+**`TableName` is required and unique.** It has no default: every registration must name the table
+it owns, and two registrations may not declare the same table — they would both run migration and
+cleanup over one physical table, so the collision is rejected at startup.
+
+When the data source is already registered by something else, skip the chaining overload — the
+storage resolves it automatically (see [Reusing an NpgsqlDataSource](#reusing-an-npgsqldatasource)):
 
 ```csharp
-builder.Services.AddSaPostgreSqlFileStorage(options =>
-{
-    options.TableName = "binary_data";
-    options.SchemaName = "storage";
-    options.PgPartBy = PgPartBy.Month;
-});
+builder.Services.AddSaPostgreSqlFileStorage("binary", b => b
+    .Options(ob => ob.Configure(o =>
+    {
+        o.TableName = "binary_data";
+        o.SchemaName = "storage";
+        o.PartByRange = PartByRange.Month;
+    })));
 ```
+
+Resolve a specific storage by key, or let the hybrid pipeline collect all of them:
+
+```csharp
+IFileStorage files  = sp.GetRequiredKeyedService<IFileStorage>("files");
+IFileStorage binary = sp.GetRequiredKeyedService<IFileStorage>("binary");
+
+// `sp.GetServices<IFileStorage>()` returns one instance per registration,
+// in registration order — the order the hybrid failover chain tries them.
+```
+
+### Reusing an NpgsqlDataSource
+
+A chained `AddDataSource(...)` is optional. When no data source is configured for the storage,
+it resolves one in this order:
+
+1. a keyed `IPgDataSource` under this registration's module key (the chained `AddDataSource`);
+2. the default (unkeyed) `IPgDataSource`, if `AddSaPostgreSqlDataSource(...)` was called;
+3. an `NpgsqlDataSource` already registered in the container — e.g. via
+   `Npgsql.DependencyInjection`'s `AddNpgsqlDataSource(...)` or
+   `services.AddSingleton<NpgsqlDataSource>(...)` — wrapped so it **reuses the same connection
+   pool** and is never disposed by the storage.
+
+```csharp
+// The app already owns a pool; the storage rides on it — no connection string here at all.
+builder.Services.AddNpgsqlDataSource("Host=db.internal;Database=mydb;Username=u;Password=p");
+builder.Services.AddSaPostgreSqlFileStorage("files", b => b
+    .Options(ob => ob.Configure(o => o.TableName = "files")));
+```
+
+With no `IPgDataSource` and no `NpgsqlDataSource` at all, resolving the storage fails with an
+`InvalidOperationException` naming both missing registrations.
+
+### Without DI
+
+```csharp
+var storage = new PostgresFileStorage(
+    dataSource: IPgDataSource.Create("Host=localhost;Database=mydb;..."),
+    partManager: /* an IPartitionManager for the table, e.g. from Sa.Partitional.PostgreSql */,
+    streamManager: new RecyclableMemoryStreamManager(),
+    options: new PostgresFileStorageOptions { TableName = "files" },
+    timeProvider: TimeProvider.System);
+```
+
+> The DI registration is the intended path: it wires the partitional module (its migration and
+> cleanup schedules) automatically. The constructor alone skips that wiring.
 
 ### Schema resolution
 
@@ -94,26 +156,32 @@ builder.Services.AddSaPostgreSqlFileStorage(options =>
 order:
 
 1. the explicit `SchemaName`, if set;
-2. the first entry of the connection string's search path
+2. the first entry of the resolved data source's search path
    (`...;Search Path=storage,public` → `storage`);
 3. `public`.
 
 `GetSearchPath()` parses the connection string, so no database round trip is involved.
 
-### Options are validated at registration
+### Validation timing
 
-`AddSaPostgreSqlFileStorage` throws `ArgumentException` before registering anything if:
+Validation runs through the standard options pipeline — at the **first read** of the options (the
+storage, the DDL or the schema resolver materialises them), or at host start with
+`ValidateOnStart()`:
 
-| Property | Requirement |
-|----------|-------------|
-| `TableName`, `SchemaName` | bare SQL identifier: `[A-Za-z_][A-Za-z0-9_]*`, at most 63 characters |
-| `StorageType` | at most 10 characters, no `:`, `/` or `\` (it becomes the file ID scheme) |
-| `Basket` | 3–63 characters, starts with a letter or `_`, no path separator |
-| `ExpireDays`, `MigrationScheduleForwardDays` | `>= 1` |
+| Problem | Failure |
+|---------|---------|
+| `TableName`, `SchemaName` not a bare SQL identifier (`[A-Za-z_][A-Za-z0-9_]*`, ≤ 63 chars) | `OptionsValidationException` naming the property |
+| `TableName` empty/not set | `OptionsValidationException` |
+| `StorageType` > 10 chars, or containing `:`, `/` or `\` (it becomes the file ID scheme) | `OptionsValidationException` |
+| `Basket` outside 3–63 chars, not starting with a letter/`_`, or containing a path separator | `OptionsValidationException` |
+| `ExpireDays`, `MigrationScheduleForwardDays` `< 1` | `OptionsValidationException` |
+| Two registrations declaring the same `TableName` | `OptionsValidationException` naming both keys |
+| A second registration with the same **key** | `InvalidOperationException` at registration |
+| `key` null/empty/whitespace | `ArgumentException` at registration |
 
-`TableName` is used both for the DDL and for every query, so it is rejected rather than
-quietly rewritten — `"\"files\""` used to be silently trimmed, which produced a table the
-provider then failed to find.
+`TableName` is used both for the DDL and for every query, so it is rejected rather than quietly
+rewritten — `"\"files\""` used to be silently trimmed, which produced a table the provider then
+failed to find.
 
 ---
 
@@ -175,10 +243,10 @@ await storage.DownloadAsync(result.FileId, async (stream, token) =>
 var metadata = await storage.GetMetadataAsync(result.FileId, ct);
 if (metadata != null)
 {
-    Console.WriteLine($"Корзина: {metadata.Basket}");       // files
-    Console.WriteLine($"Тенант: {metadata.TenantId}");       // 42
-    Console.WriteLine($"Имя: {metadata.FileName}");          // hello.txt
-    Console.WriteLine($"Тип: {metadata.StorageType}");       // pg
+    Console.WriteLine($"Basket: {metadata.Basket}");          // files
+    Console.WriteLine($"Tenant: {metadata.TenantId}");        // 42
+    Console.WriteLine($"Name:   {metadata.FileName}");        // hello.txt
+    Console.WriteLine($"Type:   {metadata.StorageType}");     // pg
 }
 ```
 
@@ -220,15 +288,16 @@ CREATE TABLE public.files (
 
 ### Partition strategies
 
-| Strategy | `PgPartBy` value | Use case |
+| Strategy | `PartByRange` value | Use case |
 |----------|------------------|----------|
-| Day | `PgPartBy.Day` | High-volume systems, fine-grained cleanup |
-| Month | `PgPartBy.Month` | Medium volume, balanced granularity |
-| Year | `PgPartBy.Year` | Low volume, simple management |
+| Day | `PartByRange.Day` | High-volume systems, fine-grained cleanup |
+| Month | `PartByRange.Month` | Medium volume, balanced granularity |
+| Year | `PartByRange.Year` | Low volume, simple management |
 
 ### Migration schedule
 
-New partitions are pre-created in advance (default: 2 days ahead) via a background job:
+Every registration configures its **own** migration schedule. New partitions are pre-created in
+advance (default: `MigrationScheduleForwardDays = 2`) via a background job:
 
 ```csharp
 options.MigrationScheduleForwardDays = 2;
@@ -236,24 +305,26 @@ options.MigrationScheduleForwardDays = 2;
 
 ### Cleanup schedule
 
-Old partitions beyond the retention period are dropped via a background job:
+Every registration configures its **own** cleanup schedule: old partitions beyond the
+registration's retention period are dropped:
 
 ```csharp
-options.ExpireDays = 365 * 3;  // drop partitions older than 3 years
+options.ExpireDays = 365 * 3;  // drop this storage's partitions older than 3 years
 ```
 
 ---
 
 ## Scheduled Maintenance
 
-Two background jobs are registered automatically:
+Each registration registers its own two background jobs:
 
 | Job | Purpose | Configuration |
 |-----|---------|--------------|
-| **Migration** | Pre-create upcoming partitions | `forwardDays`, `asBackgroundJob` |
-| **Cleanup** | Drop old partitions after retention | `dropPartsAfterRetention` (TimeSpan) |
+| **Migration** | Pre-create this storage's upcoming partitions | `forwardDays`, `asBackgroundJob` |
+| **Cleanup** | Drop this storage's old partitions after its retention | `dropPartsAfterRetention` (TimeSpan) |
 
-Both run as background hosted services and use the same PostgreSQL connection pool.
+Both run as background hosted services and use the same PostgreSQL connection pool as the
+storage.
 
 ---
 
@@ -264,11 +335,11 @@ Both run as background hosted services and use the same PostgreSQL connection po
 | Property | Description | Default |
 |----------|-------------|---------|
 | `SchemaName` | PostgreSQL schema; `null` means auto-detect (see above) | `null` → search path / `public` |
-| `TableName` | Table name for file data | `"files"` |
+| `TableName` | Table name for file data — **required**, unique per registration | — |
 | `StorageType` | Scheme prefix in File ID | `"pg"` |
 | `Basket` | Scope/container name (used as list partition key) | `"share"` |
 | `IsReadOnly` | Prevent write/delete operations | `false` |
-| `PgPartBy` | Range partitioning granularity | `PgPartBy.Day` |
+| `PartByRange` | Range partitioning granularity | `PartByRange.Day` |
 | `MigrationScheduleForwardDays` | Days ahead to pre-create partitions | `2` |
 | `ExpireDays` | Retention period before partition drop (days) | `365 * 3` |
 
@@ -276,21 +347,24 @@ Both run as background hosted services and use the same PostgreSQL connection po
 
 | Method | Description |
 |--------|-------------|
-| `AddSaPostgreSqlFileStorage(Action<PostgresFileStorageOptions>?)` | Register the provider; returns the service collection |
-| `AddSaPostgreSqlFileStorage(PostgresFileStorageOptions)` | Same, from a prepared instance (copied, not retained) |
-| `AddSaPostgreSqlFileStorageChained(Action<PostgresFileStorageOptions>?)` | Same, returns `IPartConfiguration` for `.AddDataSource(...)` |
+| `AddSaPostgreSqlFileStorage(string key, Action<IPostgresFileStorageBuilder>?)` | Register a keyed provider; returns the service collection |
+| `AddSaPostgreSqlFileStorage(string key, PostgresFileStorageOptions)` | Same, from a prepared instance (copied, not retained) |
+| `AddSaPostgreSqlFileStorage(string key, IOptions<PostgresFileStorageOptions>)` | Same, from a ready-made options instance |
+| `AddSaPostgreSqlFileStorageChained(string key, Action<IPostgresFileStorageBuilder>?)` | Same, returns `IPartConfiguration` for `.AddDataSource(...)` |
 
-Registration is idempotent: a repeated call with equal options is a no-op, a call with
-different options throws `InvalidOperationException` rather than duplicating the
-partitioning setup, the schedules and the `IFileStorage`.
+Registration keys must be unique per collection: a second call with the same key throws
+`InvalidOperationException` — it would collide on the named options instance, the keyed
+partitional module and the keyed `IFileStorage`.
 
 ### DI services
 
 | Service | Purpose |
 |---------|---------|
-| `IFileStorage` | The provider itself (singleton) |
+| `IFileStorage` (keyed by registration key) | The provider itself (singleton per key) |
+| `IFileStorage` (unkeyed) | One alias per registration — what the hybrid container orders into the failover chain |
+| `PostgresFileStorageOptions` (named by the registration key) | The storage's live options; read via `IOptionsMonitor<...>.Get(key)` |
 | `RecyclableMemoryStreamManager` | Buffering for non-seekable streams (singleton, shared) |
-| `IPartitionManager` | Partition maintenance, from `Sa.Partitional.PostgreSql` |
+| `IPartitionManager` (keyed) | This storage's partition maintenance, from `Sa.Partitional.PostgreSql` |
 | `TimeProvider` | Defaults to `TimeProvider.System`; register your own to control `UploadedAt` |
 
 ---

@@ -13,7 +13,7 @@
 | **Back-pressure** | `BoundedChannel` — стратегия `Enqueue` при полном буфере: `Wait` (по умолчанию, блокирует) • `Skip` (возвращает `false`) • `Throw` (`SaWorkQueueFullException`); плюс неблокирующий `TryEnqueue` и пакетный `EnqueueMany` | [Стратегии Enqueue](#стратегии-enqueue) |
 | **Порядок отмены читателей** | `Lifo` • `Fifo` • `RoundRobin` • `Random` — выберите, каких читателей отменять при уменьшении лимита | [Порядок отмены читателей](#порядок-отмены-читателей) |
 | **Режимы отмены** | `Hard` (по умолчанию) или `Soft` — как обрабатывается in-flight работа при удалении читателей | [Режимы отмены читателей](#режимы-отмены-читателей) |
-| **DI-интеграция** | Регистрация через `AddSaWorkQueue<TProcessor, TInput>` или делегатную `AddSaWorkQueue<TInput>` | [Быстрый старт](#быстрый-старт) |
+| **DI-интеграция** | `AddSaWorkQueue<TInput>` с `IWorkQueueBuilder` (процессор + колбэки) и настройками из `appsettings` через `Microsoft.Extensions.Options` | [Быстрый старт](#быстрый-старт) |
 | **Корректное завершение** | `ShutdownAsync`, `DisposeAsync` — идемпотентно и потокобезопасно | [Важные заметки](#-важные-заметки) |
 | **Стратегии ошибок** | Обработка сбоев элемента: `Continue`, `StopReader` или `ShutdownQueue` (по умолчанию) | [Стратегии обработки ошибок](#стратегии-обработки-ошибок) |
 | **Обратные вызовы статусов** | Отслеживайте жизненный цикл: `Running` → `Completed` / `Faulted` / `Cancelled` / `Aborted` / `Skipped` | [Жизненный цикл статусов](#жизненный-цикл-статусов) |
@@ -40,16 +40,28 @@ public sealed class OrderWork(ILogger<OrderWork> logger) : ISaWork<OrderInput>
 ### 2️⃣ Зарегистрируйте в DI
 
 ```csharp
-builder.Services.AddSaWorkQueue<OrderWork, OrderInput>((sp, opts) =>
-    opts
-        .WithConcurrencyLimit(4)
-        .WithQueueCapacity(100)
-        .WithMaxConcurrency(16)
+builder.Services.AddSaWorkQueue<OrderInput>(
+    configure: b => b
+        .UseProcessor<OrderWork>()
         .WithReaderCancellationOrder(SaReaderCancellationOrder.RoundRobin)
         .WithStatusCallback((input, status, ex) =>
         {
             // logger.LogDebug("Заказ {Id} → {Status}", input.OrderId, status);
-        }));
+        })
+        .FromConfiguration("WorkQueue"));
+```
+
+Сериализуемая половина (ёмкость, параллелизм, стратегии, таймауты) может жить в
+`appsettings` — см. [Конфигурация из appsettings](#конфигурация-из-appsettings-microsoftextentsoptions).
+Если колбэку нужны сервисы из контейнера — используйте escape hatch `Configure` builder'а:
+
+```csharp
+b.Configure((sp, opts) =>
+{
+    var log = sp.GetRequiredService<ILogger<OrderWork>>();
+    return opts.WithStatusCallback((input, status, _) =>
+        log.LogInformation("Заказ {Id} → {Status}", input.OrderId, status));
+})
 ```
 
 ### 3️⃣ Используйте через внедрение
@@ -107,6 +119,67 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(async (input, ct) => {
     await ProcessAsync(input, ct);
 });
 ```
+
+---
+
+## Конфигурация из appsettings (Microsoft.Extensions.Options)
+
+Сериализуемая половина очереди живёт в `SaWorkQueueSettings` и проходит через стандартный
+конвейер опций — привяжите секцию через `.FromConfiguration(...)`:
+
+```json
+{
+  "WorkQueue": {
+    "ConcurrencyLimit": 4,
+    "QueueCapacity": 100,
+    "MaxConcurrency": 16,
+    "SingleWriter": false,
+    "EnqueueStrategy": "Wait",
+    "ReaderCancelMode": "Hard",
+    "ReaderCancellationOrder": "RoundRobin",
+    "ShutdownTimeout": "00:00:30"
+  }
+}
+```
+
+```csharp
+builder.Services.AddSaWorkQueue<OrderInput>(
+    b => b
+        .UseProcessor<OrderWork>()
+        .FromConfiguration("WorkQueue"));
+```
+
+Тот же делегат владеет и конвейером настроек — `.Options(...)` отдаёт стандартный
+`OptionsBuilder<SaWorkQueueSettings>`, так что для всего один канал конфигурации:
+
+```csharp
+builder.Services.AddSaWorkQueue<OrderInput>(
+    b => b
+        .UseProcessor<OrderWork>()
+        .WithQueueCapacity(64)                      // кодовый дефолт — его перебивает конфиг
+        .FromConfiguration("WorkQueue")             // привязка секции — важнее кода
+        .Options(o => o                             // escape hatch — перебивает конфиг
+            .Configure(x => x.ConcurrencyLimit = 4)
+            .Validate(x => x.QueueCapacity > 0, "QueueCapacity must be positive")));
+```
+
+Что стоит знать:
+
+- **Один именованный экземпляр опций на тип элемента** (`typeof(TInput).FullName`), поэтому
+  очереди разных типов в одном контейнере привязываются к разным секциям и не видят значений
+  друг друга.
+- **Приоритет.** Конвейер идёт в порядке: кодовые дефолты `With*` из builder'а →
+  `BindConfiguration` → действия `Options(...)` builder'а → валидация. Биндер перезаписывает
+  только присутствующие в секции ключи, поэтому **конфигурация побеждает код**, а всё, о чём
+  секция молчит, остаётся кодовым значением; `Configure` внутри `Options(...)` (и queue-level
+  `Configure` builder'а, выполняющийся на resolve) перебивает конфигурацию.
+- **Валидация.** `SaWorkQueueSettingsValidator` (`IValidateOptions`, AOT-совместим) проверяет
+  те же правила, что и конструктор очереди, — `QueueCapacity` ≥ 1, `ConcurrencyLimit` ≥ 0,
+  `MaxConcurrency` ≥ 0, положительный `ShutdownTimeout`, — а `ValidateOnStart()` превращает
+  неверную секцию в `OptionsValidationException` при старте хоста, а не посреди работы.
+- **Снапшот.** Настройки читаются один раз — при создании очереди; перезагрузка конфигурации
+  не трогает работающую очередь. `ConcurrencyLimit` и так остаётся изменяемым на лету через
+  свойство очереди.
 
 ---
 
@@ -320,11 +393,11 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 6. **`ConcurrencyLimit = 0`**: приостанавливает всю обработку (отменяет всех читателей; в `Soft`-режиме текущие items сначала доделываются). Верните положительное значение для возобновления. Пока **работающая** очередь на паузе с ожидающей работой, `WaitForIdleAsync` возвращается немедленно (или бросает `InvalidOperationException` при `failIfNoProgress: true`). Это уточнение несёт смысл: очередь, которая была на паузе, а затем **остановлена**, сообщает `Stopped`, и ожидание навешивается на разгребание shutdown вместо этого — разгребанию читатель не нужен, поэтому пауза, переставшая быть причиной, не может быть и ответом. `QueuePaused` говорит об этом сам: он советует поднять `ConcurrencyLimit`, а на остановленной очереди это присваивание ничего не делает. Обратите внимание: аварийная потеря всех читателей (`ForceCancelReaders`, срабатывания `StopReader`) — это **не** пауза, но ожидание там тоже возвращается рано: пустой пул не может опуститься сам; верните `ConcurrencyLimit`, чтобы запустить новых читателей. Ранний возврат логируется как предупреждение, потому что это не тот же ответ, что «простой». Со стороны продюсера: `Enqueue` в режиме `Wait` паркуется при полном буфере — в том числе на паузе. Освобождают его три вещи: положительный `ConcurrencyLimit`, shutdown и собственный токен вызывающего. Это намеренно, а не дефект — парковка и ограничивает продюсера, а отказ от элемента превратил бы паузу в потерю данных. После того как очередь **остановлена или освобождена**, присваивание `ConcurrencyLimit` ничего не делает, а геттер продолжает возвращать лимит, на котором очередь остановлена, — присвоить 4 и прочитать обратно 4 значило бы заявить о четырёх ридерах, которых не будет. Исключения нет: присваивание выражает намерение, а ответ на вопрос «есть ли пул, который можно переразмерить» — `IsEnabled`.
 7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: аварийная остановка — мгновенно отменяет все reader-задачи. Синхронная версия ожидает до `ShutdownTimeout` (по умолч. 30с) завершения читателей; асинхронная принимает опциональный `TimeSpan? timeout`. Элементы, оставшиеся в буфере, отбрасываются и сообщаются как `Faulted` с причиной «читатели принудительно отменены» (сама очередь остаётся активной — текст не должен утверждать о shutdown, которого не было). После вызова восстановите параллелизм установкой `ConcurrencyLimit = X` для запуска новых читателей.
    **Одно исключение:** если `ForceCancelReadersAsync` получил `timeout` и он истёк (или отменили `ct`), буфер **сохраняется** — эти элементы никто не отклонял, и перевосстановленный пул может их взять. Пишется предупреждение, исключение перебрасывается (вызывающий узнаёт, что ожидание истекло), а `IsIdle()` остаётся `false` до дренажа буфера. `WaitForIdleAsync`, сдавшийся по этой причине, тоже пишет предупреждение с указанием причины, поэтому он никогда не противоречит `IsIdle()`.
-8. **Делегатная регистрация**: `AddSaWorkQueue<TInput>(configureOptions)` принимает фабрику, возвращающую `SaWorkQueueOptions<TInput>`, позволяя регистрировать очередь без класса `ISaWork<TInput>`.
+8. **Источники процессора**: процессор приходит из builder'а — `UseProcessor<TProcessor>()` (регистрируется в контейнере, если отсутствует), `UseProcessor(instance)` или `WithProcess(delegate)` — с фолбэком на зарегистрированный вручную `ISaWork<TInput>`, поэтому «голая» `AddSaWorkQueue<TInput>()` тоже работает. Очередь вовсе без процессора падает на первом resolve с `InvalidOperationException`, называющим оба варианта. Колбэкам, которым нужны сервисы из контейнера, — escape hatch builder'а `Configure((sp, opts) => ...)`; он выполняется на resolve. Захватывайте из него только синглтоны: очередь — синглтон, захваченный scoped-сервис жил бы вечно.
 9. **Возврат `Enqueue`**: `ValueTask<bool>` — `false` только в режиме `Skip` при полном буфере (элемент отброшен и сообщается как `Skipped` через `StatusChanged`). Остановленная/disposed очередь всегда бросает исключение; оно несётся `ValueTask` и раскрывается через `await`.
 10. **`AvailableCapacity`**: только информационно — свободные слоты буфера. Не влияет на `IsIdle()`.
 11. **Никогда из `Execute`**: не вызывайте `Shutdown`, `ShutdownAsync`, `ForceCancelReaders`, `ForceCancelReadersAsync`, `Dispose`/`DisposeAsync` из реализации `ISaWork<TInput>.Execute`: вызывающий читатель — одна из задач, на которые ждут эти методы, поэтому вызов блокируется на весь `ShutdownTimeout` (по умолч. 30с). Передайте работу фоновой задаче (например, `Task.Run`).
-12. **Валидация опций**: первичный конструктор `SaWorkQueueOptions<TInput>` публичен, поэтому его аргументы обходят guard-ы `With*`; конструктор `SaWorkQueue<TInput>` повторно валидирует и бросает `ArgumentOutOfRangeException` до создания канала — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, положительный `ShutdownTimeout`. `MaxConcurrency = 0` и `null` означают одно и то же — «кол-во ядер» (ровно то, что даёт `WithMaxConcurrency(0)`); отрицательное значение ничего не значит и отклоняется. Присваивание отрицательного `ConcurrencyLimit` после создания тоже бросает — молчаливый кламп в 0 дал бы очередь, навсегда приостановленную, но по-прежнему сообщающую `IsEnabled == true`. Клампом, а не ошибкой, обрабатывается только *положительное* значение выше `MaxConcurrency`.
+12. **Валидация опций**: первичный конструктор `SaWorkQueueOptions<TInput>` публичен, поэтому его аргументы обходят guard-ы `With*`; конструктор `SaWorkQueue<TInput>` повторно валидирует и бросает `ArgumentOutOfRangeException` до создания канала — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, положительный `ShutdownTimeout`. Те же правила раньше доходят до конфигурации через `SaWorkQueueSettingsValidator` и сообщаются как `OptionsValidationException` — при старте хоста (`ValidateOnStart()`) или на первом resolve очереди — а не как `ArgumentOutOfRangeException`. `MaxConcurrency = 0` и `null` означают одно и то же — «кол-во ядер» (ровно то, что даёт `WithMaxConcurrency(0)`); отрицательное значение ничего не значит и отклоняется. Присваивание отрицательного `ConcurrencyLimit` после создания тоже бросает — молчаливый кламп в 0 дал бы очередь, навсегда приостановленную, но по-прежнему сообщающую `IsEnabled == true`. Клампом, а не ошибкой, обрабатывается только *положительное* значение выше `MaxConcurrency`.
 
 ---
 

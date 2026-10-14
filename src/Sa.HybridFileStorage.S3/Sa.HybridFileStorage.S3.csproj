@@ -3,7 +3,7 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.15.0</Version>
+        <Version>0.16.0</Version>
         <Description>File storage management in S3</Description>
     </PropertyGroup>
 
@@ -22,6 +22,18 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Sa.HybridFileStorage.S3Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!--
+          Options + Options.ConfigurationExtensions дают AddOptions/Configure/PostConfigure/
+          IValidateOptions/ValidateOnStart и BindConfiguration. Источник конфигурации
+          (source-generated binder) включается в .NET SDK по умолчанию
+          (EnableConfigurationBindingGenerator), поэтому BindConfiguration не тянет reflection
+          и собирается под Native AOT.
+        -->
+        <PackageReference Include="Microsoft.Extensions.Options" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     </ItemGroup>
 
 </Project>

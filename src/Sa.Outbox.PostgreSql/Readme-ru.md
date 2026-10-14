@@ -37,7 +37,8 @@ IHost host = Host.CreateDefaultBuilder()
         // ② Подключение к PostgreSQL
         .AddSaOutboxUsingPostgreSql(cfg => cfg
             .WithDataSource(ds => ds
-                .WithConnectionString("Host=localhost;Database=outbox_db;Username=postgres;Password=postgres"))
+                .Options(ob => ob.Configure(o => o.ConnectionString =
+                    "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres")))
             .WithOutboxSettings((_, settings) =>
             {
                 settings.TableSettings.WithSchema("outbox");
@@ -90,6 +91,56 @@ public sealed class OrderConsumer : IConsumer<OrderCreated>
 
 ---
 
+## Публикация внутри транзакции вызывающего кода
+
+Обычно каждый `Publish(...)` пишет на собственном подключении и сразу коммитится (auto-commit).
+Когда запись в outbox должна закоммититься **атомарно** с вашими собственными изменениями в БД
+(классическая транзакционность outbox), публикуйте внутри `NpgsqlTransaction`, которым управляете вы:
+
+```csharp
+using Sa.Outbox.PostgreSql;      // PgOutboxPublishExtensions
+using Sa.Outbox.Publication;
+using Sa.Data.PostgreSql;        // IPgDataSource / PgTransaction
+
+// Транзакцию открывает базовый data source PostgreSQL:
+IPgDataSource dataSource = services.GetRequiredService<IPgDataSource>();
+await using PgTransaction sqlTx = await dataSource.BeginTransaction(ct);
+
+// Строки outbox уходят в транзакцию вызывающего кода:
+await publisher.Publish(events, tenantId: 1, sqlTx.Transaction, ct);
+
+// ... ваши собственные INSERT на sqlTx.Connection / sqlTx.Transaction ...
+
+await sqlTx.CommitAsync(ct);     // строки outbox становятся видимыми атомарно с вашими изменениями
+// -- dispose без commit (или RollbackAsync) откатывает всё, включая строки outbox
+```
+
+`PgOutboxPublishExtensions` добавляет перегрузки `Publish(...)` / `PublishSingle(...)`, принимающие
+`NpgsqlTransaction`. Тогда binary COPY выполняется на подключении этой транзакции, внутри неё,
+и **обходит слой автоматических повторов** — повторять поверх чужой или прерванной транзакции
+недопустимо, поэтому ошибки пробрасываются вызывающему коду.
+
+Если контекст не передан — работает обычный auto-commit. Специально **нет никакого ambient/implicit
+scope** — транзакция всегда передаётся явным аргументом.
+
+Проверки:
+
+- Транзакция обязана принадлежать **той же базе данных** (host / port / database), что и data source
+  outbox — чужая транзакция выбрасывает `InvalidOperationException` до записи чего-либо.
+- Подключение должно быть открытым, а транзакция — его собственной активной транзакцией; иначе
+  `InvalidOperationException`.
+
+> **Служебные записи** (`EnsureMsgParts`) всегда выполняются на собственном подключении outbox,
+> вне вашей транзакции, поэтому после отката публикации могут остаться пустая партиция (или строка
+> в реестре типов) — безвредный мусор, который убирают штатные задачи очистки.
+>
+> **Про блокировки:** пока ваша транзакция открыта и уже писала в партицию, DDL-партиционирование из
+> другой публикации на том же data source (например, первое сообщение нового тенанта) может ждать
+> завершения вашей транзакции. Коммитьте (или откатывайте) до того, как продолжите публиковать вне
+> транзакции.
+
+---
+
 ## Руководство по настройке
 
 Вся конфигурация разбивается на два вызова регистрации:
@@ -98,6 +149,13 @@ public sealed class OrderConsumer : IConsumer<OrderCreated>
 |---|---|
 | `AddSaOutbox(...)` | Ядро: тенанты, консьюмеры, расписание |
 | `AddSaOutboxUsingPostgreSql(...)` | PostgreSQL: подключение, таблицы, миграция, очистка |
+
+> **Изоляция.** Outbox регистрирует своё внутреннее расписание `Sa.Schedule` и свой модуль
+> `Sa.Partitional.PostgreSql` под ключом скопа `"outbox"` (`Sa.Outbox.OutboxScope.DefaultKey`) и
+> никогда не трогает расписание/партициальный модуль приложения по умолчанию. Оба входных метода
+> принимают необязательный последний параметр `scopeKey` — передайте одно и то же значение в
+> `AddSaOutbox` и `AddSaOutboxUsingPostgreSql`, чтобы перенести Outbox в другой скоп. Зарезервированный
+> ключ `"default"` отклоняется.
 
 ### 1. Настройка тенантов
 
@@ -144,6 +202,32 @@ public sealed class OrderConsumer : IConsumer<OrderCreated>
 )
 ```
 
+#### Настройки группы из конфигурации (`configurationKey`)
+
+Явные перегрузки `AddDelivery` / `AddDeliveryScoped` с `consumerGroupId` принимают опциональный `configurationKey` — путь к секции `IConfiguration` с настройками этой группы (биндится в `PgOutboxDeliveryOptions`; см. [Configuration/Readme-ru.md](Configuration/Readme-ru.md#pgoutboxdeliveryoptions)):
+
+```csharp
+.AddDeliveryScoped<OrderConsumer, OrderCreated>(
+    "cg_order_consumer",
+    (_, settings) => settings
+        .StartImmediately()
+        .WithMaxBatchSize(16),
+    configurationKey: "DeliveryGroups:cg_order_consumer")
+```
+
+Настройки группы складываются из трёх слоёв, от низшего к высшему:
+
+```
+OutboxDefaults  →  секция конфигурации (только если задан ключ)  →  callback configure
+```
+
+- **Ключ задан** — non-null значения секции вставляются между дефолтами и callback `configure`; частично заполненная секция переопределяет только то, что в ней названо.
+- **Ключа нет** — группа настраивается только `OutboxDefaults` + `configure`; совпадающая по имени секция (даже если существует) не читается.
+- Отсутствующая или пустая секция — no-op.
+- `Paused` — runtime-состояние (`IOutboxConsumerManager`), `AsSingleton` фиксируется тем, какой метод вы вызываете, а identность группы привязана к явному аргументу `consumerGroupId` — ни одно из них не берётся из секции.
+
+Достаточно, чтобы секция входила в `IConfiguration`, зарегистрированный в DI (например, appsettings.json при `Host.CreateDefaultBuilder`); провайдер читает её лениво при старте — изменение секции и рестарт и есть workflow конфигурации.
+
 #### Справочник настроек `OutboxConsumerSettingsBuilder`
 
 Единый fluent-билдер для всех параметров consumer group:
@@ -170,8 +254,8 @@ public sealed class OrderConsumer : IConsumer<OrderCreated>
 | `WithIterationDelay(span)` | 0 с | Задержка между итерациями |
 | `WithPerTenantTimeout(span)` | 0 | Таймаут обработки одного тенанта |
 | `WithPerTenantMaxDegreeOfParallelism(n)` | 1 | Параллельность по тенантам (1 = последовательно, -1 = все ядра) |
-| `WithSequentialProcessing()` | 1 | Последовательная обработка по тенантам |
-| `WithMaxParallelism()` | -1 | Максимальная параллельность по тенантам |
+| `WithTenantSequentialProcessing()` | 1 | Последовательная обработка по тенантам |
+| `WithTenantMaxParallelism()` | -1 | Максимальная параллельность по тенантам |
 | `Paused(bool)` | false | Пауза consumer group |
 | `Resumed()` | — | Снять с паузы |
 | `AsSingleton(bool)` | true | Singleton (один на кластер) vs Scoped |
@@ -209,10 +293,11 @@ bool paused = manager.IsPaused("cg_order_consumer");
 ```csharp
 .AddSaOutboxUsingPostgreSql(cfg => cfg
     .WithDataSource(ds => ds
-        .WithConnectionString("Host=...;Database=...;Username=...;Password=...")
-        // .WithMinimumPoolSize(5)
-        // .WithMaximumPoolSize(100)
-    )
+        .Options(ob => ob.Configure(o => o.ConnectionString =
+            "Host=...;Database=...;Username=...;Password=...")
+        // Пулинг, таймауты и search path задаются внутри самой строки подключения, например:
+        // "Host=...;Minimum Pool Size=5;Maximum Pool Size=100;Search Path=outbox"
+    ))
     // ...
 )
 ```
@@ -330,7 +415,8 @@ public class OrderSerializer : IOutboxMessageSerializer
 По умолчанию миграция и очистка работают как фоновые задания через `Sa.Schedule`. Можно управлять вручную:
 
 ```csharp
-var migrationService = host.Services.GetRequiredService<IMigrationService>();
+// Сервис миграции outbox живёт в собственном DI-скопе outbox ("outbox").
+var migrationService = host.Services.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
 bool ok = await migrationService.WaitMigration(TimeSpan.FromSeconds(30), ct);
 
 // Или проверить состояние

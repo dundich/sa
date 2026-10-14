@@ -4,7 +4,8 @@
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  AddSaPartitional(configure)                         │
+│  AddSaPartitional(configure)                          │
+│  AddSaPartitional(key, configure)   ← keyed module    │
 │                                                      │
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────┐ │
 │  │ Table Builder│  │ Part Cache   │  │ Migration  │ │
@@ -24,6 +25,67 @@
   │ (DDL exec)│ │ (template) │ │ (DROP parts) │
   └───────────┘ └────────────┘ └──────────────┘
 ```
+
+## Registration
+
+```csharp
+// Keyless — the default module (one data source, one schedule).
+public static IPartConfiguration AddSaPartitional(
+    this IServiceCollection services,
+    Action<IServiceProvider, ISettingsBuilder> configure,
+    bool? AsBackgroundJob = null);
+
+// Keyed — an independent module; every service of the module lives under `key`.
+public static IPartConfiguration AddSaPartitional(
+    this IServiceCollection services,
+    string key,
+    Action<IServiceProvider, ISettingsBuilder> configure,
+    bool? AsBackgroundJob = null);
+```
+
+| Aspect | Keyless | Keyed |
+|---|---|---|
+| Services | unkeyed | keyed under `key`: `IPartitionManager`, `IPartRepository`, `IMigrationService`, `IPartCleanupService`, `ISettingsBuilder`, `ISqlBuilder`, `IPartCache`, settings |
+| Schedule | default (unkeyed) schedule | named schedule `key` (`sp.GetRequiredKeyedService<IScheduler>(key)`) |
+| Job ids / names | fixed | derived from `key` (`Migration job [key]`, `Cleanup job [key]`) |
+| Data source | always registers the default one; `.AddDataSource(cfg)` configures it | named DS under `key` when configured via `.AddDataSource(cfg)`, else the default DS |
+| Repeated calls | tables merge (jobs re-registered — pre-existing) | tables and settings merge; jobs registered once (per-key marker) |
+| `AddDataSource()` in the chain | called internally (bare) | **not** called internally |
+
+`key` must be non-empty and must not be `Sa.Schedule.Setup.DefaultName` (`"default"`), otherwise
+`AddSaPartitional` throws `ArgumentException`.
+
+## Settings Configuration
+
+`IPartConfiguration` exposes one method per scalar settings type; each takes a builder callback:
+
+```csharp
+public interface IPartConfiguration
+{
+    IPartConfiguration AddPartCache(
+        Action<IPartSettingsBuilder<PartCacheSettings>>? configure = null);
+
+    IPartConfiguration AddPartMigrationSchedule(
+        Action<IPartSettingsBuilder<MigrationScheduleSettings>>? configure = null);
+
+    IPartConfiguration AddPartCleanupSchedule(
+        Action<IPartSettingsBuilder<PartCleanupScheduleSettings>>? configure = null);
+}
+
+public interface IPartSettingsBuilder<TSettings> where TSettings : class
+{
+    IPartSettingsBuilder<TSettings> FromConfiguration(string sectionPath);
+    IPartSettingsBuilder<TSettings> Configure(Action<IServiceProvider, TSettings> configure);
+    IPartSettingsBuilder<TSettings> Options(Action<OptionsBuilder<TSettings>> configureSettings);
+}
+```
+
+The settings are standard **named options** — one instance per module: the module key for a keyed
+module, the unnamed instance (`Options.DefaultName`) for the keyless one. The pipeline order is
+**section → code → `Options(...)` actions → validation**, fixed regardless of where the calls sit in
+the fluent chain. Validation is fail-fast through an `IValidateOptions<T>` validator registered
+together with `ValidateOnStart()`, so an invalid section or code value surfaces as an
+`OptionsValidationException` at host start and on the first read.
 
 ## Key Interfaces
 
@@ -158,3 +220,5 @@ public interface IPartCleanupService
 | `PartCleanupJob` | `Cleaning/PartCleanupJob.cs` | `IJob` wrapper for scheduled cleanup |
 | `SqlBuilder` | `SqlBuilder/SqlBuilder.cs` | Generates DDL templates from `ITableSettings` |
 | `PartRepository` | `Partitional/PartRepository.cs` | Executes DDL via Npgsql |
+| `JobKeys` | `JobKeys.cs` | Deterministic per-key job ids/names for keyed modules |
+| `MigrationScheduleMarker` / `PartCleanupScheduleMarker` | `Migration/Setup.cs`, `Cleaning/Setup.cs` | Per-key sentinels so a repeated keyed registration does not duplicate jobs |

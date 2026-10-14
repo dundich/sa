@@ -4,18 +4,49 @@ Declarative PostgreSQL table partitioning library for .NET 10 — supports **ran
 
 ---
 
-## Overview
+## Properties
 
-Large PostgreSQL tables lose performance as they grow. This library automates the full partition lifecycle:
+The library gathers everything needed for partitioning into three setting types, a fluent builder, and three public services. Below is a tour of the features with links to the details.
 
-1. **Declare** partitioned tables declaratively via a fluent builder.
-2. **Migrate** — automatically create missing partitions before data arrives.
-3. **Cache** — keep partition metadata in memory so a lookup does not hit the database (the metadata itself is read from the cache table, not from the catalog).
-4. **Clean up** — drop old partitions past a configurable retention window.
+### Partition management
 
-Everything wires into ASP.NET Core `IServiceCollection` through a single extension method.
+- **Auto-migration** — a background job pre-creates future partitions so INSERT does not stall on CREATE. [`MigrationScheduleSettings`](#migration), [`IMigrationService`](#api-migration)
+- **Guard against gaps.** A *gap* is an INSERT into a partition that does not yet exist — either the insert fails, or (with [`WithDefaultPartition()`](#fluent-builder-api)) it lands in the catch-all. Migration creates partitions ahead of time — for several days/months forward (`ForwardDays`) — so traffic never falls into a void. [`MigrationScheduleSettings`](#migration)
+- **Auto-cleanup** — moves old partitions out of circulation: [`Drop`](#cleanup-mode-drop) (delete) or [`Archive`](#cleanup-mode-archive) (move into an archive schema). [`PartCleanupScheduleSettings`](#cleanup), [`IPartCleanupService`](#api-cleanup)
+- **In-memory cache** of partition metadata — a lookup never hits the database. [`PartCacheSettings`](#partcache)
+- **Programmatic control** — [`IPartitionManager`](#api-manager): `Migrate`, `EnsureParts`, manual window control.
 
-All date arithmetic — partition names, day/month/year boundaries, cache windows — is done in **UTC**, so a partition name never depends on the host time zone.
+### Fluent Builder
+
+- **Range and list partitioning**, combinable hierarchically to any nesting level. [`Supported strategies`](#supported-strategies)
+- **Multiple levels on one table**: `PartByList` + `PartByRange` + `TimestampAs`. [`Fluent Builder API`](#fluent-builder-api)
+- **Tuning**: `WithFillFactor`, `WithPartSeparator`, `WithPartTablePostfix`, custom constraint and post-SQL hooks.
+
+### Default partition
+
+- **Catch-all** for rows that matched no partition, enabled via [`WithDefaultPartition()`](#fluent-builder-api). [`Fluent Builder API`](#fluent-builder-api)
+- Needed when other services write into the table without knowing about partitioning: while the right partition does not exist yet, those rows accumulate in `def$` instead of breaking the insert. [`Quick start`](#quick-start)
+- **Removes the conflict on partition creation.** When the migration creates the real partition, PostgreSQL refuses if `def$` already holds rows that belong to it. The library moves those rows out of `def$` into the new partition without collisions — through a staging table inside a transaction — so the catch-all never blocks later migrations. [`Behaviour notes`](#behaviour-notes)
+
+### Cleanup modes
+
+- **Drop** — physical removal (`DROP TABLE`). Good for ephemeral data (outbox, audit, logs). [`CleanupMode = Drop`](#cleanup-mode-drop)
+- **Archive** — move into a separate schema (`ALTER TABLE ... SET SCHEMA`). The archive schema is created automatically; the table keeps its name. [`CleanupMode = Archive`](#cleanup-mode-archive)
+
+### Named modules
+
+- Each module has its own tables, cache, and migration/cleanup schedulers. Split them by database (`AddDataSource`) or by business logic (keyed `AddSaPartitional("name", ...)`). [`Quick start`](#quick-start)
+
+### Settings
+
+- Bind to [`configuration`](#configuration-the-options-pipeline) or [`code`](#settings-in-code-full-reference) through one pipeline (`Microsoft.Extensions.Options`), one named instance per module.
+- All three setting types: [`PartCacheSettings`](#partcache), [`MigrationScheduleSettings`](#migration), [`PartCleanupScheduleSettings`](#cleanup).
+
+### General
+
+- **Everything computes in UTC** — partition names, range boundaries, and cache windows do not depend on the host time zone. [`Behaviour notes`](#behaviour-notes)
+- **Cache consistency, transient-retry, and DDL serialization** are described in [`Behaviour notes`](#behaviour-notes).
+- Partition name formats — in [`Naming conventions`](#naming-conventions).
 
 ---
 
@@ -29,35 +60,267 @@ All date arithmetic — partition names, day/month/year boundaries, cache window
 
 ## Quick Start
 
+### Minimal example — one table, one level
+
+The simplest case: a table with daily range partitioning on creation date. Migration pre-creates partitions **3 days ahead**; cleanup drops anything older than **7 days**.
+
 ```csharp
 builder.Services.AddSaPartitional((sp, builder) =>
 {
-    // no name => default schema (the Npgsql "Search Path", or "public")
+    // No schema name => uses "public" (or current_search_path)
     builder.AddSchema(schema =>
     {
-        // Range-partitioned table (daily by default).
-        // At least one field is required: the first one becomes the primary-key id column.
         schema.AddTable("events",
-            "id bigint GENERATED BY DEFAULT AS IDENTITY",
-            "created_at timestamptz NOT NULL")
-            .PartByRange(PgPartBy.Day)
-            .WithFillFactor(90);
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "message text NOT NULL",
+                "created_at timestamptz NOT NULL")
+            .PartByRange(PgPartBy.Day, "created_at");
     });
 })
-// Pre-create future partitions as a background job
-.AddPartMigrationSchedule((sp, opts) => opts.AsBackgroundJob = true)
-// Drop partitions older than 30 days
-.AddPartCleanupSchedule((sp, opts) => opts.AsBackgroundJob = true);
+// Migration: pre-create partitions 3 days ahead
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
+    opts.ForwardDays = 3))
+// Cleanup: drop partitions older than 7 days
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
+    opts.DropPartsAfterRetention = TimeSpan.FromDays(7)));
 ```
+
+After startup the library checks which partitions are missing and creates them (today + the next 3 days). The background job repeats every ~4 hours.
+
+### Two levels — list + range (multi-tenant layout)
+
+Split data by client (list), then within each client partition by day (range). Every combination gets its own table: `orders__acme_corp__y2026m10m13`.
+
+```csharp
+builder.Services.AddSaPartitional((sp, builder) =>
+{
+    builder.AddSchema(schema =>
+    {
+        schema.AddTable("orders",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "client_id varchar(50) NOT NULL",
+                "amount decimal(18,2) NOT NULL",
+                "created_at timestamptz NOT NULL")
+            .PartByList("client_id")     // first level: clients
+            .PartByRange(PgPartBy.Day, "created_at")  // second level: days
+            .WithDefaultPartition();    // catch-all for unknown clients
+    });
+})
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
+    opts.ForwardDays = 3))
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
+    opts.DropPartsAfterRetention = TimeSpan.FromDays(7)));
+```
+
+Here `.WithDefaultPartition()` ensures that an order from an unknown client does not throw — it lands in the default partition at every nesting level.
+
+### Three levels — geography → client → day
+
+Deep hierarchy for global systems: region → city → day. Partition names: `log__EU__Paris__y2026m10m13`.
+
+```csharp
+builder.Services.AddSaPartitional((sp, builder) =>
+{
+    builder.AddSchema(schema =>
+    {
+        schema.AddTable("logs",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "region varchar(10) NOT NULL",
+                "city varchar(50) NOT NULL",
+                "level varchar(5) NOT NULL",
+                "created_at timestamptz NOT NULL")
+            .PartByList("region", "city")  // two list columns at one level
+            .PartByRange(PgPartBy.Month, "created_at");  // months instead of days
+    });
+})
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
+    opts.ForwardDays = 90))  // monthly partitions look further ahead
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
+    opts.DropPartsAfterRetention = TimeSpan.FromDays(90)));
+```
+
+For monthly partitions it makes sense to look **90 days ahead** (3 months) and retain data for **90 days** instead of the usual 7–30.
+
+### Multiple modules — isolated configs in one container
+
+Each module owns its tables, its cache, its migration schedule, and its cleanup schedule. Keyed registration lets you separate them by database or business domain.
+
+```csharp
+// Module "outbox" — its own DB, own data source
+services.AddSaPartitional("outbox", (sp, builder) =>
+{
+    builder.AddSchema("public", schema =>
+    {
+        schema.AddTable("outbox_messages",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "payload jsonb NOT NULL",
+                "created_at timestamptz NOT NULL")
+            .PartByRange(PgPartBy.Day, "created_at");
+    })
+    .AddDataSource(ds => ds.Options(ob => ob.Configure(o =>
+        o.ConnectionString = "Host=db1;Database=outbox_db")));
+})
+.AddPartMigrationSchedule(b => b.Configure((_, opts) => opts.ForwardDays = 3));
+
+// Module "audit" — shared DB, default data source
+services.AddSaPartitional("audit", (sp, builder) =>
+{
+    builder.AddSchema("public", schema =>
+    {
+        schema.AddTable("audit_events",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "entity_type varchar(50) NOT NULL",
+                "created_at timestamptz NOT NULL")
+            .PartByList("entity_type")
+            .PartByRange(PgPartBy.Day, "created_at");
+    });
+    // Data source is picked from the shared registration below
+})
+.AddPartMigrationSchedule(b => b.Configure((_, opts) => opts.ForwardDays = 3));
+
+// Shared data source for all modules without their own DataSource
+services.AddSaPostgreSqlDataSource(ds => ds
+    .Options(ob => ob.Configure(o =>
+        o.ConnectionString = "Host=db-shared;Database=all_in_one")));
+```
+
+Module `"outbox"` works with its own `outbox_db`; module `"audit"` shares the common one. Each has its own background jobs: `Migration job [outbox]`, `Cleanup job [outbox]`, `Migration job [audit]`, etc.
+
+---
+
+## Configuration — the Options Pipeline
+
+The three scalar settings types — `PartCacheSettings`, `MigrationScheduleSettings`,
+`PartCleanupScheduleSettings` — are served by the standard `Microsoft.Extensions.Options`
+pipeline, one **named instance per module** (the module key, or the unnamed instance for the
+keyless module). Each `AddPart*` method takes one callback that collects three kinds of intent:
+
+| Call | Purpose |
+|------|---------|
+| `FromConfiguration(path)` | Bind the settings from a configuration section, e.g. `"Partitional:Cache"` or `"Partitional:outbox:Cache"` (last call wins) |
+| `Configure((sp, settings) => ...)` | Apply code settings — the same `(IServiceProvider, TSettings)` delegate as before |
+| `Options(ob => ...)` | Escape hatch: the raw `OptionsBuilder<T>` (`Configure` / `PostConfigure` / `Validate`) |
+
+The pipeline order is fixed — **section → code → `Options(...)` actions → validation** — no matter
+how the calls are split across the fluent chain: configuration is the baseline, code wins over it,
+and `Options(...)` has the final word.
+
+```csharp
+builder.Services.AddSaPartitional((sp, builder) => { /* table declarations */ })
+    .AddPartCache(b => b
+        .FromConfiguration("Partitional:Cache")
+        .Configure((_, s) => s.CacheTtl = TimeSpan.FromMinutes(10)))
+    .AddPartMigrationSchedule(b => b
+        .FromConfiguration("Partitional:Migration")
+        .Configure((_, s) => s.AsBackgroundJob = true))
+    .AddPartCleanupSchedule(b => b.FromConfiguration("Partitional:Cleanup"));
+```
+
+```json
+{
+  "Partitional": {
+    "Cache":     { "CacheTtl": "00:10:00", "CachedFromDate": "1.00:00:00" },
+    "Migration": { "ForwardDays": 3, "AsBackgroundJob": true, "ExecutionInterval": "02:00:00" },
+    "Cleanup":   { "DropPartsAfterRetention": "14.00:00:00", "InitialDelay": "00:05:00" }
+  }
+}
+```
+
+A keyed module binds its own section — one named instance per module keeps the modules isolated:
+
+```csharp
+services.AddSaPartitional("outbox", ...)
+    .AddPartCache(b => b.FromConfiguration("Partitional:outbox:Cache"));
+```
+
+---
+
+## Settings in Code — Full Reference
+
+Below is every property of all three settings types, with comments and defaults.
+
+### <a name="partcache"></a>PartCacheSettings — Partition Metadata Cache
+
+In-memory cache so reads do not hit the cache table on every check.
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| [`CachedFromDate`](#partcache) | `1 day` | Look-back window of a reload: partitions whose range starts before `now − CachedFromDate` are dropped from the snapshot. Sufficient to still capture the partition currently being written to. |
+| [`CacheTtl`](#partcache) | `5 min` | How long a loaded snapshot stays usable. The deadline is checked on the read path, so the cache owns no timer. |
+
+```csharp
+.AddPartCache(b => b.Configure((_, opts) =>
+{
+    opts.CachedFromDate = TimeSpan.FromDays(1);  // capture the current partition
+    opts.CacheTtl = TimeSpan.FromMinutes(5);     // refresh every 5 minutes
+}))
+```
+
+### <a name="migration"></a>MigrationScheduleSettings — Auto-Migration (Pre-Creation)
+
+Background job that pre-creates future partitions so inserts are not blocked waiting for table creation.
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| [`ForwardDays`](#migration) | `2 days` | How many days ahead to pre-create partitions on each tick. Set to `3` to be safe that tomorrow's traffic finds no missing partition. |
+| [`AsBackgroundJob`](#migration) | `false` | Run as a hosted service (`true`) or only manually via [`IMigrationService`](#api-migration)? |
+| [`MigrationJobName`](#migration) | `"Migration job"` | Job name in logs and the scheduler. When multiple modules exist, qualify it: `"Migration job [outbox]"`. |
+| [`ExecutionInterval`](#migration) | `~4h ± jitter` | Interval between migration ticks. Jitter up to 59 minutes prevents thundering-herd when several instances restart simultaneously. |
+| [`WaitMigrationTimeout`](#migration) | `3 sec` | How long to wait for the migration lock. If contended — the tick skips (returns `-1`), the next tick tries again. Does not queue. |
+| [`RunTimeout`](#migration) | `10 sec` | Time budget for a single run, counted from acquiring the lock. Should stay below `HostOptions.ShutdownTimeout` (30 s by default). DDL is idempotent, so an interrupted run is safely finished by the next tick. |
+
+```csharp
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
+{
+    opts.ForwardDays = 3;                          // 3 days ahead
+    opts.AsBackgroundJob = true;                   // run in background
+    opts.MigrationJobName = "Migration job [outbox]";
+    opts.ExecutionInterval = TimeSpan.FromHours(4);
+    opts.WaitMigrationTimeout = TimeSpan.FromSeconds(3);
+    opts.RunTimeout = TimeSpan.FromSeconds(10);
+}))
+```
+
+### <a name="cleanup"></a>PartCleanupScheduleSettings — Auto-Cleanup
+
+Background job that retires old partitions.
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| [`DropPartsAfterRetention`](#cleanup) | `30 days` | Age threshold after which a partition is retired. For event sourcing often 90–365 days; for outbox messages — 7–30 days. |
+| [`CleanupMode`](#cleanup) | `Drop` | What to do with an expired partition: [`Drop`](#cleanup-mode-drop) — delete entirely, [`Archive`](#cleanup-mode-archive) — move into an archive schema. |
+| [`ArchiveSchemaName`](#cleanup) | `"archive"` | Schema where partitions are moved when `CleanupMode = Archive`. Ignored in `Drop` mode. Tables keep their name — name collisions within the same schema cause errors. |
+| [`AsBackgroundJob`](#cleanup) | `false` | Run as hosted service or only manually via [`IPartCleanupService`](#api-cleanup)? |
+| [`ExecutionInterval`](#cleanup) | `~4h ± jitter` | Interval between cleanup ticks. |
+| [`InitialDelay`](#cleanup) | `1 min` | Delay before the first run after application start. Allows migration and initial data population to complete. |
+
+```csharp
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
+{
+    opts.DropPartsAfterRetention = TimeSpan.FromDays(7);
+    opts.CleanupMode = PartCleanupMode.Drop;
+    opts.ArchiveSchemaName = "archive";
+    opts.AsBackgroundJob = true;
+    opts.InitialDelay = TimeSpan.FromMinutes(1);
+}))
+```
+
+#### <a name="cleanup-mode-drop"></a>CleanupMode = Drop
+
+Standard behaviour — physically removes the partition via `DROP TABLE`. Data is permanently lost. Suitable for ephemeral data (outbox, audit, logs).
+
+#### <a name="cleanup-mode-archive"></a>CleanupMode = Archive
+
+Moves the partition to another schema (`ALTER TABLE ... SET SCHEMA "archive"`). The table is preserved but stops participating in queries against the main schema. Requires the archive schema to exist (the library does not create it automatically).
 
 ---
 
 ## Supported Strategies
 
 | Strategy | Description | Example |
-|---|---|---|
-| **Range** | Partitions by time intervals — day, month, or year | `events__y2026m06d26`, `events__y2026m07` |
-| **List** | Partitions by discrete key values (strings or numbers) | `orders__RU`, `orders__42` |
+|----------|-------------|---------|
+| **Range** | Partitioning by time intervals — day, month, or year | `events__y2026m06d26`, `events__y2026m07` |
+| **List** | Partitioning by discrete key values (strings or numbers) | `orders__RU`, `orders__42` |
 
 Both strategies can be combined hierarchically: a list-partitioned root can have range-partitioned children (`orders__RU__y2026m06d26`).
 
@@ -93,26 +356,84 @@ services.AddSaPartitional((sp, builder) =>
 
 - `CreateTable(name)` + `AddFields(...)` and `AddTable(name, fields...)` are the same thing. At least one field is required: the **first declared column becomes the primary-key id column**, and `Build()` throws `InvalidOperationException` without it.
 - A column that is not declared among the fields but is needed for partitioning is added to the root table by the library — a `bigint NOT NULL` — so declaring the range column explicitly (as above) is usually what you want.
-- `PartByRange(partBy, fieldName)` and `TimestampAs(fieldName)` do not depend on call order — the more specific `TimestampAs` always wins. When both are omitted, `created_at` is used.
+- `PartByRange(partBy, fieldName?)` and `TimestampAs(fieldName?)` do not depend on call order — the more specific `TimestampAs` always wins. When both are omitted, `created_at` is used.
 
-### ITableBuilder Methods
+### ITableBuilder — methods in action
 
-| Method | Description |
-|--------|-------------|
-| `AddFields(params string[])` | Column definitions (e.g. `"tenant_id varchar(50) NOT NULL"`); the first one becomes the PK id column |
-| `PartByRange(PgPartBy, fieldName?)` | Range strategy (Day / Month / Year); the timestamp column defaults to `created_at` |
-| `PartByList(params string[])` | List partitioning on one or more columns — one nesting level per column |
-| `TimestampAs(fieldName)` | Override the range column; wins over the `PartByRange` argument regardless of order |
-| `WithPartSeparator(string)` | Separator between the table name and each key value (default `"__"`); must not be empty or contain `"` |
-| `WithFillFactor(int)` | `fillfactor` of the generated range leaves, clamped to `10..100`; leaves only — root and list partitions are emitted without it |
-| `WithPartTablePostfix(string)` | Postfix of the **cache** table name, i.e. `{table}{sep}{postfix}` (default `"part$"`) |
-| `AddPostSql(Func<string>)` | Extra SQL after the root `CREATE TABLE` |
-| `AddConstraintPkSql(Func<string>)` | Name of the generated PK constraint (default `pk_{table}`) — the `PRIMARY KEY` clause itself is composed by the library |
-| `AddMigration(IPartTableMigrationSupport)` | Provide custom migration values |
-| `AddMigration(Func<CancellationToken, Task<StrOrNum[][]>>)` | Async factory for migration values |
-| `AddMigration(params StrOrNum[])` | Inline list partition values (a single nesting level) |
-| `AddMigration(StrOrNum parent, StrOrNum[] childs)` | Hierarchical migration (parent + children) |
-| `Build()` | Finalize table settings |
+Below is a single table configured with every available method. Each block is annotated:
+
+```csharp
+schema.AddTable("events",
+        // ── Columns ───────────────────────────────────────────
+        // First declared column becomes the PK id column.
+        "id bigint GENERATED BY DEFAULT AS IDENTITY",
+
+        // Additional columns (any DDL accepted by PostgreSQL).
+        "tenant_id varchar(50) NOT NULL",
+        "message text",
+        "status varchar(20)")
+
+    // ── Partitioning strategy ───────────────────────────────
+    // Range by day on "created_at". Column defaults to "created_at"
+    // if omitted; PartByRange and TimestampAs are order-independent,
+    // with TimestampAs always winning.
+    .PartByRange(PgPartBy.Day, "created_at")
+
+    // Override the range column explicitly (more specific than
+    // PartByRange's second argument).
+    .TimestampAs("updated_at")
+
+    // List on top of range — each PartByList call adds one nesting
+    // level (one column per level).
+    .PartByList("region", "priority")
+
+    // ── Naming & formatting ─────────────────────────────────
+    // Separator between table name and key values (default "__").
+    // Must not be empty or contain '"'.
+    .WithPartSeparator("_")
+
+    // Cache-table postfix (default "part$").
+    // Result: {table}{sep}{postfix}, e.g. "events__part$".
+    .WithPartTablePostfix("meta$")
+
+    // Catch-all DEFAULT partition at every nesting level so rows
+    // whose key was never migrated are kept instead of rejected.
+    // Creates names like "{table}{sep}def$", "{table}{sep}{val}{sep}def$".
+    .WithDefaultPartition()
+
+    // ── Storage tuning ───────────────────────────────────────
+    // fillfactor for generated range leaves only (clamped 10..100).
+    // Root table and list partitions are emitted without it.
+    .WithFillFactor(80)
+
+    // ── Extra SQL hooks ──────────────────────────────────────
+    // Raw SQL appended after CREATE TABLE of the root table.
+    .AddPostSql(() => "INCLUDE (tenant_id, status)")
+
+    // Override the PK constraint name (default "pk_{table}").
+    // Return only the name — the library emits CONSTRAINT ... PRIMARY KEY.
+    .AddConstraintPkSql(() => "pk_events_created_at_tenant_id")
+
+    // ── Migration values ─────────────────────────────────────
+    // Static inline list values (single nesting level).
+    // WARNING: AddMigration("a", "b") binds to params → two
+    // independent values, NOT a parent-child pair. Nesting requires
+    // an explicit array: AddMigration("a", new StrOrNum[] { "b" }).
+    .AddMigration("active", "archived")
+
+    // Hierarchical migration: parent + children nested under it.
+    .AddMigration("EU", new StrOrNum[] { "DE", "FR" })
+
+    // Custom provider implementing IPartTableMigrationSupport.
+    .AddMigration(myCustomProvider)
+
+    // Async lazy factory — resolved on-demand during migration.
+    .AddMigration(async ct => { /* query DB, return StrOrNum[][] */ })
+
+    // ── Finalise ─────────────────────────────────────────────
+    // Builds and validates the immutable ITableSettings snapshot.
+    .Build();
+```
 
 > **Overload trap.** `AddMigration("a", "b")` binds to the `params` overload and declares **two independent values**, not a parent-child pair. Nesting has to be spelled out with an array:
 > ```csharp
@@ -124,7 +445,7 @@ services.AddSaPartitional((sp, builder) =>
 
 ## Key Types
 
-### IPartitionManager
+### <a name="api-manager"></a>IPartitionManager
 
 Main entry point for programmatic partition management:
 
@@ -137,13 +458,13 @@ public interface IPartitionManager
 }
 ```
 
-- `Migrate()` — pre-create all missing partitions for today + the forward window
-- `Migrate(dates[])` — pre-create for specific dates only
-- `EnsureParts()` — guarantee a specific partition exists (creates it if missing)
+- [`Migrate()`](#api-manager) — pre-create all missing partitions for today + the forward window
+- [`Migrate(dates[])`](#api-manager) — pre-create only for specific dates
+- [`EnsureParts()`](#api-manager) — guarantee a specific partition exists (creates it if missing)
 
-### IMigrationService
+### <a name="api-migration"></a>IMigrationService
 
-The service behind `IPartitionManager`; resolve it directly to wait for an in-flight run:
+The service behind `IPartitionManager`; resolve directly to wait for an in-flight run:
 
 ```csharp
 public interface IMigrationService
@@ -155,12 +476,12 @@ public interface IMigrationService
 }
 ```
 
-- **One run at a time.** `Migrate()` waits for the migration lock at most `WaitMigrationTimeout` and then *skips* the tick (returns `-1`) instead of queueing. `Migrate(dates)` is an explicit request, so it waits as long as it takes and also honours the caller's token.
-- **`-1` means "not completed"** — deadline elapsed or cancelled, not "a negative number of partitions". The generated DDL is idempotent, so the next run finishes the remaining work.
-- A **started background run** is bounded by `RunTimeout` and is not interrupted by the caller's token: the DDL is idempotent, so finishing is cheaper than restarting.
-- `OnMigrated` is a **one-shot** signal — once a migration has completed it stays triggered, so it answers "has a migration ever completed", not "is one running now".
+- **One run at a time.** `Migrate()` waits for the migration lock at most `WaitMigrationTimeout` and then *skips* the tick (returns `-1`) instead of queueing. `Migrate(dates)` is an explicit request, so it waits indefinitely and also honours the caller's token.
+- **`-1` means "not completed"** — deadline elapsed or cancelled, not "a negative number of partitions". Generated DDL is idempotent, so the next run finishes the remainder.
+- A **started background run** is bounded by `RunTimeout` and is not interrupted by the caller's token: DDL is idempotent, so finishing is cheaper than restarting.
+- `OnMigrated` is a **one-shot** signal — once a migration completes it stays triggered, answering "has a migration ever completed", not "is one running now".
 
-### IPartCleanupService
+### <a name="api-cleanup"></a>IPartCleanupService
 
 ```csharp
 public interface IPartCleanupService
@@ -170,7 +491,7 @@ public interface IPartCleanupService
 }
 ```
 
-`Clean` drops partitions **without invalidating the in-memory cache** — a call made outside the background job leaves a stale snapshot for up to `PartCacheSettings.CacheTtl`. Prefer the scheduled job when the same process has to see the change right away.
+[`Clean`](#api-cleanup) retires partitions **without invalidating the in-memory cache** — a call outside the background job leaves a stale snapshot for up to `PartCacheSettings.CacheTtl`. Rely on the scheduled job when the same process must see the change immediately.
 
 ### PgPartBy
 
@@ -215,45 +536,6 @@ StrOrNum.TryFromFmtStr("n:x", out _);  // false — strict counterpart, no fallb
 
 ---
 
-## Schedule Settings
-
-### MigrationScheduleSettings
-
-Controls automatic pre-creation of future partitions:
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| `ForwardDays` | `2` | Days ahead to pre-create partitions |
-| `AsBackgroundJob` | `false` | Run as hosted service |
-| `MigrationJobName` | `"Migration job"` | Job name identifier |
-| `ExecutionInterval` | `~4h + jitter` | Interval between migrations |
-| `WaitMigrationTimeout` | `3 sec` | Max wait for the migration lock; a tick that misses it returns `-1` |
-| `RunTimeout` | `10 sec` | Deadline of a single run, counted from the moment it took the lock |
-
-`RunTimeout` should stay below the host shutdown timeout (`HostOptions.ShutdownTimeout`, 30 s by default); the job is given `RunTimeout + 5 s` to drain.
-
-### PartCleanupScheduleSettings
-
-Controls automatic dropping of old partitions:
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| `DropPartsAfterRetention` | `30 days` | Age threshold for deletion |
-| `AsBackgroundJob` | `false` | Run as hosted service |
-| `ExecutionInterval` | `~4h + jitter` | Interval between cleanups |
-| `InitialDelay` | `1 min` | Delay before first run |
-
-### PartCacheSettings
-
-In-memory partition metadata cache:
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| `CachedFromDate` | `1 day` | Look-back window of a reload — partitions starting before `now - CachedFromDate` are dropped from the snapshot |
-| `CacheTtl` | `5 min` | How long a loaded snapshot stays usable; the deadline is checked on the read path, so the cache owns no timer |
-
----
-
 ## Naming Conventions
 
 Partitions follow predictable naming patterns (separator defaults to `"__"`):
@@ -266,10 +548,11 @@ Partitions follow predictable naming patterns (separator defaults to `"__"`):
 | List (nested) | `{table}{sep}{val1}{sep}{val2}` | `orders__RU__Moscow` |
 | List + range leaf | `{table}{sep}{val1}...{sep}y{YYYY}m{MM}d{DD}` | `orders__RU__y2026m06d26` |
 | Cache table | `{table}{sep}{postfix}` | `events__part$` |
+| Catch-all | `{table}{sep}def$` | `orders__def$` |
 
 **Constraints and guarantees:**
 
-- Identifiers must fit **63 bytes** of UTF-8, not 63 characters. A too-long cache-table name is rejected by `Build()`; a too-long partition name throws when its DDL is generated (the key values are only known then).
+- Identifiers must fit **63 bytes** of UTF-8, not 63 characters. A too-long cache-table name is rejected by `Build()`; a too-long partition name throws when its DDL is generated (key values are only known then).
 - A key value must not contain the separator: `["a__b"]` and `["a", "b"]` would otherwise collapse onto one table name.
 - All identifiers and literals are quoted and escaped, so a key holding `"` or `'` cannot terminate them and append SQL.
 - Schemas are auto-created via `CREATE SCHEMA IF NOT EXISTS`.
@@ -281,11 +564,20 @@ Partitions follow predictable naming patterns (separator defaults to `"__"`):
 ## Behaviour Notes
 
 - **UTC everywhere.** Partition names, range boundaries and cache windows are computed from the UTC calendar, so two hosts in different time zones create the same partition for the same instant.
-- **Cache consistency.** The background jobs drop the whole snapshot after every run (unconditionally — a partial run can have created partitions too). A manual `Migrate(dates)` or `Clean(...)` call does not; `EnsureParts` invalidates the entry of its own table.
-- **Retries and serialization.** Both the read and the write path of the repository go through the retry strategy of `Sa.Data.PostgreSql`, so a transient database failure does not surface to the caller. DDL statements against one data source are additionally serialized, so two partitions are never created concurrently.
+- **Cache consistency.** Background jobs drop the whole snapshot after every run (unconditionally — a partial run could have created partitions too). A manual `Migrate(dates)` or `Clean(...)` call does not; `EnsureParts` invalidates the entry of its own table.
+- **Retries and serialization.** Both the read and write path of the repository go through the retry strategy of `Sa.Data.PostgreSql`, so a transient database failure does not reach the caller. DDL against one data source is additionally serialized, so two partitions are never created concurrently.
 - **Job error handling.** Only the expected stop (cancellation / timeout) is suppressed; a real failure is retried, logged, and then aborts *that* job — not the application.
-- **Fill factor.** Applied to the date-range children only. When `WithFillFactor` was never called the clause is omitted and PostgreSQL applies its own default (100).
+- **Fill factor.** Applied to date-range children only. When `WithFillFactor` was never called the clause is omitted and PostgreSQL applies its own default (100).
 - **Logging.** Services log through `ILogger<T>` using structured `[LoggerMessage]` events; a failed or unfinished migration is logged and reported as `-1` instead of throwing out of a scheduler tick.
+
+---
+
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [Guide](Guide.md) | Detailed setup, builder DSL, `StrOrNum`, date ranges, generated DDL |
+| [API Reference](ApiReference.md) | Interface signatures, architecture diagram, internal components |
 
 ---
 
@@ -306,16 +598,6 @@ Partitions follow predictable naming patterns (separator defaults to `"__"`):
 │  PartCleanupJob     │  ← IJob wrapper for Sa.Schedule
 └─────────────────────┘
 ```
-
----
-
-## Documentation
-
-| Document | Contents |
-|----------|----------|
-| [Guide](Guide.md) | Detailed setup, builder DSL, `StrOrNum`, date ranges, generated DDL |
-| [API Reference](ApiReference.md) | Interface signatures, architecture diagram, internal components |
-| [Improvements](Improvements.md) | Audit of the package: what was fixed, what was deliberately left |
 
 ---
 

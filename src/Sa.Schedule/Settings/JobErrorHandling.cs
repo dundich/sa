@@ -24,9 +24,15 @@ internal sealed class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBui
 
     internal JobErrorHandling Merge(IJobErrorHandling handling)
     {
-        if (handling.ThenAction != Default.Action) { ThenAction = handling.ThenAction; }
-        if (handling.HasRetryAttempts) { RetryCount = handling.RetryCount; }
-        if (handling.HasSuppressError) { SuppressError = handling.SuppressError; }
+        // Same direction as JobProperties.Merge: the aggregate (the earlier
+        // registration) keeps its explicit values, and only the gaps are filled
+        // from the later one. (Previously this merged the other way — the later
+        // registration's explicit values overwrote the aggregate's — which
+        // disagreed with every other merged property, where the first
+        // registration wins.)
+        if (ThenAction == Default.Action) { ThenAction = handling.ThenAction; }
+        if (RetryCount is null) { RetryCount = handling.RetryCount; }
+        if (SuppressError is null) { SuppressError = handling.SuppressError; }
         return this;
     }
 

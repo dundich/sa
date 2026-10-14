@@ -62,7 +62,7 @@ using Sa.HybridFileStorage.Domain;
 using Sa.Data.S3;
 
 // Configure S3 client
-var setup = new S3BucketClientSetupSettings
+var setup = new S3BucketClientSetupOptions
 {
     Endpoint = "http://localhost:9000",
     AccessKey = "ROOTUSER",
@@ -108,21 +108,43 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 
 ### With DI
 
+`AddSaS3FileStorage` takes the standard options callback, so configuration goes through
+`Configure` / `PostConfigure` / `Validate` like any other options type:
+
 ```csharp
 using Sa.HybridFileStorage.S3;
 
-builder.Services.AddSaS3FileStorage(new S3FileStorageOptions
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
 {
-    Endpoint = "http://localhost:9000",
-    AccessKey = "ROOTUSER",
-    SecretKey = "ChangeMe123",
-    Bucket = "mybucket",
-    Basket = "uploads",
-    Region = "us-east-1"
-});
-
-// The DI container resolves IS3BucketClient automatically
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "mybucket";
+    x.Basket = "uploads";
+    x.Region = "us-east-1";
+})));
 ```
+
+The bucket client is created per registration — keyed by the registration's name and built from
+its very options — and resolved together with its storage. A shared bare `IS3BucketClient` is not
+provided by the hybrid registration; register a named client with `AddSaS3BucketClient(name, ...)`
+and resolve it via `GetRequiredKeyedService<IS3BucketClient>(name)` if you need one.
+
+Transport tuning is not a nested object here — `TotalRequestTimeout`, `ConnectionPoolLifetime`
+and `HandlerLifetime` are properties of the same options instance the bucket client is built
+from.
+
+### From a configuration section
+
+```csharp
+// appsettings.json:
+// { "S3FileStorage": { "Endpoint": "http://localhost:9000", "AccessKey": "…", "SecretKey": "…", "Bucket": "mybucket", "Basket": "uploads" } }
+builder.Services.AddSaS3FileStorage(b => b.FromConfiguration("S3FileStorage"));
+```
+
+The section binds in a fixed slot **first**, so an `Options(...)` `Configure` has the last word.
+The `Options(...)` actions replay after the registration's own `PostConfigure` and `Validate`, so
+your checks add to the built-in ones instead of replacing them.
 
 ---
 
@@ -212,15 +234,21 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 | `Region` | AWS region for SigV4 signing | `"eu-central-1"` |
 | `StorageType` | Scheme prefix in File ID | `"s3"` |
 | `IsReadOnly` | Prevent write/delete operations | `false` |
-| `ClientSettings` | Transport tuning (`TotalRequestTimeout`, `HandlerLifetime`, `ConnectionPoolLifetime`, ...) | `null` — client defaults |
+| `TotalRequestTimeout` | Per-request timeout | `180 sec` |
+| `ConnectionPoolLifetime` | Connection pool lifetime | `15 min` |
+| `HandlerLifetime` | HttpClient handler lifetime | `∞` (infinite) |
+| `Service`, `UseHttp2` | SigV4 service name / force HTTP/2 | `"s3"` / `false` |
 
-`S3FileStorageOptions` is an immutable record, so a prepared instance can be reused across
-registrations; the registration copies it, so later edits to your instance do not affect the
-registered storage.
+`S3FileStorageOptions` is a single mutable type served by the options pipeline, and it inherits
+the connection and transport settings from `S3BucketClientSetupOptions` — the very type the bucket
+client is constructed from. There is no second copy and no hand-written projection, which is how
+`UseHttp2` used to be configurable yet never applied.
 
-### Options are validated at registration
+### Options are validated
 
-`AddSaS3FileStorage` throws before registering anything when:
+Values are normalised first (`PostConfigure`), then validated. `ValidateOnStart()` turns an
+invalid configuration into an `OptionsValidationException` at host start rather than a bare
+`UriFormatException` from the middle of the first upload:
 
 | Property | Requirement |
 |----------|-------------|
@@ -228,20 +256,47 @@ registered storage.
 | `AccessKey`, `SecretKey`, `Bucket` | not null or blank |
 | `StorageType` | at most 10 characters, no `:`, `/` or `\` (it becomes the file ID scheme) |
 | `Basket` | 3-63 characters, starts with a letter or `_`, no path separator |
+| `TotalRequestTimeout`, `ConnectionPoolLifetime` | positive |
+| `HandlerLifetime` | positive, or `Timeout.InfiniteTimeSpan` |
 
-`null` yields `ArgumentNullException`, blank yields `ArgumentException` — the BCL
-convention, and the reverse of what the provider used to do.
+The same checks stay usable from a non-DI path:
 
-### Idempotency
+```csharp
+options.Validate(); // throws DataAnnotations.ValidationException naming the offending option
+```
 
-Registration is idempotent. A repeated call against the same target (same `Endpoint`,
-`Bucket` and `Region`) is a no-op. A call that would point the same shared
-`IS3BucketClient` at a different target throws `InvalidOperationException`.
+### Several S3 storages per service collection
 
-A repeated call that only changes `Basket`, `StorageType`, `IsReadOnly` or the credentials
-also throws, because the shared client is registered first-wins and cannot be rebuilt: the
-second storage would silently write into the first one's basket. Credential and transport
-drift alone is not treated as a conflict, since neither can be applied anyway.
+Registration is additive: every `AddSaS3FileStorage` call registers one `IFileStorage` with its
+own named options instance and its own keyed bucket client. Several S3 storages — even several
+in the same basket, which is how two buckets back one folder — coexist in one collection:
+
+```csharp
+// Two buckets, one folder: reads probe bucket-a first and continue to bucket-b on a miss
+// (same storage type), uploads are first-wins into bucket-a.
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "bucket-a";
+})));
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "bucket-b";
+})));
+```
+
+Each registration's options live under a unique name, and the bucket client is built from that
+very instance and keyed by the same name — so no two storages ever share a client or an options
+instance, and the settings of one registration can never merge into another. The registration
+order is the probing order of the basket's chain.
+
+Rotate credentials or retarget a bucket by editing that storage's registration, not by adding
+another that would compete for the same play.
 
 ---
 
@@ -253,7 +308,9 @@ drift alone is not treated as a conflict, since neither can be applied anyway.
 | `Sa.Data.S3` | S3 client (`IS3BucketClient`, `S3BucketClient`) |
 | `Sa` | Shared utilities (`MimeTypeMap`) |
 
-The `AddSaS3FileStorage` extension method automatically registers `IS3BucketClient` via `AddSaS3BucketClient`.
+The `AddSaS3FileStorage` extension method registers one `IS3BucketClient` per call — keyed by the
+registration's name and built from its very options — through the same internal HTTP wiring
+(pool, resilience, handler lifetime) that the public named `AddSaS3BucketClient(name, ...)` uses.
 
 ---
 

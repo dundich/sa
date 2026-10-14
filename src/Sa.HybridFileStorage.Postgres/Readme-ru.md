@@ -24,6 +24,8 @@
 
 `PostgresFileStorage` реализует `IFileStorage` поверх PostgreSQL. Бинарные данные файлов хранятся в колонке `BYTEA` партиционированной таблицы. Ключевые особенности:
 
+- **Keyed-регистрация** — каждая регистрация владеет своей таблицей, настройками, миграцией и очисткой; несколько независимых хранилищ coexists в одном контейнере
+- **Автоматический data source** — chained `AddDataSource(...)` необязателен: без него хранилище переиспользует дефолтный `IPgDataSource` или уже зарегистрированный `NpgsqlDataSource`
 - **Автоматическое партиционирование** — декларативное list + range партиционирование через `Sa.Partitional.PostgreSql`
 - **Upsert-семантика** — `ON CONFLICT DO UPDATE` прозрачно обрабатывает повторные загрузки
 - **Запланированная миграция** — фоновое задание заранее создаёт будущие партиции
@@ -58,35 +60,81 @@ dotnet add package Sa.HybridFileStorage.Postgres
 
 ## Быстрый старт
 
+Регистрация **keyed**: каждый вызов принимает ключ регистрации, и каждый ключ даёт
+независимое хранилище — со своими опциями (своим `TableName`, ретенцией и настройками
+партиций), своим partitional-модулем и своим keyed `IFileStorage`. Тот же экземпляр
+дополнительно регистрируется как *безымянный* `IFileStorage` — именно их hybrid-контейнер
+собирает в failover-цепочку: несколько keyed-хранилищ перебираются в порядке регистрации,
+и первый успех завершает операцию.
+
 ### С DI
 
 ```csharp
 using Sa.HybridFileStorage.Postgres;
 
-// Регистрация провайдера через опции.
-// Имя схемы автоопределяется из connection search_path, если не задано явно.
-builder.Services.AddSaPostgreSqlFileStorage(opts =>
-{
-    opts.TableName = "files";
-    opts.Basket = "files";
-    opts.PgPartBy = PgPartBy.Day;
-    opts.MigrationScheduleForwardDays = 2;
-    opts.ExpireDays = 365 * 3;
-});
-
-// Если нужно сначала настроить DataSource — используйте chained-перегрузку,
-// которая возвращает IPartConfiguration для цепочки настройки подключения:
-builder.Services
-    .AddSaPostgreSqlFileStorageChained(opts => opts.TableName = "files")
-    .AddDataSource(ds => ds.WithConnectionString(
-        "Host=localhost;Database=mydb;Username=postgres;Password=password;Search Path=public"));
+// Одно хранилище на ключ, каждое владеет своей таблицей.
+builder.Services.AddSaPostgreSqlFileStorageChained("files", b => b
+    .Options(ob => ob.Configure(o =>
+    {
+        o.TableName = "files";
+        o.StorageType = "pg";
+        o.Basket = "share";
+        o.ExpireDays = 365 * 3;               // удалять партиции этого хранилища после 3 лет
+    })))
+    .AddDataSource(ds => ds
+        .Options(ob => ob.Configure(o => o.ConnectionString =
+            "Host=localhost;Database=mydb;Username=postgres;Password=password")));
 ```
 
-> **Примечание:** `AddSaPostgreSqlFileStorage` (обычная) и `AddSaPostgreSqlFileStorageChained`
-> выполняют одинаковую регистрацию. Отличие — `Chained` возвращает `IPartConfiguration`,
-> чтобы можно было настроить `IPgDataSource` после.
->
-> Повторная регистрация идемпотентна: равные опции — no-op, конфликтующие — `InvalidOperationException`.
+**`TableName` обязателен и уникален.** У него нет значения по умолчанию: каждая регистрация
+должна назвать свою таблицу, и две регистрации не могут объявить одну и ту же таблицу — они
+обе запустили бы миграцию и очистку над одной физической таблицей, поэтому коллизия
+отвергается на старте.
+
+Если data source уже зарегистрирован чем-то другим, chained-перегрузка не нужна —
+хранилище резолвит его автоматически (см. [Как подключиться к существующему NpgsqlDataSource](#как-подключиться-к-существующему-npgsqldatasource)):
+
+```csharp
+builder.Services.AddSaPostgreSqlFileStorage("binary", b => b
+    .Options(ob => ob.Configure(o =>
+    {
+        o.TableName = "binary_data";
+        o.SchemaName = "storage";
+        o.PartByRange = PartByRange.Month;
+    })));
+```
+
+Получить конкретное хранилище по ключу или отдать все в hybrid-pipeline:
+
+```csharp
+IFileStorage files  = sp.GetRequiredKeyedService<IFileStorage>("files");
+IFileStorage binary = sp.GetRequiredKeyedService<IFileStorage>("binary");
+
+// `sp.GetServices<IFileStorage>()` возвращает по одному экземпляру на регистрацию,
+// в порядке регистрации — в этом порядке hybrid-failover пробует хранилища.
+```
+
+### Как подключиться к существующему NpgsqlDataSource
+
+Chained `AddDataSource(...)` необязателен. Если для хранилища не настроен собственный
+источник, он резолвится в таком порядке:
+
+1. keyed `IPgDataSource` под ключом модуля этой регистрации (chained `AddDataSource`);
+2. дефолтный (безымянный) `IPgDataSource`, если вызван `AddSaPostgreSqlDataSource(...)`;
+3. уже зарегистрированный в контейнере `NpgsqlDataSource` — например, через
+   `Npgsql.DependencyInjection` (`AddNpgsqlDataSource(...)`) или
+   `services.AddSingleton<NpgsqlDataSource>(...)` — обёрнутый так, что **переиспользуется
+   общий пул подключений** и никогда не диспозится хранилищем.
+
+```csharp
+// Пул у приложения уже есть; хранилище едет на нём — строки подключения здесь вообще нет.
+builder.Services.AddNpgsqlDataSource("Host=db.internal;Database=mydb;Username=u;Password=p");
+builder.Services.AddSaPostgreSqlFileStorage("files", b => b
+    .Options(ob => ob.Configure(o => o.TableName = "files")));
+```
+
+Если нет ни `IPgDataSource`, ни `NpgsqlDataSource`, разрешение хранилища падает с
+`InvalidOperationException`, называющим обе отсутствующие регистрации.
 
 ### Как определяется схема
 
@@ -100,17 +148,22 @@ builder.Services
 Отдельного метода `WithSearchPath` у билдера data source нет: `search_path` задаётся
 только через строку подключения. `GetSearchPath()` её парсит, обращения к БД не происходит.
 
-### Валидация опций на этапе регистрации
+### Где проходит валидация
 
-`AddSaPostgreSqlFileStorage` выбросит `ArgumentException` до того, как что-либо
-зарегистрирует, если:
+Проверки идут через стандартный options-пайплайн — на **первом чтении** опций (их
+материализует хранилище, DDL или резолвер схемы), либо на старте хоста через
+`ValidateOnStart()`:
 
-| Свойство | Требование |
-|----------|------------|
-| `TableName`, `SchemaName` | «голый» SQL-идентификатор: `[A-Za-z_][A-Za-z0-9_]*`, не длиннее 63 символов |
-| `StorageType` | не длиннее 10 символов, без `:`, `/` и `\` (становится схемой file ID) |
-| `Basket` | 3–63 символа, начинается с буквы или `_`, без разделителя пути |
-| `ExpireDays`, `MigrationScheduleForwardDays` | `>= 1` |
+| Проблема | Ошибка |
+|----------|--------|
+| `TableName`, `SchemaName` — не «голый» SQL-идентификатор (`[A-Za-z_][A-Za-z0-9_]*`, ≤ 63 символов) | `OptionsValidationException` с именем свойства |
+| `TableName` пуст/не задан | `OptionsValidationException` |
+| `StorageType` длиннее 10 символов или содержит `:`, `/`, `\` (становится схемой file ID) | `OptionsValidationException` |
+| `Basket` вне 3–63 символов, не начинается с буквы/`_`, или содержит разделитель пути | `OptionsValidationException` |
+| `ExpireDays`, `MigrationScheduleForwardDays` `< 1` | `OptionsValidationException` |
+| Две регистрации объявляют один и тот же `TableName` | `OptionsValidationException`, называющий оба ключа |
+| Повторная регистрация с тем же **ключом** | `InvalidOperationException` на регистрации |
+| `key` null/пуст/пробелы | `ArgumentException` на регистрации |
 
 `TableName` используется и в DDL, и во всех запросах, поэтому некорректное значение
 отвергается, а не переписывается молча: `"\"files\""` раньше тихо обрезалось до `files`.
@@ -220,11 +273,11 @@ CREATE TABLE public.files (
 
 ### Стратегии партиционирования
 
-| Стратегия | Значение `PgPartBy` | Сценарий использования |
+| Стратегия | Значение `PartByRange` | Сценарий использования |
 |-----------|---------------------|----------------------|
-| День | `PgPartBy.Day` | Высоконагруженные системы, тонкая очистка |
-| Месяц | `PgPartBy.Month` | Средняя нагрузка, сбалансированная гранулярность |
-| Год | `PgPartBy.Year` | Низкая нагрузка, простое управление |
+| День | `PartByRange.Day` | Высоконагруженные системы, тонкая очистка |
+| Месяц | `PartByRange.Month` | Средняя нагрузка, сбалансированная гранулярность |
+| Год | `PartByRange.Year` | Низкая нагрузка, простое управление |
 
 ### Расписание миграции
 
@@ -246,14 +299,15 @@ opts.ExpireDays = 365 * 3;  // удалять партиции старше 3 л
 
 ## Запланированное обслуживание
 
-Автоматически регистрируются два фоновых задания:
+Для **каждой регистрации** автоматически регистрируются свои два фоновых задания:
 
 | Задание | Назначение | Конфигурация |
 |---------|-----------|-------------|
-| **Миграция** | Заранее создавать будущие партиции | `ForwardDays`, `AsBackgroundJob` |
-| **Очистка** | Удалять старые партиции после истечения срока | `DropPartsAfterRetention` (TimeSpan) |
+| **Миграция** | Заранее создавать будущие партиции этого хранилища | `ForwardDays`, `AsBackgroundJob` |
+| **Очистка** | Удалять старые партиции после истечения срока этого хранилища | `DropPartsAfterRetention` (TimeSpan) |
 
-Оба работают как фоновые hosted-сервисы и используют общий пул подключений PostgreSQL.
+Оба работают как фоновые hosted-сервисы и используют тот же пул подключений PostgreSQL, что
+и хранилище.
 
 ---
 
@@ -266,11 +320,11 @@ opts.ExpireDays = 365 * 3;  // удалять партиции старше 3 л
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
 | `SchemaName` | Схема PostgreSQL (`null` = автоопределение из connection search_path, fallback `"public"`) | `null` |
-| `TableName` | Имя таблицы для данных файлов | `"files"` |
+| `TableName` | Имя таблицы для данных файлов — **обязательно**, уникально в рамках регистраций | — |
 | `StorageType` | Префикс схемы в File ID | `"pg"` |
 | `IsReadOnly` | Запрет операций записи/удаления | `false` |
 | `Basket` | Имя контейнера (ключ list-партиции) | `"share"` |
-| `PgPartBy` | Гранулярность range-партиционирования | `PgPartBy.Day` |
+| `PartByRange` | Гранулярность range-партиционирования | `PartByRange.Day` |
 | `MigrationScheduleForwardDays` | Дней заранее для предсоздания партиций | `2` |
 | `ExpireDays` | Период удержания перед удалением партиции (дни) | `365 * 3` |
 
@@ -278,20 +332,24 @@ opts.ExpireDays = 365 * 3;  // удалять партиции старше 3 л
 
 | Метод | Описание |
 |-------|----------|
-| `AddSaPostgreSqlFileStorage(Action<PostgresFileStorageOptions>?)` | Регистрация провайдера; возвращает `IServiceCollection` |
-| `AddSaPostgreSqlFileStorage(PostgresFileStorageOptions)` | То же из готового экземпляра (копируется, не удерживается) |
-| `AddSaPostgreSqlFileStorageChained(Action<PostgresFileStorageOptions>?)` | То же, возвращает `IPartConfiguration` для `.AddDataSource(...)` |
+| `AddSaPostgreSqlFileStorage(string key, Action<IPostgresFileStorageBuilder>?)` | Регистрация keyed-провайдера; возвращает `IServiceCollection` |
+| `AddSaPostgreSqlFileStorage(string key, PostgresFileStorageOptions)` | То же из готового экземпляра (копируется, не удерживается) |
+| `AddSaPostgreSqlFileStorage(string key, IOptions<PostgresFileStorageOptions>)` | То же из готового options-экземпляра |
+| `AddSaPostgreSqlFileStorageChained(string key, Action<IPostgresFileStorageBuilder>?)` | То же, возвращает `IPartConfiguration` для `.AddDataSource(...)` |
 
-Регистрация идемпотентна: повторный вызов с равными опциями — no-op, с конфликтующими —
-`InvalidOperationException`, а не задвоение партиционирования, расписаний и `IFileStorage`.
+Ключи регистрации уникальны в рамках коллекции: повторный вызов с тем же ключом бросает
+`InvalidOperationException` — он столкнулся бы на именованном options-экземпляре, на
+keyed-модуле партиционирования и на keyed `IFileStorage`.
 
 ### DI-сервисы
 
 | Сервис | Назначение |
 |--------|------------|
-| `IFileStorage` | Сам провайдер (singleton) |
+| `IFileStorage` (keyed по ключу регистрации) | Сам провайдер (singleton на ключ) |
+| `IFileStorage` (безымянный) | По одному alias на регистрацию — их hybrid-контейнер собирает в failover-цепочку |
+| `PostgresFileStorageOptions` (именованы по ключу регистрации) | Живые опции хранилища; читаются через `IOptionsMonitor<...>.Get(key)` |
 | `RecyclableMemoryStreamManager` | Буферизация не-seekable потоков (singleton, общий) |
-| `IPartitionManager` | Обслуживание партиций, из `Sa.Partitional.PostgreSql` |
+| `IPartitionManager` (keyed) | Обслуживание партиций этого хранилища, из `Sa.Partitional.PostgreSql` |
 | `TimeProvider` | По умолчанию `TimeProvider.System`; свой экземпляр влияет на `UploadedAt` |
 
 ---

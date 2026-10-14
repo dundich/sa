@@ -12,15 +12,22 @@ internal sealed class OutboxBuilder : IOutboxBuilder
 {
     private readonly IServiceCollection _services;
 
-    private OutboxBuilder(IServiceCollection services) => _services = services;
+    /// <summary>The DI scope key the outbox schedule (delivery jobs) is registered under.</summary>
+    private readonly string _scopeKey;
 
-    public static OutboxBuilder Create(IServiceCollection services)
+    private OutboxBuilder(IServiceCollection services, string scopeKey)
+    {
+        _services = services;
+        _scopeKey = scopeKey;
+    }
+
+    public static OutboxBuilder Create(IServiceCollection services, string scopeKey)
     {
         services
             .AddMessagePublisher()
-            .AddOutboxDelivery();
+            .AddOutboxDelivery(scopeKey: scopeKey);
 
-        return new OutboxBuilder(services);
+        return new OutboxBuilder(services, scopeKey);
     }
 
     public IOutboxBuilder WithPublishSettings(Action<IServiceProvider, OutboxPublishSettings> configure)
@@ -37,7 +44,7 @@ internal sealed class OutboxBuilder : IOutboxBuilder
 
     public IOutboxBuilder WithDeliveries(Action<IDeliveryBuilder> build)
     {
-        _services.AddOutboxDelivery(build);
+        _services.AddOutboxDelivery(build, _scopeKey);
         return this;
     }
 
@@ -54,6 +61,28 @@ internal sealed class OutboxBuilder : IOutboxBuilder
         _services
             .RemoveAll<IDeliveryBatcher>()
             .AddSingleton<IDeliveryBatcher, TImplementation>();
+
+        return this;
+    }
+
+    public IOutboxBuilder WithIdleWaitStrategy<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
+            where TImplementation : class, IEmptyQueueWaitStrategy
+    {
+        _services
+            .RemoveAll<IEmptyQueueWaitStrategy>()
+            .AddSingleton<IEmptyQueueWaitStrategy, TImplementation>();
+
+        return this;
+    }
+
+    public IOutboxBuilder WithIdleWaitStrategy(IEmptyQueueWaitStrategy strategy)
+    {
+        ArgumentNullException.ThrowIfNull(strategy);
+
+        _services
+            .RemoveAll<IEmptyQueueWaitStrategy>()
+            .AddSingleton(strategy);
 
         return this;
     }

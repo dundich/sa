@@ -2,6 +2,8 @@
 
 Reusable infrastructure libraries for distributed .NET 10 systems — **Native AOT compatible**, **nullable enabled**, built on modern .NET primitives.
 
+> ⚠️ **Stability.** All packages are still on major-version `0` (`0.x.y`), so public APIs may change in a breaking way between releases without notice — use at your own risk.
+
 ---
 
 ## Libraries
@@ -22,6 +24,12 @@ Adds a PostgreSQL-backed `IConfigurationSource` so configuration changes in the 
 ### [Sa.Data.S3](src/Sa.Data.S3) — S3 Data Client
 
 A Minio-compatible S3 client for data operations.
+
+---
+
+### [Sa.Data.TempFolder](src/Sa.Data.TempFolder) — Temporary Folder Manager
+
+`AddSaTempFolder` registers a keyed `ITempFolder` (a root directory plus strategies): path-guarded subfolders, debounced activity marking, age-based background cleanup with level-by-level descent, volume tracking and free-space watching with edge-triggered events, read-only mode, and keyed multi-instance registration.
 
 ---
 
@@ -81,6 +89,9 @@ Located in `src/Samples/`:
 | [Partitational.ConsoleApp](src/Samples/Partitional.ConsoleApp) | Declarative partitioning |
 | [PgOutbox.ConsoleApp](src/Samples/PgOutbox.ConsoleApp) | Outbox pattern demo |
 | [Schedule.Console](src/Samples/Schedule.Console) | Scheduled task executor |
+| [Schedule.Configuration.Console](src/Samples/Schedule.Configuration.Console) | Scheduled jobs re-timed/disabled from appsettings.json |
+| [Echo](src/Samples/Echo) | Audio channel separation on Sa.Media |
+| [WorkQueue.Console](src/Samples/WorkQueue.Console) | Sa.WorkQueue demo with runtime concurrency changes |
 
 ---
 

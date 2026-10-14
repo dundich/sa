@@ -7,22 +7,20 @@ namespace Sa.HybridFileStorage.FileSystemTests;
 public class FileSystemStorageTests(FileSystemStorageTests.Fixture fixture)
     : IClassFixture<FileSystemStorageTests.Fixture>
 {
-    public sealed class Fixture : SaFixture<IFileStorage, FileSystemStorageSettings>
+    public sealed class Fixture : SaFixture<IFileStorage>
     {
+        private readonly string _root =
+            Path.Combine(Path.GetTempPath(), $"fs_storage_{Path.GetRandomFileName()}");
+
         public Fixture()
-            : base(new FileSystemStorageSettings
-            {
-                BasePath = "mytemp"
-            })
         {
-            SetupServices = (services, cfg)
-                => services.AddSaFileSystemFileStorage(Settings);
+            SetupServices = (services, cfg) => services.AddFsStorage(_root);
         }
 
-        public override ValueTask DisposeAsync()
+        public override async ValueTask DisposeAsync()
         {
-            Directory.Delete(Settings.BasePath, true);
-            return base.DisposeAsync();
+            await base.DisposeAsync();
+            try { Directory.Delete(_root, true); } catch { /* best effort */ }
         }
     }
 

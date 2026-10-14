@@ -23,6 +23,8 @@ internal sealed record TableSettings(
     Func<string>? PostRootSql,
     Func<string>? ConstraintPkSql,
     int? FillFactor,
-    string PartTablePostfix
+    string PartTablePostfix,
+
+    bool DefaultPartition
 )
 : ITableSettings;

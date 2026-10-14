@@ -32,6 +32,57 @@ public class ScheduleBuilderTests
     }
 
     [Fact]
+    public async Task AddJob_Func_SameId_ReplacesPreviousRegistration()
+    {
+        var jobId = Guid.NewGuid();
+        bool firstCalled = false;
+        bool secondCalled = false;
+
+        var services = new ServiceCollection();
+        services.AddSaSchedule(b =>
+        {
+            b.AddJob((_, _) => { firstCalled = true; return Task.CompletedTask; }, jobId)
+                .RunOnce().StartImmediate();
+            b.AddJob((_, _) => { secondCalled = true; return Task.CompletedTask; }, jobId)
+                .RunOnce().StartImmediate();
+        });
+
+        using var provider = services.BuildServiceProvider();
+
+        // The two registrations share (id, type): they merge into a single job,
+        // and the keyed FuncJob registration must be a single one — the first
+        // was removed by RemoveAllKeyed (which targets the generated key, not
+        // the raw jobId parameter), so only the latest action runs.
+        var scheduleSettings = provider.GetRequiredService<IScheduleSettings>();
+        Assert.Single(scheduleSettings.GetJobSettings());
+        Assert.Single(provider.GetKeyedServices<FuncJob>(jobId));
+
+        var scheduler = provider.GetRequiredService<IScheduler>();
+        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+
+        await WaitForConditionAsync(() =>
+            secondCalled && !scheduler.GetSchedule(jobId)!.IsStarted);
+
+        Assert.False(firstCalled, "the first registration was not removed — its function ran");
+        Assert.True(secondCalled);
+
+        await scheduler.Stop();
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition()) return;
+            await Task.Delay(25, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(condition(), "the condition was not met within the timeout");
+    }
+
+    [Fact]
     public void AddInterceptor_RegistersInterceptorSettings()
     {
         var services = new ServiceCollection();

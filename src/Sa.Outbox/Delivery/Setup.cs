@@ -2,13 +2,16 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
+using Sa.Schedule;
 
 namespace Sa.Outbox.Delivery;
 
 internal static class Setup
 {
     public static IServiceCollection AddOutboxDelivery(
-        this IServiceCollection services, Action<IDeliveryBuilder>? configure = null)
+        this IServiceCollection services,
+        Action<IDeliveryBuilder>? configure = null,
+        string scopeKey = OutboxScope.DefaultKey)
     {
         services.AddMessagesMetadata();
 
@@ -18,6 +21,11 @@ internal static class Setup
 
         services.TryAddSingleton<IDeliveryBatcher, DeliveryBatcher>();
 
+        // Empty-queue back-off: the strategy decides the wait between polls, the registry holds
+        // one idle state per consumer group shared by the job and its adaptive timing.
+        services.TryAddSingleton<IEmptyQueueWaitStrategy, ExponentialIdleWaitStrategy>();
+        services.TryAddSingleton<IOutboxIdleStateRegistry, OutboxIdleStateRegistry>();
+
         // looper - job processor
         services.TryAddSingleton<IDeliveryProcessor, DeliveryProcessor>();
         // sender - sending to scope consumer
@@ -26,15 +34,26 @@ internal static class Setup
         // support - messaging to each tenant
         services.AddOutboxPartitional();
 
+        // Delivery-group options provider: the base no-op — a provider package replaces it
+        // with its own implementation. Resolved from the delivery job body, so a group
+        // without a configurationKey (or with the base package only) is shaped purely by
+        // OutboxDefaults and the user configure callback — nothing implicit sits in between.
+        services.AddDefaultDeliveryGroupOptionsProvider();
+
         services.TryAddSingleton<IDeliveryTenant, DeliveryTenant>();
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
-        // DeliverySnapshot теперь собирает настройки из AddDeliveryJob через статический регистр
-        services.TryAddSingleton<IDeliverySnapshot, DeliverySnapshot>();
-        services.TryAddSingleton<IOutboxConsumerManager, OutboxConsumerManager>();
+        // DeliverySnapshot reads the outbox's own (keyed) schedule, not the application's default one.
+        services.TryAddSingleton<IDeliverySnapshot>(sp => new DeliverySnapshot(
+            sp.GetRequiredKeyedService<IScheduleSettings>(scopeKey),
+            sp.GetRequiredService<IOutboxConsumerManager>(),
+            sp.GetRequiredService<IOutboxMessageMetadataProvider>()));
+        services.TryAddSingleton<IOutboxConsumerManager>(sp => new OutboxConsumerManager(
+            sp.GetServices<DeliveryGroupSettingsRegistration>(),
+            sp));
 
-        configure?.Invoke(new DeliveryBuilder(services));
+        configure?.Invoke(new DeliveryBuilder(services, scopeKey));
 
         return services;
     }

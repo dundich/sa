@@ -22,11 +22,11 @@ builder.Services.AddSaPartitional((sp, builder) =>
             .WithFillFactor(90);
     });
 })
-.AddPartMigrationSchedule((sp, opts) =>
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
 {
     opts.AsBackgroundJob = true;
     opts.ForwardDays = 2;
-});
+}));
 ```
 
 This generates:
@@ -61,16 +61,16 @@ builder.Services.AddSaPartitional((sp, builder) =>
             .AddMigration("FR", new StrOrNum[] { "Paris", "Lyon" });
     });
 })
-.AddPartMigrationSchedule((sp, opts) =>
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
 {
     opts.AsBackgroundJob = true;
     opts.ForwardDays = 2;
-})
-.AddPartCleanupSchedule((sp, opts) =>
+}))
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
 {
     opts.AsBackgroundJob = true;
     opts.DropPartsAfterRetention = TimeSpan.FromDays(30);
-});
+}));
 ```
 
 This generates a multi-level hierarchy (separator `"_"` in this example):
@@ -101,6 +101,40 @@ emitted raw). The range column `created_at` is not declared in this example, so 
 ---
 
 ## Configuration Options
+
+### Configuring the settings — section, code, options
+
+Each `AddPart*` method takes a builder callback that collects three kinds of intent:
+
+| Call | Purpose |
+|------|---------|
+| `FromConfiguration("Partitional:Migration")` | Bind the settings from a configuration section (last call wins) |
+| `Configure((sp, settings) => ...)` | Apply code settings — the `(IServiceProvider, TSettings)` delegate |
+| `Options(ob => ...)` | The raw `OptionsBuilder<T>` (`Configure` / `PostConfigure` / `Validate`) |
+
+The pipeline order is fixed — **section → code → `Options(...)` actions → validation** — regardless
+of how the calls are split across the fluent chain, so configuration is the baseline, code wins over
+it, and `Options(...)` has the final word.
+
+```csharp
+.AddPartMigrationSchedule(b => b
+    .FromConfiguration("Partitional:Migration")
+    .Configure((_, s) => s.AsBackgroundJob = true)
+    .Options(ob => ob.Validate(s => s.ForwardDays <= 31, "ForwardDays must stay within a month")));
+```
+
+The settings are stored as **named options**, one instance per module: the module key for a keyed
+module, the unnamed instance for the keyless one. A keyed module therefore binds its own section —
+`Partitional:outbox:Migration` — and never sees another module's values.
+
+Validation runs at host start (`ValidateOnStart()`) and on the first read, so an invalid section or
+`Configure` value fails fast with an `OptionsValidationException`. The built-in checks are
+`ForwardDays >= 1`, positive `ExecutionInterval` / `CacheTtl` / `RunTimeout`, non-negative
+`WaitMigrationTimeout` / `CachedFromDate` / `DropPartsAfterRetention` / `InitialDelay`, and a
+non-blank `MigrationJobName` when it is set.
+
+`FromConfiguration` requires an `IConfiguration` in DI (any host provides it); a missing section
+simply leaves the class defaults and the code settings in place.
 
 ### Migration Schedule (`MigrationScheduleSettings`)
 
@@ -164,6 +198,7 @@ schema.AddTable("orders",
     .WithFillFactor(85)                    // WITH (fillfactor = 85) on the range leaves; clamped to 10..100
     .WithPartSeparator("_")                // separator in partition names (default: __)
     .WithPartTablePostfix("__part")        // postfix of the CACHE table name (default: part$)
+    .WithDefaultPartition()                // optional DEFAULT catch-all at every level (rows whose key was never migrated)
 
     // 4. Custom SQL hooks
     .AddPostSql(() => "INCLUDE (extra_column)")
@@ -245,6 +280,8 @@ A partition name is `{table}{separator}{value}...`, where the separator defaults
 | Range (year) | `{table}{sep}y{YYYY}` | `events__y2026` |
 | List (nested) | `{table}{sep}{val1}{sep}{val2}` | `customer_RU_Moscow` |
 | List + range leaf | `{table}{sep}{val1}...{sep}y{YYYY}m{MM}d{DD}` | `customer_RU_Moscow_y2026m06d26` |
+| Default (root) | `{table}{sep}def$` | `events__def$` |
+| Default (nested) | `{table}{sep}{val}...{sep}def$` | `customer_RU_def$` |
 | Cache table | `{table}{sep}{postfix}` | `events__part$` |
 
 The range suffix comes from the **UTC** calendar, and the key values sit between the table name and it — there is no
@@ -378,16 +415,17 @@ close the whole application, which is not a sane reaction to a failing `DROP`.
 Services log with structured `[LoggerMessage]` events, so they can be filtered by `EventId` — `601`–`605` for the
 migration, `101` / `102` / `202`–`501` for the repository.
 
-Settings actions are collected via `IServiceProvider.GetServices<>()` and applied in registration order, so an
-action registered after `AddSaPartitional` overrides what it set:
+Settings are served by the standard options pipeline: the configuration section binds first, then the
+code `Configure` delegates apply in registration order, then any `Options(...)` actions. So code
+overrides configuration, and `Options(...)` overrides both — see *Configuring the settings* above:
 
 ```csharp
-.AddPartMigrationSchedule((sp, opts) =>
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
 {
     opts.AsBackgroundJob = true;
     opts.ForwardDays = 3;
-    // Additional overrides apply after defaults
-})
+    // Applied after the configuration section
+}))
 ```
 
 ---
@@ -422,6 +460,48 @@ The default schema is the connection's `Search Path` (Npgsql), falling back to `
 cannot be resolved while the configuration is built. A table is looked up by its fully qualified name first; an
 unqualified one is qualified with the **first** configured schema, so pass a qualified name when more than one
 schema is declared and declaration order matters.
+
+---
+
+## Multiple Modules (Keyed Registration)
+
+`AddSaPartitional` also has a **keyed** overload: it registers an independent module — its own
+partition tables, its own migration/cleanup/cache settings and its own `Sa.Schedule` schedule —
+under a key. Two modules registered under different keys never see each other's services.
+
+```csharp
+builder.Services.AddSaPartitional("outbox", (sp, builder) =>
+{
+    builder.AddSchema(schema => schema.AddTable("outbox_messages",
+            "id bigint NOT NULL",
+            "created_at timestamptz NOT NULL")
+        .PartByRange(PgPartBy.Day));
+}, AsBackgroundJob: true);
+
+builder.Services.AddSaPartitional("audit", (sp, builder) =>
+{
+    builder.AddSchema(schema => schema.AddTable("audit_events",
+            "id bigint NOT NULL",
+            "created_at timestamptz NOT NULL")
+        .PartByRange(PgPartBy.Month));
+}, AsBackgroundJob: true);
+```
+
+```csharp
+var outbox      = sp.GetRequiredKeyedService<IPartitionManager>("outbox");
+var audit       = sp.GetRequiredKeyedService<IMigrationService>("audit");
+var outboxSched = sp.GetRequiredKeyedService<IScheduler>("outbox");
+```
+
+- Repeated calls with the **same key** merge tables and settings but keep a single migration and a
+  single cleanup job per module.
+- The key must be non-empty and not `"default"` (`Sa.Schedule.Setup.DefaultName`).
+- **Data source:** a module resolves a **named** data source registered under its key
+  (`.AddDataSource(...)` on the chain, or `services.AddSaPostgreSqlDataSource(key, ...)`), and
+  otherwise falls back to the **default** (unkeyed) one. Several modules can therefore share one
+  database; pin a module to its own database with `.AddDataSource(...)`.
+
+See the Readme's *Keyed Registration* section for the full description.
 
 ---
 

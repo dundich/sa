@@ -51,11 +51,12 @@ configure?.Invoke(configuration);   // ④ делегат пользовател
 
 ### ③ Источник данных
 
-`WithDataSource(configure)` делегирует в `AddSaPostgreSqlDataSource(configure)` из `Sa.Data.PostgreSql`:
+`WithDataSource(configure)` делегирует в `AddSaPostgreSqlDataSource(configure)` из `Sa.Data.PostgreSql`, который регистрирует источник данных на стандартном конвейере `Microsoft.Extensions.Options`:
 
-- `IPgDataSourceSettingsBuilder` предоставляет `WithConnectionString(string)` и `WithConnectionString(Func<IServiceProvider, string>)`; любой из них регистрирует `PgDataSourceSettings` как singleton (`TryAddSingleton`).
-- `IPgDataSource` регистрируется как singleton; его фабрика читает `PgDataSourceSettings`, если он зарегистрирован, иначе использует connection string зарегистрированного в DI `NpgsqlDataSource`, а если и того нет — бросает `InvalidOperationException("Empty connection string")`.
-- `PgDataSourceSettings.GetSearchPath()` — источник авто-наследования схемы из шага ②.
+- Поверхность конфигурации — плоский тип опций `PgDataSourceOptions`, единственное свойство — `ConnectionString`; пулинг, таймауты и search path задаются внутри самой строки.
+- «Голый» вызов в шаге ③ (без callback'а) идемпотентен: `AddOptions<T>` регистрирует свою инфраструктуру через `TryAdd`, а регистрации нормализатора / валидатора / фабрики дедуплицируются через `TryAddEnumerable`, поэтому повторный «голый» вызов ничего не добавляет. Именно настраивающий вызов `WithDataSource(configure)` из шага ④ — первый *настраивающий* — добавляет `Configure`-callback'и / привязку секции, и, поскольку выполняется последним, имеет последнее слово в значении опций.
+- `IPgDataSource` регистрируется как singleton; его фабрика при первом resolve читает `IOptions<PgDataSourceOptions>.Value` (что прогоняет валидаторы): непустой `ConnectionString` строит собственный `NpgsqlDataSource`, пустая строка — фолбэк на `NpgsqlDataSource`, зарегистрированный в DI (общий pool соединений — обёртка не dispose его), ни того ни другого → `OptionsValidationException`.
+- Ключ `Search Path` в connection string (или `"public"`, если отсутствует или не разбирается) — источник авто-наследования схемы из шага ②.
 
 ### ④ Делегат пользователя
 
@@ -63,7 +64,7 @@ configure?.Invoke(configuration);   // ④ делегат пользовател
 
 - `WithMessageSerializer(...)` — удаляет все существующие регистрации `IOutboxMessageSerializer` (`RemoveAll`) и добавляет ровно одну новую (`TryAddSingleton`), поэтому всегда перебивает дефолтный JSON-сериализатор.
 - `WithOutboxSettings(userAction)` — дописывает ваш делегат в зарегистрированный список `Action<IServiceProvider, PgOutboxSettings>`; он выполнится после ранее зарегистрированных делегатов.
-- `WithDataSource(action)` — регистрирует `PgDataSourceSettings` через `TryAddSingleton`, поэтому побеждает только первая регистрация; фабрика `IPgDataSource` (зарегистрированная в шаге ③) подхватит её лениво при резолвинге.
+- `WithDataSource(configure)` — делегирует в `AddSaPostgreSqlDataSource(configure)`. Вызов в шаге ③ «голый», поэтому это первый *настраивающий* вызов: именно его `Configure`-callback'и / привязка секции (`Options(...)` / `FromConfiguration(...)` в том же delegate'е) задают `PgDataSourceOptions`. Второй настраивающий вызов на той же service collection (например, прямой `services.AddSaPostgreSqlDataSource(configure)` раньше в коде) бросает `InvalidOperationException` — иначе два `Configure`-callback'а наслоились бы на один unnamed-инстанс опций и настройки тихо слитались бы.
 
 ### Где значения реально применяются
 
@@ -86,7 +87,7 @@ configure?.Invoke(configuration);   // ④ делегат пользовател
 | `WithMessageSerializer<TService>(TService instance)` | Заменить сериализатор заранее созданным инстансом |
 | `WithMessageSerializer<TService>()` | Зарегистрировать тип сериализатора с parameterless-конструктором |
 | `WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>?)` | Зарегистрировать делегат, настраивающий `PgOutboxSettings` (таблицы / миграция / очистка / consume) |
-| `WithDataSource(Action<IPgDataSourceSettingsBuilder>?)` | Настроить connection string PostgreSQL |
+| `WithDataSource(Action<IDataSourceBuilder>?)` | Настроить источник данных PostgreSQL (connection string): секция через `FromConfiguration`, конвейер опций через `Options(...)` |
 
 Все методы возвращают тот же `IPgOutboxConfiguration` для цепочки.
 
@@ -106,7 +107,7 @@ configure?.Invoke(configuration);   // ④ делегат пользовател
 
 ### `WithDataSource`
 
-Принимает опциональный `Action<IPgDataSourceSettingsBuilder>`. Единственная опция, доступная через билдер, — connection string (прямая строка или фабрика из DI). Пулинг и прочие опции Npgsql настраиваются внутри самого connection string (например, `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`); `Search Path` дополнительно управляет авто-наследованием схемы outbox-таблиц.
+Принимает опциональный callback `Action<IDataSourceBuilder>` и делегирует его в `AddSaPostgreSqlDataSource(...)` из `Sa.Data.PostgreSql` — секция приходит через `FromConfiguration(...)`, конвейер опций — через `Options(...)`; полный конвейер (нормализация, валидация, `ValidateOnStart()`) описан в её Readme. Единственная опция — `ConnectionString`; пулинг и прочие опции Npgsql настраиваются внутри самой строки (например, `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` дополнительно управляет авто-наследованием схемы outbox-таблиц (шаг ②); пустая строка переиспользует `NpgsqlDataSource`, зарегистрированный в DI, вместо открытия второго pool'а.
 
 ---
 
@@ -383,6 +384,92 @@ settings.CleanupSettings.ExecutionInterval = TimeSpan.FromHours(2);
 
 ---
 
+## PgOutboxDeliveryOptions
+
+Настройки доставки per-consumer-group, биндятся из одной секции `IConfiguration` — секция адресуется через `configurationKey`, переданный в `AddDelivery(..., configurationKey: ...)` / `AddDeliveryScoped(..., configurationKey: ...)`. Public, sealed.
+
+### Приоритеты
+
+Финальные `OutboxConsumerSettings` группы складываются из трёх слоёв, от низшего к высшему:
+
+```
+OutboxDefaults  →  эта секция (только если задан configurationKey)  →  callback configure
+```
+
+- **Частично заполненная** секция переопределяет только названные в ней свойства; остальные свойства сохраняют то, что билдер уже несёт (значение из `OutboxDefaults` или более раннее переопределение).
+- Группа, зарегистрированная **без** `configurationKey`, настраивается только `OutboxDefaults` + `configure` — совпадающая по имени секция не читается, даже если существует.
+- **Отсутствующая** или **существующая, но пустая** секция — no-op (все свойства биндятся в null → ничего не применяется).
+
+### Свойства, которые можно задать
+
+Все 16 скаляров `OutboxConsumerSettings` биндируемы и **nullable** — `null` означает «не задано, оставить как есть»:
+
+| Свойство | Тип | Примечание |
+|---|---|---|
+| `Interval` | `TimeSpan?` | Период запуска job'а |
+| `InitialDelay` | `TimeSpan?` | Задержка перед первым запуском после старта |
+| `ConcurrencyLimit` | `int?` | Предел конкурентности расписания группы |
+| `MaxConcurrency` | `int?` | Макс. одновременно работающих job'ов в группе |
+| `RetryCountOnError` | `int?` | Повторы job'а при ошибке (`-1` = бесконечно) |
+| `MaxBatchSize` | `int?` | Верхняя граница арендуемого батча |
+| `MaxProcessingIterations` | `int?` | Итераций за цикл (`-1` = до опустошения) |
+| `IterationDelay` | `TimeSpan?` | Задержка между итерациями в цикле |
+| `LockDuration` | `TimeSpan?` | TTL блокировки арендуемой задачи |
+| `LockRenewal` | `TimeSpan?` | Период продления блокировки |
+| `LookbackInterval` | `TimeSpan?` | Насколько далеко назад искать необработанные |
+| `MaxDeliveryAttempts` | `int?` | Бюджет попыток доставки перед dead-lettering |
+| `BatchingWindow` | `TimeSpan?` | Окно накопления сообщений в батч |
+| `PerTenantTimeout` | `TimeSpan?` | Таймаут обработки одного тенанта (`0` = нет) |
+| `PerTenantMaxDegreeOfParallelism` | `int?` | Параллельность по тенантам (`1` = последовательно, `-1` = по ядру) |
+| `IdleMaxInterval` | `TimeSpan?` | Верхняя граница адаптивного backoff-а пустой очереди (`0` = выключен) |
+
+Значения `TimeSpan` биндятся из стандартного формата `HH:mm:ss` (`00:00:30`); `int` — из обычного целого.
+
+### Намеренно исключены
+
+Два члена `OutboxConsumerSettings` **не** биндируются — и намеренно:
+
+- **`Paused`** — runtime-состояние, управляется через `IOutboxConsumerManager.Pause` / `Resume`, а не через конфигурацию.
+- **`AsSingleton`** — lifetime-контракт регистрации: `AddDelivery` регистрирует keyed *singleton*-консьюмер, `AddDeliveryScoped` — keyed *scoped*-консьюмер. Оно фиксируется тем, какой метод вы вызываете; идентность группы, соответственно, привязана к явному аргументу `consumerGroupId`.
+
+### Как применяется
+
+`PgOutboxDeliveryOptionsProvider` — реализация `IDeliveryGroupOptionsProvider`, которую регистрирует этот пакет (заменяя базовый no-op) — резолвит `IConfiguration` один раз при конструировании (опционально: нет `IConfiguration` в контейнере — провайдер no-op), затем на группу:
+
+1. `PgOutboxDeliveryOptions.FromConfiguration(configuration, configurationKey)` — возвращает `null`, когда ключ пуст или секция отсутствует; иначе биндит секцию через source-generated `IConfigurationSection.Bind` (AOT-safe, тот же выбор, что у partitional PostgreSql-настроек).
+2. `PgOutboxDeliveryOptions.ApplyTo(builder)` — применяет все non-null свойства к билдеру настроек, null-свойства не трогает; `IdleMaxInterval == 0` маппится в `WithFixedInterval()`, положительное значение — в `WithIdleBackoff(...)`.
+
+Провайдер опрашивается только в **stage-2 (startup)** сборке настроек — stage-1 snapshot времени регистрации регистрируется раньше (он не видит секцию, т.к. `IConfiguration` нужен live-провайдер).
+
+### Пример
+
+```jsonc
+// appsettings.json
+{
+  "DeliveryGroups": {
+    "cg_order_consumer": {
+      "MaxBatchSize": 64,
+      "Interval": "00:00:30",
+      "IdleMaxInterval": "00:00:30",
+      "MaxDeliveryAttempts": 5
+    }
+  }
+}
+```
+
+```csharp
+services.AddSaOutbox(builder => builder
+    .WithDeliveries(b => b
+        .AddDelivery<OrderConsumer, OrderCreated>(
+            "cg_order_consumer",
+            (_, settings) => settings.StartImmediately(),   // последнее слово поверх секции
+            configurationKey: "DeliveryGroups:cg_order_consumer")));
+```
+
+Здесь `MaxBatchSize` / `Interval` / `IdleMaxInterval` / `MaxDeliveryAttempts` берутся из секции (поверх `OutboxDefaults`), а `StartImmediately()` из callback'а — последнее слово по `InitialDelay`.
+
+---
+
 ## OutboxFieldDefaults
 
 Static-класс с именами колонок по умолчанию, которые используются каждым свойством `Fields`. Сгруппировано по таблицам, к которым они принадлежат:
@@ -438,7 +525,8 @@ Static-класс с именами колонок по умолчанию, ко
 ```csharp
 services.AddSaOutboxUsingPostgreSql(cfg => cfg
     .WithDataSource(ds => ds
-        .WithConnectionString("Host=localhost;Database=outbox_db;Username=postgres;Password=postgres"))
+        .Options(ob => ob.Configure(o => o.ConnectionString =
+            "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres")))
     .WithOutboxSettings((_, settings) =>
     {
         // схема + все шесть имён таблиц одним вызовом
@@ -468,12 +556,12 @@ services.AddSaOutboxUsingPostgreSql(cfg => cfg
 
 ```csharp
 services.AddSaOutboxUsingPostgreSql(cfg => cfg
-    .WithDataSource(ds => ds.WithConnectionString("Host=localhost;Database=outbox_db;Username=postgres;Password=postgres"))
+    .WithDataSource(ds => ds.Options(ob => ob.Configure(o => o.ConnectionString = "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres")))
     .WithOutboxSettings((_, settings) =>
     {
         settings.MigrationSettings.AsBackgroundJob = false;  // job будет Disabled()
         // IMigrationService по-прежнему резолвится — миграцию можно запускать вручную:
-        // var migration = host.Services.GetRequiredService<IMigrationService>();
+        // var migration = host.Services.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
         // await migration.WaitMigration(TimeSpan.FromSeconds(30), ct);
     })
 );
@@ -490,7 +578,7 @@ public sealed class OrderMessageSerializer : IOutboxMessageSerializer
 }
 
 services.AddSaOutboxUsingPostgreSql(cfg => cfg
-    .WithDataSource(ds => ds.WithConnectionString("Host=localhost;Database=outbox_db;Username=postgres;Password=postgres"))
+    .WithDataSource(ds => ds.Options(ob => ob.Configure(o => o.ConnectionString = "Host=localhost;Database=outbox_db;Username=postgres;Password=postgres")))
     .WithOutboxSettings((_, settings) =>
     {
         // новая группа консьюмеров стартует «с сейчас» — без пережёвывания исторической очереди

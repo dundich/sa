@@ -48,9 +48,14 @@ public interface IPgOutboxConfiguration
     IPgOutboxConfiguration WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null);
 
     /// <summary>
-    /// Configures the PostgreSQL data source connection string and related options.
+    /// Configures the PostgreSQL data source through the standard options pipeline
+    /// (<see cref="PgDataSourceOptions"/>).
     /// </summary>
-    /// <param name="configure">Delegate receiving <see cref="IPgDataSourceSettingsBuilder"/> to set connection string and pooling options.</param>
+    /// <param name="configure">
+    /// Optional callback receiving the <see cref="IDataSourceBuilder"/> for this data source:
+    /// the section via <c>FromConfiguration</c> and the options pipeline via <c>Options</c>
+    /// (connection string; pooling, timeout and search path live inside the string itself).
+    /// </param>
     /// <returns>The same <see cref="IPgOutboxConfiguration"/> for chaining.</returns>
-    IPgOutboxConfiguration WithDataSource(Action<IPgDataSourceSettingsBuilder>? configure = null);
+    IPgOutboxConfiguration WithDataSource(Action<IDataSourceBuilder>? configure = null);
 }

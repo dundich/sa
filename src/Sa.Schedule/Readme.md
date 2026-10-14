@@ -14,6 +14,7 @@ A .NET task scheduler — periodic and one-shot jobs, dynamic concurrency contro
 - **[Lambda jobs](#lambda-jobs)** — anonymous delegates without dedicated classes.
 - **[Graceful shutdown](#runtime-management)** — configurable timeout for running iterations.
 - **[Scoped services](#defining-jobs)** — DbContext, IDbConnection, etc. resolved in a DI scope per execution.
+- **[Multiple independent schedules](#multiple-schedules-keyed)** — several keyed schedules in one container, each with its own jobs, options, interceptors and handlers.
 
 ---
 
@@ -41,6 +42,52 @@ builder.Services.AddSaSchedule(b =>
 
 var app = builder.Build();
 await app.RunAsync();
+```
+
+---
+
+## Multiple Schedules (Keyed)
+
+`AddSaSchedule` can be called with a schedule name to register a **fully independent** schedule under that DI key — its own jobs, own interceptors, own global error handlers and its own `ScheduleOptions` (bound from its own configuration section, applied to its own named options instance). Resolve it as a keyed service:
+
+```csharp
+services.AddSaSchedule("reports", b =>
+{
+    b.UseHostedService()
+     .AddJob<ReportGenerationJob>()
+        .EveryHours(1);
+});
+
+services.AddSaSchedule("cleanup", b =>
+{
+    b.UseHostedService()
+     .AddJob<CleanupJob>((sp, job) => job.EveryMinutes(5));
+});
+
+var reports = sp.GetRequiredKeyedService<IScheduler>("reports");
+var cleanup = sp.GetRequiredKeyedService<IScheduler>("cleanup");
+```
+
+Each schedule is a self-contained nest: `IScheduler`, `IScheduleSettings`, `IJobFactory`, `IJobErrorHandler` and the named `ScheduleOptions` are all registered keyed by the schedule name, and every job, interceptor and error handler lands in that schedule's own slot. A job in one schedule never sees another schedule's settings, and starting/stopping one scheduler leaves the other untouched.
+
+Everything else — `TimeProvider`, `IJobRunner`, `IServiceScopeFactory` — stays shared and unkeyed.
+
+### Rules
+
+- **Repeated calls with the same name accumulate.** Like the keyless overload, several `AddSaSchedule("name", ...)` calls fold their jobs/interceptors/handlers into the same schedule — that is how libraries that contribute jobs compose into one named schedule. A second *configuring* call (one whose builder calls `FromConfiguration(...)` or `Options(...)`) for the same name throws, per name: the guard is tracked per schedule, not globally.
+- **The keyless overload registers the default schedule.** It is resolved unkeyed (`GetRequiredService<IScheduler>()`) and is also registered as a keyed alias under `Setup.DefaultName` (`"default"`), so both resolution styles work for it. `AddSaSchedule(Setup.DefaultName, ...)` is exactly the keyless call — it does **not** create a second, separately keyed schedule.
+- **Some libraries use a named schedule, not the default one.** `AddDeliveryJob`, `AddPartCleaning` and `AddPartMigration` register into whichever schedule the calling module is scoped to. `Sa.Outbox` scopes its delivery jobs to its own named schedule (`OutboxScope.DefaultKey`, `"outbox"`) so they never collide with the application's default one; the partitional modules register into the default schedule when used directly and into the caller's named schedule when a keyed module is used.
+- **Explicit `jobId`s must stay unique across the container.** Two schedules sharing a `jobId` would also share the keyed job registration (auto-generated ids never clash).
+- **`IValidateOptions<ScheduleOptions>` runs for every named options instance**, so per-schedule validation fires the same way the default schedule's does.
+
+```csharp
+// Named options per schedule, each bound from its own section
+services.AddSaSchedule("a", b =>
+{
+    b.AddJob<JobA>().WithName("JA").EveryMinutes(1);
+    b.FromConfiguration("ScheduleA");       // binds ScheduleOptions("a")
+    b.Options(o => o.Configure(...));        // same pipeline as the keyless overload
+});
 ```
 
 ---
@@ -102,6 +149,7 @@ b.AddJob((context, ct) =>
 | `.EveryDays(int)` | Convenience alias for days |
 | `.OnceIn(TimeSpan)` | Run once after a delay |
 | `.WithCron(string, string?)` | Schedule using cron expression (minute hour dayOfMonth month dayOfWeek) |
+| `.WithTimeZone(TimeZoneInfo)` / `.WithTimeZone(string id)` | Time zone the cron expression is read in — "0 9 * * *" means 09:00 where you live. IANA (`Europe/Moscow`) or Windows (`Russian Standard Time`) ids; duration timings are unaffected. Unset = UTC |
 | `.WithContextStackSize(int)` | Keep N previous contexts on a stack for debugging |
 | `.WithTag(object)` | Attach arbitrary metadata |
 | `.WithConcurrencyLimit(int)` | Number of concurrent executions |
@@ -110,6 +158,83 @@ b.AddJob((context, ct) =>
 | `.Disabled()` | Register but don't start |
 | `.Merge(IJobProperties)` | Merge another configuration |
 | `.ConfigureErrorHandling(Action<IJobErrorHandlingBuilder>)` | Error recovery policy |
+
+### Jobs without a timing
+
+Registering a job without any timing (`Every*`/`WithCron`) is not an error — the job runs **back-to-back**: as soon as one iteration finishes, the next one starts, with no wait in between. This mode is meant for frequent operations that pace themselves with their own wait inside `IJob.Execute` (draining a queue, polling a channel). If the job has nothing to block on, it will spin and burn CPU — give it a timing, or make the internal wait block.
+
+---
+
+## Configuration via appsettings.json
+
+Jobs are usually configured in code (builder API above), but you can also drive them from a configuration file. `AddSaSchedule` binds an optional section — recorded with `b.FromConfiguration("Schedule")` inside the same `configure` delegate — to `ScheduleOptions` on the standard `Microsoft.Extensions.Options` pipeline, and its values are applied **on top of** the code-registered jobs — configuration wins, in both directions (including `Disabled: false` re-enabling a job that was `Disabled()` in code).
+
+```csharp
+services.AddSaSchedule(
+    configure: b =>
+    {
+        b.UseHostedService();
+        b.AddJob<Heartbeat>().WithName("Heartbeat").EverySeconds(30);
+        b.AddJob<SlowReport>().WithName("SlowReport").EverySeconds(2);
+        b.AddJob<NightlyCleanup>().WithName("NightlyCleanup").EveryMinutes(15);
+        b.FromConfiguration("Schedule");
+    });
+```
+
+```json
+{
+  "Schedule": {
+    "Jobs": {
+      "Heartbeat":      { "Every": "00:00:02" },
+      "SlowReport":     { "Disabled": true },
+      "NightlyCleanup": { "Cron": "0 3 * * *" }
+    }
+  }
+}
+```
+
+`Heartbeat` now runs every 2 seconds (was 30), `SlowReport` is silent (was every 2 s), `NightlyCleanup` runs on cron at 03:00 (was every 15 min).
+
+The same `configure` delegate also owns the settings pipeline — `.Options(...)` hands you the
+standard `OptionsBuilder<ScheduleOptions>`, so there is one configuration channel for everything:
+
+```csharp
+services.AddSaSchedule(
+    configure: b =>
+    {
+        b.AddJob<Heartbeat>().WithName("Heartbeat").EverySeconds(30);
+        b.FromConfiguration("Schedule");
+        b.Options(o => o                             // escape hatch — beats config
+            .Configure(x => x.TimeZone = "UTC")
+            .Validate(x => x.Jobs.Count <= 32, "At most 32 configured jobs."));
+    });
+```
+
+### Per-job options
+
+| Property | Type | Effect |
+|---|---|---|
+| `Disabled` | `bool?` | `true` stops the job; `false` re-enables a job disabled in code |
+| `Immediate` | `bool?` | `true` runs the job on the first tick, without waiting for its timing; `false` reverts a code `StartImmediate()` |
+| `IsRunOnce` | `bool?` | `true` runs the job exactly once and never again; `false` restores the periodic schedule of a code `RunOnce()` |
+| `Cron` | `string?` | 5-field cron expression — replaces any timing set in code |
+| `Every` | `TimeSpan?` | interval — replaces any timing set in code |
+| `TimeZone` | `string?` | time zone the job's `Cron` is read in (IANA or Windows id), overriding the code zone or a schedule-wide `ScheduleOptions.TimeZone` |
+| `InitialDelay` | `TimeSpan?` | delay before the first run |
+| `ConcurrencyLimit` | `int?` | slots actively running at any moment; not negative; the scheduler clamps it down to `MaxConcurrency` |
+| `MaxConcurrency` | `int?` | absolute number of pre-allocated slots; at least 1 |
+
+All are optional; a property absent from the config leaves the code value untouched. `Cron` and `Every` are mutually exclusive — setting both is a validation error, as are a negative `ConcurrencyLimit` and a `MaxConcurrency` below 1 (the same rules the code mutators enforce). `TimeSpan` uses the constant form `[d.]hh:mm:ss`: `00:05:00` is five **minutes**, `00:00:30` is thirty **seconds**.
+
+### Matching a job to its section
+
+A job is matched to a `Jobs:<key>` entry by its name (`WithName(...)`), falling back to `typeof(Job).FullName` when no name was set. **Renaming a job in code silently detaches it from its section.** Entries whose key matches no registered job — and unknown property names within a job — are ignored.
+
+### Precedence and validation
+
+Within one job the order is code registration → section binding → your `Options(...)` callback (`b.Options(o => ...)` on the same builder), so a `Configure` call there has the last word over the file. `ValidateOnStart()` turns an invalid value into an `OptionsValidationException` at host start, and the same check runs the first time the options are read — so a misconfiguration fails fast rather than deep in a job run.
+
+A full working example lives in [`Samples/Schedule.Configuration.Console`](../Samples/Schedule.Configuration.Console).
 
 ---
 
@@ -125,12 +250,21 @@ b.AddJob<HealthCheck>().WithCron("*/15 * * * *");    // Every 15 minutes
 b.AddJob<WeekdayCleanup>().WithCron("30 14 * * 1-5"); // Weekdays at 2:30 PM
 ```
 
+By default the expression is evaluated against the scheduler's clock (**UTC**). Use `WithTimeZone` to read it on a local wall clock — the expression then means "9:00 where you live", and a DST transition shifts the moment by the transition delta instead of drifting an hour:
+
+```csharp
+b.AddJob<DailyReport>().WithCron("0 9 * * *").WithTimeZone("Europe/Moscow");
+```
+
+The same effect is available from config via `ScheduleOptions.TimeZone` (all jobs) or a job's `TimeZone` option. The zone applies to cron timings only — `Every*` intervals are durations and are unaffected.
+
 ---
 
 ## Concurrency Model
 
 - **`ConcurrencyLimit`** — how many slots are actively running at any time (initially). Can be changed dynamically via `IJobScheduler.ConcurrencyLimit`.
 - **`MaxConcurrency`** — total number of slot pre-allocated. `ConcurrencyLimit ≤ MaxConcurrency`.
+- **Defaults** — when `MaxConcurrency` is not set it equals the effective `ConcurrencyLimit` (so `WithConcurrencyLimit(5)` alone allocates 5 slots); when neither is set, both default to **1**. An unset `ConcurrencyLimit` defaults to 1 even when `MaxConcurrency` is larger (slots are pre-allocated but only one is active).
 - Dynamic adjustment pauses/resumes individual slots without recreating them.
 
 ---
@@ -272,7 +406,7 @@ public class Controller
 | `IsStarted` | Whether the job is currently running |
 | `QueueTasks` | Tasks in the queue buffer (the pre-allocated slots while running, 0 when stopped) |
 | `ConcurrencyLimit` | Get/set active concurrency |
-| `StartChangeToken()` | Track start/stop state changes |
+| `StartChangeToken()` | Fires when the running job stops; never fires while the job is already stopped (no pending transition — poll `IsStarted` for a later start) |
 | `Start(ct)` | Start this job |
 | `Stop()` | Stop with timeout |
 

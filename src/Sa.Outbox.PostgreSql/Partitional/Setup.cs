@@ -8,12 +8,19 @@ namespace Sa.Outbox.PostgreSql.Partitional;
 
 internal static class Setup
 {
-    public static IServiceCollection AddOutboxPartitional(this IServiceCollection services)
+    private static ITableBuilder WithDefaultPartitionIf(this ITableBuilder b, bool enable) =>
+        enable ? b.WithDefaultPartition() : b;
+
+    public static IServiceCollection AddOutboxPartitional(this IServiceCollection services, string scopeKey)
     {
         services.TryAddTransient<MsgMigrationSupport>();
         services.TryAddTransient<TaskMigrationSupport>();
 
-        _ = services.AddSaPartitional((sp, builder) =>
+        // Keyed module: the outbox tables, migration/cleanup settings and the migration/cleanup
+        // jobs live in the outbox's own scope, never in the application's default partitional
+        // module. The module falls back to the shared (unkeyed) outbox data source because it does
+        // not pin a named one.
+        _ = services.AddSaPartitional(scopeKey, (sp, builder) =>
         {
             SqlOutboxBuilder sql = sp.GetRequiredService<SqlOutboxBuilder>();
             var tableSettings = sql.TableSettings;
@@ -25,6 +32,7 @@ internal static class Setup
                     .PartByList(tableSettings.Message.Fields.TenantId, tableSettings.Message.Fields.MsgPart)
                     .TimestampAs(tableSettings.Message.Fields.MsgCreatedAt)
                     .WithFillFactor(tableSettings.Message.FillFactor) // insert only
+                    .WithDefaultPartitionIf(tableSettings.UseDefaultPartition)
                     .AddPostSql(() => $"""
                         {sql.SqlCreateTypeTable}
                         {sql.SqlAddMsgSeqColumnToMsgTable}
@@ -36,6 +44,7 @@ internal static class Setup
                     .PartByList(tableSettings.TaskQueue.Fields.TenantId, tableSettings.TaskQueue.Fields.ConsumerGroup)
                     .TimestampAs(tableSettings.TaskQueue.Fields.TaskCreatedAt)
                     .WithFillFactor(tableSettings.TaskQueue.FillFactor)
+                    .WithDefaultPartitionIf(tableSettings.UseDefaultPartition)
                     .AddPostSql(() => $"""
                         {sql.SqlCreateOffsetTable}
                         {sql.SqlAddMsgSeqColumnToTaskTable}
@@ -48,12 +57,14 @@ internal static class Setup
                     .PartByList(tableSettings.Delivery.Fields.TenantId, tableSettings.Delivery.Fields.ConsumerGroup)
                     .TimestampAs(tableSettings.Delivery.Fields.DeliveryCreatedAt)
                     .WithFillFactor(tableSettings.Delivery.FillFactor)
+                    .WithDefaultPartitionIf(tableSettings.UseDefaultPartition)
                 ;
 
                 ITableBuilder errorTableBuilder = schema
                     .AddTable(tableSettings.Error.TableName, tableSettings.Error.Fields.All())
                     .TimestampAs(tableSettings.Error.Fields.ErrorCreatedAt)
                     .WithFillFactor(tableSettings.Error.FillFactor)
+                    .WithDefaultPartitionIf(tableSettings.UseDefaultPartition)
                 ;
 
 
@@ -64,20 +75,22 @@ internal static class Setup
             })
             ;
         })
-        .AddPartMigrationSchedule((sp, opts) =>
+        .AddPartMigrationSchedule(b => b.Configure((sp, opts) =>
         {
             PgOutboxMigrationSettings settings = sp.GetRequiredService<PgOutboxMigrationSettings>();
             opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.ForwardDays = settings.ForwardDays;
-        })
-        .AddPartCleanupSchedule((sp, opts) =>
+        }))
+        .AddPartCleanupSchedule(b => b.Configure((sp, opts) =>
         {
             PgOutboxCleanupSettings settings = sp.GetRequiredService<PgOutboxCleanupSettings>();
             opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.DropPartsAfterRetention = settings.DropPartsAfterRetention;
-        })
+            opts.CleanupMode = settings.CleanupMode;
+            opts.ArchiveSchemaName = settings.ArchiveSchemaName;
+        }))
         ;
 
         return services;

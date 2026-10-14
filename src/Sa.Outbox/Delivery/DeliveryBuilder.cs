@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace Sa.Outbox.Delivery;
 
-internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDeliveryBuilder
+internal sealed partial class DeliveryBuilder(IServiceCollection services, string scopeKey) : IDeliveryBuilder
 {
 
     private IConsumerGroupNamingStrategy _defaultNamingStrategy = new DefaultConsumerGroupNamingStrategy();
@@ -16,12 +16,13 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
         Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
-        Guid? jobId = null)
+        Guid? jobId = null,
+        string? configurationKey = null)
             where TConsumer : class, IConsumer<TMessage>
     {
         ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
         var sanitized = SanitizeString(consumerGroupId);
-        services.AddDeliveryJob<TConsumer, TMessage>(sanitized, false, configure, jobId);
+        services.AddDeliveryJob<TConsumer, TMessage>(sanitized, false, configure, jobId, scopeKey, configurationKey);
         return this;
     }
 
@@ -36,12 +37,13 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services) : IDe
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
         Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
-        Guid? jobId = null)
+        Guid? jobId = null,
+        string? configurationKey = null)
             where TConsumer : class, IConsumer<TMessage>
     {
         ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
         var sanitized = SanitizeString(consumerGroupId);
-        services.AddDeliveryJob<TConsumer, TMessage>(sanitized, true, configure, jobId);
+        services.AddDeliveryJob<TConsumer, TMessage>(sanitized, true, configure, jobId, scopeKey, configurationKey);
         return this;
     }
 

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.PlugServices;
+using Sa.Outbox.PostgreSql.Services;
 
 namespace Sa.Outbox.PostgreSql.Services.Plug;
 
@@ -19,6 +20,8 @@ internal static class Setup
         services
             .RemoveAll<IOutboxTenantDetector>()
             .AddSingleton<IOutboxTenantDetector, OutboxTenantDetector>();
+
+        services.TryAddSingleton<IPgOutboxDatabaseGuard, PgOutboxDatabaseGuard>();
 
         return services;
     }

@@ -210,11 +210,12 @@ public sealed class WorkQueueDiagnosticsTests
 
         // A scoped or transient queue gives every resolution its own pool and its own
         // copy of the buffer. It "works" right up until two scopes both enqueue the
-        // same work, so it is rejected at registration instead.
+        // same work, so it is rejected at registration instead — and rejected before
+        // anything is added, so the collection stays untouched.
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
-            services.AddSaWorkQueue(
-                _ => SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask),
-                ServiceLifetime.Scoped));
+            services.AddSaWorkQueue<int>(
+                b => b.WithProcess((_, _) => Task.CompletedTask),
+                lifetime: ServiceLifetime.Scoped));
 
         Assert.Equal("lifetime", ex.ParamName);
         Assert.Empty(services);
@@ -225,9 +226,9 @@ public sealed class WorkQueueDiagnosticsTests
     {
         var services = new ServiceCollection();
 
-        services.AddSaWorkQueue(_ => SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask));
+        services.AddSaWorkQueue<int>(b => b.WithProcess((_, _) => Task.CompletedTask));
 
-        var descriptor = Assert.Single(services);
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(ISaWorkQueue<int>));
         Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
 
         using var provider = services.BuildServiceProvider();

@@ -1,8 +1,15 @@
-﻿namespace Sa.Partitional.PostgreSql;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// Settings for the automated background job that pre-creates future partitions.
 /// </summary>
+/// <remarks>
+/// Served by the standard <c>Microsoft.Extensions.Options</c> pipeline (one named instance per
+/// module): section binding → code delegates → validation. Mutable POCO with scalar values only, so
+/// it binds straight from <c>appsettings.json</c> and stays Native AOT friendly.
+/// </remarks>
 public sealed class MigrationScheduleSettings
 {
     /// <summary>
@@ -52,4 +59,49 @@ public sealed class MigrationScheduleSettings
     /// Default is 10 seconds.
     /// </remarks>
     public TimeSpan RunTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Validates the current settings and throws a <see cref="ValidationException"/> for the first
+    /// unusable value. Called by <c>MigrationScheduleSettingsValidator</c> after the pipeline has
+    /// bound and applied the code settings, so it validates the final values.
+    /// </summary>
+    /// <exception cref="ValidationException">Thrown when a value is not usable.</exception>
+    /// <remarks>
+    /// Explicit checks rather than <c>ValidateDataAnnotations()</c>: the latter is marked
+    /// <c>RequiresUnreferencedCode</c> (IL2026) and breaks Native AOT.
+    /// </remarks>
+    public void Validate()
+    {
+        // ForwardDays == 0 would run Enumerable.Range(0, 0) — an empty set, so no partition would
+        // ever be created. At least the current day has to be in the window.
+        if (ForwardDays < 1)
+        {
+            throw new ValidationException(
+                $"MigrationScheduleSettings:ForwardDays must be at least 1, but was '{ForwardDays}'.");
+        }
+
+        if (ExecutionInterval <= TimeSpan.Zero)
+        {
+            throw new ValidationException(
+                $"MigrationScheduleSettings:ExecutionInterval must be positive, but was '{ExecutionInterval}'.");
+        }
+
+        if (WaitMigrationTimeout < TimeSpan.Zero)
+        {
+            throw new ValidationException(
+                $"MigrationScheduleSettings:WaitMigrationTimeout must not be negative, but was '{WaitMigrationTimeout}'.");
+        }
+
+        if (RunTimeout <= TimeSpan.Zero)
+        {
+            throw new ValidationException(
+                $"MigrationScheduleSettings:RunTimeout must be positive, but was '{RunTimeout}'.");
+        }
+
+        if (MigrationJobName is { } jobName && string.IsNullOrWhiteSpace(jobName))
+        {
+            throw new ValidationException(
+                "MigrationScheduleSettings:MigrationJobName must not be blank when it is set.");
+        }
+    }
 }

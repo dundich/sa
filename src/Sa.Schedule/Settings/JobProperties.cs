@@ -1,4 +1,6 @@
-﻿namespace Sa.Schedule.Settings;
+﻿using Sa.Schedule.Cron;
+
+namespace Sa.Schedule.Settings;
 
 internal sealed class JobProperties : IJobProperties
 {
@@ -8,6 +10,7 @@ internal sealed class JobProperties : IJobProperties
     public TimeSpan? InitialDelay { get; private set; }
     public bool? Disabled { get; private set; }
     public IJobTiming? Timing { get; private set; }
+    public TimeZoneInfo? TimeZone { get; private set; }
     public object? Tag { get; private set; }
     public int? ContextStackSize { get; private set; }
     public int? ConcurrencyLimit { get; private set; }
@@ -41,6 +44,7 @@ internal sealed class JobProperties : IJobProperties
     public JobProperties WithTiming(IJobTiming timing)
     {
         Timing = timing;
+        ApplyTimeZoneToTiming();
         return this;
     }
 
@@ -84,6 +88,19 @@ internal sealed class JobProperties : IJobProperties
     public JobProperties WithCron(string expression, string? name = null)
     {
         Timing = new CronTimingAdapter(new Cron.CronTiming(expression, name));
+        ApplyTimeZoneToTiming();
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the time zone the cron expression is read in — see <see cref="TimeZone"/>.
+    /// Applies to cron timings only; durations and custom timings are unaffected.
+    /// </summary>
+    public JobProperties WithTimeZone(TimeZoneInfo timeZone)
+    {
+        ArgumentNullException.ThrowIfNull(timeZone);
+        TimeZone = timeZone;
+        ApplyTimeZoneToTiming();
         return this;
     }
 
@@ -108,6 +125,91 @@ internal sealed class JobProperties : IJobProperties
         return this;
     }
 
+    /// <summary>
+    /// Applies <see cref="JobOptions"/> from configuration on top of whatever the code set:
+    /// configuration wins in every field, in both directions — including
+    /// <c>Disabled = false</c> re-enabling a job disabled in code. A null property leaves the
+    /// code value untouched. <paramref name="options"/> may be null when a schedule-wide
+    /// <c>TimeZone</c> default still needs to reach this job.
+    /// </summary>
+    internal void ApplyConfiguration(JobOptions? options, TimeZoneInfo? defaultTimeZone = null)
+    {
+        // Zone precedence: per-job config → schedule-wide default → code value. A string id
+        // was already accepted by the options validator (which runs before any settings are
+        // consumed from the pipeline), so the resolve here cannot fail on that path.
+        if (options?.TimeZone is not null)
+        {
+            TimeZone = TimeZoneInfo.FindSystemTimeZoneById(options.TimeZone);
+        }
+        else if (TimeZone is null && defaultTimeZone is not null)
+        {
+            TimeZone = defaultTimeZone;
+        }
+
+        if (options is null)
+        {
+            ApplyTimeZoneToTiming();
+            return;
+        }
+
+        if (options.Disabled is not null)
+        {
+            Disabled = options.Disabled;
+        }
+
+        if (options.Immediate is not null)
+        {
+            Immediate = options.Immediate;
+        }
+
+        if (options.IsRunOnce is not null)
+        {
+            IsRunOnce = options.IsRunOnce;
+        }
+
+        if (options.ConcurrencyLimit is not null)
+        {
+            ConcurrencyLimit = options.ConcurrencyLimit;
+        }
+
+        if (options.MaxConcurrency is not null)
+        {
+            MaxConcurrency = options.MaxConcurrency;
+        }
+
+        if (options.Every is not null)
+        {
+            Timing = JobTiming.EveryTime(options.Every.Value);
+        }
+        else if (options.Cron is not null)
+        {
+            Timing = new CronTimingAdapter(new CronTiming(options.Cron));
+        }
+
+        if (options.InitialDelay is not null)
+        {
+            InitialDelay = options.InitialDelay;
+        }
+
+        // The config may have changed either the zone or the cron timing — re-apply so the
+        // pairing stays correct regardless of the order they arrived in.
+        ApplyTimeZoneToTiming();
+    }
+
+    /// <summary>
+    /// Applies <see cref="TimeZone"/> to the current timing. Only cron carries wall-clock
+    /// semantics — durations (<c>Every*</c>) and custom timings keep running on the
+    /// scheduler's clock. Called after every point that can change either value, so zone and
+    /// cron can be set in any order.
+    /// </summary>
+    private void ApplyTimeZoneToTiming()
+    {
+        if (TimeZone is not null && Timing is CronTimingAdapter cron)
+        {
+            cron.TimeZone = TimeZone;
+        }
+    }
+
 
     internal JobProperties Merge(IJobProperties props)
     {
@@ -116,6 +218,7 @@ internal sealed class JobProperties : IJobProperties
         Disabled ??= props.Disabled;
         Timing ??= props.Timing;
         IsRunOnce ??= props.IsRunOnce;
+        TimeZone ??= props.TimeZone;
         InitialDelay ??= props.InitialDelay;
         ContextStackSize ??= props.ContextStackSize;
         Tag ??= props.Tag;
@@ -123,6 +226,8 @@ internal sealed class JobProperties : IJobProperties
         ConcurrencyLimit ??= props.ConcurrencyLimit;
         MaxConcurrency ??= props.MaxConcurrency;
         ShutdownTimeout ??= props.ShutdownTimeout;
+
+        ApplyTimeZoneToTiming();
 
         return this;
     }

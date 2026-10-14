@@ -38,6 +38,22 @@ public class CronTimingTests
         Assert.Equal(new DateTimeOffset(2026, 6, 25, 10, 31, 0, TimeSpan.Zero), result);
     }
 
+    [Theory]
+    [InlineData("0,*/15 * * * *", "2026-06-25T10:07:00Z", "2026-06-25T10:15:00Z")] // list element "*/15"
+    [InlineData("0,5-55/20 * * * *", "2026-06-25T10:00:00Z", "2026-06-25T10:05:00Z")] // list element "5-55/20"
+    [InlineData("1-5/10 * * * *", "2026-06-25T10:00:00Z", "2026-06-25T10:01:00Z")] // range+step as a whole field
+    public void GetNextOccurrence_StepInsideList_IsAllowed(string cronExpression, string startTime, string expectedNext)
+    {
+        var timing = new CronTiming(cronExpression);
+        var start = DateTimeOffset.Parse(startTime, CultureInfo.InvariantCulture);
+        var expected = DateTimeOffset.Parse(expectedNext, CultureInfo.InvariantCulture);
+
+        var result = timing.GetNextOccurrence(start);
+
+        Assert.NotNull(result);
+        Assert.Equal(expected, result);
+    }
+
     [Fact]
     public void GetNextOccurrence_HourlyAtMinute0_NextHour()
     {

@@ -138,9 +138,9 @@ public sealed class FakeDeliveryLifetimeInvoker(Func<CancellationToken, Task> co
 }
 
 /// <summary>
-/// Fake implementation of <see cref="IRetryStrategy"/> for testing.
+/// Fake implementation of <see cref="IDeliveryBackoffStrategy"/> for testing.
 /// </summary>
-public sealed class FakeRetryStrategy(Func<int, TimeSpan> backoffFn) : IRetryStrategy
+public sealed class FakeDeliveryBackoffStrategy(Func<int, TimeSpan> backoffFn) : IDeliveryBackoffStrategy
 {
     public readonly List<int> RecordedAttempts = [];
 

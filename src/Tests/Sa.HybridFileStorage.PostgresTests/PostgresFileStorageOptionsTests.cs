@@ -1,4 +1,5 @@
 using Sa.HybridFileStorage.Postgres;
+using Sa.Partitional.PostgreSql;
 
 namespace Sa.HybridFileStorage.PostgresTests;
 
@@ -9,12 +10,19 @@ namespace Sa.HybridFileStorage.PostgresTests;
 /// </summary>
 public sealed class PostgresFileStorageOptionsTests
 {
-    private static PostgresFileStorageOptions ValidOptions() => new();
+    private static PostgresFileStorageOptions ValidOptions() => new() { TableName = "files" };
 
     [Fact]
     public void Validate_Accepts_Defaults()
     {
         ValidOptions().Validate();
+    }
+
+    [Fact]
+    public void Validate_Rejects_DefaultOptions_BecauseTableNameIsRequired()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => new PostgresFileStorageOptions().Validate());
+        Assert.Equal(nameof(PostgresFileStorageOptions.TableName), ex.ParamName);
     }
 
     // ---------- TableName ----------
@@ -190,12 +198,12 @@ public sealed class PostgresFileStorageOptionsTests
         var options = new PostgresFileStorageOptions();
 
         Assert.Null(options.SchemaName);
-        Assert.Equal("files", options.TableName);
+        Assert.Equal(string.Empty, options.TableName);
         Assert.Equal("pg", options.StorageType);
         Assert.Equal(Sa.HybridFileStorage.StorageNaming.DefaultBasket, options.Basket);
         Assert.False(options.IsReadOnly);
         Assert.Equal(365 * 3, options.ExpireDays);
         Assert.Equal(2, options.MigrationScheduleForwardDays);
-        Assert.Equal("Day", options.PgPartBy.ToString());
+        Assert.Equal(PartByRange.Day, options.PartByRange);
     }
 }

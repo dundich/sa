@@ -24,7 +24,7 @@ builder.Services
     )
     // Регистрация провайдера (пример — PostgreSQL)
     .AddSaOutboxUsingPostgreSql(cfg => cfg
-        .WithDataSource(ds => ds.WithConnectionString("Host=localhost;Database=outbox"))
+        .WithDataSource(ds => ds.Options(ob => ob.Configure(o => o.ConnectionString = "Host=localhost;Database=outbox")))
     );
 ```
 
@@ -52,23 +52,13 @@ builder.Services
 | **Publication** | Сообщения записываются в таблицу outbox внутри транзакции бизнес-операции через `IOutboxBulkWriter.InsertBulk()` |
 | **Delivery** | Фоновые задания (`Sa.Schedule`) захватывают заблокированные сообщения, вызывают консьюмеры, обновляют статус |
 
----
-
-## Основные типы
-
-| Тип | Назначение |
-|-----|-----------|
-| `IOutboxBuilder` | Fluent-билдер конфигурации |
-| `IOutboxMessagePublisher` | Публикация сообщений в outbox |
-| `IConsumer\<TMessage\>` | Интерфейс консьюмера сообщений |
-| `IOutboxContextOperations\<TMessage\>` | Операции изменения статуса доставки (`Ok`, `Error`, `Warn`, `Postpone` и т.д.) |
-| `OutboxConsumerSettings` | Immutable-снимок настроек группы консьюмера (интервал, батчи, параллелизм, повторы…) |
-| `OutboxConsumerSettingsBuilder` | Fluent-билдер для создания и частичного обновления `OutboxConsumerSettings` |
-| `IOutboxConsumerManager` | Runtime-менеджер: атомарный свап, пауза/возобновление, изменение подписок |
-| `IDeliverySnapshot` | Read-only представление зарегистрированных доставок для диагностики |
-| `DeliveryStatus` / `DeliveryStatusCode` | HTTP-подобные коды статуса доставки |
-| `ExponentialBackoffRetryStrategy` | Экспоненциальный backoff с jitter |
-| `OutboxPartInfo` | Информация о партиции: TenantId, PartName |
+> **Изоляция.** Задания доставки работают в **собственном** именованном расписании `Sa.Schedule`
+> под ключом скопа `OutboxScope.DefaultKey` (`"outbox"`), поэтому они никогда не делят расписание с
+> `AddSaSchedule()` приложения. Интеграция с PostgreSQL регистрирует свой модуль
+> `Sa.Partitional.PostgreSql` под тем же ключом. Оба метода — `AddSaOutbox` и
+> `AddSaOutboxUsingPostgreSql` — принимают необязательный последний аргумент `scopeKey`; передайте
+> одно и то же значение в оба, чтобы перенести Outbox в другой скоп. Зарезервированный ключ
+> `"default"` отклоняется.
 
 ---
 
@@ -93,24 +83,6 @@ builder.Services
 
 ---
 
-## Методы статуса
-
-После обработки каждого сообщения вызовите ровно один метод из `IOutboxContextOperations<T>`:
-
-| Метод | Описание |
-|-------|---------|
-| `msg.Ok(message?)` | Успешно обработано (200 OK) |
-| `msg.Created(message?)` | Создан ресурс побочного эффекта (201 Created) |
-| `msg.Accepted(message?)` | Принято для асинхронной обработки (202 Accepted) |
-| `msg.NoContent(message?)` | Обработано, нет данных (204 No Content) |
-| `msg.Aborted(message?)` | Намеренно пропущено (299 Aborted) |
-| `msg.Warn(exception, message?, postpone?)` | Временная ошибка → повтор (400 Warn) |
-| `msg.Error(exception, message?)` | Постоянная ошибка (500 Error) |
-| `msg.ErrorMaxAttempts()` | Исчерпан макс. число попыток (508) |
-| `msg.Postpone(delay, message?)` | Отложить обработку (103 Postpone) |
-| `msg.Retry(delay, message?)` | Повторить с метаданными (104 Retry) |
-
----
 
 ## Конфигурация
 
@@ -189,19 +161,82 @@ var allGroups = manager.GetAllConsumerGroupIds();
 | `PerTenantMaxDegreeOfParallelism` | 1 | Параллелизм по арендаторам (1 = последовательно, -1 = все ядра) |
 | `RetryCountOnError` | 0 | Повторы при ошибке (-1 = бесконечно) |
 | `Paused` | false | Флаг паузы |
+| `IdleMaxInterval` | 0 (выключено) | Верхняя граница адаптивного backoff-а пустой очереди; при установке должен быть `>= Interval` |
+
+### Политика ожидания пустой очереди
+
+Backoff пустой очереди включается на каждую группу отдельно. Задайте базовый `Interval` (пока идёт работа) и предел `IdleMaxInterval` (пока пусто):
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveries(d => d
+        .AddDelivery<OrderConsumer, OrderPlaced>("orders", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(5))      // 5 с, пока идёт работа
+            .WithIdleBackoff(TimeSpan.FromMinutes(2))   // рост до 2 мин, пока пусто
+        )
+        .AddDelivery<AuditConsumer, AuditEvent>("audit", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(1))
+            .WithFixedInterval()                        // оставить группу отзывчивой
+        )
+    ));
+```
+
+DI-значение по умолчанию — `ExponentialIdleWaitStrategy` (x2 за пустой опрос, джиттер 20%); он неактивен, пока группа не вызовет `WithIdleBackoff`. Переопределить алгоритм глобально можно по типу или экземпляром:
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryBatcher<MyBatcher>()                                   // свой расчёт размера батча
+    .WithIdleWaitStrategy(new ExponentialIdleWaitStrategy(1.5, 0.3))   // свои multiplier / jitter
+    // или: .WithIdleWaitStrategy<MyIdleStrategy>()                     // полностью своя IEmptyQueueWaitStrategy
+);
+```
+
+Пример собственной реализации `IEmptyQueueWaitStrategy` — в `Delivery/Readme-ru.md` → *Настройка политики ожидания*.
+
+---
+
+### Глобальные переопределения DI
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryBatcher<MyBatcher>()          // свой расчёт размера батча
+    .WithIdleWaitStrategy<MyIdleStrategy>()    // своя стратегия ожидания пустой очереди
+);
+```
+
+Оба необязательны: `IDeliveryBatcher` по умолчанию — `DeliveryBatcher` (проброс `MaxBatchSize`), `IEmptyQueueWaitStrategy` — `ExponentialIdleWaitStrategy`. Стратегия ожидания по умолчанию неактивна, пока группа не включит её через `WithIdleBackoff(maxInterval)`, поэтому «из коробки» опрос идёт с фиксированным `Interval`.
 
 ---
 
 ### Мультитенантность
 
+Арендатор задаётся выбором **одного** из режимов ниже — они взаимоисключающие,
+поэтому в одной регистрации используется лишь одна цепочка.
+
 ```csharp
+// Режим 1: фиксированный список ID арендаторов
+.WithTenants((_, ts) => ts.WithTenantIds(1, 2, 3))
+```
+
+```csharp
+// Режим 2: автодетект арендаторов из сообщений в рантайме
 .WithTenants((_, ts) => ts
-    .WithTenantIds(1, 2, 3)                          // Явный список
-    .WithAutoDetect()                                // Автодетект из сообщений в рантайме
+    .WithAutoDetect()                                // Автодетект из сообщений
     .WithTenantDetector<TenantDetector>()            // Кастомный детектор
     .WithTenantParallelProcessing(3)                 // Параллельная обработка по арендаторам
 )
 ```
+
+> **Примечание:** `WithTenantIds`, `WithTenantSource` и `WithTenantProvider` все
+> помечают источник арендаторов как авторитетный, отключая автодетект внутри
+> (эквивалент добавления `.WithNoAutoDetect()`). Любой из них можно сочетать с
+> `WithTenantParallelProcessing`, но никогда — с цепочкой автодетекта выше. Как только
+> любой из них вызван, ветка автодетекта через plug-сервис пропускается и
+> переданный список/источник/провайдер используется без изменений.
+>
+> Два режима взаимоисключающие и проверяются на этапе конфигурации: вызов
+> `WithAutoDetect()` после любого из них бросит <c>InvalidOperationException</c> вместо
+> тихого игнорирования явного источника. Выберите один режим на регистрацию.
 
 ---
 
@@ -222,7 +257,6 @@ options.AddMetadata<MyMessage>();
 | Провайдер | Пакет | Статус |
 |-----------|-------|--------|
 | PostgreSQL | `Sa.Outbox.PostgreSql` | ✅ production-ready |
-| SQL Server | `Sa.Outbox.SqlServer` | 🔧 в разработке |
 | Redis | `Sa.Outbox.Redis` | 🔧 в разработке |
 
 ---

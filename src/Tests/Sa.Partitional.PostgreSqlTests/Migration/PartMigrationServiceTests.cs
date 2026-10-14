@@ -45,6 +45,9 @@ public class PartMigrationServiceTests
 
         public Task<int> DropPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+
+        public Task<int> ArchivePartsToDate(string tableName, DateTimeOffset toDate, string archiveSchemaName, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 
     private static PartMigrationService Create(

@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Sa.HybridFileStorage.Domain;
 
 namespace Sa.HybridFileStorage;
@@ -22,6 +22,15 @@ public static class Setup
     /// <see cref="IHybridFileStorage"/> factory into a collection that already has one, so the new
     /// factory — together with every storage and interceptor it configures — would be silently
     /// discarded. Throwing names the mistake instead.
+    /// <para>
+    /// The failover chain follows the registration order, i.e. the order of the provider
+    /// <c>Add...</c> calls against the <see cref="IServiceCollection"/>: descriptors come first,
+    /// storages added through <see cref="IHybridFileStorageConfiguration.ConfigureStorage"/> come
+    /// after them, and the in-memory provider registered through the configuration pipeline takes
+    /// the position of the <c>AddSaHybridFileStorage</c> call itself. The order can be overridden
+    /// per basket with <see cref="IHybridFileStorageConfiguration.OrderTypes"/> and
+    /// <see cref="IHybridFileStorageConfiguration.OrderBasketTypes"/>.
+    /// </para>
     /// </remarks>
     public static IServiceCollection AddSaHybridFileStorage(
         this IServiceCollection services,
@@ -51,19 +60,50 @@ public static class Setup
     /// <param name="options">Optional configuration options for the in-memory storage. If <c>null</c>, a default instance is used.</param>
     /// <returns>The same <see cref="IServiceCollection"/> instance with the service added.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <c>null</c>.</exception>
+    /// <remarks>
+    /// The explicit instance is the "explicit instance wins" channel of the options priority
+    /// (explicit instance → configuration section → defaults): it is used as-is, bypassing
+    /// the pipeline, so nothing registered elsewhere can rewrite it.
+    /// </remarks>
     public static IServiceCollection AddSaInMemoryFileStorage(
         this IServiceCollection services,
         InMemoryFileStorageOptions? options = null)
-    {
-        ArgumentNullException.ThrowIfNull(services);
+        => HybridStorageRegistrar.Register(services, options);
 
-        options ??= new();
+    /// <summary>
+    /// Registers the in-memory file storage provider from the standard options pipeline:
+    /// a configuration section via <see cref="IInMemoryFileStorageBuilder.FromConfiguration"/>
+    /// and pipeline actions via <see cref="IInMemoryFileStorageBuilder.Options"/>.
+    /// </summary>
+    /// <param name="services">The service collection to add the services to.</param>
+    /// <param name="configure">The configuration channel: section and pipeline actions in one delegate.</param>
+    /// <returns>The same <see cref="IServiceCollection"/> instance with the service added.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> or <paramref name="configure"/> is <c>null</c>.</exception>
+    /// <remarks>
+    /// The options materialise under a unique named instance (see the plan for the basket
+    /// naming scheme), so several registrations never stack their <c>Configure</c> actions on
+    /// one shared instance — each storage gets its own. The storage resolves the instance
+    /// lazily through <c>IOptionsMonitor&lt;T&gt;.Get(name)</c>, which is also what makes a
+    /// validation failure surface at the first read (or at host start, with
+    /// <c>ValidateOnStart()</c> from the pipeline actions) instead of at registration.
+    /// </remarks>
+    public static IServiceCollection AddSaInMemoryFileStorage(
+        this IServiceCollection services,
+        Action<IInMemoryFileStorageBuilder> configure)
+        => HybridStorageRegistrar.Register(services, configure);
 
-        services.TryAddSingleton(TimeProvider.System);
-        services.AddSingleton<IFileStorage, InMemoryFileStorage>(
-            sp => new InMemoryFileStorage(options, sp.GetRequiredService<TimeProvider>()));
-        return services;
-    }
+    /// <summary>
+    /// Registers the in-memory file storage provider from a ready-made options instance,
+    /// typically one the caller resolved from its own pipeline.
+    /// </summary>
+    /// <param name="services">The service collection to add the services to.</param>
+    /// <param name="options">The ready-made options; its <see cref="IOptions{T}.Value"/> is read once, at first use.</param>
+    /// <returns>The same <see cref="IServiceCollection"/> instance with the service added.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> or <paramref name="options"/> is <c>null</c>.</exception>
+    public static IServiceCollection AddSaInMemoryFileStorage(
+        this IServiceCollection services,
+        IOptions<InMemoryFileStorageOptions> options)
+        => HybridStorageRegistrar.Register(services, options);
 
     /// <summary>
     /// Registers the in-memory file storage provider as part of the hybrid file storage configuration
@@ -83,32 +123,33 @@ public static class Setup
     public static IHybridFileStorageConfiguration AddSaInMemoryFileStorage(
         this IHybridFileStorageConfiguration configuration,
         InMemoryFileStorageOptions? options = null)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
+        => HybridStorageRegistrar.RegisterPipeline(configuration, options);
 
-        options ??= new();
+    /// <summary>
+    /// Registers the in-memory file storage provider from the standard options pipeline as part
+    /// of the hybrid configuration pipeline — the pipeline twin of the
+    /// <see cref="AddSaInMemoryFileStorage(IServiceCollection, Action{IInMemoryFileStorageBuilder})"/>
+    /// overload.
+    /// </summary>
+    /// <param name="configuration">The hybrid file storage configuration pipeline.</param>
+    /// <param name="configure">The configuration channel: section and pipeline actions in one delegate.</param>
+    /// <returns>The same <see cref="IHybridFileStorageConfiguration"/> instance for fluent chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration"/> or <paramref name="configure"/> is <c>null</c>.</exception>
+    public static IHybridFileStorageConfiguration AddSaInMemoryFileStorage(
+        this IHybridFileStorageConfiguration configuration,
+        Action<IInMemoryFileStorageBuilder> configure)
+        => HybridStorageRegistrar.RegisterPipeline(configuration, configure);
 
-        // HybridStorageBuilder is the only implementation of the interface; the fallback keeps a
-        // hypothetical external implementation working, at the cost of requiring the provider to
-        // have been registered separately as an IFileStorage.
-        if (configuration is HybridStorageBuilder builder)
-        {
-            builder.ConfigureServices(services =>
-            {
-                services.TryAddSingleton(TimeProvider.System);
-                services.AddSingleton<IFileStorage, InMemoryFileStorage>(
-                    sp => new InMemoryFileStorage(options, sp.GetRequiredService<TimeProvider>()));
-            });
-
-            // Adding the resolved instance is a no-op when the container has already picked it up
-            // from sp.GetServices<IFileStorage>() — HybridFileStorageContainer de-duplicates by
-            // reference — and it keeps the pipeline's intent explicit.
-            return builder.ConfigureStorage((sp, container) =>
-                container.AddStorage(sp.GetServices<IFileStorage>()
-                    .First(s => s is InMemoryFileStorage)));
-        }
-
-        return configuration.ConfigureStorage((sp, container) =>
-            container.AddStorage(sp.GetRequiredService<IFileStorage>()));
-    }
+    /// <summary>
+    /// Registers the in-memory file storage provider from a ready-made options instance as part
+    /// of the hybrid configuration pipeline.
+    /// </summary>
+    /// <param name="configuration">The hybrid file storage configuration pipeline.</param>
+    /// <param name="options">The ready-made options; its <see cref="IOptions{T}.Value"/> is read once, at first use.</param>
+    /// <returns>The same <see cref="IHybridFileStorageConfiguration"/> instance for fluent chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration"/> or <paramref name="options"/> is <c>null</c>.</exception>
+    public static IHybridFileStorageConfiguration AddSaInMemoryFileStorage(
+        this IHybridFileStorageConfiguration configuration,
+        IOptions<InMemoryFileStorageOptions> options)
+        => HybridStorageRegistrar.RegisterPipeline(configuration, options);
 }

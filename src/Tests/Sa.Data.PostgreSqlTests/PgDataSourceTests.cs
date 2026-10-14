@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Data.PostgreSql.Fixture;
 
@@ -46,12 +47,28 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
         Assert.Equal(expected, actual);
     }
 
+    [Fact()]
+    public void GetConnectionString_ReturnsUnderlyingConnectionString()
+    {
+        IPgDataSource dataSource = IPgDataSource.Create(fixture.ConnectionString);
+
+        var source = new NpgsqlConnectionStringBuilder(dataSource.GetConnectionString());
+        var target = new NpgsqlConnectionStringBuilder(fixture.ConnectionString);
+
+        // Npgsql omits the password unless Persist Security Info is set, so compare the
+        // connection identity — the parts the Outbox same-database guard relies on.
+        Assert.Equal(target.Host, source.Host);
+        Assert.Equal(target.Port, source.Port);
+        Assert.Equal(target.Database, source.Database);
+        Assert.Equal(target.Username, source.Username);
+    }
+
 
     [Fact()]
     public async Task DiDataSourceTest()
     {
         ServiceCollection services = new();
-        services.AddSaPostgreSqlDataSource(b => b.WithConnectionString(fixture.ConnectionString));
+        services.AddSaPostgreSqlDataSource(b => b.Options(ob => ob.Configure(o => o.ConnectionString = fixture.ConnectionString)));
         using var serviceProvider = services.BuildServiceProvider();
 
         IPgDataSource dataSource = serviceProvider.GetRequiredService<IPgDataSource>();

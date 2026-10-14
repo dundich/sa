@@ -107,7 +107,10 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                             "parallel_test_group",
                             (_, b) =>
                             {
-                                b.WithInterval(TimeSpan.FromMilliseconds(500))
+                                // StartImmediately: the old delivery pre-seed did this implicitly; the
+                                // default InitialDelay is 10s, beyond this test's wait budget.
+                                b.StartImmediately()
+                                 .WithInterval(TimeSpan.FromMilliseconds(500))
                                  .WithNoBatchingWindow()
                                  .WithPerTenantMaxDegreeOfParallelism(3)
                                  .WithPerTenantTimeout(TimeSpan.FromSeconds(10))
@@ -117,7 +120,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
                 )
                 .AddSaOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.WithDataSource(c => c.WithConnectionString(_ => ConnectionString));
+                    cfg.WithDataSource(c => c.Options(ob => ob.Configure(o => o.ConnectionString = ConnectionString)));
                     cfg.WithOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "parallel_test";
@@ -137,7 +140,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         Console.WriteLine(fixture.ConnectionString);
         ParallelTestConsumer.Clear();
 
-        var scheduler = ServiceProvider.GetRequiredService<IScheduler>();
+        var scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
         int startedSchedules = await scheduler.Start(CancellationToken.None);
         Assert.True(startedSchedules >= 1);
 

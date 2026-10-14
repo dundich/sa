@@ -1,4 +1,6 @@
-﻿namespace Sa.Outbox.PostgreSql.Configuration;
+﻿using Sa.Partitional.PostgreSql;
+
+namespace Sa.Outbox.PostgreSql.Configuration;
 
 /// <summary>
 /// Represents the settings for cleaning up old Outbox messages and parts in PostgreSQL.
@@ -17,6 +19,19 @@ public sealed class PgOutboxCleanupSettings
     /// Default is set to 30 days.
     /// </summary>
     public TimeSpan DropPartsAfterRetention { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// Gets or sets how expired parts are retired. Default is <see cref="PartCleanupMode.Drop"/> —
+    /// the historical behaviour. <see cref="PartCleanupMode.Archive"/> moves them into
+    /// <see cref="ArchiveSchemaName"/> instead of dropping them.
+    /// </summary>
+    public PartCleanupMode CleanupMode { get; set; } = PartCleanupMode.Drop;
+
+    /// <summary>
+    /// Gets or sets the schema that archived parts are moved into when
+    /// <see cref="CleanupMode"/> is <see cref="PartCleanupMode.Archive"/>. Default is <c>archive</c>.
+    /// </summary>
+    public string ArchiveSchemaName { get; set; } = "archive";
 
     /// <summary>
     /// Gets or sets the interval at which the cleanup job will be executed.

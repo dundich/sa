@@ -115,6 +115,28 @@ public interface IJobBuilder
     /// <returns>The current builder instance.</returns>
     IJobBuilder WithCron(string cronExpression, string? name = null);
 
+    /// <summary>
+    /// Sets the time zone the job's cron expression is read in — the wall clock its fields
+    /// ("0 9 * * *" = 09:00) refer to.
+    /// <para>
+    /// Not setting it (or <see cref="TimeZoneInfo.Utc"/>) keeps the current UTC behavior.
+    /// Applies to cron timings only: durations (<c>Every*</c>) and custom
+    /// <see cref="WithTiming"/> timings are unaffected by the zone.
+    /// </para>
+    /// </summary>
+    /// <returns>The current builder instance.</returns>
+    IJobBuilder WithTimeZone(TimeZoneInfo timeZone);
+
+    /// <summary>
+    /// Sets the time zone by id — IANA ("Europe/Moscow") or Windows ("Russian Standard Time");
+    /// .NET 8+ resolves both.
+    /// </summary>
+    /// <exception cref="TimeZoneNotFoundException">The id is unknown on this machine.</exception>
+    /// <exception cref="InvalidTimeZoneException">The id is malformed.</exception>
+    /// <returns>The current builder instance.</returns>
+    IJobBuilder WithTimeZone(string timeZoneId)
+        => WithTimeZone(TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
+
 
     IJobBuilder WithConcurrencyLimit(int limit);
 

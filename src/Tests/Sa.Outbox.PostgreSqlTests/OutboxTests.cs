@@ -43,7 +43,10 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer, SomeMessage>("test6", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(100))
+                            // StartImmediately: the old delivery pre-seed did this implicitly; the
+                            // default InitialDelay is 10s, beyond this test's wait budget.
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(100))
                              .WithMaxBatchSize(1)
                              .WithNoBatchingWindow();
                         })
@@ -51,7 +54,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
                 )
                 .AddSaOutboxUsingPostgreSql(cfg =>
                 {
-                    cfg.WithDataSource(c => c.WithConnectionString(_ => this.ConnectionString));
+                    cfg.WithDataSource(c => c.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)));
                     cfg.WithOutboxSettings((_, settings) =>
                     {
                         settings.TableSettings.DatabaseSchemaName = "test";
@@ -73,7 +76,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
         Console.WriteLine(fixture.ConnectionString);
 
         // start cron schedules
-        var scheduler = ServiceProvider.GetRequiredService<IScheduler>();
+        var scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
         int i = await scheduler.Start(CancellationToken.None);
         Assert.True(i > 0);
 
@@ -107,7 +110,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 
     private async Task Migrate()
     {
-        var migrationService = ServiceProvider.GetRequiredService<IMigrationService>();
+        var migrationService = ServiceProvider.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
         bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.True(r, "none migration");
     }

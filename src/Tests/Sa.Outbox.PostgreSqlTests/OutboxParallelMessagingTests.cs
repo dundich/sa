@@ -90,12 +90,16 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                     .WithDeliveries(builder => builder
                         .AddDeliveryScoped<SomeMessageConsumer1, SomeMessage1>("test7_0", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(500))
+                            // StartImmediately: the old delivery pre-seed did this implicitly; the
+                            // default InitialDelay is 10s, beyond this test's wait budget.
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(500))
                              .WithMaxBatchSize(1024);
                         })
                         .AddDelivery<SomeMessageConsumer2, SomeMessage2>("test7_1", (_, b) =>
                         {
-                            b.WithInterval(TimeSpan.FromMilliseconds(500))
+                            b.StartImmediately()
+                             .WithInterval(TimeSpan.FromMilliseconds(500))
                              .WithMaxBatchSize(1024);
                         })
                     )
@@ -104,7 +108,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                 .AddSaOutboxUsingPostgreSql(cfg =>
                 {
                     cfg
-                        .WithDataSource(c => c.WithConnectionString(_ => ConnectionString))
+                        .WithDataSource(c => c.Options(ob => ob.Configure(o => o.ConnectionString = ConnectionString)))
                         .WithOutboxSettings((_, settings) =>
                         {
                             settings.TableSettings.DatabaseSchemaName = "parallel";
@@ -123,7 +127,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
         Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
         // start cron schedules
-        IScheduler scheduler = ServiceProvider.GetRequiredService<IScheduler>();
+        IScheduler scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
         int i = await scheduler.Start(CancellationToken.None);
         Assert.True(i > 0);
 

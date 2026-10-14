@@ -32,8 +32,27 @@ public interface IJobProperties
 
     /// <summary>
     /// Gets the timing configuration for the job.
+    /// <para>
+    /// <c>null</c> is a valid, intentional mode — it is not a misconfiguration: the job runs
+    /// back-to-back, starting the next iteration as soon as the previous one finished, with no
+    /// wait in between. It is meant for frequent operations that pace themselves with their own
+    /// wait inside <see cref="IJob.Execute"/> (draining a queue, polling a channel). Without such
+    /// a self-wait the job spins and burns CPU — give it a timing (<c>Every*</c>/<c>WithCron</c>)
+    /// or make the internal wait block.
+    /// </para>
     /// </summary>
     IJobTiming? Timing { get; }
+
+    /// <summary>
+    /// Gets the time zone the job's cron expression is read in — the wall clock its fields
+    /// ("0 9 * * *" = 09:00) refer to.
+    /// <para>
+    /// <c>null</c> means the scheduler's own clock (UTC). Applies to cron timings only:
+    /// duration timings (<c>Every*</c>) and custom <see cref="IJobBuilder.WithTiming"/> timings
+    /// are unaffected by the zone.
+    /// </para>
+    /// </summary>
+    TimeZoneInfo? TimeZone { get; }
 
     /// <summary>
     /// Gets the size of the context stack for the job.

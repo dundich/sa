@@ -399,7 +399,7 @@ FROM inserted_rows
     // reported in *two* batches on the same day collides, and this clause is what keeps
     // `__error$` from growing one row per batch. ErrorDeliveryCommand.GroupByException
     // relies on that dedup. Do not "clean this up" by symmetry with SqlFinishDelivery.
-    private string SqlError(PgOutboxTableSettings settings, int count) =>
+    private static string SqlError(PgOutboxTableSettings settings, int count) =>
 $"""
 INSERT INTO {settings.GetQualifiedErrorTableName()}
   ({settings.Error.Fields.ErrorId},{settings.Error.Fields.ErrorType},{settings.Error.Fields.ErrorMessage},{settings.Error.Fields.ErrorCreatedAt})
@@ -409,7 +409,7 @@ ON CONFLICT DO NOTHING
 ;
 """;
 
-    private string BuildErrorInsertValues(int count)
+    private static string BuildErrorInsertValues(int count)
     {
         // ~40–48 bytes per VALUES row (four indexed param names + separators). The estimate is a
         // floor — StringBuilder grows amortized if names run longer. No pool: these builders run
@@ -444,7 +444,7 @@ ON CONFLICT DO NOTHING
     public string SqlFinishDelivery(int count) => SqlFinishDelivery(settings, count);
 
 
-    private string SqlFinishDelivery(PgOutboxTableSettings settings, int count)
+    private static string SqlFinishDelivery(PgOutboxTableSettings settings, int count)
     {
         return
 $"""
@@ -497,7 +497,7 @@ WHERE
 """;
     }
 
-    private string BuildDeliveryInsertValues(int count)
+    private static string BuildDeliveryInsertValues(int count)
     {
         // ~90–96 bytes per row: 8 indexed param names + the 3 common names (@tnt/@gr/@trn) repeated
         // in every VALUES row. Floor, not exact — see BuildErrorInsertValues. No pool (M1).

@@ -11,11 +11,13 @@ public class PostgresFileStorageFixture : PgDataSourceFixture<IFileStorage>
         string tableName,
         Action<PostgresFileStorageOptions>? configure = null)
     {
-        Services.AddSaPostgreSqlFileStorageChained(opts =>
+        // The registration key is the table name: each fixture builds its own service collection,
+        // and the keyed storage is also aliased as the unkeyed IFileStorage this fixture resolves.
+        Services.AddSaPostgreSqlFileStorageChained(tableName, b => b.Options(ob => ob.Configure(opts =>
             {
                 opts.TableName = tableName;
                 configure?.Invoke(opts);
-            })
-            .AddDataSource(b => b.WithConnectionString(_ => ConnectionString));
+            })))
+            .AddDataSource(b => b.Options(ob => ob.Configure(o => o.ConnectionString = ConnectionString)));
     }
 }

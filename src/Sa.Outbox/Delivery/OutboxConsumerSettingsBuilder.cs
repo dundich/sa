@@ -24,6 +24,7 @@ public sealed class OutboxConsumerSettingsBuilder
     private TimeSpan? _perTenantTimeout;
     private int? _perTenantMaxDegreeOfParallelism;
     private bool? _paused;
+    private TimeSpan? _idleMaxInterval;
     private object? _tag;
 
     // ── Bootstrap: build from scratch ─────────────────────────
@@ -54,6 +55,7 @@ public sealed class OutboxConsumerSettingsBuilder
             _perTenantMaxDegreeOfParallelism ?? OutboxDefaults.PerTenantMaxDegreeOfParallelism,
             _paused ?? OutboxDefaults.Paused,
             0,
+            _idleMaxInterval ?? OutboxDefaults.IdleMaxInterval,
             _tag);
     }
 
@@ -186,6 +188,31 @@ public sealed class OutboxConsumerSettingsBuilder
     {
         if (iterationDelay.Ticks < 0) throw new ArgumentException("IterationDelay must be >= TimeSpan.Zero.", nameof(iterationDelay));
         _iterationDelay = iterationDelay;
+        return this;
+    }
+
+    // Idle / empty-queue back-off
+
+    /// <summary>
+    /// Enables adaptive back-off of the poll period while the queue stays empty. The wait grows
+    /// from <see cref="WithInterval(TimeSpan)"/> towards <paramref name="maxInterval"/> according
+    /// to the registered <see cref="IEmptyQueueWaitStrategy"/>. Must be >= the configured interval.
+    /// </summary>
+    public OutboxConsumerSettingsBuilder WithIdleBackoff(TimeSpan maxInterval)
+    {
+        if (maxInterval <= TimeSpan.Zero)
+            throw new ArgumentException("IdleMaxInterval must be > TimeSpan.Zero.", nameof(maxInterval));
+        _idleMaxInterval = maxInterval;
+        return this;
+    }
+
+    /// <summary>
+    /// Disables adaptive back-off: the poll period always stays at
+    /// <see cref="WithInterval(TimeSpan)"/>. This is the default.
+    /// </summary>
+    public OutboxConsumerSettingsBuilder WithFixedInterval()
+    {
+        _idleMaxInterval = TimeSpan.Zero;
         return this;
     }
 

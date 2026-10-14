@@ -24,7 +24,7 @@ builder.Services
     )
     // Provider registration (example — PostgreSQL)
     .AddSaOutboxUsingPostgreSql(cfg => cfg
-        .WithDataSource(ds => ds.WithConnectionString("Host=localhost;Database=outbox"))
+        .WithDataSource(ds => ds.Options(ob => ob.Configure(o => o.ConnectionString = "Host=localhost;Database=outbox")))
     );
 ```
 
@@ -52,23 +52,12 @@ builder.Services
 | **Publication** | Messages are written to the outbox table inside the business operation's transaction via `IOutboxBulkWriter.InsertBulk()` |
 | **Delivery** | Background jobs (`Sa.Schedule`) acquire locked messages, invoke consumers, update status |
 
----
-
-## Key Types
-
-| Type | Purpose |
-|------|---------|
-| `IOutboxBuilder` | Fluent configuration builder |
-| `IOutboxMessagePublisher` | Publish messages to outbox |
-| `IConsumer\<TMessage\>` | Message consumer interface |
-| `IOutboxContextOperations\<TMessage\>` | Delivery status change operations (`Ok`, `Error`, `Warn`, `Postpone`, etc.) |
-| `OutboxConsumerSettings` | Immutable snapshot of consumer group settings (interval, batches, concurrency, retries…) |
-| `OutboxConsumerSettingsBuilder` | Fluent builder for creating and partially updating `OutboxConsumerSettings` |
-| `IOutboxConsumerManager` | Runtime manager: atomic swap, pause/resume, change subscriptions |
-| `IDeliverySnapshot` | Read-only view of registered deliveries for diagnostics |
-| `DeliveryStatus` / `DeliveryStatusCode` | HTTP-like delivery status codes |
-| `ExponentialBackoffRetryStrategy` | Exponential backoff with jitter |
-| `OutboxPartInfo` | Part info: TenantId, PartName |
+> **Isolation.** Delivery jobs run in the Outbox's **own** named `Sa.Schedule` schedule under the
+> scope key `OutboxScope.DefaultKey` (`"outbox"`), so they never share a schedule with the
+> application's `AddSaSchedule()`. The PostgreSQL integration registers its
+> `Sa.Partitional.PostgreSql` module under the same key. Both `AddSaOutbox` and
+> `AddSaOutboxUsingPostgreSql` accept an optional trailing `scopeKey` argument — pass the same value
+> to both to move the Outbox to a different scope. The reserved `"default"` key is rejected.
 
 ---
 
@@ -90,25 +79,6 @@ Full set of HTTP-like status codes:
 | 508 | `ErrorMaxAttempts()` | Max attempts exhausted |
 | 103 | `Postpone()` | Deferred processing |
 | 104 | `Retry()` | Retry now |
-
----
-
-## Status Methods
-
-After processing each message, call exactly one method from `IOutboxContextOperations<T>`:
-
-| Method | Description |
-|--------|-------------|
-| `msg.Ok(message?)` | Successfully processed (200 OK) |
-| `msg.Created(message?)` | Side-effect resource created (201 Created) |
-| `msg.Accepted(message?)` | Accepted for async processing (202 Accepted) |
-| `msg.NoContent(message?)` | Processed, no data (204 No Content) |
-| `msg.Aborted(message?)` | Intentionally skipped (299 Aborted) |
-| `msg.Warn(exception, message?, postpone?)` | Transient error → retry (400 Warn) |
-| `msg.Error(exception, message?)` | Permanent error (500 Error) |
-| `msg.ErrorMaxAttempts()` | Max attempts exhausted (508) |
-| `msg.Postpone(delay, message?)` | Defer processing (103 Postpone) |
-| `msg.Retry(delay, message?)` | Retry with metadata (104 Retry) |
 
 ---
 
@@ -189,19 +159,82 @@ var allGroups = manager.GetAllConsumerGroupIds();
 | `PerTenantMaxDegreeOfParallelism` | 1 | Tenant parallelism (1 = sequential, -1 = all cores) |
 | `RetryCountOnError` | 0 | Retries on error (-1 = infinite) |
 | `Paused` | false | Pause flag |
+| `IdleMaxInterval` | 0 (disabled) | Upper bound of the adaptive empty-queue poll back-off; must be `>= Interval` when set |
+
+### Empty-Queue Wait Policy
+
+Empty-queue back-off is opt-in per consumer group. Set the base `Interval` (used while work flows) and the cap `IdleMaxInterval` (used while empty):
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveries(d => d
+        .AddDelivery<OrderConsumer, OrderPlaced>("orders", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(5))      // 5 s while work is flowing
+            .WithIdleBackoff(TimeSpan.FromMinutes(2))   // grow up to 2 min while empty
+        )
+        .AddDelivery<AuditConsumer, AuditEvent>("audit", (_, cs) => cs
+            .WithInterval(TimeSpan.FromSeconds(1))
+            .WithFixedInterval()                        // keep this group responsive
+        )
+    ));
+```
+
+The DI default is `ExponentialIdleWaitStrategy` (x2 per empty poll, 20% jitter); it is inert until a group calls `WithIdleBackoff`. Override the algorithm globally by type or by instance:
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryBatcher<MyBatcher>()                                   // custom batch-size calculator
+    .WithIdleWaitStrategy(new ExponentialIdleWaitStrategy(1.5, 0.3))   // custom multiplier / jitter
+    // or: .WithIdleWaitStrategy<MyIdleStrategy>()                      // fully custom IEmptyQueueWaitStrategy
+);
+```
+
+See `Delivery/Readme.md` → *Configuring the wait policy* for a custom `IEmptyQueueWaitStrategy` implementation.
+
+---
+
+### Global DI Overrides
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryBatcher<MyBatcher>()          // custom batch-size calculator
+    .WithIdleWaitStrategy<MyIdleStrategy>()    // custom empty-queue wait strategy
+);
+```
+
+Both are optional: `IDeliveryBatcher` defaults to `DeliveryBatcher` (passthrough of `MaxBatchSize`), and `IEmptyQueueWaitStrategy` defaults to `ExponentialIdleWaitStrategy`. The default idle strategy is inert until a group opts in with `WithIdleBackoff(maxInterval)`, so out-of-the-box behavior is a fixed `Interval` poll.
 
 ---
 
 ### Multi-Tenancy
 
+The tenant source is set by choosing **one** of the modes below — they are mutually
+exclusive, so pick a single chain per registration.
+
 ```csharp
+// Mode 1: explicit static list of tenant IDs
+.WithTenants((_, ts) => ts.WithTenantIds(1, 2, 3))
+```
+
+```csharp
+// Mode 2: auto-detect tenants from messages at runtime
 .WithTenants((_, ts) => ts
-    .WithTenantIds(1, 2, 3)                          // Explicit list
-    .WithAutoDetect()                                // Auto-detect from messages at runtime
-    .WithTenantDetector<TenantDetector>()            // Custom detector
-    .WithTenantParallelProcessing(3)                 // Parallel processing per tenant
+    .WithAutoDetect()                                // auto-detect from messages
+    .WithTenantDetector<TenantDetector>()            // custom detector
+    .WithTenantParallelProcessing(3)                 // parallel processing per tenant
 )
 ```
+
+> **Note:** `WithTenantIds`, `WithTenantSource`, and `WithTenantProvider` all mark the
+> tenant source as authoritative by disabling auto-detection internally
+> (equivalent to appending `.WithNoAutoDetect()`). Any of them can be combined with
+> `WithTenantParallelProcessing`, but never with the auto-detect chain above. Once any of
+> them is called, the plug-service auto-detect branch is skipped and the supplied
+> list/source/provider is used verbatim.
+>
+> The two modes are mutually exclusive and enforced at configuration time: calling
+> `WithAutoDetect()` after any of these throws <c>InvalidOperationException</c> instead of
+> silently ignoring the explicit source. Choose one mode per registration.
 
 ---
 
@@ -222,7 +255,6 @@ options.AddMetadata<MyMessage>();
 | Provider | Package | Status |
 |----------|---------|--------|
 | PostgreSQL | `Sa.Outbox.PostgreSql` | ✅ production-ready |
-| SQL Server | `Sa.Outbox.SqlServer` | 🔧 in development |
 | Redis | `Sa.Outbox.Redis` | 🔧 in development |
 
 ---

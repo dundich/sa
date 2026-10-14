@@ -70,7 +70,11 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
                 .WithDeliveries(deliveryBuilder => deliveryBuilder
                     .AddDeliveryScoped<C2Consumer, TestMessage>(GroupId, (_, b) =>
                     {
-                        b.WithInterval(TimeSpan.FromMilliseconds(100)).WithNoBatchingWindow();
+                        // StartImmediately: the old delivery pre-seed did this implicitly; the
+                        // default InitialDelay is 10s, beyond this test's wait budget.
+                        b.StartImmediately()
+                         .WithInterval(TimeSpan.FromMilliseconds(100))
+                         .WithNoBatchingWindow();
                     })
                 )
             );
@@ -88,7 +92,7 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
         C2Consumer.Reset();
         var ct = TestContext.Current.CancellationToken;
 
-        var scheduler = fixture.ServiceProvider.GetRequiredService<IScheduler>();
+        var scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
         Assert.True(await scheduler.Start(ct) >= 1);
 
         var publisher = fixture.Publisher;
@@ -211,7 +215,11 @@ public class DeliveryMinOffsetFloorTests(DeliveryMinOffsetFloorTests.Fixture fix
                 .WithDeliveries(deliveryBuilder => deliveryBuilder
                     .AddDeliveryScoped<FloorConsumer, TestMessage>(GroupId, (_, b) =>
                     {
-                        b.WithInterval(TimeSpan.FromMilliseconds(100)).WithNoBatchingWindow();
+                        // StartImmediately: the old delivery pre-seed did this implicitly; the
+                        // default InitialDelay is 10s, beyond this test's wait budget.
+                        b.StartImmediately()
+                         .WithInterval(TimeSpan.FromMilliseconds(100))
+                         .WithNoBatchingWindow();
                     })
                 )
             );
@@ -254,7 +262,7 @@ public class DeliveryMinOffsetFloorTests(DeliveryMinOffsetFloorTests.Fixture fix
             new TestMessage { PayloadId = "at-or-above-floor", TenantId = Fixture.TenantId }, Fixture.TenantId, ct);
         Assert.Equal(1UL, sentM2);
 
-        var scheduler = fixture.ServiceProvider.GetRequiredService<IScheduler>();
+        var scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
         Assert.True(await scheduler.Start(ct) >= 1);
 
         await WaitForAsync(() => FloorConsumer.Counter >= 1, ct);

@@ -172,8 +172,8 @@ public class SqlTemplateEscapingTests(SqlTemplateEscapingTests.Fixture fixture) 
         string selectFrom = builder.SelectPartsFromDate;
         string selectTo = builder.SelectPartsToDate;
 
-        Assert.Contains("WHERE root = 'public.we''ird' AND from_date >= @from_date", selectFrom);
-        Assert.Contains("WHERE root = 'public.we''ird' AND to_date <= @to_date", selectTo);
+        Assert.Contains("WHERE root = 'public.we''ird' AND archived = FALSE AND from_date >= @from_date", selectFrom);
+        Assert.Contains("WHERE root = 'public.we''ird' AND archived = FALSE AND to_date <= @to_date", selectTo);
     }
 
     [Fact]

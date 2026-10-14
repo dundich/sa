@@ -114,6 +114,15 @@ public sealed record OutboxConsumerSettings(
     /// </summary>
     int Version,
 
+    /// <summary>
+    /// Upper bound for the adaptive poll interval used while the consumer group's queue stays
+    /// empty. <see cref="TimeSpan.Zero"/> (default) disables adaptive back-off — the poll period
+    /// stays at <see cref="Interval"/>. When set, it must be at least <see cref="Interval"/>, and
+    /// the wait between empty polls grows from <see cref="Interval"/> towards this bound according
+    /// to <see cref="IEmptyQueueWaitStrategy"/>.
+    /// </summary>
+    TimeSpan IdleMaxInterval = default,
+
     // User tag
     object? Tag = null)
 {
@@ -135,6 +144,7 @@ public sealed record OutboxConsumerSettings(
         CheckTsNonNeg(nameof(LockRenewal), LockRenewal);
         CheckTsNonNeg(nameof(BatchingWindow), BatchingWindow);
         CheckTsNonNeg(nameof(PerTenantTimeout), PerTenantTimeout);
+        CheckTsNonNeg(nameof(IdleMaxInterval), IdleMaxInterval);
 
         // TimeSpans: strictly positive (> Zero)
         CheckTsPos(nameof(LockDuration), LockDuration);
@@ -160,6 +170,10 @@ public sealed record OutboxConsumerSettings(
         if (LockRenewal <= TimeSpan.Zero || LockRenewal >= LockDuration)
             errors.Add(
                 $"LockRenewal ({LockRenewal}) must be greater than TimeSpan.Zero and less than LockDuration ({LockDuration}).");
+
+        if (IdleMaxInterval > TimeSpan.Zero && IdleMaxInterval < Interval)
+            errors.Add(
+                $"IdleMaxInterval ({IdleMaxInterval}) must be greater than or equal to Interval ({Interval}) when set.");
 
         void CheckTsNonNeg(string name, TimeSpan ts)
         {

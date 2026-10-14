@@ -37,6 +37,25 @@ public interface IOutboxBuilder
     IOutboxBuilder WithDeliveryBatcher<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
          where TImplementation : class, IDeliveryBatcher;
 
+    /// <summary>
+    /// Registers a custom implementation of <see cref="IEmptyQueueWaitStrategy"/> that controls how
+    /// long a consumer group waits between polls while its queue is empty.
+    /// </summary>
+    /// <typeparam name="TImplementation">The custom wait-strategy implementation to register.</typeparam>
+    /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
+    IOutboxBuilder WithIdleWaitStrategy<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
+         where TImplementation : class, IEmptyQueueWaitStrategy;
+
+    /// <summary>
+    /// Registers a specific <see cref="IEmptyQueueWaitStrategy"/> instance that controls how long a
+    /// consumer group waits between polls while its queue is empty. Use this overload to configure a
+    /// built-in strategy with non-default parameters, for example
+    /// <c>new ExponentialIdleWaitStrategy(multiplier: 1.5, jitter: 0.3)</c>.
+    /// </summary>
+    /// <param name="strategy">The wait-strategy instance to register.</param>
+    /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
+    IOutboxBuilder WithIdleWaitStrategy(IEmptyQueueWaitStrategy strategy);
+
 
     /// <summary>
     /// Configures message metadata registrations (part names and payload ID resolvers) for outbox message types.

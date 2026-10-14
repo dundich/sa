@@ -93,4 +93,10 @@ internal sealed class JobBuilder(JobSettings settings) : IJobBuilder
         settings.Properties.WithTiming(new CronTimingAdapter(new Cron.CronTiming(cronExpression, name)));
         return this;
     }
+
+    public IJobBuilder WithTimeZone(TimeZoneInfo timeZone)
+    {
+        settings.Properties.WithTimeZone(timeZone);
+        return this;
+    }
 }

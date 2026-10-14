@@ -30,7 +30,7 @@ public sealed class WorkQueueTestFixture : IDisposable
     public WorkQueueTestFixture()
     {
         var services = new ServiceCollection();
-        services.AddSaWorkQueue<TestWorkProcessor, TestInput>();
+        services.AddSaWorkQueue<TestInput>(b => b.UseProcessor<TestWorkProcessor>());
         ServiceProvider = services.BuildServiceProvider();
     }
 

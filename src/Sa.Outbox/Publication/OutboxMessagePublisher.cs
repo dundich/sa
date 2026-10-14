@@ -13,16 +13,18 @@ internal sealed class OutboxMessagePublisher(
     public async ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
         int tenantId,
+        object? context,
         CancellationToken cancellationToken = default)
     {
         if (messages.Count == 0) return 0;
 
-        return await Send(messages, tenantId, cancellationToken);
+        return await Send(messages, tenantId, context, cancellationToken);
     }
 
     private async ValueTask<ulong> Send<TMessage>(
         IReadOnlyCollection<TMessage> messages,
         int tenantId,
+        object? context,
         CancellationToken cancellationToken)
     {
         OutboxMessageMetadata typeInfo = metadataProvider.GetMetadata<TMessage>();
@@ -60,7 +62,8 @@ internal sealed class OutboxMessagePublisher(
                     count++;
                 }
 
-                sent += await bulkWriter.InsertBulk<TMessage>(payloads.AsMemory()[..len], cancellationToken);
+                sent += await bulkWriter.InsertBulk<TMessage>(
+                    payloads.AsMemory()[..len], context, cancellationToken);
             }
             finally
             {

@@ -3,7 +3,7 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.15.0</Version>
+        <Version>0.16.0</Version>
         <Description>Execute jobs on a schedule</Description>
     </PropertyGroup>
 
@@ -22,6 +22,15 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
         <PackageReference Include="Microsoft.Extensions.Primitives" />
+        <!--
+          Options + Options.ConfigurationExtensions дают AddOptions /
+          IValidateOptions / ValidateOnStart и BindConfiguration. Source-generated binder
+          включается в .NET SDK автоматически при PublishAot=true, поэтому
+          BindConfiguration не тянет reflection и собирается под Native AOT
+          (включая Dictionary-свойства — проверено AOT-сборкой).
+        -->
+        <PackageReference Include="Microsoft.Extensions.Options" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     </ItemGroup>
 
     <ItemGroup>
