@@ -366,7 +366,7 @@ public record ProcessExecutionResult(
 
 FFmpeg static builds are packed into the NuGet package and extracted by an MSBuild target into `sa/native/` next to the application at build time. No system installation required.
 
-**Supported RIDs:** `win-x64`, `win-arm64`, `linux-x64`. **Payloads shipped in the package:** `win-x64` and `linux-x64`. `win-arm64` has no payload yet — the build emits a loud warning, and at runtime the library falls back to a system FFmpeg (PATH or `ExecutablePath`). Other platforms (Linux arm64, macOS) resolve to no payload as well.
+**Supported RIDs:** `win-x64`, `linux-x64`. **Payloads shipped in the package:** `win-x64` and `linux-x64` — the two lists are identical on purpose. Any other RID (`win-arm64`, Linux arm64, macOS) resolves to no payload: the build emits a loud warning, and at runtime the library falls back to a system FFmpeg (PATH or `ExecutablePath`).
 
 **Discovery order:**
 1. `AppContext.BaseDirectory/ffmpeg`

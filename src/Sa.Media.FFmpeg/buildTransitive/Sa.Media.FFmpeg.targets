@@ -36,6 +36,18 @@
         <Warning Text="[Sa.Media.FFmpeg] No bundled FFmpeg for RID '$(_FfmpegRequestedRid)'. Supported: $(FfmpegSupportedRids). Install FFmpeg system-wide or set FFMpegOptions.ExecutablePath. Pass -p:SkipFfmpegExtract=true to silence." />
     </Target>
 
+    <!--
+      The RID resolved to a payload name the package does not actually ship.
+      Without this target ExtractFfmpegInConsumer just skips itself (its Condition is an Exists()
+      on the zip) and the build stays green — which is exactly how a broken package shipped:
+      the run died later with FileNotFoundException: ffmpeg not found.
+    -->
+    <Target Name="WarnMissingFfmpegZip"
+            BeforeTargets="Build;CoreBuild;GetCopyToOutputDirectoryItems"
+            Condition="'$(SkipFfmpegExtract)' != 'true' AND '$(_FfmpegRidFileMissing)' != 'true' AND '$(_FfmpegRid)' != '' AND !Exists('$(_FfmpegZip)')">
+        <Warning Text="[Sa.Media.FFmpeg] Payload ffmpeg\$(_FfmpegRid)\ffmpeg.zip is not in the package, so nothing was extracted to $(_FfmpegDest) and the run will fail with 'ffmpeg not found'. Supported: $(FfmpegSupportedRids). Install FFmpeg system-wide or set FFMpegOptions.ExecutablePath. Pass -p:SkipFfmpegExtract=true to silence." />
+    </Target>
+
     <!-- 🔹 Распаковка при сборке потребителя -->
     <Target Name="ExtractFfmpegInConsumer"
             BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths;Build;CoreBuild"

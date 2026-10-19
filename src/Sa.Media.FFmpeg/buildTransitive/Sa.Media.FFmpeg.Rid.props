@@ -14,7 +14,7 @@
     -->
 
     <PropertyGroup>
-        <FfmpegSupportedRids>win-x64;win-arm64;linux-x64</FfmpegSupportedRids>
+        <FfmpegSupportedRids>win-x64;linux-x64</FfmpegSupportedRids>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -31,8 +31,14 @@
         <_FfmpegIsX64 Condition="$(_FfmpegRequestedRid.EndsWith('-x64')) == 'true'">true</_FfmpegIsX64>
         <_FfmpegIsX64 Condition="'$(_FfmpegIsX64)' == ''">false</_FfmpegIsX64>
 
+        <!--
+          MSBuild properties are last-wins: every condition below must be mutually exclusive,
+          otherwise the fallback branch overwrites the precise one. The old
+          `Condition="'$(_FfmpegIsWindows)' == 'true'"` branch silently turned win-x64 into
+          win-arm64 on every Windows machine, so the consumer extraction looked for
+          ffmpeg\win-arm64\ffmpeg.zip, found nothing, and skipped itself without a warning.
+        -->
         <_FfmpegCurrentRid Condition="'$(_FfmpegIsWindows)' == 'true' AND '$(_FfmpegIsX64)' == 'true'">win-x64</_FfmpegCurrentRid>
-        <_FfmpegCurrentRid Condition="'$(_FfmpegIsWindows)' == 'true'">win-arm64</_FfmpegCurrentRid>
         <_FfmpegCurrentRid Condition="'$(_FfmpegIsWindows)' != 'true' AND '$(_FfmpegIsX64)' == 'true'">linux-x64</_FfmpegCurrentRid>
 
         <!--

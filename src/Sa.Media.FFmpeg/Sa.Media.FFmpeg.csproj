@@ -3,11 +3,11 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.16.0</Version>
+        <Version>0.16.1</Version>
         <Description>FFmpeg wrapper</Description>
         <GeneratePathProperty>true</GeneratePathProperty>
         <!-- Должно совпадать с $(FfmpegSupportedRids) в buildTransitive\Sa.Media.FFmpeg.Rid.props -->
-        <RuntimeIdentifiers>win-x64;win-arm64;linux-x64</RuntimeIdentifiers>
+        <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
 
         <!-- Пути для локальной работы -->
         <FfmpegSourceZipDir>$(MSBuildThisFileDirectory)sa</FfmpegSourceZipDir>
@@ -73,6 +73,17 @@
             BeforeTargets="ExtractFfmpegLocally"
             Condition="'$(SkipFfmpegExtract)' != 'true' AND '$(_FfmpegCurrentRid)' == ''">
         <Warning Text="[Sa.Media.FFmpeg] No bundled FFmpeg for RID '$(_FfmpegRequestedRid)'. Supported: $(FfmpegSupportedRids). Install FFmpeg system-wide or set FFMpegOptions.ExecutablePath. Pass -p:SkipFfmpegExtract=true to silence." />
+    </Target>
+
+    <!--
+      Same class of failure as the consumer side: a resolvable RID whose zip is simply not in
+      sa\ (a RID with no payload folder) leaves ExtractFfmpegLocally skipped by its Exists() Condition while
+      the build stays green — ProjectReference consumers then get no binaries at all.
+    -->
+    <Target Name="WarnMissingFfmpegZip"
+            BeforeTargets="ExtractFfmpegLocally"
+            Condition="'$(SkipFfmpegExtract)' != 'true' AND '$(_FfmpegCurrentRid)' != '' AND !Exists('$(FfmpegSourceZipDir)\$(_FfmpegCurrentRid)\ffmpeg.zip')">
+        <Warning Text="[Sa.Media.FFmpeg] sa\$(_FfmpegCurrentRid)\ffmpeg.zip is missing, so $(FfmpegLocalExtractDir) was not populated and consumers will get no bundled binaries. Supported: $(FfmpegSupportedRids). Pass -p:SkipFfmpegExtract=true to silence." />
     </Target>
 
     <!-- 🔹 Ключевое: делаем распакованные файлы видимыми для ProjectReference -->
