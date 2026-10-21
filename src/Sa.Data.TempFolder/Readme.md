@@ -325,7 +325,9 @@ Validation is an explicit `IValidateOptions` (`ValidateOnStart()`), not `Validat
 
 ## FilePathResolver
 
-Companion component of this package, namespace `Sa.Data.TempFolder.FilePathResolver`.
+Companion component of this package, namespace `Sa.Data.TempFolder.FilePathResolver` — its own
+folder, with a dedicated readme: [`FilePathResolver/Readme.md`](FilePathResolver/Readme.md)
+([Russian version](FilePathResolver/Readme-ru.md)).
 
 Resolves fuzzy / imprecise paths (as stored in a database) into real paths on the file system.
 Every discovered mapping is cached per database path, so subsequent lookups are a dictionary

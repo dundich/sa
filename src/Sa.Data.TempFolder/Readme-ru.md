@@ -325,7 +325,9 @@ builder.Services.AddSaTempFolder("uploads", b => b.Options(ob => ob.Configure(o 
 
 ## FilePathResolver
 
-Компонент этого же пакета, пространство имён `Sa.Data.TempFolder.FilePathResolver`.
+Компонент этого же пакета, пространство имён `Sa.Data.TempFolder.FilePathResolver` — у него своя
+папка и отдельный readme: [`FilePathResolver/Readme-ru.md`](FilePathResolver/Readme-ru.md)
+([английская версия](FilePathResolver/Readme.md)).
 
 Резолвит нечёткие / неточные пути (как они хранятся в базе данных) в реальные пути файловой системы.
 Каждый найденный маппинг кэшируется по пути из БД, поэтому повторный запрос — это чтение словаря
