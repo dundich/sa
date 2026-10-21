@@ -238,12 +238,17 @@ through. The properties that matter to a filesystem storage:
 |----------|-------------|---------|
 | `RootPath` | Root directory of the storage; **must not** be blank or the system temp directory | `Path.GetTempPath()` (rejected) |
 | `MaxAge` | Age after which the cleanup strategy removes an expired subfolder | **30 days** (storage default) |
+| `CleanupEnabled` | Whether the storage's temp folder deletes expired subfolders at all | `true` |
 | `TouchDebounce` | Debounce before a write refreshes the folder's activity marker | 5 seconds |
 | `OverwriteFiles` | Whether an existing file is replaced on write | `true` |
 
 `Sa.HybridFileStorage.FileSystem` raises a storage's `MaxAge` from the temp-folder default of 24
 hours to **30 days**, because storage files are meant to outlive a scratch folder. A section value
 or a code `Configure` that sets `MaxAge` still wins.
+
+`CleanupEnabled = false` (through the same `TempFolder(...)` channel) turns the deletion off: the
+storage keeps working, but nothing is ever cleaned up — use it when the files' lifetime is managed
+elsewhere. The volume tracking and the free-space check keep running: they only report.
 
 Validation runs after post-configuration and enforces:
 

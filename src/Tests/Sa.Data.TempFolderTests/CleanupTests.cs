@@ -350,6 +350,40 @@ public sealed class CleanupTests : IDisposable
         Assert.Equal(0, await folder.CleanupExpiredAsync(TestTemp.Token));
     }
 
+    [Fact]
+    public async Task Cleanup_Disabled_DeletesNothing()
+    {
+        // The flag is about deletion only: an expired folder survives, and the pass reports 0
+        // without touching the disk.
+        using var provider = Build(options: o => o.CleanupEnabled = false);
+        var folder = Resolve(provider);
+
+        var expired = MakeSubfolder("expired");
+        TestTemp.MakeExpired(expired);
+
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
+
+        Assert.Equal(0, removed);
+        Assert.True(Directory.Exists(expired), "a cleanup-disabled instance must never delete");
+    }
+
+    [Fact]
+    public async Task Cleanup_Disabled_IgnoresACodeOverrideStrategyToo()
+    {
+        // Even a strategy that asks for everything gets nothing while the cleanup is off.
+        using var provider = Build(
+            configure: b => b.UseCleanupStrategy<DeleteEverythingStrategy>(),
+            options: o => o.CleanupEnabled = false);
+        var folder = Resolve(provider);
+
+        var dir = MakeSubfolder("gone");
+
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
+
+        Assert.Equal(0, removed);
+        Assert.True(Directory.Exists(dir));
+    }
+
     /// <summary>Code-override sample: no age filter at all — everything top-level goes.</summary>
     private sealed class DeleteEverythingStrategy : ICleanupStrategy
     {

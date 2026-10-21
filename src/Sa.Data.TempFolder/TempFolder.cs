@@ -369,6 +369,12 @@ internal sealed class TempFolder : ITempFolder
             return 0;
         }
 
+        if (!_options.CleanupEnabled)
+        {
+            _logger.LogDebug("Temp folder '{Name}': cleanup is disabled; pass ignored.", Name);
+            return 0;
+        }
+
         if (ShouldTrackVolume())
         {
             try

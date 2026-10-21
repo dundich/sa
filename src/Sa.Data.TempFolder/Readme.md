@@ -15,6 +15,7 @@ Temporary directory management: path-guarded subfolders under a root, debounced 
 - [API](#api)
 - [Path rules](#path-rules)
 - [Cleanup](#cleanup)
+  - [Turning the cleanup off](#turning-the-cleanup-off)
 - [Debounced activity marking](#debounced-activity-marking)
 - [Volume tracking](#volume-tracking)
 - [Free space](#free-space)
@@ -189,6 +190,21 @@ One pass = strategy selection → guarded deletion:
 
 Deleted → `LogInformation`; a folder that survives the retries → `LogWarning`, the pass continues. Files directly in the root are out of scope.
 
+### Turning the cleanup off
+
+`CleanupEnabled = false` switches deletion off entirely: the background service starts no cleanup loop, and `CleanupExpiredAsync` returns 0 without touching the disk. The instance stays fully writable (writes are allowed) — unlike [read-only](#read-only-mode), which refuses writes too.
+
+```csharp
+builder.Services.AddSaTempFolder("uploads", b => b.Options(ob => ob.Configure(o =>
+{
+    o.CleanupEnabled = false; // the folder's lifecycle belongs to someone else
+})));
+```
+
+What does **not** change: the volume tracking and the free-space check — they only report and never delete, so their loops keep running and `OnVolumeExceeded` / `OnFreeSpaceReached` keep firing.
+
+While the cleanup is off, its knobs (`MaxAge`, `MaxFoldersPerPass`, `CleanupInterval`) are not read: a zero is accepted there (an explicit "not used"), a negative value is an error either way. `MaxAge = 0` with the cleanup **enabled** is a validation error: zero would mean "everything is expired", and the first pass would wipe the root.
+
 ---
 
 ## Debounced activity marking
@@ -237,7 +253,7 @@ builder.Services.AddSaTempFolder("uploads", b => b.Options(ob => ob.Configure(o 
 One `TempFolderCleanerHost` per service collection walks **all** registrations:
 
 - **At start** — `EnsureAccessAsync` for every instance; a broken root fails host startup with a clear message instead of surfacing at first use.
-- **Then** — one cleanup loop per instance (`CleanupInterval`, first pass after one interval) and, when configured, one volume-scan loop (`VolumeScanInterval`, first pass immediately) and one free-space loop (`FreeSpaceCheckInterval`, first pass immediately). Pass failures are logged and never bring the host down; all delays use the container's `TimeProvider`, so tests can virtualise the schedule.
+- **Then** — one cleanup loop per instance (`CleanupInterval`, first pass after one interval) and, when configured, one volume-scan loop (`VolumeScanInterval`, first pass immediately) and one free-space loop (`FreeSpaceCheckInterval`, first pass immediately). The cleanup loop is started only while the cleanup is enabled (`CleanupEnabled`) — a disabled cleanup deletes nothing, while the volume-scan and free-space loops keep running. Pass failures are logged and never bring the host down; all delays use the container's `TimeProvider`, so tests can virtualise the schedule.
 
 ---
 
@@ -248,6 +264,7 @@ One `TempFolderCleanerHost` per service collection walks **all** registrations:
 - `CreateSubfolder` / `WriteAsync` / `CopyFileAsync` / `DeleteFileAsync` throw `InvalidOperationException` — reading (`ReadAsync`) and enumeration keep working, they mutate nothing.
 - `CleanupExpiredAsync` returns `0`, and the background service **ignores** the instance entirely — no cleanup, no volume scan, no event, no free-space check.
 - Startup validation then checks only that the root exists and can be listed (it is never created).
+- Not the same as a [disabled cleanup](#turning-the-cleanup-off): read-only refuses writes as well, while `CleanupEnabled = false` leaves the instance fully writable.
 
 ---
 
@@ -256,13 +273,14 @@ One `TempFolderCleanerHost` per service collection walks **all** registrations:
 | Option | Default | Description |
 |---|---|---|
 | `RootPath` | `Path.GetTempPath()` | Root directory; relative values are resolved to a full path before validation. When it equals the system temp directory, `FolderPrefix` must be non-empty — an unscoped cleanup there would delete other processes' folders (validation fails otherwise). |
-| `MaxAge` | 24 h | Age after which a subfolder is expired (see `AgeSource`). |
+| `MaxAge` | 24 h | Age after which a subfolder is expired (see `AgeSource`). Must be positive while the cleanup is enabled; a zero is accepted with the cleanup off (no TTL). |
 | `AgeSource` | `LastWriteTime` | `LastWriteTime` \| `CreationTime`. |
 | `FolderPrefix` | `""` | Name prefix for generated folders **and** the cleanup filter (plain name — `.`/`..`, separators and [path-rule](#path-rules) characters rejected). With `Naming = Date` it lands on the first segment of the date path (`up_` + `yyyy/MM/dd` → `up_2026/10/08`). Required (non-empty) when `RootPath` is the system temp directory. |
 | `FolderNameFormat` | `yyyy-MM-dd` | .NET date/time format `Naming = Date` shapes folder names with — invariant culture, container's `TimeProvider`, local time. Works with any pattern (`yyyy-MM-dd/HH`, `yyyy/MM/dd`, `yyyyMMdd`, `yyyyMM/dd/HH` …); the rendered shape is validated with the prefix (broken format, `..`, rooted output → `OptionsValidationException`). |
 | `OverwriteFiles` | `true` | `WriteAsync` / `CopyFileAsync` replace an existing target file; `false` → the write fails with `IOException` and the original stays intact. |
 | `MaxFoldersPerPass` | 100 | Upper bound of deletions per cleanup pass. |
 | `CleanupInterval` | 1 h | Background cleanup period per instance. |
+| `CleanupEnabled` | `true` | Whether the instance deletes expired subfolders at all. `false` → no cleanup loop is started and `CleanupExpiredAsync` returns 0; volume tracking and the free-space check keep running. See [turning the cleanup off](#turning-the-cleanup-off). |
 | `VolumeScanInterval` | `0` | Independent volume-scan period; `0` = scan only before a cleanup pass. |
 | `MinFreeSpace` | `0` | Minimum free bytes the root's volume should keep; `0` = the check is off and the volume is never probed. Positive → one check per `FreeSpaceCheckInterval`, firing `OnFreeSpaceReached` edge-triggered. |
 | `FreeSpaceCheckInterval` | 24 h | Free-space check period; first check at host start. Must be positive; only consulted when `MinFreeSpace > 0`. |

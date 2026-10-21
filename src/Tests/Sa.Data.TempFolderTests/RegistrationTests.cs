@@ -86,6 +86,141 @@ public sealed class RegistrationTests : IDisposable
             () => provider.GetRequiredKeyedService<ITempFolder>("bad"));
 
         Assert.Contains("MaxAge", ex.Message, StringComparison.Ordinal);
+
+        // The message must point at the way out: a zero TTL is not a way to switch the cleanup off
+        // (it would expire everything on the first pass).
+        Assert.Contains("CleanupEnabled", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Register_MaxAgeZero_WithTheCleanupDisabled_Resolves()
+    {
+        // With the cleanup off the TTL is not read at all, so a zero ("no TTL") is a legal value
+        // there — while it stays an error while the cleanup is on.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("off", b => b.Options(o => o.Configure(x =>
+        {
+            x.RootPath = _root;
+            x.MaxAge = TimeSpan.Zero;
+            x.CleanupEnabled = false;
+        })));
+
+        using var provider = services.BuildServiceProvider();
+
+        var folder = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("off");
+
+        Assert.False(folder.OptionsSnapshot.CleanupEnabled);
+        Assert.Equal(TimeSpan.Zero, folder.OptionsSnapshot.MaxAge);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Register_NegativeMaxAge_FailsValidation_WhateverTheCleanupDoes(bool cleanupEnabled)
+    {
+        // A negative TTL is a mistake either way — even with the cleanup off.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("neg", b => b.Options(o => o.Configure(x =>
+        {
+            x.RootPath = _root;
+            x.MaxAge = TimeSpan.FromSeconds(-1);
+            x.CleanupEnabled = cleanupEnabled;
+        })));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredKeyedService<ITempFolder>("neg"));
+
+        Assert.Contains("MaxAge", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Register_CleanupDisabled_AllowsZeroCleanupKnobs()
+    {
+        // The cleanup-only knobs are inert while the cleanup is off: a zero is an explicit
+        // "not used" there.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("off", b => b.Options(o => o.Configure(x =>
+        {
+            x.RootPath = _root;
+            x.CleanupEnabled = false;
+            x.MaxFoldersPerPass = 0;
+            x.CleanupInterval = TimeSpan.Zero;
+        })));
+
+        using var provider = services.BuildServiceProvider();
+
+        var folder = provider.GetRequiredKeyedService<ITempFolder>("off");
+
+        Assert.Equal(Path.GetFullPath(_root), folder.RootPath);
+    }
+
+    [Theory]
+    [InlineData(0, 3600)] // MaxFoldersPerPass = 0
+    [InlineData(100, 0)] // CleanupInterval = 0
+    public void Register_ZeroCleanupKnobs_FailValidation_WhileTheCleanupIsEnabled(
+        int maxFoldersPerPass,
+        int cleanupIntervalSeconds)
+    {
+        // The same zeros are an error while the cleanup runs — they would make the pass a no-op
+        // or a busy loop.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("on", b => b.Options(o => o.Configure(x =>
+        {
+            x.RootPath = _root;
+            x.MaxFoldersPerPass = maxFoldersPerPass;
+            x.CleanupInterval = TimeSpan.FromSeconds(cleanupIntervalSeconds);
+        })));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredKeyedService<ITempFolder>("on"));
+    }
+
+    [Fact]
+    public void Register_BindsCleanupEnabledFromAConfigurationSection()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TempFolder:RootPath"] = _root,
+                ["TempFolder:CleanupEnabled"] = "false",
+                ["TempFolder:MaxAge"] = "00:00:00",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddSaTempFolder("cfg", b => b.FromConfiguration("TempFolder"));
+
+        using var provider = services.BuildServiceProvider();
+        var folder = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("cfg");
+        var options = folder.OptionsSnapshot;
+
+        Assert.False(options.CleanupEnabled);
+        Assert.Equal(TimeSpan.Zero, options.MaxAge);
+    }
+
+    [Fact]
+    public void Register_SystemTempRootWithoutPrefix_FailsValidation_EvenWithTheCleanupDisabled()
+    {
+        // The scope rule is not a cleanup rule: an unscoped instance on the shared system temp
+        // folder stays invalid, cleanup enabled or not.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("sysscope", b => b.Options(o => o.Configure(x =>
+        {
+            x.RootPath = Path.GetTempPath();
+            x.CleanupEnabled = false;
+        })));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredKeyedService<ITempFolder>("sysscope"));
+
+        Assert.Contains("system temp", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]

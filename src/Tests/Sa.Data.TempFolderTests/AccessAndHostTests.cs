@@ -216,6 +216,80 @@ public sealed class AccessAndHostTests : IDisposable
     }
 
     [Fact]
+    public async Task Host_CleanupDisabled_StartsNoCleanupLoop()
+    {
+        // The background service must not even start a cleanup loop for a cleanup-disabled
+        // instance — the folder stays, however many intervals pass.
+        var expired = Path.Combine(_root, "expired");
+        Directory.CreateDirectory(expired);
+        TestTemp.MakeExpired(expired);
+
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("off", b => b.Options(o => o.Configure(x =>
+        {
+            x.RootPath = _root;
+            x.CleanupEnabled = false;
+            x.CleanupInterval = TimeSpan.FromMilliseconds(100);
+        })));
+        await using var provider = services.BuildServiceProvider();
+
+        var host = provider.GetServices<IHostedService>().OfType<TempFolderCleanerHost>().Single();
+        await host.StartAsync(TestTemp.Token);
+
+        try
+        {
+            await Task.Delay(500, TestTemp.Token);
+            Assert.True(Directory.Exists(expired), "a cleanup-disabled instance must never be cleaned");
+        }
+        finally
+        {
+            await host.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Host_CleanupDisabled_StillRunsTheVolumeScan()
+    {
+        // The flag is about deletion only: the volume scan keeps running and keeps reporting,
+        // so the limit is still watched while the cleanup is off.
+        var dir = Path.Combine(_root, "big");
+        Directory.CreateDirectory(dir);
+        File.WriteAllBytes(Path.Combine(dir, "payload.bin"), new byte[100]);
+
+        var exceeded = false;
+
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("off", b => b.Options(o => o.Configure(x =>
+        {
+            x.RootPath = _root;
+            x.CleanupEnabled = false;
+            x.TrackVolume = true;
+            x.MaxTotalSize = 10;
+            x.VolumeScanInterval = TimeSpan.FromMilliseconds(100);
+            x.OnVolumeExceeded = _ => exceeded = true;
+        })));
+        await using var provider = services.BuildServiceProvider();
+
+        var host = provider.GetServices<IHostedService>().OfType<TempFolderCleanerHost>().Single();
+        await host.StartAsync(TestTemp.Token);
+
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (!exceeded && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(50, TestTemp.Token);
+            }
+
+            Assert.True(exceeded, "the volume scan must keep running with the cleanup disabled");
+        }
+        finally
+        {
+            await host.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task Host_IgnoresReadOnlyInstances_WithoutFailingStartup()
     {
         var expired = Path.Combine(_root, "expired");

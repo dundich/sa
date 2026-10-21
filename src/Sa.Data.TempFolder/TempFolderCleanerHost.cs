@@ -12,7 +12,9 @@ namespace Sa.Data.TempFolder;
 /// </summary>
 /// <remarks>
 /// One host per service collection walks <b>all</b> registrations. Read-only instances are
-/// skipped entirely: no cleanup, no scan, no volume event, no free-space check. Loop failures are
+/// skipped entirely: no cleanup, no scan, no volume event, no free-space check. An instance with
+/// <see cref="TempFolderOptions.CleanupEnabled"/> off gets no cleanup loop — but its volume-scan
+/// and free-space loops still run, because they only report and never delete. Loop failures are
 /// logged and never bring the host down — the next interval simply runs the pass again. All delays
 /// go through the container's <see cref="TimeProvider"/>, so tests can virtualise the schedule.
 /// </remarks>
@@ -69,12 +71,23 @@ internal sealed class TempFolderCleanerHost : BackgroundService
                 continue;
             }
 
-            loops.Add(RunLoopAsync(
-                $"{registration.Name}:cleanup",
-                options.CleanupInterval,
-                runFirstImmediately: false,
-                () => folder.CleanupExpiredAsync(stoppingToken).AsTask(),
-                stoppingToken));
+            // The cleanup loop is the only loop that deletes anything: with the cleanup disabled
+            // the instance is not deleted from — the volume-scan and free-space loops below keep
+            // running, because they only report.
+            if (options.CleanupEnabled)
+            {
+                loops.Add(RunLoopAsync(
+                    $"{registration.Name}:cleanup",
+                    options.CleanupInterval,
+                    runFirstImmediately: false,
+                    () => folder.CleanupExpiredAsync(stoppingToken).AsTask(),
+                    stoppingToken));
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "Temp folder '{Name}': the cleanup is disabled; no cleanup loop is started.", registration.Name);
+            }
 
             if (folder.HasPeriodicVolumeScan())
             {

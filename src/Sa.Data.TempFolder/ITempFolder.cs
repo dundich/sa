@@ -204,6 +204,9 @@ public interface ITempFolder : IDisposable
     /// current data.
     /// </summary>
     /// <remarks>
+    /// A read-only instance and an instance with <see cref="TempFolderOptions.CleanupEnabled"/>
+    /// turned off do nothing at all: the pass returns 0 without touching the disk.
+    /// <para>
     /// The pass always yields to file activity: it does not start while a
     /// <see cref="WriteAsync"/> / <see cref="CopyFileAsync"/> / <see cref="ReadAsync"/> /
     /// <see cref="DeleteFileAsync"/> / <see cref="CreateSubfolder"/> /
@@ -217,6 +220,7 @@ public interface ITempFolder : IDisposable
     /// returned instead).</param>
     /// <returns>
     /// The number of subfolders this pass actually deleted. Always 0 for a read-only instance, for
+    /// an instance whose cleanup is disabled (<see cref="TempFolderOptions.CleanupEnabled"/>), for
     /// a pass that was cancelled before deleting anything, and for candidates that vanished
     /// out-of-band between selection and deletion — a vanished folder is not counted as deleted.
     /// </returns>

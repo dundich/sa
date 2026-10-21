@@ -63,7 +63,10 @@ public interface IFileSystemStorageBuilder
     /// the pipeline via <see cref="ITempFolderBuilder.Options"/>, and the strategy overrides
     /// (<c>UseCleanupStrategy&lt;T&gt;()</c> / <c>UseNamingStrategy&lt;T&gt;()</c>). A storage
     /// registration defaults <see cref="TempFolderOptions.MaxAge"/> to 30 days when neither the
-    /// section nor the callback sets it. May be called several times; the actions run in call order.
+    /// section nor the callback sets it. Setting
+    /// <see cref="TempFolderOptions.CleanupEnabled"/> to <c>false</c> through this channel turns
+    /// the deletion off: the storage keeps working, but nothing is ever cleaned up. May be called
+    /// several times; the actions run in call order.
     /// </remarks>
     /// <param name="configureTempFolder">Callback receiving the temp-folder builder.</param>
     IFileSystemStorageBuilder TempFolder(Action<ITempFolderBuilder> configureTempFolder);

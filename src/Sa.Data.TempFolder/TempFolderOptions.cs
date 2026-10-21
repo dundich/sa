@@ -28,6 +28,11 @@ public sealed class TempFolderOptions
     /// Defaults to 24 hours. Which timestamp the age is measured from is decided by
     /// <see cref="AgeSource"/>.
     /// </summary>
+    /// <remarks>
+    /// Must be positive while the cleanup is enabled (<see cref="CleanupEnabled"/>): zero would
+    /// expire every subfolder on the first pass. With the cleanup off the value is not read at
+    /// all, and a zero is accepted as an explicit "no TTL"; a negative value is an error either way.
+    /// </remarks>
     public TimeSpan MaxAge { get; set; } = TimeSpan.FromHours(24);
 
     /// <summary>
@@ -71,15 +76,37 @@ public sealed class TempFolderOptions
     /// <summary>
     /// Gets or sets the maximum number of subfolders a single cleanup pass may delete.
     /// Defaults to 100. Bounds the duration of one pass; leftover expired folders are picked up
-    /// by the next pass.
+    /// by the next pass. Must be positive while the cleanup is enabled
+    /// (<see cref="CleanupEnabled"/>); with the cleanup off the value is not read at all.
     /// </summary>
     public int MaxFoldersPerPass { get; set; } = 100;
 
     /// <summary>
     /// Gets or sets how often the background service runs a cleanup pass for this instance.
-    /// Defaults to 1 hour. Must be positive.
+    /// Defaults to 1 hour. Must be positive while the cleanup is enabled
+    /// (<see cref="CleanupEnabled"/>).
     /// </summary>
     public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Gets or sets whether this instance deletes expired subfolders at all. Defaults to
+    /// <see langword="true"/>. When <see langword="false"/> the instance never removes anything:
+    /// the background service starts no cleanup loop, and
+    /// <see cref="ITempFolder.CleanupExpiredAsync"/> returns 0 without touching the disk.
+    /// </summary>
+    /// <remarks>
+    /// The volume scan and the free-space check are <b>not</b> affected — they only report and
+    /// never delete, so they keep running and keep firing their events. The cleanup-only knobs
+    /// (<see cref="MaxAge"/>, <see cref="MaxFoldersPerPass"/>, <see cref="CleanupInterval"/>) are
+    /// inert while the cleanup is off: a zero is accepted (an explicit "not used"), a negative
+    /// value stays an error.
+    /// <para>
+    /// Not the same as <see cref="ReadOnly"/>: a read-only instance also refuses every write,
+    /// while a cleanup-disabled instance stays fully writable — use it when the folder's
+    /// lifecycle belongs to someone else.
+    /// </para>
+    /// </remarks>
+    public bool CleanupEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets how often the background volume scanner runs independently of cleanup.
@@ -202,9 +229,20 @@ public sealed class TempFolderOptions
             throw new ValidationException($"Invalid RootPath format: {RootPath}. {ex.Message}");
         }
 
-        if (MaxAge <= TimeSpan.Zero)
+        // The cleanup-only knobs are inert while the cleanup is off, so their "must be positive"
+        // rule applies only then; a zero is an explicit "not used" and a negative value is a
+        // mistake either way.
+        if (MaxAge < TimeSpan.Zero)
         {
-            throw new ValidationException($"MaxAge must be positive, but was {MaxAge}.");
+            throw new ValidationException($"MaxAge cannot be negative, but was {MaxAge}.");
+        }
+
+        if (MaxAge == TimeSpan.Zero && CleanupEnabled)
+        {
+            throw new ValidationException(
+                $"MaxAge must be positive while the cleanup is enabled, but was {MaxAge}. Zero would " +
+                "expire every subfolder on the first pass — set CleanupEnabled to false to turn the " +
+                "age-based cleanup off instead.");
         }
 
         if (FolderPrefix.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
@@ -255,14 +293,16 @@ public sealed class TempFolderOptions
                 $"unusable folder path '{generatedSample}'.");
         }
 
-        if (MaxFoldersPerPass <= 0)
+        if (MaxFoldersPerPass < 0 || (MaxFoldersPerPass == 0 && CleanupEnabled))
         {
-            throw new ValidationException($"MaxFoldersPerPass must be positive, but was {MaxFoldersPerPass}.");
+            throw new ValidationException(
+                $"MaxFoldersPerPass must be positive while the cleanup is enabled, but was {MaxFoldersPerPass}.");
         }
 
-        if (CleanupInterval <= TimeSpan.Zero)
+        if (CleanupInterval < TimeSpan.Zero || (CleanupInterval == TimeSpan.Zero && CleanupEnabled))
         {
-            throw new ValidationException($"CleanupInterval must be positive, but was {CleanupInterval}.");
+            throw new ValidationException(
+                $"CleanupInterval must be positive while the cleanup is enabled, but was {CleanupInterval}.");
         }
 
         if (VolumeScanInterval < TimeSpan.Zero)

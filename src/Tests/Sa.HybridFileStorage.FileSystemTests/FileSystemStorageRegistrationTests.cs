@@ -309,6 +309,46 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     }
 
     [Fact]
+    public async Task Register_Storage_CleanupDisabled_KeepsExpiredFiles()
+    {
+        // The storage's temp folder is an ordinary temp-folder instance: the cleanup flag reaches
+        // it through the TempFolder channel, and with the cleanup off nothing is deleted.
+        var services = new ServiceCollection();
+        services.AddFsStorageWithTempFolder(Name, tb => tb.Options(ob => ob.Configure(o =>
+        {
+            o.RootPath = _testDir;
+            o.CleanupEnabled = false;
+            o.MaxAge = TimeSpan.FromHours(1);
+        })));
+
+        using var provider = services.BuildServiceProvider();
+        var fileId = await UploadAsync(provider, "kept.txt");
+
+        AgeFolders(TimeSpan.FromHours(2));
+
+        await TempFolder(provider).CleanupExpiredAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(await ExistsAsync(provider, fileId), "a cleanup-disabled storage must keep its files");
+    }
+
+    [Fact]
+    public void Register_Storage_CleanupDisabled_ResolvesWithTheStorageDefaultTtl()
+    {
+        // The storage's 30-day default rides on a sentinel that only a post-configure replaces —
+        // the flag must not break that dance: the instance still validates and still resolves.
+        var services = new ServiceCollection();
+        services.AddFsStorageWithTempFolder(Name, tb => tb.Options(ob => ob.Configure(o =>
+        {
+            o.RootPath = _testDir;
+            o.CleanupEnabled = false;
+        })));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Equal(Path.GetFullPath(_testDir), TempFolder(provider).RootPath);
+    }
+
+    [Fact]
     public void Register_WithoutASection_WorksWithoutConfiguration()
     {
         // BindConfiguration is only called when a path is supplied, so a container with no
