@@ -22,7 +22,25 @@ Alternative to PowerShell `build/` — these scripts work on Linux/macOS.
 
 # Enable long paths on Linux (create /sa symlink)
 sudo ./do-fix-max-path-linux.sh
+
+# Encrypt, decrypt and check Sa.Configuration secrets files
+./do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets_enc.lsr.dev.txt
+./do-secrets.sh decrypt secrets_enc.lsr.dev.txt
+./do-secrets.sh check
 ```
+
+## Secrets tooling
+
+`do-secrets.sh` wraps `tools/secrets.cs` — a .NET 10 file-based app that references
+`src/Sa.Configuration/Sa.Configuration.csproj`, so it always uses the in-repo format.
+
+- The key is read from `SA_SECRETS_DECRYPTION_KEY` (or `SA_SECRETS_DECRYPTION_KEY_<CLIENT>`),
+  from `--key-file`, from `.env`, or typed interactively. `--key` is rejected on purpose:
+  a command-line key leaks through process listings and shell history.
+- `check` infers the client/environment from each file header, verifies decryption and exits
+  non-zero on the first failure — suitable for CI.
+- `encrypt` takes a plaintext `key=value` file and writes `ENC1:` values; comments and blank
+  lines are preserved. Use it to re-encrypt after editing the plaintext source.
 
 ## Notes
 

@@ -1,6 +1,6 @@
 ﻿using Sa.Configuration.CommandLine;
 
-namespace Sa.Configuration.SecretStore.Stories;
+namespace Sa.Configuration.SecretStore.Stores;
 
 public sealed class CommandLineArgsSecretStore(string[]? args = null) : ISecretStore
 {

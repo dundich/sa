@@ -84,10 +84,37 @@ Secrets use LIFO priority — the store added last wins. The default chain is re
 |---|--------|---------|
 | 1 | Command-line arguments | `--sa_pg_password=...` |
 | 2 | Environment variables | `SA_PG_PASSWORD=...` |
-| 3 | Environment-specific file | `secrets.Development.txt` |
-| 4 | Base secrets file | `secrets.txt` |
+| 3 | `.env.{env}` / `.env` | `SA_SECRETS_DECRYPTION_KEY=...` |
+| 4 | `secrets_enc.{client}.{env}.txt` / `secrets_enc.{client}.txt` | committed encrypted secrets |
+| 5 | `secrets_enc.{env}.txt` / `secrets_enc.txt` | committed encrypted defaults |
+| 6 | `secrets.{env}.txt` | plaintext environment-specific file |
+| 7 | `secrets.txt` | plaintext base file |
 
 The first source with a value wins — command line can override everything, environment variables override files, and so on.
+
+---
+
+## Encrypted Secrets
+
+Encrypted files are safe to commit: values are AES-256-GCM encrypted, while key names and comments stay readable for diffs. Enable it by creating `secrets_enc*.txt` files and supplying a key:
+
+```bash
+export SA_SECRETS_DECRYPTION_CLIENT=lsr
+export SA_SECRETS_DECRYPTION_KEY=...        # or base64:<32-byte key>
+# or put the same variables into .env (never commit .env)
+```
+
+File names: `secrets_enc.txt`, `secrets_enc.{env}.txt`, `secrets_enc.{client}.txt`, `secrets_enc.{client}.{env}.txt`. The `{env}` part is the exact environment name (`Development`, `Production`, or whatever `DOTNET_ENVIRONMENT` contains).
+
+Encrypt and verify files with the repository script:
+
+```bash
+./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets_enc.lsr.dev.txt
+./build-sh/do-secrets.sh decrypt secrets_enc.lsr.dev.txt
+./build-sh/do-secrets.sh check
+```
+
+A file that exists without a resolvable key fails startup instead of silently falling back to plaintext. See `SecretStore/Readme.md` for the format, per-client keys and failure behaviour.
 
 ---
 
@@ -175,7 +202,7 @@ Use `Secrets` directly when you need secrets outside of `IConfiguration`:
 ```csharp
 using Sa.Configuration.SecretStore;
 
-// Default chain (LIFO): CLI args → env vars → secrets.{Env}.txt → secrets.txt
+// Default chain (LIFO): CLI args → env vars → .env → secrets_enc* → secrets.{Env}.txt → secrets.txt
 var secrets = Secrets.CreateDefault();
 
 string? result   = secrets.PopulateSecrets("Server={{host}};Pwd={{sa_pg_password}}");

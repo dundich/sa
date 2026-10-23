@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
-using Sa.Configuration.SecretStore.Stories;
+using Sa.Configuration.SecretStore.Stores;
 
 namespace Sa.ConfigurationTests;
 

@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.SecretStore.Stories;
+﻿namespace Sa.Configuration.SecretStore.Stores;
 
 public sealed class InMemorySecretStore(Dictionary<string, string?>? secrets = null) : ISecretStore
 {

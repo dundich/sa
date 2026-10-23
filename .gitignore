@@ -803,6 +803,10 @@ src/.vscode/
 
 *.lscache
 
+# local secrets
+.env
+!.env.example
+
 # ai
 .qwen/
 .agents/

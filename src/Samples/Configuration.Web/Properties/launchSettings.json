@@ -8,7 +8,9 @@
       "launchUrl": "settings",
       "applicationUrl": "http://localhost:5245",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "SA_SECRETS_DECRYPTION_CLIENT": "lsr",
+        "SA_SECRETS_DECRYPTION_KEY": "demo-only-not-for-production"
       }
     }
   }

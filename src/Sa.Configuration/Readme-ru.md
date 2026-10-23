@@ -84,10 +84,39 @@ var pgConn = app.Configuration["sa:pg:connection"];
 |---|----------|--------|
 | 1 | Аргументы командной строки | `--sa_pg_password=...` |
 | 2 | Переменные окружения | `SA_PG_PASSWORD=...` |
-| 3 | Файл конкретной среды | `secrets.Development.txt` |
-| 4 | Базовый файл секретов | `secrets.txt` |
+| 3 | `.env.{env}` / `.env` | `SA_SECRETS_DECRYPTION_KEY=...` |
+| 4 | `secrets_enc.{client}.{env}.txt` / `secrets_enc.{client}.txt` | закоммиченные зашифрованные секреты |
+| 5 | `secrets_enc.{env}.txt` / `secrets_enc.txt` | зашифрованные значения по умолчанию |
+| 6 | `secrets.{env}.txt` | обычный файл конкретной среды |
+| 7 | `secrets.txt` | обычный базовый файл |
 
 Первый источник со значением побеждает — командная строка может переопределить всё, переменные окружения переопределяют файлы, и т.д.
+
+`{env}` — точное значение `Secrets.GetEnvironmentName()` (`DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `environment`, иначе `Production`). Для коротких имён вроде `dev` задайте `DOTNET_ENVIRONMENT=dev` — имена обычных и зашифрованных файлов следуют за ним.
+
+---
+
+## Зашифрованные секреты
+
+Зашифрованные файлы можно коммитить: значения шифруются AES-256-GCM, а имена ключей и комментарии остаются читаемыми для диффов. Достаточно создать файлы `secrets_enc*.txt` и задать ключ:
+
+```bash
+export SA_SECRETS_DECRYPTION_CLIENT=lsr
+export SA_SECRETS_DECRYPTION_KEY=...        # или base64:<32-байтный ключ>
+# те же переменные можно положить в .env (сам .env не коммитится)
+```
+
+Имена файлов: `secrets_enc.txt`, `secrets_enc.{env}.txt`, `secrets_enc.{client}.txt`, `secrets_enc.{client}.{env}.txt`.
+
+Шифрование и проверка — скриптом из репозитория:
+
+```bash
+./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets_enc.lsr.dev.txt
+./build-sh/do-secrets.sh decrypt secrets_enc.lsr.dev.txt
+./build-sh/do-secrets.sh check
+```
+
+Если зашифрованный файл существует, а ключ не найден, приложение падает при старте вместо тихого отката на plaintext. Формат, ключи на клиента и поведение при ошибках — в `SecretStore/Readme.md`.
 
 ---
 
@@ -175,7 +204,7 @@ TimeSpan? timeout = args.GetTimeSpan("timeout");
 ```csharp
 using Sa.Configuration.SecretStore;
 
-// Цепочка по умолчанию (LIFO): CLI-аргументы → ENV-переменные → secrets.{Env}.txt → secrets.txt
+// Цепочка по умолчанию (LIFO): CLI-аргументы → ENV-переменные → .env → secrets_enc* → secrets.{Env}.txt → secrets.txt
 var secrets = Secrets.CreateDefault();
 
 string? result   = secrets.PopulateSecrets("Server={{host}};Pwd={{sa_pg_password}}");
