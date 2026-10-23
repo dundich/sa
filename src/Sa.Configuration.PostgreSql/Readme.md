@@ -10,6 +10,7 @@ A dynamic configuration source for .NET that loads settings from PostgreSQL. Cha
 - **One connection pool, not one per reload**: the pool is created once and reused by every `Reload()`
 - **Async reload**: `LoadAsync(CancellationToken)` for timer- or `BackgroundService`-driven reloads
 - **Key/value trimming**: whitespace is automatically trimmed from both keys and values
+- **`__` as `:` (opt-in)**: with `DoubleUnderscoreAsSeparator = true`, a double underscore in a key is read as the configuration separator, so `sa__pg__host` and `sa:pg:host` are the same setting — the convention `AddEnvironmentVariables()` already applies. Off by default, so keys are stored verbatim
 - **Layering control**: decide whether blank and `NULL` values delegate to lower-priority sources or override them
 
 ## Quick Start
@@ -33,6 +34,67 @@ var lang  = app.Configuration["language"];       // → "en"
 
 Options are validated when the source is registered, so a blank connection string or query
 fails while the host is still building rather than at the first load.
+
+---
+
+## Key Separators
+
+The configuration separator is `:`, so a nested setting reads as
+`configuration["sa:pg:host"]`. By default this source stores keys **verbatim**, so a key that
+legitimately contains `__` (or `:`) is preserved as-is — nothing is re-shaped behind your back.
+
+If your database is filled from the same places environment variables come from, where the
+separator is `__`, you can opt in to the environment convention with
+`DoubleUnderscoreAsSeparator = true`. Then `__` in a key is read as `:`, exactly as
+`AddEnvironmentVariables()` does:
+
+```sql
+INSERT INTO app_settings (key, value) VALUES
+    ('sa__pg__host', 'db.internal'),   -- read as sa:pg:host (alias on)
+    ('sa:pg:port',   '5432');          -- read as sa:pg:port
+```
+
+The alias is bidirectional: keys are stored in canonical `:` form, but `configuration["sa__pg__host"]`
+answers for `sa:pg:host` as well. A single underscore is data, not a separator
+(`config_db` stays `config_db`).
+
+Two keys are considered the same setting after normalization, so if the query returns both
+spellings of one path they are duplicates, and `LastWins` decides which value survives.
+
+The alias mirrors the environment provider, including its quirk that replacement is pairwise:
+four underscores become two delimiters (`a____b` → `a::b`). With the default
+`DoubleUnderscoreAsSeparator = false` the key is stored and read verbatim instead.
+
+---
+
+## Key Aliases
+
+This package no longer maps keys on its own. The explicit key-alias feature — a C# path like
+`sa:scope:api:auth:base_url` filled by a flat PHP key `auth_base_url` — lives in the
+[**Sa.Configuration**](../Sa.Configuration) Secrets layer, which applies it over the merged
+configuration of *every* provider (not just this database). Declare it there:
+
+```csharp
+using Sa.Configuration;
+
+builder.Configuration.AddSaConfiguration(new SecretOptions
+{
+    KeyAliases = new KeyAliasOptions
+    {
+        KeyAliases =
+        {
+            ["sa:scope:api:auth:base_url"] = "auth_base_url",
+            ["sa:scope:api:auth:token_ttl"] = "auth_token_ttl",
+        },
+    },
+});
+```
+
+Because the alias runs in the final post-secrets stage, it also resolves across sources — the
+flat key can come from this PostgreSQL source while the canonical path comes from another. See
+the [Sa.Configuration readme](../Sa.Configuration/Readme.md#key-aliases) for the full behaviour.
+
+---
 
 ## Parameterized Queries
 
@@ -95,6 +157,7 @@ raises its own) observe the new snapshot. Concurrent reloads collapse into a sin
 | `MaxAttempts` | `3` | Total load attempts including the first. `0` and `1` both mean a single attempt. |
 | `MedianFirstRetryDelay` | `530` | Median first-retry delay in ms; each delay is jittered. The first retry is always immediate. |
 | `SkipEmptyValues` | `true` | Drop rows whose **value** is `NULL`/blank. See *Layering* below. Blank **keys** are dropped regardless of this setting. |
+| `DoubleUnderscoreAsSeparator` | `false` | When `true`, read `__` in a key as the `:` separator, so `sa__pg__host` ≡ `sa:pg:host`. `false` (default) keeps `__` verbatim. |
 | `LastWins` | `true` | For duplicate keys, the last row wins. Set to `false` for first-row-wins. |
 
 ```csharp
@@ -105,6 +168,7 @@ builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOp
     MaxAttempts = 5,
     MedianFirstRetryDelay = 200,
     SkipEmptyValues = false,
+    DoubleUnderscoreAsSeparator = true,
     LastWins = true,
 });
 ```
@@ -121,6 +185,7 @@ the connection string's password is redacted, so options objects are safe to int
 | Value is `NULL` in DB | Skipped by default — see *Layering* |
 | Value is an empty string or whitespace only | Skipped by default — see *Layering* |
 | Key or value has surrounding whitespace | Trimmed |
+| Key contains `__` | Read as the `:` separator only when `DoubleUnderscoreAsSeparator = true`; verbatim by default |
 | Query returns fewer than 2 columns | `InvalidOperationException` naming the actual column count |
 | Transient connection error | Retried up to `MaxAttempts` |
 | Permanent query error | Fails on the first attempt |

@@ -4,10 +4,21 @@ namespace Sa.Configuration.SecretStore;
 
 public static class Setup
 {
+    /// <summary>
+    /// Adds a post-secrets-processing source: the final stage that substitutes <c>{{key}}</c>
+    /// placeholders in every provider's values and, when <paramref name="keyAliasOptions"/>
+    /// carries mappings, applies the explicit key aliases over the merged configuration.
+    /// </summary>
     public static IConfigurationBuilder AddSaPostSecretProcessing(
         this IConfigurationBuilder builder,
-        ISecretService secretService)
+        ISecretService secretService,
+        KeyAliasOptions keyAliasOptions = null!)
     {
+        if (keyAliasOptions is null)
+            keyAliasOptions = new();
+        else
+            keyAliasOptions.Validate();
+
         return builder.Add(new PostSecretProcessingConfigurationSource(
             () =>
             {
@@ -19,11 +30,14 @@ public static class Setup
 
                 return postBuilder.Build();
             },
-            secretService));
+            secretService,
+            keyAliasOptions));
     }
 
     internal static IConfigurationBuilder AddSaPostSecretProcessing(
         this IConfigurationBuilder builder,
         SecretOptions? options = null)
-            => builder.AddSaPostSecretProcessing(Secrets.CreateDefault(options));
+            => builder.AddSaPostSecretProcessing(
+                Secrets.CreateDefault(options),
+                (options ?? new()).KeyAliases);
 }

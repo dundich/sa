@@ -37,7 +37,11 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
                 ('WhitespaceKey', '   spaced   '),
                 ('EmptyValueKey', ''),
                 ('NullValueKey', null),
-                ('  LeadingSpaceKey', 'leading_space_value')
+                ('  LeadingSpaceKey', 'leading_space_value'),
+                ('sa__pg__host', 'db-host'),
+                ('sa:pg:port', '5432'),
+                ('single_underscore_key', 'single_underscore_value'),
+                ('literal__double', 'literal_double_value')
                 ON CONFLICT (key) DO NOTHING;", connection);
 
             await insertCommand.ExecuteNonQueryAsync();
@@ -116,6 +120,60 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
 
         // Assert
         Assert.Null(configuration["NullValueKey"]);
+    }
+
+    [Fact]
+    public void Load_TreatsDoubleUnderscoreAsSeparator()
+    {
+        // A key stored in the database as sa__pg__host must be reachable as sa:pg:host,
+        // the same convention AddEnvironmentVariables() applies to environment variables.
+        // The alias is opt-in, so it must be switched on explicitly.
+        var builder = new ConfigurationBuilder();
+        var options = new PostgreSqlConfigurationOptions(
+            fixture.ConnectionString,
+            "SELECT key, value FROM config_provider_test WHERE key LIKE 'sa%' OR key = 'single_underscore_key'")
+        with { DoubleUnderscoreAsSeparator = true };
+
+        builder.AddSaPostgreSqlConfiguration(options);
+
+        // Act
+        var configuration = builder.Build();
+
+        // Assert — both spellings in the database land on the same canonical `:` key.
+        Assert.Equal("db-host", configuration["sa:pg:host"]);
+        Assert.Equal("5432", configuration["sa:pg:port"]);
+
+        // Reading through the alias spelling works as well, so the two are interchangeable.
+        Assert.Equal("db-host", configuration["sa__pg__host"]);
+        Assert.Equal("5432", configuration["sa__pg__port"]);
+
+        // Single underscores are data, not separators.
+        Assert.Equal("single_underscore_value", configuration["single_underscore_key"]);
+
+        // The path is a real hierarchy, so section binding sees the children.
+        Assert.Equal("db-host", configuration.GetSection("sa:pg")["host"]);
+    }
+
+    [Fact]
+    public void Load_KeepsDoubleUnderscore_WhenSeparatorAliasIsDisabled()
+    {
+        // With the alias off, a key that legitimately contains __ is stored verbatim.
+        var builder = new ConfigurationBuilder();
+        var options = new PostgreSqlConfigurationOptions(
+            fixture.ConnectionString,
+            "SELECT key, value FROM config_provider_test WHERE key IN ('literal__double', 'sa__pg__host')")
+        with { DoubleUnderscoreAsSeparator = false };
+
+        builder.AddSaPostgreSqlConfiguration(options);
+
+        // Act
+        var configuration = builder.Build();
+
+        // Assert
+        Assert.Equal("literal_double_value", configuration["literal__double"]);
+        Assert.Null(configuration["literal:double"]);
+        Assert.Equal("db-host", configuration["sa__pg__host"]);
+        Assert.Null(configuration["sa:pg:host"]);
     }
 
     [Fact]

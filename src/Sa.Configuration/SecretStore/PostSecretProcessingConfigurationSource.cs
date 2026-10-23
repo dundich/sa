@@ -4,8 +4,9 @@ namespace Sa.Configuration.SecretStore;
 
 internal sealed class PostSecretProcessingConfigurationSource(
     Func<IConfiguration> getInnerConfiguration,
-    ISecretService secretService) : IConfigurationSource
+    ISecretService secretService,
+    KeyAliasOptions keyAliasOptions) : IConfigurationSource
 {
     public IConfigurationProvider Build(IConfigurationBuilder builder)
-        => new PostSecretProcessingConfigurationProvider(getInnerConfiguration, secretService);
+        => new PostSecretProcessingConfigurationProvider(getInnerConfiguration, secretService, keyAliasOptions);
 }

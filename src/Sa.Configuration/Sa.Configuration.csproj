@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Sa\Classes\ConfigurationKey.cs" Link="AsLink\ConfigurationKey.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Sa.ConfigurationTests" />
   </ItemGroup>
 

@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Text.RegularExpressions;
+using Sa.Classes;
 
 namespace Sa.Configuration.CommandLine;
 
@@ -42,7 +43,12 @@ public sealed partial class Arguments
             {
                 var currentParameter = parts[1];
                 var cleanedValue = s_ReRemover.Replace(parts[2], "$1");
-                _parameters[currentParameter] = cleanedValue;
+
+                // `--sa__pg__host` addresses the same configuration key as `--sa:pg:host`:
+                // a double underscore is stored as the `:` separator, the same convention
+                // AddEnvironmentVariables() applies. Lookups normalize the key likewise, so
+                // both spellings resolve to the same value.
+                _parameters[ConfigurationKey.Normalize(currentParameter)] = cleanedValue;
             }
         }
     }
@@ -59,11 +65,19 @@ public sealed partial class Arguments
     /// </summary>
     /// <param name="param">The parameter name to retrieve.</param>
     /// <returns>The value associated with the parameter, or null if not found.</returns>
-    public string? this[string param] => _parameters.TryGetValue(param, out var value) ? value : null;
+    /// <remarks>
+    /// A double underscore in <paramref name="param"/> is treated as the <c>:</c> separator, so
+    /// <c>arguments["sa__pg__host"]</c> and <c>arguments["sa:pg:host"]</c> are interchangeable.
+    /// </remarks>
+    public string? this[string param]
+        => _parameters.TryGetValue(ConfigurationKey.Normalize(param), out var value) ? value : null;
 
     /// <summary>
     /// Gets all parameters.
     /// </summary>
+    /// <remarks>
+    /// Keys are stored in configuration form: <c>__</c> is already replaced by <c>:</c>.
+    /// </remarks>
     public IReadOnlyDictionary<string, string?> Parameters => _parameters;
 
     /// <summary>
@@ -146,7 +160,7 @@ public sealed partial class Arguments
     /// <returns>true if the parameter exists; otherwise false.</returns>
     public bool Contains(string param)
     {
-        return _parameters.ContainsKey(param);
+        return _parameters.ContainsKey(ConfigurationKey.Normalize(param));
     }
 
     /// <summary>
@@ -162,7 +176,7 @@ public sealed partial class Arguments
     {
         if (!Contains(param)) return default;
 
-        var value = _parameters[param]?.ToLowerInvariant();
+        var value = this[param]?.ToLowerInvariant();
         return value == "true" || value == "1" || value == "yes" || value == "on";
     }
 
@@ -173,7 +187,7 @@ public sealed partial class Arguments
     /// <returns>The integer value if found and valid; otherwise null.</returns>
     public int? GetInt(string param)
     {
-        if (!Contains(param) || !int.TryParse(_parameters[param], CultureInfo.InvariantCulture, out int result))
+        if (!Contains(param) || !int.TryParse(this[param], CultureInfo.InvariantCulture, out int result))
             return default;
 
         return result;
@@ -187,7 +201,7 @@ public sealed partial class Arguments
     public float? GetFloat(string param)
     {
         if (!Contains(param)
-            || !float.TryParse(_parameters[param], CultureInfo.InvariantCulture, out float result))
+            || !float.TryParse(this[param], CultureInfo.InvariantCulture, out float result))
             return default;
 
         return result;
@@ -201,7 +215,7 @@ public sealed partial class Arguments
     public long? GetLong(string param)
     {
         if (!Contains(param)
-            || !long.TryParse(_parameters[param], CultureInfo.InvariantCulture, out long result))
+            || !long.TryParse(this[param], CultureInfo.InvariantCulture, out long result))
             return default;
 
         return result;
@@ -215,7 +229,7 @@ public sealed partial class Arguments
     public TimeSpan? GetTimeSpan(string param)
     {
         if (!Contains(param)
-            || !TimeSpan.TryParse(_parameters[param], CultureInfo.InvariantCulture, out TimeSpan result))
+            || !TimeSpan.TryParse(this[param], CultureInfo.InvariantCulture, out TimeSpan result))
             return default;
 
         return result;

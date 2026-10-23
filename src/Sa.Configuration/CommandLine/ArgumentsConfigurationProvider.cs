@@ -1,6 +1,7 @@
 ﻿namespace Sa.Configuration.CommandLine;
 
 using Microsoft.Extensions.Configuration;
+using Sa.Classes;
 
 
 internal sealed class ArgumentsConfigurationSource : IConfigurationSource
@@ -28,4 +29,12 @@ internal class ArgumentsConfigurationProvider(ArgumentsConfigurationSource sourc
             Data[kvp.Key] = kvp.Value;
         }
     }
+
+    /// <summary>
+    /// Answers for the environment-variable spelling as well: arguments are stored under the
+    /// canonical <c>:</c> key, and <c>configuration["sa__pg__host"]</c> must find what
+    /// <c>--sa__pg__host</c> supplied.
+    /// </summary>
+    public override bool TryGet(string key, out string? value)
+        => base.TryGet(ConfigurationKey.Normalize(key), out value);
 }

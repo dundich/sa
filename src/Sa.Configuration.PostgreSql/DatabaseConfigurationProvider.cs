@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Npgsql;
+using Sa.Classes;
 using Sa.Data.PostgreSql;
 
 namespace Sa.Configuration.PostgreSql;
@@ -112,8 +113,16 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
         }
     }
 
-    private bool TryBeginLoad() => Interlocked.Exchange(ref _loading, 1) == 0;
+    /// <summary>
+    /// Answers for both spellings of a key: when <see cref="PostgreSqlConfigurationOptions.DoubleUnderscoreAsSeparator"/>
+    /// is on, <c>configuration["sa__pg__host"]</c> finds the value stored as <c>sa:pg:host</c>.
+    /// The alias already applies to keys read from the database; normalizing the requested key
+    /// as well makes the two spellings truly interchangeable for consumers.
+    /// </summary>
+    public override bool TryGet(string key, out string? value)
+        => base.TryGet(_options.DoubleUnderscoreAsSeparator ? ConfigurationKey.Normalize(key) : key, out value);
 
+    private bool TryBeginLoad() => Interlocked.Exchange(ref _loading, 1) == 0;
     private void EndLoad() => Volatile.Write(ref _loading, 0);
 
     private async Task LoadCoreAsync(CancellationToken cancellationToken)
@@ -173,20 +182,25 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
                     if (reader.IsDBNull(0))
                         return;
 
-                    string key = reader.GetString(0);
-                    if (string.IsNullOrWhiteSpace(key))
+                    // Trim() returns the same instance when there is nothing to trim.
+                    string key = reader.GetString(0).Trim();
+                    if (key.Length == 0)
                         return;
+
+                    // `sa__pg__host` in the database addresses the same setting as
+                    // `sa:pg:host`, matching how AddEnvironmentVariables() treats `__`.
+                    if (_options.DoubleUnderscoreAsSeparator)
+                        key = ConfigurationKey.Normalize(key);
 
                     string? value = reader.IsDBNull(1) ? null : reader.GetString(1);
 
                     if (_options.SkipEmptyValues && string.IsNullOrWhiteSpace(value))
                         return;
 
-                    // Trim() returns the same instance when there is nothing to trim.
                     if (_options.LastWins)
-                        newData[key.Trim()] = value?.Trim();
+                        newData[key] = value?.Trim();
                     else
-                        newData.TryAdd(key.Trim(), value?.Trim());
+                        newData.TryAdd(key, value?.Trim());
                 },
                 cmd =>
                 {

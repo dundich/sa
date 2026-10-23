@@ -30,6 +30,12 @@ public sealed record SecretOptions
     /// <summary>Base <c>.env</c> file name. The environment-specific file is <c>{DotEnvFileName}.{env}</c>.</summary>
     public string DotEnvFileName { get; init; } = Stores.DotEnvSecretStore.DefaultFileName;
 
+    /// <summary>
+    /// Explicit key aliases applied after the secrets pass, over the merged configuration of all
+    /// providers — see <see cref="KeyAliasOptions"/>.
+    /// </summary>
+    public KeyAliasOptions KeyAliases { get; init; } = new();
+
     public SecretOptions()
     {
         FileName = Secrets.DefaultFileName;

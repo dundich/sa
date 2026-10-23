@@ -2,10 +2,21 @@
 
 Parse and consume command-line arguments in .NET apps with a simple dictionary-like API. Supports `--flag=value`, `--flag value`, short options (`-x`), and typed getters.
 
+## Features
+
+- **Dictionary-like API**: access parsed arguments with `args["key"]` and typed getters
+- **Multiple formats**: `--flag=value`, `--flag value`, short options (`-x`)
+- **`__` as `:`**: a double underscore in a parameter name is the environment-variable spelling of the configuration separator, so `--sa__pg__host` is read as `sa:pg:host`
+- **Typed getters**: `GetBool`, `GetInt`, `GetFloat`, `GetLong`, `GetTimeSpan`
+
 Tokens that look like negative numbers (e.g. `-5`, `--1.5`) are treated as **values**, not flags.
 
 > **Key detail:** the parser strips leading dashes from parameter names. When you access a value, use the key **without** leading `-` or `--`.
 > Example: `--config_db` in CLI → `args["config_db"]` in code. `-v` in CLI → `args["v"]` in code.
+
+> **`__` as `:`:** a double underscore in a parameter name is the environment-variable spelling of the
+> configuration separator, so `--sa__pg__host` is stored and read as `sa:pg:host` — the same convention
+> `AddEnvironmentVariables()` applies. See [Key Separators](#key-separators).
 
 ## Quick Start
 
@@ -58,6 +69,39 @@ TTL:   00:05:00
 
 ---
 
+## Key Separators
+
+A double underscore in a parameter name is the environment-variable spelling of the configuration
+separator `:`, so it is stored and read as `:` — the same convention `AddEnvironmentVariables()`
+applies:
+
+| CLI Input | Key in the dictionary | Read as |
+|-----------|----------------------|---------|
+| `--sa__pg__host` | `"sa:pg:host"` | `args["sa:pg:host"]` or `args["sa__pg__host"]` |
+| `--config_db` | `"config_db"` | unchanged — a single underscore is data, not a separator |
+
+Storage is always in canonical `:` form, so `args.Parameters` never contains a `__` spelling.
+Reads are normalized the same way, so both `args["sa__pg__host"]` and `args["sa:pg:host"]` resolve
+to the same value, and the typed getters (`GetInt`, `GetBool`, …) follow the same rule. The
+replacement is pairwise, exactly like the environment provider: four underscores become two
+delimiters (`--a____b` → `a::b`).
+
+Example:
+
+```bash
+dotnet run -- --sa__pg__host db.internal --sa__pg__port 5432 --config_db mydb
+```
+
+```csharp
+var args = new Arguments(args);
+
+args["sa:pg:host"];   // "db.internal"  — read as sa:pg:host
+args["sa:pg:port"];   // "5432"         — read as sa:pg:port
+args["config_db"];    // "mydb"         — single underscore is data, unchanged
+```
+
+---
+
 ## Supported Formats
 
 | Format | CLI Input | Dictionary Key | Value |
@@ -106,6 +150,9 @@ Returns the value for a parameter name, or `null` if not found. Keys are stored 
 var db = args["database"];   // null if --database was never passed
 ```
 
+The key is normalized before the lookup, so `args["sa__pg__host"]` and `args["sa:pg:host"]` are
+interchangeable — see [Key Separators](#key-separators).
+
 ### Contains
 
 ```csharp
@@ -153,6 +200,9 @@ var configuration = new ConfigurationBuilder()
 var db = configuration["db"];
 var port = configuration["port"];
 ```
+
+Like the indexer, `configuration["sa__pg__host"]` and `configuration["sa:pg:host"]` resolve the
+same value, because the provider normalizes the requested key — see [Key Separators](#key-separators).
 
 Order matters: sources registered **later** override earlier ones. Place `AddSaCommandLine` before JSON/file sources if you want CLI to win:
 
