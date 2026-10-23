@@ -1,39 +1,44 @@
 # Sa.Configuration
 
-Secure secrets management and command-line argument parsing within the .NET `Microsoft.Extensions.Configuration` ecosystem. Secrets are automatically substituted into configuration without manual application code.
+A .NET package that does two things:
+
+1. **Substitutes secrets into configuration** — instead of hardcoding passwords and keys, you write `{{sa_pg_password}}` in the config, and the package fills in the real value from a file, an environment variable, or a command-line argument.
+2. **Parses command-line arguments** — `--key value`, `--key=value`, `-flag`, and so on.
+
+It plugs into the standard `Microsoft.Extensions.Configuration` pipeline, so it slots right into a normal ASP.NET setup.
 
 ---
 
-## Features
+## What it can do
 
-- **Automatic secret substitution**: [`Quick Start`](#quick-start) — `{{key}}` placeholders are replaced with real values from files, environment variables, or command-line arguments
-- **Value normalization**: secret values are trimmed and their surrounding quotes (`'`, `"`, `` ` ``) are stripped — see [Encoding](#encoding)
-- **Cycle protection**: nested placeholders resolve up to a depth of 3; circular references throw `InvalidOperationException`. Details in [Secrets](#secrets)
-- **Optional placeholders**: [`{{?key}}`](#optional-placeholders) — if the secret is not found, the whole string becomes `null` instead of throwing
-- **Chained Stores**: [`Secrets`](#secrets) chains any [`ISecretStore`](#secrets) with LIFO priority (the store added last wins); `AddStore` is thread-safe
-- **Argument parser**: [`Arguments`](#arguments) supports `--key value`, `--key=value`, `-flag` formats; negative numbers are treated as values; surrounding quotes are stripped; `__` in a parameter name is read as the `:` configuration separator
-- **Environments**: automatic loading of [`secrets.{Environment}.txt`](#secret-priority-order) (Development/Staging/Production)
-- **Key Aliases**: [`Key Aliases`](#key-aliases) — a C# path like `sa:scope:api:auth:base_url` can be filled by a flat PHP key `auth_base_url`, applied over the merged configuration of every provider
-- **Encryption support**: committed `secrets_enc*.txt` files (AES-256-GCM, PBKDF2-SHA256), raw and passphrase keys (`base64:`), clients/environments, `.env` keys and Unicode — see [Encrypted Secrets](#encrypted-secrets)
+- **Automatic secret substitution** — `{{key}}` placeholders are replaced with real values. See [Quick start](#quick-start).
+- **Value cleanup** — values are trimmed at the edges and stripped of surrounding quotes (`'`, `"`, `` ` ``). Details in [Encodings](#encodings).
+- **Cycle protection** — nested placeholders are expanded up to 3 levels deep. If a cycle forms, you get a clear `InvalidOperationException`. Details in [Secrets](#secrets).
+- **Optional placeholders** — `{{?key}}` instead of `{{key}}`: if the secret is missing, the string becomes `null` instead of failing with an error.
+- **Multiple stores at once** — [`Secrets`](#secrets) can combine any number of stores (`ISecretStore`). The one added last wins. Stores can be added at runtime, including from multiple threads.
+- **Argument parsing** — [`Arguments`](#arguments) understands `--key value`, `--key=value`, `-flag`. Negative numbers are treated as values, not flags. Quotes are stripped. `__` in a parameter name is read as the `:` separator.
+- **Environments** — automatically picks up `secrets.{Environment}.txt` for Development/Staging/Production.
+- **Key aliases** — [Key aliases](#key-aliases): you can link a "flat" setting name (say, `auth_base_url` from the PHP world) to a nested C# path (`sa:scope:api:auth:base_url`). Works across all sources at once.
+- **Encryption** — encrypted `secrets_enc*.txt` files (AES-256-GCM) can be committed to the repo. Encryption keys are plain or `base64:`. Clients, environments, `.env`, and Unicode are supported. See [Encrypted secrets](#encrypted-secrets).
 
 ---
 
-## Quick Start
+## Quick start
 
-### 1. Register in `Program.cs`
+### 1. Wire up the package in `Program.cs`
 
 ```csharp
 using Sa.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Connects arguments + secrets from files/env vars/command line
+// Hook up arguments + secrets from files/ENV/CLI
 builder.Configuration.AddSaConfiguration();
 
 var app = builder.Build();
 ```
 
-### 2. Secrets File (`secrets.txt`)
+### 2. Create a secrets file `secrets.txt`
 
 ```ini
 # Postgres
@@ -49,9 +54,9 @@ api_key=abc123xyz
 jwt_secret=h8k2m9p0
 ```
 
-> ⚠️ Add `secrets*.txt` to `.gitignore`!
+> ⚠️ Don't forget to add `secrets*.txt` to `.gitignore`!
 
-### 3. Placeholders in `appsettings.json`
+### 3. Write placeholders in `appsettings.json`
 
 ```json
 {
@@ -69,7 +74,7 @@ jwt_secret=h8k2m9p0
 }
 ```
 
-### 4. Reading Configuration
+### 4. Read the configuration as usual
 
 ```csharp
 var pgConn = app.Configuration["sa:pg:connection"];
@@ -78,44 +83,53 @@ var pgConn = app.Configuration["sa:pg:connection"];
 
 ---
 
-## Secret Priority Order
+## Where secrets come from (priority order)
 
-Secrets use LIFO priority — the store added last wins. The default chain, from lowest to highest priority, is:
+Sources are checked in order. The first one that has the value wins. Higher in the list means more important:
 
 | # | Source | Example |
 |---|--------|---------|
-| 1 | `secrets.txt` | plaintext base file |
-| 2 | `secrets.{env}.txt` | plaintext environment-specific file |
-| 3 | `secrets_enc.txt` | committed encrypted defaults |
-| 4 | `secrets_enc.{env}.txt` | committed encrypted per environment |
-| 5 | `secrets_enc.{client}.txt` | committed encrypted per client |
-| 6 | `secrets_enc.{client}.{env}.txt` | committed encrypted per client and environment |
-| 7 | `.env` | local overrides; also holds the decryption key |
-| 8 | `.env.{env}` | local per-environment overrides |
-| 9 | Environment variables | override every file |
-| 10 | Command-line arguments | highest priority |
+| 1 | Command-line arguments | `--sa_pg_password=...` |
+| 2 | Environment variables | `SA_PG_PASSWORD=...` |
+| 3 | `.env.{env}` / `.env` | `SA_SECRETS_DECRYPTION_KEY=...` |
+| 4 | `secrets_enc.{client}.{env}.txt` / `secrets_enc.{client}.txt` | encrypted secrets committed to the repo |
+| 5 | `secrets_enc.{env}.txt` / `secrets_enc.txt` | encrypted default values |
+| 6 | `secrets.{env}.txt` | regular environment-specific file |
+| 7 | `secrets.txt` | regular base file |
 
-The first source with a value wins — command line can override everything, environment variables override files, and so on.
+Put simply: the command line overrides everything, environment variables override files, and environment-specific files override the base file.
 
-`{env}` is the exact value of `Secrets.GetEnvironmentName()` (`DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `environment`, falling back to `Production`). To use short names such as `dev`, set `DOTNET_ENVIRONMENT=dev` — both plaintext and encrypted file names follow it.
+What `{env}` means: the environment name taken from `DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `environment`. If none is set — `Production`. Want a short name like `dev`? Set `DOTNET_ENVIRONMENT=dev`, and all file names will follow it.
 
 ---
 
-## Encrypted Secrets
+## Encrypted secrets
 
-Encrypted files are safe to commit: values are AES-256-GCM encrypted, while key names and comments stay readable for diffs. Enable it by creating `secrets_enc*.txt` files and supplying a key:
+Encrypted files can be safely committed to the repo: values are encrypted with AES-256-GCM, while key names and comments stay readable — convenient for diffs.
+
+How to use:
+
+1. Create `secrets_enc*.txt` files.
+2. Set the decryption key:
 
 ```bash
 export SA_SECRETS_DECRYPTION_CLIENT=lsr
 export SA_SECRETS_DECRYPTION_KEY=...        # or base64:<32-byte key>
-# or put the same variables into .env (never commit .env)
+# the same variables can go into .env (the .env itself is not committed)
 ```
 
-File names: `secrets_enc.txt`, `secrets_enc.{env}.txt`, `secrets_enc.{client}.txt`, `secrets_enc.{client}.{env}.txt`. The `{env}` part is the exact environment name (`Development`, `Production`, or whatever `DOTNET_ENVIRONMENT` contains).
+Possible file names:
 
-### Example of an Encrypted File
+- `secrets_enc.txt`
+- `secrets_enc.{env}.txt`
+- `secrets_enc.{client}.txt`
+- `secrets_enc.{client}.{env}.txt`
 
-`secrets_enc.lsr.dev.txt` — the plaintext `secrets.txt` from [Quick Start](#2-secrets-file-secretstxt) encrypted for client `lsr` and environment `dev`:
+`{env}` is the exact environment name (`Development`, `Production`, or whatever is in `DOTNET_ENVIRONMENT`).
+
+### Example encrypted file
+
+Here's the same `secrets.txt` from the [quick start](#2-create-a-secrets-file-secretstxt), but encrypted for client `lsr` and environment `dev`:
 
 ```
 # saenc: v1
@@ -134,9 +148,11 @@ api_key=ENC1:Nzz7pPfq4K6rrAixJWQhN37Inu/n6jL+rkFGpJbKyfqAuOs4Aw==
 jwt_secret=ENC1:MHP6RX5G7Xc5v+QaSkdhaxVRDRQg8NfCr4OjJzw0BhNEFFgv
 ```
 
-Keys, comments and the header stay readable — only values are ciphertext. The block above was really produced by `do-secrets.sh` from the throwaway passphrase `demo-passphrase-not-a-real-secret`, so `decrypt` / `check` can be tried on it as-is.
+What stays readable: keys, comments, header. What gets encrypted: only the values.
 
-The same idea with a raw key: no `iterations` / `salt` entries and `kdf=none` (`SA_SECRETS_DECRYPTION_KEY=base64:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=`):
+This block was actually generated by `do-secrets.sh` with the one-time passphrase `demo-passphrase-not-a-real-secret` — so `decrypt` and `check` can be tested directly on it.
+
+The same approach with a "raw" key (no `iterations` / `salt`, `kdf=none`, key `SA_SECRETS_DECRYPTION_KEY=base64:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=`):
 
 ```
 # saenc: v1
@@ -146,7 +162,7 @@ The same idea with a raw key: no `iterations` / `salt` entries and `kdf=none` (`
 sa_pg_password=ENC1:fFodkm/LnlPzC6wIu32wkVAvCbXx6th6qG/So7DsX7MSmOUPpRumfOxb
 ```
 
-Encrypt and verify files with the repository script:
+Scripts for encryption and verification live in the repo:
 
 ```bash
 ./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets_enc.lsr.dev.txt
@@ -154,39 +170,41 @@ Encrypt and verify files with the repository script:
 ./build-sh/do-secrets.sh check
 ```
 
-A file that exists without a resolvable key fails startup instead of silently falling back to plaintext. See `SecretStore/Readme.md` for the format, per-client keys and failure behaviour.
+Important behavior: if an encrypted file exists but the key isn't found, the application **fails at startup**. This is intentional — so it never silently falls back to plaintext.
 
-### Encoding
+Format, per-client keys, and error handling are described in `SecretStore/Readme.md`.
 
-Everything is UTF-8 end to end; the only non-UTF-8 token inside a file is the Base64 payload.
+### Encodings
 
-| Aspect | Behaviour |
-|--------|-----------|
-| File encoding | UTF-8. A BOM is accepted and ignored (on the first `# saenc: v1` header line and in `.env`). Files without a BOM are decoded as UTF-8 — re-save CP1251/CP866 content as UTF-8. |
-| Line endings | LF, CRLF and CR all read correctly; `SecretsCipher` / `do-secrets.sh` always **write** LF (`\n`), so re-encrypting stays diff-stable. |
-| Value → ciphertext | `UTF8.GetBytes(value)` → AES-256-GCM → `nonce(12) ‖ tag(16) ‖ ciphertext` → standard padded Base64, on a single line, never wrapped. |
-| Value prefix | `ENC1:` marks format version 1. It is not authenticated itself — the **key name** is (`SAENC1\|<key>`), so a blob cannot be moved to another key. |
-| Payload length | `4 × ceil((28 + UTF-8 byte count) / 3)` — 9 ASCII bytes (`localhost`) → 52 chars, `superSecret123` (14 bytes) → 56, `Привет` (12 bytes) → 56. |
-| Unicode | Keys and values round-trip as UTF-8: `Привет`, `pä£s=word`, emoji. Non-ASCII characters cost more bytes, hence a longer blob. |
-| `=` inside values | Fine — a line is split on the **first** `=` only, so `api_key=abc=123` survives encryption and decryption unchanged. |
-| Empty values | Encrypted and restored as empty (`empty=`), no error. |
-| Spaces | Keys and values are trimmed at both ends (` key = value ` → `key=value`); inner spaces are preserved. |
-| Comments | Any line whose trimmed form starts with `#` is copied verbatim. A *source* comment starting with `# saenc:` is rejected as "already encrypted". |
-| Header metadata | `client` / `env` are trimmed, must not contain line breaks, and are validated against the file name when the file is loaded. |
-| Passphrase | Any UTF-8 text, trimmed — spaces and non-ASCII characters are allowed. |
-| Raw key | `base64:` + Base64 of exactly 32 bytes (44 chars with padding). Any other length fails with a `32 bytes` error. |
-| Salt | Base64 of 16 random bytes (24 chars) on the `# saenc: salt=` line; its length is checked, so a hand-edited salt breaks decryption. |
-| Case sensitivity | Key names, `ENC1:`, `base64:` and header entry names are ordinal — `# saenc: kdf=PBKDF2-SHA256` is not accepted. |
-| Placeholder names | `{{key}}` matches `\w+` (Unicode letters, digits, underscore). Hyphens, dots and spaces never match — `{{api-key}}` is left untouched. |
-| Substituted values | Trimmed and stripped of surrounding `'`, `"` or `` ` `` quotes before insertion into the configuration string. |
+Everything runs in UTF-8. The only "non-UTF-8" token in a file is the Base64 payload (ciphertext).
 
-`.env` files (they hold the decryption key) have their own encoding rules: `KEY=VALUE`, `export KEY=VALUE`, `#` comments, an optional UTF-8 BOM, CRLF/LF, surrounding `'`, `"` or `` ` `` quotes, and the escapes `\n`, `\r`, `\t`, `\"`, `\\` inside double quotes. Unknown escapes such as a Windows path `"C:\Users"` keep their backslash.
+| What | How it works |
+|------|--------------|
+| File encoding | UTF-8. BOM is allowed and ignored. Files without BOM are read as UTF-8 — if yours are CP1251/CP866, re-save them as UTF-8. |
+| Line endings | LF, CRLF, and CR are read correctly. When writing (`SecretsCipher` / `do-secrets.sh`), LF is always used, so re-encryption doesn't break diffs. |
+| How a value becomes ciphertext | UTF-8 bytes → AES-256-GCM → `nonce(12) ‖ tag(16) ‖ ciphertext` → standard Base64 on one line. |
+| Value prefix | `ENC1:` — format version 1 marker. It isn't authenticated itself; the key name is authenticated, so the blob can't be moved to another key. |
+| Payload length | `4 × ceil((28 + UTF-8 byte count) / 3)`. Examples: `localhost` (9 bytes) → 52 chars, `superSecret123` (14 bytes) → 56, `Привет` (12 bytes) → 56. |
+| Unicode | Keys and values round-trip as UTF-8: `Привет`, `pä£s=word`, emoji. Non-ASCII takes more bytes — hence the longer blob. |
+| `=` inside values | Allowed. The line is split on the first `=`, so `api_key=abc=123` is preserved intact. |
+| Empty values | Encrypted and restored empty (`empty=`), no error. |
+| Whitespace | Keys and values are trimmed at the edges (` key = value ` → `key=value`). Internal spaces are kept. |
+| Comments | A line that starts with `#` after trim is copied verbatim. A `# saenc:` comment in the source file is rejected as "already encrypted". |
+| Header metadata | `client` / `env` are trimmed, must not contain line breaks, and are checked against the file name on load. |
+| Passphrase | Any UTF-8 text, trimmed. Spaces and non-ASCII are allowed. |
+| "Raw" key | `base64:` + Base64 exactly 32 bytes (44 chars with padding). Any other length → `32 bytes` error. |
+| Salt | Base64 16 random bytes (24 chars) in the `# saenc: salt=` line. Length is checked, so editing the salt by hand breaks decryption. |
+| Case | Key names, `ENC1:`, `base64:`, and header fields are case-sensitive. `# saenc: kdf=PBKDF2-SHA256` is not accepted. |
+| Placeholder names | `{{key}}` matches `\w+` (Unicode letters, digits, underscore). Hyphens, dots, and spaces don't match — `{{api-key}}` stays as-is. |
+| What gets substituted | The value is trimmed and stripped of quotes `'`, `"`, `` ` `` before being inserted into the configuration string. |
+
+`.env` (which stores the decryption key) has its own rules: `KEY=VALUE`, `export KEY=VALUE`, `#` comments, optional UTF-8 BOM, CRLF/LF, quotes `'`, `"`, `` ` ``, and escaping of `\n`, `\r`, `\t`, `\"`, `\\` inside double quotes. Unknown escape sequences such as the Windows path `"C:\Users"` keep the backslash.
 
 ---
 
-## Optional Placeholders
+## Optional placeholders
 
-Use `{{?key}}` instead of `{{key}}` to avoid an error when a secret is missing:
+Normally, if a secret isn't found, that's an error. But sometimes a setting is needed "if present". That's what `{{?key}}` is for:
 
 ```json
 {
@@ -194,17 +212,24 @@ Use `{{?key}}` instead of `{{key}}` to avoid an error when a secret is missing:
 }
 ```
 
-If `feature_flag` is not found in any store, the whole string is `null`.
+If `feature_flag` isn't found in any store — the whole string becomes `null`. No exceptions.
 
-In the configuration pipeline (`AddSaConfiguration` / `AddSaPostSecretProcessing`), any missing secret — including a plain `{{key}}` — results in `null` for that value instead of throwing.
+By the way, in the configuration chain (`AddSaConfiguration` / `AddSaPostSecretProcessing`), **any** missing secret — even a regular `{{key}}` — yields `null` instead of an exception. So behavior there is softer than calling `PopulateSecrets` directly.
 
 ---
 
-## Key Aliases
+## Key aliases
 
-Sometimes a setting is stored under a flat, PHP-style key while the C# code reads it as a nested
-path. For example, the C# key `sa:scope:api:auth:base_url` corresponds to the flat PHP key
-`auth_base_url`. The mapping is declared on `SecretOptions.KeyAliases` (a `KeyAliasOptions`):
+### The problem
+
+The same setting may have different names in different systems:
+
+- In PHP (or in a database written by PHP) — a flat key: `auth_base_url`.
+- In C# it's more convenient as a nested path: `sa:scope:api:auth:base_url`.
+
+Rewriting the config or the code just for this is annoying. An alias links the two names: "when someone asks for the path — look at the flat key".
+
+### How to set it
 
 ```csharp
 using Sa.Configuration;
@@ -215,30 +240,39 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
     {
         KeyAliases =
         {
-            ["sa:scope:api:auth:base_url"] = "auth_base_url",
+            ["sa:scope:api:auth:base_url"] = "auth_base_url",   // path → flat key
             ["sa:scope:api:auth:token_ttl"] = "auth_token_ttl",
         },
     },
 });
 ```
 
-The alias runs in the final post-secrets stage, **over the merged configuration of every
-provider** — so the flat key and the canonical path may live in different sources (for instance,
-the flat key in a PostgreSQL source and the canonical path in `appsettings.json`). Reading the
-result, both spellings return the same value:
+On the left — the path C# reads. On the right — the name under which the value actually lives.
+
+### What happens after that
+
+Both names return the same value:
 
 ```csharp
-string? baseUrl = app.Configuration["sa:scope:api:auth:base_url"]; // → "https://php.example.com"
-string? flat    = app.Configuration["auth_base_url"];             // → "https://php.example.com"
+app.Configuration["sa:scope:api:auth:base_url"]; // → "https://php.example.com"
+app.Configuration["auth_base_url"];               // → "https://php.example.com"
 ```
 
-### Resolution
+The flat key doesn't go anywhere — it stays accessible. PHP code keeps working as before, and C# code gets its nested path.
 
-- A **non-blank** alias value is written to the canonical path by default — the alias wins for
-  the canonical key.
-- Set `CanonicalValueWins = true` to invert that: a non-blank alias value then fills the
-  canonical path **only when it is empty or absent** in the merged configuration, so a value any
-  lower-priority provider already filled wins over the alias.
+### Where the value is looked up
+
+The alias applies to the **final** configuration — the one already assembled from **all** sources (files, ENV, PostgreSQL, etc.). So the flat key and the canonical path can live **in different sources**:
+
+- `auth_base_url` — in the PostgreSQL source.
+- `sa:scope:api:auth:base_url` — in `appsettings.json`.
+
+The alias will glue them together, and both paths will return the same value.
+
+### Who overrides whom
+
+- **By default, the alias wins.** A non-empty value from the flat key is written into the canonical path.
+- **With `CanonicalValueWins = true`** — the other way round: the canonical value has priority. The alias fills the path only if it's empty.
 
 ```csharp
 builder.Configuration.AddSaConfiguration(new SecretOptions
@@ -246,27 +280,34 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
     KeyAliases = new KeyAliasOptions
     {
         KeyAliases = { ["sa:scope:api:auth:base_url"] = "auth_base_url" },
-        CanonicalValueWins = true,   // canonical value wins; alias only fills an empty path
+        CanonicalValueWins = true,   // canonical value wins
     },
 });
 ```
 
-- A **missing or blank** alias value never touches the canonical path — it keeps its own value
-  (if any) or stays absent, so a lower-priority provider answers for it and no value is
-  fabricated. A blank value is always treated as "no value".
-- The flat alias key is **not** removed: `auth_base_url` stays reachable directly, so PHP-style
-  keys can be read while C# code reads the canonical path.
+- **If the alias is empty or missing** — the canonical path is not touched. It keeps its value (if any) or stays absent, and then a lower-priority source is responsible for it. No fake values are inserted.
 
-Mapping keys are compared the same way configuration keys are — case-insensitively, and spelled
-with `:` when they contain `__` (the environment-variable spelling of the separator) — so
-`sa__scope__api__auth__base_url` in the map addresses the same key as
-`sa:scope:api:auth:base_url`. An empty or blank mapping entry is a registration-time error: such
-an alias can never match a setting, so it fails while the host is still building rather than
-silently doing nothing. An empty map leaves the pipeline exactly as it was before the feature.
+### Details
+
+- **Case doesn't matter**: `Auth_Base_Url` and `auth_base_url` are the same.
+- **`__` = `:`**: in the mapping you can write `sa__scope__api__auth__base_url` — same as `sa:scope:api:auth:base_url`.
+- **An empty key or an empty string in the mapping** — a startup error. Such an alias would never match anything, so it's better to fail fast than silently do nothing.
+- **An empty mapping** — nothing changes, the pipeline works as usual.
+
+### Cheat sheet
+
+| I want | Setting |
+|--------|---------|
+| Link a flat key to a nested path | `KeyAliases["path"] = "flat_key"` |
+| Flat key wins | default |
+| Nested path wins | `CanonicalValueWins = true` |
+| Value missing | path isn't touched, the lower-priority source is used |
 
 ---
 
-## Usage with Sa.Configuration.PostgreSql
+## Using together with Sa.Configuration.PostgreSql
+
+First hook up the standard sources, then the dynamic settings from the database:
 
 ```csharp
 using Sa.Configuration;
@@ -277,7 +318,7 @@ var builder = WebApplication.CreateBuilder(args);
 // First, standard sources (appsettings.json, secrets.txt)
 builder.Configuration.AddSaConfiguration();
 
-// Then, dynamic settings from the database
+// Then dynamic settings from the database
 builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
     ConnectionString: "...",
     SelectSql: "SELECT key, value FROM app_settings"
@@ -286,10 +327,7 @@ builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOp
 var app = builder.Build();
 ```
 
-When a setting is stored in the database under a flat PHP-style key (e.g. `auth_base_url`)
-instead of the nested C# path (`sa:scope:api:auth:base_url`), declare the mapping in the Secrets
-layer — **not** on the PG options — so it applies over the merged configuration of every provider
-(see [Key Aliases](#key-aliases)):
+If the database stores a setting under a flat PHP key (say, `auth_base_url`), while C# code reads the nested path (`sa:scope:api:auth:base_url`), set the mapping **in the Secrets layer**, not in the PG options. Then it applies to all providers at once:
 
 ```csharp
 using Sa.Configuration;
@@ -306,11 +344,11 @@ string? baseUrl = app.Configuration["sa:scope:api:auth:base_url"];
 // → the value of the auth_base_url row
 ```
 
-The flat key stays reachable as its own key (`app.Configuration["auth_base_url"]`).
+The flat key remains separately accessible: `app.Configuration["auth_base_url"]`.
 
 ---
 
-## Arguments
+## Command-line arguments
 
 ```csharp
 using Sa.Configuration.CommandLine;
@@ -335,33 +373,31 @@ Supported formats:
 --key -5         → value "-5" (negative numbers are never treated as flags)
 ```
 
-> **`__` as `:`** — a double underscore in a parameter name is the environment-variable spelling
-> of the `:` separator, so `--sa__pg__host` is stored and read as `sa:pg:host` (single underscores
-> are data). `args["sa__pg__host"]` and `args["sa:pg:host"]` are interchangeable, and the typed
-> getters follow the same rule.
+> **`__` as `:`** — a double underscore in a parameter name is the environment-variable-style way of writing the `:` separator. So `--sa__pg__host` is stored and read as `sa:pg:host`. Single underscores are data, not separators. `args["sa__pg__host"]` and `args["sa:pg:host"]` are interchangeable, and typed getters work the same way.
 
-Typed getters return `null` when the parameter is absent or invalid:
+Typed methods return `null` if the parameter is absent or invalid:
 
-| Method | Return Type | Conversion |
-|--------|------------|------------|
+| Method | Type | How it converts |
+|--------|------|-----------------|
 | `GetBool()` | `bool?` | `"true"/"1"/"yes"/"on"` → `true` |
 | `GetInt()` | `int?` | `int.TryParse(..., InvariantCulture)` |
-| `GetFloat()` | `float?` | same as above |
-| `GetLong()` | `long?` | same as above |
+| `GetFloat()` | `float?` | same |
+| `GetLong()` | `long?` | same |
 | `GetTimeSpan()` | `TimeSpan?` | `TimeSpan.TryParse(..., InvariantCulture)` |
 
-`args.Contains("key")` checks for parameter existence; `args.Parameters` gives access to the full parsed dictionary.
+Check whether a parameter is present with `args.Contains("key")`. Full dictionary — `args.Parameters`.
 
 ---
 
-## Secrets
+## Working with secrets directly
 
-Use `Secrets` directly when you need secrets outside of `IConfiguration`:
+Sometimes secrets are needed outside `IConfiguration`. Then use `Secrets` directly:
 
 ```csharp
 using Sa.Configuration.SecretStore;
 
-// Default chain (LIFO): CLI args → env vars → .env → secrets_enc* → secrets.{Env}.txt → secrets.txt
+// Default chain (top to bottom by priority):
+// CLI args → ENV variables → .env → secrets_enc* → secrets.{Env}.txt → secrets.txt
 var secrets = Secrets.CreateDefault();
 
 string? result   = secrets.PopulateSecrets("Server={{host}};Pwd={{sa_pg_password}}");
@@ -373,10 +409,20 @@ Custom chain — any `ISecretStore` (`FileSecretStore`, `EnvironmentVariableSecr
 ```csharp
 var secrets = new Secrets(new FileSecretStore("my-secrets.txt"));
 secrets.AddStore(new InMemorySecretStore().AddSecret("override_key", "override_value"));
-// LIFO: the newly added store has the highest priority
+// LIFO: the new store has the highest priority
 ```
 
-`Secrets.CreateDefault(new SecretOptions { FileName = "app-secrets.txt", EnvironmentName = "Staging" })` customizes the base file name and environment. `Secrets.GetEnvironmentName()` resolves it from `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` / `environment`, falling back to `Production`.
+You can configure the base file name and environment:
+
+```csharp
+Secrets.CreateDefault(new SecretOptions
+{
+    FileName = "app-secrets.txt",
+    EnvironmentName = "Staging"
+});
+```
+
+`Secrets.GetEnvironmentName()` takes the environment name from `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` / `environment`, defaulting to `Production`.
 
 ---
 

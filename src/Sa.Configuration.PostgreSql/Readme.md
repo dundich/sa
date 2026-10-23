@@ -1,19 +1,23 @@
 # Sa.Configuration.PostgreSql
 
-A dynamic configuration source for .NET that loads settings from PostgreSQL. Changes in the database are applied to the running application without restart — just call `Reload()` on `IConfigurationRoot`.
+A dynamic configuration source for .NET that loads settings from PostgreSQL. Changes in the database are applied to the running application without a restart — just call `Reload()` on `IConfigurationRoot`.
+
+---
 
 ## Features
 
-- **Live configuration**: values are stored in the database and can be changed at runtime
-- **Parameterized SQL queries**: supports `@named_parameters` via `NpgsqlParameter` — parameters are cloned on every load, so one options instance is reusable
-- **Automatic retry**: transient Npgsql failures (network errors, `08xxx` SQLSTATEs) are retried with decorrelated jitter back-off
-- **One connection pool, not one per reload**: the pool is created once and reused by every `Reload()`
-- **Async reload**: `LoadAsync(CancellationToken)` for timer- or `BackgroundService`-driven reloads
-- **Key/value trimming**: whitespace is automatically trimmed from both keys and values
-- **`__` as `:` (opt-in)**: with `DoubleUnderscoreAsSeparator = true`, a double underscore in a key is read as the configuration separator, so `sa__pg__host` and `sa:pg:host` are the same setting — the convention `AddEnvironmentVariables()` already applies. Off by default, so keys are stored verbatim
-- **Layering control**: decide whether blank and `NULL` values delegate to lower-priority sources or override them
+- **Live configuration** — values are stored in the database and can be changed at runtime.
+- **Parameterized SQL queries** — supports `@named_parameters` via `NpgsqlParameter`. Parameters are cloned on every load, so a single options instance can be reused.
+- **Automatic retries** — transient Npgsql errors (network failures, SQLSTATE `08xxx`) are retried with decorrelated jitter back-off.
+- **One connection pool, not a new one on every reload** — the pool is created once and reused by all `Reload()` calls.
+- **Asynchronous reload** — `LoadAsync(CancellationToken)` for timers and `BackgroundService`.
+- **Key/value trimming** — whitespace is automatically trimmed from both keys and values.
+- **`__` as `:` (optional)** — with `DoubleUnderscoreAsSeparator = true`, a double underscore in a key is read as the configuration separator, so `sa__pg__host` and `sa:pg:host` are the same setting. This is the same convention already used by `AddEnvironmentVariables()`. Disabled by default — keys are stored as-is.
+- **Layer control** — decide whether empty and `NULL` values delegate to lower-priority sources or override them.
 
-## Quick Start
+---
+
+## Quick start
 
 ```csharp
 using Sa.Configuration.PostgreSql;
@@ -32,47 +36,35 @@ var theme = app.Configuration["theme"];          // → "dark"
 var lang  = app.Configuration["language"];       // → "en"
 ```
 
-Options are validated when the source is registered, so a blank connection string or query
-fails while the host is still building rather than at the first load.
+Options are validated when the source is registered, so an empty connection string or an empty query fails during host build rather than on the first load.
 
 ---
 
-## Key Separators
+## Key separators
 
-The configuration separator is `:`, so a nested setting reads as
-`configuration["sa:pg:host"]`. By default this source stores keys **verbatim**, so a key that
-legitimately contains `__` (or `:`) is preserved as-is — nothing is re-shaped behind your back.
+The configuration separator is `:`, so a nested setting is read as `configuration["sa:pg:host"]`.
 
-If your database is filled from the same places environment variables come from, where the
-separator is `__`, you can opt in to the environment convention with
-`DoubleUnderscoreAsSeparator = true`. Then `__` in a key is read as `:`, exactly as
-`AddEnvironmentVariables()` does:
+By default, this source stores keys **as-is**. If a key legitimately contains `__` (or `:`), it is preserved unchanged — nothing is reformatted behind your back.
+
+If the database is populated from the same places as environment variables (where the separator is `__`), you can enable the environment convention with `DoubleUnderscoreAsSeparator = true`. Then `__` in a key is read as `:`, exactly as `AddEnvironmentVariables()` does:
 
 ```sql
 INSERT INTO app_settings (key, value) VALUES
-    ('sa__pg__host', 'db.internal'),   -- read as sa:pg:host (alias on)
+    ('sa__pg__host', 'db.internal'),   -- read as sa:pg:host (alias enabled)
     ('sa:pg:port',   '5432');          -- read as sa:pg:port
 ```
 
-The alias is bidirectional: keys are stored in canonical `:` form, but `configuration["sa__pg__host"]`
-answers for `sa:pg:host` as well. A single underscore is data, not a separator
-(`config_db` stays `config_db`).
+The alias works in both directions: keys are stored in canonical form with `:`, but `configuration["sa__pg__host"]` also responds for `sa:pg:host`. A single underscore is data, not a separator (`config_db` remains `config_db`).
 
-Two keys are considered the same setting after normalization, so if the query returns both
-spellings of one path they are duplicates, and `LastWins` decides which value survives.
+Two keys are considered the same setting after normalization, so if the query returns both records for the same path, they are duplicates, and `LastWins` decides which value survives.
 
-The alias mirrors the environment provider, including its quirk that replacement is pairwise:
-four underscores become two delimiters (`a____b` → `a::b`). With the default
-`DoubleUnderscoreAsSeparator = false` the key is stored and read verbatim instead.
+The alias mirrors environment behavior, including its quirk: replacement is pairwise, so four underscores become two separators (`a____b` → `a::b`). With the default `DoubleUnderscoreAsSeparator = false`, the key is stored and read as-is.
 
 ---
 
-## Key Aliases
+## Key aliases
 
-This package no longer maps keys on its own. The explicit key-alias feature — a C# path like
-`sa:scope:api:auth:base_url` filled by a flat PHP key `auth_base_url` — lives in the
-[**Sa.Configuration**](../Sa.Configuration) Secrets layer, which applies it over the merged
-configuration of *every* provider (not just this database). Declare it there:
+This package itself does not map keys. The explicit key alias feature — a C# path such as `sa:scope:api:auth:base_url` populated by the flat PHP key `auth_base_url` — lives in the Secrets layer **[Sa.Configuration](../Sa.Configuration)**: there the alias is applied to the **aggregate** configuration of *all* providers, not only this database. Set it there:
 
 ```csharp
 using Sa.Configuration;
@@ -90,15 +82,13 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 });
 ```
 
-Because the alias runs in the final post-secrets stage, it also resolves across sources — the
-flat key can come from this PostgreSQL source while the canonical path comes from another. See
-the [Sa.Configuration readme](../Sa.Configuration/Readme.md#key-aliases) for the full behaviour.
+Because the alias is applied at the final post-secrets stage, it also resolves across sources — the flat key can come from this PostgreSQL source, while the canonical path can come from another. Full behavior is described in [README Sa.Configuration](../Sa.Configuration/Readme.md#key-aliases).
 
 ---
 
-## Parameterized Queries
+## Parameterized queries
 
-Use `@parameters` for filtering by client/tenant:
+Use `@parameters` to filter settings by client or tenant:
 
 ```csharp
 builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
@@ -108,57 +98,55 @@ builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOp
 ));
 ```
 
-## Reusing the Application's Connection Pool
+---
 
-By default the source owns a private data source. To share one pool with the rest of the
-application, create it explicitly and pass it in:
+## Reusing the application connection pool
+
+By default, the source owns its own data source. If you want to use one shared pool for the whole application, create it explicitly and pass it to the configuration source:
 
 ```csharp
 IPgDataSource appDataSource = IPgDataSource.Create(connectionString);
 
 builder.Configuration.AddSaPostgreSqlConfiguration(
     new PostgreSqlConfigurationOptions(
-        ConnectionString: string.Empty,   // ignored: the data source carries the connection
+        ConnectionString: string.Empty,   // ignored: the connection comes from the data source
         SelectSql: "SELECT key, value FROM app_settings"),
     appDataSource);
 ```
 
-If the application already registers `IPgDataSource` through `AddSaPostgreSqlDataSource`
-(`b => b.Options(o => o.Configure(x => x.ConnectionString = ...))`), resolve that instance and hand it to the configuration
-source as well, so both paths share one pool.
+If the application already registers `IPgDataSource` via `AddSaPostgreSqlDataSource` (`b => b.Options(o => o.Configure(x => x.ConnectionString = ...))`), get that instance and pass it to the configuration source — then both paths use the same connection pool.
 
-The provider never disposes a data source it did not create — you keep ownership of
-`appDataSource`. An owned data source is released when the `IConfigurationRoot` is disposed.
+The provider never disposes a data source it did not create — ownership of `appDataSource` remains yours. Its own source is disposed when `IConfigurationRoot` is disposed.
 
-## Live Configuration Updates
+---
 
-When rows in the `app_settings` table change, the application can pick up new values:
+## Live configuration updates
+
+When rows in the `app_settings` table are changed, the application can pick up the new values:
 
 ```csharp
-// After modifying rows in the database:
+// After changing rows in the database:
 ((IConfigurationRoot)app.Configuration).Reload();
 
-// From a timer or BackgroundService, without blocking a thread:
+// From a timer or BackgroundService, without blocking the thread:
 await provider.LoadAsync(cancellationToken);
 ```
 
-`Reload()` replaces the full set of keys: rows removed from the database disappear from the
-configuration, and new rows appear. A **failed** load leaves the previous snapshot in place —
-a transient database problem never wipes the running configuration.
+`Reload()` replaces the entire key set: rows removed from the database disappear from the configuration, and new ones appear. A **failed** load leaves the previous snapshot in place — a transient database problem never wipes out a working configuration.
 
-`LoadAsync` is the async counterpart of `Load()` and additionally raises the provider's reload
-token, so consumers holding the provider directly (rather than the `IConfigurationRoot`, which
-raises its own) observe the new snapshot. Concurrent reloads collapse into a single query.
+`LoadAsync` is the asynchronous counterpart of `Load()`. It additionally raises the provider's reload token, so consumers that hold the provider itself (rather than `IConfigurationRoot`, which raises its own token) will see the new snapshot. Concurrent reloads collapse into a single request.
+
+---
 
 ## Options
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `MaxAttempts` | `3` | Total load attempts including the first. `0` and `1` both mean a single attempt. |
-| `MedianFirstRetryDelay` | `530` | Median first-retry delay in ms; each delay is jittered. The first retry is always immediate. |
-| `SkipEmptyValues` | `true` | Drop rows whose **value** is `NULL`/blank. See *Layering* below. Blank **keys** are dropped regardless of this setting. |
-| `DoubleUnderscoreAsSeparator` | `false` | When `true`, read `__` in a key as the `:` separator, so `sa__pg__host` ≡ `sa:pg:host`. `false` (default) keeps `__` verbatim. |
-| `LastWins` | `true` | For duplicate keys, the last row wins. Set to `false` for first-row-wins. |
+| `MaxAttempts` | `3` | Total number of load attempts, including the first one. `0` and `1` mean a single attempt |
+| `MedianFirstRetryDelay` | `530` | Median delay of the first retry in ms; each delay is jittered. The first retry is always immediate |
+| `SkipEmptyValues` | `true` | Skip rows whose **value** is `NULL` or empty. See *Layers* below. Empty **keys** are skipped regardless of this setting |
+| `DoubleUnderscoreAsSeparator` | `false` | When `true`, read `__` in a key as the `:` separator, i.e. `sa__pg__host` ≡ `sa:pg:host`. `false` (default) — store `__` as-is |
+| `LastWins` | `true` | For duplicate keys, the last row wins. `false` — the first one |
 
 ```csharp
 builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
@@ -173,53 +161,52 @@ builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOp
 });
 ```
 
-`ToString()` on the options is overridden: parameter values are counted rather than printed, and
-the connection string's password is redacted, so options objects are safe to interpolate into logs.
+`ToString()` is overridden on options: parameter values are counted but not printed, and the password in the connection string is masked — so options are safe to interpolate into logs.
 
-## Load Behavior
+---
+
+## Load behavior
 
 | Scenario | Result |
 |----------|--------|
 | Key is `NULL` | Skipped — always, regardless of `SkipEmptyValues` |
-| Key is empty or whitespace only | Skipped — always, regardless of `SkipEmptyValues` |
-| Value is `NULL` in DB | Skipped by default — see *Layering* |
-| Value is an empty string or whitespace only | Skipped by default — see *Layering* |
-| Key or value has surrounding whitespace | Trimmed |
-| Key contains `__` | Read as the `:` separator only when `DoubleUnderscoreAsSeparator = true`; verbatim by default |
-| Query returns fewer than 2 columns | `InvalidOperationException` naming the actual column count |
+| Key is empty or whitespace-only | Skipped — always, regardless of `SkipEmptyValues` |
+| Value is `NULL` in the database | Skipped by default — see *Layers* |
+| Value is an empty string or whitespace-only | Skipped by default — see *Layers* |
+| Key or value has leading/trailing whitespace | Trimmed |
+| Key contains `__` | Read as the `:` separator only when `DoubleUnderscoreAsSeparator = true`; by default — as-is |
+| Query returns fewer than 2 columns | `InvalidOperationException` with the actual column count |
 | Transient connection error | Retried up to `MaxAttempts` |
 | Permanent query error | Fails on the first attempt |
-| Connection/query error after retries | `InvalidOperationException` with the original exception as `InnerException` |
-| Load cancelled | `OperationCanceledException` — never wrapped |
-| Duplicate keys in the result | Last row wins (`LastWins`) |
+| Error after all retries | `InvalidOperationException` with the original exception as `InnerException` |
+| Load cancellation | `OperationCanceledException` — never wrapped |
+| Duplicate keys in the result | The last row wins (`LastWins`) |
 
-### Layering
+### Layers
 
-`IConfiguration` resolves a key from the highest-priority source that has it. With
-`SkipEmptyValues = true` (the default) a `NULL` or blank value in the database means this source
-simply does not have the key, so a lower-priority source answers for it instead:
+`IConfiguration` takes a value from the highest-priority source that contains that key. With `SkipEmptyValues = true` (the default), a `NULL` or empty string value in the database means the source simply does not contain that key, and a lower-priority source is responsible for it:
 
 ```csharp
 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
 {
     ["feature_x"] = "fallback"
 });
-// database has feature_x = ''  →  configuration["feature_x"] == "fallback"
+// in the database feature_x = ''  →  configuration["feature_x"] == "fallback"
 ```
 
-Set `SkipEmptyValues = false` to store those values instead, so this source overrides whatever
-comes below it:
+Set `SkipEmptyValues = false` to keep these values and override everything below:
 
 ```csharp
-// database has feature_x = ''  →  configuration["feature_x"] == ""
+// in the database feature_x = ''  →  configuration["feature_x"] == ""
 ```
 
-Note that a `NULL` value cannot shadow a lower-priority source: `ConfigurationRoot` keeps
-scanning providers while they return `null`. Only an empty string overrides.
+Note that a `NULL` value cannot override a lower-priority source: `ConfigurationRoot` continues traversing providers while they return `null`. Only an empty string overrides.
 
-## Table Schema
+---
 
-Minimum table required for the provider:
+## Table schema
+
+The minimal table required by the provider:
 
 ```sql
 CREATE TABLE app_settings (
@@ -231,16 +218,20 @@ CREATE TABLE app_settings (
 INSERT INTO app_settings (key, value) VALUES
     ('theme',      'dark'),
     ('language',   'en'),
-    ('debug_mode', '');   -- skipped by default: delegated to lower-priority sources
+    ('debug_mode', '');   -- skipped by default: delegates to lower sources
 ```
 
-A `PRIMARY KEY` on `key` is not required — without it, duplicates are resolved by `LastWins`.
+`PRIMARY KEY` on `key` is not required — without it, duplicates are resolved by the `LastWins` rule.
+
+---
 
 ## Dependencies
 
 - `Microsoft.Extensions.Configuration`
 - `Npgsql` (`NpgsqlParameter` is part of the public API)
 - `Sa.Data.PostgreSql` (Npgsql wrapper with `PgRetryStrategy` and `IPgDataSource`)
+
+---
 
 ## License
 
