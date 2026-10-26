@@ -325,6 +325,22 @@ public class CronTimingTests
     }
 
     [Fact]
+    public void GetNextOccurrence_FullRangeDayOfMonth_IsTreatedAsWildcard()
+    {
+        // Wildcard detection is value-based: a day-of-month range covering every day
+        // (1-31) behaves like `*`, so the day is decided by day-of-week alone. Vixie
+        // cron would fire every day here — the difference is intentional and documented
+        // in CRON.md, and this test pins it against accidental changes.
+        var timing = new CronTiming("0 0 1-31 * 1"); // Mondays
+
+        var friday = new DateTimeOffset(2026, 6, 26, 10, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal(
+            new DateTimeOffset(2026, 6, 29, 0, 0, 0, TimeSpan.Zero),
+            timing.GetNextOccurrence(friday));
+    }
+
+    [Fact]
     public void GetNextOccurrence_PreciseMinute_NonZeroSeconds()
     {
         // When seconds are non-zero, we should still land on the next minute boundary

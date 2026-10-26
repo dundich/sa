@@ -4,20 +4,18 @@ using Sa.Schedule.Cron;
 namespace Sa.Schedule;
 
 /// <summary>
-/// Валидирует <see cref="ScheduleOptions"/> для конвейера options.
+/// Validates <see cref="ScheduleOptions"/> for the options pipeline.
 /// </summary>
 /// <remarks>
-/// Проверяет *значения* секций, присутствующих в конфигурации, независимо от того,
-/// соответствует ли ключ какой-то зарегистрированной задаче: проверка синтаксиса не зависит
-/// от контейнера. Секции, которым задача не найдена, валидация не мешает — их просто
-/// никто не применит.
+/// Checks the <i>values</i> of every section present in configuration, regardless of whether
+/// its key matches a registered job: syntax validation does not depend on the container.
+/// Sections with no matching job are not an error — they are simply never applied.
 /// <para>
-/// Намеренно <c>IValidateOptions</c>, а не <c>ValidateDataAnnotations()</c>: последний
-/// помечен <c>RequiresUnreferencedCode</c> (IL2026) и ломает Native AOT, ради которого
-/// эта сборка и существует. Валидация срабатывает и при чтении
-/// <c>IOptions&lt;T&gt;.Value</c> (не только при <c>ValidateOnStart()</c>), поэтому
-/// ошибка всплывает как <see cref="OptionsValidationException"/> при первой сборке
-/// настроек планировщика.
+/// Deliberately <c>IValidateOptions</c> rather than <c>ValidateDataAnnotations()</c>: the
+/// latter is marked <c>RequiresUnreferencedCode</c> (IL2026) and breaks Native AOT, which is
+/// why this assembly exists. Validation also runs when <c>IOptions&lt;T&gt;.Value</c> is read
+/// (not only under <c>ValidateOnStart()</c>), so an invalid value surfaces as an
+/// <see cref="OptionsValidationException"/> when the scheduler settings are first built.
 /// </para>
 /// </remarks>
 internal sealed class ScheduleOptionsValidator : IValidateOptions<ScheduleOptions>

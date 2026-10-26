@@ -24,17 +24,20 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
 
     public async Task<int> Restart(CancellationToken cancellationToken)
     {
-        var results = await Task
-            .WhenAll(Jobs
-                .Where(c => c.IsStarted)
-                .Select(c => Task.Run(async () =>
-                {
-                    await c.Stop();
-                    await c.Start(cancellationToken);
-                    return true;
-                })));
+        // Restart only what is running (a stopped job — error-aborted, run-once
+        // consumed — is not brought back), and count the jobs that actually started
+        // again rather than the ones that were merely stopped.
+        IJobScheduler[] jobs = [.. Jobs.Where(c => c.IsStarted)];
 
-        return results.Count(r => r);
+        int[] results = await Task.WhenAll(jobs.Select(c => RestartJob(c, cancellationToken)));
+
+        return results.Count(r => r == 1);
+    }
+
+    private static async Task<int> RestartJob(IJobScheduler job, CancellationToken cancellationToken)
+    {
+        await job.Stop();
+        return await job.Start(cancellationToken) ? 1 : 0;
     }
 
     public async Task Stop()

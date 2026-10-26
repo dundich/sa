@@ -128,7 +128,65 @@ public class ScheduleSettingsTests
         Assert.Same(original.JobType, clone.JobType);
     }
 
+    [Fact]
+    public void Merge_ErrorHandling_ExplicitCloseApplication_IsNotOverwrittenByALaterRegistration()
+    {
+        // ThenAction defaults to CloseApplication, so the value alone used to make an
+        // explicit ThenCloseApplication() look "unset" — a later ThenStopAllJobs() won.
+        // The merge now tracks whether the action was chosen.
+        var jobId = Guid.NewGuid();
+
+        var first = JobSettings.Create<TestJob>(jobId);
+        first.ErrorHandling.ThenCloseApplication();
+
+        var second = JobSettings.Create<TestJob>(jobId);
+        second.ErrorHandling.ThenStopAllJobs();
+
+        var merged = ScheduleSettings.Create([first, second], false, null)
+            .GetJobSettings()
+            .Single();
+
+        Assert.Equal(ErrorHandlingAction.CloseApplication, merged.ErrorHandling.ThenAction);
+    }
+
+    [Fact]
+    public void Create_SameJobIdForDifferentTypes_ThrowsWithBothTypes()
+    {
+        var jobId = Guid.NewGuid();
+        var first = JobSettings.Create<TestJob>(jobId);
+        var second = JobSettings.Create<OtherTestJob>(jobId);
+
+        var ex = Assert.Throws<ArgumentException>(
+            () => ScheduleSettings.Create([first, second], false, null));
+
+        Assert.Contains(jobId.ToString(), ex.Message);
+        Assert.Contains(nameof(TestJob), ex.Message);
+        Assert.Contains(nameof(OtherTestJob), ex.Message);
+    }
+
+    [Fact]
+    public void Create_SameJobIdForSameType_MergesIntoOneJob()
+    {
+        // The same (id, type) registered twice is the documented accumulation case —
+        // it must keep merging, not trip the duplicate-id guard.
+        var jobId = Guid.NewGuid();
+        var first = JobSettings.Create<TestJob>(jobId);
+        var second = JobSettings.Create<TestJob>(jobId);
+        second.ErrorHandling.IfErrorRetry(4);
+
+        var settings = ScheduleSettings.Create([first, second], false, null);
+
+        Assert.Single(settings.GetJobSettings());
+        Assert.Equal(4, settings.GetJobSettings().Single().ErrorHandling.RetryCount);
+    }
+
     private sealed class TestJob : IJob
+    {
+        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+    }
+
+    private sealed class OtherTestJob : IJob
     {
         public Task Execute(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;

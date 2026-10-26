@@ -168,6 +168,41 @@ public class JobSchedulerTests
     }
 
     [Fact]
+    public async Task Start_AfterHungRun_GivesUpAfterShutdownTimeout()
+    {
+        // Stop only waits out the shutdown timeout, so the previous run's item can
+        // still be in flight. Start used to wait for idle without any bound and hung
+        // Restart()/Start() forever; it must give up within the same timeout.
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        settings.Properties.WithShutdownTimeout(TimeSpan.FromMilliseconds(300));
+
+        var scheduler = new JobScheduler(settings, new HangingRunner(), i => new TestJobController(i));
+
+        Assert.True(await scheduler.Start(TestContext.Current.CancellationToken));
+
+        // Let the reader take the hanging item into flight, then stop past the timeout.
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await scheduler.Stop();
+        Assert.False(scheduler.IsStarted);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        // WaitAsync keeps the failure fast on a regression: an unbounded Start would
+        // otherwise hang the whole suite instead of failing this one test.
+        bool started = await scheduler
+            .Start(TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        sw.Stop();
+
+        Assert.False(started);
+        Assert.False(scheduler.IsStarted);
+        Assert.InRange(sw.Elapsed, TimeSpan.FromMilliseconds(250), TimeSpan.FromSeconds(5));
+
+        await scheduler.DisposeAsync();
+    }
+
+    [Fact]
     public void QueueTasks_ReturnsZero_BeforeStart()
     {
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());

@@ -292,6 +292,27 @@ public sealed class ScheduleOptionsConfigurationTests
     }
 
     [Fact]
+    public void SecondConfiguringCall_RollsBackTheJobsItRegistered()
+    {
+        // The rejected call must leave the collection exactly as it found it: its core
+        // registrations and jobs used to stay behind, so a later job-only call would
+        // silently inherit jobs from a call that threw.
+        var services = new ServiceCollection();
+        services.AddSaSchedule(b => b.FromConfiguration("Schedule"));
+
+        int countAfterFirst = services.Count;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            services.AddSaSchedule(b =>
+            {
+                b.AddJob<Job1>().WithName("Leaked").EveryTime(TimeSpan.FromSeconds(1));
+                b.FromConfiguration("Schedule");
+            }));
+
+        Assert.Equal(countAfterFirst, services.Count);
+    }
+
+    [Fact]
     public void OptionsOnlyFirstCall_TripsTheGuard_ButJobOnlyCallsStayRepeatable()
     {
         // An Options(...) on the builder is what makes a call *configuring*: it creates the

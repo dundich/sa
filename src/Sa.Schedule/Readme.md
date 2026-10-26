@@ -35,7 +35,7 @@ builder.Services.AddSaSchedule(b =>
                 .IfErrorRetry(3)
                 .ThenAbortJob());
      })
-     .AddJob<ReportGenerationJob>(id: Guid.Parse("xxxx-xxxx"))
+     .AddJob<ReportGenerationJob>(jobId: Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7"))
         .EveryHours(1)
         .StartImmediate();
 });
@@ -77,7 +77,7 @@ Everything else — `TimeProvider`, `IJobRunner`, `IServiceScopeFactory` — sta
 - **Repeated calls with the same name accumulate.** Like the keyless overload, several `AddSaSchedule("name", ...)` calls fold their jobs/interceptors/handlers into the same schedule — that is how libraries that contribute jobs compose into one named schedule. A second *configuring* call (one whose builder calls `FromConfiguration(...)` or `Options(...)`) for the same name throws, per name: the guard is tracked per schedule, not globally.
 - **The keyless overload registers the default schedule.** It is resolved unkeyed (`GetRequiredService<IScheduler>()`) and is also registered as a keyed alias under `Setup.DefaultName` (`"default"`), so both resolution styles work for it. `AddSaSchedule(Setup.DefaultName, ...)` is exactly the keyless call — it does **not** create a second, separately keyed schedule.
 - **Some libraries use a named schedule, not the default one.** `AddDeliveryJob`, `AddPartCleaning` and `AddPartMigration` register into whichever schedule the calling module is scoped to. `Sa.Outbox` scopes its delivery jobs to its own named schedule (`OutboxScope.DefaultKey`, `"outbox"`) so they never collide with the application's default one; the partitional modules register into the default schedule when used directly and into the caller's named schedule when a keyed module is used.
-- **Explicit `jobId`s must stay unique across the container.** Two schedules sharing a `jobId` would also share the keyed job registration (auto-generated ids never clash).
+- **Job ids.** An explicit `jobId` must be unique per schedule across job types — two different job types sharing one id throw an `ArgumentException` that names both types. Registering the *same* type with the same id is the documented accumulation case and merges into one job. Omit `jobId` to get a unique generated id per registration.
 - **`IValidateOptions<ScheduleOptions>` runs for every named options instance**, so per-schedule validation fires the same way the default schedule's does.
 
 ```csharp
@@ -242,7 +242,7 @@ A full working example lives in [`Samples/Schedule.Configuration.Console`](../Sa
 
 5-field expression: `minute hour day-of-month month day-of-week`. Supports `*`, `,`, `-`, `/`.
 
-- [Detailed Cron documentation (EN)](./Cron/CRON.md)
+- [Detailed Cron documentation (EN)](./Cron/CRON.md) · [(RU)](./Cron/CRON-ru.md)
 
 ```csharp
 b.AddJob<DailyReport>().WithCron("0 9 * * *");       // Every day at 9:00 AM
@@ -262,10 +262,11 @@ The same effect is available from config via `ScheduleOptions.TimeZone` (all job
 
 ## Concurrency Model
 
-- **`ConcurrencyLimit`** — how many slots are actively running at any time (initially). Can be changed dynamically via `IJobScheduler.ConcurrencyLimit`.
-- **`MaxConcurrency`** — total number of slot pre-allocated. `ConcurrencyLimit ≤ MaxConcurrency`.
+- **`ConcurrencyLimit`** — how many slots run the job concurrently. Each slot runs its **own loop**, so a timing-based job with a limit of 3 executes three times per occurrence (a daily cron job with limit 3 fires three times at that time). Can be changed at runtime via `IJobScheduler.ConcurrencyLimit`.
+- **`MaxConcurrency`** — total number of slots pre-allocated. `ConcurrencyLimit ≤ MaxConcurrency`.
 - **Defaults** — when `MaxConcurrency` is not set it equals the effective `ConcurrencyLimit` (so `WithConcurrencyLimit(5)` alone allocates 5 slots); when neither is set, both default to **1**. An unset `ConcurrencyLimit` defaults to 1 even when `MaxConcurrency` is larger (slots are pre-allocated but only one is active).
-- Dynamic adjustment pauses/resumes individual slots without recreating them.
+- **Dynamic adjustment pauses/resumes the pre-allocated slots** — it never recreates them. A slot that is running when the limit drops finishes its current iteration, then waits; raising the limit again resumes it. `ConcurrencyLimit = 0` pauses the whole job while leaving `IsStarted` true.
+- **`QueueTasks`** equals the number of pre-allocated slots while the job is started (paused slots included) and `0` when it is stopped.
 
 ---
 
@@ -286,11 +287,12 @@ Each job defines its own error policy:
 |---|---|
 | `CloseApplication` | Stop the entire application via `IHostApplicationLifetime.StopApplication()` (**default**) |
 | `AbortJob` | Stop only the current job; other jobs continue |
-| `StopAllJobs` | Stop all registered jobs |
+| `StopAllJobs` | Stop all jobs **of the same schedule** — a keyed schedule stops only its own jobs |
 
 ### Global Error Handler
 
-Register a global handler that runs *before* per-job handling:
+Register a global handler that runs after the per-job retries are exhausted and before the
+per-job action is chosen:
 
 ```csharp
 b.AddErrorHandler((context, exception) =>
@@ -306,9 +308,14 @@ b.AddErrorHandler((context, exception) =>
 });
 ```
 
+`exception` is the exception the job actually threw — the same object the retry/suppress
+predicates see. The wrapped `JobException` (with its `ContextSnapshot`) is available as
+`context.LastError`.
+
 Handlers accumulate: registering more than one — including from separate `AddSaSchedule` calls —
 means the error is consumed as soon as **any** handler returns `true`. Only when every handler
-returns `false` does the per-job error policy decide.
+returns `false` does the per-job error policy decide. Errors suppressed by
+`DoSuppressError` never reach a handler, and retried failures reach it only on the final attempt.
 
 ### JobException
 
@@ -370,9 +377,9 @@ public class Controller
     public Controller(IScheduler scheduler)
         => _scheduler = scheduler;
 
-    public async Task RestartAll()
+    public async Task RestartAll(CancellationToken cancellationToken)
     {
-        var count = await _scheduler.Restart(TestContext.Current.CancellationToken);
+        var count = await _scheduler.Restart(cancellationToken);
         Console.WriteLine($"Restarted {count} jobs");
     }
 
@@ -394,7 +401,7 @@ public class Controller
 | `Settings` | Schedule-wide settings |
 | `Jobs` | Collection of `IJobScheduler` |
 | `Start(ct)` | Start all non-disabled jobs |
-| `Restart(ct)` | Stop + restart all started jobs |
+| `Restart(ct)` | Stop + restart the running jobs; returns the number actually restarted (stopped jobs are not revived) |
 | `Stop()` | Graceful stop; waits for running iterations up to each job's shutdown timeout (default 30s) |
 | `GetSchedule(id)` | Find a specific job scheduler |
 

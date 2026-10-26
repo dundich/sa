@@ -177,7 +177,13 @@ internal sealed partial class JobController(
             return CanJobExecuteResult.Abort;
 
         if (_context.NumIterations == 0 && settings.Properties.Immediate == true)
+        {
+            // The immediate first run skips the timing wait, but the context stack must
+            // still receive this iteration's snapshot — otherwise the first entry is
+            // missing from every Immediate job's history.
+            PushStackSnapshot();
             return CanJobExecuteResult.Ok;
+        }
 
         IJobTiming? timing = settings.Properties.Timing;
 
@@ -232,8 +238,12 @@ internal sealed partial class JobController(
 
     public void ExecutionFailed(Exception exception)
     {
-        JobException error = new(_context, exception);
+        // Increment first: the snapshot attached to the JobException must describe the
+        // context *including* this failure (LastError is assigned afterwards on purpose —
+        // JobSnapshot.LastErrorMessage is documented as the previous failure).
         _context.FailedIterations++;
+
+        JobException error = new(_context, exception);
         _context.LastError = error;
         _retryOwed = false;
 
@@ -273,23 +283,54 @@ internal sealed partial class JobController(
         // the job continues; throwing means the configured action was applied
         // (abort job / stop all jobs / close application) and this job must stop.
         //
+        // The handler receives the ORIGINAL exception: retry/suppress already see it,
+        // and the wrapped JobException (with its ContextSnapshot) stays available as
+        // IJobContext.LastError.
+        //
         // A keyed (named) schedule registers its handler keyed: the job scope can resolve it
-        // because the schedule key was stamped onto the merged JobSettings. The resolution
-        // itself stays in the try: a handler whose factory throws must also abort this job.
+        // because the schedule key was stamped onto the merged JobSettings.
+        //
+        // Resolution is separated from handling: a handler whose *factory* throws cannot
+        // apply the policy at all, so the job is aborted (same contract as a throwing
+        // handler) but the failure is logged — otherwise the job just stops and nobody
+        // learns that the configured action was silently bypassed.
         string? scheduleKey = (settings as JobSettings)?.ScheduleKey;
+
+        IJobErrorHandler? errorHandler;
 
         try
         {
-            IJobErrorHandler? errorHandler = scheduleKey is null
+            errorHandler = scheduleKey is null
                 ? _context.ServiceProvider.GetService<IJobErrorHandler>()
                 : _context.ServiceProvider.GetKeyedService<IJobErrorHandler>(scheduleKey);
+        }
+        catch (Exception ex)
+        {
+            LogErrorHandlerUnavailable(
+                _context.Logger,
+                _context.JobName,
+                ex.GetType().Name,
+                ex.Message);
+            _abortedByError = true;
+            return;
+        }
 
-            errorHandler?.HandleError(_context, error);
+        try
+        {
+            errorHandler?.HandleError(_context, exception);
         }
         catch
         {
+            // DoHandleError always rethrows to signal "the configured action was applied".
             _abortedByError = true;
+            return;
         }
+
+        // The handler consumed the error and the job continues. The retry budget
+        // belongs to one failure, so it is reset here: leaving it at RetryCount would
+        // make every later failure skip its retries and go straight to the handler for
+        // the rest of the slot's life.
+        _context.FailedRetries = 0;
     }
 
 
@@ -305,6 +346,12 @@ internal sealed partial class JobController(
         Message = "[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: {Type} “{Error}”")]
     static partial void LogFailedRetryAttempts(
         ILogger logger, string jobName, int failedRetryAttempts, int retryCount, string type, string error);
+
+    [LoggerMessage(
+        EventId = 403,
+        Level = LogLevel.Error,
+        Message = "[{JobName}] the job error handler could not be resolved — the configured error policy was NOT applied: {Type} “{Error}”")]
+    static partial void LogErrorHandlerUnavailable(ILogger logger, string jobName, string type, string error);
 
     public void Dispose() => Shutdown();
 }

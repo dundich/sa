@@ -26,7 +26,16 @@ public interface IJobScheduler: IDisposable, IAsyncDisposable
     int QueueTasks { get; }
 
     /// <summary>
-    /// Consume instance count
+    /// Gets or sets the number of slots that run the job concurrently.
+    /// <para>
+    /// Each slot runs its own loop, so a timing-based job with a limit of 3 executes
+    /// three times per occurrence. Changing the value pauses or resumes the
+    /// pre-allocated slots — it never recreates them: a slot that is running when the
+    /// limit drops finishes its current iteration and then waits, and raising the
+    /// limit again resumes it. <c>0</c> pauses the whole job without stopping it
+    /// (<see cref="IsStarted"/> stays <see langword="true"/>). Values outside
+    /// <c>[0, MaxConcurrency]</c> are clamped to that range.
+    /// </para>
     /// </summary>
     int ConcurrencyLimit { get; set; }
 
