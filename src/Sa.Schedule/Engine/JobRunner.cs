@@ -4,9 +4,9 @@ namespace Sa.Schedule.Engine;
 
 internal sealed class JobRunner() : IJobRunner
 {
-    public async Task<bool> Run(IJobController controller, CancellationToken cancellationToken)
+    public async Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
     {
-        bool aborted = false;
+        JobRunResult result;
 
         try
         {
@@ -21,7 +21,12 @@ internal sealed class JobRunner() : IJobRunner
 
             controller.Start();
 
-            aborted = await RunLoop(controller, cancellationToken);
+            result = await RunLoop(controller, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A stop that landed during the initial delay or the first pause check.
+            result = JobRunResult.Stopped;
         }
         finally
         {
@@ -30,11 +35,11 @@ internal sealed class JobRunner() : IJobRunner
             controller.Shutdown();
         }
 
-        return aborted;
+        return result;
     }
 
     [StackTraceHidden]
-    private static async Task<bool> RunLoop(IJobController controller, CancellationToken cancellationToken)
+    private static async Task<JobRunResult> RunLoop(IJobController controller, CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -49,14 +54,14 @@ internal sealed class JobRunner() : IJobRunner
                     // aborted it. The caller (the scheduler) treats every one of
                     // these as a job that has finished, in contrast to a cancelled
                     // run below which is a stop the caller already knows about.
-                    return true;
+                    return JobRunResult.Finished;
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 // The caller cancelled the stop token (Stop/Dispose), so IsStarted is
                 // already false — this is not an error, the run just ends.
-                return false;
+                return JobRunResult.Stopped;
             }
             catch (Exception ex)
             {
@@ -64,15 +69,16 @@ internal sealed class JobRunner() : IJobRunner
                 // IJobTiming, a disposal race, a paused-gate failure. Report it to the
                 // job's error policy and end the run — the loop state is no longer
                 // known, and continuing would spin on the same failure at full speed.
-                // The scheduler turns the "finished" result into its teardown path.
+                // "Faulted" (not "Finished") keeps a RunOnce budget intact, so the job
+                // can be started again after the fault is fixed.
                 controller.ExecutionFailed(ex);
-                return true;
+                return JobRunResult.Faulted;
             }
 
             await ExecuteIteration(controller, cancellationToken);
         }
 
-        return false;
+        return JobRunResult.Stopped;
     }
 
     private static async Task ExecuteIteration(

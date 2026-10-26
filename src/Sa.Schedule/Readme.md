@@ -317,6 +317,19 @@ means the error is consumed as soon as **any** handler returns `true`. Only when
 returns `false` does the per-job error policy decide. Errors suppressed by
 `DoSuppressError` never reach a handler, and retried failures reach it only on the final attempt.
 
+### Failures outside a run
+
+A failure that does not come from `IJob.Execute` stops the whole job (all of its slots)
+instead of only one slot:
+
+- a job or interceptor that cannot be constructed is logged, and the job is stopped;
+- a throwing custom `IJobTiming` (or any other loop-level failure) is reported to the job's
+  error policy once and then the job is stopped — it is not retried in a loop, because the
+  loop's state is no longer known.
+
+Neither counts as a **natural completion**, so a `RunOnce` job keeps its single run and can
+be started again once the cause is fixed.
+
 ### JobException
 
 When a job throws, it's wrapped in `JobException` containing:

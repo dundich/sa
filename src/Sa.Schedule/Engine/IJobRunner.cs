@@ -1,5 +1,32 @@
 ﻿namespace Sa.Schedule.Engine;
 
+/// <summary>
+/// Why a job slot's loop ended.
+/// </summary>
+internal enum JobRunResult
+{
+    /// <summary>
+    /// The loop ran out of work: the RunOnce budget was consumed, the schedule can
+    /// never fire again, or the error handling requested an abort. The job is
+    /// finished — a RunOnce job stays stopped permanently.
+    /// </summary>
+    Finished,
+
+    /// <summary>
+    /// The run was interrupted by the caller's stop token. <see cref="IJobScheduler.Stop"/>
+    /// already moved the scheduler to the stopped state, so there is nothing to tear down.
+    /// </summary>
+    Stopped,
+
+    /// <summary>
+    /// The loop ended because something outside the iteration failed — a throwing
+    /// custom <see cref="IJobTiming"/>, a disposal race, a paused-gate failure. This is
+    /// <b>not</b> a natural completion: the RunOnce budget is not consumed, so the job
+    /// stays restartable.
+    /// </summary>
+    Faulted
+}
+
 internal interface IJobRunner
 {
     /// <summary>
@@ -11,14 +38,10 @@ internal interface IJobRunner
     /// The stop token for this job; cancellation ends the run and is not an error.
     /// </param>
     /// <returns>
-    /// <see langword="true"/> when the loop ended because there is no more work:
-    /// the run-once job completed, the schedule can never fire again (an
-    /// unsatisfiable cron expression), or the error handling requested an abort.
-    /// The scheduler turns this into its stop/teardown path, so it must not be
-    /// reported while the loop is still supposed to run.
-    /// <see langword="false"/> when the run was interrupted by a stop — the
-    /// caller cancelled the token, so <see cref="IJobScheduler.Stop"/> already
-    /// handled the shutdown and an abort path must not run again.
+    /// Why the loop ended. The scheduler turns <see cref="JobRunResult.Finished"/> into
+    /// the normal stop/teardown path (consuming the RunOnce budget) and
+    /// <see cref="JobRunResult.Faulted"/> into the same teardown <i>without</i> consuming
+    /// it, so a faulted RunOnce job can still be started again.
     /// </returns>
-    Task<bool> Run(IJobController controller, CancellationToken cancellationToken);
+    Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken);
 }

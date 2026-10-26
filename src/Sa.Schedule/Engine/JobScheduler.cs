@@ -185,8 +185,8 @@ internal sealed class JobScheduler : IJobScheduler
             stoppingToken = _stoppingTokenSource.Token;
         }
 
-        // Cancel and dispose outside the lock: cancellation callbacks run synchronously
-        // on this thread, and Stop() does the same for the same reason.
+        // Cancel and dispose outside the lock: cancellation callbacks run on this
+        // thread. (Stop() cancels under its lock on purpose — see the note there.)
         if (previousSource is not null)
         {
             try
@@ -332,11 +332,11 @@ internal sealed class JobScheduler : IJobScheduler
     /// </summary>
     private async Task RunJob(IJobController controller, CancellationToken ct)
     {
-        bool finished;
+        JobRunResult result;
 
         try
         {
-            finished = await _runner.Run(controller, ct);
+            result = await _runner.Run(controller, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -360,24 +360,46 @@ internal sealed class JobScheduler : IJobScheduler
             return;
         }
 
-        if (finished)
+        switch (result)
         {
-            // The loop ended because there is no more work: the run-once job
-            // completed, the schedule can never fire again (unsatisfiable cron),
-            // or the error handling requested an abort. In every such case the
-            // scheduler must reflect the stopped state and release the slot
-            // readers — otherwise IsStarted would stay true over a dead job.
-            if (!controller.AbortedByError && _isRunOnce)
-            {
-                lock (_lock)
+            case JobRunResult.Finished:
+                // The loop ended because there is no more work: the run-once job
+                // completed, the schedule can never fire again (unsatisfiable cron),
+                // or the error handling requested an abort. In every such case the
+                // scheduler must reflect the stopped state and release the slot
+                // readers — otherwise IsStarted would stay true over a dead job.
+                if (!controller.AbortedByError && _isRunOnce)
                 {
-                    // A naturally completed run-once is consumed permanently:
-                    // per the RunOnce contract the job must not start again.
-                    _runOnceCompleted = true;
+                    lock (_lock)
+                    {
+                        // A naturally completed run-once is consumed permanently:
+                        // per the RunOnce contract the job must not start again.
+                        _runOnceCompleted = true;
+                    }
                 }
-            }
 
-            AbortJob();
+                AbortJob();
+                break;
+
+            case JobRunResult.Faulted:
+                // A fault is not a natural completion, so the RunOnce budget stays
+                // intact and the job can be started again once the cause is fixed.
+                // The slot is still torn down: the queue's faulted-item strategy alone
+                // would leave IsStarted true over a dead slot.
+                AbortJob(faulted: true);
+                break;
+
+            default:
+                // Stopped: the caller cancelled the token. Normally Stop/Dispose already
+                // moved the scheduler to the stopped state and this is a no-op. If it is
+                // still marked started, the run ended because the caller's own token (for
+                // example the host's startup token) was cancelled — reflect that in the
+                // state as well.
+                if (ct.IsCancellationRequested)
+                {
+                    AbortJob();
+                }
+                break;
         }
     }
 
@@ -391,8 +413,9 @@ internal sealed class JobScheduler : IJobScheduler
     /// </summary>
     /// <param name="faulted">
     /// <see langword="true"/> when the loop ended because a slot faulted rather than
-    /// because it ran out of work. The distinction matters only while a start is in
-    /// flight: a fault fails that start, a normal completion does not.
+    /// because it ran out of work. The distinction matters in two places: while a start
+    /// is in flight (a fault fails that start, a normal completion does not) and for a
+    /// RunOnce job (only a normal completion consumes its single run).
     /// </param>
     private void AbortJob(bool faulted = false)
     {
@@ -473,6 +496,10 @@ internal sealed class JobScheduler : IJobScheduler
 
             if (!started.Value) return;
 
+            // Cancelled under the lock on purpose: this closes the race with Dispose(),
+            // which disposes the same source outside the lock — Cancel() on a disposed
+            // source throws ObjectDisposedException. System.Threading.Lock is reentrant,
+            // so a callback cannot deadlock on this lock from the same thread.
             stoppingTokenSource = _stoppingTokenSource;
             stoppingTokenSource.Cancel();
             _started = false;

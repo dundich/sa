@@ -404,6 +404,61 @@ public class JobSchedulerTests
     }
 
 
+    [Fact]
+    public async Task RunOnce_FaultedRun_DoesNotConsumeTheRunBudget()
+    {
+        // "Faulted" is not a natural completion: the RunOnce budget must survive, so
+        // the job can be started again after the fault (a broken timing, a failed
+        // construction) is fixed.
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        settings.Properties.RunOnce();
+
+        var runner = new FaultedRunner();
+        var scheduler = new JobScheduler(settings, runner, i => new TestJobController(i));
+
+        // The first start may report true (the fault landed after the slots were
+        // spawned) or false (it landed during startup) — neither may consume the run.
+        _ = await scheduler.Start(TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => runner.Attempts >= 1 && !scheduler.IsStarted);
+
+        Assert.False(scheduler.IsStarted);
+
+        // A second start must reach the runner again instead of being refused as a
+        // consumed RunOnce — that is what "budget intact" means.
+        int attemptsBefore = runner.Attempts;
+        _ = await scheduler.Start(TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => runner.Attempts > attemptsBefore);
+
+        Assert.True(runner.Attempts > attemptsBefore);
+
+        await scheduler.DisposeAsync();
+    }
+
+
+    [Fact]
+    public async Task CallerTokenCancelledLater_MarksTheJobStopped()
+    {
+        // The stop token is linked to the caller's token, so cancelling the caller's
+        // token (for example the host's startup token) ends the slots without Stop().
+        // The scheduler must not keep reporting a running job in that case.
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        var scheduler = new JobScheduler(settings, new TokenWaitingRunner(), i => new TestJobController(i));
+
+        using var cts = new CancellationTokenSource();
+
+        Assert.True(await scheduler.Start(cts.Token));
+        Assert.True(scheduler.IsStarted);
+
+        await cts.CancelAsync();
+
+        await WaitForConditionAsync(() => !scheduler.IsStarted);
+
+        Assert.False(scheduler.IsStarted);
+
+        await scheduler.DisposeAsync();
+    }
+
+
     private static async Task WaitForConditionAsync(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow.AddSeconds(10);
@@ -428,8 +483,8 @@ public class JobSchedulerTests
 
     class TestJobRunner : IJobRunner
     {
-        public Task<bool> Run(IJobController controller, CancellationToken cancellationToken)
-            => Task.FromResult(false);
+        public Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+            => Task.FromResult(JobRunResult.Stopped);
     }
 
 
@@ -438,10 +493,10 @@ public class JobSchedulerTests
     // configured shutdown timeout.
     class HangingRunner : IJobRunner
     {
-        private static readonly Task<bool> Never =
-            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously).Task;
+        private static readonly Task<JobRunResult> Never =
+            new TaskCompletionSource<JobRunResult>(TaskCreationOptions.RunContinuationsAsynchronously).Task;
 
-        public Task<bool> Run(IJobController controller, CancellationToken cancellationToken)
+        public Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
             => Never;
     }
 
@@ -450,8 +505,44 @@ public class JobSchedulerTests
     // when a RunOnce gate closes or an unsatisfiable schedule ends the loop.
     class FinishedRunner : IJobRunner
     {
-        public Task<bool> Run(IJobController controller, CancellationToken cancellationToken)
-            => Task.FromResult(true);
+        public Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+            => Task.FromResult(JobRunResult.Finished);
+    }
+
+
+    // Reports a loop-level fault — the same result a real runner returns when the
+    // job cannot be constructed or a custom timing throws. Counts attempts so a
+    // test can tell "started and faulted" from "refused by the RunOnce guard".
+    class FaultedRunner : IJobRunner
+    {
+        private int _attempts;
+
+        public int Attempts => Volatile.Read(ref _attempts);
+
+        public Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _attempts);
+            return Task.FromResult(JobRunResult.Faulted);
+        }
+    }
+
+
+    // Waits on the stop token and reports a plain stop when it fires — models a
+    // job that ends because the caller's own token was cancelled (no Stop() call).
+    class TokenWaitingRunner : IJobRunner
+    {
+        public async Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                return JobRunResult.Finished;
+            }
+            catch (OperationCanceledException)
+            {
+                return JobRunResult.Stopped;
+            }
+        }
     }
 
 
@@ -471,11 +562,11 @@ public class JobSchedulerTests
 
         public void Release() => _gate.TrySetResult();
 
-        public async Task<bool> Run(IJobController controller, CancellationToken cancellationToken)
+        public async Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
         {
             _started.TrySetResult();
             await _gate.Task;
-            return false;
+            return JobRunResult.Stopped;
         }
     }
 

@@ -371,16 +371,16 @@ public sealed class JobControllerLifecycleTests
         var controller = new JobController(
             0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
 
-        bool aborted = await new JobRunner()
+        JobRunResult result = await new JobRunner()
             .Run(controller, TestContext.Current.CancellationToken);
 
         Assert.Equal(3, Volatile.Read(ref attempts)); // 1 attempt + 2 retries
 
         // The loop ended because a RunOnce job has no more work — from the
         // scheduler's point of view this is a finished job (it must stop and
-        // tear its readers down), so Run reports true. No error handler threw,
-        // so the controller itself is not marked AbortedByError.
-        Assert.True(aborted);
+        // tear its readers down). No error handler threw, so the controller
+        // itself is not marked AbortedByError.
+        Assert.Equal(JobRunResult.Finished, result);
         Assert.False(controller.AbortedByError);
     }
 
@@ -493,10 +493,12 @@ public sealed class JobControllerLifecycleTests
         var controller = MakeController(settings);
         controller.Start();
 
-        bool finished = await new JobRunner()
+        JobRunResult result = await new JobRunner()
             .Run(controller, TestContext.Current.CancellationToken);
 
-        Assert.True(finished, "a loop-level failure must end the run, not fault the slot");
+        // A loop-level failure is reported as "faulted", not "finished": the scheduler
+        // tears the slot down but must not consume a RunOnce budget for it.
+        Assert.Equal(JobRunResult.Faulted, result);
 
         controller.Shutdown();
     }
@@ -544,10 +546,10 @@ public sealed class JobControllerLifecycleTests
         var controller = new JobController(
             0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
 
-        bool finished = await new JobRunner()
+        JobRunResult result = await new JobRunner()
             .Run(controller, TestContext.Current.CancellationToken);
 
-        Assert.True(finished);
+        Assert.Equal(JobRunResult.Finished, result);
         Assert.Equal(1, observedDepth);
     }
 
