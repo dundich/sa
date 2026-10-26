@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Configuration.Binder.SourceGeneration;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -57,10 +56,13 @@ public static class Setup
     /// </para>
     /// <para>
     /// <b>Repeated calls.</b> Uses <c>TryAdd</c> for the queue itself: a second registration
-    /// for the same <typeparamref name="TInput"/> keeps the first. A fully bare call
+    /// for the same <typeparamref name="TInput"/> keeps the first factory. A fully bare call
     /// (no arguments) neither checks nor creates the marker — the way repeated internal
     /// registrations deduplicate — while any call carrying configuration fails fast instead
     /// of silently stacking two <c>Configure</c> callbacks onto the same settings instance.
+    /// A bare call may still come first: its factory reads the configured processor and
+    /// callbacks from a shared slot, so a configuring call that follows it is honored rather
+    /// than silently dropped.
     /// </para>
     /// <para>
     /// The processor comes from <paramref name="configure"/> (<c>UseProcessor</c> /
@@ -105,12 +107,27 @@ public static class Setup
         // configuration wins over the code defaults (see AddSaWorkQueue remarks).
         var optionsBuilder = services.AddOptions<SaWorkQueueSettings>(QueueSettingsName<TInput>());
 
+        // The code half of the registration, held in a singleton the queue factory reads at
+        // resolve time. Closing over this call's builder instead made the *order* of the calls
+        // matter in a way nothing could report: a bare registration followed by a configuring
+        // one kept the first (builder-less) factory, so the processor and the callbacks were
+        // dropped, the settings still merged, and the only symptom was "no processor" at
+        // resolve — pointing at the call that had already supplied one.
+        var state = FindBuilderState<TInput>(services);
+
+        if (state is null)
+        {
+            state = new WorkQueueBuilderState<TInput>();
+            services.AddSingleton(state);
+        }
+
         WorkQueueBuilder<TInput>? builder = null;
 
         if (configure is not null)
         {
             builder = new WorkQueueBuilder<TInput>(services);
             configure(builder);
+            state.Builder = builder;
 
             if (builder.HasCodeSettings)
             {
@@ -144,12 +161,13 @@ public static class Setup
             }
         }
 
-        // The first registration wins — the builder captured here is the one the queue is
-        // built from, exactly as TryAdd kept the first factory before the builder existed.
-        var capturedBuilder = builder;
+        // The first registration wins the factory itself, exactly as TryAdd kept the first
+        // factory before the builder existed. What it reads is the state above rather than a
+        // builder captured here, so a bare call followed by a configuring one still builds the
+        // queue the caller described.
         services.TryAdd(new ServiceDescriptor(
             typeof(ISaWorkQueue<TInput>),
-            sp => CreateQueue(sp, capturedBuilder),
+            sp => CreateQueue(sp, state.Builder),
             lifetime));
 
         if (willConfigure)
@@ -163,6 +181,29 @@ public static class Setup
     /// <summary>Options name for the queue of <typeparamref name="TInput"/>: one named settings instance per item type.</summary>
     private static string QueueSettingsName<TInput>()
         => typeof(TInput).FullName ?? typeof(TInput).Name;
+
+    /// <summary>
+    /// The builder state an earlier <see cref="AddSaWorkQueue{TInput}"/> call already
+    /// registered in this collection, or <see langword="null"/> when this is the first one.
+    /// </summary>
+    /// <remarks>
+    /// Looked up in the collection rather than kept in a closure because only the collection
+    /// survives across calls: a bare call registers the queue (and therefore the state) before
+    /// any configuring call exists to fill it in.
+    /// </remarks>
+    private static WorkQueueBuilderState<TInput>? FindBuilderState<TInput>(IServiceCollection services)
+    {
+        foreach (var descriptor in services)
+        {
+            if (descriptor.ServiceType == typeof(WorkQueueBuilderState<TInput>)
+                && descriptor.ImplementationInstance is WorkQueueBuilderState<TInput> state)
+            {
+                return state;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Assembles the queue at first resolve: settings from the options pipeline (whose
@@ -275,4 +316,23 @@ public static class Setup
 /// </summary>
 internal sealed class SaWorkQueueSettingsConfigurationMarker<TInput>
 {
+}
+
+/// <summary>
+/// The code half of a work-queue registration — the builder a configuring call assembled —
+/// held in a singleton so the queue factory reads it when the queue is resolved.
+/// </summary>
+/// <remarks>
+/// Why a mutable slot instead of a captured value: a bare <c>AddSaWorkQueue</c> call carries
+/// no builder at all, and it may legally come first (that is how repeated internal
+/// registrations deduplicate). If the factory closed over the builder of the call that
+/// registered it, every later <c>UseProcessor</c> / <c>WithProcess</c> / callback would be
+/// dropped — while the settings half still merged, so the failure surfaced only as "no
+/// processor" at resolve. This slot lets a later configuring call fill in what the bare one
+/// had nothing to say about.
+/// </remarks>
+internal sealed class WorkQueueBuilderState<TInput>
+{
+    /// <summary>The builder from the (single, enforcing) configuring call, once one has been made.</summary>
+    public WorkQueueBuilder<TInput>? Builder { get; set; }
 }

@@ -46,16 +46,19 @@ public sealed partial class SaWorkQueue<TInput>
     /// </param>
     /// <param name="ct">Cancels the wait, not the readers.</param>
     /// <remarks>
-    /// This is the one emergency-stop path that does <em>not</em> drop the buffer.
-    /// The synchronous <see cref="ForceCancelReaders"/> drains unconditionally, because
-    /// "stop the pool and throw away what is left" is what it means. Here an explicit
-    /// <paramref name="timeout"/> says the caller expects the readers to unwind; when
-    /// they do not, the items still queued were never rejected by anybody and a pool
-    /// re-armed afterwards can still take them. Dropping work that nobody asked to
-    /// drop is worse than leaving it waiting, so the buffer is kept and the shortfall
-    /// is logged instead. <see cref="IsIdle"/> stays <see langword="false"/> — truthfully,
-    /// there is work left — and a later <see cref="WaitForIdleAsync"/> that returns
-    /// without progress says so in a log line rather than silently.
+    /// Only the timeout path keeps the buffer. When an explicit <paramref name="timeout"/>
+    /// elapses — or <paramref name="ct"/> ends the wait — the readers were asked to stop and
+    /// are still unwinding, so the items behind them were never rejected by anybody and a
+    /// pool re-armed afterwards can still take them. Dropping work that nobody asked to drop
+    /// is worse than leaving it waiting, so the buffer is kept and the shortfall is logged
+    /// instead. <see cref="IsIdle"/> stays <see langword="false"/> — truthfully, there is
+    /// work left — and a later <see cref="WaitForIdleAsync"/> that returns without progress
+    /// says so in a log line rather than silently.
+    /// <para>
+    /// On success — and when there is no reader left to wait for — this drains the buffer
+    /// exactly like <see cref="ForceCancelReaders"/>: "stop the pool and throw away what is
+    /// left" is what a completed force-cancel means.
+    /// </para>
     /// </remarks>
     public async Task ForceCancelReadersAsync(TimeSpan? timeout = null, CancellationToken ct = default)
     {
@@ -134,32 +137,54 @@ public sealed partial class SaWorkQueue<TInput>
     public async Task ShutdownAsync()
     {
         if (Interlocked.CompareExchange(ref _state, (int)QueueState.Shutdown, (int)QueueState.Active) != (int)QueueState.Active)
+        {
+            // Someone else owns the shutdown. Waiting for them is what makes "idempotent"
+            // mean the same thing to every caller: when this method returns, the readers are
+            // gone and what the buffer held has been reported. The exception is a call made
+            // by the shutdown itself — a status callback asking to stop the queue again —
+            // which must not wait for a completion only the flow it interrupts can signal.
+            if (!IsShuttingDownHere)
+            {
+                await _shutdownCompleted.Task.ConfigureAwait(false);
+            }
+
             return;
+        }
+
+        ShutdownDepth.Value++;
 
         try
         {
-            await _shutdownCts.CancelAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
-        }
+            try
+            {
+                await _shutdownCts.CancelAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+            }
 
-        // See the type remarks: closing and draining must happen even if the
-        // cancellation above faulted.
-        _queue.Writer.TryComplete();
+            // See the type remarks: closing and draining must happen even if the
+            // cancellation above faulted.
+            _queue.Writer.TryComplete();
 
-        try
-        {
-            await WaitForReadersToCompleteAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+            try
+            {
+                await WaitForReadersToCompleteAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+            }
+            finally
+            {
+                DrainAndResetIdle(SaWorkDrainReason.Shutdown);
+            }
         }
         finally
         {
-            DrainAndResetIdle(SaWorkDrainReason.Shutdown);
+            ShutdownDepth.Value--;
+            _shutdownCompleted.TrySetResult();
         }
     }
 
@@ -167,30 +192,49 @@ public sealed partial class SaWorkQueue<TInput>
     public void Shutdown()
     {
         if (Interlocked.CompareExchange(ref _state, (int)QueueState.Shutdown, (int)QueueState.Active) != (int)QueueState.Active)
+        {
+            // See ShutdownAsync: a caller that finds the shutdown already running waits for
+            // it, unless that shutdown is the one calling.
+            if (!IsShuttingDownHere)
+            {
+                _shutdownCompleted.Task.Wait();
+            }
+
             return;
+        }
+
+        ShutdownDepth.Value++;
 
         try
         {
-            _shutdownCts.Cancel();
-        }
-        catch (Exception ex)
-        {
-            SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
-        }
+            try
+            {
+                _shutdownCts.Cancel();
+            }
+            catch (Exception ex)
+            {
+                SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+            }
 
-        _queue.Writer.TryComplete();
+            _queue.Writer.TryComplete();
 
-        try
-        {
-            WaitForReadersToComplete();
-        }
-        catch (Exception ex)
-        {
-            SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+            try
+            {
+                WaitForReadersToComplete();
+            }
+            catch (Exception ex)
+            {
+                SaWorkQueueLogMessages.LogShutdownError(_logger, ex);
+            }
+            finally
+            {
+                DrainAndResetIdle(SaWorkDrainReason.Shutdown);
+            }
         }
         finally
         {
-            DrainAndResetIdle(SaWorkDrainReason.Shutdown);
+            ShutdownDepth.Value--;
+            _shutdownCompleted.TrySetResult();
         }
     }
 
@@ -291,13 +335,19 @@ public sealed partial class SaWorkQueue<TInput>
         return count;
     }
 
+    /// <summary>Marks the queue disposed. Runs once, on the thread that won the dispose race.</summary>
+    /// <remarks>
+    /// <c>_shutdownCts</c> is deliberately left undisposed. Disposing it bought nothing — the
+    /// linked sources the readers own are released by <see cref="Reader.Release"/>, and an
+    /// undisposed source with no pending timer holds no unmanaged state once it is garbage —
+    /// while it opened a window: a reader registered by a concurrent
+    /// <see cref="ConcurrencyLimit"/> change is created with <c>_shutdownCts.Token</c>, which
+    /// throws <see cref="ObjectDisposedException"/> once the source is disposed. That turned a
+    /// setter documented to "do nothing" into a throwing one, and left the readers registered
+    /// by that call unlaunched.
+    /// </remarks>
     private void CompleteDispose()
-    {
-        if (Interlocked.Exchange(ref _state, (int)QueueState.Disposed) != (int)QueueState.Disposed)
-        {
-            _shutdownCts.Dispose();
-        }
-    }
+        => Interlocked.Exchange(ref _state, (int)QueueState.Disposed);
 
     /// <inheritdoc />
     public void Dispose()
@@ -305,15 +355,7 @@ public sealed partial class SaWorkQueue<TInput>
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
-    {
-        await RunDisposeAsync(async () =>
-        {
-            if (IsEnabled)
-            {
-                await ShutdownAsync().ConfigureAwait(false);
-            }
-        }).ConfigureAwait(false);
-    }
+        => await RunDisposeAsync(ShutdownAsync).ConfigureAwait(false);
 
     /// <summary>
     /// Single-flight dispose: the first caller becomes the winner, runs
@@ -321,15 +363,21 @@ public sealed partial class SaWorkQueue<TInput>
     /// loser waits for the winner rather than racing it.
     /// </summary>
     /// <remarks>
-    /// The winner must not be beaten to the teardown: <c>_shutdownCts</c> must not
-    /// be disposed out from under a still-running shutdown, and a loser must never
-    /// observe a half-disposed queue.
+    /// The winner must not be beaten to the teardown: a loser must never observe a
+    /// half-disposed queue, and the shutdown it would otherwise race is still reporting
+    /// what it dropped.
     /// </remarks>
     private void RunDispose(Action shutdown)
     {
         if (Interlocked.CompareExchange(ref _disposeStarted, 1, 0) != 0)
         {
-            _disposeCompleted.Task.Wait();
+            // A call made from inside the shutdown the winner is running would wait on
+            // itself; see ShutdownDepth.
+            if (!IsShuttingDownHere)
+            {
+                _disposeCompleted.Task.Wait();
+            }
+
             return;
         }
 
@@ -352,7 +400,11 @@ public sealed partial class SaWorkQueue<TInput>
     {
         if (Interlocked.CompareExchange(ref _disposeStarted, 1, 0) != 0)
         {
-            await _disposeCompleted.Task.ConfigureAwait(false);
+            if (!IsShuttingDownHere)
+            {
+                await _disposeCompleted.Task.ConfigureAwait(false);
+            }
+
             return;
         }
 

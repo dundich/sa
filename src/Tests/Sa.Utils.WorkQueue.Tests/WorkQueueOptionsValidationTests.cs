@@ -66,6 +66,29 @@ public sealed class WorkQueueOptionsValidationTests
     }
 
     [Fact]
+    public void WithMaxConcurrency_Negative_Throws()
+    {
+        // Единственный With*-метод без проверки знака раньше: -1 молча сворачивался в число
+        // CPU, то есть опечатка в знаке выглядела как осознанное значение по умолчанию —
+        // ровно то, из-за чего конструктор очереди отвергает отрицательный MaxConcurrency.
+        var options = SaWorkQueueOptions<int>.Create(new CountingProcessor());
+
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => options.WithMaxConcurrency(-1));
+        Assert.Equal("limit", ex.ParamName);
+
+        var ex2 = Assert.Throws<ArgumentOutOfRangeException>(() => options.WithMaxConcurrency(int.MinValue));
+        Assert.Equal("limit", ex2.ParamName);
+    }
+
+    [Fact]
+    public void WithMaxConcurrency_Zero_MeansProcessorCount()
+    {
+        var options = SaWorkQueueOptions<int>.Create(new CountingProcessor()).WithMaxConcurrency(0);
+
+        Assert.Equal(Environment.ProcessorCount, options.MaxConcurrency);
+    }
+
+    [Fact]
     public async Task Ctor_BoundaryValidValues_AcceptedAndWork()
     {
         // The minimum acceptable values must not just pass validation —

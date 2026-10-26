@@ -47,9 +47,16 @@ public sealed record SaWorkQueueOptions<TInput>(
     }
 
     /// <summary>Sets the absolute maximum number of reader tasks.</summary>
-    /// <param name="limit">If less than 1, defaults to CPU count.</param>
+    /// <param name="limit">
+    /// <c>0</c> defaults to the CPU count; otherwise must be positive. A negative value is
+    /// rejected, exactly as the queue constructor rejects one: folding a sign mistake into a
+    /// plausible default is how it stops being visible.
+    /// </param>
     public SaWorkQueueOptions<TInput> WithMaxConcurrency(int limit)
-        => this with { MaxConcurrency = limit < 1 ? Environment.ProcessorCount : limit };
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(limit);
+        return this with { MaxConcurrency = limit < 1 ? Environment.ProcessorCount : limit };
+    }
 
     /// <summary>Optimises for a single writer source.</summary>
     public SaWorkQueueOptions<TInput> WithSingleWriter(bool sw)
@@ -125,7 +132,6 @@ public sealed record SaWorkQueueOptions<TInput>(
         ArgumentNullException.ThrowIfNull(timeProvider);
         return this with { TimeProvider = timeProvider };
     }
-
 
     /// <summary>Creates options from a delegate that processes a single item.</summary>
     /// <param name="process">Async delegate that receives the item and a cancellation token.</param>

@@ -226,14 +226,34 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     /// <summary>
     /// Single-flight dispose: 0 = not started, 1 = in progress. The winner runs
-    /// the shutdown and releases <c>_shutdownCts</c>; a concurrent
-    /// <see cref="Dispose()"/>/<see cref="DisposeAsync"/> loser waits for the
-    /// winner instead of racing it, which would otherwise dispose the token source
-    /// out from under a still-running shutdown.
+    /// the shutdown; a concurrent <see cref="Dispose()"/>/<see cref="DisposeAsync"/> loser
+    /// waits for the winner instead of racing it, which would otherwise tear the queue down
+    /// while a shutdown was still reporting what it dropped.
     /// </summary>
     private int _disposeStarted;
 
     private readonly TaskCompletionSource _disposeCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Signalled when the shutdown that won <c>_state</c> has finished: readers gone and
+    /// the buffer reported. A caller that arrives while that shutdown is still running
+    /// waits for this instead of returning early, so "the queue is shut down" means the
+    /// same thing to every caller — the same reason <see cref="_disposeCompleted"/> exists.
+    /// </summary>
+    private readonly TaskCompletionSource _shutdownCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Non-zero while the current logical flow is inside a shutdown body. A re-entrant call —
+    /// a status callback invoked by the drain asking to shut the queue down again — must not
+    /// wait for the completion that the flow it interrupts is going to signal: it would wait
+    /// on itself, and no timeout covers that wait. Async-local rather than thread-static
+    /// because a shutdown body crosses <c>await</c>s, and the callback that makes the
+    /// re-entrant call runs on whichever thread continues it.
+    /// </summary>
+    private static readonly AsyncLocal<int> ShutdownDepth = new();
+
+    /// <summary>Whether the current logical flow is already running a shutdown of this queue.</summary>
+    private static bool IsShuttingDownHere => ShutdownDepth.Value > 0;
 
     public SaWorkQueue(SaWorkQueueOptions<TInput> options, ILogger<SaWorkQueue<TInput>>? logger = null)
     {
