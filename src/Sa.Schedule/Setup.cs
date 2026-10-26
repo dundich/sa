@@ -300,7 +300,8 @@ public static class Setup
             services.TryAddKeyedSingleton<IScheduler>(
                 scheduleKey, static (sp, key) => new Scheduler(
                     sp.GetRequiredKeyedService<IScheduleSettings>(key),
-                    sp.GetRequiredKeyedService<IJobFactory>(key)));
+                    sp.GetRequiredKeyedService<IJobFactory>(key),
+                    sp.GetService<ILogger<Scheduler>>()));
 
             services.TryAddKeyedSingleton<IJobFactory>(
                 scheduleKey, static (sp, key) => new JobFactory(

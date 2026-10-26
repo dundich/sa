@@ -153,13 +153,14 @@ internal sealed class ScheduleSettings : IScheduleSettings
             // Grouping is by (JobId, JobType), so the same explicit id on two different
             // job types survives grouping and used to fail here with a bare
             // "An item with the same key has already been added" from ToDictionary.
+            // ScheduleBuilder already rejects this at registration time; this stays as
+            // the safety net for settings assembled by other means.
             if (!storage.TryAdd(job.JobId, job))
             {
-                throw new ArgumentException(
-                    $"Two different job types share the explicit job id '{job.JobId}': " +
-                    $"'{storage[job.JobId].JobType.FullName}' and '{job.JobType.FullName}'. " +
-                    "Job ids must be unique per schedule — pass distinct ids, or omit " +
-                    "jobId to have one generated per registration.",
+                JobIdGuard.Throw(
+                    job.JobId,
+                    storage[job.JobId].JobType,
+                    job.JobType,
                     nameof(jobSettings));
             }
         }

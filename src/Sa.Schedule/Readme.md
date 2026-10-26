@@ -77,7 +77,7 @@ Everything else — `TimeProvider`, `IJobRunner`, `IServiceScopeFactory` — sta
 - **Repeated calls with the same name accumulate.** Like the keyless overload, several `AddSaSchedule("name", ...)` calls fold their jobs/interceptors/handlers into the same schedule — that is how libraries that contribute jobs compose into one named schedule. A second *configuring* call (one whose builder calls `FromConfiguration(...)` or `Options(...)`) for the same name throws, per name: the guard is tracked per schedule, not globally.
 - **The keyless overload registers the default schedule.** It is resolved unkeyed (`GetRequiredService<IScheduler>()`) and is also registered as a keyed alias under `Setup.DefaultName` (`"default"`), so both resolution styles work for it. `AddSaSchedule(Setup.DefaultName, ...)` is exactly the keyless call — it does **not** create a second, separately keyed schedule.
 - **Some libraries use a named schedule, not the default one.** `AddDeliveryJob`, `AddPartCleaning` and `AddPartMigration` register into whichever schedule the calling module is scoped to. `Sa.Outbox` scopes its delivery jobs to its own named schedule (`OutboxScope.DefaultKey`, `"outbox"`) so they never collide with the application's default one; the partitional modules register into the default schedule when used directly and into the caller's named schedule when a keyed module is used.
-- **Job ids.** An explicit `jobId` must be unique per schedule across job types — two different job types sharing one id throw an `ArgumentException` that names both types. Registering the *same* type with the same id is the documented accumulation case and merges into one job. Omit `jobId` to get a unique generated id per registration.
+- **Job ids.** An explicit `jobId` must be unique per schedule across job types — two different job types sharing one id throw an `ArgumentException` (at `AddSaSchedule` time) that names both types. Registering the *same* type with the same id is the documented accumulation case and merges into one job. Omit `jobId` to get a unique generated id per registration.
 - **`IValidateOptions<ScheduleOptions>` runs for every named options instance**, so per-schedule validation fires the same way the default schedule's does.
 
 ```csharp
@@ -414,7 +414,7 @@ public class Controller
 | `Settings` | Schedule-wide settings |
 | `Jobs` | Collection of `IJobScheduler` |
 | `Start(ct)` | Start all non-disabled jobs |
-| `Restart(ct)` | Stop + restart the running jobs; returns the number actually restarted (stopped jobs are not revived) |
+| `Restart(ct)` | Stop + restart the running jobs; returns the number actually restarted (stopped jobs are not revived; a job that fails to restart is logged and skipped) |
 | `Stop()` | Graceful stop; waits for running iterations up to each job's shutdown timeout (default 30s) |
 | `GetSchedule(id)` | Find a specific job scheduler |
 

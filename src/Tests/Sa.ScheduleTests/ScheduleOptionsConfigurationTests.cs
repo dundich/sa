@@ -292,6 +292,58 @@ public sealed class ScheduleOptionsConfigurationTests
     }
 
     [Fact]
+    public void AddJob_DuplicateExplicitIdForDifferentTypes_ThrowsAtRegistration()
+    {
+        // The duplicate used to be noticed only when IScheduleSettings was resolved
+        // (host start), with a generic "same key" exception. It now fails inside
+        // AddSaSchedule, naming the id and both types.
+        var id = Guid.NewGuid();
+        var services = new ServiceCollection();
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            services.AddSaSchedule(b =>
+            {
+                b.AddJob<Job1>(id);
+                b.AddJob<Job2>(id);
+            }));
+
+        Assert.Contains(id.ToString(), ex.Message);
+        Assert.Contains(nameof(Job1), ex.Message);
+        Assert.Contains(nameof(Job2), ex.Message);
+    }
+
+    [Fact]
+    public void AddJob_SameExplicitIdForSameType_StillAccumulates()
+    {
+        var id = Guid.NewGuid();
+        var services = new ServiceCollection();
+
+        var ex = Record.Exception(() => services.AddSaSchedule(b =>
+        {
+            b.AddJob<Job1>(id);
+            b.AddJob<Job1>(id);
+        }));
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void AddJob_SameIdInDifferentSchedules_IsAllowed()
+    {
+        // The guard is per schedule: two schedules may use the same explicit id.
+        var id = Guid.NewGuid();
+        var services = new ServiceCollection();
+
+        var ex = Record.Exception(() =>
+        {
+            services.AddSaSchedule("a", b => b.AddJob<Job1>(id));
+            services.AddSaSchedule("b", b => b.AddJob<Job2>(id));
+        });
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
     public void SecondConfiguringCall_RollsBackTheJobsItRegistered()
     {
         // The rejected call must leave the collection exactly as it found it: its core

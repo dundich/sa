@@ -41,9 +41,10 @@ internal sealed class JobScheduler : IJobScheduler
     private readonly ILogger<JobScheduler>? _logger;
 
     // The user-requested concurrency limit (initially the configured one). The
-    // reader pool itself stays at MaxConcurrency for the scheduler's lifetime;
-    // this value is the single source of truth for how many slots are active,
-    // applied by pausing/resuming the controller gates in RefreshConcurrency.
+    // reader pool is pinned at MaxConcurrency from the first Start() (not at
+    // construction — see the queue options), and this value is the single source of
+    // truth for how many slots are active, applied by pausing/resuming the controller
+    // gates in RefreshConcurrency.
     private volatile int _limit;
 
     private readonly SaWorkQueue<IJobController> _queue;
@@ -99,13 +100,15 @@ internal sealed class JobScheduler : IJobScheduler
             SaWorkQueueOptions<IJobController>.Create(RunJob)
             .WithQueueCapacity(maxConcurrency)
             .WithMaxConcurrency(maxConcurrency)
-            // The reader pool stays at MaxConcurrency; the *effective* limit is
-            // applied by pausing/resuming the slot gates (see RefreshConcurrency).
-            // Letting the queue shrink instead hard-cancels a reader's in-flight
-            // item — and an item here is a job's whole loop — so every slot above
-            // the new limit would be gone for good: raising the limit again could
+            // The reader pool is raised to MaxConcurrency on the first Start() and
+            // pinned there; the *effective* limit is applied by pausing/resuming the
+            // slot gates (see RefreshConcurrency). The pool starts paused, so a
+            // scheduler that is resolved but never started costs no reader tasks.
+            // Letting the queue shrink to the limit instead hard-cancels a reader's
+            // in-flight item — and an item here is a job's whole loop — so every slot
+            // above the new limit would be gone for good: raising the limit again could
             // never bring it back without a full Stop+Start.
-            .WithConcurrencyLimit(maxConcurrency)
+            .WithConcurrencyLimit(0)
             .WithSingleWriter(true)
             .WithShutdownTimeout(_shutdownTimeout)
             // An unexpected fault must not kill the queue (the default
@@ -207,8 +210,9 @@ internal sealed class JobScheduler : IJobScheduler
 
         try
         {
-            // Re-spawn readers lost by a previous abort/force-cancel
-            // (setting the same value is a no-op when the pool is healthy).
+            // Re-spawn readers lost by a previous abort/force-cancel, and spawn the
+            // whole pool on the first start (the queue is created paused).
+            // Setting the same value is a no-op when the pool is healthy.
             _queue.ConcurrencyLimit = _queue.MaxConcurrency;
 
             // Bounded: a previous run's iteration may ignore cancellation (Stop only

@@ -38,6 +38,30 @@ public sealed class SchedulerTests
     }
 
     [Fact]
+    public async Task Restart_OneJobThrowing_DoesNotPreventTheOthers()
+    {
+        // A broken job's teardown (or start) must not abort the restart of the others:
+        // the failure is logged and counted as "not restarted".
+        var stopFails = new StubJobScheduler { IsStarted = true, StopThrows = true };
+        var startFails = new StubJobScheduler { IsStarted = true, StartThrows = true };
+        var healthy = new StubJobScheduler { IsStarted = true, StartsAgain = true };
+
+        var scheduler = CreateScheduler(stopFails, startFails, healthy);
+
+        Assert.Equal(1, await scheduler.Restart(TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, stopFails.StopCalls);
+        Assert.Equal(0, stopFails.StartCalls);
+
+        Assert.Equal(1, startFails.StopCalls);
+        Assert.Equal(1, startFails.StartCalls);
+
+        Assert.Equal(1, healthy.StopCalls);
+        Assert.Equal(1, healthy.StartCalls);
+        Assert.True(healthy.IsStarted);
+    }
+
+    [Fact]
     public async Task Restart_NoRunningJobs_ReturnsZero()
     {
         var scheduler = CreateScheduler(new StubJobScheduler { IsStarted = false });
@@ -83,6 +107,10 @@ public sealed class SchedulerTests
 
         public bool StartsAgain { get; init; } = true;
 
+        public bool StopThrows { get; init; }
+
+        public bool StartThrows { get; init; }
+
         public int QueueTasks => 0;
 
         public int ConcurrencyLimit { get; set; } = 1;
@@ -96,6 +124,12 @@ public sealed class SchedulerTests
         public Task<bool> Start(CancellationToken cancellationToken)
         {
             StartCalls++;
+
+            if (StartThrows)
+            {
+                throw new InvalidOperationException("start failed");
+            }
+
             IsStarted = StartsAgain;
             return Task.FromResult(StartsAgain);
         }
@@ -103,6 +137,12 @@ public sealed class SchedulerTests
         public Task Stop()
         {
             StopCalls++;
+
+            if (StopThrows)
+            {
+                throw new InvalidOperationException("stop failed");
+            }
+
             IsStarted = false;
             return Task.CompletedTask;
         }

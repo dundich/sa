@@ -1,6 +1,11 @@
-﻿namespace Sa.Schedule.Engine;
+﻿using Microsoft.Extensions.Logging;
 
-internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
+namespace Sa.Schedule.Engine;
+
+internal sealed class Scheduler(
+    IScheduleSettings settings,
+    IJobFactory factory,
+    ILogger<Scheduler>? logger = null)
     : IScheduler, IDisposable, IAsyncDisposable
 {
     private volatile bool _disposed;
@@ -34,10 +39,28 @@ internal sealed class Scheduler(IScheduleSettings settings, IJobFactory factory)
         return results.Count(r => r == 1);
     }
 
-    private static async Task<int> RestartJob(IJobScheduler job, CancellationToken cancellationToken)
+    private async Task<int> RestartJob(IJobScheduler job, CancellationToken cancellationToken)
     {
-        await job.Stop();
-        return await job.Start(cancellationToken) ? 1 : 0;
+        try
+        {
+            await job.Stop();
+            return await job.Start(cancellationToken) ? 1 : 0;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The caller cancelled the restart — do not disguise it as a broken job.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // One job's teardown must not prevent the others from being restarted.
+            if (logger is not null)
+            {
+                SchedulerLog.LogJobRestartFailed(logger, job.JobId, ex);
+            }
+
+            return 0;
+        }
     }
 
     public async Task Stop()

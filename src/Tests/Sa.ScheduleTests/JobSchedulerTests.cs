@@ -424,12 +424,16 @@ public class JobSchedulerTests
         Assert.False(scheduler.IsStarted);
 
         // A second start must reach the runner again instead of being refused as a
-        // consumed RunOnce — that is what "budget intact" means.
+        // consumed RunOnce — that is what "budget intact" means. Start() may return
+        // false while the previous start is still settling, so poll until the runner
+        // is actually reached; a consumed RunOnce would never reach it.
         int attemptsBefore = runner.Attempts;
-        _ = await scheduler.Start(TestContext.Current.CancellationToken);
-        await WaitForConditionAsync(() => runner.Attempts > attemptsBefore);
 
-        Assert.True(runner.Attempts > attemptsBefore);
+        await WaitForConditionAsync(() =>
+        {
+            _ = scheduler.Start(TestContext.Current.CancellationToken);
+            return runner.Attempts > attemptsBefore;
+        });
 
         await scheduler.DisposeAsync();
     }
@@ -456,6 +460,41 @@ public class JobSchedulerTests
         Assert.False(scheduler.IsStarted);
 
         await scheduler.DisposeAsync();
+    }
+
+
+    [Fact]
+    public async Task ReaderPool_IsPausedUntilTheFirstStart()
+    {
+        // The queue used to be created with MaxConcurrency readers, so resolving a
+        // scheduler (even one that is never started) allocated the whole pool. It now
+        // starts paused and is raised to MaxConcurrency on Start.
+        var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+        settings.Properties
+            .WithMaxConcurrency(3)
+            .WithConcurrencyLimit(1);
+
+        var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
+
+        Assert.Equal(Sa.Utils.WorkQueue.SaWorkPoolState.Paused, ReaderPoolOf(scheduler).PoolState);
+
+        await scheduler.Start(TestContext.Current.CancellationToken);
+
+        await WaitForConditionAsync(() =>
+            ReaderPoolOf(scheduler).PoolState == Sa.Utils.WorkQueue.SaWorkPoolState.Active);
+        Assert.Equal(3, ReaderPoolOf(scheduler).MaxConcurrency);
+
+        await scheduler.DisposeAsync();
+    }
+
+
+    private static Sa.Utils.WorkQueue.ISaWorkQueue<IJobController> ReaderPoolOf(JobScheduler scheduler)
+    {
+        var field = typeof(JobScheduler).GetField(
+            "_queue",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+        return (Sa.Utils.WorkQueue.ISaWorkQueue<IJobController>)field.GetValue(scheduler)!;
     }
 
 
