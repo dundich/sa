@@ -199,16 +199,28 @@ public sealed class WorkQueueForceCancelDrainTests
     {
         var logger = new RecordingLogger<SaWorkQueue<int>>();
         var statuses = new StatusLog();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(async (_, _) => await gate.Task.ConfigureAwait(false))
+            SaWorkQueueOptions<int>.Create(async (_, _) =>
+                {
+                    started.TrySetResult();
+                    await gate.Task.ConfigureAwait(false);
+                })
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback(statuses.Record),
             logger);
 
-        _ = queue.Enqueue(1, TestToken);
-        _ = queue.Enqueue(2, TestToken);
+        await queue.Enqueue(1, TestToken);
+        await queue.Enqueue(2, TestToken);
+
+        // Дождаться, пока элемент 1 действительно окажется внутри процессора. Пауза отменяет
+        // ридера, а элемент, уже вынутый из буфера, но ещё не дошедший до процессора,
+        // отменяется на входе в ExecuteItemAsync и уходит в Cancelled — тогда в очереди
+        // остаётся один элемент, и тест проверял бы совсем другое состояние (и падал через
+        // раз). Здесь же «в полёте один, в буфере один» — гарантия, а не совпадение.
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestToken);
 
         // Item 1 is in flight, item 2 is buffered, and nothing will read either.
         queue.ConcurrencyLimit = 0;
@@ -218,6 +230,9 @@ public sealed class WorkQueueForceCancelDrainTests
 
         Assert.Equal(1, logger.Count(LogLevel.Warning, "WaitForIdleAsync returned with 2 item(s) still pending"));
         Assert.Equal(1, logger.Count(LogLevel.Warning, "Paused"));
+
+        // Отпустить ридера: иначе Dispose ждал бы его до самого shutdown-таймаута.
+        gate.TrySetResult();
     }
 
     static SaWorkQueue<int> Build(

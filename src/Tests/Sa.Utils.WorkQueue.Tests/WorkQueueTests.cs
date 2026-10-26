@@ -236,6 +236,42 @@ public class WorkQueueTests
 
 
     [Fact]
+    public async Task ShutdownAsync_ConcurrentCallers_AllWaitForTheDrain()
+    {
+        // Второй вызывающий раньше возвращался сразу, пока первый ещё отменял ридеров и
+        // сливал буфер: «shutdown завершён» означал разное в зависимости от того, кто
+        // спросил. Теперь проигравший ждёт победителя.
+        using var entered = new SemaphoreSlim(0);
+        using var gate = new SemaphoreSlim(0);
+
+        // Ридер сидит в элементе, который не прерывается отменой: shutdown паркуется на нём,
+        // и без релиза гейта завершиться не может.
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(async (_, _) =>
+                {
+                    entered.Release();
+                    await gate.WaitAsync(CancellationToken.None);
+                })
+                .WithConcurrencyLimit(1)
+                .WithQueueCapacity(4));
+
+        await queue.Enqueue(1, TestToken);
+        Assert.True(await entered.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+
+        var first = queue.ShutdownAsync();
+        var second = queue.ShutdownAsync();
+
+        Assert.False(first.IsCompleted);
+        Assert.False(second.IsCompleted);
+
+        gate.Release();
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5), TestToken);
+
+        Assert.False(queue.IsEnabled);
+        Assert.True(queue.IsIdle());
+    }
+
+    [Fact]
     public async Task Observer_InvokedOnStateChange()
     {
 

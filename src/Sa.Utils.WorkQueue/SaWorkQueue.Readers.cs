@@ -64,21 +64,29 @@ public sealed partial class SaWorkQueue<TInput>
         if (count <= 0) return;
 
         var registered = new Reader[count];
+        var added = 0;
 
-        lock (_readersSync)
+        try
         {
-            for (var i = 0; i < count; i++)
+            lock (_readersSync)
             {
-                registered[i] = RegisterReaderUnderLock();
+                for (; added < count; added++)
+                {
+                    registered[added] = RegisterReaderUnderLock();
+                }
             }
         }
-
-        // Outside the lock, on purpose. A reader cancelled in the window above is
-        // still launched: it counts as live until it unwinds, and its loop checks
-        // the token before reading anything.
-        foreach (var reader in registered)
+        finally
         {
-            LaunchReader(reader);
+            // Whatever got registered is launched, for two reasons. A reader cancelled in the
+            // window above still has to run: it counts as live until it unwinds, and its loop
+            // checks the token before reading anything. And a reader that is registered but
+            // never launched never completes its published task, so anything waiting for the
+            // pool to wind down would wait out the whole shutdown timeout on it.
+            for (var i = 0; i < added; i++)
+            {
+                LaunchReader(registered[i]);
+            }
         }
     }
 
@@ -276,10 +284,12 @@ public sealed partial class SaWorkQueue<TInput>
         }
         catch (ObjectDisposedException)
         {
-            // The shutdown token source was disposed out from under this reader:
-            // Dispose ran after the shutdown wait timed out while this reader was
-            // still alive. An expected late exit — no extra shutdown, no alarming
-            // log. RemoveReader in the finally still cleans up.
+            // A token source this loop depends on was released while the loop was still
+            // running. Kept as a safety net: the one path that used to reach it — Dispose
+            // releasing the queue's shutdown source under a reader that outlived the wait —
+            // no longer happens, because that source is no longer disposed. Treated as an
+            // expected late exit either way: no extra shutdown, no alarming log, and
+            // RemoveReader in the finally still cleans up.
         }
         catch (Exception ex)
         {
@@ -351,6 +361,13 @@ public sealed partial class SaWorkQueue<TInput>
             // or by a concurrent call, is skipped rather than released twice.
             lock (_readersSync)
             {
+                // Gone from the registry means it died on its own — a StopReader fault,
+                // typically — and RemoveReader already gave its slot back. Releasing it
+                // again here would decrement a limit the caller may have re-armed since
+                // the snapshot was taken, which is exactly what the slot accounting is
+                // built to prevent.
+                if (!_readers.Contains(reader)) continue;
+
                 if (!reader.IsLive) continue;
                 if (reader.Loop.IsCancellationRequested) continue; // shutdown got here first
 

@@ -49,7 +49,10 @@ public interface IWorkQueueBuilder<TInput>
     /// </summary>
     IWorkQueueBuilder<TInput> WithConcurrencyLimit(int limit);
 
-    /// <summary>Sets the default absolute ceiling of reader tasks. Values below 1 default to the CPU count.</summary>
+    /// <summary>
+    /// Sets the default absolute ceiling of reader tasks. <c>0</c> defaults to the CPU count;
+    /// a negative value is rejected.
+    /// </summary>
     IWorkQueueBuilder<TInput> WithMaxConcurrency(int limit);
 
     /// <summary>Optimises the channel for a single writer source.</summary>

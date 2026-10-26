@@ -103,6 +103,7 @@ internal sealed class WorkQueueBuilder<TInput> : IWorkQueueBuilder<TInput>
 
     public IWorkQueueBuilder<TInput> WithMaxConcurrency(int limit)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(limit);
         _codeSettings.MaxConcurrency = limit < 1 ? Environment.ProcessorCount : limit;
         HasCodeSettings = true;
         return this;

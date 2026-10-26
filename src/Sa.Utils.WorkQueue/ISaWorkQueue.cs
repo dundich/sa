@@ -34,8 +34,9 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <see cref="IsIdle"/> provokes: work is pending, so why is nothing happening to
     /// it? Without this, a caller can see that it is not idle and has no way to find out
     /// whether the queue was paused by hand, lost every reader to a
-    /// <see cref="ForceCancelReaders"/> or a fault, or has been stopped. Only the third
-    /// is a fault, and only the third has an obvious response.
+    /// <see cref="ForceCancelReaders"/> or a fault, or has been stopped. Only the second
+    /// is a fault; the other two are a decision the caller already made and a queue that
+    /// is simply gone.
     /// <para>
     /// <see cref="ConcurrencyLimit"/> does not answer it: a force-cancel releases the
     /// slots of the readers it stops, so the limit reads <c>0</c> afterwards exactly as
@@ -155,6 +156,11 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// Intended for hot paths where the caller cannot block or await:
     /// it offers the same "drop when full" outcome as <see cref="SaEnqueueStrategy.Skip"/>
     /// regardless of the configured strategy, without any asynchronous machinery.
+    /// <para>
+    /// The item carries no cancellation token, so it cannot be cancelled by the caller after
+    /// acceptance — the reader runs it to a terminal status. Use
+    /// <see cref="Enqueue(TInput, CancellationToken)"/> when the work must remain abortable.
+    /// </para>
     /// </remarks>
     bool TryEnqueue(TInput input);
 
@@ -253,6 +259,13 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// one of the tasks being awaited, so the call blocks for the full
     /// <see cref="SaWorkQueueOptions{TInput}.ShutdownTimeout"/> (30 s by default) and only then
     /// returns. Hand the work off to a background task instead (see <c>JobScheduler.AbortJob</c>).
+    /// <para>
+    /// A call that finds a shutdown already running waits for that one to finish instead of
+    /// returning early, so "shutdown completed" means the same thing to every caller: readers
+    /// gone and the buffer reported. Only a call made from inside that shutdown — a status
+    /// callback asking to stop the queue again — returns immediately, because waiting would
+    /// mean waiting on itself.
+    /// </para>
     /// </remarks>
     Task ShutdownAsync();
 
@@ -265,6 +278,8 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <remarks>
     /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/> — see
     /// <see cref="ShutdownAsync"/> for why, and use a background task instead.
+    /// A call that finds a shutdown already running blocks until it finishes, exactly as
+    /// <see cref="ShutdownAsync"/> awaits it.
     /// </remarks>
     void Shutdown();
 
@@ -305,6 +320,8 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// on <see cref="TimeoutException"/> or cancellation the items still in the buffer are kept,
     /// no reader is picking them up, and a warning is logged saying so. Raise
     /// <see cref="ConcurrencyLimit"/> above 0 to spawn a replacement pool and let them run.
+    /// A <em>successful</em> wait, including the overload with no timeout, drains the buffer
+    /// just like the synchronous variant.
     /// </para>
     /// <para>
     /// <see cref="IsIdle"/> reports <see langword="false"/> in that state, and keeps doing so until

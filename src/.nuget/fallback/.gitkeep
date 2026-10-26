@@ -1,0 +1,4 @@
+Keeps src/.nuget/fallback in the repository on purpose.
+Directory.Build.props points NuGet's RestoreFallbackFolders at this folder, and NuGet
+fails the restore (NU1301) when the folder does not exist. An empty directory cannot be
+tracked by git, so this placeholder is the thing that keeps it there.
