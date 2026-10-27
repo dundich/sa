@@ -189,6 +189,21 @@ public sealed class ScheduleOptionsConfigurationTests
     }
 
     [Fact]
+    public void Cron_SixFieldExpression_FiresOnSeconds()
+    {
+        // The config path detects the format the same way the code does: a leading seconds
+        // field switches the timing to second precision.
+        var settings = BuildSettings(
+            configure: b => b.AddJob<Job1>().WithName("J1"),
+            entries: new Dictionary<string, string?>
+            {
+                ["Schedule:Jobs:J1:Cron"] = "*/30 * * * * *",
+            });
+
+        Assert.Equal(From.AddSeconds(30), Next(GetJob(settings, "J1")));
+    }
+
+    [Fact]
     public void UserConfigure_HasLastWordOverSection()
     {
         var settings = BuildSettings(

@@ -4,10 +4,10 @@
 
 ## Overview
 
-- Format: **5 fields** — `minute hour day-of-month month day-of-week`
+- Format: **5 fields** — `minute hour day-of-month month day-of-week` — or **6 fields** with a leading seconds field — `second minute hour day-of-month month day-of-week`. The form is detected by the field count; there is no year field.
 - Interface: `IJobTiming`
 - Method: `GetNextOccurrence(DateTimeOffset dateTime)`
-- Behavior: **exclusive** — when `dateTime` exactly matches the schedule, the **next** occurrence (> dateTime) is returned, truncated to the minute.
+- Behavior: **exclusive** — when `dateTime` exactly matches the schedule, the **next** occurrence (> dateTime) is returned, truncated to the resolution of the expression (the second for 6 fields, the minute for 5).
 - Search horizon: **28 years** ahead. If no matching time is found within 28 years, `null` is returned (the expression can never fire, e.g. `0 0 30 2 *`). An input too close to the end of the representable range (year 9971 and later) also returns `null` instead of throwing, because the 28-year window no longer fits a `DateTimeOffset`.
 - DOM ∩ DOW semantics: **OR** (Vixie cron). When both day-of-month and day-of-week are restricted, a day matches if **either** field matches.
 - Day of week: `0` and `7` both mean **Sunday**; `1–6` are Monday–Saturday.
@@ -16,6 +16,7 @@
 
 | Field | Range | Description |
 |---|---|---|
+| Second (6-field form only) | 0–59 | `*`, `,`, `-`, `/` |
 | Minute | 0–59 | `*`, `,`, `-`, `/` |
 | Hour | 0–23 | `*`, `,`, `-`, `/` |
 | Day of month (DOM) | 1–31 | `*`, `,`, `-`, `/` |
@@ -59,6 +60,27 @@
 | `0 0 29 2 *` | February 29 (leap years only; the next leap year is searched within the 28-year horizon) |
 | `0 0 15 * 1` | The 15th **or** Monday (DOM∩DOW OR semantics) |
 | `0 12 15 * 3` | At 12:00 on the 15th **or** on a Wednesday |
+
+## Seconds (6-field expressions)
+
+Add a seconds field **in front of** the 5-field expression and the timing switches to second
+precision. The rule is purely positional — 6 fields means the first one is seconds:
+
+| Expression | Description |
+|---|---|
+| `* * * * * *` | Every second |
+| `*/15 * * * * *` | Every 15 seconds (0, 15, 30, 45) |
+| `30 * * * * *` | At second 30 of every minute |
+| `0 0 9 * * *` | Daily at 09:00:00 — the same instant as `0 9 * * *` |
+| `0,30 */5 * * * *` | Seconds 0 and 30 of every fifth minute |
+| `5-10/2 0 9 * * 1-5` | Seconds 5, 7 and 9 at 09:00 on weekdays |
+
+The day fields keep their semantics: `L`/`LW`/`dW`/`dL`, the DOM∩DOW OR rule and the month
+list all work as in the 5-field form (`0 0 0 L * *` is midnight on the last day of the month).
+
+**Careful with the same text meaning something else**: `0 9 * * *` is 09:00 every day, while
+`0 9 * * * *` is second 0 of minute 9 of every hour. There is no year field, so 7 fields is a
+parse error rather than a silently misread expression.
 
 ## Day specials: L, L-n, LW, dW
 
@@ -106,8 +128,12 @@ Expressions that can never fire (for example `0 0 30 2 *` — February 30 never 
 ### Time zone
 `CronTiming` works with `DateTimeOffset`. The input offset is preserved when the next occurrence is computed: the fields are matched against the input's wall clock, and a DST transition is **not** re-evaluated. The scheduler always passes UTC, and `CronTimingAdapter` (used by `WithCron` / `WithTimeZone`) re-derives the offset for each occurrence from the configured zone. When using `CronTiming` directly, pass a UTC `DateTimeOffset`.
 
-### Minute precision
-Computations are minute-precise. When the input `dateTime` has seconds/milliseconds, the search starts at the next minute (exclusive behavior).
+### Precision
+The search runs at the resolution of the expression. A **5-field** expression is minute-precise: it only ever fires on second `0`, and an input with seconds/milliseconds starts the search at the next minute (`10:30:45` with `* * * * *` → `10:31:00`). A **6-field** expression is second-precise: the search starts at the next second (`10:30:45.500` with `* * * * * *` → `10:30:46`).
+
+Second precision is a scheduling resolution, not a real-time guarantee: the wait ends in `Task.Delay`, so a job fires a few milliseconds after the requested second. Missed occurrences are not replayed — the search is exclusive from "now", so after a long iteration the scheduler continues at the next boundary rather than catching up.
+
+For a plain "every N seconds" cadence prefer `EveryTime(TimeSpan.FromSeconds(n))`: it needs no cron parsing, is relative to the end of the previous iteration, and keeps the expression readable. A seconds field is worth it when the job must run **on a wall-clock boundary** (`*/30 * * * * *` fires at :00 and :30) or when migrating an expression from Spring/Quartz/node-cron.
 
 ## Usage
 
@@ -144,7 +170,7 @@ These are rejected with `CronParseException` — they are never silently ignored
 - `?` (Quartz "no specific value") — use `*` instead.
 - `#` (nth weekday of the month, for example `5#3`).
 - Month and weekday names (`JAN`, `MON`) and `@daily`-style macros.
-- A seconds field: the expression is strictly 5 fields.
+- A year field: the expression is 5 or 6 fields (seconds first), never 7.
 - Lowercase specials (`l`, `w`): only uppercase `L` and `W` are recognized.
 
 ## Exceptions

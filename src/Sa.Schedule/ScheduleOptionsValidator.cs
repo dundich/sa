@@ -59,7 +59,7 @@ internal sealed class ScheduleOptionsValidator : IValidateOptions<ScheduleOption
                 {
                     return ValidateOptionsResult.Fail(
                         $"ScheduleOptions:Jobs:{jobName}: 'Cron' value '{job.Cron}' is not a valid " +
-                        $"5-field cron expression: {ex.Message}");
+                        $"5- or 6-field cron expression: {ex.Message}");
                 }
             }
 

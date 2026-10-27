@@ -9,18 +9,19 @@ namespace Sa.Schedule.Cron;
 /// </summary>
 internal static class CronFieldParser
 {
-    private static readonly string[] FieldNames = ["minute", "hour", "day-of-month", "month", "day-of-week"];
+    private static readonly string[] FieldNames =
+        ["second", "minute", "hour", "day-of-month", "month", "day-of-week"];
 
     private static readonly int[] FieldMin =
     [
-        CronLimits.MinuteMin, CronLimits.HourMin, CronLimits.DayOfMonthMin,
-        CronLimits.MonthMin, CronLimits.DayOfWeekMin,
+        CronLimits.SecondMin, CronLimits.MinuteMin, CronLimits.HourMin,
+        CronLimits.DayOfMonthMin, CronLimits.MonthMin, CronLimits.DayOfWeekMin,
     ];
 
     private static readonly int[] FieldMax =
     [
-        CronLimits.MinuteMax, CronLimits.HourMax, CronLimits.DayOfMonthMax,
-        CronLimits.MonthMax, CronLimits.DayOfWeekMax,
+        CronLimits.SecondMax, CronLimits.MinuteMax, CronLimits.HourMax,
+        CronLimits.DayOfMonthMax, CronLimits.MonthMax, CronLimits.DayOfWeekMax,
     ];
 
     public static CronField Parse(string token, CronFieldKind kind)

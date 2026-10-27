@@ -175,7 +175,7 @@ public class CronTimingTests
     [Theory]
     [InlineData("invalid")]
     [InlineData("* *")]
-    [InlineData("* * * * * *")]
+    [InlineData("* * * * * * *")] // 7 fields — there is no year field
     [InlineData("60 * * * *")]
     [InlineData("* 24 * * *")]
     [InlineData("* * 32 * *")]

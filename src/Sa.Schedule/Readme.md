@@ -7,7 +7,7 @@ A .NET task scheduler — periodic and one-shot jobs, dynamic concurrency contro
 ## Features
 
 - **[Periodic & one-shot jobs](#defining-jobs)** — `EveryMinutes`, `EveryHours`, `RunOnce`, etc.
-- **[Cron scheduling](#cron-scheduling)** — standard 5-field expressions.
+- **[Cron scheduling](#cron-scheduling)** — 5-field expressions, or 6 fields with a leading seconds field.
 - **[Dynamic concurrency](#concurrency-model)** — change `ConcurrencyLimit` on the fly.
 - **[Error recovery policies](#error-handling)** — retry, suppress errors, stop individual job or the whole app.
 - **[Interceptors](#interceptors)** — chain-of-responsibility for logging, metrics, tracing.
@@ -217,7 +217,7 @@ services.AddSaSchedule(
 | `Disabled` | `bool?` | `true` stops the job; `false` re-enables a job disabled in code |
 | `Immediate` | `bool?` | `true` runs the job on the first tick, without waiting for its timing; `false` reverts a code `StartImmediate()` |
 | `IsRunOnce` | `bool?` | `true` runs the job exactly once and never again; `false` restores the periodic schedule of a code `RunOnce()` |
-| `Cron` | `string?` | 5-field cron expression — replaces any timing set in code |
+| `Cron` | `string?` | cron expression — 5 fields, or 6 with seconds first — replaces any timing set in code |
 | `Every` | `TimeSpan?` | interval — replaces any timing set in code |
 | `TimeZone` | `string?` | time zone the job's `Cron` is read in (IANA or Windows id), overriding the code zone or a schedule-wide `ScheduleOptions.TimeZone` |
 | `InitialDelay` | `TimeSpan?` | delay before the first run |
@@ -240,7 +240,7 @@ A full working example lives in [`Samples/Schedule.Configuration.Console`](../Sa
 
 ## Cron Scheduling
 
-5-field expression: `minute hour day-of-month month day-of-week`. Supports `*`, `,`, `-`, `/`.
+5-field expression: `minute hour day-of-month month day-of-week`; add a leading seconds field for second precision (`second minute hour day-of-month month day-of-week`). Supports `*`, `,`, `-`, `/`.
 
 - [Detailed Cron documentation (EN)](./Cron/CRON.md) · [(RU)](./Cron/CRON-ru.md)
 

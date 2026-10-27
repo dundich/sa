@@ -110,6 +110,13 @@ public sealed class CronFieldParserTests
     }
 
     [Fact]
+    public void Parse_SecondsField_UsesTheSecondRange()
+    {
+        Assert.Equal([0, 20, 40], CronFieldParser.Parse("*/20", CronFieldKind.Second).Values);
+        Assert.Equal([59], CronFieldParser.Parse("59", CronFieldKind.Second).Values);
+    }
+
+    [Fact]
     public void Parse_ListOfPlainValueAndSpecial_KeepsBoth()
     {
         var field = CronFieldParser.Parse("1,L", CronFieldKind.DayOfMonth);

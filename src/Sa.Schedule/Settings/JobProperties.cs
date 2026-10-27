@@ -73,14 +73,16 @@ internal sealed class JobProperties : IJobProperties
     }
 
     /// <summary>
-    /// Creates a cron-based timing from a standard 5-field cron expression.
-    /// Format: "minute hour day-of-month month day-of-week"
+    /// Creates a cron-based timing. Two formats are accepted, detected by the field count:
+    ///   5 fields — "minute hour day-of-month month day-of-week"
+    ///   6 fields — "second minute hour day-of-month month day-of-week" (second precision)
     /// 
     /// Examples:
-    ///   "0 9 * * *"       — Every day at 9:00 AM
-    ///   "0 */2 * * *"    — Every 2 hours at minute 0
-    ///   "30 14 * * 1-5"  — Weekdays (Mon-Fri) at 2:30 PM
-    ///   "0 0 1 * *"      — First day of every month at midnight
+    ///   "0 9 * * *"          — Every day at 9:00 AM
+    ///   "0 */2 * * *"        — Every 2 hours at minute 0
+    ///   "30 14 * * 1-5"      — Weekdays (Mon-Fri) at 2:30 PM
+    ///   "0 0 1 * *"          — First day of every month at midnight
+    ///   "*/30 * * * * *"     — Every 30 seconds, aligned to the wall clock
     /// </summary>
     /// <param name="expression">The cron expression.</param>
     /// <param name="name">Optional display name.</param>

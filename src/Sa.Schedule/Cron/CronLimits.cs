@@ -7,6 +7,9 @@ namespace Sa.Schedule.Cron;
 /// </summary>
 internal static class CronLimits
 {
+    public const int SecondMin = 0;
+    public const int SecondMax = 59;
+
     public const int MinuteMin = 0;
     public const int MinuteMax = 59;
 
