@@ -3,7 +3,7 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.16.1</Version>
+        <Version>0.17.0</Version>
         <Description>FFmpeg wrapper</Description>
         <GeneratePathProperty>true</GeneratePathProperty>
         <!-- Должно совпадать с $(FfmpegSupportedRids) в buildTransitive\Sa.Media.FFmpeg.Rid.props -->
