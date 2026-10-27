@@ -806,11 +806,15 @@ src/.vscode/
 # local secrets
 .env
 !.env.example
+.secrets/
 
 # ai
 .qwen/
 .agents/
 /.github/skills
+# Local opencode config: may reference machine-specific paths and secrets (.secrets/).
+/opencode.jsonc
+/opencode.json
 /src/Sa.Media.FFmpeg/sa/native/
 /src/Tests/Sa.MediaTests/data/pcm_s16le.wav
 /src/Sa.Media/Echo/output.wav
