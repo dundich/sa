@@ -144,9 +144,16 @@ public sealed class CronTiming
     }
 
     /// <summary>
-    /// Creates a cron timing with the given expression and display name.
+    /// Creates a cron timing from a 5-field expression — the lenient counterpart of
+    /// <see cref="Strict"/>: malformed syntax throws, but an expression that can never fire
+    /// is accepted and simply makes <see cref="GetNextOccurrence"/> return <c>null</c>.
+    /// Equivalent to calling the constructor.
     /// </summary>
-    public static CronTiming Every(string expression, string? name = null) =>
+    /// <param name="expression">The cron expression.</param>
+    /// <param name="name">Optional display name, defaults to "cron".</param>
+    /// <exception cref="ArgumentNullException"><paramref name="expression"/> is null.</exception>
+    /// <exception cref="CronParseException">The expression is malformed.</exception>
+    public static CronTiming For(string expression, string? name = null) =>
         new(expression, name);
 
     /// <summary>

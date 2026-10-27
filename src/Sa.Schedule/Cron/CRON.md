@@ -117,7 +117,7 @@ var next = timing.GetNextOccurrence(DateTimeOffset.UtcNow);
 ```
 
 ```csharp
-var timing = CronTiming.Every("*/15 * * * *", name: "every-15-min");
+var timing = CronTiming.For("*/15 * * * *", name: "every-15-min");
 ```
 
 ## Strict calendar validation
@@ -135,7 +135,7 @@ Day `29 2` is allowed, because the 28-year search horizon contains leap years.
 
 The same check applies to the day specials: `31W 2` (February has no 31st) and `L-30 2` (shorter than any February) are rejected, while `L 2`, `29W 2` and `1W 2` are accepted.
 
-The job's `Cron` option in `ScheduleOptions` — whether it comes from the configuration section or from `b.Options(...)` — is always validated strictly: an expression that can never fire is a configuration error (`OptionsValidationException`) rather than a job that silently never runs. `WithCron(...)`, `new CronTiming(...)` and `CronTiming.Every(...)` stay lenient (they reject malformed syntax only), so a timing built imperatively can still be probed for `null`.
+The job's `Cron` option in `ScheduleOptions` — whether it comes from the configuration section or from `b.Options(...)` — is always validated strictly: an expression that can never fire is a configuration error (`OptionsValidationException`) rather than a job that silently never runs. `WithCron(...)`, `new CronTiming(...)` and `CronTiming.For(...)` stay lenient (they reject malformed syntax only), so a timing built imperatively can still be probed for `null`.
 
 ## Not supported
 

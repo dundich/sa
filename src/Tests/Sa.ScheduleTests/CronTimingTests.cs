@@ -211,9 +211,9 @@ public class CronTimingTests
     }
 
     [Fact]
-    public void StaticEvery_Method_CreatesCronTimingWithName()
+    public void For_Factory_CreatesCronTimingWithName()
     {
-        var timing = CronTiming.Every("0 9 * * *", "Morning job");
+        var timing = CronTiming.For("0 9 * * *", "Morning job");
 
         Assert.Equal("Morning job", timing.TimingName);
     }
