@@ -462,6 +462,63 @@ public class JobSchedulerTests
         await scheduler.DisposeAsync();
     }
 
+    [Fact]
+    public async Task CallerTokenCancelledBeforeTheSlotRuns_MarksTheJobStopped()
+    {
+        // The same contract as above, but on the losing side of a startup race: the caller's token
+        // can be cancelled after Start() returned and before a reader picked the slot up. The queue
+        // then drops the item at its own cancellation gate *without* invoking the processor
+        // (SaWorkQueue.ExecuteItemAsync throws before Execute and reports the item as Aborted), so no
+        // slot ever observes the cancellation. The scheduler has to reflect the stop from the stop
+        // token itself; relying on a running slot left IsStarted true over a dead job forever.
+        //
+        // Repeated because which side of the race a given iteration lands on is up to the thread
+        // pool — a single run could pass on the broken code by starting the slot first.
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
+            var runner = new CountingTokenWaitingRunner();
+            var scheduler = new JobScheduler(settings, runner, i => new TestJobController(i));
+
+            using var cts = new CancellationTokenSource();
+
+            Assert.True(await scheduler.Start(cts.Token));
+            await cts.CancelAsync();
+
+            await WaitForConditionAsync(() => !scheduler.IsStarted);
+
+            Assert.True(!scheduler.IsStarted, $"attempt {attempt}: IsStarted stayed true (runner calls: {runner.Calls})");
+
+            await scheduler.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// <see cref="TokenWaitingRunner"/> that counts how many times it was actually entered, so a
+    /// failing attempt can say whether the slot ran at all.
+    /// </summary>
+    class CountingTokenWaitingRunner : IJobRunner
+    {
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public async Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _calls);
+
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                return JobRunResult.Finished;
+            }
+            catch (OperationCanceledException)
+            {
+                return JobRunResult.Stopped;
+            }
+        }
+    }
+
 
     [Fact]
     public async Task ReaderPool_IsPausedUntilTheFirstStart()

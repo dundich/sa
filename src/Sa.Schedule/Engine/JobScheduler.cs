@@ -170,6 +170,7 @@ internal sealed class JobScheduler : IJobScheduler
     {
         CancellationToken stoppingToken;
         CancellationTokenSource? previousSource = null;
+        CancellationTokenSource source;
 
         lock (_lock)
         {
@@ -185,8 +186,13 @@ internal sealed class JobScheduler : IJobScheduler
             previousSource = _stoppingTokenSource;
             _stoppingTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            stoppingToken = _stoppingTokenSource.Token;
+            source = _stoppingTokenSource;
+            stoppingToken = source.Token;
         }
+
+        // Arm the stop observation before anything can cancel the token (see the method: the state
+        // must follow the caller's token even when no slot ever runs to observe it).
+        RegisterStopObservation(source);
 
         // Cancel and dispose outside the lock: cancellation callbacks run on this
         // thread. (Stop() cancels under its lock on purpose — see the note there.)
@@ -303,6 +309,69 @@ internal sealed class JobScheduler : IJobScheduler
         RefreshConcurrency();
 
         return success;
+    }
+
+    /// <summary>
+    /// Marks the job stopped as soon as its stop token fires, whatever the slots are doing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The stop token is linked to the caller's token, so cancelling the caller's token (the host's
+    /// startup token, a scoped request, ...) ends the job without <see cref="Stop"/> being called. The
+    /// scheduler used to learn about that only from a slot, in <see cref="RunJob"/> — and the queue
+    /// drops an item whose producer token is already cancelled <i>before</i> invoking the processor
+    /// (<c>SaWorkQueue.ExecuteItemAsync</c> throws at its cancellation gate and reports the item as
+    /// <c>Aborted</c>), so a slot that never started left <see cref="IsStarted"/> true over a dead job
+    /// forever. Subscribing here makes the transition independent of slot timing.
+    /// </para>
+    /// <para>
+    /// Only the state is flipped: the readers are left to unwind on the cancellation they already
+    /// observe. <see cref="AbortJob"/> would additionally force-cancel the reader pool, which is what
+    /// <see cref="Stop"/> deliberately does <i>not</i> do — it drains for up to the shutdown timeout —
+    /// and <see cref="Stop"/> cancels this very token, so the callback must not decide that.
+    /// </para>
+    /// </remarks>
+    private void RegisterStopObservation(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token.Register(
+                static state =>
+                {
+                    var (scheduler, source) = ((JobScheduler Scheduler, CancellationTokenSource Source))state!;
+                    scheduler.OnStopTokenCancelled(source);
+                },
+                (Scheduler: this, Source: source));
+        }
+        catch (ObjectDisposedException)
+        {
+            // The scheduler was disposed between the lock and here: the job is over either way.
+        }
+    }
+
+    /// <summary>
+    /// Reflects a fired stop token in the scheduler state, unless the token belongs to a superseded
+    /// start (a new <see cref="Start"/> cancels the previous source before arming its own) or the
+    /// scheduler is already disposed.
+    /// </summary>
+    private void OnStopTokenCancelled(CancellationTokenSource source)
+    {
+        lock (_lock)
+        {
+            if (_disposed || !ReferenceEquals(_stoppingTokenSource, source)) return;
+
+            // A Start() is still spawning slots: record the end instead of racing its completion,
+            // which consumes the flag and reports the start as not started.
+            if (_started is null)
+            {
+                _jobEndedDuringStart = true;
+                return;
+            }
+
+            // Stop() sets this too, right after the Cancel() that lands here; both write the same
+            // value, and the drain that follows Stop() is untouched.
+            _started = false;
+        }
     }
 
     private void RefreshConcurrency()
