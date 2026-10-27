@@ -75,6 +75,24 @@ precision. The rule is purely positional — 6 fields means the first one is sec
 | `0,30 */5 * * * *` | Seconds 0 and 30 of every fifth minute |
 | `5-10/2 0 9 * * 1-5` | Seconds 5, 7 and 9 at 09:00 on weekdays |
 
+Concrete next occurrences (searched exclusively from the given instant, > dateTime):
+
+| Expression | From | Next | Note |
+|---|---|---|---|
+| `* * * * * *` | 2026-06-25T10:30:00 | 2026-06-25T10:30:01 | The next second |
+| `* * * * * *` | 2026-06-25T10:30:00.500 | 2026-06-25T10:30:01 | A sub-second input still lands on a second boundary |
+| `*/15 * * * * *` | 2026-06-25T10:30:05 | 2026-06-25T10:30:15 | The next multiple of 15 |
+| `30 * * * * *` | 2026-06-25T10:30:00 | 2026-06-25T10:30:30 | Second 30 of the current minute |
+| `30 * * * * *` | 2026-06-25T10:30:30 | 2026-06-25T10:31:30 | Already at second 30 → the next minute |
+| `0,30 */5 * * * *` | 2026-06-25T10:30:10 | 2026-06-25T10:30:30 | List of seconds; 10:30 is a multiple of 5 |
+| `0 0 9 * * *` | 2026-06-25T08:59:59 | 2026-06-25T09:00:00 | The hour boundary |
+| `0 0 9 * * *` | 2026-06-25T09:00:00 | 2026-06-26T09:00:00 | Exclusive: the matching instant itself is skipped |
+| `5-10/2 0 9 * * 1-5` | 2026-06-26T09:00:06 | 2026-06-26T09:00:07 | Range with a step (5, 7, 9) on a Friday |
+| `5-10/2 0 9 * * 1-5` | 2026-06-26T09:00:09 | 2026-06-29T09:00:05 | Last slot on Friday → Monday; the day fields are unchanged |
+| `59 59 23 31 12 *` | 2026-12-31T23:59:58 | 2026-12-31T23:59:59 | The last second of the year |
+| `59 59 23 31 12 *` | 2026-12-31T23:59:59 | 2027-12-31T23:59:59 | Second → minute → hour → day → year rollover |
+| `0 0 0 L * *` | 2026-06-25T00:00:00 | 2026-06-30T00:00:00 | A day special combined with a seconds field |
+
 The day fields keep their semantics: `L`/`LW`/`dW`/`dL`, the DOM∩DOW OR rule and the month
 list all work as in the 5-field form (`0 0 0 L * *` is midnight on the last day of the month).
 
