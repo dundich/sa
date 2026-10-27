@@ -85,7 +85,10 @@ Dependency graph (who references whom): `Sa.Utils.WorkQueue` → `Sa.Schedule` �
 ## Tests
 - **xUnit v3** on Microsoft.Testing.Platform (test projects are executables). Not classic xUnit — see the `xunit3` skill (`.opencode/skills/xunit3/`) for the v3 API, and `.github/skills/migrate-xunit-to-xunit-v3/` for the migration patterns.
 - Cancellation token comes from **`TestContext.Current.CancellationToken`** (house pattern: a static `TestToken` property on the test class).
-- Integration tests use **Testcontainers** (PostgreSQL + Minio) via fixtures in `src/Tests/Fixtures/` — **Docker must be running** for those suites. One container per test class, so concurrency is deliberately throttled — see *Test load is capped on purpose* above.
+- Integration tests use **Testcontainers** (PostgreSQL + SeaweedFS) via fixtures in `src/Tests/Fixtures/` — **Docker must be running** for those suites. One container per test class, so concurrency is deliberately throttled — see *Test load is capped on purpose* above.
+- Images are pulled **once** and then reused from the local daemon; after that the suites need no registry. `./build-sh/do-docker-images.sh {status|pull|save|load}` warms a machine up, and `save`/`load` moves the tars to one without registry access.
+- The S3 server image is **SeaweedFS** (`chrislusf/seaweedfs`), **not** MinIO: `minio/minio` no longer answers anonymous pulls on Docker Hub, and `quay.io/minio/minio` rejects them too. The fixture runs `mini` (master+volume+filer+S3 in one process) on port 8333 with `-s3.autoCreateBucket=false`, so a missing bucket fails like it did on MinIO — see `S3Fixture.CreateBuilder`.
+- If a VPN tunnel owns the default route, pulls crawl. `sudo ./build-sh/do-docker-bypass.sh {on|off|status}` routes the registry and its CDN around the tunnel; see `build-sh/readme.md`.
 - `TestCi` / CI run `dotnet test ... --filter "Category!=Local"` to skip local-infra tests. As of now **no test carries a `Category` trait** (grep-verified), so this filter currently excludes nothing — it's a placeholder for future `Category=Local` tests.
 - Each lib declares `<InternalsVisibleTo Include="<Name>.Tests" />`, so tests can touch `internal` members.
 
