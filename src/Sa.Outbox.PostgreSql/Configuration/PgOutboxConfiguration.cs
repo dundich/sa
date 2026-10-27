@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
@@ -73,6 +74,15 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
 
             foreach (var configureAction in configureActions)
                 configureAction.Invoke(sp, settings);
+
+            // Validated here — after every configure action, before the SQL templates are built — so a
+            // name that would break the generated DDL fails at startup instead of on the first batch.
+            //
+            // The consumer groups are read from their manager when the delivery side is registered:
+            // a group id is half of a task- and delivery-partition name, and a group that cannot fit
+            // PostgreSQL's identifier limit would otherwise only fail on the first *failed* delivery.
+            // GetService, not GetRequiredService: a publish-only deployment registers no manager.
+            settings.Validate(sp.GetService<IOutboxConsumerManager>()?.GetAllConsumerGroupIds());
 
             return settings;
         });

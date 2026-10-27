@@ -59,14 +59,21 @@ public static class PgOutboxMigrationSettingsExtensions
     }
 
     /// <summary>
-    /// Configures migration for testing purposes.
+    /// Configures migration for testing purposes: the job stays disabled, so nothing runs on its own.
     /// </summary>
+    /// <remarks>
+    /// The values still have to be <i>valid</i>: <c>MigrationScheduleSettings.Validate()</c> runs at
+    /// host start for every named instance regardless of <see cref="PgOutboxMigrationSettings.AsBackgroundJob"/>,
+    /// and it rejects <c>ForwardDays = 0</c> (an empty date window creates no partition at all) and a
+    /// non-positive <c>ExecutionInterval</c>. This used to set both to zero and therefore failed
+    /// validation on startup.
+    /// </remarks>
     public static PgOutboxMigrationSettings UseTestSettings(
         this PgOutboxMigrationSettings settings)
     {
         settings.AsBackgroundJob = false;
-        settings.ForwardDays = 0; // No forward movement in tests
-        settings.ExecutionInterval = TimeSpan.Zero; // No interval for tests
+        settings.ForwardDays = 1; // The current day — the smallest window the validator accepts.
+        settings.ExecutionInterval = TimeSpan.FromHours(1); // Never used while the job is disabled.
 
         return settings;
     }

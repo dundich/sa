@@ -1,6 +1,21 @@
 ﻿namespace Sa.Outbox.PostgreSql.Configuration;
 
 /// <summary>Represents the settings for configuring the Outbox tables in PostgreSQL.</summary>
+/// <remarks>
+/// <para>
+/// Every name here is spliced into the generated SQL: the table and schema names go through
+/// <see cref="PgOutboxTableSettingsExtensions.EscapeIdentifier"/>, while the <c>Fields.*</c> column
+/// definitions are emitted <b>verbatim</b> as raw <c>name TYPE …</c> fragments that this module hands
+/// to <c>Sa.Partitional.PostgreSql</c>. Column definitions are therefore trusted developer input;
+/// <see cref="Validate"/> covers the table and schema names.
+/// </para>
+/// <para>
+/// Configure the names <i>before</i> the container builds the Outbox services: <c>SqlOutboxBuilder</c>
+/// (a singleton) composes all of its ~20 SQL templates from this instance in its constructor, so a
+/// name changed afterwards would be seen by the readers (<c>NpgsqlOutboxReader</c> resolves column
+/// ordinals by these names) but not by the generated SQL.
+/// </para>
+/// </remarks>
 public sealed class PgOutboxTableSettings
 {
     /// <summary>Contains default values for schema and table names.</summary>
@@ -11,6 +26,14 @@ public sealed class PgOutboxTableSettings
 
         /// <summary>The default base table name ("outbox"), from which all six table names derive.</summary>
         public const string DatabaseTableName = "outbox";
+
+        /// <summary>
+        /// Separator between the parts of a generated partition name. Must stay in step with
+        /// <c>Sa.Partitional.PostgreSql</c>'s default — the Outbox registers its tables without
+        /// <c>WithPartSeparator</c>, so this is what the names actually use. Pinned by
+        /// <c>PgOutboxPartitionNameBudgetTests.Separator_MatchesThePartitionalDefault</c>.
+        /// </summary>
+        public const string SqlPartSeparator = "__";
     }
 
     /// <summary>Gets or sets the database schema name that owns all six outbox tables. Default is "public".</summary>
@@ -41,6 +64,97 @@ public sealed class PgOutboxTableSettings
     /// <summary>The consumer-group offsets table (advisory-locked). No FillFactor property.</summary>
     public OffsetTable Offset { get; } = new();
 
+    /// <summary>
+    /// Rejects table and schema names that cannot be spliced into the generated DDL safely, and
+    /// consumer group ids whose partitions could never fit PostgreSQL's identifier limit.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Unlike <c>Sa.Partitional.PostgreSql</c>, this module does not quote the column names it
+    /// generates DDL for: the <c>Fields</c> tables hand out raw <c>name TYPE …</c> fragments (they
+    /// even carry <c>--</c> comments) and the builder pastes them into a comma-separated column list.
+    /// Column definitions are therefore <b>trusted developer input</b> by design and cannot be
+    /// pattern-checked — a definition legitimately contains semicolons and quotes.
+    /// </para>
+    /// <para>
+    /// The bytes are checked here as well: a leaf name is
+    /// <c>table{sep}tenant{sep}key{sep}dateSuffix</c>, and PostgreSQL truncates anything over 63. A name
+    /// that long is otherwise only discovered when the DDL for that particular partition runs — for the
+    /// delivery log, on the first <i>failed</i> delivery.
+    /// </para>
+    /// <para>
+    /// Called once, when the settings are materialised from the container (see
+    /// <c>PgOutboxConfiguration.RegisterOutboxSettings</c>), i.e. after every
+    /// <c>WithOutboxSettings</c> action has run and before any SQL template is built.
+    /// </para>
+    /// </remarks>
+    /// <param name="consumerGroupIds">
+    /// The registered consumer groups, when the delivery side is part of the application (publish-only
+    /// deployments have none). A group id is half of a task- and delivery-partition name, so a group
+    /// that cannot fit is a configuration error that has to be reported now.
+    /// </param>
+    /// <exception cref="ArgumentException">A table, schema or consumer group name is unusable.</exception>
+    internal void Validate(IReadOnlyCollection<string>? consumerGroupIds = null)
+    {
+        ValidateName(DatabaseSchemaName, nameof(DatabaseSchemaName));
+
+        ValidateName(TaskQueue.TableName, nameof(TaskQueue.TableName));
+        ValidateName(Message.TableName, nameof(Message.TableName));
+        ValidateName(Delivery.TableName, nameof(Delivery.TableName));
+        ValidateName(Error.TableName, nameof(Error.TableName));
+        ValidateName(Type.TableName, nameof(Type.TableName));
+        ValidateName(Offset.TableName, nameof(Offset.TableName));
+
+        if (consumerGroupIds is null) return;
+
+        foreach (string groupId in consumerGroupIds)
+        {
+            ValidateName(groupId, "Consumer group id");
+
+            // The tenant id shares the same budget but is only known at runtime. Reserving its full
+            // ten digits would reject group ids that work perfectly well with the one- or two-digit
+            // tenants applications actually use, so a small allowance is reserved here and the exact
+            // check (with the real tenant) runs in OutboxPartRepository before the DDL.
+            TryEnsurePartitionFits(TaskQueue.TableName, groupId);
+            TryEnsurePartitionFits(Delivery.TableName, groupId);
+        }
+    }
+
+    /// <summary>Digits reserved for the tenant id by the startup check (see <see cref="Validate"/>).</summary>
+    private const int ReservedTenantDigits = 3;
+
+    /// <summary>
+    /// Startup version of the partition-name budget check: reports the group id (not a per-table
+    /// exception) when it leaves no room for the tenant. See <see cref="PgOutboxPartitionNames"/>.
+    /// </summary>
+    private static void TryEnsurePartitionFits(string tableName, string value)
+    {
+        int budget = PgOutboxPartitionNames.ValueBudget(tableName, 2) - ReservedTenantDigits;
+        int actual = System.Text.Encoding.UTF8.GetByteCount(value);
+
+        if (actual <= budget) return;
+
+        throw new ArgumentException(
+            $"Consumer group id '{value}' is {actual} bytes and does not fit in a partition of table "
+            + $"'{tableName}': the name, its separators and the day suffix leave "
+            + $"{PgOutboxPartitionNames.ValueBudget(tableName, 2)} bytes for the tenant id and the group, "
+            + $"of which {ReservedTenantDigits} are reserved for the tenant. Shorten the group id or use a "
+            + "shorter base table name with UseBaseTableName.");
+    }
+
+    private static void ValidateName(string? name, string what)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException($"{what} must not be null or blank.");
+
+        if (name.IndexOfAny([';', '\n', '\r', '\0']) >= 0)
+        {
+            throw new ArgumentException(
+                $"{what} '{name}' contains a character (';', a line break or NUL) that would break out "
+                + "of the SQL it is spliced into.");
+        }
+    }
+
     /// <summary>Message table fields (append-only table, BINARY COPY target).</summary>
     public sealed class MessageTable
     {
@@ -50,16 +164,16 @@ public sealed class PgOutboxTableSettings
         /// <summary>Gets or sets the table name. Default is "{Defaults.DatabaseTableName}{Suffix}" (e.g. "outbox__msg$").</summary>
         public string TableName { get; set; } = $"{Defaults.DatabaseTableName}{Suffix}";
 
-        /// <summary>Gets or sets the fill factor (1–100). PostgreSQL constraint — throws <see cref="ArgumentOutOfRangeException"/> outside this range.</summary>
+        /// <summary>Gets or sets the fill factor (10–100). PostgreSQL constraint — throws <see cref="ArgumentOutOfRangeException"/> outside this range.</summary>
         public int FillFactor
         {
             get => _fillFactor;
             set
             {
-                if (value < 1 || value > 100)
+                if (value < 10 || value > 100)
                     throw new ArgumentOutOfRangeException(
                         nameof(value), value,
-                        "FillFactor must be between 1 and 100 (PostgreSQL constraint).");
+                        "FillFactor must be between 10 and 100 (PostgreSQL constraint).");
                 _fillFactor = value;
             }
         }
@@ -124,16 +238,16 @@ public sealed class PgOutboxTableSettings
         /// <summary>Gets or sets the table name. Default is <see cref="Defaults.DatabaseTableName"/> (e.g. "outbox").</summary>
         public string TableName { get; set; } = Defaults.DatabaseTableName;
 
-        /// <summary>Gets or sets the fill factor (1–100). PostgreSQL constraint — throws <see cref="ArgumentOutOfRangeException"/> outside this range.</summary>
+        /// <summary>Gets or sets the fill factor (10–100). PostgreSQL constraint — throws <see cref="ArgumentOutOfRangeException"/> outside this range.</summary>
         public int FillFactor
         {
             get => _fillFactor;
             set
             {
-                if (value < 1 || value > 100)
+                if (value < 10 || value > 100)
                     throw new ArgumentOutOfRangeException(
                         nameof(value), value,
-                        "FillFactor must be between 1 and 100 (PostgreSQL constraint).");
+                        "FillFactor must be between 10 and 100 (PostgreSQL constraint).");
                 _fillFactor = value;
             }
         }
@@ -237,16 +351,16 @@ public sealed class PgOutboxTableSettings
         /// <summary>The table name suffix ("__log$").</summary>
         public const string Suffix = "__log$";
 
-        /// <summary>Gets or sets the fill factor (1–100). PostgreSQL constraint — throws <see cref="ArgumentOutOfRangeException"/> outside this range.</summary>
+        /// <summary>Gets or sets the fill factor (10–100). PostgreSQL constraint — throws <see cref="ArgumentOutOfRangeException"/> outside this range.</summary>
         public int FillFactor
         {
             get => _fillFactor;
             set
             {
-                if (value < 1 || value > 100)
+                if (value < 10 || value > 100)
                     throw new ArgumentOutOfRangeException(
                         nameof(value), value,
-                        "FillFactor must be between 1 and 100 (PostgreSQL constraint).");
+                        "FillFactor must be between 10 and 100 (PostgreSQL constraint).");
                 _fillFactor = value;
             }
         }
@@ -322,16 +436,16 @@ public sealed class PgOutboxTableSettings
         /// <summary>The table name suffix ("__error$").</summary>
         public const string Suffix = "__error$";
 
-        /// <summary>Gets or sets the fill factor (1–100). PostgreSQL constraint — throws <see cref="ArgumentOutOfRangeException"/> outside this range.</summary>
+        /// <summary>Gets or sets the fill factor (10–100). PostgreSQL constraint — throws <see cref="ArgumentOutOfRangeException"/> outside this range.</summary>
         public int FillFactor
         {
             get => _fillFactor;
             set
             {
-                if (value < 1 || value > 100)
+                if (value < 10 || value > 100)
                     throw new ArgumentOutOfRangeException(
                         nameof(value), value,
-                        "FillFactor must be between 1 and 100 (PostgreSQL constraint).");
+                        "FillFactor must be between 10 and 100 (PostgreSQL constraint).");
                 _fillFactor = value;
             }
         }

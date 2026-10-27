@@ -62,12 +62,18 @@ public static class PgOutboxCleanupSettingsExtensions
     /// <summary>
     /// Configures cleanup for testing purposes (no actual cleanup).
     /// </summary>
+    /// <remarks>
+    /// The job stays disabled, but the interval still has to be positive:
+    /// <c>PartCleanupScheduleSettings.Validate()</c> runs at host start for every named instance
+    /// regardless of <see cref="PgOutboxCleanupSettings.AsBackgroundJob"/>, and this used to set
+    /// <c>ExecutionInterval</c> to zero, which failed validation on startup.
+    /// </remarks>
     public static PgOutboxCleanupSettings UseTestSettings(
         this PgOutboxCleanupSettings settings)
     {
         settings.AsBackgroundJob = false;
         settings.DropPartsAfterRetention = TimeSpan.MaxValue; // Never drop in tests
-        settings.ExecutionInterval = TimeSpan.Zero;
+        settings.ExecutionInterval = TimeSpan.FromHours(1); // Never used while the job is disabled.
 
         return settings;
     }

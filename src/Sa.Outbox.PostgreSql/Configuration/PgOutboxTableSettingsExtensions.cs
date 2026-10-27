@@ -2,11 +2,20 @@
 
 public static class PgOutboxTableSettingsExtensions
 {
+    /// <summary>PostgreSQL truncates identifiers to 63 <b>bytes</b> (UTF-8), not to 63 characters.</summary>
+    private const int MaxIdentifierBytes = 63;
+
     /// <summary>
     /// Escapes a PostgreSQL identifier by wrapping it in double quotes and doubling any internal quotes.
     /// Throws <see cref="ArgumentException"/> if the identifier contains characters that cannot be safely escaped
-    /// (newline, backslash, or unpaired quote).
+    /// (newline, backslash, or unpaired quote) or is longer than PostgreSQL's 63-byte limit.
     /// </summary>
+    /// <remarks>
+    /// A double quote inside a quoted identifier is escaped by <b>doubling it</b> — <c>"a""b"</c> is
+    /// the identifier <c>a"b</c>. Doubling it as two apostrophes (<c>"a''b"</c>, which this method
+    /// used to emit) produces a perfectly valid but different name, so every object ended up created
+    /// under a name the caller never asked for.
+    /// </remarks>
     public static string EscapeIdentifier(this string identifier)
     {
         if (string.IsNullOrEmpty(identifier))
@@ -18,11 +27,57 @@ public static class PgOutboxTableSettingsExtensions
                 $"Identifier '{identifier}' contains characters that cannot be safely quoted.",
                 nameof(identifier));
 
+        ValidateIdentifierLength(identifier);
+
+        return QuoteIdentifierCore(identifier);
+    }
+
+    /// <summary>
+    /// Quotes an identifier the library derives itself (<c>pk_{table}</c>) — same escaping as
+    /// <see cref="EscapeIdentifier"/>, without the 63-byte check.
+    /// </summary>
+    /// <remarks>
+    /// A derived name is longer than the name it embeds, so a legitimate 61-byte table name would
+    /// fail the length check here. PostgreSQL truncates an over-long constraint name with a notice
+    /// instead, which is harmless: constraint names only have to be unique within their table.
+    /// </remarks>
+    internal static string QuoteDerivedIdentifier(this string identifier)
+    {
+        if (string.IsNullOrEmpty(identifier))
+            throw new ArgumentException("Identifier cannot be null or empty.", nameof(identifier));
+
+        if (identifier.IndexOfAny(['\n', '\r', '\\']) >= 0)
+            throw new ArgumentException(
+                $"Identifier '{identifier}' contains characters that cannot be safely quoted.",
+                nameof(identifier));
+
+        return QuoteIdentifierCore(identifier);
+    }
+
+    /// <summary>
+    /// Rejects a name PostgreSQL would silently truncate. Measured in UTF-8 bytes, because that is
+    /// what the server truncates on: a non-ASCII name has more bytes than characters, and a truncated
+    /// identifier would no longer match the name the caller configured.
+    /// </summary>
+    internal static void ValidateIdentifierLength(this string identifier)
+    {
+        if (System.Text.Encoding.UTF8.GetByteCount(identifier) > MaxIdentifierBytes)
+        {
+            throw new ArgumentException(
+                $"Identifier '{identifier}' is {System.Text.Encoding.UTF8.GetByteCount(identifier)} bytes long "
+                + $"and exceeds PostgreSQL's {MaxIdentifierBytes}-byte identifier limit.",
+                nameof(identifier));
+        }
+    }
+
+    private static string QuoteIdentifierCore(string identifier)
+    {
         var sb = new System.Text.StringBuilder(identifier.Length + 4);
         sb.Append('"');
         foreach (char c in identifier)
         {
-            sb.Append(c == '"' ? "''" : c.ToString());
+            if (c == '"') sb.Append("\"\"");
+            else sb.Append(c);
         }
         sb.Append('"');
         return sb.ToString();
@@ -132,6 +187,22 @@ public static class PgOutboxTableSettingsExtensions
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(tableName);
         settings.Message.TableName = tableName;
+        return settings;
+    }
+
+    /// <summary>
+    /// Sets custom task-queue table name (overrides the base table name).
+    /// </summary>
+    /// <remarks>
+    /// The task queue table is the one table that is not derived from a suffix — it carries the base
+    /// name itself — so it had no setter companion while every other table did.
+    /// </remarks>
+    public static PgOutboxTableSettings WithTaskTableName(
+        this PgOutboxTableSettings settings,
+        string tableName)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(tableName);
+        settings.TaskQueue.TableName = tableName;
         return settings;
     }
 
