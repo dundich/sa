@@ -404,6 +404,9 @@ FodyWeavers.xsd
 
 
 Sa.Media.FFmpeg/runtimes/native/
-nupkgs/
+# Local feed for `Sa.*` packages (src/nuget.config → local.nupkgs). The folder itself must exist
+# before restore, so the contents are ignored but a placeholder is tracked.
+nupkgs/*
+!nupkgs/.gitkeep
 .packages/
 *.lscache
