@@ -8,6 +8,13 @@ internal interface ISqlTableBuilder
 
     ITableSettings Settings { get; }
 
+    /// <summary>
+    /// The range strategy of the table, hoisted out of <see cref="Settings"/> so a caller that only
+    /// needs the granularity (the partition cache sizes its snapshot window by it) does not have to
+    /// pull in the whole settings object.
+    /// </summary>
+    PgPartBy PartBy { get; }
+
     string SelectPartsFromDate { get; }
     string SelectPartsToDate { get; }
 

@@ -46,17 +46,26 @@ internal sealed class PartCache(
         return list.Exists(c => partValues.SequenceEqual(c.PartValues) && c.PartBy.GetRange(c.FromDate).InRange(date));
     }
 
+    /// <summary>
+    /// Cache key of a table: the resolved fully qualified name when the builder knows the table, so
+    /// <c>events</c> and <c>public.events</c> share one snapshot instead of loading the same table
+    /// twice under two keys.
+    /// </summary>
+    private string CacheKey(string tableName) => sqlBuilder[tableName]?.FullName ?? tableName;
+
     private async Task<List<PartByRangeInfo>> GetPartsInCache(string tableName, CancellationToken cancellationToken)
     {
         DateTimeOffset now = _timeProvider.GetUtcNow();
 
-        if (_cache.TryGetValue(tableName, out CacheEntry? entry) && IsUsable(entry, now))
+        string key = CacheKey(tableName);
+
+        if (_cache.TryGetValue(key, out CacheEntry? entry) && IsUsable(entry, now))
         {
-            return await AwaitLoad(entry, tableName, cancellationToken).ConfigureAwait(false);
+            return await AwaitLoad(entry, key, cancellationToken).ConfigureAwait(false);
         }
 
         // Expired, faulted or cancelled: drop it so the next read starts from a clean slate.
-        if (_cache.TryRemove(tableName, out CacheEntry? stale)) Discard(stale);
+        if (_cache.TryRemove(key, out CacheEntry? stale)) Discard(stale);
 
         CacheEntry fresh = new(
             new Lazy<Task<List<PartByRangeInfo>>>(
@@ -65,9 +74,9 @@ internal sealed class PartCache(
             now + settings.CacheTtl);
 
         // Losers of the race adopt the winner's entry, so every caller awaits one single load.
-        entry = _cache.GetOrAdd(tableName, fresh);
+        entry = _cache.GetOrAdd(key, fresh);
 
-        return await AwaitLoad(entry, tableName, cancellationToken).ConfigureAwait(false);
+        return await AwaitLoad(entry, key, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -135,7 +144,7 @@ internal sealed class PartCache(
     {
         try
         {
-            DateTimeOffset from = (_timeProvider.GetUtcNow() - settings.CachedFromDate).StartOfDay();
+            DateTimeOffset from = SnapshotFloor(tableName);
 
             // CancellationToken.None on purpose: this load is shared by every caller awaiting the
             // entry, so it must not be bound to any single caller's token. Npgsql's command and
@@ -148,27 +157,61 @@ internal sealed class PartCache(
         }
     }
 
-    public async Task<bool> EnsureCache(
+    /// <summary>
+    /// Lower bound of the snapshot loaded for <paramref name="tableName"/>.
+    /// </summary>
+    /// <remarks>
+    /// The snapshot query keeps partitions whose range <i>starts</i> at or after this instant. The
+    /// configured <see cref="PartCacheSettings.CachedFromDate"/> alone is not enough: it defaults to
+    /// one day, while the partition currently being written to may have started much earlier — a
+    /// monthly partition started on the 1st, a yearly one on 1 January. Such a partition would never
+    /// be in the snapshot, so every <c>EnsureParts</c> for it looked like a miss and re-ran the whole
+    /// partition DDL. The window is therefore widened to at least one full partition period of the
+    /// table; a daily period equals the default <see cref="PartCacheSettings.CachedFromDate"/>, so
+    /// nothing changes for day-partitioned tables.
+    /// </remarks>
+    private DateTimeOffset SnapshotFloor(string tableName)
+    {
+        TimeSpan lookback = settings.CachedFromDate;
+
+        if (sqlBuilder[tableName]?.PartBy is { } partBy)
+        {
+            TimeSpan period = partBy.PartByRange switch
+            {
+                PartByRange.Day => TimeSpan.FromDays(1),
+                PartByRange.Month => TimeSpan.FromDays(31),
+                PartByRange.Year => TimeSpan.FromDays(366),
+                _ => TimeSpan.FromDays(1),
+            };
+
+            if (period > lookback) lookback = period;
+        }
+
+        return (_timeProvider.GetUtcNow() - lookback).StartOfDay();
+    }
+
+    public async Task EnsureCache(
         string tableName,
         DateTimeOffset date,
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default)
     {
-        bool result = await InCache(tableName, date, partValues, cancellationToken).ConfigureAwait(false);
-        if (result) return true;
+        if (await InCache(tableName, date, partValues, cancellationToken).ConfigureAwait(false)) return;
 
         await repository.CreatePart(tableName, date, partValues, cancellationToken).ConfigureAwait(false);
 
         await RemoveCache(tableName, cancellationToken).ConfigureAwait(false);
 
-        result = await InCache(tableName, date, partValues, cancellationToken).ConfigureAwait(false);
-
-        return result;
+        // The DDL just executed is `CREATE TABLE IF NOT EXISTS` for the leaf plus the cache row, so
+        // when it returns the partition exists — re-reading the snapshot could only tell us whether
+        // the *cache window* covers the date. It does not for a date older than
+        // `PartCacheSettings.CachedFromDate`: the old second `InCache` therefore returned false for
+        // every backdated write, driving a full DDL pass and a cache flush on each call, forever.
     }
 
     public Task RemoveCache(string tableName, CancellationToken cancellationToken = default)
     {
-        if (_cache.TryRemove(tableName, out CacheEntry? removed)) Discard(removed);
+        if (_cache.TryRemove(CacheKey(tableName), out CacheEntry? removed)) Discard(removed);
         return Task.CompletedTask;
     }
 

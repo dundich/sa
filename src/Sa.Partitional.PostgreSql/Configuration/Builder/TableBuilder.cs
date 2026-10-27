@@ -20,6 +20,10 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     /// </summary>
     private const int MaxIdentifierBytes = 63;
 
+    /// <summary>PostgreSQL's accepted range for the <c>fillfactor</c> storage parameter.</summary>
+    private const int MinFillFactor = 10;
+    private const int MaxFillFactor = 100;
+
 
     private readonly List<string> _fields = [];
     private readonly List<string> _parts = [];
@@ -83,13 +87,30 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
             throw new ArgumentException("Part separator cannot contain a double quote.", nameof(partSeparator));
         }
 
+        // A control character would end up inside every generated identifier. It is legal there, but
+        // it can never be intended, and it makes the DDL and the partition names unreadable in logs.
+        if (partSeparator.Any(char.IsControl))
+        {
+            throw new ArgumentException("Part separator cannot contain control characters.", nameof(partSeparator));
+        }
+
         _separator = partSeparator;
         return this;
     }
 
     public ITableBuilder WithFillFactor(int fillFactor)
     {
-        _fillFactor = Math.Clamp(fillFactor, 10, 100);
+        // PostgreSQL's own range for fillfactor is 10–100. Clamping silently created the table with a
+        // value nobody asked for; a value outside the range would otherwise only surface as an error
+        // from CREATE TABLE. Reject it here, where the offending setting is still identifiable.
+        if (fillFactor is < MinFillFactor or > MaxFillFactor)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(fillFactor), fillFactor,
+                $"FillFactor must be between {MinFillFactor} and {MaxFillFactor} (PostgreSQL constraint).");
+        }
+
+        _fillFactor = fillFactor;
         return this;
     }
 
@@ -110,6 +131,14 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         // nameof(postfix) is the constant "postfix", so the check below never fired and a null /
         // empty postfix silently produced a cache table named exactly like the root table.
         ArgumentException.ThrowIfNullOrWhiteSpace(postfix);
+
+        // The postfix becomes part of the cache table's identifier. A quote or a control character
+        // there is never intended, and it would make every generated name unreadable.
+        if (postfix.Contains('"') || postfix.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                "Part table postfix cannot contain a double quote or control characters.", nameof(postfix));
+        }
 
         _postfix = postfix;
         return this;

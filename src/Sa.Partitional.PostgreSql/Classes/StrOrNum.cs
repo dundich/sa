@@ -91,13 +91,15 @@ public abstract record StrOrNum
     /// Explicitly extracts the underlying <see cref="int"/> from a <see cref="ChoiceNum"/>,
     /// or attempts to parse a <see cref="ChoiceStr"/> as a number (returns 0 on failure).
     /// </summary>
-    public static explicit operator int(StrOrNum choice) => choice.Match(c1 => StrToInt(c1) ?? 0, c2 => (int)c2);
+    /// <exception cref="OverflowException">The numeric value does not fit in an <see cref="int"/>.</exception>
+    public static explicit operator int(StrOrNum choice) => choice.Match(c1 => StrToInt(c1) ?? 0, c2 => checked((int)c2));
 
     /// <summary>
     /// Explicitly extracts the underlying <see cref="short"/> from a <see cref="ChoiceNum"/>,
     /// or attempts to parse a <see cref="ChoiceStr"/> as a number (returns 0 on failure).
     /// </summary>
-    public static explicit operator short(StrOrNum choice) => choice.Match(c1 => StrToShort(c1) ?? 0, c2 => (short)c2);
+    /// <exception cref="OverflowException">The numeric value does not fit in a <see cref="short"/>.</exception>
+    public static explicit operator short(StrOrNum choice) => choice.Match(c1 => StrToShort(c1) ?? 0, c2 => checked((short)c2));
 
     private static U Match<U>(Func<string, U> onChoiceStr, Func<long, U> onChoiceNum, StrOrNum choice)
     {

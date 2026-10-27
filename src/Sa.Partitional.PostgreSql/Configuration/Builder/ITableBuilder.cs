@@ -58,7 +58,8 @@ public interface ITableBuilder
     /// </summary>
     /// <remarks>Applied to the date-range child tables only - the root table and the intermediate
     /// list partitions are emitted without it.</remarks>
-    /// <param name="fillFactor">An integer; values are clamped to the 10..100 range.</param>
+    /// <param name="fillFactor">An integer between 10 and 100 (PostgreSQL's own range for
+    /// <c>fillfactor</c>); anything else throws <see cref="ArgumentOutOfRangeException"/>.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
     ITableBuilder WithFillFactor(int fillFactor);
 

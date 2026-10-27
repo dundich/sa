@@ -25,15 +25,22 @@ public interface IPartitionManager
     Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Ensures that the specified partitions exist for a given table and date.
-    /// This method checks if the specified partitions are present and creates them if they are not.
+    /// Ensures that the specified partition exists for a given table and date, creating it when it is
+    /// missing from the partition cache.
     /// </summary>
-    /// <param name="tableName">The name of the table for which partitions are being ensured.</param>
+    /// <remarks>
+    /// The generated DDL is idempotent (<c>CREATE TABLE IF NOT EXISTS</c> plus the cache upsert), so a
+    /// cache miss costs one statement batch and never duplicates a partition. Completion means the
+    /// partition exists; everything else is reported as an exception, so there is no result to inspect.
+    /// The method used to return <c>Task&lt;bool&gt;</c>, but that bool was <c>false</c> whenever the
+    /// partition was merely outside the cache's look-back window — which read as a failure and made
+    /// callers either ignore the result or reject a perfectly valid write.
+    /// </remarks>
+    /// <param name="tableName">The name of the table for which the partition is being ensured.</param>
     /// <param name="date">The date associated with the partition.</param>
     /// <param name="partValues">An array of values that define the partitions (could be strings or numbers).</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A task representing the asynchronous operation, with a boolean result indicating whether the partitions were ensured successfully.</returns>
-    Task<bool> EnsureParts(
+    Task EnsureParts(
         string tableName,
         DateTimeOffset date,
         StrOrNum[] partValues,

@@ -12,6 +12,8 @@ internal sealed class SqlTableBuilder(ITableSettings settings) : ISqlTableBuilde
 
     public ITableSettings Settings => settings;
 
+    public PgPartBy PartBy => settings.PartBy;
+
 
     public string CreateSql(DateTimeOffset date, params StrOrNum[] partValues)
     {

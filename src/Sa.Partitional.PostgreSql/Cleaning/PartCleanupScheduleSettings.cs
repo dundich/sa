@@ -81,6 +81,18 @@ public sealed class PartCleanupScheduleSettings
                 $"PartCleanupScheduleSettings:ArchiveSchemaName must not be blank when CleanupMode is '{nameof(PartCleanupMode.Archive)}'.");
         }
 
+        // The archive schema becomes an identifier in `ALTER TABLE … SET SCHEMA`, and PostgreSQL
+        // truncates identifiers at 63 bytes: a longer name would send the partitions to a schema that
+        // does not match the one the operator configured.
+        if (ArchiveSchemaName is { } archiveSchema
+            && System.Text.Encoding.UTF8.GetByteCount(archiveSchema) > 63)
+        {
+            throw new ValidationException(
+                "PartCleanupScheduleSettings:ArchiveSchemaName must not exceed PostgreSQL's 63-byte "
+                + $"identifier limit, but '{archiveSchema}' is "
+                + $"{System.Text.Encoding.UTF8.GetByteCount(archiveSchema)} bytes.");
+        }
+
         if (ExecutionInterval <= TimeSpan.Zero)
         {
             throw new ValidationException(

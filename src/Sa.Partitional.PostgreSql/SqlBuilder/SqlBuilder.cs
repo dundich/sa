@@ -68,8 +68,8 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
     /// A name that is already qualified (<c>schema.table</c>) is looked up as is. An unqualified name
     /// is qualified with the <b>first</b> configured schema, so with several schemas declared the
     /// resolution depends on declaration order - pass a qualified name when that matters. A name that
-    /// still does not match is scanned against the full names as a last resort, and a quoted name is
-    /// retried without its quotes.
+    /// still does not match is scanned against the full names as a last resort, and a name that
+    /// arrives quoted from PostgreSQL (<c>"sc""h"."my table"</c>) is retried in its unquoted form.
     /// </remarks>
     private ISqlTableBuilder? Find(string tableName)
     {
@@ -86,13 +86,23 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
 
         if (item != null) return item;
 
-        if (tableName.Contains('"'))
-        {
-            tableName = tableName.Replace("\"", "");
-            return Find(tableName);
-        }
-        return item;
+        // Only the quotes that *enclose* each part are removed, and each part is unescaped on its own.
+        // Stripping every quote character in the string - what this used to do - also rewrites names
+        // that legitimately contain one, and could resolve to a different table than the caller meant.
+        string? unquoted = TryUnquote(tableName);
+
+        return unquoted is null || unquoted == tableName ? null : Find(unquoted);
     }
+
+    /// <summary>
+    /// Removes the enclosing quotes from each part of a possibly quoted qualified name
+    /// (<c>"public"."my table"</c> becomes <c>public.my table</c>).
+    /// </summary>
+    /// <returns>The unquoted name, or <c>null</c> when it is not of that shape.</returns>
+    private static string? TryUnquote(string tableName)
+        => tableName.Contains('"') && SqlTemplate.TrySplitQualifiedName(tableName, out string[] parts)
+            ? string.Join('.', parts)
+            : null;
 
     static string GetFullName(string schemaName, string tableName) => $"{schemaName}.{tableName}";
 

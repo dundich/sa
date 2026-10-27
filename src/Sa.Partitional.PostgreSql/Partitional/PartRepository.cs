@@ -126,6 +126,11 @@ internal sealed partial class PartRepository(
     {
         string sql = sqlBuilder.SelectPartsToDateSql(tableName);
 
+        // Deliberately NOT truncated to the start of the day, unlike GetPartsFromDate. `to_date` in
+        // the cache is the exclusive end of a partition range, and the predicate is `to_date <=
+        // @to_date`: truncating the cutoff would let a retention run drop the partition that contains
+        // the cutoff instant itself.
+        //
         // Same retry policy as GetPartsFromDate: both are the same read of the same cache table, and
         // a cleanup that gives up on one transient connection failure would silently skip a batch of
         // partitions to drop.
@@ -364,11 +369,9 @@ internal sealed partial class PartRepository(
     /// (<c>"public"."events__y2026m06d26"</c> becomes <c>events__y2026m06d26</c>).
     /// </summary>
     private static string BarePartName(string qualifiedPartName)
-    {
-        int separator = qualifiedPartName.LastIndexOf("\".\"", StringComparison.Ordinal);
-        string tail = separator < 0 ? qualifiedPartName : qualifiedPartName[(separator + 3)..];
-        return tail.Trim('"');
-    }
+        => SqlTemplate.TrySplitQualifiedName(qualifiedPartName, out string[] parts)
+            ? parts[^1]
+            : qualifiedPartName.Trim('"');
 
     /// <summary>
     /// Where an archive pass currently finds a partition.

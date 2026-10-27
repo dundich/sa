@@ -226,7 +226,11 @@ public class SqlTemplateEscapingTests(SqlTemplateEscapingTests.Fixture fixture) 
         InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
             () => builder.CreateSql(FixedDate, value1, value2));
 
-        Assert.Contains("63-byte", ex.Message);
+        // The message has to say how far over the limit the name is and what the fixed part of the
+        // name already costs, because the caller's next question is how short the value has to be.
+        Assert.Contains("64 bytes", ex.Message);
+        Assert.Contains("identifier limit is 63", ex.Message);
+        Assert.Contains("fixed part", ex.Message);
     }
 
     [Fact]

@@ -18,6 +18,13 @@ public sealed class PartCacheSettings
     /// that ended earlier, so the snapshot runs from that instant onwards.
     /// Default is 1 day, which is enough to still include the partition currently being written to.
     /// </summary>
+    /// <remarks>
+    /// This is a lower bound, not the whole window: the snapshot is always widened to at least one
+    /// full partition period of the table (a day, a month, a year), because a monthly or yearly
+    /// partition that is being written to right now started at the beginning of its period. Raise the
+    /// value when the application writes rows backdated by more than one day — a partition older than
+    /// the window is not in the snapshot, so it looks missing and its (idempotent) DDL is re-run.
+    /// </remarks>
     public TimeSpan CachedFromDate { get; set; } = TimeSpan.FromDays(1);
 
     /// <summary>

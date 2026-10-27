@@ -1,4 +1,5 @@
 ﻿using Sa.Partitional.PostgreSql.Classes;
+using Sa.Partitional.PostgreSql.SqlBuilder;
 
 namespace Sa.Partitional.PostgreSqlTests.Classes;
 
@@ -165,5 +166,62 @@ public class StrOrNumTests
         StrOrNum choice = value;
 
         Assert.Equal(expected, (long)choice);
+    }
+
+    [Fact]
+    public void ExplicitConversion_FromNumberToInt_OverflowIsNotSilent()
+    {
+        // Narrowing a long used to wrap around: a partition value 2^32+1 became 1 without a word.
+        StrOrNum choice = (long)int.MaxValue + 1;
+
+        Assert.Throws<OverflowException>(() => { _ = (int)choice; });
+        Assert.Throws<OverflowException>(() => { _ = (short)choice; });
+    }
+
+    /// <summary>
+    /// The cache table stores a whole value set in one <c>part_values</c> string, joined by a comma,
+    /// with <c>\</c> as the escape. Everything that reaches a partition key — including text an
+    /// application does not control — travels through this encoding, so it has to survive the round
+    /// trip byte for byte, and a value that contains a comma must stay one value.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("plain")]
+    [InlineData("a,b")]
+    [InlineData(@"a\b")]
+    [InlineData(@"a\")]
+    [InlineData(@"\")]
+    [InlineData(@"\\")]
+    [InlineData(@"\,\,")]
+    [InlineData("s:n:1")]
+    [InlineData("кириллица")]
+    [InlineData("a b\tc")]
+    [InlineData(" , ")]
+    public void PartValues_RoundTripThroughTheCacheFormat(string value)
+    {
+        StrOrNum[] values = [7, value, "tail"];
+
+        string encoded = string.Join(',', values.Select(v => v.ToFmtString()));
+        StrOrNum[] decoded = SqlTemplate.ParseStrOrNums(encoded);
+
+        Assert.Equal(values, decoded);
+    }
+
+    [Fact]
+    public void PartValues_SeparatorInsideAValue_DoesNotSplitIt()
+    {
+        StrOrNum[] values = [new StrOrNum.ChoiceStr("a,b"), new StrOrNum.ChoiceStr("c,d")];
+
+        string encoded = string.Join(',', values.Select(v => v.ToFmtString()));
+        StrOrNum[] decoded = SqlTemplate.ParseStrOrNums(encoded);
+
+        Assert.Equal(2, decoded.Length);
+        Assert.Equal(values, decoded);
+    }
+
+    [Fact]
+    public void PartValues_EmptySet_StaysEmpty()
+    {
+        Assert.Empty(SqlTemplate.ParseStrOrNums(string.Empty));
     }
 }

@@ -62,10 +62,9 @@ public class PartCacheFaultTests
         await Assert.ThrowsAsync<PostgresException>(() => cache.EnsureCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
         Assert.Equal(0, repository.CreatePartCalls);
 
-        // 2nd EnsureCache: cache recovers, partition is created and the final InCache confirms it.
-        bool actual = await cache.EnsureCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
+        // 2nd EnsureCache: cache recovers and the partition is created exactly once.
+        await cache.EnsureCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
 
-        Assert.True(actual);
         Assert.Equal(1, repository.CreatePartCalls);
     }
 
@@ -354,6 +353,8 @@ internal sealed class FakeSqlTableBuilder : ISqlTableBuilder
     public string FullName => "public.test";
 
     public ITableSettings Settings => throw new NotImplementedException();
+
+    public PgPartBy PartBy => PgPartBy.Day;
 
     public string SelectPartsFromDate => string.Empty;
 

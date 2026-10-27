@@ -46,18 +46,34 @@ public class PgPartByTests
     [InlineData("")]
     public void Day_ParseFmt_ReturnsNull_ForInvalidStrings(string input)
     {
-        try
-        {
-            // Act
-            var result = PgPartBy.Day.ParseFmt(input);
+        // "y2023m13d32" passes the digit-shape regex, so the month/day range check is what has to
+        // reject it. This test used to wrap the call in try/catch and pass on an exception, which is
+        // exactly the behaviour that made a malformed cached name take down its caller.
+        DateTimeOffset? result = PgPartBy.Day.ParseFmt(input);
 
-            // Assert
-            Assert.Null(result);
-        }
-        catch
-        {
-            Assert.True(true);
-        }
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("Day", PartByRange.Day)]
+    [InlineData("Month", PartByRange.Month)]
+    [InlineData("Year", PartByRange.Year)]
+    public void FromPartName_ResolvesTheStoredStrategy(string stored, PartByRange expected)
+    {
+        // The `part_by` column holds PgPartBy.Name ("Day"/"Month"/"Year"). The lookup used to run
+        // through Part.TryFromName, whose registry only holds "root", so every value resolved to
+        // Day and a month/year table was validated against a one-day range.
+        Assert.Equal(expected, PgPartBy.FromPartName(stored).PartByRange);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("root")]
+    [InlineData("not-a-strategy")]
+    public void FromPartName_FallsBackToDay(string? stored)
+    {
+        Assert.Equal(PartByRange.Day, PgPartBy.FromPartName(stored).PartByRange);
     }
 
 

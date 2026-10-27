@@ -19,11 +19,34 @@ internal static class SqlTemplate
 
     /// <summary>
     /// Escapes <paramref name="value"/> for use as a single-quoted SQL string literal.
-    /// Embedded single quotes are doubled (<c>'</c> to <c>''</c>); that is PostgreSQL's only
-    /// escape mechanism inside a literal, there is no backslash escaping.
+    /// Embedded single quotes are doubled (<c>'</c> to <c>''</c>).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The plain <c>'…'</c> form is emitted by default: with <c>standard_conforming_strings = on</c>
+    /// (the server default since PostgreSQL 9.1, and what Npgsql sets on its connections) a backslash
+    /// has no meaning inside it, so doubling the quote is the whole escape.
+    /// </para>
+    /// <para>
+    /// A value that <i>does</i> contain a backslash is rendered as an explicit escape string
+    /// (<c>E'…'</c>) with every backslash doubled. <c>E</c> forces backslash escaping whatever the
+    /// server setting is, so a value ending in <c>\</c> can never swallow the closing quote and let
+    /// the remainder of the value be parsed as SQL.
+    /// </para>
+    /// </remarks>
     private static string QuoteLiteral(string? value)
-        => value is null ? "NULL" : $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";
+    {
+        if (value is null) return "NULL";
+
+        if (!value.Contains('\\', StringComparison.Ordinal))
+        {
+            return $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";
+        }
+
+        return $"E'{value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("'", "''", StringComparison.Ordinal)}'";
+    }
 
     /// <summary>
     /// Escapes <paramref name="name"/> and wraps it in double quotes so it can be used as a SQL
@@ -43,6 +66,129 @@ internal static class SqlTemplate
     /// </summary>
     private static string QuoteValue(StrOrNum value)
         => value.Match(s => QuoteLiteral(s), n => n.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>
+    /// Quotes a qualified table name that came <i>back</i> from the database (the partition cache's
+    /// <c>id</c> column, <c>regclass</c> output) so it can be embedded in DDL.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>DROP TABLE</c>, <c>ALTER TABLE … DETACH PARTITION</c> and <c>ALTER TABLE … SET SCHEMA</c>
+    /// do not take parameters, and the partition name has to be spliced into the statement. These
+    /// names are written by <see cref="GetQualifiedTableNameCore"/> and are already quoted there, but
+    /// they are read back from a table and are therefore the one place where stored data reaches
+    /// SQL. Parsing the name into its component identifiers and quoting each one again means a row
+    /// that does not have the expected <c>schema.table</c> shape can only ever become a quoted
+    /// identifier — never an extra statement.
+    /// </para>
+    /// <para>
+    /// Whatever the caller does with the returned text, the <i>original</i> string is the key of the
+    /// cache row and has to be used as-is (with <see cref="QuoteLiteral"/>) in the
+    /// <c>DELETE</c>/<c>UPDATE</c> that follows.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The name is not a qualified identifier.</exception>
+    internal static string RequoteStoredQualifiedName(string qualifiedName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(qualifiedName);
+
+        if (!TrySplitQualifiedName(qualifiedName, out string[] parts))
+        {
+            throw new InvalidOperationException(
+                $"'{qualifiedName}' is not a table name of the form schema.table; refusing to put it into DDL. " +
+                "The partition cache row is corrupt.");
+        }
+
+        return string.Join('.', parts.Select(QuoteIdentifier));
+    }
+
+    /// <summary>
+    /// Splits a (possibly quoted) qualified name into its parts, unescaping doubled quotes inside a
+    /// quoted identifier: <c>"sc""h"."my.table"</c> becomes <c>sc"h</c> and <c>my.table</c>.
+    /// </summary>
+    /// <param name="qualifiedName">The name to split.</param>
+    /// <param name="parts">
+    /// One or two unquoted identifiers, or an empty array when the name is malformed.
+    /// </param>
+    /// <returns><see langword="true"/> when the name is a well-formed 1- or 2-part identifier.</returns>
+    /// <remarks>
+    /// Unquoted parts cannot contain a dot — the dot <i>is</i> the separator — so splitting on it
+    /// outside quotes is exactly right; inside quotes it is ordinary text.
+    /// </remarks>
+    internal static bool TrySplitQualifiedName(string qualifiedName, out string[] parts)
+    {
+        parts = [];
+
+        if (string.IsNullOrEmpty(qualifiedName)) return false;
+
+        List<string> result = new(2);
+        var current = new StringBuilder(qualifiedName.Length);
+
+        bool inQuotes = false;
+
+        for (int i = 0; i < qualifiedName.Length; i++)
+        {
+            char c = qualifiedName[i];
+
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    // A doubled quote inside a quoted identifier is the escaped quote itself.
+                    if (i + 1 < qualifiedName.Length && qualifiedName[i + 1] == '"')
+                    {
+                        current.Append('"');
+                        i++;
+                        continue;
+                    }
+
+                    inQuotes = false;
+                    continue;
+                }
+
+                current.Append(c);
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inQuotes = true;
+                continue;
+            }
+
+            if (c == '.')
+            {
+                if (current.Length == 0) return false;
+
+                result.Add(current.ToString());
+                current.Clear();
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        // An unterminated quote or an empty last part ("public.") is not a name we can quote back.
+        if (inQuotes || current.Length == 0) return false;
+
+        result.Add(current.ToString());
+
+        if (result.Count > 2) return false;
+
+        parts = [.. result];
+        return true;
+    }
+
+    /// <summary>
+    /// Flattens free text so it can be embedded in a single-line <c>--</c> SQL comment.
+    /// </summary>
+    /// <remarks>
+    /// A newline in the injected text would end the comment and turn the rest of it into live SQL.
+    /// The values that reach a comment (field and strategy names) are developer-provided, so they are
+    /// flattened rather than quoted.
+    /// </remarks>
+    internal static string SingleLineCommentText(string? value)
+        => value is null ? string.Empty : value.Replace('\r', ' ').Replace('\n', ' ');
 
     /// <summary>
     /// Name token of the optional <c>DEFAULT</c> partition. It is a reserved name, not a partition
@@ -270,7 +416,7 @@ FOR VALUES IN ({QuoteValue(values[^1])})
 $"""
 
 
--- ({settings.PartByRangeFieldName})  part by: {settings.PartBy}
+-- ({SqlTemplate.SingleLineCommentText(settings.PartByRangeFieldName)})  part by: {SqlTemplate.SingleLineCommentText(settings.PartBy.Name)}
 
 CREATE TABLE IF NOT EXISTS {timeRangeTablename}
 PARTITION OF {settings.GetQualifiedTableName(values.AsSpan())}
@@ -349,7 +495,7 @@ SELECT pt::text from pt
     public static string DropPartSql(this ITableSettings settings, string qualifiedTableName)
     {
         return $"""
-DROP TABLE IF EXISTS {qualifiedTableName};
+DROP TABLE IF EXISTS {RequoteStoredQualifiedName(qualifiedTableName)};
 DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id={QuoteLiteral(qualifiedTableName)};
 """;
     }
@@ -399,7 +545,7 @@ SELECT
     /// <c>DETACH PARTITION CONCURRENTLY</c> inside a transaction block.
     /// </summary>
     public static string DetachPartSql(this ITableSettings settings, StrOrNum[] partValues, string qualifiedPartName)
-        => $"ALTER TABLE {settings.GetQualifiedTableName(partValues.AsSpan())} DETACH PARTITION {qualifiedPartName} CONCURRENTLY;\n";
+        => $"ALTER TABLE {settings.GetQualifiedTableName(partValues.AsSpan())} DETACH PARTITION {RequoteStoredQualifiedName(qualifiedPartName)} CONCURRENTLY;\n";
 
     /// <summary>
     /// Completes a <c>DETACH PARTITION CONCURRENTLY</c> that an earlier run left pending (the
@@ -407,7 +553,7 @@ SELECT
     /// it is finalised). Single statement, like the detach itself.
     /// </summary>
     public static string FinalizeDetachPartSql(this ITableSettings settings, StrOrNum[] partValues, string qualifiedPartName)
-        => $"ALTER TABLE {settings.GetQualifiedTableName(partValues.AsSpan())} DETACH PARTITION {qualifiedPartName} FINALIZE;\n";
+        => $"ALTER TABLE {settings.GetQualifiedTableName(partValues.AsSpan())} DETACH PARTITION {RequoteStoredQualifiedName(qualifiedPartName)} FINALIZE;\n";
 
     /// <summary>
     /// Moves an already detached partition into the archive schema (its indexes follow the table) and
@@ -417,7 +563,7 @@ SELECT
     public static string ArchivePartSql(this ITableSettings settings, string qualifiedPartName, string archiveSchemaName)
     {
         return $"""
-ALTER TABLE {qualifiedPartName} SET SCHEMA {QuoteIdentifier(archiveSchemaName)};
+ALTER TABLE {RequoteStoredQualifiedName(qualifiedPartName)} SET SCHEMA {QuoteIdentifier(archiveSchemaName)};
 UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={QuoteLiteral(qualifiedPartName)};
 """;
     }
@@ -475,6 +621,13 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
     /// <c>string.Join</c> always did, just without the extra <c>StrOrNum[]</c> copies the sliced
     /// overloads used to make.
     /// </summary>
+    /// <remarks>
+    /// A value that itself contains <see cref="ITableSettings.SqlPartSeparator"/> is rejected: it
+    /// would make two different value sets produce the same table name. Note also that the name is
+    /// built from <see cref="StrOrNum.ToString"/>, so the string <c>"5"</c> and the number <c>5</c>
+    /// render the same name while producing different partition bounds (<c>'5'</c> vs <c>5</c>) —
+    /// one table must therefore use one kind of value per position.
+    /// </remarks>
     static string BuildPartTableName(this ITableSettings settings, ReadOnlySpan<StrOrNum> values, string? suffix = null)
     {
         int count = values.Length + (suffix is null ? 0 : 1);
@@ -482,20 +635,41 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
         if (count == 0)
             return settings.DatabaseTableName;
 
+        string separator = settings.SqlPartSeparator;
+
         // One buffer for the per-value strings (and the optional range suffix); string.Join consumes
         // it. The suffix is appended as the final join element instead of the caller materialising a
         // [.. values, suffix] array.
         string[] parts = new string[count];
         for (int i = 0; i < values.Length; i++)
-            parts[i] = values[i].ToString();
+        {
+            string part = values[i].ToString();
+
+            // The name is root{sep}v1{sep}v2…, so a separator *inside* a value makes the name
+            // ambiguous: ("a__b", "c") and ("a", "b__c") produce one and the same table while asking
+            // for two different partition bounds. The second CREATE TABLE IF NOT EXISTS would silently
+            // no-op and its rows would land in the first partition. Failing here is the only outcome
+            // that cannot lose data; the caller either renames the value or picks another separator
+            // with WithPartSeparator.
+            if (part.Contains(separator, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Partition value '{part}' contains the partition separator '{separator}' of table "
+                    + $"'{settings.FullName}'. That makes the generated partition name ambiguous "
+                    + "(a__b+c and a+b__c would be the same table); rename the value or configure "
+                    + "another separator with WithPartSeparator.");
+            }
+
+            parts[i] = part;
+        }
 
         if (suffix is not null)
             parts[values.Length] = suffix;
 
         return string.Concat(
             settings.DatabaseTableName,
-            settings.SqlPartSeparator,
-            string.Join(settings.SqlPartSeparator, parts));
+            separator,
+            string.Join(separator, parts));
     }
 
     /// <summary>
@@ -521,10 +695,28 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
         // 63 BYTES, not 63 chars: PostgreSQL truncates on the UTF-8 encoding, and a non-ASCII
         // partition value has more UTF-8 bytes than string.Length. A name PostgreSQL would truncate
         // cannot reach the cache table, because the DDL and the stored identifier would no longer match.
-        if (Encoding.UTF8.GetByteCount(tableName) > MaxIdentifierBytes)
+        int bytes = Encoding.UTF8.GetByteCount(tableName);
+
+        if (bytes > MaxIdentifierBytes)
         {
+            // Spell the arithmetic out. The caller's next question is always "how short does the
+            // value have to be?", and the answer is the fixed part of the name - the root name, the
+            // separators and the range suffix - which is known here. A bare "exceeds 63 bytes" left
+            // that reconstruction to the reader.
+            string suffix = settings.PartBy.Fmt(DateTimeOffset.UnixEpoch);
+
+            int fixedBytes = Encoding.UTF8.GetByteCount(settings.DatabaseTableName)
+                + Encoding.UTF8.GetByteCount(suffix);
+
             throw new InvalidOperationException(
-                $"Table name '{tableName}' exceeds PostgreSQL's {MaxIdentifierBytes}-byte limit for identifiers. ");
+                $"Table name '{tableName}' is {bytes} bytes; PostgreSQL's identifier limit is "
+                + $"{MaxIdentifierBytes}. The fixed part of a leaf name of table '{settings.FullName}' is "
+                + $"'{settings.DatabaseTableName}' ({Encoding.UTF8.GetByteCount(settings.DatabaseTableName)} bytes) "
+                + $"plus the range suffix '{suffix}' ({Encoding.UTF8.GetByteCount(suffix)} bytes), i.e. "
+                + $"{fixedBytes}; every partition key value costs its own bytes plus "
+                + $"'{settings.SqlPartSeparator}' ({Encoding.UTF8.GetByteCount(settings.SqlPartSeparator)} bytes). "
+                + "Shorten the partition key values (tenant, message part, consumer group) or configure a "
+                + "shorter table name.");
         }
 
         return $"{QuoteIdentifier(settings.DatabaseSchemaName)}.{QuoteIdentifier(tableName)}";
