@@ -153,6 +153,18 @@ Second precision is a scheduling resolution, not a real-time guarantee: the wait
 
 For a plain "every N seconds" cadence prefer `EveryTime(TimeSpan.FromSeconds(n))`: it needs no cron parsing, is relative to the end of the previous iteration, and keeps the expression readable. A seconds field is worth it when the job must run **on a wall-clock boundary** (`*/30 * * * * *` fires at :00 and :30) or when migrating an expression from Spring/Quartz/node-cron.
 
+### Cost per firing
+
+One occurrence costs the engine one short iteration: a pause check, the next-occurrence search (a few timestamp comparisons), the wait, the job call and two counters. The run's DI scope and the job instance are opened **once per slot on the first execution** and reused by every later iteration, so a per-second job does not create a scope per call. On a normal server that overhead is on the order of **0.1 ms of CPU and a few hundred bytes per firing** (measured with a no-op job; a real job body dominates).
+
+It scales linearly, so the cadence matters more than the expression form:
+
+- a cron expression fires at most **once per second per slot** (`* * * * * *`) — seconds cannot go below that;
+- `ConcurrencyLimit` multiplies a timing: N slots run N independent loops, so one occurrence becomes N executions;
+- `EveryTime` *can* go below a second: 10 jobs at 100 ms are 100 executions/s, which is where CPU and allocations start to be visible.
+
+Prefer **one job that processes work in a loop** over N jobs on the same cadence: N jobs means N loops, N contexts and N pre-allocated slots for the same throughput.
+
 ## Usage
 
 ```csharp

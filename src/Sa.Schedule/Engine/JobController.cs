@@ -58,7 +58,7 @@ internal sealed partial class JobController(
             && settings.Properties.InitialDelay is { } delay
             && delay != TimeSpan.Zero)
         {
-            await JobDelay.Wait(delay, cancellationToken);
+            await JobDelay.Wait(delay, timeProvider, cancellationToken);
         }
     }
 
@@ -135,12 +135,26 @@ internal sealed partial class JobController(
     {
         if (_disposed) return;
 
-        _executor = new JobExecutor(settings, interceptorSettings, scopeFactory);
-
-        _context.ServiceProvider = _executor.ServiceProvider;
-
+        // The DI scope is opened on the first execution, not here: a slot that is started
+        // for a job firing hours from now would otherwise pin its scoped services (a
+        // DbContext, a connection) for the whole wait. See EnsureExecutor.
         if (_context.NumRuns == 0) _context.CreatedAt = timeProvider.GetUtcNow();
         _context.NumRuns++;
+    }
+
+    /// <summary>
+    /// Opens the run's DI scope the first time the job actually executes. Every later
+    /// iteration of the same run reuses it (and the resolved job instance), so the cost is
+    /// paid once per run — but not one moment earlier than necessary.
+    /// </summary>
+    private void EnsureExecutor()
+    {
+        if (_executor is not null) return;
+
+        var executor = new JobExecutor(settings, interceptorSettings, scopeFactory);
+
+        _context.ServiceProvider = executor.ServiceProvider;
+        _executor = executor;
     }
 
     public void Shutdown()
@@ -200,7 +214,7 @@ internal sealed partial class JobController(
 
             if (delay.TotalMilliseconds > 0)
             {
-                await JobDelay.Wait(delay, cancellationToken);
+                await JobDelay.Wait(delay, timeProvider, cancellationToken);
             }
         }
 
@@ -226,6 +240,9 @@ internal sealed partial class JobController(
     {
         _context.NumIterations++;
         _context.ExecuteAt = timeProvider.GetUtcNow();
+
+        EnsureExecutor();
+
         return _executor!.Execute(_context, cancellationToken);
     }
 
@@ -296,41 +313,64 @@ internal sealed partial class JobController(
         // learns that the configured action was silently bypassed.
         string? scheduleKey = (settings as JobSettings)?.ScheduleKey;
 
-        IJobErrorHandler? errorHandler;
+        // The run's scope is opened on the first execution (see EnsureExecutor). A failure
+        // that happens before that — a throwing timing, a failed pause gate — still has to
+        // apply the configured policy, so it gets a scope of its own for as long as the
+        // handling takes.
+        IServiceScope? transientScope = null;
 
-        try
+        if (_executor is null)
         {
-            errorHandler = scheduleKey is null
-                ? _context.ServiceProvider.GetService<IJobErrorHandler>()
-                : _context.ServiceProvider.GetKeyedService<IJobErrorHandler>(scheduleKey);
-        }
-        catch (Exception ex)
-        {
-            LogErrorHandlerUnavailable(
-                _context.Logger,
-                _context.JobName,
-                ex.GetType().Name,
-                ex.Message);
-            _abortedByError = true;
-            return;
+            transientScope = scopeFactory.CreateScope();
+            _context.ServiceProvider = transientScope.ServiceProvider;
         }
 
         try
         {
-            errorHandler?.HandleError(_context, exception);
-        }
-        catch
-        {
-            // DoHandleError always rethrows to signal "the configured action was applied".
-            _abortedByError = true;
-            return;
-        }
+            IJobErrorHandler? errorHandler;
 
-        // The handler consumed the error and the job continues. The retry budget
-        // belongs to one failure, so it is reset here: leaving it at RetryCount would
-        // make every later failure skip its retries and go straight to the handler for
-        // the rest of the slot's life.
-        _context.FailedRetries = 0;
+            try
+            {
+                errorHandler = scheduleKey is null
+                    ? _context.ServiceProvider.GetService<IJobErrorHandler>()
+                    : _context.ServiceProvider.GetKeyedService<IJobErrorHandler>(scheduleKey);
+            }
+            catch (Exception ex)
+            {
+                LogErrorHandlerUnavailable(
+                    _context.Logger,
+                    _context.JobName,
+                    ex.GetType().Name,
+                    ex.Message);
+                _abortedByError = true;
+                return;
+            }
+
+            try
+            {
+                errorHandler?.HandleError(_context, exception);
+            }
+            catch
+            {
+                // DoHandleError always rethrows to signal "the configured action was applied".
+                _abortedByError = true;
+                return;
+            }
+
+            // The handler consumed the error and the job continues. The retry budget
+            // belongs to one failure, so it is reset here: leaving it at RetryCount would
+            // make every later failure skip its retries and go straight to the handler for
+            // the rest of the slot's life.
+            _context.FailedRetries = 0;
+        }
+        finally
+        {
+            if (transientScope is not null)
+            {
+                _context.ServiceProvider = NullJobServices.Instance;
+                transientScope.Dispose();
+            }
+        }
     }
 
 

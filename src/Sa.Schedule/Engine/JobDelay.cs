@@ -12,6 +12,12 @@ namespace Sa.Schedule.Engine;
 /// faulted-item strategy — the job would die silently while <c>IsStarted</c> still reported
 /// <c>true</c>, bypassing the job's error policy entirely.
 /// </summary>
+/// <remarks>
+/// The wait is created through the scheduler's <see cref="TimeProvider"/>, so it follows the
+/// same clock as the occurrence search (<c>GetUtcNow</c>) instead of the wall clock. A custom
+/// provider (a fake clock in tests, a simulated clock in a host) can therefore drive the
+/// scheduler's delays as well as its timestamps.
+/// </remarks>
 internal static class JobDelay
 {
     /// <summary>The documented upper bound of a single <c>Task.Delay</c> — <c>int.MaxValue</c> ms.</summary>
@@ -21,29 +27,32 @@ internal static class JobDelay
     /// Waits for <paramref name="delay"/>. Non-positive delays are a no-op;
     /// a cancelled token throws <see cref="OperationCanceledException"/> as usual.
     /// </summary>
-    public static Task Wait(TimeSpan delay, CancellationToken cancellationToken)
+    public static Task Wait(TimeSpan delay, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
         if (delay <= TimeSpan.Zero) return Task.CompletedTask;
 
-        if (delay <= MaxSingleDelay) return Task.Delay(delay, cancellationToken);
+        if (delay <= MaxSingleDelay) return Task.Delay(delay, timeProvider, cancellationToken);
 
-        return WaitInChunks(delay, cancellationToken);
+        return WaitInChunks(delay, timeProvider, cancellationToken);
     }
 
-    private static async Task WaitInChunks(TimeSpan delay, CancellationToken cancellationToken)
+    private static async Task WaitInChunks(
+        TimeSpan delay,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
     {
         while (delay > MaxSingleDelay)
         {
             // Cancellation is re-checked between chunks, so a long wait still
             // reacts to shutdown within one timer tick of the token firing.
-            await Task.Delay(MaxSingleDelay, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(MaxSingleDelay, timeProvider, cancellationToken).ConfigureAwait(false);
 
             delay -= MaxSingleDelay;
         }
 
         if (delay > TimeSpan.Zero)
         {
-            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(delay, timeProvider, cancellationToken).ConfigureAwait(false);
         }
     }
 }

@@ -54,6 +54,36 @@ public sealed class JobControllerLifecycleTests
     }
 
     [Fact]
+    public void ExecutionFailed_BeforeAnyExecution_StillAppliesTheErrorPolicy()
+    {
+        // A throwing custom timing fails in CanExecute — after Start() but before the first
+        // execution opens the run's scope. The configured handler must still be resolved
+        // (in a short-lived scope of its own) and its decision honoured.
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<FailingJob>(jobId);
+        settings.ErrorHandling.IfErrorRetry(0);
+
+        int handlerCalls = 0;
+
+        var factory = TrackingScopeFactory.Create(services =>
+        {
+            services.AddKeyedScoped<RecordingJob>(jobId);
+            services.AddScoped<IJobErrorHandler>(_ =>
+                new ConsumingErrorHandler(() => handlerCalls++));
+        });
+
+        var controller = new JobController(0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
+
+        controller.Start();
+        controller.ExecutionFailed(new InvalidOperationException("timing failed"));
+
+        Assert.Equal(1, handlerCalls);
+        Assert.False(controller.AbortedByError);
+
+        controller.Shutdown();
+    }
+
+    [Fact]
     public async Task Execute_ExhaustsRetries_NoHandler_DoesNotSetAbortFlag()
     {
         // With no IJobErrorHandler registered, the exhausted-retry path resolves
@@ -168,7 +198,7 @@ public sealed class JobControllerLifecycleTests
     }
 
     [Fact]
-    public async Task Start_CreatesScope_Shutdown_DisposesScope_NoLeak()
+    public async Task FirstExecute_CreatesScope_Shutdown_DisposesScope_NoLeak()
     {
         var jobId = Guid.NewGuid();
         var settings = JobSettings.Create<RecordingJob>(jobId);
@@ -179,11 +209,34 @@ public sealed class JobControllerLifecycleTests
         var controller = new JobController(0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
 
         controller.Start();
+        await controller.Execute(TestContext.Current.CancellationToken);
         controller.Shutdown();
 
         var scopes = factory.Scopes;
         Assert.Single(scopes);
         Assert.True(scopes[0].Disposed);
+    }
+
+    [Fact]
+    public void Start_WithoutExecution_OpensNoScope()
+    {
+        // A slot that is started for a job firing hours from now must not pin its scoped
+        // services (a DbContext, a connection) for the whole wait: the scope is opened on
+        // the first execution and reused from then on.
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<RecordingJob>(jobId);
+        settings.Properties.WithCron("0 3 * * *");
+
+        var factory = TrackingScopeFactory.Create(services =>
+            services.AddKeyedScoped<RecordingJob>(jobId));
+
+        var controller = new JobController(0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
+
+        controller.Start();
+
+        Assert.Empty(factory.Scopes);
+
+        controller.Shutdown();
     }
 
     [Fact]
