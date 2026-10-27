@@ -9,12 +9,19 @@ namespace Sa.Schedule.Cron;
 /// </summary>
 internal static class CronFieldParser
 {
-    /// <summary>Maximum accepted "L-n" offset; a month never has more than 31 days.</summary>
-    private const int MaxLastDayOffset = 30;
-
     private static readonly string[] FieldNames = ["minute", "hour", "day-of-month", "month", "day-of-week"];
-    private static readonly int[] FieldMin = [0, 0, 1, 1, 0];
-    private static readonly int[] FieldMax = [59, 23, 31, 12, 7];
+
+    private static readonly int[] FieldMin =
+    [
+        CronLimits.MinuteMin, CronLimits.HourMin, CronLimits.DayOfMonthMin,
+        CronLimits.MonthMin, CronLimits.DayOfWeekMin,
+    ];
+
+    private static readonly int[] FieldMax =
+    [
+        CronLimits.MinuteMax, CronLimits.HourMax, CronLimits.DayOfMonthMax,
+        CronLimits.MonthMax, CronLimits.DayOfWeekMax,
+    ];
 
     public static CronField Parse(string token, CronFieldKind kind)
     {
@@ -225,9 +232,9 @@ internal static class CronFieldParser
                 if (!TryParseNumber(offsetToken, out int offset))
                     throw new CronParseException($"Invalid last-day offset '{offsetToken}' for {name}.", name, token);
 
-                if (offset > MaxLastDayOffset)
+                if (offset > CronLimits.MaxLastDayOffset)
                     throw new CronParseException(
-                        $"Last-day offset must be between 0 and {MaxLastDayOffset} for {name}.", name, token);
+                        $"Last-day offset must be between 0 and {CronLimits.MaxLastDayOffset} for {name}.", name, token);
 
                 // "L-0" is the same day as "L".
                 if (offset == 0) acc.LastDay = true;
@@ -243,7 +250,8 @@ internal static class CronFieldParser
                     throw new CronParseException(
                         $"The 'W' special needs a single day of month, for example '15W', but got '{token}'.", name, token);
 
-                acc.NearestWeekdays.Add(ValidateRange(day, 1, 31, name, token));
+                acc.NearestWeekdays.Add(
+                    ValidateRange(day, CronLimits.DayOfMonthMin, CronLimits.DayOfMonthMax, name, token));
                 return true;
             }
 
@@ -257,7 +265,8 @@ internal static class CronFieldParser
                 throw new CronParseException(
                     $"Invalid last-day-of-week value '{dayToken}' for {name}.", name, token);
 
-            acc.LastWeekdaysOfMonth.Add(ValidateRange(day, 0, 7, name, token));
+            acc.LastWeekdaysOfMonth.Add(
+                ValidateRange(day, CronLimits.DayOfWeekMin, CronLimits.DayOfWeekMax, name, token));
             return true;
         }
 

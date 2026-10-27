@@ -20,17 +20,25 @@ public sealed class CronTiming
     /// </summary>
     private const int MaxSearchYears = 28;
 
+    /// <summary>
+    /// First year in which the 28-year window is no longer guaranteed to fit: a
+    /// <see cref="DateTimeOffset"/> cannot represent a local value past 9999-12-31, so from
+    /// this year on the horizon (or the one-minute step) could overflow for some offsets.
+    /// The search ends with a null there instead of throwing.
+    /// </summary>
+    private const int LastSearchableYear = 9999 - MaxSearchYears;
+
     // Flag arrays for O(1) membership checks
-    private readonly bool[] _minuteFlags = new bool[60];
-    private readonly bool[] _hourFlags = new bool[24];
-    private readonly bool[] _domFlags = new bool[32];   // index 1..31
-    private readonly bool[] _monthFlags = new bool[13];   // index 1..12
-    private readonly bool[] _dowFlags = new bool[7];    // 0=Sunday..6=Saturday
+    private readonly bool[] _minuteFlags = new bool[CronLimits.MinuteMax + 1];
+    private readonly bool[] _hourFlags = new bool[CronLimits.HourMax + 1];
+    private readonly bool[] _domFlags = new bool[CronLimits.DayOfMonthMax + 1];  // index 1..31
+    private readonly bool[] _monthFlags = new bool[CronLimits.MonthMax + 1];     // index 1..12
+    private readonly bool[] _dowFlags = new bool[CronLimits.DayOfWeekCount];     // 0=Sunday..6=Saturday
 
     // Lookup tables: next valid value >= index (sentinel = -1)
-    private readonly int[] _nextMinute = new int[61];
-    private readonly int[] _nextHour = new int[25];
-    private readonly int[] _nextMonth = new int[14];
+    private readonly int[] _nextMinute = new int[CronLimits.MinuteMax + 2];
+    private readonly int[] _nextHour = new int[CronLimits.HourMax + 2];
+    private readonly int[] _nextMonth = new int[CronLimits.MonthMax + 2];
 
     // First valid value in each field (used as default when jumping)
     private readonly int _firstMinute;
@@ -44,16 +52,14 @@ public sealed class CronTiming
     private readonly bool _domHasSpecials;
     private readonly bool _domLastDay;
     private readonly bool _domLastWeekday;
-    private readonly bool[] _domLastDayOffsets = new bool[MaxLastDayOffset + 1];
+    private readonly bool[] _domLastDayOffsets = new bool[CronLimits.MaxLastDayOffset + 1];
 
     // "dW" — usually a single entry, matched against the real calendar of the candidate day
     private readonly int[] _nearestWeekdays;
 
     // Day-of-week special: "dL" — the last d-weekday of the month
     private readonly bool _dowHasSpecials;
-    private readonly bool[] _dowLastOfMonth = new bool[7];
-
-    private const int MaxLastDayOffset = 30;
+    private readonly bool[] _dowLastOfMonth = new bool[CronLimits.DayOfWeekCount];
 
     public string TimingName { get; }
 
@@ -93,18 +99,20 @@ public sealed class CronTiming
 
         // Minute
         PopulateFlags(minute.Values, _minuteFlags);
-        _firstMinute = BuildNextTable(_minuteFlags, _nextMinute, 0, 59);
+        _firstMinute = BuildNextTable(
+            _minuteFlags, _nextMinute, CronLimits.MinuteMin, CronLimits.MinuteMax);
 
         // Hour
         PopulateFlags(hour.Values, _hourFlags);
-        BuildNextTable(_hourFlags, _nextHour, 0, 23);
+        BuildNextTable(_hourFlags, _nextHour, CronLimits.HourMin, CronLimits.HourMax);
 
         // Day-of-month (no jump table needed, only flags)
         PopulateFlags(dayOfMonth.Values, _domFlags);
 
         // Month
         PopulateFlags(month.Values, _monthFlags);
-        _firstMonth = BuildNextTable(_monthFlags, _nextMonth, 1, 12);
+        _firstMonth = BuildNextTable(
+            _monthFlags, _nextMonth, CronLimits.MonthMin, CronLimits.MonthMax);
 
         // Day-of-week
         PopulateFlags(dayOfWeek.Values, _dowFlags);
@@ -124,8 +132,10 @@ public sealed class CronTiming
             _dowLastOfMonth[day] = true;
 
         // Wildcard detection — a field that restricts days through a special is never a wildcard
-        _dowWildcard = !_dowHasSpecials && AreAllFlagsSet(_dowFlags, 0, 6);
-        _domWildcard = !_domHasSpecials && AreAllFlagsSet(_domFlags, 1, 31);
+        _dowWildcard = !_dowHasSpecials
+            && AreAllFlagsSet(_dowFlags, CronLimits.DayOfWeekMin, CronLimits.DayOfWeekCount - 1);
+        _domWildcard = !_domHasSpecials
+            && AreAllFlagsSet(_domFlags, CronLimits.DayOfMonthMin, CronLimits.DayOfMonthMax);
 
         // A restricted day-of-week makes every day match on its own, so the calendar
         // combination of day-of-month and month is irrelevant in that case.
@@ -156,9 +166,26 @@ public sealed class CronTiming
     public static CronTiming Strict(string expression, string? name = null) =>
         new(expression, name, strictCalendarValidation: true);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Computes the first occurrence strictly after <paramref name="dateTime"/>, truncated to
+    /// the minute.
+    /// </summary>
+    /// <param name="dateTime">The current instant; the search is exclusive.</param>
+    /// <returns>
+    /// The next occurrence, or <c>null</c> when the expression can never match — or when
+    /// <paramref name="dateTime"/> is too close to the end of the representable range
+    /// (year 9971 and later) for the one-minute step and the 28-year horizon to fit a
+    /// <see cref="DateTimeOffset"/>.
+    /// </returns>
     public DateTimeOffset? GetNextOccurrence(DateTimeOffset dateTime)
     {
+        // A DateTimeOffset cannot hold a local value past 9999-12-31, and both the +1 minute
+        // start and the 28-year horizon are constructed as DateTimeOffset values. Inside the
+        // final window there is nothing to search: report "no next occurrence" (which the
+        // caller already handles) instead of throwing ArgumentOutOfRangeException.
+        if (dateTime.Year >= LastSearchableYear)
+            return null;
+
         var candidate = TruncateToMinute(dateTime.AddMinutes(1));
         var maxSearch = dateTime.AddYears(MaxSearchYears);
 
@@ -353,7 +380,8 @@ public sealed class CronTiming
     {
         foreach (int m in month.Values)
         {
-            if (m is >= 1 and <= 12 && CanMatchDay(dayOfMonth, MaxDaysInMonth(m)))
+            if (m >= CronLimits.MonthMin && m <= CronLimits.MonthMax
+                && CanMatchDay(dayOfMonth, MaxDaysInMonth(m)))
                 return;
         }
 
@@ -405,8 +433,14 @@ public sealed class CronTiming
     {
         foreach (int value in values)
         {
-            if ((uint)value < (uint)flags.Length)
-                flags[value] = true;
+            // The parser validates the range before any value reaches this point, so an
+            // out-of-range index means the field bounds and the lookup table sizes have
+            // drifted apart — fail loudly instead of silently dropping the value.
+            if ((uint)value >= (uint)flags.Length)
+                throw new ArgumentOutOfRangeException(
+                    nameof(values), value, "Cron field value is outside its lookup table.");
+
+            flags[value] = true;
         }
     }
 

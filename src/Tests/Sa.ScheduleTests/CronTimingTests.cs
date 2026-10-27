@@ -385,4 +385,30 @@ public class CronTimingTests
         var timing = new CronTiming(expression, name);
         Assert.Equal(name, timing.TimingName);
     }
+
+    [Fact]
+    public void GetNextOccurrence_NearEndOfRepresentableRange_ReturnsNull()
+    {
+        // A DateTimeOffset cannot step past 9999-12-31, so the +1 minute start and the
+        // 28-year horizon would overflow; the search reports "no next occurrence" instead
+        // of throwing ArgumentOutOfRangeException.
+        var timing = new CronTiming("* * * * *");
+
+        Assert.Null(timing.GetNextOccurrence(new DateTimeOffset(9990, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+        Assert.Null(timing.GetNextOccurrence(new DateTimeOffset(9999, 12, 31, 23, 58, 0, TimeSpan.Zero)));
+        Assert.Null(timing.GetNextOccurrence(
+            new DateTimeOffset(9999, 12, 31, 23, 58, 0, TimeSpan.FromHours(12))));
+    }
+
+    [Fact]
+    public void GetNextOccurrence_LastSearchableYear_StillSearches()
+    {
+        // 9970 + 28 = 9998, which stays representable even with a negative offset — the
+        // leap-day search across 9971 must keep working there.
+        var timing = new CronTiming("0 0 29 2 *");
+
+        Assert.Equal(
+            new DateTimeOffset(9972, 2, 29, 0, 0, 0, TimeSpan.FromHours(-12)),
+            timing.GetNextOccurrence(new DateTimeOffset(9970, 6, 1, 0, 0, 0, TimeSpan.FromHours(-12))));
+    }
 }

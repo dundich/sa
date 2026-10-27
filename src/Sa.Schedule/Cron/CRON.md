@@ -8,7 +8,7 @@
 - Interface: `IJobTiming`
 - Method: `GetNextOccurrence(DateTimeOffset dateTime)`
 - Behavior: **exclusive** — when `dateTime` exactly matches the schedule, the **next** occurrence (> dateTime) is returned, truncated to the minute.
-- Search horizon: **28 years** ahead. If no matching time is found within 28 years, `null` is returned (the expression can never fire, e.g. `0 0 30 2 *`).
+- Search horizon: **28 years** ahead. If no matching time is found within 28 years, `null` is returned (the expression can never fire, e.g. `0 0 30 2 *`). An input too close to the end of the representable range (year 9971 and later) also returns `null` instead of throwing, because the 28-year window no longer fits a `DateTimeOffset`.
 - DOM ∩ DOW semantics: **OR** (Vixie cron). When both day-of-month and day-of-week are restricted, a day matches if **either** field matches.
 - Day of week: `0` and `7` both mean **Sunday**; `1–6` are Monday–Saturday.
 
