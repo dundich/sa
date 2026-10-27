@@ -219,12 +219,12 @@ Both are enforced in `OutboxConsumerSettings.Validate()`, which runs on `TryRegi
 | Member | Behaviour |
 |---|---|
 | `TryRegister` | Validates the settings, adds them if the group is unknown, returns `false` if already present. Notifies subscribers **outside** the lock |
-| `Apply` | Runs a transform under the lock, validates the result, stores the new snapshot. Throws if the group is not registered |
+| `Apply` | Runs the transform **outside** the lock (so a transform may call back into the manager), validates the result, then swaps it in if the snapshot it transformed is still current; retries the transform otherwise. Throws if the group is not registered |
 | `Get` / `IsRegistered` / `IsPaused` | Lock-protected reads |
 | `Pause` / `Resume` | `Apply(group, s => s with { Paused = ... })` — takes effect on the next loop iteration |
 | `Unregister` | Drops settings and listeners |
 | `GetAllConsumerGroupIds` | Returns a **copy**, not a live view — the lock is released before the caller enumerates, so handing out the live key collection would expose concurrent mutations and throw |
-| `Subscribe` | Returns an `IDisposable` handle; listener exceptions are swallowed and logged to `Debug` so one bad subscriber cannot break delivery |
+| `Subscribe` | Returns an `IDisposable` handle. Listeners are invoked over a snapshot taken under the lock; a throwing subscriber is logged through `ILogger` and does not stop the others |
 
 Because settings are replaced atomically, a runtime `Apply` is observed by the next iteration and never mid-batch.
 

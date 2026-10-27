@@ -38,6 +38,8 @@ internal sealed class OutboxMessagePublisher(
         int start = 0;
         do
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             int len = (start + maxBatchSize < messages.Count)
                 ? maxBatchSize
                 : messages.Count - start;
@@ -62,15 +64,25 @@ internal sealed class OutboxMessagePublisher(
                     count++;
                 }
 
+                // Count can lie. Sending `len` rather than the number of items actually written
+                // copied default structs (and, through the pool, the previous batch's payloads)
+                // into the bulk writer.
+                if (count == 0)
+                    break;
+
                 sent += await bulkWriter.InsertBulk<TMessage>(
-                    payloads.AsMemory()[..len], context, cancellationToken);
+                    payloads.AsMemory()[..count], context, cancellationToken);
+
+                start += count;
+                if (count < len)
+                    break;
             }
             finally
             {
-                ArrayPool<OutboxMessage<TMessage>>.Shared.Return(payloads);
+                // clearArray: the rented buffer is larger than `len` and holds TMessage. Without
+                // this, payloads stay rooted in the pool until those slots happen to be overwritten.
+                ArrayPool<OutboxMessage<TMessage>>.Shared.Return(payloads, clearArray: true);
             }
-
-            start += len;
         }
         while (start < messages.Count);
 

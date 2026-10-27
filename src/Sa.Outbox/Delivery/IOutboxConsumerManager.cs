@@ -13,7 +13,11 @@ public interface IOutboxConsumerManager
     /// then pick up the new settings on the next iteration.
     /// </summary>
     /// <param name="consumerGroupId">The consumer group identifier.</param>
-    /// <param name="transform">A function that receives the current snapshot and returns the updated one. Use <c>this with { ... }</c> expressions.</param>
+    /// <param name="transform">
+    /// A function that receives the current snapshot and returns the updated one. Use <c>with</c>
+    /// expressions. It runs outside the manager lock and may be invoked again if a concurrent
+    /// update lands first, so it must not assume it runs exactly once.
+    /// </param>
     void Apply(string consumerGroupId, Func<OutboxConsumerSettings, OutboxConsumerSettings> transform);
 
 

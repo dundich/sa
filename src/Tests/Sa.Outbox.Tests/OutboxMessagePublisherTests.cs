@@ -1,0 +1,87 @@
+using Sa.Outbox;
+using Sa.Outbox.Metadata;
+using Sa.Outbox.PlugServices;
+using Sa.Outbox.Publication;
+
+namespace Sa.Outbox.Tests;
+
+/// <summary>
+/// Batch slicing in <see cref="OutboxMessagePublisher"/>: the rented array is bigger than the
+/// logical batch, so the bulk writer must receive the number of items actually written — not the
+/// requested length.
+/// </summary>
+public class OutboxMessagePublisherTests
+{
+    private static CancellationToken TestToken => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task Publish_CollectionReportsMoreItemsThanItYields_WritesOnlyActualItems()
+    {
+        var writer = new CapturingBulkWriter();
+        var publisher = new OutboxMessagePublisher(
+            TimeProvider.System,
+            writer,
+            new OutboxPublishSettings(MaxBatchSize: 16),
+            new MetadataConfiguration());
+
+        ulong sent = await publisher.Publish(
+            new LyingCollection(["a"]),
+            tenantId: 7,
+            context: null,
+            TestToken);
+
+        Assert.Equal(1UL, sent);
+        var only = Assert.Single(writer.Seen);
+        Assert.Equal("a", only.Payload);
+        Assert.Equal(7, only.TenantId);
+    }
+
+    [Fact]
+    public async Task Publish_MultipleBatches_KeepsPayloadOrder()
+    {
+        var writer = new CapturingBulkWriter();
+        var publisher = new OutboxMessagePublisher(
+            TimeProvider.System,
+            writer,
+            new OutboxPublishSettings(MaxBatchSize: 2),
+            new MetadataConfiguration());
+
+        ulong sent = await publisher.Publish(["a", "b", "c"], tenantId: 1, context: null, TestToken);
+
+        Assert.Equal(3UL, sent);
+        Assert.Equal(["a", "b", "c"], writer.Seen.Select(m => m.Payload));
+    }
+
+    private sealed class CapturingBulkWriter : IOutboxBulkWriter
+    {
+        /// <summary>
+        /// A copy, not the rented memory: the publisher clears the pooled array on return, so
+        /// holding the <see cref="ReadOnlyMemory{T}"/> would read zeroed slots afterwards.
+        /// </summary>
+        public List<(string? Payload, int TenantId)> Seen { get; } = [];
+
+        public ValueTask<ulong> InsertBulk<TMessage>(
+            ReadOnlyMemory<OutboxMessage<TMessage>> messages,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (OutboxMessage<TMessage> message in messages.Span)
+            {
+                Seen.Add((
+                    (string?)(object?)message.Payload,
+                    message.PartInfo.TenantId));
+            }
+
+            return new ValueTask<ulong>((ulong)messages.Length);
+        }
+    }
+
+    /// <summary>Advertises two items but yields one — the shape a buggy custom collection has.</summary>
+    private sealed class LyingCollection(string[] items) : IReadOnlyCollection<string>
+    {
+        public int Count => items.Length + 1;
+
+        public IEnumerator<string> GetEnumerator() => ((IEnumerable<string>)items).GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+}
