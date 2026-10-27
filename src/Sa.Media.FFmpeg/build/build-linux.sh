@@ -95,6 +95,17 @@ FFMPEG_CONFIGURE_FLAGS+=(
     # --extra-ldflags="-L/usr/lib/x86_64-linux-gnu"
     # --extra-libs="-logg -lm"
 
+    # Статическая линковка — как в build-windows.sh. Без этих флагов linux-пейлоад
+    # линковался с системными libmp3lame.so.0/libopus.so.0/libvorbis*.so, и бинарник
+    # не запускался на машине без соответствующих -dev/рантайм-пакетов
+    # (exit 127, "error while loading shared libraries"). --pkg-config-flags=--static
+    # заставляет pkg-config отдавать .a-библиотеки кодеков, -static — тянуть статически
+    # и glibc/libm. Требуются *-dev пакеты, в которых лежат .a: libmp3lame-dev,
+    # libopus-dev, libvorbis-dev, libogg-dev.
+    --pkg-config-flags=--static
+    --extra-cflags='-static'
+    --extra-ldflags='-static'
+
     --enable-libmp3lame
     --enable-libvorbis
     --enable-libopus
@@ -140,6 +151,14 @@ make -j"$(nproc)"
 
 echo "Installing FFmpeg..."
 make install
+
+# Гард от регрессии: если кодеки снова уедут в динамику, пейлоад будет требовать
+# системных .so и упадёт на чистой машине с невнятным exit 127.
+if readelf -d "$BASE_DIR/$OUTPUT_DIR/bin/ffmpeg" | grep -Eq 'libmp3lame|libopus|libvorbis'; then
+    echo "ERROR: $OUTPUT_DIR/bin/ffmpeg still links codec libraries dynamically:" >&2
+    readelf -d "$BASE_DIR/$OUTPUT_DIR/bin/ffmpeg" | grep -E 'libmp3lame|libopus|libvorbis' >&2
+    exit 1
+fi
 
 chown $(stat -c '%u:%g' $BASE_DIR) -R $BASE_DIR/$OUTPUT_DIR
 echo "Build completed successfully!"
