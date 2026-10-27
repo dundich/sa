@@ -272,7 +272,9 @@ internal static class CronFieldParser
 
     private static CronField Build(string token, string name, CronFieldKind kind, Accumulator acc)
     {
-        // Quartz forbids mixing "W" with "L" — the two have no defined precedence.
+        // The "LW" token is the supported L+W combination. What is rejected here is an
+        // "L"/"L-n" element combined with a separate "dW" element (for example "15W,L"):
+        // those are two independent day rules with no defined precedence.
         if (acc.NearestWeekdays.Count > 0 && acc.HasLastDaySpecial)
             throw new CronParseException(
                 $"The 'W' special cannot be combined with 'L' in the {name} field.", name, token);

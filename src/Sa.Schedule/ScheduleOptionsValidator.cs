@@ -11,6 +11,11 @@ namespace Sa.Schedule;
 /// its key matches a registered job: syntax validation does not depend on the container.
 /// Sections with no matching job are not an error — they are simply never applied.
 /// <para>
+/// Cron values are checked with <see cref="CronTiming.Strict"/>: besides the syntax, an
+/// expression that can never fire (31 April) is rejected here instead of turning into a job
+/// loop that aborts on its first <c>GetNextOccurrence</c> returning null.
+/// </para>
+/// <para>
 /// Deliberately <c>IValidateOptions</c> rather than <c>ValidateDataAnnotations()</c>: the
 /// latter is marked <c>RequiresUnreferencedCode</c> (IL2026) and breaks Native AOT, which is
 /// why this assembly exists. Validation also runs when <c>IOptions&lt;T&gt;.Value</c> is read
@@ -45,7 +50,10 @@ internal sealed class ScheduleOptionsValidator : IValidateOptions<ScheduleOption
             {
                 try
                 {
-                    _ = new CronTiming(job.Cron);
+                    // Strict, not the lenient ctor: an expression that can never fire
+                    // (31 April, 30 February) would otherwise pass validation and then
+                    // abort the job loop silently on the first GetNextOccurrence == null.
+                    _ = CronTiming.Strict(job.Cron);
                 }
                 catch (Exception ex)
                 {

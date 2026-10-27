@@ -7,7 +7,7 @@
 /// The next occurrence is searched within a 28-year horizon — the full Gregorian
 /// day-of-week cycle — so every satisfiable 5-field expression is found; null means
 /// the expression can never match (e.g. February 30).
-/// Optimized with O(1) membership tests and precomputed jump tables (.NET 8–10).
+/// Optimized with O(1) membership tests and precomputed jump tables.
 /// </summary>
 public sealed class CronTiming
 {

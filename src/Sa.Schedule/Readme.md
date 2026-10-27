@@ -224,7 +224,7 @@ services.AddSaSchedule(
 | `ConcurrencyLimit` | `int?` | slots actively running at any moment; not negative; the scheduler clamps it down to `MaxConcurrency` |
 | `MaxConcurrency` | `int?` | absolute number of pre-allocated slots; at least 1 |
 
-All are optional; a property absent from the config leaves the code value untouched. `Cron` and `Every` are mutually exclusive — setting both is a validation error, as are a negative `ConcurrencyLimit` and a `MaxConcurrency` below 1 (the same rules the code mutators enforce). `TimeSpan` uses the constant form `[d.]hh:mm:ss`: `00:05:00` is five **minutes**, `00:00:30` is thirty **seconds**.
+All are optional; a property absent from the config leaves the code value untouched. `Cron` and `Every` are mutually exclusive — setting both is a validation error, as are a negative `ConcurrencyLimit`, a `MaxConcurrency` below 1 and a cron expression that can never fire (for example `0 0 31 4 *`; see [strict calendar validation](./Cron/CRON.md#strict-calendar-validation)). `TimeSpan` uses the constant form `[d.]hh:mm:ss`: `00:05:00` is five **minutes**, `00:00:30` is thirty **seconds**.
 
 ### Matching a job to its section
 

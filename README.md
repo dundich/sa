@@ -47,7 +47,7 @@ Declarative PostgreSQL table partitioning (range by day/month/year and list) wit
 
 ### [Sa.Schedule](src/Sa.Schedule) — Scheduled Task Executor
 
-Configurable scheduled tasks supporting cron expressions, fixed intervals, and one-shot delays, with per-job failure strategies, retries, concurrency limits, interceptors, and runtime start/stop/restart. ([Cron docs EN](src/Sa.Schedule/CRON.md), [Cron docs RU](src/Sa.Schedule/CRON-ru.md))
+Configurable scheduled tasks supporting cron expressions, fixed intervals, and one-shot delays, with per-job failure strategies, retries, concurrency limits, interceptors, and runtime start/stop/restart. ([Cron docs EN](src/Sa.Schedule/Cron/CRON.md), [Cron docs RU](src/Sa.Schedule/Cron/CRON-ru.md))
 
 ---
 

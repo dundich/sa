@@ -235,6 +235,39 @@ public sealed class ScheduleOptionsConfigurationTests
     }
 
     [Fact]
+    public void Validator_UnsatisfiableCron_FailsOnResolve()
+    {
+        // Strict calendar validation on the config path: 31 April never exists, so the job
+        // would silently abort its loop on the first GetNextOccurrence == null.
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => NewServices(entries: new Dictionary<string, string?>
+            {
+                ["Schedule:Jobs:J1:Cron"] = "0 0 31 4 *",
+            })
+            .BuildServiceProvider()
+            .GetRequiredService<IScheduleSettings>());
+
+        Assert.Contains("no valid day", ex.Message);
+    }
+
+    [Fact]
+    public void Validator_LeapDayCron_IsAccepted()
+    {
+        // 29 February is reachable inside the 28-year horizon, so strict validation must
+        // not reject it.
+        var settings = BuildSettings(
+            configure: b => b.AddJob<Job1>().WithName("J1"),
+            entries: new Dictionary<string, string?>
+            {
+                ["Schedule:Jobs:J1:Cron"] = "0 0 29 2 *",
+            });
+
+        Assert.Equal(
+            new DateTimeOffset(2028, 2, 29, 0, 0, 0, TimeSpan.Zero),
+            Next(GetJob(settings, "J1")));
+    }
+
+    [Fact]
     public void Validator_NonPositiveEvery_FailsOnResolve()
     {
         var ex = Assert.Throws<OptionsValidationException>(
