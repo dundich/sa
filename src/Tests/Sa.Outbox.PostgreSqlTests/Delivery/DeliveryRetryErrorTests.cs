@@ -81,18 +81,18 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
             await Task.Delay(300, TestContext.Current.CancellationToken);
 
             await Sub.ProcessMessages<TestMessage>(fixture.OutboxSettings, CancellationToken.None);
-            int attempt = await GetDeliveries();
+            long attempt = await GetDeliveries();
             if (attempt > Fixture.MaxDeliveryAttempts)
             {
                 cnt++;
             }
         }
 
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>(
+        long errCount = await fixture.DataSource.ExecuteReaderFirst<long>(
             $"SELECT COUNT(*) FROM {TableSettings.Error.TableName}",
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, errCount);
+        Assert.Equal(1L, errCount);
 
         var sql =
             $"""
@@ -111,7 +111,7 @@ public class DeliveryRetryErrorTests(DeliveryRetryErrorTests.Fixture fixture)
         Assert.Equal(delivery_id, outbox_delivery_id);
     }
 
-    private Task<int> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<int>(
+    private Task<long> GetDeliveries() => fixture.DataSource.ExecuteReaderFirst<long>(
         $"""
             SELECT COUNT({TableSettings.Delivery.Fields.DeliveryId}) 
             FROM {TableSettings.Delivery.TableName}

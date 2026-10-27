@@ -303,19 +303,19 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
     /// assertions, compare the total against a snapshot taken before the delivery instead. That is
     /// immune to test ordering.
     /// </remarks>
-    private async Task<int> TotalErrorRowsAsync()
+    private async Task<long> TotalErrorRowsAsync()
     {
         if (!await ErrorTableExistsAsync())
             return 0;
 
-        return await fixture.DataSource.ExecuteReaderFirst<int>(
+        return await fixture.DataSource.ExecuteReaderFirst<long>(
             $"SELECT COUNT({TableSettings.Error.Fields.ErrorId}) FROM {ErrorTable}", Token);
     }
 
     private async Task<bool> ErrorTableExistsAsync()
-        => await fixture.DataSource.ExecuteReaderFirst<int>(
+        => await fixture.DataSource.ExecuteReaderFirst<long>(
             $"SELECT COUNT(*) FROM pg_class WHERE relname = '{TableSettings.Error.TableName}'",
-            Token) > 0;
+            Token) > 0L;
 
     private static long UnixNow() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -364,9 +364,9 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
     }
 
     private async Task<bool> TaskQueueExistsAsync()
-        => await fixture.DataSource.ExecuteReaderFirst<int>(
+        => await fixture.DataSource.ExecuteReaderFirst<long>(
             $"SELECT COUNT(*) FROM pg_class WHERE relname = '{TableSettings.TaskQueue.TableName}'",
-            Token) > 0;
+            Token) > 0L;
 
     /// <summary>
     /// Publishing a message creates a task row for <em>every</em> registered consumer group of that
@@ -460,7 +460,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
         var settings = fixture.SettingsFor(Groups.PostponeKeepsTask);
         await DrainAsync();
 
-        int errorsBefore = await TotalErrorRowsAsync();
+        long errorsBefore = await TotalErrorRowsAsync();
         await PublishAsync(id);
 
         // Handled, but not a success and not an error — the count reports handled messages.
@@ -537,7 +537,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
         var settings = fixture.SettingsFor(Groups.Warn);
         await DrainAsync();
 
-        int errorsBefore = await TotalErrorRowsAsync();
+        long errorsBefore = await TotalErrorRowsAsync();
         await PublishAsync(id);
 
         Assert.Equal(1, await Sub.ProcessMessages<TestMessage>(settings, Token));
@@ -564,7 +564,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
         var settings = fixture.SettingsFor(Groups.Error5xx);
         await DrainAsync();
 
-        int errorsBefore = await TotalErrorRowsAsync();
+        long errorsBefore = await TotalErrorRowsAsync();
         await PublishAsync(id);
 
         Assert.Equal(1, await Sub.ProcessMessages<TestMessage>(settings, Token));
@@ -575,7 +575,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
 
         // 5xx reaches __error$ and is referenced from the task row. Exactly one new row: the delivery
         // is terminal, and DrainAsync cleared the other groups so nothing re-delivers this message.
-        Assert.Equal(errorsBefore + 1, await TotalErrorRowsAsync());
+        Assert.Equal(errorsBefore + 1L, await TotalErrorRowsAsync());
         Assert.Equal(1, await ErrorRowsForAsync(PermanentException.TypeName));
         Assert.NotEqual(0, await TaskErrorIdAsync(id));
 
@@ -597,7 +597,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
         // success tally nor the error log — but it is still a message the courier handled.
         // Snapshot the error log first: another test in this class legitimately writes to it, so
         // asserting an absolute count here would depend on the order xUnit happens to run tests in.
-        int errorsBefore = await TotalErrorRowsAsync();
+        long errorsBefore = await TotalErrorRowsAsync();
 
         var settings = fixture.SettingsFor(Groups.MovedPermanently);
         await DrainAsync();

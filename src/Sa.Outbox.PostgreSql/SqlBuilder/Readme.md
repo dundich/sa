@@ -30,7 +30,7 @@ All templates are built at construction time using column/table names resolved f
 | `SqlLockAndSelect` | CTE-based lock-and-fetch: selects pending/recoverable tasks, marks them `Processing`, joins with the message table, and returns payloads. Uses `FOR UPDATE SKIP LOCKED` for safe concurrent consumption |
 | `SqlExtendDelivery` | Extends the lock TTL on a currently-processing task |
 | `SqlLoadConsumerGroup` | Bulk-inserts tasks from the message table into the task queue, returning copied-row count plus the max `msg_seq` of the inserted rows — the new consumption cursor (C2). ORDER BY / WHERE / RETURNING all live on `msg_seq`, never on the v7 id |
-| `SqlResolveMsgIdFloor` / `SqlResolveDateFloor` | Legacy floor translation (C2): turn a v7-id or date `WithMinOffset` floor into the exclusive `msg_seq` boundary — `MAX(msg_seq)` of messages that still sort below the floor, 0 when none. Cached per consumer group by the loader |
+| `SqlResolveMsgIdFloor` / `SqlResolveDateFloor` | Legacy floor translation (C2): turn a v7-id or date `WithMinOffset` floor into the exclusive `msg_seq` boundary — `MAX(msg_seq)` of messages that still sort below the floor, 0 when none. Cached per (consumer group, tenant) by the loader |
 | `SqlAddMsgSeqColumnToMsgTable` / `SqlAddMsgSeqColumnToTaskTable` / `SqlAddGroupOffsetSeqColumnToOffsetTable` | Idempotent C14-style upgrade hooks (`ADD COLUMN IF NOT EXISTS`, run from the Partitional post-hook on every migration pass): bring an existing deployment's schema up to the C2 shape. They only touch the schema — backfilling cursor values on a populated DB stays a recorded manual step |
 
 ### Dynamic templates (generated per-call)

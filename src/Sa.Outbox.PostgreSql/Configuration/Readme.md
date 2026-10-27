@@ -360,7 +360,7 @@ settings.CleanupSettings.ExecutionInterval = TimeSpan.FromHours(2);
 Per-consumer-group **minimum offsets** — a floor for the persisted offset of a consumer group (public, sealed). The public API is unchanged (UUID v7 / `DateTimeOffset`), but the cursor is now a `msg_seq` (BIGINT), so each floor is translated on first use:
 
 - the raw floor (`Guid` v7 or `DateTimeOffset`) is stored in a `Dictionary<string, ...>` keyed by consumer group id;
-- on the first load inside the advisory-lock transaction the loader resolves it to an **exclusive `msg_seq` boundary** — `MAX(msg_seq)` of the messages that still sort below the floor (0 when none do) — and caches the result per group, so the translation cost is paid once.
+- on the first load inside the advisory-lock transaction the loader resolves it to an **exclusive `msg_seq` boundary** — `MAX(msg_seq)` of the messages that still sort below the floor (0 when none do) — and caches the result per (group, tenant), so the translation cost is paid once. The resolving queries filter by `tenant_id`, so the boundary is tenant-specific; a group-only cache entry used to hand the first tenant's boundary to every other tenant.
 
 | Member | Description |
 |---|---|
@@ -375,7 +375,7 @@ For each consumer group + tenant the loader:
 
 1. takes an advisory lock for the group,
 2. reads the persisted cursor from the `__offset$` table (`SELECT group_offset_seq WHERE consumer_group = ... AND tenant_id = ...`); if no row exists yet, inserts one initialized to the resolved floor (`0` when no floor is configured),
-3. resolves (on first use per run) and caches the configured floor to its exclusive `msg_seq` boundary — see above,
+3. resolves (on first use per run) and caches the configured floor to its exclusive `msg_seq` boundary — per (group, tenant); see above,
 4. computes the effective offset as `max(persisted offset, floor)` — the floor can only move the consumer forward, never below the configured boundary,
 5. loads the batch with `... WHERE msg_seq > @offset ... ORDER BY msg_seq LIMIT n` — `msg_seq` is assigned by the database at COPY time, so a backdated or skewed application clock can never make a new message sort below the advanced cursor,
 6. advances the persisted cursor to the max `msg_seq` of the loaded batch (returned by the load).
