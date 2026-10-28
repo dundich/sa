@@ -16,6 +16,17 @@ internal static class PostgresFileStorageTable
     public const string SizeColumnType = "BIGINT";
 
     /// <summary>
+    /// Maximum length of the stored file name, matching the <c>name</c> column. Enforced by the
+    /// provider before the insert so an over-long name fails with a named argument error.
+    /// </summary>
+    public const int NameMaxLength = 512;
+
+    /// <summary>
+    /// Maximum length of the stored file extension, matching the <c>file_ext</c> column.
+    /// </summary>
+    public const int FileExtMaxLength = 64;
+
+    /// <summary>
     /// The column holding the upload timestamp, as Unix seconds.
     /// <para>
     /// Not declared here: the partitioning layer adds the range column as
@@ -38,9 +49,9 @@ internal static class PostgresFileStorageTable
     public static string[] Columns { get; } =
     [
         "id TEXT NOT NULL",
-        "name VARCHAR(512) NOT NULL",
+        $"name VARCHAR({NameMaxLength}) NOT NULL",
         $"size {SizeColumnType} NOT NULL",
-        "file_ext VARCHAR(64) NOT NULL",
+        $"file_ext VARCHAR({FileExtMaxLength}) NOT NULL",
         "tenant_id INT NOT NULL",
         "basket VARCHAR(63) NOT NULL",
         "data BYTEA NOT NULL",

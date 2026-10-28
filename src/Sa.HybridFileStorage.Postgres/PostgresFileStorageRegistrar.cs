@@ -129,6 +129,15 @@ internal static class PostgresFileStorageRegistrar
             partBuilder.AddSchema(schema, schemaBuilder =>
             {
                 schemaBuilder.AddTable(options.TableName, PostgresFileStorageTable.Columns)
+                    // `basket` is a list level even though it is constant per registration. The
+                    // library derives the primary key from the declared columns —
+                    // (id, tenant_id, basket, created_at) — and the upsert's ON CONFLICT target
+                    // names those four. Dropping the level would change the key to
+                    // (id, tenant_id, created_at), and PostgreSQL does not infer a narrower conflict
+                    // target from an existing wider primary key ("there is no unique or exclusion
+                    // constraint matching the ON CONFLICT specification", verified on PG 15), so
+                    // every table created before such a change would start rejecting writes. The
+                    // level costs one relation per tenant and stays until there is a migration.
                     .PartByList("tenant_id", "basket")
                     .PartByRange(PgPartBy.FromRange(options.PartByRange), PostgresFileStorageTable.PartByRangeFieldName);
             });

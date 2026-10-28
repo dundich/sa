@@ -86,7 +86,31 @@ internal sealed class PostgresFileStorageSchema
         }
 
         string first = searchPath.Split(',')[0].Trim();
-        return string.IsNullOrWhiteSpace(first) ? FallbackSchema : first;
+
+        if (string.IsNullOrWhiteSpace(first))
+        {
+            return FallbackSchema;
+        }
+
+        // A quoted entry is already case-exact, so only its quotes are removed; an unquoted one goes
+        // through PostgreSQL's identifier folding, so its effective name is the lower-cased one.
+        // Either way the result has to satisfy the same rule as an explicit SchemaName: a name with a
+        // space (or any other character a bare identifier cannot hold) is not usable here, because
+        // both the DDL and the queries quote whatever they are given. Such a value falls back to the
+        // default instead of producing SQL that does not parse.
+        string candidate = first.Length >= 2 && first[0] == '"' && first[^1] == '"'
+            ? first[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal)
+            : first.ToLowerInvariant();
+
+        try
+        {
+            return StorageNaming.RequireIdentifier(
+                candidate, nameof(PostgresFileStorageOptions.SchemaName));
+        }
+        catch (ArgumentException)
+        {
+            return FallbackSchema;
+        }
     }
 
     private static string? TryGetSearchPath(IServiceProvider sp, string dataSourceKey)
@@ -100,11 +124,12 @@ internal sealed class PostgresFileStorageSchema
             // instead of silently falling back to "public".
             return PgDataSourceResolver.Resolve(sp, dataSourceKey).GetSearchPath();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or ObjectDisposedException)
         {
-            // A data source that cannot report its search path (misconfigured connection string,
-            // provider not registered yet) must not take the whole registration down — the
-            // fallback keeps the provider usable against the default schema.
+            // No source registered yet, an unparsable connection string, or a source someone else has
+            // already disposed — none of them may take the whole registration down, and the fallback
+            // keeps the provider usable against the default schema. Anything else (OOM, a genuine
+            // bug) keeps propagating.
             return null;
         }
     }

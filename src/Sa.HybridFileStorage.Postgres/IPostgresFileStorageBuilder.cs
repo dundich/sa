@@ -26,7 +26,8 @@ public interface IPostgresFileStorageBuilder
     /// Binds <see cref="PostgresFileStorageOptions"/> from the given configuration section,
     /// e.g. <c>"PostgresFileStorage"</c>. The section may contain <c>SchemaName</c>,
     /// <c>TableName</c> (required), <c>StorageType</c>, <c>IsReadOnly</c>, <c>Basket</c>,
-    /// <c>ExpireDays</c>, <c>MigrationScheduleForwardDays</c> and <c>PartByRange</c>.
+    /// <c>ExpireDays</c>, <c>MigrationScheduleForwardDays</c>, <c>PartByRange</c> and
+    /// <c>MaxUploadSizeBytes</c>.
     /// </summary>
     /// <param name="configSectionPath">The configuration section path.</param>
     /// <returns>The same builder instance for fluent chaining.</returns>

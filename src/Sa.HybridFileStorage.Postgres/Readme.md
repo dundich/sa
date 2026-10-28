@@ -12,7 +12,7 @@ PostgreSQL-backed file storage provider for `Sa.HybridFileStorage`. Stores files
 - [Quick Start](#quick-start)
   - [Several keyed storages](#several-keyed-storages)
   - [Reusing an NpgsqlDataSource](#reusing-an-npgsqldatasource)
-  - [Without DI](#without-di)
+  - [Without a Generic Host](#without-a-generic-host)
 - [CRUD Examples](#crud-examples)
 - [Partitioning](#partitioning)
 - [Scheduled Maintenance](#scheduled-maintenance)
@@ -136,19 +136,26 @@ builder.Services.AddSaPostgreSqlFileStorage("files", b => b
 With no `IPgDataSource` and no `NpgsqlDataSource` at all, resolving the storage fails with an
 `InvalidOperationException` naming both missing registrations.
 
-### Without DI
+### Without a Generic Host
+
+There is no public constructor: the provider needs a partition manager, a recyclable memory-stream
+manager and (optionally) a time provider, and the registration wires all three — plus the
+migration and cleanup schedules. Without a `Generic Host`, build a container directly:
 
 ```csharp
-var storage = new PostgresFileStorage(
-    dataSource: IPgDataSource.Create("Host=localhost;Database=mydb;..."),
-    partManager: /* an IPartitionManager for the table, e.g. from Sa.Partitional.PostgreSql */,
-    streamManager: new RecyclableMemoryStreamManager(),
-    options: new PostgresFileStorageOptions { TableName = "files" },
-    timeProvider: TimeProvider.System);
+var services = new ServiceCollection();
+
+services.AddSaPostgreSqlFileStorageChained("files", b => b
+        .Options(ob => ob.Configure(o => o.TableName = "files")))
+    .AddDataSource(ds => ds
+        .Options(ob => ob.Configure(o => o.ConnectionString = "Host=localhost;Database=mydb;...")));
+
+await using var provider = services.BuildServiceProvider();
+var storage = provider.GetRequiredKeyedService<IFileStorage>("files");
 ```
 
-> The DI registration is the intended path: it wires the partitional module (its migration and
-> cleanup schedules) automatically. The constructor alone skips that wiring.
+> A host is only needed for `ValidateOnStart()` to run at startup; without one, validation fires on
+> the first read of the options (the resolve above), and the scheduled jobs never start.
 
 ### Schema resolution
 
@@ -175,6 +182,8 @@ storage, the DDL or the schema resolver materialises them), or at host start wit
 | `StorageType` > 10 chars, or containing `:`, `/` or `\` (it becomes the file ID scheme) | `OptionsValidationException` |
 | `Basket` outside 3–63 chars, not starting with a letter/`_`, or containing a path separator | `OptionsValidationException` |
 | `ExpireDays`, `MigrationScheduleForwardDays` `< 1` | `OptionsValidationException` |
+| `MaxUploadSizeBytes` `< 0` | `OptionsValidationException` |
+| `FileName` longer than 512 characters, or containing a NUL byte | `ArgumentException` on upload |
 | Two registrations declaring the same `TableName` | `OptionsValidationException` naming both keys |
 | A second registration with the same **key** | `InvalidOperationException` at registration |
 | `key` null/empty/whitespace | `ArgumentException` at registration |
@@ -213,6 +222,10 @@ var result = await storage.UploadAsync(
 // Internally: copied → buffered → upserted → buffer recycled
 ```
 
+> The whole stream is buffered in memory before it is written (Npgsql needs the length up front).
+> Set `MaxUploadSizeBytes` to bound that allocation — an oversized upload is rejected with
+> `InvalidOperationException` and no row is written.
+
 ### Download to Memory
 
 ```csharp
@@ -250,6 +263,14 @@ if (metadata != null)
 }
 ```
 
+`null` means the row is gone (deleted, or never uploaded): the values come from the table, not from
+parsing the file ID. A parsable ID alone is not a file.
+
+The same holds before anything has been written at all: the table is created by the first upload or
+by the migration schedule, so a read that runs before either answers "not found" —
+`DownloadAsync`/`DeleteAsync` return `false`, `GetMetadataAsync` returns `null` — instead of raising
+`42P01`.
+
 ### Delete
 
 ```csharp
@@ -271,7 +292,7 @@ Files are stored in a partitioned table with dual partitioning strategy:
 The provider uses `Sa.Partitional.PostgreSql` to manage partitions:
 
 ```sql
--- Auto-created table structure:
+-- Auto-created table structure (abridged):
 CREATE TABLE public.files (
     id         TEXT NOT NULL,
     name       VARCHAR(512) NOT NULL,
@@ -280,11 +301,19 @@ CREATE TABLE public.files (
     tenant_id  INT NOT NULL,
     basket     VARCHAR(63) NOT NULL,
     data       BYTEA NOT NULL,
-    created_at BIGINT NOT NULL       -- range partitioning key, Unix seconds
-) PARTITION BY RANGE (created_at);
+    created_at BIGINT NOT NULL,       -- range key, Unix seconds (UTC midnight of the upload day)
+    CONSTRAINT pk_files PRIMARY KEY (id, tenant_id, basket, created_at)
+) PARTITION BY LIST (tenant_id);
 
--- Each (tenant_id, basket) pair gets its own list partition within each date range
+-- The tree is nested, not two independent strategies:
+--   PARTITION BY LIST (tenant_id)  →  PARTITION BY LIST (basket)  →  PARTITION BY RANGE (created_at)
+-- Each (tenant_id, basket) pair therefore gets its own set of date partitions.
 ```
+
+> Each tenant (and basket) gets its own set of date partitions, so the default `PartByRange.Day`
+> with `ExpireDays = 365 * 3` keeps about 1095 leaf partitions per tenant. With many tenants pick
+> `PartByRange.Month` or `Year`, or a shorter retention — the partition count is the operational
+> cost of this layout.
 
 ### Partition strategies
 
@@ -342,6 +371,7 @@ storage.
 | `PartByRange` | Range partitioning granularity | `PartByRange.Day` |
 | `MigrationScheduleForwardDays` | Days ahead to pre-create partitions | `2` |
 | `ExpireDays` | Retention period before partition drop (days) | `365 * 3` |
+| `MaxUploadSizeBytes` | Largest accepted upload in bytes; `0` means no limit | `0` |
 
 ### Registration extensions
 
