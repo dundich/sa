@@ -84,6 +84,15 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 
 Because the alias is applied at the final post-secrets stage, it also resolves across sources — the flat key can come from this PostgreSQL source, while the canonical path can come from another. Full behavior is described in [README Sa.Configuration](../Sa.Configuration/Readme.md#key-aliases).
 
+If this PostgreSQL source is registered **after** the alias pass and itself holds canonical paths, finalize the pipeline so the aliases land on top of it:
+
+```csharp
+builder.Configuration
+    .AddSaPostgreSqlConfiguration(...)
+    .AddSaConfiguration(...)
+    .FinalizeSaConfiguration();
+```
+
 ---
 
 ## Parameterized queries

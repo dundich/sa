@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Sa.Configuration.PostProcessing;
 
 namespace Sa.Configuration.SecretStore;
 
@@ -9,35 +10,29 @@ public static class Setup
     /// placeholders in every provider's values and, when <paramref name="keyAliasOptions"/>
     /// carries mappings, applies the explicit key aliases over the merged configuration.
     /// </summary>
+    /// <remarks>
+    /// Unlike <c>AddSaConfiguration</c>, every call adds its own pass, so repeated calls compose
+    /// additively. Use <c>AddSaConfiguration</c> when the calls should accumulate into one pass.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/> or
+    /// <paramref name="secretService"/> is null.</exception>
+    /// <exception cref="ArgumentException">A mapping key or alias is blank.</exception>
     public static IConfigurationBuilder AddSaPostSecretProcessing(
         this IConfigurationBuilder builder,
         ISecretService secretService,
-        KeyAliasOptions keyAliasOptions = null!)
+        KeyAliasOptions? keyAliasOptions = null)
     {
-        if (keyAliasOptions is null)
-            keyAliasOptions = new();
-        else
-            keyAliasOptions.Validate();
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(secretService);
 
-        return builder.Add(new PostSecretProcessingConfigurationSource(
-            () =>
-            {
-                ConfigurationBuilder postBuilder = new();
-                foreach (var item in builder.Sources.Where(c => c is not PostSecretProcessingConfigurationSource))
-                {
-                    postBuilder.Add(item);
-                }
+        SaConfigurationState state = new();
+        state.UseSecretService(secretService);
 
-                return postBuilder.Build();
-            },
-            secretService,
-            keyAliasOptions));
+        if (keyAliasOptions is not null)
+            state.AddAliases(keyAliasOptions);
+
+        return builder.Add(new SaPostProcessingConfigurationSource(
+            () => PostProcessingPipeline.BuildInner(builder),
+            state));
     }
-
-    internal static IConfigurationBuilder AddSaPostSecretProcessing(
-        this IConfigurationBuilder builder,
-        SecretOptions? options = null)
-            => builder.AddSaPostSecretProcessing(
-                Secrets.CreateDefault(options),
-                (options ?? new()).KeyAliases);
 }

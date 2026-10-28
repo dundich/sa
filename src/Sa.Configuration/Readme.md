@@ -251,6 +251,48 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 
 On the left — the path C# reads. On the right — the name under which the value actually lives.
 
+### Several registrations (multisetup)
+
+Calling `AddSaConfiguration` more than once is supported and adds up:
+
+```csharp
+builder.Configuration
+    .AddSaConfiguration(new SecretOptions { KeyAliases = { ["sa:…:base_url"] = "auth_base_url" } })
+    .AddSaConfiguration(new SecretOptions { KeyAliases = { ["sa:…:token_ttl"] = "auth_token_ttl" } });
+```
+
+- every call **merges** its `KeyAliases` into one accumulated map; for a canonical key declared twice the **last** call wins;
+- the secret options (`FileName`, `LoadDotEnv`, `Encryption`, `Args`) also come from the **last** call;
+- only **one** pass and **one** command-line source are registered, so secrets are read once, on the first build (registration itself doesn't touch the files);
+- `CanonicalValueWins` is a single flag, so its value is taken from the last call as well.
+
+### The alias must be the last word
+
+The pass derives values and therefore wins over every provider registered **before** it. A provider added **after** the last `AddSaConfiguration` is an ordinary provider and beats the alias for the keys it holds. Call `FinalizeSaConfiguration()` as the last configuration step when sources are registered later:
+
+```csharp
+builder.Configuration
+    .AddSaPostgreSqlConfiguration(...)   // a source holding canonical keys
+    .AddSaConfiguration(...)             // aliases
+    .FinalizeSaConfiguration();          // the pass goes after everything
+```
+
+### Custom transforms
+
+The final pass is extensible: `AddSaConfigurationTransform` appends a step that receives the merged configuration and returns **only** the keys it changes. Transforms run after the built-in ones (placeholders, then aliases) in registration order, and each one sees the previous ones' output:
+
+```csharp
+public sealed class StripPrefixTransform(string prefix) : ISaConfigurationTransform
+{
+    public IEnumerable<KeyValuePair<string, string?>> Apply(ISaConfigurationView configuration)
+        => configuration.Values
+            .Where(c => c.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(c => new KeyValuePair<string, string?>(c.Key[prefix.Length..], c.Value));
+}
+
+builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("legacy:"));
+```
+
 ### What happens after that
 
 Both names return the same value:
@@ -295,6 +337,7 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 - **`__` = `:`**: in the mapping you can write `sa__scope__api__auth__base_url` — same as `sa:scope:api:auth:base_url`.
 - **An empty key or an empty string in the mapping** — a startup error. Such an alias would never match anything, so it's better to fail fast than silently do nothing.
 - **An empty mapping** — nothing changes, the pipeline works as usual.
+- **`Reload()`** — the pass is recomputed: a key that disappeared from its source or from the mapping stops being served.
 
 ### Cheat sheet
 
@@ -309,7 +352,7 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 
 ## Using together with Sa.Configuration.PostgreSql
 
-First hook up the standard sources, then the dynamic settings from the database:
+First hook up the sources, then the Sa pipeline, and finalize it — so the aliases land on top of every source, including the dynamic settings from the database:
 
 ```csharp
 using Sa.Configuration;
@@ -317,14 +360,19 @@ using Sa.Configuration.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// First, standard sources (appsettings.json, secrets.txt)
-builder.Configuration.AddSaConfiguration();
+// Standard sources (appsettings.json, secrets.txt)
+builder.Configuration.AddJsonFile("appsettings.json");
 
-// Then dynamic settings from the database
+// Dynamic settings from the database
 builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
     ConnectionString: "...",
     SelectSql: "SELECT key, value FROM app_settings"
 ));
+
+// Final pass: secret placeholders + key aliases
+builder.Configuration
+    .AddSaConfiguration()
+    .FinalizeSaConfiguration();
 
 var app = builder.Build();
 ```
@@ -334,13 +382,15 @@ If the database stores a setting under a flat PHP key (say, `auth_base_url`), wh
 ```csharp
 using Sa.Configuration;
 
-builder.Configuration.AddSaConfiguration(new SecretOptions
-{
-    KeyAliases = new KeyAliasOptions
+builder.Configuration
+    .AddSaConfiguration(new SecretOptions
     {
-        KeyAliases = { ["sa:scope:api:auth:base_url"] = "auth_base_url" },
-    },
-});
+        KeyAliases = new KeyAliasOptions
+        {
+            KeyAliases = { ["sa:scope:api:auth:base_url"] = "auth_base_url" },
+        },
+    })
+    .FinalizeSaConfiguration();
 
 string? baseUrl = app.Configuration["sa:scope:api:auth:base_url"];
 // → the value of the auth_base_url row

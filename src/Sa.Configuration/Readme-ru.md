@@ -174,7 +174,7 @@ sa_pg_password=ENC1:fFodkm/LnlPzC6wIu32wkVAvCbXx6th6qG/So7DsX7MSmOUPpRumfOxb
 
 Важное поведение: если зашифрованный файл есть, а ключ не найден — приложение **падает при старте**. Это сделано специально, чтобы не откатиться молча на незашифрованный plaintext.
 
-Формат, отдельные ключи на клиента и обработка ошибок описаны в `SecretStore/Readme.md`.
+Формат, отдельные ключи на клиента и обработка ошибок описаны в `SecretStore/Readme-ru.md`.
 
 ### Кодировки
 
@@ -251,6 +251,48 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 
 Слева — путь, который читает C#. Справа — имя, под которым значение реально лежит.
 
+### Несколько регистраций (multisetup)
+
+Вызывать `AddSaConfiguration` несколько раз можно — вызовы складываются:
+
+```csharp
+builder.Configuration
+    .AddSaConfiguration(new SecretOptions { KeyAliases = { ["sa:…:base_url"] = "auth_base_url" } })
+    .AddSaConfiguration(new SecretOptions { KeyAliases = { ["sa:…:token_ttl"] = "auth_token_ttl" } });
+```
+
+- каждый вызов **дописывает** свои `KeyAliases` в одну общую карту; если канонический ключ объявлен дважды, побеждает **последний** вызов;
+- опции секретов (`FileName`, `LoadDotEnv`, `Encryption`, `Args`) тоже берутся из **последнего** вызова;
+- регистрируется **один** проход и **один** источник командной строки, поэтому секреты читаются один раз — при первом `Build()` (сама регистрация файлы не трогает);
+- `CanonicalValueWins` — один флаг на всю карту, его значение тоже берётся из последнего вызова.
+
+### Алиас должен быть последним
+
+Проход записывает производные значения и поэтому побеждает все источники, зарегистрированные **до** него. Источник, добавленный **после** последнего `AddSaConfiguration`, — обычный провайдер: для своих ключей он перекрывает алиас. Если источники регистрируются позже, последним шагом вызывайте `FinalizeSaConfiguration()`:
+
+```csharp
+builder.Configuration
+    .AddSaPostgreSqlConfiguration(...)   // источник с каноническими ключами
+    .AddSaConfiguration(...)             // алиасы
+    .FinalizeSaConfiguration();          // проход уходит в конец
+```
+
+### Свои трансформы
+
+Финальный проход расширяется: `AddSaConfigurationTransform` добавляет шаг, который получает суммарную конфигурацию и возвращает **только** те ключи, которые меняет. Трансформы выполняются после встроенных (плейсхолдеры, затем алиасы) в порядке регистрации, и каждая видит результат предыдущих:
+
+```csharp
+public sealed class StripPrefixTransform(string prefix) : ISaConfigurationTransform
+{
+    public IEnumerable<KeyValuePair<string, string?>> Apply(ISaConfigurationView configuration)
+        => configuration.Values
+            .Where(c => c.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(c => new KeyValuePair<string, string?>(c.Key[prefix.Length..], c.Value));
+}
+
+builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("legacy:"));
+```
+
 ### Что происходит после этого
 
 Оба имени отдают одно значение:
@@ -295,6 +337,7 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 - **`__` = `:`**: в маппинге можно писать `sa__scope__api__auth__base_url` — это то же самое, что `sa:scope:api:auth:base_url`.
 - **Пустой ключ или пустая строка в маппинге** — ошибка при старте. Такой алиас никогда ни с чем не совпадёт, поэтому лучше упасть сразу, чем молча не работать.
 - **Пустой маппинг** — ничего не меняется, конвейер работает как обычно.
+- **`Reload()`** — проход пересчитывается: ключ, исчезнувший из источника или из маппинга, перестаёт отдаваться.
 
 ### Шпаргалка
 
@@ -309,7 +352,7 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 
 ## Использование вместе с Sa.Configuration.PostgreSql
 
-Сначала подключаем стандартные источники, потом — динамические настройки из БД:
+Сначала подключаем источники, затем Sa-конвейер, и финализируем его — так алиасы ложатся поверх всех источников, включая динамические настройки из БД:
 
 ```csharp
 using Sa.Configuration;
@@ -317,14 +360,19 @@ using Sa.Configuration.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Сначала стандартные источники (appsettings.json, secrets.txt)
-builder.Configuration.AddSaConfiguration();
+// Стандартные источники (appsettings.json, secrets.txt)
+builder.Configuration.AddJsonFile("appsettings.json");
 
-// Затем динамические настройки из базы данных
+// Динамические настройки из базы данных
 builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
     ConnectionString: "...",
     SelectSql: "SELECT key, value FROM app_settings"
 ));
+
+// Финальный проход: плейсхолдеры секретов + алиасы ключей
+builder.Configuration
+    .AddSaConfiguration()
+    .FinalizeSaConfiguration();
 
 var app = builder.Build();
 ```
@@ -334,13 +382,15 @@ var app = builder.Build();
 ```csharp
 using Sa.Configuration;
 
-builder.Configuration.AddSaConfiguration(new SecretOptions
-{
-    KeyAliases = new KeyAliasOptions
+builder.Configuration
+    .AddSaConfiguration(new SecretOptions
     {
-        KeyAliases = { ["sa:scope:api:auth:base_url"] = "auth_base_url" },
-    },
-});
+        KeyAliases = new KeyAliasOptions
+        {
+            KeyAliases = { ["sa:scope:api:auth:base_url"] = "auth_base_url" },
+        },
+    })
+    .FinalizeSaConfiguration();
 
 string? baseUrl = app.Configuration["sa:scope:api:auth:base_url"];
 // → значение строки auth_base_url

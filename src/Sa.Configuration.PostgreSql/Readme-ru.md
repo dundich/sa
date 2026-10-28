@@ -84,6 +84,15 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 
 Алиас срабатывает на финальном post-secrets-этапе, поэтому он разрешается и между источниками: плоский ключ может приходить из этого PostgreSQL-источника, а канонический путь — из другого. Полное поведение описано в [README Sa.Configuration](../Sa.Configuration/Readme-ru.md#алиасы-ключей).
 
+Если этот PostgreSQL-источник зарегистрирован **после** прохода алиасов и сам хранит канонические пути, финализируйте конвейер — тогда алиасы лягут поверх него:
+
+```csharp
+builder.Configuration
+    .AddSaPostgreSqlConfiguration(...)
+    .AddSaConfiguration(...)
+    .FinalizeSaConfiguration();
+```
+
 ---
 
 ## Параметризованные запросы
