@@ -76,7 +76,9 @@ public sealed class TempFolderOptions
     /// <summary>
     /// Gets or sets the maximum number of subfolders a single cleanup pass may delete.
     /// Defaults to 100. Bounds the duration of one pass; leftover expired folders are picked up
-    /// by the next pass. Must be positive while the cleanup is enabled
+    /// by the next pass. Enforced by the instance itself, so it applies to a custom
+    /// (<c>UseCleanupStrategy&lt;T&gt;()</c>) strategy too — a strategy that returns more
+    /// candidates is truncated. Must be positive while the cleanup is enabled
     /// (<see cref="CleanupEnabled"/>); with the cleanup off the value is not read at all.
     /// </summary>
     public int MaxFoldersPerPass { get; set; } = 100;
@@ -120,9 +122,10 @@ public sealed class TempFolderOptions
     /// Gets or sets a value indicating whether this instance is read-only. Defaults to
     /// <see langword="false"/>. Read-only instances reject every mutating operation
     /// (<c>CreateSubfolder</c> / <c>WriteAsync</c> / <c>CopyFileAsync</c> /
-    /// <c>CleanupExpiredAsync</c>) and the background service ignores them completely: no cleanup,
-    /// no volume scan, no <see cref="OnVolumeExceeded"/>, no free-space check. Startup access
-    /// validation then only checks that the root exists and can be listed.
+    /// <c>DeleteFileAsync</c>) with <see cref="InvalidOperationException"/>;
+    /// <c>CleanupExpiredAsync</c> is a no-op that returns 0. The background service ignores them
+    /// completely: no cleanup, no volume scan, no <see cref="OnVolumeExceeded"/>, no free-space
+    /// check. Startup access validation then only checks that the root exists and can be listed.
     /// </summary>
     public bool ReadOnly { get; set; } = false;
 
@@ -193,7 +196,8 @@ public sealed class TempFolderOptions
     /// <summary>
     /// Gets or sets how often the background service polls the free space of the root's volume.
     /// Defaults to 24 hours — the first check runs right at host start, then once per interval.
-    /// Must be positive; only consulted when <see cref="MinFreeSpace"/> is positive.
+    /// Must be positive while the check is enabled (<see cref="MinFreeSpace"/> &gt; 0); a zero is
+    /// accepted while it is off (an explicit "not used"), a negative value is an error either way.
     /// </summary>
     public TimeSpan FreeSpaceCheckInterval { get; set; } = TimeSpan.FromHours(24);
 
@@ -325,10 +329,11 @@ public sealed class TempFolderOptions
             throw new ValidationException($"MinFreeSpace cannot be negative, but was {MinFreeSpace}.");
         }
 
-        if (FreeSpaceCheckInterval <= TimeSpan.Zero)
+        if (FreeSpaceCheckInterval < TimeSpan.Zero || (FreeSpaceCheckInterval == TimeSpan.Zero && MinFreeSpace > 0))
         {
             throw new ValidationException(
-                $"FreeSpaceCheckInterval must be positive, but was {FreeSpaceCheckInterval}.");
+                $"FreeSpaceCheckInterval must be positive while the free-space check is enabled " +
+                $"(MinFreeSpace > 0), but was {FreeSpaceCheckInterval}.");
         }
 
         if (!Enum.IsDefined(AgeSource))

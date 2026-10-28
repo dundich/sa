@@ -48,7 +48,7 @@ public sealed class AgeBasedCleanupStrategy : ICleanupStrategy
         {
             var name = Path.GetFileName(dir);
 
-            if (prefix.Length > 0 && !name.StartsWith(prefix, StringComparison.Ordinal))
+            if (prefix.Length > 0 && !name.StartsWith(prefix, PathGuard.PathComparison))
             {
                 // Outside this instance's scope — and deliberately not descended into: the
                 // children of a foreign top-level folder are none of this instance's business.

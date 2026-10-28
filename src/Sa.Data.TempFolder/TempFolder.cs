@@ -443,7 +443,11 @@ internal sealed class TempFolder : ITempFolder
                 return 0;
             }
 
-            foreach (var path in candidates)
+            // The instance — not the strategy — owns the per-pass budget: a custom strategy that
+            // returns more candidates is truncated here, so one pass can never run unbounded.
+            var budget = Math.Max(_options.MaxFoldersPerPass, 0);
+
+            foreach (var path in candidates.Take(budget))
             {
                 // Caller cancellation and an arriving write both land here: the pass stops
                 // before its next deletion rather than racing the operation.

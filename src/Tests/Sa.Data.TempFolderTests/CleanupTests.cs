@@ -384,6 +384,45 @@ public sealed class CleanupTests : IDisposable
         Assert.True(Directory.Exists(dir));
     }
 
+    [Fact]
+    public async Task Cleanup_CustomStrategyOverTheBudget_IsTruncatedByTheInstance()
+    {
+        // The strategy ignores the budget and asks for everything: the instance owns the cap, so a
+        // custom strategy can never make one pass unbounded.
+        using var provider = Build(
+            configure: b => b.UseCleanupStrategy<DeleteEverythingStrategy>(),
+            options: o => o.MaxFoldersPerPass = 2);
+        var folder = Resolve(provider);
+
+        for (var i = 0; i < 5; i++)
+        {
+            MakeSubfolder($"f{i}");
+        }
+
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
+
+        Assert.Equal(2, removed);
+        Assert.Equal(3, Directory.GetDirectories(_root).Length);
+    }
+
+    [Fact]
+    public async Task Cleanup_PrefixMatch_FollowsThePlatformCaseRule()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("Only Windows compares folder names case-insensitively by default.");
+        }
+
+        using var provider = Build(options: o => o.FolderPrefix = "p_");
+        var folder = Resolve(provider);
+
+        var differentlyCased = MakeSubfolder("P_OLD");
+        TestTemp.MakeExpired(differentlyCased);
+
+        Assert.Equal(1, await folder.CleanupExpiredAsync(TestTemp.Token));
+        Assert.False(Directory.Exists(differentlyCased));
+    }
+
     /// <summary>Code-override sample: no age filter at all — everything top-level goes.</summary>
     private sealed class DeleteEverythingStrategy : ICleanupStrategy
     {

@@ -40,6 +40,14 @@ public static class PathGuard
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     /// <summary>
+    /// The comparison every path and name check in this package must use — case-insensitive on
+    /// Windows (where NTFS is by default), ordinal elsewhere. Exposed so callers that compare
+    /// folder names against configuration (<see cref="TempFolderOptions.FolderPrefix"/>) follow the same rule
+    /// instead of silently skipping a folder spelled with a different case.
+    /// </summary>
+    internal static StringComparison PathComparison => s_comparison;
+
+    /// <summary>
     /// Characters rejected in every path argument. Backslash is additionally rejected on Unix,
     /// where it is a legal-but-suspicious filename character (a Windows path or a shell escape).
     /// </summary>
