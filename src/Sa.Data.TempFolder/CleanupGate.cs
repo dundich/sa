@@ -128,14 +128,21 @@ internal sealed class CleanupGate
     private void ReleasePass()
     {
         TaskCompletionSource? exited;
+        CancellationTokenSource? interrupt;
 
         lock (_sync)
         {
             _passActive = false;
+            interrupt = _interrupt;
             _interrupt = null;
             exited = _passExited;
             _passExited = null;
         }
+
+        // The pass is over: dispose the interrupt source (its linked lease source is already gone,
+        // so no registration is left hanging on it). A snapshot taken by a waiting activity may
+        // still be cancelled after this — Cancel tolerates the disposed source.
+        interrupt?.Dispose();
 
         // RunContinuationsAsynchronously: waiting activities resume on the pool, never inline
         // under the lock.
