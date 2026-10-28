@@ -202,6 +202,10 @@ internal sealed class TempFolder : ITempFolder
                 $"Path '{path}' points at a directory ('{full}'); a file path is required.");
         }
 
+        // Resolving is textual, so a link planted inside the root could still point this read at
+        // a file outside it: reading through a link is a containment escape like any other.
+        PathGuard.AssertNoSymlinkComponents(RootPath, full);
+
         // The whole read is one activity: no cleanup pass can run between the existence check
         // and the end of the callback (a running one is cancelled by this very entry), so the
         // file is never deleted under the open stream.
@@ -263,6 +267,11 @@ internal sealed class TempFolder : ITempFolder
             throw new InvalidOperationException(
                 $"Path '{path}' points at a directory ('{full}'); a file path is required.");
         }
+
+        // A delete is destructive: without this check a directory link planted inside the root
+        // (`root/up_cache -> /var/www`) would make File.Delete unlink the target's file, outside
+        // the root — the same vector WriteAsync and CopyFileAsync already refuse.
+        PathGuard.AssertNoSymlinkComponents(RootPath, full);
 
         // The whole delete is one activity: no cleanup pass can run between the existence check
         // and the last attempt (a running one is cancelled by this very entry), so the pass can
@@ -347,7 +356,10 @@ internal sealed class TempFolder : ITempFolder
         {
             RecurseSubdirectories = recursive,
             IgnoreInaccessible = true,
-            AttributesToSkip = 0,
+            // Reparse points are skipped exactly like the volume scan and the cleanup walk do it:
+            // following a linked directory would walk — and report paths from — a tree that lives
+            // outside the root, and a link cycle would never finish.
+            AttributesToSkip = FileAttributes.ReparsePoint,
         };
 
         foreach (var file in Directory.EnumerateFiles(directory, pattern, enumerationOptions))

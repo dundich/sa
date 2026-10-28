@@ -132,7 +132,8 @@ public interface ITempFolder : IDisposable
     /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace.</exception>
     /// <exception cref="InvalidOperationException">The path points at a directory.</exception>
     /// <exception cref="System.Security.SecurityException">
-    /// The path resolves outside the root, or contains an injection-style construct (see the remarks above).
+    /// The path resolves outside the root, passes through a symbolic link inside the root, or
+    /// contains an injection-style construct (see the remarks above).
     /// </exception>
     Task<bool> ReadAsync(
         string path,
@@ -171,7 +172,8 @@ public interface ITempFolder : IDisposable
     /// A transient failure persisted through all retry attempts.
     /// </exception>
     /// <exception cref="System.Security.SecurityException">
-    /// The path resolves outside the root, or contains an injection-style construct (see the remarks above).
+    /// The path resolves outside the root, passes through a symbolic link inside the root, or
+    /// contains an injection-style construct (see the remarks above).
     /// </exception>
     Task<bool> DeleteFileAsync(string path, CancellationToken cancellationToken = default);
 
@@ -181,6 +183,10 @@ public interface ITempFolder : IDisposable
     /// cannot start or keep deleting while the walk is in flight, so the caller sees a consistent
     /// snapshot of the tree (see <see cref="CleanupExpiredAsync"/>).
     /// </summary>
+    /// <remarks>
+    /// Symbolic links and junctions are skipped — neither reported nor descended into — so every
+    /// returned path really lives under <see cref="RootPath"/> and a link cycle cannot hang the walk.
+    /// </remarks>
     /// <param name="pattern">File pattern, e.g. <c>"*.dat"</c> or <c>"report_?.csv"</c> — the
     /// pattern is a pattern, not a path, so <c>*</c>/<c>?</c> are allowed there.</param>
     /// <param name="subfolder">Subfolder to search — relative or absolute (when absolute
