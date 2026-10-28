@@ -7,7 +7,7 @@ The `Secrets` class provides a unified way to manage and retrieve sensitive info
 - **Chained Secret Stores**: multiple secret stores combined with LIFO priority — the store passed or added last wins. `AddStore` is thread-safe (atomic snapshot swap). Built-in stores:
     - File-based Secrets: load secrets from a primary secrets file (e.g., `secrets.txt`).
     - Environment-specific Secrets: load secrets from an environment-specific file (e.g., `secrets.Development.txt`), enabling different configurations per environment.
-    - Encrypted Secrets: load committed `secrets_enc*.txt` files encrypted with AES-256-GCM (see below).
+    - Encrypted Secrets: load committed `secrets*.pub` files encrypted with AES-256-GCM (see below).
     - `.env` files: `KEY=VALUE`, `export KEY=VALUE`, quotes, comments.
     - Environment Variables: retrieve secrets stored as environment variables.
     - Command-line Arguments: retrieve secrets from CLI arguments via `Arguments`.
@@ -24,10 +24,10 @@ The default chain (`Secrets.CreateDefault()`) is resolved with LIFO priority —
 |---|--------|------|
 | 1 | `secrets.txt` | plaintext defaults |
 | 2 | `secrets.{env}.txt` | plaintext per environment |
-| 3 | `secrets_enc.txt` | encrypted defaults |
-| 4 | `secrets_enc.{env}.txt` | encrypted per environment |
-| 5 | `secrets_enc.{client}.txt` | encrypted per client |
-| 6 | `secrets_enc.{client}.{env}.txt` | encrypted per client and environment |
+| 3 | `secrets.pub` | encrypted defaults |
+| 4 | `secrets.{env}.pub` | encrypted per environment |
+| 5 | `secrets.{client}.pub` | encrypted per client |
+| 6 | `secrets.{client}.{env}.pub` | encrypted per client and environment |
 | 7 | `.env` | local overrides; also holds the decryption key |
 | 8 | `.env.{env}` | local per-environment overrides |
 | 9 | Environment variables | override every file |
@@ -110,10 +110,10 @@ The repository ships a script (a thin wrapper around a .NET 10 file-based app):
 ```bash
 # Encrypt secrets.txt for client "lsr" and environment "dev"
 SA_SECRETS_DECRYPTION_KEY=... \
-  ./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets_enc.lsr.dev.txt
+  ./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets.lsr.dev.pub
 
 # Print the decrypted content
-./build-sh/do-secrets.sh decrypt secrets_enc.lsr.dev.txt
+./build-sh/do-secrets.sh decrypt secrets.lsr.dev.pub
 
 # Verify every encrypted file in the current directory (CI-friendly, non-zero exit on failure)
 ./build-sh/do-secrets.sh check

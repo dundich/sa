@@ -72,7 +72,7 @@ static int Check(Options options, DotEnvSecretStore? dotEnv)
 {
     string[] files = options.Positional.Count > 0
         ? [.. options.Positional]
-        : Directory.GetFiles(".", "secrets_enc*.txt");
+        : Directory.GetFiles(".", "secrets*.pub");
 
     if (files.Length == 0)
     {

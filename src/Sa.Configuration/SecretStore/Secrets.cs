@@ -12,7 +12,7 @@ namespace Sa.Configuration.SecretStore;
 public sealed class Secrets(params ISecretStore[] stores) : ISecretService
 {
     public const string DefaultFileName = "secrets.txt";
-    public const string EncryptedFileName = "secrets_enc.txt";
+    public const string EncryptedFileName = "secrets.pub";
 
     private const string DecryptionKeyVariable = "SA_SECRETS_DECRYPTION_KEY";
     private const string DecryptionKeyFileVariable = "SA_SECRETS_DECRYPTION_KEY_FILE";
@@ -111,16 +111,16 @@ public sealed class Secrets(params ISecretStore[] stores) : ISecretService
 
         if (hasEnvironmentFilePart)
         {
-            AddStore($"secrets_enc.{environmentName}.txt", client: null, expectedEnvironment: environmentName);
+            AddStore($"secrets.{environmentName}.pub", client: null, expectedEnvironment: environmentName);
         }
 
         foreach (string client in ResolveClients(encryption, dotEnv, dotEnvEnvironment))
         {
-            AddStore($"secrets_enc.{client}.txt", client, expectedEnvironment: null);
+            AddStore($"secrets.{client}.pub", client, expectedEnvironment: null);
 
             if (hasEnvironmentFilePart)
             {
-                AddStore($"secrets_enc.{client}.{environmentName}.txt", client, expectedEnvironment: environmentName);
+                AddStore($"secrets.{client}.{environmentName}.pub", client, expectedEnvironment: environmentName);
             }
         }
 

@@ -19,7 +19,7 @@
 - **Разбор аргументов** — [`Arguments`](#аргументы) понимает `--key value`, `--key=value`, `-flag`. Отрицательные числа считаются значениями, а не флагами. Кавычки снимаются. `__` в имени параметра читается как разделитель `:`.
 - **Среды** — автоматически подхватывает `secrets.{Environment}.txt` для Development/Staging/Production.
 - **Алиасы ключей** — [Алиасы ключей](#алиасы-ключей): можно связать «плоское» имя настройки (например, `auth_base_url` из PHP-мира) с вложенным C#-путём (`sa:scope:api:auth:base_url`). Работает поверх всех источников сразу.
-- **Шифрование** — зашифрованные файлы `secrets_enc*.txt` (AES-256-GCM) можно коммитить в репозиторий. Ключи шифрования — обычные или `base64:`. Поддерживаются клиенты, среды, `.env`, Unicode. См. [Зашифрованные секреты](#зашифрованные-секреты).
+- **Шифрование** — зашифрованные файлы `secrets*.pub` (AES-256-GCM) можно коммитить в репозиторий. Ключи шифрования — обычные или `base64:`. Поддерживаются клиенты, среды, `.env`, Unicode. См. [Зашифрованные секреты](#зашифрованные-секреты).
 
 ---
 
@@ -92,8 +92,8 @@ var pgConn = app.Configuration["sa:pg:connection"];
 | 1 | Аргументы командной строки | `--sa_pg_password=...` |
 | 2 | Переменные окружения | `SA_PG_PASSWORD=...` |
 | 3 | `.env.{env}` / `.env` | `SA_SECRETS_DECRYPTION_KEY=...` |
-| 4 | `secrets_enc.{client}.{env}.txt` / `secrets_enc.{client}.txt` | зашифрованные секреты, закоммиченные в репо |
-| 5 | `secrets_enc.{env}.txt` / `secrets_enc.txt` | зашифрованные значения по умолчанию |
+| 4 | `secrets.{client}.{env}.pub` / `secrets.{client}.pub` | зашифрованные секреты, закоммиченные в репо |
+| 5 | `secrets.{env}.pub` / `secrets.pub` | зашифрованные значения по умолчанию |
 | 6 | `secrets.{env}.txt` | обычный файл для конкретной среды |
 | 7 | `secrets.txt` | обычный базовый файл |
 
@@ -109,7 +109,7 @@ var pgConn = app.Configuration["sa:pg:connection"];
 
 Как пользоваться:
 
-1. Создайте файлы `secrets_enc*.txt`.
+1. Создайте файлы `secrets*.pub`.
 2. Задайте ключ расшифровки:
 
 ```bash
@@ -120,12 +120,14 @@ export SA_SECRETS_DECRYPTION_KEY=...        # или base64:<32-байтный �
 
 Возможные имена файлов:
 
-- `secrets_enc.txt`
-- `secrets_enc.{env}.txt`
-- `secrets_enc.{client}.txt`
-- `secrets_enc.{client}.{env}.txt`
+- `secrets.pub`
+- `secrets.{env}.pub`
+- `secrets.{client}.pub`
+- `secrets.{client}.{env}.pub`
 
 `{env}` — точное имя среды (`Development`, `Production` или то, что лежит в `DOTNET_ENVIRONMENT`).
+
+Расширение `.pub` означает файл, который безопасно коммитить; внутри — шифртекст AES-256-GCM, а не публичный ключ.
 
 ### Пример зашифрованного файла
 
@@ -165,8 +167,8 @@ sa_pg_password=ENC1:fFodkm/LnlPzC6wIu32wkVAvCbXx6th6qG/So7DsX7MSmOUPpRumfOxb
 Скрипты для шифрования и проверки лежат в репозитории:
 
 ```bash
-./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets_enc.lsr.dev.txt
-./build-sh/do-secrets.sh decrypt secrets_enc.lsr.dev.txt
+./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets.lsr.dev.pub
+./build-sh/do-secrets.sh decrypt secrets.lsr.dev.pub
 ./build-sh/do-secrets.sh check
 ```
 
@@ -397,7 +399,7 @@ TimeSpan? timeout = args.GetTimeSpan("timeout");
 using Sa.Configuration.SecretStore;
 
 // Цепочка по умолчанию (сверху вниз приоритет):
-// CLI-аргументы → ENV-переменные → .env → secrets_enc* → secrets.{Env}.txt → secrets.txt
+// CLI-аргументы → ENV-переменные → .env → secrets*.pub → secrets.{Env}.txt → secrets.txt
 var secrets = Secrets.CreateDefault();
 
 string? result   = secrets.PopulateSecrets("Server={{host}};Pwd={{sa_pg_password}}");

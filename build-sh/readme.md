@@ -24,8 +24,8 @@ Alternative to PowerShell `build/` — these scripts work on Linux/macOS.
 sudo ./do-fix-max-path-linux.sh
 
 # Encrypt, decrypt and check Sa.Configuration secrets files
-./do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets_enc.lsr.dev.txt
-./do-secrets.sh decrypt secrets_enc.lsr.dev.txt
+./do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets.lsr.dev.pub
+./do-secrets.sh decrypt secrets.lsr.dev.pub
 ./do-secrets.sh check
 
 # Container images the integration suites need (PostgreSQL, SeaweedFS, Ryuk)

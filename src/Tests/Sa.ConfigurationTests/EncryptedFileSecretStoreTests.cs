@@ -12,7 +12,7 @@ public class EncryptedFileSecretStoreTests
     {
         using TempDirectory directory = new();
         string path = directory.Write(
-            "secrets_enc.lsr.txt",
+            "secrets.lsr.pub",
             SecretsCipher.Encrypt(
                 """
                 # comment
@@ -44,7 +44,7 @@ public class EncryptedFileSecretStoreTests
     public void Ctor_WrongKey_ThrowsWithFilePath()
     {
         using TempDirectory directory = new();
-        string path = directory.Write("secrets_enc.txt", SecretsCipher.Encrypt("key=value", Key));
+        string path = directory.Write("secrets.pub", SecretsCipher.Encrypt("key=value", Key));
 
         var exception = Assert.Throws<InvalidOperationException>(
             () => new EncryptedFileSecretStore(path, "wrong-key"));
@@ -57,7 +57,7 @@ public class EncryptedFileSecretStoreTests
     public void Ctor_ClientMismatch_Throws()
     {
         using TempDirectory directory = new();
-        string path = directory.Write("secrets_enc.acme.txt", SecretsCipher.Encrypt("key=value", Key, client: "lsr"));
+        string path = directory.Write("secrets.acme.pub", SecretsCipher.Encrypt("key=value", Key, client: "lsr"));
 
         var exception = Assert.Throws<InvalidOperationException>(
             () => new EncryptedFileSecretStore(path, Key, client: "acme"));
@@ -70,7 +70,7 @@ public class EncryptedFileSecretStoreTests
     {
         using TempDirectory directory = new();
         string path = directory.Write(
-            "secrets_enc.lsr.dev.txt",
+            "secrets.lsr.dev.pub",
             SecretsCipher.Encrypt("key=value", Key, client: "lsr", environment: "dev"));
 
         var exception = Assert.Throws<InvalidOperationException>(
@@ -84,7 +84,7 @@ public class EncryptedFileSecretStoreTests
     {
         using TempDirectory directory = new();
         string path = directory.Write(
-            "secrets_enc.txt",
+            "secrets.pub",
             """
             # saenc: v1
             # saenc: kdf=pbkdf2-sha256
@@ -102,6 +102,6 @@ public class EncryptedFileSecretStoreTests
     [Fact]
     public void Ctor_EmptyKey_Throws()
     {
-        Assert.Throws<ArgumentException>(() => new EncryptedFileSecretStore("secrets_enc.txt", " "));
+        Assert.Throws<ArgumentException>(() => new EncryptedFileSecretStore("secrets.pub", " "));
     }
 }

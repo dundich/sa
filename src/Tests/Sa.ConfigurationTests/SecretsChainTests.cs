@@ -15,7 +15,7 @@ public class SecretsChainTests
         string secretKey = "priority_key_" + suffix;
         string plainName = $"secrets_{suffix}.txt";
         string environmentName = $"secrets_{suffix}.{environment}.txt";
-        string encryptedName = $"secrets_enc.{client}.{environment}.txt";
+        string encryptedName = $"secrets.{client}.{environment}.pub";
 
         using TempDirectory directory = new();
         string dotEnvPath = Path.Combine(directory.Path, ".env");
@@ -84,7 +84,7 @@ public class SecretsChainTests
         string environment = "env" + suffix;
         string client = "client" + suffix;
         string secretKey = "dotenv_key_" + suffix;
-        string encryptedName = $"secrets_enc.{client}.{environment}.txt";
+        string encryptedName = $"secrets.{client}.{environment}.pub";
         string encryptedPath = Path.Combine(AppContext.BaseDirectory, encryptedName);
 
         using TempDirectory directory = new();
@@ -117,7 +117,7 @@ public class SecretsChainTests
     {
         string suffix = Guid.NewGuid().ToString("N");
         string client = "client" + suffix;
-        string fileName = $"secrets_enc.{client}.txt";
+        string fileName = $"secrets.{client}.pub";
         string filePath = Path.Combine(AppContext.BaseDirectory, fileName);
 
         File.WriteAllText(filePath, SecretsCipher.Encrypt("key=value", Key, client));
@@ -152,7 +152,7 @@ public class SecretsChainTests
     {
         string suffix = Guid.NewGuid().ToString("N");
         string client = "client" + suffix;
-        string fileName = $"secrets_enc.{client}.txt";
+        string fileName = $"secrets.{client}.pub";
         string filePath = Path.Combine(AppContext.BaseDirectory, fileName);
 
         File.WriteAllText(filePath, SecretsCipher.Encrypt("key=value", Key, client));
@@ -185,6 +185,40 @@ public class SecretsChainTests
         };
 
         Assert.Null(Secrets.CreateDefault(options).GetSecret("missing"));
+    }
+
+    [Fact]
+    public void EncryptedFileName_UsesCommittedPubExtension()
+    {
+        Assert.Equal("secrets.pub", Secrets.EncryptedFileName);
+    }
+
+    [Fact]
+    public void CreateDefault_ReadsEnvironmentOnlyEncryptedFile()
+    {
+        string suffix = Guid.NewGuid().ToString("N");
+        string environment = "env" + suffix;
+        string secretKey = "env_key_" + suffix;
+        string fileName = $"secrets.{environment}.pub";
+        string filePath = Path.Combine(AppContext.BaseDirectory, fileName);
+
+        File.WriteAllText(filePath, SecretsCipher.Encrypt($"{secretKey}=env-only", Key, environment: environment));
+
+        try
+        {
+            var options = new SecretOptions
+            {
+                EnvironmentName = environment,
+                LoadDotEnv = false,
+                Encryption = new SecretEncryptionOptions { DecryptionKey = Key }
+            };
+
+            Assert.Equal("env-only", Secrets.CreateDefault(options).GetSecret(secretKey));
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
     }
 
     private static string GetClientKeyVariable(string client)

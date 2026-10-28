@@ -5,8 +5,8 @@
 /// </summary>
 /// <remarks>
 /// When <see cref="Enabled"/> is <see langword="true"/>, <see cref="Secrets.CreateDefault(SecretOptions?)"/>
-/// looks for <c>secrets_enc.txt</c>, <c>secrets_enc.{env}.txt</c>, <c>secrets_enc.{client}.txt</c> and
-/// <c>secrets_enc.{client}.{env}.txt</c>. A file that exists without a resolvable key fails startup.
+/// looks for <c>secrets.pub</c>, <c>secrets.{env}.pub</c>, <c>secrets.{client}.pub</c> and
+/// <c>secrets.{client}.{env}.pub</c>. A file that exists without a resolvable key fails startup.
 /// </remarks>
 public sealed record SecretEncryptionOptions
 {

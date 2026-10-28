@@ -21,7 +21,7 @@ Open `http://localhost:5245/settings` in your browser to see all configuration v
 
 ## What This Sample Demonstrates
 
-1. **Secrets Management** — `{{sa_secret}}` placeholders in `appsettings.json` are resolved from a chain of stores: CLI arguments → environment variables → `.env` → encrypted files → plaintext files. This sample commits an AES-256-GCM-encrypted `secrets_enc.lsr.Development.txt`.
+1. **Secrets Management** — `{{sa_secret}}` placeholders in `appsettings.json` are resolved from a chain of stores: CLI arguments → environment variables → `.env` → encrypted files → plaintext files. This sample commits an AES-256-GCM-encrypted `secrets.lsr.Development.pub`.
 2. **Dynamic Configuration from PostgreSQL** — Application settings (`theme`, `language`, `notifications`) are stored in a DB table and reflected in-app without restart.
 3. **CLI Argument Parsing** — The `Arguments` class is wired through `AddSaConfiguration()` for command-line secret overrides.
 4. **Zero ORM** — No EF Core or migrations. Just raw Npgsql with `CREATE TABLE IF NOT EXISTS`.
@@ -35,14 +35,14 @@ The placeholder format `{{key}}` resolves values from the chained secret stores 
 1. **CLI Arguments** — e.g., `/sa_secret:"Override from CLI"`
 2. **Environment Variables** — e.g., `SA_SECRET="My Secret"`
 3. **`.env.{env}` / `.env`** — local overrides (the key can also live here)
-4. **`secrets_enc.{client}.{env}.txt` / `secrets_enc.{client}.txt`** — committed encrypted secrets
+4. **`secrets.{client}.{env}.pub` / `secrets.{client}.pub`** — committed encrypted secrets
 5. **`secrets.{env}.txt` / `secrets.txt`** — plaintext files (`key=value`, `#` comments, quotes trimmed)
 
 Optional variant `{{?key}}` returns `null` instead of throwing if the key is missing.
 
 ### Encrypted secrets layer (demo)
 
-This sample commits `secrets_enc.lsr.Development.txt` on purpose. It is encrypted with
+This sample commits `secrets.lsr.Development.pub` on purpose. It is encrypted with
 `AES-256-GCM` and overrides `sa_secret` from `secrets.txt`. The decryption key is public:
 `demo-only-not-for-production` (see `.env.example` and `Properties/launchSettings.json`).
 
@@ -56,10 +56,10 @@ Encrypt/decrypt/check with the repository script:
 SA_SECRETS_DECRYPTION_KEY=demo-only-not-for-production \
   ./build-sh/do-secrets.sh encrypt src/Samples/Configuration.Web/secrets.txt \
   --client lsr --env Development \
-  -o src/Samples/Configuration.Web/secrets_enc.lsr.Development.txt
+  -o src/Samples/Configuration.Web/secrets.lsr.Development.pub
 
 # Verify every encrypted file decrypts with the available key
-./build-sh/do-secrets.sh check src/Samples/Configuration.Web/secrets_enc*.txt
+./build-sh/do-secrets.sh check src/Samples/Configuration.Web/secrets*.pub
 ```
 
 The decrypted value of `sa_secret` is shown on `/settings` as `ENCRYPTED DEMO SECRET`.

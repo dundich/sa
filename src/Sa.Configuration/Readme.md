@@ -19,7 +19,7 @@ It plugs into the standard `Microsoft.Extensions.Configuration` pipeline, so it 
 - **Argument parsing** — [`Arguments`](#arguments) understands `--key value`, `--key=value`, `-flag`. Negative numbers are treated as values, not flags. Quotes are stripped. `__` in a parameter name is read as the `:` separator.
 - **Environments** — automatically picks up `secrets.{Environment}.txt` for Development/Staging/Production.
 - **Key aliases** — [Key aliases](#key-aliases): you can link a "flat" setting name (say, `auth_base_url` from the PHP world) to a nested C# path (`sa:scope:api:auth:base_url`). Works across all sources at once.
-- **Encryption** — encrypted `secrets_enc*.txt` files (AES-256-GCM) can be committed to the repo. Encryption keys are plain or `base64:`. Clients, environments, `.env`, and Unicode are supported. See [Encrypted secrets](#encrypted-secrets).
+- **Encryption** — encrypted `secrets*.pub` files (AES-256-GCM) can be committed to the repo. Encryption keys are plain or `base64:`. Clients, environments, `.env`, and Unicode are supported. See [Encrypted secrets](#encrypted-secrets).
 
 ---
 
@@ -92,8 +92,8 @@ Sources are checked in order. The first one that has the value wins. Higher in t
 | 1 | Command-line arguments | `--sa_pg_password=...` |
 | 2 | Environment variables | `SA_PG_PASSWORD=...` |
 | 3 | `.env.{env}` / `.env` | `SA_SECRETS_DECRYPTION_KEY=...` |
-| 4 | `secrets_enc.{client}.{env}.txt` / `secrets_enc.{client}.txt` | encrypted secrets committed to the repo |
-| 5 | `secrets_enc.{env}.txt` / `secrets_enc.txt` | encrypted default values |
+| 4 | `secrets.{client}.{env}.pub` / `secrets.{client}.pub` | encrypted secrets committed to the repo |
+| 5 | `secrets.{env}.pub` / `secrets.pub` | encrypted default values |
 | 6 | `secrets.{env}.txt` | regular environment-specific file |
 | 7 | `secrets.txt` | regular base file |
 
@@ -109,7 +109,7 @@ Encrypted files can be safely committed to the repo: values are encrypted with A
 
 How to use:
 
-1. Create `secrets_enc*.txt` files.
+1. Create `secrets*.pub` files.
 2. Set the decryption key:
 
 ```bash
@@ -120,12 +120,14 @@ export SA_SECRETS_DECRYPTION_KEY=...        # or base64:<32-byte key>
 
 Possible file names:
 
-- `secrets_enc.txt`
-- `secrets_enc.{env}.txt`
-- `secrets_enc.{client}.txt`
-- `secrets_enc.{client}.{env}.txt`
+- `secrets.pub`
+- `secrets.{env}.pub`
+- `secrets.{client}.pub`
+- `secrets.{client}.{env}.pub`
 
 `{env}` is the exact environment name (`Development`, `Production`, or whatever is in `DOTNET_ENVIRONMENT`).
+
+The `.pub` extension marks a file that is safe to commit; the contents are AES-256-GCM ciphertext, not a public key.
 
 ### Example encrypted file
 
@@ -165,8 +167,8 @@ sa_pg_password=ENC1:fFodkm/LnlPzC6wIu32wkVAvCbXx6th6qG/So7DsX7MSmOUPpRumfOxb
 Scripts for encryption and verification live in the repo:
 
 ```bash
-./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets_enc.lsr.dev.txt
-./build-sh/do-secrets.sh decrypt secrets_enc.lsr.dev.txt
+./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets.lsr.dev.pub
+./build-sh/do-secrets.sh decrypt secrets.lsr.dev.pub
 ./build-sh/do-secrets.sh check
 ```
 
@@ -397,7 +399,7 @@ Sometimes secrets are needed outside `IConfiguration`. Then use `Secrets` direct
 using Sa.Configuration.SecretStore;
 
 // Default chain (top to bottom by priority):
-// CLI args → ENV variables → .env → secrets_enc* → secrets.{Env}.txt → secrets.txt
+// CLI args → ENV variables → .env → secrets*.pub → secrets.{Env}.txt → secrets.txt
 var secrets = Secrets.CreateDefault();
 
 string? result   = secrets.PopulateSecrets("Server={{host}};Pwd={{sa_pg_password}}");
