@@ -45,6 +45,9 @@ internal static class WavHeaderReader
             throw new InvalidDataException($"Invalid WAV file: expected 'fmt ' chunk, found 0x{subchunk1Id:X8}");
 
         uint subchunk1Size = await reader.ReadUInt32Async(cancellationToken).ConfigureAwait(false);
+        if (subchunk1Size < 16)
+            throw new InvalidDataException($"Invalid WAV file: fmt chunk is too small ({subchunk1Size} bytes)");
+
         ushort audioFormatValue = await reader.ReadUInt16Async(cancellationToken).ConfigureAwait(false);
         WaveFormatType audioFormat = (WaveFormatType)audioFormatValue;
 

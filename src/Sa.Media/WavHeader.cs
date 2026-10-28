@@ -67,37 +67,62 @@ public sealed class WavHeader
         if (AudioFormat == WaveFormatType.Extensible && !IsPcm && !IsIeeeFloat)
             throw new NotSupportedException("Extended WAV format with unknown subformat is not supported");
 
-        if (BitsPerSample is not (8 or 16 or 24 or 32 or 64))
-            throw new NotSupportedException($"Unsupported bits per sample: {BitsPerSample}");
-
         if (NumChannels == 0 || NumChannels > 6)
             throw new NotSupportedException($"Unsupported number of channels: {NumChannels}");
 
         if (SampleRate == 0)
             throw new InvalidDataException("Sample rate is zero");
 
-#pragma warning disable S3236
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(BlockAlign, nameof(BlockAlign));
-        ArgumentOutOfRangeException.ThrowIfNegative(DataSize, nameof(DataSize));
-#pragma warning restore S3236
+        // Поддерживаемые пары (формат, разрядность). Проверяем здесь, а не в конвертере:
+        // иначе PCM 64-bit или IEEE float 8-bit проходят разбор заголовка и падают уже
+        // в середине чтения сэмплов.
+        bool supportedBitsPerSample = EffectiveAudioFormat switch
+        {
+            WaveFormatType.Pcm => BitsPerSample is 8 or 16 or 24 or 32,
+            WaveFormatType.IeeeFloat => BitsPerSample is 32 or 64,
+            _ => false
+        };
+
+        if (!supportedBitsPerSample)
+            throw new NotSupportedException(
+                $"Unsupported bits per sample: {BitsPerSample} for {EffectiveAudioFormat} format");
+
+        // BlockAlign — единственный источник правды для шага кадра в читателе
+        // (SampleSize = BlockAlign / NumChannels). Несогласованный BlockAlign даёт
+        // «сэмплы» неверного размера вместо понятной ошибки.
+        int bytesPerSample = BitsPerSample / 8;
+        int expectedBlockAlign = NumChannels * bytesPerSample;
+        if (BlockAlign != expectedBlockAlign)
+            throw new InvalidDataException(
+                $"Invalid WAV file: block align {BlockAlign} does not match {NumChannels} channel(s) x {bytesPerSample} byte(s)");
+    }
+
+    /// <summary>
+    /// Реальный размер данных: из заголовка, а для потоковых записей
+    /// (<see cref="DataSize"/> == <see cref="uint.MaxValue"/>) — из длины файла, если она известна.
+    /// </summary>
+    /// <returns>Размер в байтах или 0, если определить его нельзя.</returns>
+    internal long ResolveDataSize(long? fileSize = null)
+    {
+        if (HasDataSize)
+            return DataSize;
+
+        if (fileSize is not { } length || length <= DataOffset)
+            return 0;
+
+        return length - DataOffset;
     }
 
     public double GetDurationInSeconds(long? fileSize = default)
     {
-        if (BitsPerSample == 0 || NumChannels == 0 || SampleRate == 0)
+        long dataSize = ResolveDataSize(fileSize);
+
+        // Потоковая запись без известной длины не имеет длительности, а не «13 часов».
+        if (dataSize <= 0 || SampleRate == 0 || BlockAlign == 0)
             return 0;
 
-        long dataSize = (fileSize >= DataOffset && !HasDataSize)
-            ? fileSize.Value - DataOffset
-            : DataSize;
-
-        // Потоковые/некорректные данные не должны давать отрицательную длительность.
-        if (dataSize < 0)
-            return 0;
-
-        long bytesPerChannel = dataSize / NumChannels;
-        long samplesPerChannel = bytesPerChannel / (BitsPerSample / 8);
-        return samplesPerChannel / (double)SampleRate;
+        long frames = dataSize / BlockAlign;
+        return frames / (double)SampleRate;
     }
 
     public TimeSpan GetDuration() => TimeSpan.FromSeconds(GetDurationInSeconds());
@@ -178,9 +203,9 @@ public sealed class WavHeader
 
         long bytesPerSecond = GetBytesPerSecond();
 
-        long dataEnd = HasDataSize
-            ? dataOffset + DataSize
-            : (fileSize ?? (long)TimeSpan.MaxValue.TotalSeconds * bytesPerSecond);
+        long dataEnd = HasDataSize || fileSize.HasValue
+            ? dataOffset + ResolveDataSize(fileSize)
+            : dataOffset + (long)TimeSpan.MaxValue.TotalSeconds * bytesPerSecond;
 
 
         long fromOffset = dataOffset + (long)(range.From.TotalSeconds * bytesPerSecond);
@@ -210,5 +235,11 @@ public sealed class WavHeader
 
     public Func<ReadOnlySpan<byte>, double> GetNormalizedConverter()
         => SampleConverter.GetNormalizedConverter(BitsPerSample, EffectiveAudioFormat);
+
+    /// <summary>
+    /// Float-вариант <see cref="GetNormalizedConverter"/> для DSP-путей: без промежуточного double.
+    /// </summary>
+    internal Func<ReadOnlySpan<byte>, float> GetNormalizedFloatConverter()
+        => SampleConverter.GetNormalizedFloatConverter(BitsPerSample, EffectiveAudioFormat);
 
 }

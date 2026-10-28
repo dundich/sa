@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace Sa.Media;
 
-public static class TimeRangeExpander
+public static class TimeRangeExtensions
 {
 
     public static bool Contains(this TimeRange range, TimeSpan time)
@@ -24,8 +24,8 @@ public static class TimeRangeExpander
 
     public static IReadOnlyCollection<TimeRange> Merge(
         this TimeRange[] ranges,
-        int thresholdMillesecods = 300)
-            => MergeCloseRanges(ranges, thresholdMillesecods);
+        int thresholdMilliseconds = 300)
+            => MergeCloseRanges(ranges, thresholdMilliseconds);
 
 
 
@@ -36,7 +36,7 @@ public static class TimeRangeExpander
 #pragma warning restore S2368
 #pragma warning restore S3776
         TimeRange[][] chunks,
-        int thresholdMillesecods = 300,
+        int thresholdMilliseconds = 300,
         int gapMilliseconds = 0)
     {
         if (chunks.Length == 0)
@@ -46,7 +46,7 @@ public static class TimeRangeExpander
         var mergedChunks = new TimeRange[chunks.Length][];
         for (int c = 0; c < chunks.Length; c++)
         {
-            mergedChunks[c] = MergeCloseRanges(chunks[c], thresholdMillesecods);
+            mergedChunks[c] = MergeCloseRanges(chunks[c], thresholdMilliseconds);
         }
 
         // Подсчёт общего количества после слияния
@@ -91,11 +91,11 @@ public static class TimeRangeExpander
                 ref var curr = ref Unsafe.Add(ref first, i);
                 ref var prev = ref Unsafe.Add(ref first, i - 1);
 
-                long available = curr.From - prev.To - thresholdMillesecods * 2 - gapMilliseconds;
+                long available = curr.From - prev.To - thresholdMilliseconds * 2 - gapMilliseconds;
                 if (available > 0)
                 {
-                    curr.From -= thresholdMillesecods;
-                    prev.To += thresholdMillesecods;
+                    curr.From -= thresholdMilliseconds;
+                    prev.To += thresholdMilliseconds;
                 }
                 else
                 {
@@ -109,21 +109,21 @@ public static class TimeRangeExpander
                 }
 
                 if (i == span.Length - 1
-                    && TimeSpan.MaxValue.TotalMilliseconds - thresholdMillesecods > curr.To)
+                    && TimeSpan.MaxValue.TotalMilliseconds - thresholdMilliseconds > curr.To)
                 {
-                    curr.To += thresholdMillesecods;
+                    curr.To += thresholdMilliseconds;
                 }
             }
 
             // первый элемент
             if (span.Length > 0)
             {
-                long from = Math.Max(first.From - thresholdMillesecods, 0);
+                long from = Math.Max(first.From - thresholdMilliseconds, 0);
                 first.From = from;
 
-                if (span.Length == 1 && TimeSpan.MaxValue.TotalMilliseconds - thresholdMillesecods > first.To)
+                if (span.Length == 1 && TimeSpan.MaxValue.TotalMilliseconds - thresholdMilliseconds > first.To)
                 {
-                    first.To += thresholdMillesecods;
+                    first.To += thresholdMilliseconds;
                 }
             }
 
@@ -147,7 +147,7 @@ public static class TimeRangeExpander
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static TimeRange[] MergeCloseRanges(TimeRange[] ranges, int thresholdMillesecods)
+    private static TimeRange[] MergeCloseRanges(TimeRange[] ranges, int thresholdMilliseconds)
     {
         if (ranges.Length <= 1)
             return ranges;
@@ -168,7 +168,7 @@ public static class TimeRangeExpander
             var nextTo = (long)sorted[i].To.TotalMilliseconds;
 
             // Если расстояние меньше gap — сливаем
-            if (nextFrom - currentTo < thresholdMillesecods)
+            if (nextFrom - currentTo < thresholdMilliseconds)
             {
                 // Расширяем текущий диапазон до максимума
                 currentTo = Math.Max(currentTo, nextTo);

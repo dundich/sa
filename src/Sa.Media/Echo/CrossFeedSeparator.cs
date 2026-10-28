@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 namespace Sa.Media.Echo;
 
 
-public sealed class CrossFeedSeparator()
+public static class CrossFeedSeparator
 {
     public enum ProcessingMode { Auto, MaximumSpeed, MinimumMemory, MinimumMemoryFastNormalize, Aggressive }
 
@@ -17,10 +17,19 @@ public sealed class CrossFeedSeparator()
 
     public static async Task ExecuteAsync(AudioSeparationOptions options, CancellationToken cancellationToken = default)
     {
+        // Аргументы проверяем до обращения к файловой системе: неверные опции должны падать
+        // с ArgumentException/ArgumentNullException, а не с FileNotFoundException на чужом пути.
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrEmpty(options.InputPath);
+
+        if (options.SpectralMaskPower <= 0)
+            throw new ArgumentException("--spectral-mask-power must be greater than zero", nameof(options));
+
+        if (options.MaskFloor is < 0 or > 1)
+            throw new ArgumentException("--mask-floor must be between zero and one", nameof(options));
+
         string inputPath = Path.GetFullPath(options.InputPath);
         if (!File.Exists(inputPath)) throw new FileNotFoundException($"Input file not found: {inputPath}");
-        if (options.SpectralMaskPower <= 0) throw new ArgumentException("--spectral-mask-power must be greater than zero");
-        if (options.MaskFloor is < 0 or > 1) throw new ArgumentException("--mask-floor must be between zero and one");
 
         HeadInfo head = await ReadHeadInfoAsync(inputPath, cancellationToken);
         if (head.TotalFrames == 0 || head.FrameCount == 0) throw new InvalidOperationException("Recording is too short to analyze");
@@ -88,19 +97,22 @@ public sealed class CrossFeedSeparator()
         if (wavHeader.NumChannels != 2)
             throw new InvalidOperationException($"Expected a stereo recording, found {wavHeader.NumChannels} channel(s)");
         int sampleRate = (int)wavHeader.SampleRate;
-        long totalFrames = (long)wavHeader.DataSize / 4;
+
+        // Для потоковых записей (data size == 0xFFFFFFFF) реальный размер берём из файла,
+        // иначе TotalFrames = 1_073_741_823 и выбор режима/буферы уезжают в космос.
+        long totalFrames = wavHeader.ResolveDataSize(new FileInfo(path).Length) / 4;
         int frameSize = Math.Max(1, (int)Math.Round(sampleRate * 0.1));
         int frameCount = (int)Math.Min((long)int.MaxValue, totalFrames / frameSize);
         return new HeadInfo(frameSize, frameCount, sampleRate, totalFrames);
     }
 
     private static async IAsyncEnumerable<AudioPacket> ReadDataAsync(
-        string path, int? maxFrameIndex, [EnumeratorCancellation] CancellationToken cancellationToken)
+        string path, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await using AsyncWavReader reader = AsyncWavReader.CreateFromFile(path);
         WavHeader wavHeader = await reader.GetHeaderAsync(cancellationToken);
         int sampleRate = (int)wavHeader.SampleRate;
-        long totalFrames = (long)wavHeader.DataSize / 4;
+        long totalFrames = wavHeader.ResolveDataSize() / 4;
         int frameSize = Math.Max(1, (int)Math.Round(sampleRate * 0.1));
         int frameCount = (int)Math.Min((long)int.MaxValue, totalFrames / frameSize);
         if (frameCount == 0) throw new InvalidOperationException("Recording is too short to analyze");
@@ -109,17 +121,19 @@ public sealed class CrossFeedSeparator()
         int frameIndex = 0;
         float leftSample = 0f;
 
-        await foreach (var packet in reader.ReadDoubleSamplesAsync(
-            allowBufferReuse: true, cancellationToken: cancellationToken).WithCancellation(cancellationToken))
+        // ReadFloatSamplesAsync: raw-байты конвертируются в float напрямую, без double-прослойки
+        // (раньше здесь был ReadDoubleSamplesAsync + приведение к float на каждом сэмпле).
+        await foreach (var packet in reader
+            .ReadFloatSamplesAsync(cancellationToken: cancellationToken)
+            .WithCancellation(cancellationToken))
         {
-            float sample = (float)packet.Sample;
+            float sample = packet.Sample;
             if (packet.ChannelId == 0)
             {
                 leftSample = sample;
             }
             else
             {
-                if (maxFrameIndex.HasValue && frameIndex > maxFrameIndex.Value) yield break;
                 frameOffset--;
                 bool isEof = frameOffset == 0;
                 yield return new AudioPacket(frameIndex, leftSample, sample, isEof);
@@ -127,7 +141,6 @@ public sealed class CrossFeedSeparator()
                 {
                     frameIndex++;
                     frameOffset = frameSize;
-                    if (maxFrameIndex.HasValue && frameIndex > maxFrameIndex.Value) yield break;
                 }
             }
         }
@@ -143,7 +156,7 @@ public sealed class CrossFeedSeparator()
         try
         {
             int count = 0;
-            await foreach (var packet in ReadDataAsync(inputPath, null, cancellationToken).WithCancellation(cancellationToken))
+            await foreach (var packet in ReadDataAsync(inputPath, cancellationToken).WithCancellation(cancellationToken))
             {
                 if (count + 1 >= capacity) break;
                 data[count++] = packet.LeftSample;
@@ -235,75 +248,79 @@ public sealed class CrossFeedSeparator()
         string path, HeadInfo head, double dominanceDb, CancellationToken cancellationToken)
     {
         if (head.FrameCount == 0) throw new InvalidOperationException("Recording is too short to analyze");
+
         var energyL = new double[head.FrameCount];
         var energyR = new double[head.FrameCount];
+        var cross = new double[head.FrameCount];
         var loudness = new double[head.FrameCount];
-        double sumL = 0.0, sumR = 0.0;
+        double sumL = 0.0, sumR = 0.0, sumLR = 0.0;
         float peakLeft = 0f, peakRight = 0f;
 
-        await foreach (var packet in ReadDataAsync(path, null, cancellationToken).WithCancellation(cancellationToken))
+        await foreach (var packet in ReadDataAsync(path, cancellationToken).WithCancellation(cancellationToken))
         {
             float l = packet.LeftSample, r = packet.RightSample;
             float absL = Math.Abs(l); if (absL > peakLeft) peakLeft = absL;
             float absR = Math.Abs(r); if (absR > peakRight) peakRight = absR;
             if (packet.FrameIndex >= head.FrameCount) continue;
-            sumL += (double)l * l; sumR += (double)r * r;
+
+            // Энергии и взаимная корреляция копятся по кадру: второй проход по файлу
+            // за Σl·r больше не нужен (раньше это делал ComputeLeakageGainAsync).
+            sumL += (double)l * l;
+            sumR += (double)r * r;
+            sumLR += (double)l * r;
+
             if (!packet.IsFrameEof) continue;
+
             int f = packet.FrameIndex;
-            energyL[f] = sumL; energyR[f] = sumR;
+            energyL[f] = sumL; energyR[f] = sumR; cross[f] = sumLR;
             double rmsL = Math.Sqrt(sumL / head.FrameSize + AudioConstants.RmsEpsilon);
             double rmsR = Math.Sqrt(sumR / head.FrameSize + AudioConstants.RmsEpsilon);
             loudness[f] = Math.Max(rmsL, rmsR);
-            sumL = 0.0; sumR = 0.0;
+            sumL = 0.0; sumR = 0.0; sumLR = 0.0;
         }
 
         var sortedLoudness = (double[])loudness.Clone();
         Array.Sort(sortedLoudness);
         double activeThreshold = Math.Max(AudioMath.Percentile(sortedLoudness, 20), AudioMath.Percentile(sortedLoudness, 90) * 0.02);
-        var dominance = new byte[head.FrameCount];
-        int leftCount = 0, rightCount = 0, lastDominantFrame = -1;
+
+        // Не-доминантные кадры в оценку не входят, поэтому порог применяется здесь,
+        // а не на этапе накопления (он зависит от распределения по всему файлу).
+        double crossLeft = 0.0, selfLeft = 0.0, crossRight = 0.0, selfRight = 0.0;
+        int leftCount = 0, rightCount = 0;
+
         for (int f = 0; f < head.FrameCount; f++)
         {
             if (loudness[f] <= activeThreshold) continue;
+
             double rmsL = Math.Sqrt(energyL[f] / head.FrameSize + AudioConstants.RmsEpsilon);
             double rmsR = Math.Sqrt(energyR[f] / head.FrameSize + AudioConstants.RmsEpsilon);
             double ratioDb = 20.0 * Math.Log10((rmsL + 1e-10) / (rmsR + 1e-10));
-            if (ratioDb > dominanceDb) { dominance[f] = 1; leftCount++; lastDominantFrame = f; }
-            else if (ratioDb < -dominanceDb) { dominance[f] = 2; rightCount++; lastDominantFrame = f; }
-        }
 
-        if (leftCount < 3 || rightCount < 3) throw new InvalidOperationException("Could not find enough single-speaker regions to estimate cross-talk. Try a lower --dominance-db value.");
-        var (alpha, beta) = await ComputeLeakageGainAsync(path, dominance, lastDominantFrame, cancellationToken);
-        return new EstimateResult(alpha, beta, peakLeft, peakRight);
-    }
-
-    private static async Task<(double Alpha, double Beta)> ComputeLeakageGainAsync(string path, byte[] dominance, int lastDominantFrame, CancellationToken cancellationToken)
-    {
-        double crossA = 0.0, selfA = 0.0, crossB = 0.0, selfB = 0.0;
-        int currentFrame = -1;
-        bool useLeft = false, useRight = false;
-
-        await foreach (var packet in ReadDataAsync(path, lastDominantFrame, cancellationToken).WithCancellation(cancellationToken))
-        {
-            if (packet.FrameIndex > lastDominantFrame) break;
-            if (packet.FrameIndex != currentFrame)
+            if (ratioDb > dominanceDb)
             {
-                currentFrame = packet.FrameIndex;
-                byte mask = dominance[currentFrame];
-                useLeft = (mask & 1) != 0; useRight = (mask & 2) != 0;
+                leftCount++;
+                crossLeft += cross[f];
+                selfLeft += energyL[f];
             }
-            if (!useLeft && !useRight) continue;
-            float l = packet.LeftSample, r = packet.RightSample;
-            if (useLeft) { crossA += (double)l * r; selfA += (double)l * l; }
-            if (useRight) { crossB += (double)l * r; selfB += (double)r * r; }
+            else if (ratioDb < -dominanceDb)
+            {
+                rightCount++;
+                crossRight += cross[f];
+                selfRight += energyR[f];
+            }
         }
 
-        if (selfA <= AudioConstants.RmsEpsilon || selfB <= AudioConstants.RmsEpsilon)
+        if (leftCount < 3 || rightCount < 3)
+            throw new InvalidOperationException("Could not find enough single-speaker regions to estimate cross-talk. Try a lower --dominance-db value.");
+
+        if (selfLeft <= AudioConstants.RmsEpsilon || selfRight <= AudioConstants.RmsEpsilon)
             throw new InvalidOperationException("Not enough energy in dominant frames to estimate cross-talk.");
 
-        double alpha = crossA / selfA, beta = crossB / selfB;
+        double alpha = crossLeft / selfLeft;
+        double beta = crossRight / selfRight;
         AudioMath.ThrowIfUnsafeCoefficients(alpha, beta);
-        return (alpha, beta);
+
+        return new EstimateResult(alpha, beta, peakLeft, peakRight);
     }
 
     private static async Task WriteLinearStreamingExactAsync(
@@ -327,7 +344,7 @@ public sealed class CrossFeedSeparator()
     {
         var c = AudioMath.MakeCoefficients(alpha, beta);
         float peak = 0f;
-        await foreach (var packet in ReadDataAsync(path, null, cancellationToken).WithCancellation(cancellationToken))
+        await foreach (var packet in ReadDataAsync(path, cancellationToken).WithCancellation(cancellationToken))
         {
             float l = c.CLL * packet.LeftSample + c.CLR * packet.RightSample;
             float r = c.CRL * packet.LeftSample + c.CRR * packet.RightSample;
@@ -342,7 +359,7 @@ public sealed class CrossFeedSeparator()
     {
         await Task.CompletedTask;
         var c = AudioMath.MakeCoefficients(alpha, beta);
-        await foreach (var packet in ReadDataAsync(path, null, cancellationToken).WithCancellation(cancellationToken))
+        await foreach (var packet in ReadDataAsync(path, cancellationToken).WithCancellation(cancellationToken))
         {
             yield return (c.CLL * packet.LeftSample + c.CLR * packet.RightSample) * gain;
             yield return (c.CRL * packet.LeftSample + c.CRR * packet.RightSample) * gain;

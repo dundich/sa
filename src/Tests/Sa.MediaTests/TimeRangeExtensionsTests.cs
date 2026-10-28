@@ -2,7 +2,7 @@
 
 namespace Sa.MediaTests;
 
-public sealed class TimeRangeExpanderTests
+public sealed class TimeRangeExtensionsTests
 {
     #region Helper Methods
 
@@ -77,9 +77,9 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(
+        var actual = TimeRangeExtensions.ExpandTimeRanges(
             input,
-            thresholdMillesecods: 500,
+            thresholdMilliseconds: 500,
             gapMilliseconds: 0);
 
         // Assert
@@ -95,7 +95,7 @@ public sealed class TimeRangeExpanderTests
         var input = ToChunks(
             [
                 Ms(1000, 2000),
-                Ms(2300, 3000),   // thresholdMillesecods = 300 < 500 → сольётся с предыдущим
+                Ms(2300, 3000),   // thresholdMilliseconds = 300 < 500 → сольётся с предыдущим
                 Ms(5000, 6000)
             ],
             [
@@ -114,7 +114,7 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
+        var actual = TimeRangeExtensions.ExpandTimeRanges(input, thresholdMilliseconds: 500);
 
         // Assert
         AssertChunksEqual(expected, actual);
@@ -132,7 +132,7 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, gapMilliseconds: 500);
+        var actual = TimeRangeExtensions.ExpandTimeRanges(input, gapMilliseconds: 500);
 
         // Assert
         Assert.Equal(2, actual.Length);
@@ -152,7 +152,7 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
+        var actual = TimeRangeExtensions.ExpandTimeRanges(input, thresholdMilliseconds: 500);
 
         // Assert
         Assert.Single(actual);
@@ -182,7 +182,7 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
+        var actual = TimeRangeExtensions.ExpandTimeRanges(input, thresholdMilliseconds: 500);
 
         // Assert
         AssertChunksEqual(expected, actual);
@@ -204,7 +204,7 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
+        var actual = TimeRangeExtensions.ExpandTimeRanges(input, thresholdMilliseconds: 500);
 
         // Assert
         AssertChunksEqual(expected, actual);
@@ -226,8 +226,8 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(
-            input, thresholdMillesecods: 500,
+        var actual = TimeRangeExtensions.ExpandTimeRanges(
+            input, thresholdMilliseconds: 500,
             gapMilliseconds: 50);
 
         // Assert
@@ -248,7 +248,7 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
+        var actual = TimeRangeExtensions.ExpandTimeRanges(input, thresholdMilliseconds: 500);
 
         // Assert
         Assert.Equal(3, actual.Length);
@@ -276,7 +276,7 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, thresholdMillesecods: 500);
+        var actual = TimeRangeExtensions.ExpandTimeRanges(input, thresholdMilliseconds: 500);
 
         // Assert
         Assert.Equal(0, actual[0][0].From.TotalMilliseconds);
@@ -293,7 +293,7 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(input, 100);
+        var actual = TimeRangeExtensions.ExpandTimeRanges(input, 100);
 
 
         var expected = ToChunks(
@@ -318,9 +318,9 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(
+        var actual = TimeRangeExtensions.ExpandTimeRanges(
             input,
-            thresholdMillesecods: 0,
+            thresholdMilliseconds: 0,
             gapMilliseconds: 500);
 
         var expected = ToChunks(
@@ -342,9 +342,9 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(
+        var actual = TimeRangeExtensions.ExpandTimeRanges(
             input,
-            thresholdMillesecods: 0,
+            thresholdMilliseconds: 0,
             gapMilliseconds: 500);
 
 
@@ -365,9 +365,9 @@ public sealed class TimeRangeExpanderTests
         );
 
         // Act
-        var actual = TimeRangeExpander.ExpandTimeRanges(
+        var actual = TimeRangeExtensions.ExpandTimeRanges(
             input,
-            thresholdMillesecods: 1500,
+            thresholdMilliseconds: 1500,
             gapMilliseconds: 1500);
 
         var expected = ToChunks([Ms(0, 4500)]);

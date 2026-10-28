@@ -23,9 +23,9 @@
 
 ```csharp
 using var stream = File.OpenRead("test.wav");
-var reader = new AsyncWavReader(stream);
+await using var reader = AsyncWavReader.Create(stream);
 
-var header = await reader.GetHeaderAsync();
+var header = await reader.GetHeaderAsync(ct);
 Console.WriteLine($"{header.NumChannels}ch @ {header.SampleRate}Hz, " +
     $"{header.BitsPerSample}-bit {header.AudioFormat}");
 ```
@@ -48,6 +48,18 @@ await foreach (var packet in reader.ReadSamplesPerChannelAsync(
 await using var reader = AsyncWavReader.CreateFromFile("test.wav");
 
 await foreach (var packet in reader.ReadDoubleSamplesAsync(cancellationToken: ct))
+{
+    Console.WriteLine($"Ch#{packet.ChannelId}: {packet.Sample:F4}");
+}
+```
+
+### Чтение нормализованных float-сэмплов (DSP-путь)
+
+```csharp
+await using var reader = AsyncWavReader.CreateFromFile("test.wav");
+
+// Те же значения, что у double-пути, но конвертация сразу в float — без промежуточного double.
+await foreach (var packet in reader.ReadFloatSamplesAsync(cancellationToken: ct))
 {
     Console.WriteLine($"Ch#{packet.ChannelId}: {packet.Sample:F4}");
 }
@@ -129,7 +141,7 @@ await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
 Разделитель должен работать с **2-канальным (стерео)** записью. Вывод —
 16-bit PCM WAV с нормализацией по пиковому уровню. Линейный путь работает в
 потоковом режиме и не загружает весь файл в память; режим в памяти
-автоматически включается для коротких записей (≤ 100 Mframes).
+автоматически включается для коротких записей (≤ 32 M кадров, ~12 минут при 44.1 кГц).
 
 ---
 
@@ -158,6 +170,7 @@ await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
 | `WavHeader` | Разобранный RIFF/WAV заголовок с вычисляемыми свойствами (`IsPcm`, `IsStereo`, `Duration`) |
 | `AudioPacket` | Record: `(ChannelId, Sample, Position, IsEof)` — сырые/конвертированные байты |
 | `AudioNormalizedPacket` | Record: `(ChannelId, Sample, Position, IsEof)` — нормализованные double [-1.0, 1.0] |
+| `AudioFloatPacket` | Record: `(ChannelId, Sample, Position, IsEof)` — нормализованные float [-1.0, 1.0] |
 | `TimeRange` | Record: `(From, To)` — обрезка по времени с фабричными методами |
 | `AudioEncoding` | Enum: PCM 8/16/24/32, IEEE Float 32/64 |
 | `WaveFormatType` | Enum: `Pcm`, `Adpcm`, `IeeeFloat`, `Extensible` |
@@ -182,9 +195,10 @@ await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
 |-------|---------|----------|
 | `Create(Stream)` | `AsyncWavReader` | Фабрика из потока |
 | `CreateFromFile(string)` | `AsyncWavReader` | Фабрика из пути к файлу |
-| `GetHeaderAsync()` | `Task<WavHeader>` | Потокобезопасное ленивое разбирание заголовка |
+| `GetHeaderAsync(ct)` | `Task<WavHeader>` | Потокобезопасное ленивое разбирание заголовка; отмена первого вызова не «отравляет» ридер |
 | `ReadSamplesPerChannelAsync()` | `IAsyncEnumerable<AudioPacket>` | Сырые сэмплы по каналам |
 | `ReadDoubleSamplesAsync()` | `IAsyncEnumerable<AudioNormalizedPacket>` | Нормализованные double сэмплы |
+| `ReadFloatSamplesAsync()` | `IAsyncEnumerable<AudioFloatPacket>` | Нормализованные float сэмплы (DSP-путь, без double) |
 | `ConvertToFormatAsync()` | `IAsyncEnumerable<AudioPacket>` | Конвертация в целевую кодировку |
 | `ReadStreamableChunksAsync()` | `IAsyncEnumerable<AudioPacket>` | Пакетные сэмплы для пайплайнов |
 
@@ -204,7 +218,7 @@ await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
 
 - `allowBufferReuse=true` (по умолчанию) повторно использует пуленные буферы между yields — вызывающий должен скопировать перед следующей итерацией
 - `allowBufferReuse=false` выделяет новый массив на каждый семпл — безопаснее для параллельных потребителей
-- `ReadStreamableChunksAsync` принудительно устанавливает `allowBufferReuse:false` внутри для предотвращения алиасинга буферов
+- `ReadStreamableChunksAsync` по умолчанию сохраняет `allowBufferReuse:true`: каждый пакет канала ссылается на его пулированный буфер и перезаписывается следующей порцией того же канала, поэтому копируйте или обрабатывайте данные до следующей итерации (либо передайте `allowBufferReuse:false`, чтобы получить независимые массивы)
 - Все внутренние await используют `ConfigureAwait(false)` — безопасно в любом синхронизационном контексте
 
 ---
@@ -214,11 +228,11 @@ await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
 ```
 src/Sa.Media/
 ├── AsyncWavReader.cs        # Основной класс ридера
-├── AsyncWavWriter.cs        # Внутренний WAV-писатель
 ├── AudioEncoding.cs         # Enum форматов
 ├── AudioEncodingExtensions.cs
 ├── AudioPacket.cs           # Record сырого семпла
-├── AudioNormalizedPacket.cs # Record нормализованного семпла
+├── AudioNormalizedPacket.cs # Record нормализованного double-семпла
+├── AudioFloatPacket.cs      # Record нормализованного float-семпла
 ├── BinaryPipeReader.cs      # Little-endian бинарный ридер
 ├── PipeReaderExtensions.cs  # Помощники пропуска
 ├── SampleConverter.cs       # Конвертация PCM ↔ double

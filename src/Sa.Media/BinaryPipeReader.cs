@@ -10,45 +10,64 @@ internal sealed class BinaryPipeReader(PipeReader reader)
 
     public async ValueTask<uint> ReadUInt32Async(CancellationToken cancellationToken = default)
     {
-        var idBuffer = await reader.ReadAtLeastAsync(4, cancellationToken).ConfigureAwait(false);
-        uint result = ReadUInt32Little(idBuffer.Buffer);
-        reader.AdvanceTo(idBuffer.Buffer.GetPosition(4));
+        ReadResult result = await reader.ReadAtLeastAsync(4, cancellationToken).ConfigureAwait(false);
+        EnsureAvailable(result, 4);
+        uint value = ReadUInt32Little(result.Buffer);
+        reader.AdvanceTo(result.Buffer.GetPosition(4));
         Position += 4;
-        return result;
+        return value;
     }
 
     public async ValueTask<ushort> ReadUInt16Async(CancellationToken cancellationToken = default)
     {
-        var idBuffer = await reader.ReadAtLeastAsync(2, cancellationToken).ConfigureAwait(false);
-        ushort result = ReadUInt16Little(idBuffer.Buffer);
-        reader.AdvanceTo(idBuffer.Buffer.GetPosition(2));
+        ReadResult result = await reader.ReadAtLeastAsync(2, cancellationToken).ConfigureAwait(false);
+        EnsureAvailable(result, 2);
+        ushort value = ReadUInt16Little(result.Buffer);
+        reader.AdvanceTo(result.Buffer.GetPosition(2));
         Position += 2;
-        return result;
+        return value;
     }
 
     public async ValueTask<int> ReadInt32Async(CancellationToken cancellationToken = default)
     {
-        var idBuffer = await reader.ReadAtLeastAsync(4, cancellationToken).ConfigureAwait(false);
-        int result = ReadInt32Little(idBuffer.Buffer);
-        reader.AdvanceTo(idBuffer.Buffer.GetPosition(4));
+        ReadResult result = await reader.ReadAtLeastAsync(4, cancellationToken).ConfigureAwait(false);
+        EnsureAvailable(result, 4);
+        int value = ReadInt32Little(result.Buffer);
+        reader.AdvanceTo(result.Buffer.GetPosition(4));
         Position += 4;
-        return result;
+        return value;
     }
 
     public async ValueTask<Guid> ReadGuidAsync(CancellationToken cancellationToken = default)
     {
-        var seq = await reader.ReadAtLeastAsync(16, cancellationToken).ConfigureAwait(false);
+        ReadResult result = await reader.ReadAtLeastAsync(16, cancellationToken).ConfigureAwait(false);
+        EnsureAvailable(result, 16);
         Span<byte> tmp = stackalloc byte[16];
-        seq.Buffer.Slice(0, 16).CopyTo(tmp);
-        reader.AdvanceTo(seq.Buffer.GetPosition(16));
+        result.Buffer.Slice(0, 16).CopyTo(tmp);
+        reader.AdvanceTo(result.Buffer.GetPosition(16));
         Position += 16;
         return new Guid(tmp);
     }
 
     public async Task SkipBytesAsync(long count, CancellationToken cancellationToken = default)
     {
-        Position += count;
-        await PipeReaderExtensions.SkipAsync(reader, count, cancellationToken).ConfigureAwait(false);
+        long skipped = await PipeReaderExtensions.SkipAsync(reader, count, cancellationToken).ConfigureAwait(false);
+        Position += skipped;
+
+        if (skipped < count)
+            throw new InvalidDataException(
+                $"Unexpected end of WAV file: expected {count} more byte(s), got {skipped}");
+    }
+
+    /// <summary>
+    /// ReadAtLeast возвращает меньше запрошенного, если поток закончился. Без этой проверки
+    /// GetPosition()/BinaryPrimitives бросали ArgumentOutOfRangeException вместо понятной ошибки.
+    /// </summary>
+    private static void EnsureAvailable(ReadResult result, int count)
+    {
+        if (result.Buffer.Length < count)
+            throw new InvalidDataException(
+                $"Unexpected end of WAV file: expected {count} byte(s), got {result.Buffer.Length}");
     }
 
     private static uint ReadUInt32Little(ReadOnlySequence<byte> seq)
