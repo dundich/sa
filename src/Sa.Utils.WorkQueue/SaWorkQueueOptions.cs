@@ -7,7 +7,8 @@
 /// The <c>With*</c> methods validate eagerly and are the preferred way to build options.
 /// The primary constructor is public, so its arguments bypass those guards: the queue
 /// constructor re-validates everything (<c>ConcurrencyLimit</c> must not be negative,
-/// <c>QueueCapacity</c> must be at least 1, <c>ShutdownTimeout</c> must be positive) and throws
+/// <c>QueueCapacity</c> must be at least 1, <c>ShutdownTimeout</c> must be positive, and
+/// the three strategy enums must be defined values) and throws
 /// <see cref="ArgumentOutOfRangeException"/> before creating the channel. Either way, an invalid
 /// value fails the same way.
 /// </remarks>

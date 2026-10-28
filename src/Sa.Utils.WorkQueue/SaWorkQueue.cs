@@ -192,7 +192,13 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     /// </summary>
     private volatile bool _paused;
 
-    /// <summary>The exception that triggered the shutdown, if any.</summary>
+    /// <summary>
+    /// The exception that triggered the shutdown, if any. <c>volatile</c> covers the read
+    /// side — <see cref="ShutdownError"/> returns it without a lock. The write side is a
+    /// compare-exchange, because two readers can fault at the same instant and the first
+    /// cause is the one worth keeping; that call passes the field by <c>ref</c>, which is
+    /// the one place CS0420 is suppressed (see <see cref="HandleShutdownOnError"/>).
+    /// </summary>
     private volatile Exception? _shutdownError;
 
     /// <summary>
@@ -291,6 +297,33 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options.ShutdownTimeout), shutdownTimeout, "Shutdown timeout must be positive.");
+        }
+
+        // The three strategy enums are read through switch arms and equality tests, so an
+        // undefined value does not fail — it quietly becomes one of the real ones: an
+        // unrecognised enqueue strategy behaves as Skip, an unrecognised cancel mode as
+        // Hard, an unrecognised cancellation order as Lifo. A typo in configuration then
+        // looks like a deliberate choice, which is the same failure the integer checks
+        // above exist to prevent, so it is rejected here next to them.
+        if (!Enum.IsDefined(options.EnqueueStrategy))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.EnqueueStrategy), options.EnqueueStrategy,
+                "Enqueue strategy must be Wait, Skip or Throw.");
+        }
+
+        if (!Enum.IsDefined(options.ReaderCancelMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ReaderCancelMode), options.ReaderCancelMode,
+                "Reader cancel mode must be Hard or Soft.");
+        }
+
+        if (!Enum.IsDefined(options.ReaderCancellationOrder))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ReaderCancellationOrder), options.ReaderCancellationOrder,
+                "Reader cancellation order must be Lifo, Fifo, RoundRobin or Random.");
         }
 
         _logger = logger;
@@ -531,8 +564,17 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     {
         // Keep the cause that started it. ShutdownAsync can return immediately when
         // a concurrent call has already moved the state, so a later fault must not
-        // overwrite the original — that one is the reason the queue is down.
-        _shutdownError ??= ex;
+        // overwrite the original — that one is the reason the queue is down. A
+        // compare-exchange, not a read-then-write: two readers can fault at the same
+        // moment, and a `??=` would let whichever finished last win rather than the one
+        // that got there first.
+        //
+        // The field is volatile for the lock-free read in ShutdownError, so passing it by
+        // ref here is exactly the case CS0420 describes as legitimate — an interlocked API
+        // — and the compiler asks only that it be spelled out.
+#pragma warning disable CS0420 // a volatile field is intentionally passed by ref to an interlocked API
+        Interlocked.CompareExchange(ref _shutdownError, ex, null);
+#pragma warning restore CS0420
         _ = ShutdownAsync().ConfigureAwait(false);
         return false;
     }

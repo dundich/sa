@@ -5,13 +5,19 @@ namespace Sa.Utils.WorkQueue;
 /// what is left in the channel, and single-flight disposal.
 /// </summary>
 /// <remarks>
-/// Every path here ends in the same place: <c>Writer.TryComplete</c> plus
-/// <see cref="DrainAndResetIdle(SaWorkDrainReason)"/>. A queue that reported
-/// itself stopped while its channel was still open would never report the items
-/// still inside it, would keep a non-zero pending count forever, and would leave
-/// a producer parked in a waiting write with no way out. That pairing runs even
-/// when the cancellation itself faulted, so it belongs in a
-/// <see langword="finally"/>.
+/// The shutdown path ends in one fixed place: <c>Writer.TryComplete</c> plus
+/// <see cref="DrainAndResetIdle(SaWorkDrainReason)"/>, in a <see langword="finally"/> so it
+/// runs even when the cancellation itself faulted. A queue that reported itself stopped
+/// while its channel was still open would never report the items still inside it, would
+/// keep a non-zero pending count forever, and would leave a producer parked in a waiting
+/// write with no way out.
+/// <para>
+/// A force-cancel is the other shape: the channel stays open (the queue is still active and
+/// still accepting work), so the drain is not the way it reports a stop — it is only how it
+/// disposes of the items the readers it just stopped will never reach. That is why it is
+/// gated on a reader having actually been stopped: with nothing cancelled there is nothing
+/// to clean up, and an empty pool must not empty the buffer as a side effect.
+/// </para>
 /// </remarks>
 public sealed partial class SaWorkQueue<TInput>
 {
@@ -20,11 +26,17 @@ public sealed partial class SaWorkQueue<TInput>
     /// the buffer, and leaves the queue itself active. Restore the pool afterwards
     /// by setting <see cref="ConcurrencyLimit"/>.
     /// </summary>
+    /// <remarks>
+    /// The buffer is dropped only when this call actually stopped a reader. A pool with
+    /// nothing live to cancel — a paused queue, or one whose readers are already on their
+    /// way out — leaves the buffered items where they are: nothing was interrupted, so
+    /// nothing is discarded on its behalf, and a re-armed pool still has the work to do.
+    /// </remarks>
     public void ForceCancelReaders()
     {
         if (!IsEnabled) return;
 
-        var tasks = CancelAndTrackReaders();
+        var tasks = CancelAndTrackReaders(out var cancelled);
 
         if (tasks.Length > 0)
         {
@@ -35,7 +47,10 @@ public sealed partial class SaWorkQueue<TInput>
             WaitAllBounded(tasks, _shutdownTimeout);
         }
 
-        DrainAndResetIdle(SaWorkDrainReason.ForceCancel);
+        if (cancelled > 0)
+        {
+            DrainAndResetIdle(SaWorkDrainReason.ForceCancel);
+        }
     }
 
     /// <inheritdoc cref="ForceCancelReaders" />
@@ -55,16 +70,17 @@ public sealed partial class SaWorkQueue<TInput>
     /// work left — and a later <see cref="WaitForIdleAsync"/> that returns without progress
     /// says so in a log line rather than silently.
     /// <para>
-    /// On success — and when there is no reader left to wait for — this drains the buffer
-    /// exactly like <see cref="ForceCancelReaders"/>: "stop the pool and throw away what is
-    /// left" is what a completed force-cancel means.
+    /// On success this drains the buffer exactly like <see cref="ForceCancelReaders"/> —
+    /// but, like it, only when this call actually stopped a reader. A pool with nothing
+    /// live to cancel keeps its items: "stop the pool and throw away what is left" needs
+    /// something to stop.
     /// </para>
     /// </remarks>
     public async Task ForceCancelReadersAsync(TimeSpan? timeout = null, CancellationToken ct = default)
     {
         if (!IsEnabled) return;
 
-        var tasks = CancelAndTrackReaders();
+        var tasks = CancelAndTrackReaders(out var cancelled);
 
         if (tasks.Length > 0)
         {
@@ -94,7 +110,10 @@ public sealed partial class SaWorkQueue<TInput>
             }
         }
 
-        DrainAndResetIdle(SaWorkDrainReason.ForceCancel);
+        if (cancelled > 0)
+        {
+            DrainAndResetIdle(SaWorkDrainReason.ForceCancel);
+        }
     }
 
     /// <summary>

@@ -42,6 +42,7 @@ public sealed partial class SaWorkQueue<TInput>
     /// <inheritdoc />
     public async ValueTask<int> EnqueueMany(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(inputs);
         ThrowIfNotActive();
 
         var accepted = 0;

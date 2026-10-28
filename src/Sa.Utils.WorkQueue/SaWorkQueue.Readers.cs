@@ -321,7 +321,14 @@ public sealed partial class SaWorkQueue<TInput>
             // (ReaderStop already set) gave its slot back at the moment the
             // decision was taken; releasing it here as well is what used to let
             // readers on their way out eat a limit the caller had set meanwhile.
-            lostSlot = reader.IsLive;
+            //
+            // A stopped queue is not a lost slot either. Its readers did not die,
+            // they were dismissed: the shutdown cancelled every loop token, so each
+            // one unwinds through here with Stop still None. Counting those as lost
+            // slots ended every shutdown with ConcurrencyLimit reading 0, while the
+            // contract — and the reason the setter is a no-op once stopped — is that
+            // the getter keeps reporting the limit the queue was stopped at.
+            lostSlot = reader.IsLive && IsEnabled;
             if (lostSlot && _concurrency > 0)
             {
                 _concurrency--;
@@ -343,10 +350,18 @@ public sealed partial class SaWorkQueue<TInput>
     /// and <see cref="ForceCancelReadersAsync"/>; only callable while the queue
     /// is enabled.
     /// </summary>
-    private Task[] CancelAndTrackReaders()
+    /// <param name="cancelled">
+    /// How many readers this call actually stopped. Zero means the pool had nothing
+    /// live to stop — it is paused, or every reader was already on its way out — and
+    /// the callers use that to leave the buffer alone: nothing was cancelled, so
+    /// nothing is discarded on its behalf.
+    /// </param>
+    private Task[] CancelAndTrackReaders(out int cancelled)
     {
         Task[] tasks;
         Reader[] readers;
+
+        cancelled = 0;
 
         lock (_readersSync)
         {
@@ -372,6 +387,7 @@ public sealed partial class SaWorkQueue<TInput>
                 if (reader.Loop.IsCancellationRequested) continue; // shutdown got here first
 
                 reader.Stop = ReaderStop.ForceCancel;
+                cancelled++;
 
                 if (_concurrency > 0)
                 {

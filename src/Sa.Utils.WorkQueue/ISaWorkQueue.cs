@@ -187,6 +187,7 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// </returns>
     /// <exception cref="SaWorkQueueFullException">If the buffer is full and the strategy is <see cref="SaEnqueueStrategy.Throw"/>
     /// (carries <see cref="SaWorkQueueFullException.AcceptedCount"/> and <see cref="SaWorkQueueFullException.TotalCount"/>).</exception>
+    /// <exception cref="ArgumentNullException">If <paramref name="inputs"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">If the queue has been shut down.</exception>
     /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
     /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled while waiting for space.</exception>
@@ -295,6 +296,12 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/>: the calling reader is
     /// one of the tasks being awaited, so the call blocks for the full
     /// <see cref="SaWorkQueueOptions{TInput}.ShutdownTimeout"/>. Use a background task instead.
+    /// <para>
+    /// Items still in the buffer are dropped and reported as <see cref="SaWorkStatus.Faulted"/>
+    /// — but only when this call actually stopped a reader. On a paused queue, or on one whose
+    /// readers are already unwinding, there is nothing to cancel and therefore nothing to
+    /// discard: the items stay queued for a re-armed pool.
+    /// </para>
     /// </remarks>
     void ForceCancelReaders();
 
@@ -321,7 +328,9 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// no reader is picking them up, and a warning is logged saying so. Raise
     /// <see cref="ConcurrencyLimit"/> above 0 to spawn a replacement pool and let them run.
     /// A <em>successful</em> wait, including the overload with no timeout, drains the buffer
-    /// just like the synchronous variant.
+    /// just like the synchronous variant — provided this call actually stopped a reader. A
+    /// paused queue, or one whose readers were already unwinding, keeps its items: with
+    /// nothing cancelled, there is nothing to discard on its behalf.
     /// </para>
     /// <para>
     /// <see cref="IsIdle"/> reports <see langword="false"/> in that state, and keeps doing so until

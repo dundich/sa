@@ -376,6 +376,34 @@ public sealed class SetupRegistrationTests
         Assert.Contains("ConcurrencyLimit", ex.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// An undefined strategy enum in configuration used to be accepted and then read as
+    /// its default arm inside the queue — an unknown enqueue strategy behaved as Skip, an
+    /// unknown cancel mode as Hard, an unknown order as Lifo. A typo in appsettings looked
+    /// like a deliberate choice; it now fails the same way the numeric options do.
+    /// </summary>
+    [Fact]
+    public void Register_UndefinedEnqueueStrategy_FailsValidation()
+    {
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WorkQueue:EnqueueStrategy"] = "99",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(configuration);
+        services.AddSaWorkQueue<int>(b => b.WithProcess((_, _) => Task.CompletedTask).FromConfiguration("WorkQueue"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<ISaWorkQueue<int>>());
+
+        Assert.Contains("EnqueueStrategy", ex.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Register_ZeroShutdownTimeout_FailsValidation()
     {
