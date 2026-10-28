@@ -260,4 +260,66 @@ public sealed class VolumeTests : IDisposable
         var single = Assert.Single(over);
         Assert.Equal(60, single.TotalSize);
     }
+
+    [Fact]
+    public async Task CleanupDisabled_StillMeasuresTheVolume()
+    {
+        // The flag is about deletion only. With the default VolumeScanInterval = 0 the
+        // pre-cleanup scan is volume tracking's only trigger, so a disabled cleanup must not
+        // silence it.
+        var events = new List<TempFolderVolumeArgs>();
+        using var provider = Build(options: o =>
+        {
+            o.CleanupEnabled = false;
+            o.TrackVolume = true;
+            o.MaxTotalSize = 10; // the payload below is 100 bytes
+            o.OnVolumeExceeded = e => { lock (events) events.Add(e); };
+        });
+        var folder = Resolve(provider);
+
+        var dir = MakeSizedFolder("big", bytes: 100);
+
+        Assert.Equal(0, await folder.CleanupExpiredAsync(TestTemp.Token)); // nothing is deleted
+        Assert.True(Directory.Exists(dir));
+
+        TempFolderVolumeArgs[] fired;
+        lock (events) fired = events.ToArray();
+
+        var single = Assert.Single(fired);
+        Assert.True(single.Exceeded);
+        Assert.Equal(100, single.TotalSize);
+    }
+
+    [Fact]
+    public async Task OverwritingARootLevelFile_UpdatesTheMeasuredTotal()
+    {
+        var events = new List<TempFolderVolumeArgs>();
+        using var provider = Build(options: o =>
+        {
+            o.TrackVolume = true;
+            o.MaxTotalSize = 1000;
+            o.OnVolumeExceeded = e => { lock (events) events.Add(e); };
+        });
+        var folder = Resolve(provider);
+
+        // A file directly in the root is cached under the root's own stamp, and an overwrite moves
+        // neither that stamp nor any ancestor's — the write must invalidate the entry explicitly,
+        // or the total would stay frozen at the first measured size.
+        await folder.WriteAsync(new MemoryStream(new byte[100]), "payload.bin", TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token); // first measurement: 100, under the limit
+
+        TempFolderVolumeArgs[] before;
+        lock (events) before = events.ToArray();
+        Assert.Empty(before);
+
+        await folder.WriteAsync(new MemoryStream(new byte[5000]), "payload.bin", TestTemp.Token);
+        await folder.CleanupExpiredAsync(TestTemp.Token);
+
+        TempFolderVolumeArgs[] fired;
+        lock (events) fired = events.ToArray();
+
+        var single = Assert.Single(fired);
+        Assert.True(single.Exceeded);
+        Assert.Equal(5000, single.TotalSize);
+    }
 }

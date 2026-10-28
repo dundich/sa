@@ -47,6 +47,14 @@ internal sealed class VolumeScanner
 
     private readonly Lock _gate = new();
     private readonly Dictionary<string, CachedFolder> _cache = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Serialises the walks: the pre-cleanup scan and the independent interval loop are triggered
+    /// from different places, and two concurrent walks of the same tree would only fight over the
+    /// cache (a stale measurement could overwrite a fresher one).
+    /// </summary>
+    private readonly SemaphoreSlim _scanGate = new(1, 1);
+
     private bool? _exceeded;
 
     public VolumeScanner(string name, string rootPath, ILogger logger)
@@ -58,10 +66,23 @@ internal sealed class VolumeScanner
 
     /// <summary>
     /// Runs one measurement pass on a low-priority thread and evaluates the volume event.
-    /// Returns the measured total in bytes.
+    /// Returns the measured total in bytes. A second caller waits for the running walk instead of
+    /// starting a competing one.
     /// </summary>
-    public Task<long> ScanAsync(TempFolderOptions options, CancellationToken cancellationToken)
-        => RunLowPriorityAsync(() => ScanCore(options, cancellationToken), cancellationToken);
+    public async Task<long> ScanAsync(TempFolderOptions options, CancellationToken cancellationToken)
+    {
+        await _scanGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return await RunLowPriorityAsync(() => ScanCore(options, cancellationToken), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _scanGate.Release();
+        }
+    }
 
     private long ScanCore(TempFolderOptions options, CancellationToken cancellationToken)
     {
@@ -219,28 +240,29 @@ internal sealed class VolumeScanner
 
     /// <summary>
     /// Drops the cached size of the top-level subfolder <paramref name="absolutePath"/> belongs to,
-    /// so the next scan re-walks it. Called after a successful deletion: deleting deep inside a
-    /// hierarchy does not move the top-level folder's last write time — the cache is keyed by
-    /// exactly that stamp — and would otherwise keep serving the pre-delete total until some later
-    /// write happens to touch the ancestor chain. A path directly in the root needs no help: the
-    /// root's own stamp moves with it.
+    /// so the next scan re-walks it. Called after a successful write or deletion: a deep change
+    /// does not move the top-level folder's last write time — the cache is keyed by exactly that
+    /// stamp — and would otherwise keep serving the pre-change total until some later write
+    /// happens to touch the ancestor chain. For a path lying directly in the root the loose-file
+    /// total is dropped instead: creating or deleting a root file moves the root's stamp, but an
+    /// <i>overwrite</i> does not, so that entry needs the explicit nudge.
     /// </summary>
     /// <exception cref="SecurityException">The path is outside the root — nothing to invalidate.</exception>
     public void Invalidate(string absolutePath)
     {
         var top = PathGuard.TopSegment(_rootPath, absolutePath);
-        if (top is null)
-        {
-            return; // sits directly in the root — its stamp already moved
-        }
-
-        // Same construction as Directory.EnumerateDirectories(_rootPath) uses for its results,
-        // so the key matches the cache textually.
-        var key = Path.Combine(_rootPath, top);
 
         lock (_gate)
         {
-            _cache.Remove(key);
+            if (top is null)
+            {
+                _cache.Remove(RootFilesCacheKey);
+                return;
+            }
+
+            // Same construction as Directory.EnumerateDirectories(_rootPath) uses for its results,
+            // so the key matches the cache textually.
+            _cache.Remove(Path.Combine(_rootPath, top));
         }
     }
 

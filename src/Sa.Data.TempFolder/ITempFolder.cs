@@ -52,8 +52,9 @@ public interface ITempFolder : IDisposable
     /// cleanup pass: a concurrent pass is cancelled rather than allowed to race it (see
     /// <see cref="CleanupExpiredAsync"/>). When the source's remaining length is known
     /// (<see cref="Stream.CanSeek"/>), the target file is preallocated to exactly that size so it
-    /// never grows in chunks during the copy. A failed or cancelled copy removes the partially
-    /// written target — no half-written file is left behind for a reader to take for complete.
+    /// never grows in chunks during the copy. The copy is staged in a sibling temp file and renamed
+    /// into place only when complete: a reader never observes a truncated target, and a failed or
+    /// cancelled copy leaves an existing file exactly as it was (the staged partial is removed).
     /// </summary>
     /// <param name="source">The stream to copy from; its current position is respected.</param>
     /// <param name="path">

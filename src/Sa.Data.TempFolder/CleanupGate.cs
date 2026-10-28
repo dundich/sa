@@ -100,6 +100,23 @@ internal sealed class CleanupGate
         }
     }
 
+    /// <summary>
+    /// Whether file activity or a cleanup pass is in flight right now. A cheap read-only probe for
+    /// callers that can skip work which a pass could not use anyway (the pre-cleanup volume scan);
+    /// it takes no lease and guarantees nothing — the authoritative check is
+    /// <see cref="TryEnterCleanup"/>.
+    /// </summary>
+    public bool IsBusy
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _passActive || _activity > 0;
+            }
+        }
+    }
+
     private void ExitActivity()
     {
         lock (_sync)
