@@ -473,25 +473,6 @@ ORDER BY from_date ASC
     }
 
 
-    public static string SelectPartsQualifiedTablesSql(this ITableSettings settings, StrOrNum[] values)
-        => SelectPartsQualifiedTablesSql(settings.GetQualifiedTableName(values.AsSpan()));
-
-    internal static string SelectPartsQualifiedTablesSql(this ITableSettings settings, ReadOnlySpan<StrOrNum> values)
-        => SelectPartsQualifiedTablesSql(settings.GetQualifiedTableName(values));
-
-    public static string SelectPartsQualifiedTablesSql(string qualifiedTableName)
-        =>
-$"""
-WITH pt AS (
-  SELECT inhrelid::regclass AS pt
-  FROM pg_inherits
-  WHERE inhparent = {QuoteLiteral(qualifiedTableName)}::regclass
-)
-SELECT pt::text from pt
-;
-""";
-
-
     public static string DropPartSql(this ITableSettings settings, string qualifiedTableName)
     {
         return $"""

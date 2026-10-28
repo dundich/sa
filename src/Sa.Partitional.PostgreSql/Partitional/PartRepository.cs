@@ -12,12 +12,18 @@ internal sealed partial class PartRepository(
     ISqlBuilder sqlBuilder,
     // Required, not optional: the [LoggerMessage] methods dereference it, so a null logger
     // turned the first drop/migrate into a NullReferenceException.
-    ILogger<PartRepository> logger) : IPartRepository, IDisposable
+    ILogger<PartRepository> logger) : IPartRepository
 {
 
     /// <summary>
     /// Semaphore to ensure we don't perform ddl sql concurrently for this data source.
     /// </summary>
+    /// <remarks>
+    /// Never disposed. <see cref="SemaphoreSlim"/> owns no unmanaged resource unless
+    /// <c>AvailableWaitHandle</c> is used (it is not), while disposing it does break a run that is
+    /// still queued on it: the host disposes singletons on its way out, and that run would then get
+    /// an <see cref="ObjectDisposedException"/> instead of finishing or waiting for its token.
+    /// </remarks>
     private readonly SemaphoreSlim _migrationSemaphore = new(1, 1);
 
     /// <summary>
@@ -397,11 +403,6 @@ internal sealed partial class PartRepository(
 
 
     private static bool UndefinedTable(PostgresException ex) => PgErrorCodes.IsUndefinedTable(ex);
-
-    public void Dispose()
-    {
-        _migrationSemaphore.Dispose();
-    }
 
 
     [LoggerMessage(

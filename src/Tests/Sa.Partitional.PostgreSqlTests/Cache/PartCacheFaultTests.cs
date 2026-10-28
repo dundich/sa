@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using Sa.Partitional.PostgreSql;
 using Sa.Partitional.PostgreSql.Cache;
 using Sa.Partitional.PostgreSql.Classes;
@@ -332,15 +332,6 @@ internal sealed class FakeSqlBuilder : ISqlBuilder
     public IAsyncEnumerable<string> MigrateSql(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve)
         => throw new NotImplementedException();
 
-    public string CreatePartSql(string tableName, DateTimeOffset date, StrOrNum[] partValues)
-        => string.Empty;
-
-    public string SelectPartsQualifiedTablesSql(string tableName, StrOrNum[] partValues)
-        => string.Empty;
-
-    public string SelectPartsQualifiedTablesSql(string qualifiedTablesSql)
-        => string.Empty;
-
     public string SelectPartsFromDateSql(string tableName)
         => string.Empty;
 
@@ -359,8 +350,6 @@ internal sealed class FakeSqlTableBuilder : ISqlTableBuilder
     public string SelectPartsFromDate => string.Empty;
 
     public string SelectPartsToDate => string.Empty;
-
-    public string GetPartsSql(StrOrNum[] partValues) => string.Empty;
 
     public string CreateSql(DateTimeOffset date, params StrOrNum[] partValues) => string.Empty;
 }

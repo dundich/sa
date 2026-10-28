@@ -44,7 +44,7 @@ public sealed class KeyedRegistrationTests
         string tableName,
         bool? asBackgroundJob = null)
         => services.AddSaPartitional(key, (_, builder) => builder.AddSchema(schema => schema
-            .AddTable(tableName, "id bigint NOT NULL", "created_at timestamptz NOT NULL")
+            .AddTable(tableName, "id bigint NOT NULL", "created_at bigint NOT NULL")
             .PartByRange(PgPartBy.Day)), asBackgroundJob);
 
     // ---------- independence of modules ----------
@@ -178,7 +178,7 @@ public sealed class KeyedRegistrationTests
         ServiceCollection services = CreateServices();
 
         services.AddSaPartitional((_, builder) => builder.AddSchema(schema => schema
-            .AddTable("t_default", "id bigint NOT NULL", "created_at timestamptz NOT NULL")
+            .AddTable("t_default", "id bigint NOT NULL", "created_at bigint NOT NULL")
             .PartByRange(PgPartBy.Day)));
 
         AddKeyedModule(services, "one", "t_one");

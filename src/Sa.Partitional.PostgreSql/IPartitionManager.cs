@@ -12,7 +12,12 @@ public interface IPartitionManager
     /// This method may be used to reorganize or update partitions based on the current state of the data.
     /// </summary>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A task representing the asynchronous operation, with an integer result indicating the number of partitions migrated.</returns>
+    /// <returns>
+    /// The number of DDL statements executed (the DDL is <c>IF NOT EXISTS</c>, so this is not the
+    /// number of partitions created), or <c>-1</c> when the run did not complete — see
+    /// <see cref="IMigrationService.Migrate(CancellationToken)"/>. Callers must treat <c>-1</c> as
+    /// "not completed", never as a negative count.
+    /// </returns>
     Task<int> Migrate(CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -21,7 +26,10 @@ public interface IPartitionManager
     /// </summary>
     /// <param name="dates">An array of dates for which partitions should be migrated.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A task representing the asynchronous operation, with an integer result indicating the number of partitions migrated.</returns>
+    /// <returns>
+    /// The number of DDL statements executed, or <c>-1</c> when the run did not complete — see
+    /// <see cref="IMigrationService.Migrate(DateTimeOffset[], CancellationToken)"/>.
+    /// </returns>
     Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
     /// <summary>

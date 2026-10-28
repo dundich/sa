@@ -116,7 +116,7 @@ internal sealed class PartCache(
 
     private async Task<List<PartByRangeInfo>> AwaitLoad(
         CacheEntry entry,
-        string tableName,
+        string cacheKey,
         CancellationToken cancellationToken)
     {
         Task<List<PartByRangeInfo>> load = entry.Load.Value;
@@ -134,7 +134,11 @@ internal sealed class PartCache(
             // key AND value), so a concurrent reload is not thrown away. The original exception
             // reaches the caller, and the next call re-queries the database instead of replaying a
             // stale failure forever.
-            if (_cache.TryRemove(new KeyValuePair<string, CacheEntry>(tableName, entry))) Discard(entry);
+            //
+            // It has to be the *cache key*, not the caller's table name: the entry was stored under
+            // the resolved full name (see CacheKey), so removing by a bare name here would quietly
+            // stop evicting for a caller that passes "events" instead of "public.events".
+            if (_cache.TryRemove(new KeyValuePair<string, CacheEntry>(cacheKey, entry))) Discard(entry);
             throw;
         }
     }

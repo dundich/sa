@@ -59,9 +59,9 @@ public sealed class OutboxScopeIsolationTests
     static IPartConfiguration AddAppDefaultModule(IServiceCollection services)
         => services.AddSaPartitional(
             (_, builder) => builder.AddSchema(schema => schema
-                .AddTable("app_table", "id bigint NOT NULL", "created_at timestamptz NOT NULL")
+                .AddTable("app_table", "id bigint NOT NULL", "created_at bigint NOT NULL")
                 .PartByRange(PgPartBy.Day)),
-            AsBackgroundJob: true);
+            asBackgroundJob: true);
 
     [Fact]
     public void Outbox_WithoutAppRegistrations_DoesNotCreateTheDefaultScheduleOrModule()

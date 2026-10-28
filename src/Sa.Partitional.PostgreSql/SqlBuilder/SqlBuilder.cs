@@ -1,4 +1,4 @@
-﻿using Sa.Partitional.PostgreSql.Classes;
+using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
@@ -19,6 +19,15 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
             SqlTableBuilder builder = builders[table];
 
             StrOrNum[][] parValues = await resolve(table).ConfigureAwait(false);
+
+            if (parValues.Length == 0 && builder.Settings.PartByListFieldNames.Length > 0)
+            {
+                // A list-partitioned table needs one value per list level; with none resolved there is
+                // no leaf to create. This used to emit the root and the list levels only, producing a
+                // tree whose deepest level had no range leaf - every later INSERT then failed with
+                // "no partition of relation ... found for row". Nothing to do is the honest answer.
+                continue;
+            }
 
             if (parValues.Length > 0)
             {
@@ -45,20 +54,11 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
     public ISqlTableBuilder? this[string tableName] => Find(tableName ?? throw new ArgumentNullException(nameof(tableName)));
 
 
-    public string SelectPartsQualifiedTablesSql(string tableName, StrOrNum[] partValues)
-        => (Find(tableName) ?? throw new KeyNotFoundException(tableName)).GetPartsSql(partValues);
-
-    public string SelectPartsQualifiedTablesSql(string qualifiedTablesSql)
-        => SqlTemplate.SelectPartsQualifiedTablesSql(qualifiedTablesSql);
-
     public string SelectPartsFromDateSql(string tableName)
         => (Find(tableName) ?? throw new KeyNotFoundException(tableName)).SelectPartsFromDate;
 
     public string SelectPartsToDateSql(string tableName)
         => (Find(tableName) ?? throw new KeyNotFoundException(tableName)).SelectPartsToDate;
-
-    public string CreatePartSql(string tableName, DateTimeOffset date, StrOrNum[] partValues)
-        => (Find(tableName) ?? throw new KeyNotFoundException(tableName)).CreateSql(date, partValues);
 
     #region privates
     /// <summary>

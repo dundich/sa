@@ -35,7 +35,7 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture)
 
                 });
             }
-            , AsBackgroundJob: true
+            , asBackgroundJob: true
             )
             .AddDataSource(configure => configure.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)))
             ;

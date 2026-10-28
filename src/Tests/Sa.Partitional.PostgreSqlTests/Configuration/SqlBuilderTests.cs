@@ -315,7 +315,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     {
         SchemaBuilder builder = new("public");
         ITableBuilder table = builder
-            .AddTable("t", "id INT NOT NULL", "created_at TIMESTAMPTZ NOT NULL", "dt TIMESTAMPTZ NOT NULL");
+            .AddTable("t", "id INT NOT NULL", "created_at BIGINT NOT NULL", "dt BIGINT NOT NULL");
 
         if (timestampAsFirst)
         {
@@ -333,7 +333,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     public void PartByRange_FallsBackToItsArgument_WhenTimestampAsWasNotCalled()
     {
         SchemaBuilder builder = new("public");
-        ITableBuilder table = builder.AddTable("t", "id INT NOT NULL", "created_at TIMESTAMPTZ NOT NULL");
+        ITableBuilder table = builder.AddTable("t", "id INT NOT NULL", "created_at BIGINT NOT NULL");
         table.PartByRange(PgPartBy.Month, "created_at");
 
         Assert.Equal("created_at", builder.Build().Single().PartByRangeFieldName);
@@ -461,5 +461,91 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
 
         Assert.DoesNotContain("DEFAULT reconciliation", sql);
         Assert.DoesNotContain("DEFAULT PARTITION", sql);
+    }
+
+    [Fact]
+    public void CreateSql_RejectsAWrongNumberOfPartValues()
+    {
+        // The list depth is fixed by the configuration, so a different number of values cannot
+        // describe the same table. It used to be tolerated and produced a tree whose deepest level
+        // had no range leaf, which only failed later, on INSERT.
+        ISqlTableBuilder builder = fixture.SqlBuilder["public.test_0"]!;
+
+        ArgumentException tooFew = Assert.Throws<ArgumentException>(
+            () => builder.CreateSql(Date, 29, "part1"));
+
+        Assert.Contains("3", tooFew.Message);
+        Assert.Contains("tenant_id", tooFew.Message);
+        Assert.Equal("partValues", tooFew.ParamName);
+
+        Assert.Throws<ArgumentException>(() => builder.CreateSql(Date, 29, "part1", "part2", "extra"));
+    }
+
+    [Fact]
+    public void CreateSql_RejectsAPartValueForARangeOnlyTable()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "created_at BIGINT NOT NULL")
+            .PartByRange(PgPartBy.Day);
+
+        ISqlTableBuilder tableBuilder = new SqlTableBuilder(builder.Build().Single());
+
+        Assert.Throws<ArgumentException>(() => tableBuilder.CreateSql(Date, "unexpected"));
+        Assert.NotEmpty(tableBuilder.CreateSql(Date));
+    }
+
+    [Fact]
+    public void Build_RejectsAListColumnThatNoFieldDeclares()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "tenant TEXT NOT NULL")
+            .PartByList("tenant_id");
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("tenant_id", error.Message);
+        Assert.Contains("public.t", error.Message);
+    }
+
+    [Fact]
+    public void Build_RejectsTheSameListColumnTwice()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "tenant TEXT NOT NULL")
+            .PartByList("tenant", "tenant");
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("tenant", error.Message);
+    }
+
+    [Theory]
+    [InlineData("timestamptz")]
+    [InlineData("TIMESTAMP")]
+    [InlineData("timestamp with time zone")]
+    [InlineData("date")]
+    [InlineData("time")]
+    public void Build_RejectsADateTimeRangeColumn(string type)
+    {
+        // The generated FOR VALUES bounds are Unix seconds; PostgreSQL refuses to cast them to a
+        // date/time type, and the failure would otherwise only appear in the migration job.
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", $"created_at {type} NOT NULL")
+            .PartByRange(PgPartBy.Day);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("created_at", error.Message);
+        Assert.Contains("bigint", error.Message);
+    }
+
+    [Fact]
+    public void Build_AcceptsABigintRangeColumn()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "created_at BIGINT NOT NULL")
+            .PartByRange(PgPartBy.Day);
+
+        Assert.Equal("created_at", builder.Build().Single().PartByRangeFieldName);
     }
 }

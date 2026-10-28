@@ -100,12 +100,14 @@ internal sealed partial class PartMigrationService(
         using var deadlineCts = new CancellationTokenSource(settings.RunTimeout);
 
         // The repository (and through it user IPartTableMigrationSupport.GetParts code) only ever
-        // sees a token owned by this library.
-        using CancellationTokenSource runCts = honorCallerToken
+        // sees a token owned by this library. A manual run additionally honours the caller's token,
+        // which needs a second source; it is disposed below rather than by a second `using` on the
+        // same variable, so the deadline source is never disposed twice.
+        using CancellationTokenSource? linkedCts = honorCallerToken
             ? CancellationTokenSource.CreateLinkedTokenSource(deadlineCts.Token, callerToken)
-            : deadlineCts;
+            : null;
 
-        CancellationToken runToken = runCts.Token;
+        CancellationToken runToken = linkedCts?.Token ?? deadlineCts.Token;
 
         LogMigrating(dates.Length, settings.RunTimeout);
 

@@ -1,4 +1,4 @@
-﻿using Sa.Partitional.PostgreSql.Repositories;
+using Sa.Partitional.PostgreSql.Repositories;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
@@ -138,20 +138,5 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
             $"""SELECT count(*) FROM public."test_10__{PartPostfix}" WHERE id LIKE '%7__race1__race1%';""",
             TestContext.Current.CancellationToken);
         Assert.Equal(1, cacheRows);
-    }
-
-    [Fact]
-    public async Task ExecuteDDL_AfterDispose_FailsAtTheLock()
-    {
-        PartRepository repository = new(
-            fixture.DataSource,
-            fixture.ServiceProvider.GetRequiredService<ISqlBuilder>(),
-            NullLogger<PartRepository>.Instance);
-        repository.Dispose();
-
-        // A disposed repository is a closed door rather than a broken one: the DDL semaphore is gone,
-        // so the call fails on the lock instead of running half of a migration and then failing.
-        await Assert.ThrowsAsync<ObjectDisposedException>(
-            () => repository.ExecuteDDL("SELECT 1;", TestContext.Current.CancellationToken));
     }
 }

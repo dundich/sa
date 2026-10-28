@@ -35,7 +35,7 @@ public class KeyedPartitionAsJobTests(KeyedPartitionAsJobTests.Fixture fixture)
                     .PartByList("country", "city")
                     .AddMigration("RU", ["Moscow", "Samara"])
                     .AddMigration("USA", ["Alabama", "New York"]));
-            }, AsBackgroundJob: true);
+            }, asBackgroundJob: true);
         }
     }
 
