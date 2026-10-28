@@ -23,6 +23,11 @@ internal sealed class FileSystemStorage(
 {
     private const string SchemeSeparator = "://";
 
+    // NTFS is case-insensitive by default, so a resolved path that differs from the configured
+    // root only in casing is still inside it. Same rule as PathGuard in Sa.Data.TempFolder.
+    private static readonly StringComparison s_pathComparison =
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
     // The temp folder hands out a fully qualified root; the trim keeps the prefix comparisons
     // below free of a trailing separator.
     private readonly string _root = Path.TrimEndingDirectorySeparator(tempFolder.RootPath);
@@ -54,7 +59,7 @@ internal sealed class FileSystemStorage(
         if (!fileId.AsSpan().StartsWith(_schemePrefix.AsSpan(), StringComparison.Ordinal))
             return false;
 
-        return IsPathWithinBase(GetFullPathFast(fileId));
+        return IsFileIdWithinBase(fileId);
     }
 
     public async Task<StorageResult> UploadAsync(
@@ -70,9 +75,16 @@ internal sealed class FileSystemStorage(
         string filename = PathSanitizer.SanitizeRelativePath(metadata.FileName);
 
         // The layout and the file ID stay exactly as before: {Basket}/{tenant}/{file}, joined
-        // with forward slashes so the fs:// prefix reads the same on every platform. The temp
-        // folder resolves and guards the path against its root.
-        string relativePath = string.Concat(Basket, "/", metadata.TenantId.ToString(), "/", filename);
+        // with forward slashes. The sanitizer emits the platform separator for nested names, so it
+        // is converted here — a file ID is a cross-platform identifier (`fs://share/1/sub/file.txt`
+        // on every OS), and the temp folder accepts '/' on every platform. The temp folder
+        // resolves and guards the path against its root.
+        string relativePath = string.Concat(
+            Basket,
+            "/",
+            metadata.TenantId.ToString(),
+            "/",
+            filename.Replace(Path.DirectorySeparatorChar, '/'));
 
         var (_, absolutePath) = await tempFolder
             .WriteAsync(fileStream, relativePath, cancellationToken)
@@ -115,19 +127,14 @@ internal sealed class FileSystemStorage(
                 .DeleteFileAsync(FileIdToPath(fileId), cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // A transient failure that survived the temp folder's retries reads as "not deleted"
-            // here — the same contract the provider had when it deleted files itself.
+            // here — the same contract the provider had when it deleted files itself. The temp
+            // folder retries both exception types (a permission denial is as transient as a lock
+            // on Windows), so both have to be swallowed on the way out.
             return false;
         }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private string GetFullPathFast(string fileId)
-    {
-        var relativePath = FileIdToPath(fileId);
-        return Path.Combine(_root, relativePath);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -144,12 +151,40 @@ internal sealed class FileSystemStorage(
         return span[(separatorIndex + SchemeSeparator.Length)..].ToString();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool IsPathWithinBase(string path)
+    /// <summary>
+    /// Determines whether <paramref name="fileId"/> resolves to a file inside this storage's basket.
+    /// </summary>
+    /// <remarks>
+    /// One resolve per call: the root is fully qualified, so <see cref="Path.Combine(string, string)"/>
+    /// already yields an absolute path and <see cref="Path.GetFullPath(string)"/> is only there to
+    /// normalise <c>..</c> and redundant separators before the containment check. <c>CanProcess</c>
+    /// runs for every storage in a hybrid chain, so a second resolve would be pure overhead.
+    /// </remarks>
+    private bool IsFileIdWithinBase(string fileId)
     {
-        return Path.GetFullPath(path)
-            .AsSpan()
-            .StartsWith(_basePathScope.AsSpan(), StringComparison.Ordinal);
+        string full;
+        try
+        {
+            full = Path.GetFullPath(Path.Combine(_root, FileIdToPath(fileId)));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // A file ID is caller input and CanProcess is a predicate: an ID the OS cannot resolve
+            // (a NUL character, an unsupported form, an over-long path) is "not mine", not an
+            // error. The hybrid chain probes every storage with this before any failover handling,
+            // so throwing here would abort the operation instead of letting the next candidate vote.
+            return false;
+        }
+
+        var scope = _basePathScope.AsSpan();
+        if (!full.AsSpan().StartsWith(scope, s_pathComparison))
+            return false;
+
+        // A trailing separator — or the end of the path — must follow the base scope; without it
+        // a sibling basket that merely shares the prefix (`share` vs `share2`) would be claimed.
+        return full.Length == scope.Length
+            || full[scope.Length] == Path.DirectorySeparatorChar
+            || full[scope.Length] == Path.AltDirectorySeparatorChar;
     }
 
     public Task<FileMetadata?> GetMetadataAsync(
@@ -159,13 +194,17 @@ internal sealed class FileSystemStorage(
         if (!CanProcess(fileId))
             return Task.FromResult<FileMetadata?>(null);
 
-        if (!FileIdParser.TryParse(fileId, out var basket, out var tenantId, out _, out var fileName))
+        if (!FileIdParser.TryParse(fileId, out _, out var tenantId, out _, out var fileName))
             return Task.FromResult<FileMetadata?>(null);
 
         var metadata = new FileMetadata
         {
             StorageType = StorageType,
-            Basket = basket,
+            // The configured basket, not the one spelled in the file ID: an ID only reaches this
+            // point when CanProcess mapped it inside {RootPath}/{Basket}, and reporting the
+            // configured value keeps the metadata consistent with Basket even for the odd IDs the
+            // parser legitimately accepts (the Postgres provider does the same).
+            Basket = Basket,
             FileName = fileName,
             TenantId = tenantId
         };
