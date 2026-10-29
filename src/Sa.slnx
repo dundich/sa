@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Benchmarks/">
+    <Project Path="Benchmarks/Sa.Outbox.Benchmarks/Sa.Outbox.Benchmarks.csproj" />
     <Project Path="Benchmarks/Sa.Utils.WorkQueue.Benchmarks/Sa.Utils.WorkQueue.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/Configuration/">

@@ -8,7 +8,7 @@
 /// <param name="Payload">Gets the actual message payload.</param>
 /// <param name="PartInfo">Gets information about the part of the Outbox message.</param>
 /// <typeparam name="TMessage">The type of the message payload.</typeparam>
-public sealed record OutboxMessage<TMessage>(
+public readonly record struct OutboxMessage<TMessage>(
     string PayloadId,
     TMessage Payload,
     OutboxPartInfo PartInfo

@@ -272,8 +272,8 @@ A provider must implement three key interfaces:
 > **Consumer ownership.** The `messages` memory passed to `IConsumer.Consume` and every context
 > in it are owned by the pipeline for the duration of that call. The contexts are recycled once
 > the statuses are persisted, so a consumer must not retain them (or the payload reached through
-> them) beyond the returned task. `OutboxPartInfo`, `OutboxTaskDeliveryInfo` and
-> `OutboxDeliveryMessage<T>` are `readonly record struct`s.
+> them) beyond the returned task. `OutboxMessage<T>`, `OutboxPartInfo`, `OutboxTaskDeliveryInfo`
+> and `OutboxDeliveryMessage<T>` are `readonly record struct`s.
 >
 > **Provider shape.** `IOutboxBulkWriter` has an `OutboxMessageBatch<T>` overload carrying one
 > shared part and no per-message wrapper. Its default implementation materializes the old
