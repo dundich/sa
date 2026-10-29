@@ -71,10 +71,26 @@ public class OutboxTypeCacheTests
         await cache.Reset(TestToken);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => resolver.GetHashCode("B", TestToken));
+            async () => await resolver.GetHashCode("B", TestToken));
 
         Assert.Contains("'B'", exception.Message, StringComparison.Ordinal);
         Assert.Contains("'A'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetHashCode_CachedType_DoesNotReloadTheTable()
+    {
+        var repository = new FakeTypeRepository();
+        repository.Rows.Add((1, "A"));
+        var cache = new OutboxTypeCache(repository);
+        var resolver = new OutboxTypeResolver(cache, repository);
+
+        Assert.Equal(1, await resolver.GetHashCode("A", TestToken));
+        var loadsAfterFirst = repository.SelectAllCalls;
+
+        // Served by the synchronous snapshot: no second SELECT, no task on the hot path.
+        Assert.Equal(1, await resolver.GetHashCode("A", TestToken));
+        Assert.Equal(loadsAfterFirst, repository.SelectAllCalls);
     }
 
     [Fact]
@@ -102,6 +118,8 @@ public class OutboxTypeCacheTests
 
         public int InsertCalls { get; private set; }
 
+        public int SelectAllCalls { get; private set; }
+
         public bool FailOnSelect { get; set; }
 
         public Task<int> Insert(long id, string typeName, CancellationToken cancellationToken)
@@ -117,6 +135,8 @@ public class OutboxTypeCacheTests
 
         public Task<IReadOnlyCollection<(long id, string typeName)>> SelectAll(CancellationToken cancellationToken)
         {
+            SelectAllCalls++;
+
             if (FailOnSelect)
                 throw new InvalidOperationException("select failed");
 

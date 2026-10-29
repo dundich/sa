@@ -10,6 +10,14 @@ internal sealed class OutboxTypeCache : IOutboxTypeCache
     private readonly ResetLazy<Task<Storage>> _cache;
 
     /// <summary>
+    /// The last successfully loaded snapshot, published for the synchronous fast path.
+    /// <see cref="Reset"/> clears it so the next lookup cannot keep answering from the map
+    /// that was just invalidated; a load still in flight may republish an older append-only
+    /// snapshot, which only makes a lookup for a newly added type fall back to the slow path.
+    /// </summary>
+    private volatile Storage? _ready;
+
+    /// <summary>
     /// Token of the caller that started the current load. <see cref="ResetLazy{T}"/>'s factory
     /// takes no arguments, so the token cannot be passed in; it is stored here before
     /// <see cref="ResetLazy{T}.Value"/> starts the factory. Later callers share that load.
@@ -48,6 +56,27 @@ internal sealed class OutboxTypeCache : IOutboxTypeCache
         }
     }
 
+    public bool TryGetCode(string typeName, out long code)
+    {
+        Storage? storage = _ready;
+
+        if (storage is not null && storage.GetCode(typeName) is { } found)
+        {
+            code = found;
+            return true;
+        }
+
+        code = 0;
+        return false;
+    }
+
+    public bool TryGetTypeName(long code, out string? typeName)
+    {
+        Storage? storage = _ready;
+        typeName = storage?.GetType(code);
+        return typeName is not null;
+    }
+
     public async Task<long?> GetCode(string typeName, CancellationToken cancellationToken)
     {
         Storage storage = await GetStorage(cancellationToken).ConfigureAwait(false);
@@ -66,6 +95,10 @@ internal sealed class OutboxTypeCache : IOutboxTypeCache
         // honouring a cancel here would leave the in-process map stale forever. The token is
         // part of the interface for symmetry with the async members.
         _ = cancellationToken;
+
+        // Clear the fast-path snapshot before invalidating the lazy: a concurrent lookup must
+        // not resolve against the map that is being dropped.
+        _ready = null;
         _cache.Reset();
         return Task.CompletedTask;
     }
@@ -101,7 +134,12 @@ internal sealed class OutboxTypeCache : IOutboxTypeCache
     {
         CancellationToken token = _loadScope.Token;
         var hashCodes = await _repository.SelectAll(token).ConfigureAwait(false);
-        return new Storage(hashCodes);
+
+        // The snapshot is immutable and fully built before the volatile publish, so a reader
+        // that sees _ready sees a consistent pair of maps.
+        var storage = new Storage(hashCodes);
+        _ready = storage;
+        return storage;
     }
 
     private sealed class LoadScope(CancellationToken token)

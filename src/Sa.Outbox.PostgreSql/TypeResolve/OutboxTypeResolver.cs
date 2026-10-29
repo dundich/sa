@@ -9,7 +9,20 @@ internal sealed class OutboxTypeResolver(
 {
     private readonly SemaphoreSlim _insertLock = new(1, 1);
 
-    public async Task<long> GetHashCode(string typeName, CancellationToken cancellationToken)
+    public ValueTask<long> GetHashCode(string typeName, CancellationToken cancellationToken)
+    {
+        // Hot path: the snapshot is loaded and already knows this type. Returning a ValueTask
+        // avoids the Task<long> the async method would allocate even when it completes
+        // synchronously — this runs on every publish, poll and lock-renewal.
+        if (cache.TryGetCode(typeName, out long cached))
+        {
+            return new ValueTask<long>(cached);
+        }
+
+        return new ValueTask<long>(GetHashCodeSlow(typeName, cancellationToken));
+    }
+
+    private async Task<long> GetHashCodeSlow(string typeName, CancellationToken cancellationToken)
     {
         long? code = await cache.GetCode(typeName, cancellationToken).ConfigureAwait(false);
 
@@ -46,7 +59,17 @@ internal sealed class OutboxTypeResolver(
         return computed;
     }
 
-    public async Task<string> GetTypeName(long typeHashCode, CancellationToken cancellationToken)
+    public ValueTask<string> GetTypeName(long typeHashCode, CancellationToken cancellationToken)
+    {
+        if (cache.TryGetTypeName(typeHashCode, out string? known) && known is not null)
+        {
+            return new ValueTask<string>(known);
+        }
+
+        return new ValueTask<string>(GetTypeNameSlow(typeHashCode, cancellationToken));
+    }
+
+    private async Task<string> GetTypeNameSlow(long typeHashCode, CancellationToken cancellationToken)
     {
         string? typeName = await cache.GetTypeName(typeHashCode, cancellationToken).ConfigureAwait(false);
         if (typeName != null) return typeName;
