@@ -140,22 +140,22 @@ public class SqlSelectTenantPlanTests(SqlSelectTenantPlanTests.Fixture fixture)
         // A projection mistake here would return fewer tenants than exist and only show up
         // as a quietly under-consumed outbox.
         //
-        // Counted rather than compared against a literal: both tests in this class share the
-        // fixture and therefore the message table, and the plan test seeds every configured
-        // tenant, so the number of distinct tenants is TenantCount by the time this runs. The
-        // point being asserted is "one row per tenant, never fewer and never more", which is
-        // what a broken projection or a missing DISTINCT would break.
+        // Every configured tenant is seeded *by this test*: both tests in this class share the
+        // fixture and therefore the message table, but xUnit gives no order guarantee, and
+        // relying on the sibling's seeding made the expected count depend on it. On a CI runner
+        // this test ran first, so the table held only the two tenants it had published itself
+        // and the assertion went 4 != 2. Two messages per tenant keep the dedup exercised.
         var ct = TestContext.Current.CancellationToken;
 
-        var published = await fixture.Sub.Publish(
-            [
-                new TestMessage { PayloadId = "distinct-a", Content = "a", TenantId = 1 },
-                new TestMessage { PayloadId = "distinct-b", Content = "b", TenantId = 1 },
-                new TestMessage { PayloadId = "distinct-c", Content = "c", TenantId = 3 },
-            ],
-            m => m.TenantId,
-            ct);
-        Assert.Equal(3u, published);
+        List<TestMessage> messages = [];
+        for (var tenant = 1; tenant <= TenantCount; tenant++)
+        {
+            messages.Add(new TestMessage { PayloadId = $"distinct-{tenant}-a", Content = "a", TenantId = tenant });
+            messages.Add(new TestMessage { PayloadId = $"distinct-{tenant}-b", Content = "b", TenantId = tenant });
+        }
+
+        var published = await fixture.Sub.Publish(messages, m => m.TenantId, ct);
+        Assert.Equal((ulong)messages.Count, published);
 
         var field = TableSettings.Message.Fields.TenantId;
         var tenants = await DataSource.ExecuteReaderList(
@@ -165,7 +165,7 @@ public class SqlSelectTenantPlanTests(SqlSelectTenantPlanTests.Fixture fixture)
 
         Assert.Equal(TenantCount, tenants.Count);
         Assert.Equal(tenants.Count, tenants.Distinct().Count());
-        Assert.Equal(tenants.Order(), tenants.OrderBy(t => t));
+        Assert.Equal(Enumerable.Range(1, TenantCount), tenants.Order());
     }
 
     private async Task<List<string>> ExplainAsync(string sql, CancellationToken cancellationToken)

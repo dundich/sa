@@ -58,7 +58,10 @@ public sealed class ProcessExecutorTests
         Assert.InRange(sw.Elapsed, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(10));
 
         // Команда попала в сообщение — диагностика таймаута не «голый» текст.
-        Assert.Contains("sleep", ex.Message, StringComparison.OrdinalIgnoreCase);
+        // Имя процесса платформенное: LongRunningProcess запускает ping на Windows и /bin/sleep
+        // на Unix, поэтому захардкоженное "sleep" валило windows-лег на ровном месте.
+        var expectedCommand = OperatingSystem.IsWindows() ? "ping" : "sleep";
+        Assert.Contains(expectedCommand, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

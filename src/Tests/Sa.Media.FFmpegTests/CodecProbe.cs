@@ -41,20 +41,52 @@ static class CodecProbe
     {
         var codecs = await IFFMpegExecutor.Default.GetCodecs(token);
 
-        var found = codecs.Split('\n').Any(
-            line => line
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                .Any(token => token.Trim('(', ')', ':', ',') == encoderName));
-
-        if (!found)
+        if (!Tokens(codecs).Contains(encoderName, StringComparer.Ordinal))
         {
             var message = $"Encoder '{encoderName}' is not in the detected FFmpeg build — " +
-                          "rebuild the payload (build/common.sh carries the codec flags).";
+                          "rebuild the payload (build/common.sh carries the codec flags)." +
+                          $"{Environment.NewLine}{await DescribeDetectedBuildAsync(token)}";
 
             if (skipWhenMissing)
                 Assert.Skip(message);
             else
                 Assert.Fail(message);
         }
+    }
+
+    /// <summary>
+    /// Слова из вывода <c>ffmpeg -codecs</c>. <see cref="string.Trim()"/> обязателен перед
+    /// снятием скобок: на Windows строки приходят с <c>\r</c>, и токен в конце строки
+    /// (<c>libvorbis\r</c>) не совпадал ни с одним именем энкодера.
+    /// </summary>
+    private static IEnumerable<string> Tokens(string codecs) =>
+        codecs
+            .Split('\n')
+            .SelectMany(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .Select(part => part.Trim().Trim('(', ')', ':', ','));
+
+    /// <summary>
+    /// Что именно тест увидел: путь к бинарю, его версия и список внешних библиотек
+    /// (<c>lib*</c>), найденных в сборке. Без этого «энкодера нет» не отличить от «взят
+    /// не тот ffmpeg» — а Windows-лег уже один раз упал именно так, и по сообщению
+    /// невозможно было понять, какой бинарь опрошен.
+    /// </summary>
+    private static async Task<string> DescribeDetectedBuildAsync(CancellationToken token)
+    {
+        var executor = IFFMpegExecutor.Default;
+
+        var version = (await executor.GetVersion(token))
+            .Split('\n')
+            .FirstOrDefault(line => line.Contains("version", StringComparison.OrdinalIgnoreCase))
+            ?.Trim() ?? "(version unknown)";
+
+        var external = string.Join(", ", Tokens(await executor.GetCodecs(token))
+            .Where(part => part.StartsWith("lib", StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(part => part, StringComparer.Ordinal));
+
+        return $"Detected: {version}{Environment.NewLine}" +
+               $"Executable: {executor.Executor.ExecutablePath}{Environment.NewLine}" +
+               $"External encoders: {external}";
     }
 }

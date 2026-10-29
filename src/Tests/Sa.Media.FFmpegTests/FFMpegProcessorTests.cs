@@ -168,9 +168,13 @@ public sealed class FFMpegProcessorTests
     [InlineData("./data/input.wav")]
     public async Task ConvertToOgg_ShouldBeWork(string testFilePath)
     {
-        // isLibopus: false → команда явно называет энкодер libvorbis; если его нет
-        // в сборке (win-x64 payload старше фикса кодеков) — тест пропускается, а не падает.
-        await CodecProbe.RequireEncoderAvailable("libvorbis", CancellationToken);
+        // isLibopus: false → команда явно называет энкодер libvorbis. Payload win-x64 старше
+        // linux-ового и собран отдельной кросс-компиляцией, поэтому отсутствие libvorbis в нём —
+        // известное состояние, а не регрессия: тест обязан пропуститься, а не падать
+        // (RequireEncoderAvailable здесь валил windows-лег на ровном месте).
+        // Причина пропуска несёт путь к бинарю, версию и список внешних энкодеров —
+        // по ней видно, опрошен ли бандл или подобран чужой ffmpeg из PATH.
+        await CodecProbe.EnsureEncoderAvailable("libvorbis", CancellationToken);
 
         var fn = "./data/output.ogg_";
         // Act

@@ -72,10 +72,43 @@ public sealed class WorkQueueSyncReaderTests
     // below reach it by reflection. They check the two properties the registry has
     // to have: every entry is a usable reader, and none of them is a leftover.
 
+    private static readonly FieldInfo ReadersField = typeof(SaWorkQueue<int>)
+        .GetField("_readers", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    private static readonly FieldInfo ReadersSyncField = typeof(SaWorkQueue<int>)
+        .GetField("_readersSync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    private static readonly MethodInfo LockEnter = typeof(Lock).GetMethod(nameof(Lock.Enter))!;
+
+    private static readonly MethodInfo LockExit = typeof(Lock).GetMethod(nameof(Lock.Exit))!;
+
+    /// <summary>
+    /// Snapshot of the registry, taken under the queue's own <c>_readersSync</c>.
+    /// </summary>
+    /// <remarks>
+    /// Readers are added and removed from their own threads, so a plain copy of the list
+    /// raced with that and threw "Collection was modified; enumeration operation may not
+    /// execute" on a 4-core CI runner, pointing the finger at the queue while the fault was
+    /// purely in the snapshot. <see cref="Lock.EnterScope"/> cannot be reached through
+    /// reflection (it returns a <c>ref struct</c>), so the same lock is taken through
+    /// <see cref="Lock.Enter"/>/<see cref="Lock.Exit"/>. <c>Monitor.Enter</c> would not do:
+    /// a <see cref="Lock"/> synchronizes through its own state, not through the object's
+    /// monitor, so anything but the very same <see cref="Lock"/> provides no exclusion at all.
+    /// </remarks>
     private static List<object> Readers(SaWorkQueue<int> queue)
-        => [.. (IEnumerable)typeof(SaWorkQueue<int>)
-            .GetField("_readers", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(queue)!];
+    {
+        var sync = ReadersSyncField.GetValue(queue)!;
+
+        LockEnter.Invoke(sync, null);
+        try
+        {
+            return [.. (IEnumerable)ReadersField.GetValue(queue)!];
+        }
+        finally
+        {
+            LockExit.Invoke(sync, null);
+        }
+    }
 
     private static object? Prop(object instance, string name)
         => instance.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public)!.GetValue(instance);
