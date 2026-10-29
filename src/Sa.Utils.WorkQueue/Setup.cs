@@ -222,6 +222,7 @@ public static class Setup
             MaxConcurrency: settings.MaxConcurrency,
             SingleWriter: settings.SingleWriter,
             EnqueueStrategy: settings.EnqueueStrategy,
+            ProducerCancellation: settings.ProducerCancellation,
             ReaderCancelMode: settings.ReaderCancelMode,
             ReaderCancellationOrder: settings.ReaderCancellationOrder,
             HandleItemFaulted: builder?.HandleItemFaulted,

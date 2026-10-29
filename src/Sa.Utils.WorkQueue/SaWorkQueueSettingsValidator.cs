@@ -56,6 +56,11 @@ internal sealed class SaWorkQueueSettingsValidator : IValidateOptions<SaWorkQueu
             Fail(ref errors, "SaWorkQueueSettings:EnqueueStrategy must be Wait, Skip or Throw.");
         }
 
+        if (!Enum.IsDefined(options.ProducerCancellation))
+        {
+            Fail(ref errors, "SaWorkQueueSettings:ProducerCancellation must be Observe or Detached.");
+        }
+
         if (!Enum.IsDefined(options.ReaderCancelMode))
         {
             Fail(ref errors, "SaWorkQueueSettings:ReaderCancelMode must be Hard or Soft.");

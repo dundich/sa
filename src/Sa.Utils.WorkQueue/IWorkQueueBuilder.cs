@@ -61,6 +61,13 @@ public interface IWorkQueueBuilder<TInput>
     /// <summary>Sets the default behaviour when the buffer is full.</summary>
     IWorkQueueBuilder<TInput> WithEnqueueStrategy(SaEnqueueStrategy strategy);
 
+    /// <summary>
+    /// Sets whether an accepted item keeps observing the producer's cancellation token.
+    /// <see cref="SaProducerCancellationMode.Detached"/> uses the token only for the wait
+    /// on buffer space, so an item that was accepted cannot be aborted by its producer.
+    /// </summary>
+    IWorkQueueBuilder<TInput> WithProducerCancellation(SaProducerCancellationMode mode);
+
     /// <summary>Sets how in-flight work is treated when readers are cancelled.</summary>
     IWorkQueueBuilder<TInput> WithReaderCancelMode(SaReaderCancelMode mode);
 

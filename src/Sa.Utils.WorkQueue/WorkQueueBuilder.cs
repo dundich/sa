@@ -123,6 +123,13 @@ internal sealed class WorkQueueBuilder<TInput> : IWorkQueueBuilder<TInput>
         return this;
     }
 
+    public IWorkQueueBuilder<TInput> WithProducerCancellation(SaProducerCancellationMode mode)
+    {
+        _codeSettings.ProducerCancellation = mode;
+        HasCodeSettings = true;
+        return this;
+    }
+
     public IWorkQueueBuilder<TInput> WithReaderCancelMode(SaReaderCancelMode mode)
     {
         _codeSettings.ReaderCancelMode = mode;
@@ -211,6 +218,7 @@ internal sealed class WorkQueueBuilder<TInput> : IWorkQueueBuilder<TInput>
         target.MaxConcurrency = _codeSettings.MaxConcurrency;
         target.SingleWriter = _codeSettings.SingleWriter;
         target.EnqueueStrategy = _codeSettings.EnqueueStrategy;
+        target.ProducerCancellation = _codeSettings.ProducerCancellation;
         target.ReaderCancelMode = _codeSettings.ReaderCancelMode;
         target.ReaderCancellationOrder = _codeSettings.ReaderCancellationOrder;
         target.ShutdownTimeout = _codeSettings.ShutdownTimeout;

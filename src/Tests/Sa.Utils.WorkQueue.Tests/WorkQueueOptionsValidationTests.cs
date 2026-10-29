@@ -66,6 +66,17 @@ public sealed class WorkQueueOptionsValidationTests
     }
 
     [Fact]
+    public void Ctor_UndefinedProducerCancellation_Throws()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new SaWorkQueue<int>(new SaWorkQueueOptions<int>(
+                new CountingProcessor(),
+                ProducerCancellation: (SaProducerCancellationMode)42)));
+
+        Assert.Equal(nameof(SaWorkQueueOptions<int>.ProducerCancellation), ex.ParamName);
+    }
+
+    [Fact]
     public void WithMaxConcurrency_Negative_Throws()
     {
         // Единственный With*-метод без проверки знака раньше: -1 молча сворачивался в число

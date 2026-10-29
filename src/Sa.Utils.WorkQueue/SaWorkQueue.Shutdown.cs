@@ -128,25 +128,41 @@ public sealed partial class SaWorkQueue<TInput>
     /// </param>
     private void DrainAndResetIdle(SaWorkDrainReason reason)
     {
+        // The exception built below exists only for the status callback, so a queue
+        // without one would allocate (and throw away) a fault object per dropped
+        // item. The terminal-status contract still holds: there is nobody to report
+        // it to.
+        var hasObserver = _statusChanged is not null;
+        var drained = 0;
+
         while (_queue.Reader.TryRead(out var item))
         {
-            if (item.CancellationToken.IsCancellationRequested)
+            if (hasObserver)
             {
-                // The producer gave up before any reader reached this item, so
-                // nothing has reported it yet. A reader picking it up would have
-                // reported Aborted, so do the same here and keep the "every
-                // accepted item gets a terminal status" contract.
-                OnStatusChanged(item.Input, SaWorkStatus.Aborted, ThrowHelper.CallerCancelledException());
-            }
-            else
-            {
-                // A fresh exception per item, so an observer can tell which work
-                // item was dropped (a shared singleton made them all
-                // reference-identical).
-                OnStatusChanged(item.Input, SaWorkStatus.Faulted, ThrowHelper.DroppedException(reason));
+                if (item.CancellationToken.IsCancellationRequested)
+                {
+                    // The producer gave up before any reader reached this item, so
+                    // nothing has reported it yet. A reader picking it up would have
+                    // reported Aborted, so do the same here and keep the "every
+                    // accepted item gets a terminal status" contract.
+                    OnStatusChanged(item.Input, SaWorkStatus.Aborted, ThrowHelper.CallerCancelledException());
+                }
+                else
+                {
+                    // A fresh exception per item, so an observer can tell which work
+                    // item was dropped (a shared singleton made them all
+                    // reference-identical).
+                    OnStatusChanged(item.Input, SaWorkStatus.Faulted, ThrowHelper.DroppedException(reason));
+                }
             }
 
-            MarkInactive();
+            drained++;
+        }
+
+        if (drained > 0)
+        {
+            // One critical section for the whole buffer instead of one per item.
+            MarkInactive(drained);
         }
 
         ResetPendingIfAllReadersDone();

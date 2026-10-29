@@ -95,6 +95,7 @@ SaWorkQueueOptions<TInput>.Create(processor)
     .WithReaderCancellationOrder(enum)             // Lifo | Fifo | RoundRobin | Random
     .WithReaderCancelMode(enum)                   // Hard | Soft — in-flight работа при удалении читателя
     .WithEnqueueStrategy(enum)                    // Wait | Skip | Throw — поведение при полном буфере
+    .WithProducerCancellation(enum)               // Observe | Detached — хранить токен продюсера после принятия или нет
     .WithStatusCallback(Action<TInput, SaWorkStatus, Exception?>)
     .WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy>)
     .WithItemDisplayName(Func<TInput, string>)    // Пользовательское имя элемента для логирования
@@ -135,6 +136,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(async (input, ct) => {
     "MaxConcurrency": 16,
     "SingleWriter": false,
     "EnqueueStrategy": "Wait",
+    "ProducerCancellation": "Observe",
     "ReaderCancelMode": "Hard",
     "ReaderCancellationOrder": "RoundRobin",
     "ShutdownTimeout": "00:00:30"
@@ -312,6 +314,30 @@ int free = queue.AvailableCapacity;
 
 `EnqueueMany(inputs, ct)` добавляет несколько элементов одним вызовом и возвращает число принятых (`ValueTask<int>`). Каждый элемент ведёт себя согласно настроенной стратегии: `Wait` блокирует до освобождения места, так что в итоге принимаются все элементы; `Skip` бросает элементы, которым не хватило места, сообщая каждый из них как `Skipped`; `Throw` бросает `SaWorkQueueFullException` сразу, как только буфер наполняется, — с `AcceptedCount` и `TotalCount`. Элементы, принятые до сбоя `Throw`, остаются в очереди.
 
+### Отмена со стороны продюсера
+
+По умолчанию принятый элемент продолжает наблюдать токен, переданный в `Enqueue`:
+отмена во время нахождения в буфере или в работе сообщает `Aborted`, а ридер остаётся в
+пуле. Это стоит линкованного `CancellationTokenSource` на каждый элемент, если токен
+может сработать.
+
+```csharp
+var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
+    .WithProducerCancellation(SaProducerCancellationMode.Detached);
+```
+
+`Detached` хранит токен только для ожидания места в буфере. Уже отменённый токен
+по-прежнему отклоняет вызов, а отмена продюсера, припаркованного в `WriteAsync`, его
+разблокирует, — но после принятия элемент доходит до терминального статуса. Собственный
+shutdown и force-cancel очереди при этом продолжают отменять работу. Режим нужен, когда
+работа должна пережить область, которая её создала (например, токен HTTP-запроса,
+переданный в фоновую обработку). `EnqueueMany` проверяет токен перед каждым элементом,
+поэтому отмена в середине батча останавливает его после уже принятых элементов.
+
+`SaProducerCancellationMode.Observe` — режим по умолчанию и единственный, в котором
+отмена продюсером может дать `SaWorkStatus.Aborted`. `TryEnqueue` вообще не несёт токен,
+то есть уже работает как detached.
+
 ---
 
 ## Стратегии обработки ошибок
@@ -398,7 +424,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 9. **Возврат `Enqueue`**: `ValueTask<bool>` — `false` только в режиме `Skip` при полном буфере (элемент отброшен и сообщается как `Skipped` через `StatusChanged`). Остановленная/disposed очередь всегда бросает исключение; оно несётся `ValueTask` и раскрывается через `await`.
 10. **`AvailableCapacity`**: только информационно — свободные слоты буфера. Не влияет на `IsIdle()`.
 11. **Никогда из `Execute`**: не вызывайте `Shutdown`, `ShutdownAsync`, `ForceCancelReaders`, `ForceCancelReadersAsync`, `Dispose`/`DisposeAsync` из реализации `ISaWork<TInput>.Execute`: вызывающий читатель — одна из задач, на которые ждут эти методы, поэтому вызов блокируется на весь `ShutdownTimeout` (по умолч. 30с). Передайте работу фоновой задаче (например, `Task.Run`).
-12. **Валидация опций**: первичный конструктор `SaWorkQueueOptions<TInput>` публичен, поэтому его аргументы обходят guard-ы `With*`; конструктор `SaWorkQueue<TInput>` повторно валидирует и бросает `ArgumentOutOfRangeException` до создания канала — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, положительный `ShutdownTimeout`, а три стратегических enum-а (`EnqueueStrategy`, `ReaderCancelMode`, `ReaderCancellationOrder`) должны быть *определёнными* значениями: неопределённое иначе проваливается в default-ветку и молча становится `Skip`, `Hard` или `Lifo`. Те же правила раньше доходят до конфигурации через `SaWorkQueueSettingsValidator` и сообщаются как `OptionsValidationException` — при старте хоста (`ValidateOnStart()`) или на первом resolve очереди — а не как `ArgumentOutOfRangeException`. `MaxConcurrency = 0` и `null` означают одно и то же — «кол-во ядер» (ровно то, что даёт `WithMaxConcurrency(0)`); отрицательное значение ничего не значит и отклоняется. Присваивание отрицательного `ConcurrencyLimit` после создания тоже бросает — молчаливый кламп в 0 дал бы очередь, навсегда приостановленную, но по-прежнему сообщающую `IsEnabled == true`. Клампом, а не ошибкой, обрабатывается только *положительное* значение выше `MaxConcurrency`.
+12. **Валидация опций**: первичный конструктор `SaWorkQueueOptions<TInput>` публичен, поэтому его аргументы обходят guard-ы `With*`; конструктор `SaWorkQueue<TInput>` повторно валидирует и бросает `ArgumentOutOfRangeException` до создания канала — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, положительный `ShutdownTimeout`, а четыре стратегических enum-а (`EnqueueStrategy`, `ProducerCancellation`, `ReaderCancelMode`, `ReaderCancellationOrder`) должны быть *определёнными* значениями: неопределённое иначе проваливается в default-ветку и молча становится `Skip`, `Hard` или `Lifo`. Те же правила раньше доходят до конфигурации через `SaWorkQueueSettingsValidator` и сообщаются как `OptionsValidationException` — при старте хоста (`ValidateOnStart()`) или на первом resolve очереди — а не как `ArgumentOutOfRangeException`. `MaxConcurrency = 0` и `null` означают одно и то же — «кол-во ядер» (ровно то, что даёт `WithMaxConcurrency(0)`); отрицательное значение ничего не значит и отклоняется. Присваивание отрицательного `ConcurrencyLimit` после создания тоже бросает — молчаливый кламп в 0 дал бы очередь, навсегда приостановленную, но по-прежнему сообщающую `IsEnabled == true`. Клампом, а не ошибкой, обрабатывается только *положительное* значение выше `MaxConcurrency`.
 
 ---
 

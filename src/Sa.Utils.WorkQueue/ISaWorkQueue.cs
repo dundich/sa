@@ -123,8 +123,13 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="input">The work item to process.</param>
     /// <param name="cancellationToken">
-    /// Token for caller-initiated cancellation. If this token is cancelled while the item is being processed,
-    /// the item is reported as <see cref="SaWorkStatus.Aborted"/> and the reader continues to the next item.
+    /// Token for caller-initiated cancellation. In the default
+    /// <see cref="SaProducerCancellationMode.Observe"/> mode it is stored with the item:
+    /// cancelling it while the item is buffered or being processed reports
+    /// <see cref="SaWorkStatus.Aborted"/> and the reader continues to the next item. In
+    /// <see cref="SaProducerCancellationMode.Detached"/> mode it only cancels the wait for
+    /// buffer space — once accepted, the item is no longer abortable by its producer, and
+    /// an already-cancelled token rejects the call with <see cref="OperationCanceledException"/>.
     /// </param>
     /// <returns>
     /// <see langword="true" /> if the item was accepted into the buffer;
@@ -135,7 +140,11 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <exception cref="SaWorkQueueFullException">If the buffer is full and the strategy is <see cref="SaEnqueueStrategy.Throw"/>.</exception>
     /// <exception cref="InvalidOperationException">If the queue has been shut down.</exception>
     /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
-    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled while waiting for buffer space (<see cref="SaEnqueueStrategy.Wait"/> only).</exception>
+    /// <exception cref="OperationCanceledException">
+    /// If <paramref name="cancellationToken"/> is cancelled while waiting for buffer space
+    /// (<see cref="SaEnqueueStrategy.Wait"/> only), or was already cancelled when the item
+    /// is offered in <see cref="SaProducerCancellationMode.Detached"/> mode.
+    /// </exception>
     ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -177,8 +186,13 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="inputs">The work items to process, in the order they are enqueued.</param>
     /// <param name="cancellationToken">
-    /// Token for caller-initiated cancellation. All enqueued items share this token, so cancelling it
-    /// aborts every not-yet-completed item from this batch (<see cref="SaWorkStatus.Aborted"/>).
+    /// Token for caller-initiated cancellation. In
+    /// <see cref="SaProducerCancellationMode.Observe"/> mode all enqueued items share this
+    /// token, so cancelling it aborts every not-yet-completed item from this batch
+    /// (<see cref="SaWorkStatus.Aborted"/>). In
+    /// <see cref="SaProducerCancellationMode.Detached"/> mode it cancels only the waits for
+    /// buffer space, and a cancellation observed between items stops the batch with
+    /// <see cref="OperationCanceledException"/> after the preceding items were accepted.
     /// </param>
     /// <returns>
     /// The number of items accepted into the buffer
@@ -190,7 +204,10 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <exception cref="ArgumentNullException">If <paramref name="inputs"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">If the queue has been shut down.</exception>
     /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
-    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled while waiting for space.</exception>
+    /// <exception cref="OperationCanceledException">
+    /// If <paramref name="cancellationToken"/> is cancelled while waiting for space, or is
+    /// observed cancelled between items in <see cref="SaProducerCancellationMode.Detached"/> mode.
+    /// </exception>
     ValueTask<int> EnqueueMany(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default);
 
     /// <summary>
