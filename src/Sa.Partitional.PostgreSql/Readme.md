@@ -645,6 +645,35 @@ Practical rules: prefer numeric ids over long strings for list keys, keep table 
 not build deep list hierarchies from long values. The library never truncates a name silently — it
 fails with the byte breakdown instead.
 
+#### Overflow callback
+
+If the values cannot be shortened, supply a replacement name with `WithLongPartitionName`. It is
+called **only** when the regular name exceeds 63 bytes — short names are never rewritten:
+
+```csharp
+using System.Security.Cryptography;
+using System.Text;
+
+schema.AddTable("orders", /* ... */)
+    .PartByRange(PgPartBy.Day, "created_at")
+    .WithLongPartitionName(ctx =>
+    {
+        string token = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(ctx.IdealName)))[..26].ToLowerInvariant();
+
+        return $"{ctx.RootTableName}__h${token}"
+             + (ctx.RangeSuffix is null ? string.Empty : $"__{ctx.RangeSuffix}");
+    });
+```
+
+- Called for intermediate list levels and `DEFAULT` partitions too (`ctx.IsDefaultPartition`).
+- Must be a pure function: same context → same name on every host and restart.
+- Result must be a bare name of at most 63 UTF-8 bytes; the library validates it.
+- Uniqueness is the callback's responsibility. A hash of `ctx.IdealName` is the usual approach;
+  make sure the result fits even when the root name is long (otherwise fall back to `p_<hash>`).
+- The cache-table name is not affected — use `WithPartTablePostfix` for it; the root name itself
+  cannot be replaced.
+
 ---
 
 ## Behaviour Notes

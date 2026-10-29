@@ -72,6 +72,34 @@ public interface ITableBuilder
     ITableBuilder WithRangeKey(RangeKeyType rangeKeyType);
 
     /// <summary>
+    /// Supplies a replacement name when the regular partition name would exceed PostgreSQL's
+    /// 63-byte identifier limit.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The callback is invoked <b>only</b> on overflow: names that fit keep the regular
+    /// <c>{table}{separator}{values}{separator}{rangeSuffix}</c> form, so existing partitions are
+    /// never renamed. It is also invoked for intermediate list levels and for <c>DEFAULT</c>
+    /// partitions, because their parents and siblings have to agree on the same scheme.
+    /// </para>
+    /// <para>
+    /// The callback must be a pure function of its input: the same context has to produce the same
+    /// name on every host, on every restart and after an upgrade. Its result must be a bare table
+    /// name of at most 63 UTF-8 bytes — the library validates the length and fails with an
+    /// actionable error otherwise. The callback owns uniqueness; a hash of
+    /// <see cref="PartitionNameContext.IdealName"/> is a typical implementation.
+    /// </para>
+    /// <para>
+    /// The cache-table name is not affected: control it with
+    /// <see cref="WithPartTablePostfix"/>. The root table name itself cannot be replaced — a root
+    /// longer than 63 bytes is rejected by <see cref="Build"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="factory">The overflow-name factory.</param>
+    /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
+    ITableBuilder WithLongPartitionName(Func<PartitionNameContext, string> factory);
+
+    /// <summary>
     /// Sets the separator placed between the table name and each partition key value in generated
     /// table names (default: <c>__</c>).
     /// </summary>

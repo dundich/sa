@@ -16,6 +16,7 @@ internal sealed record TableSettings(
 
     string PartByRangeFieldName,
     RangeKeyType RangeKeyType,
+    Func<PartitionNameContext, string>? LongPartitionName,
     string[] PartByListFieldNames,
     string PartitionByFieldName,
 

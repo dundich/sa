@@ -621,7 +621,8 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
     }
 
     private static string GetCacheByRangeTableName(this ITableSettings settings)
-        => settings.GetQualifiedTableName(settings.PartTablePostfix);
+        => settings.GetQualifiedTableNameCore(
+            $"{settings.DatabaseTableName}{settings.SqlPartSeparator}{settings.PartTablePostfix}");
 
 
     /// <summary>
@@ -726,6 +727,42 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
         // partition value has more UTF-8 bytes than string.Length. A name PostgreSQL would truncate
         // cannot reach the cache table, because the DDL and the stored identifier would no longer match.
         int bytes = Encoding.UTF8.GetByteCount(tableName);
+
+        if (bytes > MaxIdentifierBytes && settings.LongPartitionName is { } overflowName
+            && (values.Length > 0 || suffix is not null))
+        {
+            PartitionNameContext context = new(
+                RootTableName: settings.DatabaseTableName,
+                Separator: settings.SqlPartSeparator,
+                Values: values.ToArray(),
+                RangeSuffix: suffix,
+                IsDefaultPartition: string.Equals(suffix, DefaultPartitionName, StringComparison.Ordinal),
+                IdealName: tableName,
+                IdealBytes: bytes);
+
+            string replacement = overflowName(context);
+
+            if (string.IsNullOrWhiteSpace(replacement))
+            {
+                throw new InvalidOperationException(
+                    $"The WithLongPartitionName callback returned an empty name for "
+                    + $"'{settings.FullName}' (ideal '{tableName}', {bytes} bytes). It must return a "
+                    + $"bare table name of at most {MaxIdentifierBytes} UTF-8 bytes.");
+            }
+
+            int replacementBytes = Encoding.UTF8.GetByteCount(replacement);
+
+            if (replacementBytes > MaxIdentifierBytes)
+            {
+                throw new InvalidOperationException(
+                    $"The WithLongPartitionName callback returned '{replacement}' ({replacementBytes} bytes) "
+                    + $"for table '{settings.FullName}'; PostgreSQL's identifier limit is "
+                    + $"{MaxIdentifierBytes}. The callback has to shorten the name itself.");
+            }
+
+            tableName = replacement;
+            bytes = replacementBytes;
+        }
 
         if (bytes > MaxIdentifierBytes)
         {

@@ -626,6 +626,34 @@ PgPartBy.FromPartName("root");         // из строки имени парт�
 короткими и не строите глубокую иерархию из длинных значений. Библиотека никогда не обрезает имя
 молча — она падает с разбивкой по байтам.
 
+#### Коллбек на превышение
+
+Если значения сократить нельзя, задайте замену имени через `WithLongPartitionName`. Коллбек
+вызывается **только** когда обычное имя превышает 63 байта — короткие имена не переписываются:
+
+```csharp
+using System.Security.Cryptography;
+using System.Text;
+
+schema.AddTable("orders", /* ... */)
+    .PartByRange(PgPartBy.Day, "created_at")
+    .WithLongPartitionName(ctx =>
+    {
+        string token = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(ctx.IdealName)))[..26].ToLowerInvariant();
+
+        return $"{ctx.RootTableName}__h${token}"
+             + (ctx.RangeSuffix is null ? string.Empty : $"__{ctx.RangeSuffix}");
+    });
+```
+
+- Вызывается и для промежуточных list-уровней, и для `DEFAULT`-партиций (`ctx.IsDefaultPartition`).
+- Должен быть чистой функцией: одинаковый контекст → одинаковое имя на всех хостах и после рестарта.
+- Результат — голое имя не длиннее 63 байт UTF-8; библиотека это проверяет.
+- Уникальность — ответственность коллбека. Обычно хешируют `ctx.IdealName`; учтите, что при
+  длинном root имя с префиксом может не влезть — тогда используйте `p_<hash>`.
+- Имя кэш-таблицы не меняется — для него есть `WithPartTablePostfix`; само имя root заменить нельзя.
+
 ---
 
 ## Особенности поведения

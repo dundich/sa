@@ -136,6 +136,23 @@ The cache table keeps `from_date`/`to_date` as Unix seconds in every mode, so cl
 `DateTimeOffset` API are identical. `.WithRangeKey(RangeKeyType...)` overrides the detected type for
 a column declared through a domain or an alias; `time`, `integer` and `numeric` are rejected.
 
+## Long Partition Names
+
+A regular partition name that exceeds PostgreSQL's 63-byte limit is an error by default. To supply a
+replacement, use `WithLongPartitionName`; the callback runs **only on overflow** and receives a
+`PartitionNameContext` (`RootTableName`, `Separator`, `Values`, `RangeSuffix`, `IsDefaultPartition`,
+`IdealName`, `IdealBytes`):
+
+```csharp
+.WithLongPartitionName(ctx =>
+    $"{ctx.RootTableName}__h${Hash(ctx.IdealName)}"
+    + (ctx.RangeSuffix is null ? string.Empty : $"__{ctx.RangeSuffix}"));
+```
+
+It must be deterministic, return a bare name of at most 63 UTF-8 bytes, and own uniqueness; the
+library validates the length. It is called for intermediate list levels and `DEFAULT` partitions too.
+The cache-table name is controlled by `WithPartTablePostfix`; the root name itself cannot be replaced.
+
 ## Key Interfaces
 
 ### `IPartitionManager`

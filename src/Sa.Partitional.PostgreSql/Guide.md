@@ -376,8 +376,27 @@ Levers, cheapest first:
 | `WithPartTablePostfix("meta$")` | shortens only the cache-table name |
 
 Prefer numeric ids over long strings for list keys, keep table names short, and avoid deep list
-hierarchies built from long values. A hash-based fallback is deliberately **not** enabled by default:
-it makes names opaque and turns the hash length into a long-lived naming contract.
+hierarchies built from long values. If the values cannot be shortened, supply a replacement name with
+`WithLongPartitionName`; it is invoked only on overflow (short names are never rewritten), for
+intermediate list levels and `DEFAULT` partitions too:
+
+```csharp
+.WithLongPartitionName(ctx =>
+{
+    string token = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(ctx.IdealName)))[..26].ToLowerInvariant();
+
+    return $"{ctx.RootTableName}__h${token}"
+         + (ctx.RangeSuffix is null ? string.Empty : $"__{ctx.RangeSuffix}");
+});
+```
+
+The callback must be a pure function, return a bare name of at most 63 UTF-8 bytes, and own
+uniqueness. The cache table is controlled by `WithPartTablePostfix`; a root name longer than 63 bytes
+cannot be replaced.
+
+A hash-based fallback is deliberately **not** enabled by default: it makes names opaque and turns the
+hash length into a long-lived naming contract.
 
 ### Escaping
 

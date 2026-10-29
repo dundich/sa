@@ -35,6 +35,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     private string? _timestamp;
     private PgPartBy? _partBy;
     private RangeKeyType? _rangeKey;
+    private Func<PartitionNameContext, string>? _longPartitionName;
     private TableRootMode _rootMode = TableRootMode.Create;
     private ConversionBackupMode _conversionBackup = ConversionBackupMode.Keep;
     private string? _separator = null;
@@ -125,6 +126,12 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     public ITableBuilder WithRangeKey(RangeKeyType rangeKeyType)
     {
         _rangeKey = rangeKeyType;
+        return this;
+    }
+
+    public ITableBuilder WithLongPartitionName(Func<PartitionNameContext, string> factory)
+    {
+        _longPartitionName = factory ?? throw new ArgumentNullException(nameof(factory));
         return this;
     }
 
@@ -313,6 +320,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
             PartByRangeFieldName: timestampField,
             RangeKeyType: rangeKeyType,
+            LongPartitionName: _longPartitionName,
             PartByListFieldNames: partByListFieldNames,
             PartitionByFieldName: partByListFieldNames.Length == 0 ? timestampField : partByListFieldNames[0],
 

@@ -67,6 +67,12 @@ public interface ITableSettings
     RangeKeyType RangeKeyType { get; }
 
     /// <summary>
+    /// Gets the callback that supplies a replacement name when a generated partition name would
+    /// exceed PostgreSQL's 63-byte identifier limit, or <c>null</c> when overflow is an error.
+    /// </summary>
+    Func<PartitionNameContext, string>? LongPartitionName { get; }
+
+    /// <summary>
     /// Gets the partitioning strategy — day, month, or year. Range partitioning is always present
     /// (the list levels, when there are any, sit above the range leaf), so this is never <c>null</c>;
     /// without an explicit <c>PartByRange</c> call it defaults to <see cref="PgPartBy.Day"/>.
