@@ -65,9 +65,12 @@ internal sealed partial class PartMigrationService(
         try
         {
             DateTimeOffset now = timeProvider.GetUtcNow().StartOfDay();
-            DateTimeOffset[] dates = [.. Enumerable
-                .Range(0, settings.ForwardDays)
-                .Select(i => now.AddDays(i))];
+            var dates = new DateTimeOffset[settings.ForwardDays];
+
+            for (int i = 0; i < dates.Length; i++)
+            {
+                dates[i] = now.AddDays(i);
+            }
 
             // The background job owns no token of its own: the scheduler's token is the host's,
             // and a started run has to reach the end.

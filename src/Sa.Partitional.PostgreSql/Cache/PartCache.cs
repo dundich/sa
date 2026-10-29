@@ -1,6 +1,7 @@
 ﻿using Sa.Classes;
 using Sa.Extensions;
 using Sa.Partitional.PostgreSql.Classes;
+using Sa.Partitional.PostgreSql.SqlBuilder;
 using System.Collections.Concurrent;
 
 namespace Sa.Partitional.PostgreSql.Cache;
@@ -37,13 +38,27 @@ internal sealed class PartCache(
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default)
     {
-        if (sqlBuilder[tableName] == null) return false;
+        // Resolve the builder once: this path runs for every EnsureParts call.
+        ISqlTableBuilder? builder = sqlBuilder[tableName];
+        if (builder is null) return false;
 
-        List<PartByRangeInfo> list = await GetPartsInCache(tableName, cancellationToken).ConfigureAwait(false);
+        List<PartByRangeInfo> list = await GetPartsInCache(builder, tableName, cancellationToken).ConfigureAwait(false);
 
         if (list.Count == 0) return false;
 
-        return list.Exists(c => partValues.SequenceEqual(c.PartValues) && c.PartBy.GetRange(c.FromDate).InRange(date));
+        // A plain loop, not List.Exists with a capturing lambda: the closure and the
+        // SequenceEqual enumerator were allocated per EnsureParts even on a cache hit.
+        foreach (PartByRangeInfo cached in list)
+        {
+            if (cached.PartValues.Length == partValues.Length
+                && cached.PartValues.AsSpan().SequenceEqual(partValues)
+                && cached.PartBy.GetRange(cached.FromDate).InRange(date))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -51,13 +66,17 @@ internal sealed class PartCache(
     /// <c>events</c> and <c>public.events</c> share one snapshot instead of loading the same table
     /// twice under two keys.
     /// </summary>
-    private string CacheKey(string tableName) => sqlBuilder[tableName]?.FullName ?? tableName;
+    private static string CacheKey(string tableName, ISqlTableBuilder? builder)
+        => builder?.FullName ?? tableName;
 
-    private async Task<List<PartByRangeInfo>> GetPartsInCache(string tableName, CancellationToken cancellationToken)
+    private async Task<List<PartByRangeInfo>> GetPartsInCache(
+        ISqlTableBuilder builder,
+        string tableName,
+        CancellationToken cancellationToken)
     {
         DateTimeOffset now = _timeProvider.GetUtcNow();
 
-        string key = CacheKey(tableName);
+        string key = CacheKey(tableName, builder);
 
         if (_cache.TryGetValue(key, out CacheEntry? entry) && IsUsable(entry, now))
         {
@@ -69,7 +88,7 @@ internal sealed class PartCache(
 
         CacheEntry fresh = new(
             new Lazy<Task<List<PartByRangeInfo>>>(
-                () => SelectPartsInDb(tableName),
+                () => SelectPartsInDb(builder, tableName),
                 LazyThreadSafetyMode.ExecutionAndPublication),
             now + settings.CacheTtl);
 
@@ -121,6 +140,14 @@ internal sealed class PartCache(
     {
         Task<List<PartByRangeInfo>> load = entry.Load.Value;
 
+        // Cache hit: the shared load has already completed. Returning the list directly avoids the
+        // Task that WaitAsync allocates for an already-finished operation. A cancelled caller still
+        // goes through WaitAsync below, preserving the token contract.
+        if (load.IsCompletedSuccessfully && !cancellationToken.IsCancellationRequested)
+        {
+            return load.Result;
+        }
+
         try
         {
             // WaitAsync rather than a bare await: the caller's token must cancel only this await and
@@ -144,11 +171,11 @@ internal sealed class PartCache(
     }
 
     // search and set the cache duration based result set
-    private async Task<List<PartByRangeInfo>> SelectPartsInDb(string tableName)
+    private async Task<List<PartByRangeInfo>> SelectPartsInDb(ISqlTableBuilder builder, string tableName)
     {
         try
         {
-            DateTimeOffset from = SnapshotFloor(tableName);
+            DateTimeOffset from = SnapshotFloor(builder);
 
             // CancellationToken.None on purpose: this load is shared by every caller awaiting the
             // entry, so it must not be bound to any single caller's token. Npgsql's command and
@@ -162,7 +189,7 @@ internal sealed class PartCache(
     }
 
     /// <summary>
-    /// Lower bound of the snapshot loaded for <paramref name="tableName"/>.
+    /// Lower bound of the snapshot loaded for a table.
     /// </summary>
     /// <remarks>
     /// The snapshot query keeps partitions whose range <i>starts</i> at or after this instant. The
@@ -174,11 +201,11 @@ internal sealed class PartCache(
     /// table; a daily period equals the default <see cref="PartCacheSettings.CachedFromDate"/>, so
     /// nothing changes for day-partitioned tables.
     /// </remarks>
-    private DateTimeOffset SnapshotFloor(string tableName)
+    private DateTimeOffset SnapshotFloor(ISqlTableBuilder builder)
     {
         TimeSpan lookback = settings.CachedFromDate;
 
-        if (sqlBuilder[tableName]?.PartBy is { } partBy)
+        if (builder.PartBy is { } partBy)
         {
             TimeSpan period = partBy.PartByRange switch
             {
@@ -215,7 +242,8 @@ internal sealed class PartCache(
 
     public Task RemoveCache(string tableName, CancellationToken cancellationToken = default)
     {
-        if (_cache.TryRemove(CacheKey(tableName), out CacheEntry? removed)) Discard(removed);
+        ISqlTableBuilder? builder = sqlBuilder[tableName];
+        if (_cache.TryRemove(CacheKey(tableName, builder), out CacheEntry? removed)) Discard(removed);
         return Task.CompletedTask;
     }
 

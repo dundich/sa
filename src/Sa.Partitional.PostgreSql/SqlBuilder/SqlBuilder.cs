@@ -2,12 +2,41 @@ using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
-internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
+internal sealed class SqlBuilder : ISqlBuilder
 {
-    private readonly Dictionary<string, SqlTableBuilder> builders = storage
-        .Tables
-        .Select(table => new SqlTableBuilder(table))
-        .ToDictionary(c => c.FullName);
+    private readonly Dictionary<string, SqlTableBuilder> builders;
+
+    /// <summary>
+    /// Resolved lookup: full name and the bare name of a table in the default schema.
+    /// <see cref="Find"/> used to qualify an unqualified name by interpolating
+    /// <c>schema.table</c> on every call (one string allocation per EnsureParts), then fall back
+    /// to a linear scan. Both are now a single dictionary lookup; the quoted-name path below is
+    /// the only remaining fallback.
+    /// </summary>
+    private readonly Dictionary<string, SqlTableBuilder> _byName;
+
+    public SqlBuilder(ITableSettingsStorage storage)
+    {
+        builders = storage
+            .Tables
+            .Select(table => new SqlTableBuilder(table))
+            .ToDictionary(c => c.FullName, StringComparer.Ordinal);
+
+        string? defaultSchema = storage.Schemas.Count > 0 ? storage.Schemas.First() : null;
+
+        _byName = new Dictionary<string, SqlTableBuilder>(builders.Count * 2, StringComparer.Ordinal);
+
+        foreach (SqlTableBuilder builder in builders.Values)
+        {
+            _byName[builder.FullName] = builder;
+
+            // Only the default schema answers an unqualified name, matching the old lookup.
+            if (string.Equals(builder.Settings.DatabaseSchemaName, defaultSchema, StringComparison.Ordinal))
+            {
+                _byName[builder.Settings.DatabaseTableName] = builder;
+            }
+        }
+    }
 
 
     public IReadOnlyCollection<ISqlTableBuilder> Tables => builders.Values;
@@ -66,25 +95,14 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
     /// </summary>
     /// <remarks>
     /// A name that is already qualified (<c>schema.table</c>) is looked up as is. An unqualified name
-    /// is qualified with the <b>first</b> configured schema, so with several schemas declared the
-    /// resolution depends on declaration order - pass a qualified name when that matters. A name that
-    /// still does not match is scanned against the full names as a last resort, and a name that
-    /// arrives quoted from PostgreSQL (<c>"sc""h"."my table"</c>) is retried in its unquoted form.
+    /// resolves to the table of that name in the <b>first</b> configured schema, so with several
+    /// schemas declared the resolution depends on declaration order - pass a qualified name when that
+    /// matters. A name that arrives quoted from PostgreSQL (<c>"sc""h"."my table"</c>) is retried in
+    /// its unquoted form.
     /// </remarks>
     private ISqlTableBuilder? Find(string tableName)
     {
-        // An unqualified name is resolved against the first configured schema. With no schema
-        // configured at all there is nothing to qualify with - fall through to the full-name scan
-        // instead of throwing on Schemas.First().
-        string? defaultSchema = storage.Schemas.Count > 0 ? storage.Schemas.First() : null;
-
-        ISqlTableBuilder? item = tableName.Contains('.') || defaultSchema is null
-            ? builders.GetValueOrDefault(tableName)
-            : builders.GetValueOrDefault(GetFullName(defaultSchema, tableName));
-
-        item ??= builders.Values.FirstOrDefault(c => c.FullName == tableName);
-
-        if (item != null) return item;
+        if (_byName.TryGetValue(tableName, out SqlTableBuilder? item)) return item;
 
         // Only the quotes that *enclose* each part are removed, and each part is unescaped on its own.
         // Stripping every quote character in the string - what this used to do - also rewrites names
@@ -103,10 +121,6 @@ internal sealed class SqlBuilder(ITableSettingsStorage storage) : ISqlBuilder
         => tableName.Contains('"') && SqlTemplate.TrySplitQualifiedName(tableName, out string[] parts)
             ? string.Join('.', parts)
             : null;
-
-    static string GetFullName(string schemaName, string tableName) => $"{schemaName}.{tableName}";
-
-
 
     #endregion
 }
