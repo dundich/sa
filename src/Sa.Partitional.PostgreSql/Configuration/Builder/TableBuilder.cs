@@ -264,16 +264,40 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
             }
         }
 
+        // A root name PostgreSQL would truncate silently makes every generated identifier (cache
+        // table, partitions, cache rows) refer to a name that does not exist. Fail while the
+        // configuration is still identifiable.
+        int rootBytes = Encoding.UTF8.GetByteCount(databaseTableName);
+        if (rootBytes > MaxIdentifierBytes)
+        {
+            throw new InvalidOperationException(
+                $"Root table name '{databaseTableName}' is {rootBytes} bytes; PostgreSQL's identifier "
+                + $"limit is {MaxIdentifierBytes}. It is over by {rootBytes - MaxIdentifierBytes} byte(s). "
+                + "Shorten the table name in the schema declaration.");
+        }
+
+        int schemaBytes = Encoding.UTF8.GetByteCount(schemaName);
+        if (schemaBytes > MaxIdentifierBytes)
+        {
+            throw new InvalidOperationException(
+                $"Schema name '{schemaName}' is {schemaBytes} bytes; PostgreSQL's identifier limit is "
+                + $"{MaxIdentifierBytes}. It is over by {schemaBytes - MaxIdentifierBytes} byte(s).");
+        }
+
         // Fail fast on a name PostgreSQL would silently truncate: the truncated DDL would never
         // match the identifiers written to the cache table. The name carrying partition values
         // cannot be checked here - those values are only known when the DDL is generated, and
         // SqlTemplate.GetQualifiedTableName checks them there.
         string cacheTableName = $"{databaseTableName}{_separator ?? Default.SqlPartSeparator}{partTablePostfix}";
-        if (Encoding.UTF8.GetByteCount(cacheTableName) > MaxIdentifierBytes)
+        int cacheBytes = Encoding.UTF8.GetByteCount(cacheTableName);
+        if (cacheBytes > MaxIdentifierBytes)
         {
             throw new InvalidOperationException(
-                $"Cache table name '{cacheTableName}' of table '{schemaName}.{databaseTableName}' exceeds "
-                + $"PostgreSQL's {MaxIdentifierBytes}-byte identifier limit.");
+                $"Cache table name '{cacheTableName}' of table '{schemaName}.{databaseTableName}' is "
+                + $"{cacheBytes} bytes; PostgreSQL's identifier limit is {MaxIdentifierBytes}. It is over by "
+                + $"{cacheBytes - MaxIdentifierBytes} byte(s). Shorten the table name, the separator "
+                + $"(WithPartSeparator) or the cache postfix (WithPartTablePostfix, currently "
+                + $"'{partTablePostfix}').");
         }
 
         return new TableSettings(

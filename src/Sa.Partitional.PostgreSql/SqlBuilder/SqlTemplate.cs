@@ -270,7 +270,8 @@ DEFAULT
     /// <paramref name="values"/> (the root when the span is empty).
     /// </summary>
     internal static string GetQualifiedDefaultTableName(this ITableSettings settings, ReadOnlySpan<StrOrNum> values)
-        => settings.GetQualifiedTableNameCore(settings.GetPartTableName(values, DefaultPartitionName));
+        => settings.GetQualifiedTableNameCore(
+            settings.GetPartTableName(values, DefaultPartitionName), values, DefaultPartitionName);
 
     /// <summary>
     /// <c>field = 'value'</c> — the rows a list partition of <paramref name="fieldIndex"/> with
@@ -611,9 +612,13 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
     /// materialising a <c>[.. values, suffix]</c> array, so the caller's array is never copied.
     /// </summary>
     internal static string GetQualifiedTableName(this ITableSettings settings, DateTimeOffset? date, ReadOnlySpan<StrOrNum> values)
-        => date is null
-        ? settings.GetQualifiedTableNameCore(settings.GetPartTableName(values))
-        : settings.GetQualifiedTableNameCore(settings.GetPartTableName(values, settings.PartBy.Fmt(date.Value)));
+    {
+        // The range suffix is only known when a date is supplied; keep it beside the values so the
+        // 63-byte error can report a real breakdown instead of guessing the fixed part.
+        string? suffix = date is null ? null : settings.PartBy.Fmt(date.Value);
+
+        return settings.GetQualifiedTableNameCore(settings.GetPartTableName(values, suffix), values, suffix);
+    }
 
     private static string GetCacheByRangeTableName(this ITableSettings settings)
         => settings.GetQualifiedTableName(settings.PartTablePostfix);
@@ -698,20 +703,24 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
     /// array of values, enforcing the 63-byte UTF-8 identifier limit.
     /// </summary>
     static string GetQualifiedTableName(this ITableSettings settings, params StrOrNum[] values)
-        => settings.GetQualifiedTableNameCore(settings.GetPartTableName(values));
+        => settings.GetQualifiedTableNameCore(settings.GetPartTableName(values), values);
 
     /// <summary>
     /// Span view of <see cref="GetQualifiedTableName(ITableSettings, StrOrNum[])"/>.
     /// </summary>
     internal static string GetQualifiedTableName(this ITableSettings settings, ReadOnlySpan<StrOrNum> values)
-        => settings.GetQualifiedTableNameCore(settings.GetPartTableName(values));
+        => settings.GetQualifiedTableNameCore(settings.GetPartTableName(values), values);
 
     /// <summary>
     /// The shared validation + qualification step for both the array and the span
     /// <see cref="GetQualifiedTableName"/> entry points. Keeping it in one place means the 63-byte
     /// UTF-8 check and its exception cannot drift between the two.
     /// </summary>
-    static string GetQualifiedTableNameCore(this ITableSettings settings, string tableName)
+    static string GetQualifiedTableNameCore(
+        this ITableSettings settings,
+        string tableName,
+        ReadOnlySpan<StrOrNum> values = default,
+        string? suffix = null)
     {
         // 63 BYTES, not 63 chars: PostgreSQL truncates on the UTF-8 encoding, and a non-ASCII
         // partition value has more UTF-8 bytes than string.Length. A name PostgreSQL would truncate
@@ -720,24 +729,27 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
 
         if (bytes > MaxIdentifierBytes)
         {
-            // Spell the arithmetic out. The caller's next question is always "how short does the
-            // value have to be?", and the answer is the fixed part of the name - the root name, the
-            // separators and the range suffix - which is known here. A bare "exceeds 63 bytes" left
-            // that reconstruction to the reader.
-            string suffix = settings.PartBy.Fmt(DateTimeOffset.UnixEpoch);
+            int rootBytes = Encoding.UTF8.GetByteCount(settings.DatabaseTableName);
+            int separatorBytes = Encoding.UTF8.GetByteCount(settings.SqlPartSeparator);
+            int suffixBytes = suffix is null ? 0 : Encoding.UTF8.GetByteCount(suffix);
 
-            int fixedBytes = Encoding.UTF8.GetByteCount(settings.DatabaseTableName)
-                + Encoding.UTF8.GetByteCount(suffix);
+            // The name is root + separator + values joined by the separator (+ separator + suffix),
+            // so the value bytes are everything left after the fixed parts and the separators.
+            int separators = (values.Length > 0 ? 1 : 0) + (suffixBytes > 0 ? 1 : 0)
+                + Math.Max(0, values.Length - 1);
+            int valueBytes = Math.Max(0, bytes - rootBytes - suffixBytes - (separatorBytes * separators));
 
             throw new InvalidOperationException(
                 $"Table name '{tableName}' is {bytes} bytes; PostgreSQL's identifier limit is "
-                + $"{MaxIdentifierBytes}. The fixed part of a leaf name of table '{settings.FullName}' is "
-                + $"'{settings.DatabaseTableName}' ({Encoding.UTF8.GetByteCount(settings.DatabaseTableName)} bytes) "
-                + $"plus the range suffix '{suffix}' ({Encoding.UTF8.GetByteCount(suffix)} bytes), i.e. "
-                + $"{fixedBytes}; every partition key value costs its own bytes plus "
-                + $"'{settings.SqlPartSeparator}' ({Encoding.UTF8.GetByteCount(settings.SqlPartSeparator)} bytes). "
-                + "Shorten the partition key values (tenant, message part, consumer group) or configure a "
-                + "shorter table name.");
+                + $"{MaxIdentifierBytes}. It is over by {bytes - MaxIdentifierBytes} byte(s). "
+                + $"Breakdown: root '{settings.DatabaseTableName}' {rootBytes} byte(s), "
+                + $"separator '{settings.SqlPartSeparator}' {separatorBytes} byte(s) × {separators}, "
+                + $"partition values {valueBytes} byte(s)"
+                + (suffixBytes > 0 ? $", range suffix '{suffix}' {suffixBytes} byte(s)" : string.Empty)
+                + ". Shorten the partition key values (tenant, message part, consumer group) by at least "
+                + $"{bytes - MaxIdentifierBytes} byte(s), use a shorter separator with WithPartSeparator('_'), "
+                + "or choose a shorter table name. WithPartTablePostfix shortens only the cache table, not "
+                + "the partition name.");
         }
 
         return $"{QuoteIdentifier(settings.DatabaseSchemaName)}.{QuoteIdentifier(tableName)}";

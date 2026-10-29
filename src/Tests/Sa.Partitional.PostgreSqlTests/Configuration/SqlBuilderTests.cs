@@ -285,10 +285,10 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     }
 
     [Fact]
-    public void Build_Fails_WhenTheCacheTableNameExceedsTheIdentifierLimit()
+    public void Build_Fails_WhenTheRootTableNameExceedsTheIdentifierLimit()
     {
-        // 63 bytes, and PostgreSQL truncates silently - the DDL would then never match the name
-        // the cache table stores.
+        // PostgreSQL truncates silently, so the partitioned root and every generated child would
+        // disagree about the real name.
         string tooLong = new('t', 70);
 
         SchemaBuilder builder = new("public");
@@ -296,7 +296,23 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
-        Assert.Contains("63", error.Message);
+        Assert.Contains("Root table name", error.Message);
+        Assert.Contains("70 bytes", error.Message);
+        Assert.Contains("over by 7 byte", error.Message);
+    }
+
+    [Fact]
+    public void Build_Fails_WhenTheCacheTableNameExceedsTheIdentifierLimit()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable(new string('t', 50), "id INT NOT NULL")
+            .WithPartTablePostfix(new string('p', 20));
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("Cache table name", error.Message);
+        Assert.Contains("WithPartTablePostfix", error.Message);
+        Assert.Contains("over by 9 byte", error.Message);
     }
 
     [Fact]

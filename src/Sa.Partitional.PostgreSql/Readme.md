@@ -622,12 +622,28 @@ Partitions follow predictable naming patterns (separator defaults to `"__"`):
 
 **Constraints and guarantees:**
 
-- Identifiers must fit **63 bytes** of UTF-8, not 63 characters. A too-long cache-table name is rejected by `Build()`; a too-long partition name throws when its DDL is generated (key values are only known then).
+- Identifiers must fit **63 bytes** of UTF-8, not 63 characters. `Build()` rejects a too-long schema, root-table or cache-table name; a too-long partition name throws when its DDL is generated (key values are only known then).
 - A key value must not contain the separator: `["a__b"]` and `["a", "b"]` would otherwise collapse onto one table name.
 - All identifiers and literals are quoted and escaped, so a key holding `"` or `'` cannot terminate them and append SQL.
 - Schemas are auto-created via `CREATE SCHEMA IF NOT EXISTS`.
-- Child partitions use `PARTITION OF parent FOR VALUES FROM (<unix seconds>) TO (<unix seconds>)` (range) or `FOR VALUES IN (...)` (list).
+- Child partitions use `PARTITION OF parent FOR VALUES FROM (...) TO (...)` (range) or `FOR VALUES IN (...)` (list). Range bounds are integers for a `bigint` key and quoted timestamps/dates for a timestamp/date key.
 - After each range partition is created, a row is written into the cache table (`id`, `root`, `part_values`, `part_by`, `from_date`, `to_date`) with `ON CONFLICT (id) DO NOTHING`.
+
+### Keeping identifiers under 63 bytes
+
+A generated partition name is `root + separator + values + separator + range suffix`. The error message
+breaks that down, reports how many bytes are over the limit, and names the levers:
+
+| Lever | Effect |
+|---|---|
+| `WithPartSeparator("_")` | shrinks every separator in every partition name |
+| shorter table/root name | removes bytes from every name and from the cache table |
+| shorter key values (e.g. numeric tenant ids) | removes the value contribution |
+| `WithPartTablePostfix("meta$")` | shrinks **only** the cache table name, not partition names |
+
+Practical rules: prefer numeric ids over long strings for list keys, keep table names short, and do
+not build deep list hierarchies from long values. The library never truncates a name silently — it
+fails with the byte breakdown instead.
 
 ---
 

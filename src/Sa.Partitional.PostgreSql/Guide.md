@@ -362,8 +362,22 @@ public._customer_RU_Moscow_y2026m06d26
 ```
 
 The library never lets a name reach that limit silently: `Build()` throws `InvalidOperationException` when the
-cache-table name is too long, and DDL generation throws when a *partition* name is (the key values are only known
-then). If your keys are long, shorten them or use a shorter `WithPartSeparator`.
+schema, root-table or cache-table name is too long, and DDL generation throws when a *partition* name is (the key
+values are only known then). The partition-name error reports the byte breakdown and how many bytes are over the
+limit.
+
+Levers, cheapest first:
+
+| Lever | Effect |
+|---|---|
+| `WithPartSeparator("_")` | shortens every separator in every partition name |
+| shorter table/root name | removes bytes from every generated name and the cache table |
+| shorter key values (numeric tenant ids) | removes the value contribution |
+| `WithPartTablePostfix("meta$")` | shortens only the cache-table name |
+
+Prefer numeric ids over long strings for list keys, keep table names short, and avoid deep list
+hierarchies built from long values. A hash-based fallback is deliberately **not** enabled by default:
+it makes names opaque and turns the hash length into a long-lived naming contract.
 
 ### Escaping
 
