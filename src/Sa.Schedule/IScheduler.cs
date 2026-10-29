@@ -23,9 +23,13 @@ public interface IScheduler
     Task<int> Start(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Restarts the scheduler.
+    /// Restarts the jobs that are currently running.
     /// </summary>
-    /// <returns>The number of jobs restarted.</returns>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>
+    /// The number of jobs that were actually stopped and started again. Stopped jobs —
+    /// including ones stopped by an error action or a consumed RunOnce — are not restarted.
+    /// </returns>
     Task<int> Restart(CancellationToken cancellationToken);
 
     /// <summary>

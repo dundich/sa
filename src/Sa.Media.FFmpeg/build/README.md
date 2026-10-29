@@ -1,4 +1,4 @@
-# ffmpeg-7.1.2
+# ffmpeg-7.1.5
 
 ## Ubuntu/Debian:
 
@@ -12,8 +12,13 @@ sudo apt install -y \
     pkg-config \
     libmp3lame-dev \
     libvorbis-dev \
-    libopus-dev
+    libopus-dev \
+    libogg-dev
 ```
+
+`*-dev` пакеты нужны не только ради заголовков: в них лежат `.a`, без которых не собрать
+статический пейлоад (`--pkg-config-flags=--static` + `-static` в `build-linux.sh`). Результат
+не должен иметь `NEEDED` на `libmp3lame/libopus/libvorbis` — это проверяет гард в конце скрипта.
 
 ## Run build build/artifacts/ffmpeg-7.1.2-audio-x86_64-linux-gnu/bin
 ```

@@ -270,4 +270,75 @@ public class ArgumentsTests
         Assert.False(arguments.Contains("1"));
         Assert.Equal("value", arguments["param"]);
     }
+
+    /// <summary>
+    /// A double underscore is the environment-variable spelling of the configuration
+    /// separator, so <c>--sa__pg__host</c> and <c>--sa:pg:host</c> must be the same argument.
+    /// </summary>
+    [Fact]
+    public void TestDoubleUnderscoreIsTreatedAsSeparator()
+    {
+        // Arrange
+        var args = new[] { "--sa__pg__host=db", "--sa:pg:port=5432" };
+
+        // Act
+        var arguments = new Arguments(args);
+
+        // Assert — both spellings resolve the same value.
+        Assert.Equal("db", arguments["sa__pg__host"]);
+        Assert.Equal("db", arguments["sa:pg:host"]);
+        Assert.Equal("5432", arguments["sa__pg__port"]);
+        Assert.Equal("5432", arguments["sa:pg:port"]);
+
+        Assert.True(arguments.Contains("sa__pg__host"));
+        Assert.True(arguments.Contains("sa:pg:host"));
+    }
+
+    [Fact]
+    public void TestDoubleUnderscore_IsStoredInCanonicalForm()
+    {
+        // Arrange
+        var arguments = new Arguments("--sa__pg__host=db");
+
+        // Act
+        var parameters = arguments.Parameters;
+
+        // Assert — one canonical key, so configuration consumers never see both spellings.
+        Assert.True(parameters.ContainsKey("sa:pg:host"));
+        Assert.False(parameters.ContainsKey("sa__pg__host"));
+        Assert.Single(parameters);
+    }
+
+    [Fact]
+    public void TestSingleUnderscore_IsNotASeparator()
+    {
+        // Arrange
+        var arguments = new Arguments("--config_db=/tmp/db.json");
+
+        // Act & Assert
+        Assert.Equal("/tmp/db.json", arguments["config_db"]);
+        Assert.Null(arguments["config:db"]);
+    }
+
+    [Fact]
+    public void TestDoubleUnderscore_WorksWithTypedGetters()
+    {
+        // Arrange
+        var arguments = new Arguments("--sa__port=5432", "--sa__debug=true", "--sa__ttl=00:05:00");
+
+        // Act & Assert
+        Assert.Equal(5432, arguments.GetInt("sa:port"));
+        Assert.True(arguments.GetBool("sa:debug"));
+        Assert.Equal(TimeSpan.FromMinutes(5), arguments.GetTimeSpan("sa:ttl"));
+    }
+
+    [Fact]
+    public void TestTwoDoubleUnderscoresInARow_ProduceTwoSeparators()
+    {
+        // Mirrors EnvironmentVariablesConfigurationProvider: Replace("__", ":") is pairwise,
+        // so four underscores become two delimiters instead of one.
+        var arguments = new Arguments("--a____b=value");
+
+        Assert.Equal("value", arguments["a::b"]);
+    }
 }

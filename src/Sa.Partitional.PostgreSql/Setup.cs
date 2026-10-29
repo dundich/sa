@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Partitional.PostgreSql.Cache;
 using Sa.Partitional.PostgreSql.Configuration;
@@ -16,15 +16,18 @@ public static class Setup
     /// </summary>
     /// <param name="services">The service collection to add services to.</param>
     /// <param name="configure">An action to configure partitioned tables via <see cref="ISettingsBuilder"/>.</param>
-    /// <param name="AsBackgroundJob">
+    /// <param name="asBackgroundJob">
     /// Optionally forces both migration and cleanup to run as background jobs (<c>true</c>) or disables them (<c>false</c>).
     /// When <c>null</c>, each component uses its own default.
     /// </param>
     /// <returns>An <see cref="IPartConfiguration"/> for chained configuration of optional components.</returns>
     public static IPartConfiguration AddSaPartitional(this IServiceCollection services,
         Action<IServiceProvider, ISettingsBuilder> configure,
-        bool? AsBackgroundJob = null)
+        bool? asBackgroundJob = null)
     {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddSingleton<IPartitionManager, PartitionManager>();
 
@@ -37,14 +40,14 @@ public static class Setup
             {
                 // "null" means "keep the section value / component default"; an explicit true/false
                 // is applied as a code setting, so it beats configuration.
-                if (AsBackgroundJob is { } flag)
+                if (asBackgroundJob is { } flag)
                 {
                     b.Configure((_, settings) => settings.AsBackgroundJob = flag);
                 }
             })
             .AddPartCleanupSchedule(b =>
             {
-                if (AsBackgroundJob is { } flag)
+                if (asBackgroundJob is { } flag)
                 {
                     b.Configure((_, settings) => settings.AsBackgroundJob = flag);
                 }
@@ -67,7 +70,7 @@ public static class Setup
     /// non-empty, and not <see cref="Sa.Schedule.Setup.DefaultName"/>.
     /// </param>
     /// <param name="configure">An action to configure partitioned tables via <see cref="ISettingsBuilder"/> — scoped to this module only; repeated calls with the same key merge.</param>
-    /// <param name="AsBackgroundJob">
+    /// <param name="asBackgroundJob">
     /// Optionally forces both migration and cleanup to run as background jobs (<c>true</c>) or disables them (<c>false</c>).
     /// When <c>null</c>, each component uses its own default.
     /// </param>
@@ -85,7 +88,7 @@ public static class Setup
     public static IPartConfiguration AddSaPartitional(this IServiceCollection services,
         string key,
         Action<IServiceProvider, ISettingsBuilder> configure,
-        bool? AsBackgroundJob = null)
+        bool? asBackgroundJob = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
@@ -118,14 +121,14 @@ public static class Setup
             {
                 // "null" means "keep the section value / component default"; an explicit true/false
                 // is applied as a code setting, so it beats configuration.
-                if (AsBackgroundJob is { } flag)
+                if (asBackgroundJob is { } flag)
                 {
                     b.Configure((_, settings) => settings.AsBackgroundJob = flag);
                 }
             })
             .AddPartCleanupSchedule(b =>
             {
-                if (AsBackgroundJob is { } flag)
+                if (asBackgroundJob is { } flag)
                 {
                     b.Configure((_, settings) => settings.AsBackgroundJob = flag);
                 }

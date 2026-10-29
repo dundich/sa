@@ -11,9 +11,10 @@ namespace Sa.Partitional.PostgreSql;
 /// <c>jobId</c> would share the keyed job registration — the Sa.Schedule rule). The ids derived
 /// here are stable per (module key, role): the same key produces the same id in every process and
 /// on every repeated registration, so a repeated <c>AddSaPartitional(key, ...)</c> call cannot
-/// spawn a duplicate job, and two different module keys can never collide. They also never clash
-/// with the fixed ids of the default (unkeyed) module
-/// (<see cref="Migration.MigrationJobConstance.MigrationJobId"/> and the cleanup job id).
+/// spawn a duplicate job, and two different module keys produce different ids. They also differ
+/// from the fixed ids of the default (unkeyed) module
+/// (<see cref="Migration.MigrationJobConstance.MigrationJobId"/> and the cleanup job id) — not by
+/// construction, but because a truncated SHA-256 of a keyed name is not a fixed constant.
 /// </remarks>
 internal static class JobKeys
 {

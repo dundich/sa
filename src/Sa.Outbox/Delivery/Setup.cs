@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
 using Sa.Schedule;
@@ -51,7 +52,8 @@ internal static class Setup
             sp.GetRequiredService<IOutboxMessageMetadataProvider>()));
         services.TryAddSingleton<IOutboxConsumerManager>(sp => new OutboxConsumerManager(
             sp.GetServices<DeliveryGroupSettingsRegistration>(),
-            sp));
+            sp,
+            sp.GetService<ILogger<OutboxConsumerManager>>()));
 
         configure?.Invoke(new DeliveryBuilder(services, scopeKey));
 

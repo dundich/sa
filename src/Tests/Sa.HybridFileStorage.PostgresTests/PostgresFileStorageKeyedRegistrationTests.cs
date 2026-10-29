@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Sa.HybridFileStorage.Domain;
 using Sa.HybridFileStorage.Postgres;
+using Sa.Partitional.PostgreSql;
 
 namespace Sa.HybridFileStorage.PostgresTests;
 
@@ -240,5 +241,69 @@ public sealed class PostgresFileStorageKeyedRegistrationTests
             () => provider.GetRequiredKeyedService<IFileStorage>("files"));
 
         Assert.Contains("No IPgDataSource is registered", ex.Message, StringComparison.Ordinal);
+    }
+
+    // ---------- schedule settings ----------
+
+    [Fact]
+    public void Register_RetentionAndForwardDays_ReachTheSchedules()
+    {
+        // The two numbers are configured on the storage options but consumed by the partitional
+        // module's schedules; a wiring mistake would silently keep the library defaults.
+        var services = new ServiceCollection();
+        services.AddSaPostgreSqlFileStorage("files", b => b.Options(ob => ob.Configure(o =>
+        {
+            o.TableName = "files";
+            o.ExpireDays = 7;
+            o.MigrationScheduleForwardDays = 4;
+        })));
+
+        using var provider = services.BuildServiceProvider();
+        string moduleKey = PostgresFileStorageRegistrar.ModuleKey("files");
+
+        MigrationScheduleSettings migration =
+            provider.GetRequiredKeyedService<MigrationScheduleSettings>(moduleKey);
+        PartCleanupScheduleSettings cleanup =
+            provider.GetRequiredKeyedService<PartCleanupScheduleSettings>(moduleKey);
+
+        Assert.True(migration.AsBackgroundJob);
+        Assert.Equal(4, migration.ForwardDays);
+
+        Assert.True(cleanup.AsBackgroundJob);
+        Assert.Equal(TimeSpan.FromDays(7), cleanup.DropPartsAfterRetention);
+    }
+
+    // ---------- schema auto-detection from the search path ----------
+    [Theory]
+    [InlineData("Storage", "storage")]          // unquoted → PostgreSQL folds it to lower case
+    [InlineData("storage,public", "storage")]   // only the first entry is effective
+    [InlineData("'\"Storage\"'", "Storage")]    // a quoted entry is case-exact, quotes are not part of the name
+    [InlineData("'\"my schema\"'", "public")]   // not a bare identifier → fall back to the default
+    public void Schema_NormalisesTheAutoDetectedSearchPath(string searchPath, string expected)
+    {
+        // The value used to be taken verbatim, so `Search Path=Storage` silently targeted a
+        // "Storage" schema instead of the folded `storage` PostgreSQL actually resolves, and a
+        // quoted name produced SQL that does not parse.
+        var borrowed = Npgsql.NpgsqlDataSource.Create(
+            $"Host=127.0.0.1;Database=postgres;Username=u;Password=p;Search Path={searchPath}");
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>),
+                typeof(Microsoft.Extensions.Logging.Abstractions.NullLogger<>));
+            services.AddSingleton<Npgsql.NpgsqlDataSource>(borrowed);
+            services.AddSaPostgreSqlFileStorage("files", b =>
+                b.Options(ob => ob.Configure(o => o.TableName = "files")));
+
+            using var provider = services.BuildServiceProvider();
+
+            Assert.Equal(expected,
+                provider.GetRequiredKeyedService<PostgresFileStorageSchema>("files").Value);
+        }
+        finally
+        {
+            borrowed.Dispose();
+        }
     }
 }

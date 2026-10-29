@@ -202,6 +202,10 @@ internal sealed class TempFolder : ITempFolder
                 $"Path '{path}' points at a directory ('{full}'); a file path is required.");
         }
 
+        // Resolving is textual, so a link planted inside the root could still point this read at
+        // a file outside it: reading through a link is a containment escape like any other.
+        PathGuard.AssertNoSymlinkComponents(RootPath, full);
+
         // The whole read is one activity: no cleanup pass can run between the existence check
         // and the end of the callback (a running one is cancelled by this very entry), so the
         // file is never deleted under the open stream.
@@ -263,6 +267,11 @@ internal sealed class TempFolder : ITempFolder
             throw new InvalidOperationException(
                 $"Path '{path}' points at a directory ('{full}'); a file path is required.");
         }
+
+        // A delete is destructive: without this check a directory link planted inside the root
+        // (`root/up_cache -> /var/www`) would make File.Delete unlink the target's file, outside
+        // the root — the same vector WriteAsync and CopyFileAsync already refuse.
+        PathGuard.AssertNoSymlinkComponents(RootPath, full);
 
         // The whole delete is one activity: no cleanup pass can run between the existence check
         // and the last attempt (a running one is cancelled by this very entry), so the pass can
@@ -347,7 +356,10 @@ internal sealed class TempFolder : ITempFolder
         {
             RecurseSubdirectories = recursive,
             IgnoreInaccessible = true,
-            AttributesToSkip = 0,
+            // Reparse points are skipped exactly like the volume scan and the cleanup walk do it:
+            // following a linked directory would walk — and report paths from — a tree that lives
+            // outside the root, and a link cycle would never finish.
+            AttributesToSkip = FileAttributes.ReparsePoint,
         };
 
         foreach (var file in Directory.EnumerateFiles(directory, pattern, enumerationOptions))
@@ -369,27 +381,42 @@ internal sealed class TempFolder : ITempFolder
             return 0;
         }
 
+        if (ShouldTrackVolume())
+        {
+            // Cheap pre-check: when activity is in flight the pass below cannot start anyway, so
+            // a full tree walk would be pure waste. A measurement is reporting only, so it does
+            // not depend on the pass.
+            if (_cleanupGate.IsBusy)
+            {
+                _logger.LogDebug(
+                    "Temp folder '{Name}': volume scan before cleanup skipped — file activity or a pass is in progress.",
+                    Name);
+            }
+            else
+            {
+                try
+                {
+                    await _volumeScanner.ScanAsync(_options, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Age-based cleanup does not depend on the measurement — never lose the pass to it.
+                    _logger.LogWarning(ex, "Temp folder '{Name}': volume scan before cleanup failed.", Name);
+                }
+            }
+        }
+
+        // Deliberately *after* the scan: the measurement only reports and deletes nothing, so a
+        // disabled cleanup must not switch volume tracking off (with the default
+        // VolumeScanInterval = 0 the pre-cleanup scan is its only trigger).
         if (!_options.CleanupEnabled)
         {
             _logger.LogDebug("Temp folder '{Name}': cleanup is disabled; pass ignored.", Name);
             return 0;
-        }
-
-        if (ShouldTrackVolume())
-        {
-            try
-            {
-                await _volumeScanner.ScanAsync(_options, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // Age-based cleanup does not depend on the measurement — never lose the pass to it.
-                _logger.LogWarning(ex, "Temp folder '{Name}': volume scan before cleanup failed.", Name);
-            }
         }
 
         // Deletion yields to activity: the pass does not start while a read or write is in
@@ -431,7 +458,11 @@ internal sealed class TempFolder : ITempFolder
                 return 0;
             }
 
-            foreach (var path in candidates)
+            // The instance — not the strategy — owns the per-pass budget: a custom strategy that
+            // returns more candidates is truncated here, so one pass can never run unbounded.
+            var budget = Math.Max(_options.MaxFoldersPerPass, 0);
+
+            foreach (var path in candidates.Take(budget))
             {
                 // Caller cancellation and an arriving write both land here: the pass stops
                 // before its next deletion rather than racing the operation.
@@ -643,7 +674,9 @@ internal sealed class TempFolder : ITempFolder
         // the normal buffered path (the copy is going to fill it anyway).
         var targetOptions = new FileStreamOptions
         {
-            Mode = _options.OverwriteFiles ? FileMode.Create : FileMode.CreateNew,
+            // The staging name is unique, so it is always created fresh; the overwrite policy is
+            // enforced by the rename below (and by the pre-check above, for a friendly message).
+            Mode = FileMode.CreateNew,
             Access = FileAccess.Write,
             Share = FileShare.None,
             BufferSize = CopyBufferSize,
@@ -661,18 +694,28 @@ internal sealed class TempFolder : ITempFolder
             }
         }
 
+        // The copy lands in a sibling temp file first and is renamed into place only once complete:
+        // a reader never sees a truncated target, and a failed or cancelled copy leaves an
+        // existing file exactly as it was (a plain FileMode.Create would already have destroyed it).
+        var staging = Path.Combine(
+            parent ?? RootPath, $".sa-{Guid.CreateVersion7():N}.tmp");
+
         try
         {
-            await using (var target = new FileStream(full, targetOptions))
+            await using (var target = new FileStream(staging, targetOptions))
             {
                 await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
             }
+
+            // Same directory → same volume → an atomic rename. OverwriteFiles=false keeps the
+            // no-clobber promise even when the target appeared while the copy was running.
+            File.Move(staging, full, overwrite: _options.OverwriteFiles);
         }
         catch
         {
             // A failed or cancelled copy must not leave a half-written file behind: a reader
             // would take it for complete, and a later CreateNew write would trip over the name.
-            DeletePartialWrite(full);
+            DeletePartialWrite(staging);
             throw;
         }
 
@@ -681,23 +724,29 @@ internal sealed class TempFolder : ITempFolder
         // mtime. A file lying directly in the root has no aging parent — no request.
         RequestActivity(full);
 
+        // The volume cache is keyed by directory stamps, and an overwrite moves none of them —
+        // drop the affected top-level entry so the next scan re-measures instead of serving the
+        // pre-write total.
+        _volumeScanner.Invalidate(full);
+
         return (Path.GetRelativePath(RootPath, full), full);
     }
 
     /// <summary>
-    /// Best-effort removal of a partially written target after a failed or cancelled copy. The
-    /// file is already doomed (its content is incomplete); this only stops it from masquerading as
-    /// a complete file or blocking a later <c>CreateNew</c> write.
+    /// Best-effort removal of a staged partial write after a failed or cancelled copy. The file is
+    /// never the target itself — the original, if any, is untouched — this only stops the staging
+    /// name from lingering.
     /// </summary>
-    private void DeletePartialWrite(string full)
+    private void DeletePartialWrite(string stagingPath)
     {
         try
         {
-            File.Delete(full);
+            File.Delete(stagingPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
         {
-            _logger.LogDebug(ex, "Temp folder '{Name}': partial file '{Path}' could not be removed.", Name, full);
+            _logger.LogDebug(
+                ex, "Temp folder '{Name}': staged file '{Path}' could not be removed.", Name, stagingPath);
         }
     }
 

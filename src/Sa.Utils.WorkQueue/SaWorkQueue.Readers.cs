@@ -64,21 +64,29 @@ public sealed partial class SaWorkQueue<TInput>
         if (count <= 0) return;
 
         var registered = new Reader[count];
+        var added = 0;
 
-        lock (_readersSync)
+        try
         {
-            for (var i = 0; i < count; i++)
+            lock (_readersSync)
             {
-                registered[i] = RegisterReaderUnderLock();
+                for (; added < count; added++)
+                {
+                    registered[added] = RegisterReaderUnderLock();
+                }
             }
         }
-
-        // Outside the lock, on purpose. A reader cancelled in the window above is
-        // still launched: it counts as live until it unwinds, and its loop checks
-        // the token before reading anything.
-        foreach (var reader in registered)
+        finally
         {
-            LaunchReader(reader);
+            // Whatever got registered is launched, for two reasons. A reader cancelled in the
+            // window above still has to run: it counts as live until it unwinds, and its loop
+            // checks the token before reading anything. And a reader that is registered but
+            // never launched never completes its published task, so anything waiting for the
+            // pool to wind down would wait out the whole shutdown timeout on it.
+            for (var i = 0; i < added; i++)
+            {
+                LaunchReader(registered[i]);
+            }
         }
     }
 
@@ -111,45 +119,32 @@ public sealed partial class SaWorkQueue<TInput>
     /// </remarks>
     private Reader RegisterReaderUnderLock()
     {
-        // Both sources are linked to the shutdown token, so shutdown stays a hard
-        // stop in every mode.
+        // The loop source is linked to the shutdown token, so shutdown stays a hard
+        // stop in every mode. Hard mode needs no work source: the item in flight
+        // already runs under the loop token, so a second source would be created,
+        // linked to shutdown, and never read.
         var reader = new Reader(
             CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token),
-            CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token));
+            _cancelMode == SaReaderCancelMode.Soft
+                ? CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token)
+                : null);
 
         _readers.Add(reader);
         return reader;
     }
 
     /// <summary>
-    /// Runs an already-registered reader's loop and points the task the registry
-    /// published at its outcome. Never called under <c>_readersSync</c>.
+    /// Starts an already-registered reader's loop. Never called under
+    /// <c>_readersSync</c>.
     /// </summary>
-    private void LaunchReader(Reader reader)
-    {
-        var loop = ReaderLoopAsync(reader);
-
-        if (loop.IsCompleted)
-        {
-            // It can end right here, and did the bookkeeping in its own finally.
-            // Completing synchronously is what keeps a start-then-immediately-finish
-            // indistinguishable from one that finished a millisecond later.
-            reader.Completion.TrySetResult();
-            return;
-        }
-
-        // The loop then outlives this call, possibly for the life of the process.
-        // One continuation, run inline on whichever thread completes the loop, so
-        // the published task is never meaningfully behind the real one. The delegate
-        // cannot throw, so the loop's own outcome — which it has already swallowed,
-        // it catches everything — has nowhere to go even in the impossible case.
-        _ = loop.ContinueWith(
-            static (_, state) => ((TaskCompletionSource)state!).TrySetResult(),
-            reader.Completion,
-            CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
-    }
+    /// <remarks>
+    /// The loop publishes its own <see cref="Reader.Completion"/> from its
+    /// <c>finally</c>, so there is no task-to-task continuation to allocate here.
+    /// It also handles processor and cancellation failures itself, which is why the
+    /// returned task is safe to drop: the registry observes completion through
+    /// <see cref="Reader.Completion"/>, not through this task's outcome.
+    /// </remarks>
+    private void LaunchReader(Reader reader) => _ = ReaderLoopAsync(reader);
 
     /// <summary>
     /// Tells <paramref name="toCancel"/> live readers to stop, in the configured
@@ -255,11 +250,33 @@ public sealed partial class SaWorkQueue<TInput>
                     break;
                 }
 
+                // The producer already gave up on this item before a reader reached
+                // it, so nothing can run it. Reporting it here avoids building the
+                // per-item linked source below for work that is already over.
+                if (item.CancellationToken.IsCancellationRequested)
+                {
+                    if (_statusChanged is not null || _logger is not null)
+                    {
+                        var cancelled = ThrowHelper.CallerCancelledException();
+                        OnStatusChanged(item.Input, SaWorkStatus.Aborted, cancelled);
+
+                        if (_logger is not null)
+                        {
+                            SaWorkQueueLogMessages.LogItemAborted(
+                                _logger, _getItemDisplayName(item.Input), cancelled);
+                        }
+                    }
+
+                    MarkInactive();
+                    continue;
+                }
+
                 // In Soft mode the item runs under the work token rather than the
                 // loop token, so a planned removal or a pause does not interrupt
                 // work in flight. The queue itself is still a hard stop in every
                 // mode, because the work token is linked to the shutdown token too.
-                var workParent = _cancelMode == SaReaderCancelMode.Soft ? reader.Work.Token : reader.Loop.Token;
+                // Hard mode has no work source at all; the loop token owns the item.
+                var workParent = reader.Work?.Token ?? reader.Loop.Token;
 
                 // A linked source is only needed when the producer's token can
                 // actually fire; a default token cannot be cancelled, so skip the
@@ -268,7 +285,38 @@ public sealed partial class SaWorkQueue<TInput>
                     ? CancellationTokenSource.CreateLinkedTokenSource(workParent, item.CancellationToken)
                     : null;
 
-                if (!await ExecuteItemAsync(item, ctsExec?.Token ?? workParent).ConfigureAwait(false))
+                var ct = ctsExec?.Token ?? workParent;
+                var keepGoing = true;
+
+                // The item runs here rather than in an async helper on purpose: a
+                // helper that suspends leaves a second boxed state machine behind on
+                // every asynchronous item. The loop already owns one; these two
+                // `await`s reuse it, and the reporting below is synchronous.
+                try
+                {
+                    ct.ThrowIfCancellationRequested();
+                    OnStatusChanged(item.Input, SaWorkStatus.Running);
+                    await _processor.Execute(item.Input, ct).ConfigureAwait(false);
+                    OnStatusChanged(item.Input, SaWorkStatus.Completed);
+                }
+                catch (OperationCanceledException ex) when (item.CancellationToken.IsCancellationRequested)
+                {
+                    ReportItemAborted(item, ex);
+                }
+                catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
+                {
+                    keepGoing = ReportItemCancelled(item, ex);
+                }
+                catch (Exception ex)
+                {
+                    keepGoing = ReportItemFaulted(item, ex);
+                }
+                finally
+                {
+                    MarkInactive();
+                }
+
+                if (!keepGoing)
                 {
                     break;
                 }
@@ -276,10 +324,12 @@ public sealed partial class SaWorkQueue<TInput>
         }
         catch (ObjectDisposedException)
         {
-            // The shutdown token source was disposed out from under this reader:
-            // Dispose ran after the shutdown wait timed out while this reader was
-            // still alive. An expected late exit — no extra shutdown, no alarming
-            // log. RemoveReader in the finally still cleans up.
+            // A token source this loop depends on was released while the loop was still
+            // running. Kept as a safety net: the one path that used to reach it — Dispose
+            // releasing the queue's shutdown source under a reader that outlived the wait —
+            // no longer happens, because that source is no longer disposed. Treated as an
+            // expected late exit either way: no extra shutdown, no alarming log, and
+            // RemoveReader in the finally still cleans up.
         }
         catch (Exception ex)
         {
@@ -288,8 +338,94 @@ public sealed partial class SaWorkQueue<TInput>
         }
         finally
         {
-            RemoveReader(reader);
+            // Completion is published even if the bookkeeping throws: a shutdown
+            // waiting on the reader must not be left to time out because teardown
+            // failed after the loop had already stopped.
+            try
+            {
+                RemoveReader(reader);
+            }
+            finally
+            {
+                // Completing after RemoveReader keeps the published task in step
+                // with the registry: an observer that awaits it never sees a
+                // finished reader still counted as tracked. Doing it here also
+                // removes the extra Task and continuation LaunchReader used to
+                // allocate per reader.
+                reader.Completion.TrySetResult();
+            }
         }
+    }
+
+    /// <summary>
+    /// Reports an item the producer abandoned. The reader is fine, only the work is
+    /// over, so it stays in the pool — hence no return value.
+    /// </summary>
+    private void ReportItemAborted(WorkItem item, OperationCanceledException ex)
+    {
+        // The exception travels with the status — a callback has no logger of its
+        // own, so this is the only place it can learn why the item stopped.
+        OnStatusChanged(item.Input, SaWorkStatus.Aborted, ex);
+
+        // The display name formats the item, so it is only worth building when a
+        // logger is actually going to write it.
+        if (_logger is not null)
+        {
+            SaWorkQueueLogMessages.LogItemAborted(_logger, _getItemDisplayName(item.Input), ex);
+        }
+    }
+
+    /// <summary>
+    /// Reports an item the queue cancelled. The reader is going down with it, so the
+    /// return value is <see langword="false"/>.
+    /// </summary>
+    private bool ReportItemCancelled(WorkItem item, OperationCanceledException ex)
+    {
+        OnStatusChanged(item.Input, SaWorkStatus.Cancelled, ex);
+
+        if (_logger is not null)
+        {
+            SaWorkQueueLogMessages.LogItemCancelled(_logger, _getItemDisplayName(item.Input), ex);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Reports a faulted item and asks the configured handler what happens to the
+    /// reader next.
+    /// </summary>
+    private bool ReportItemFaulted(WorkItem item, Exception ex)
+    {
+        SaExecutionErrorStrategy errorStrategy = SaExecutionErrorStrategy.ShutdownQueue;
+        try
+        {
+            OnStatusChanged(item.Input, SaWorkStatus.Faulted, ex);
+
+            if (_logger is not null)
+            {
+                SaWorkQueueLogMessages.LogItemExecutionFailed(_logger, _getItemDisplayName(item.Input), ex);
+            }
+
+            errorStrategy = _handleItemFaulted(item.Input, ex);
+        }
+        catch (Exception callbackEx)
+        {
+            // A throwing error handler must not decide the reader's fate; the
+            // conservative default (stop the queue) stays in place.
+            if (_logger is not null)
+            {
+                SaWorkQueueLogMessages.LogItemHandlerFailed(_logger, _getItemDisplayName(item.Input), callbackEx);
+            }
+        }
+
+        return errorStrategy switch
+        {
+            SaExecutionErrorStrategy.Continue => true,
+            SaExecutionErrorStrategy.StopReader => false,
+            SaExecutionErrorStrategy.ShutdownQueue => HandleShutdownOnError(ex),
+            _ => true
+        };
     }
 
     /// <summary>
@@ -311,7 +447,14 @@ public sealed partial class SaWorkQueue<TInput>
             // (ReaderStop already set) gave its slot back at the moment the
             // decision was taken; releasing it here as well is what used to let
             // readers on their way out eat a limit the caller had set meanwhile.
-            lostSlot = reader.IsLive;
+            //
+            // A stopped queue is not a lost slot either. Its readers did not die,
+            // they were dismissed: the shutdown cancelled every loop token, so each
+            // one unwinds through here with Stop still None. Counting those as lost
+            // slots ended every shutdown with ConcurrencyLimit reading 0, while the
+            // contract — and the reason the setter is a no-op once stopped — is that
+            // the getter keeps reporting the limit the queue was stopped at.
+            lostSlot = reader.IsLive && IsEnabled;
             if (lostSlot && _concurrency > 0)
             {
                 _concurrency--;
@@ -333,10 +476,18 @@ public sealed partial class SaWorkQueue<TInput>
     /// and <see cref="ForceCancelReadersAsync"/>; only callable while the queue
     /// is enabled.
     /// </summary>
-    private Task[] CancelAndTrackReaders()
+    /// <param name="cancelled">
+    /// How many readers this call actually stopped. Zero means the pool had nothing
+    /// live to stop — it is paused, or every reader was already on its way out — and
+    /// the callers use that to leave the buffer alone: nothing was cancelled, so
+    /// nothing is discarded on its behalf.
+    /// </param>
+    private Task[] CancelAndTrackReaders(out int cancelled)
     {
         Task[] tasks;
         Reader[] readers;
+
+        cancelled = 0;
 
         lock (_readersSync)
         {
@@ -351,10 +502,18 @@ public sealed partial class SaWorkQueue<TInput>
             // or by a concurrent call, is skipped rather than released twice.
             lock (_readersSync)
             {
+                // Gone from the registry means it died on its own — a StopReader fault,
+                // typically — and RemoveReader already gave its slot back. Releasing it
+                // again here would decrement a limit the caller may have re-armed since
+                // the snapshot was taken, which is exactly what the slot accounting is
+                // built to prevent.
+                if (!_readers.Contains(reader)) continue;
+
                 if (!reader.IsLive) continue;
                 if (reader.Loop.IsCancellationRequested) continue; // shutdown got here first
 
                 reader.Stop = ReaderStop.ForceCancel;
+                cancelled++;
 
                 if (_concurrency > 0)
                 {
@@ -373,11 +532,13 @@ public sealed partial class SaWorkQueue<TInput>
 
             // A force-cancel is always hard, even in Soft mode: cancelling the work
             // token interrupts the item in flight instead of letting it finish.
-            if (_cancelMode == SaReaderCancelMode.Soft)
+            // Hard mode has no work token — the loop token it just cancelled
+            // already owns the item in flight.
+            if (reader.Work is { } work)
             {
                 try
                 {
-                    reader.Work.Cancel();
+                    work.Cancel();
                 }
                 catch (ObjectDisposedException)
                 {

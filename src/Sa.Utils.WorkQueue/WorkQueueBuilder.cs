@@ -103,6 +103,7 @@ internal sealed class WorkQueueBuilder<TInput> : IWorkQueueBuilder<TInput>
 
     public IWorkQueueBuilder<TInput> WithMaxConcurrency(int limit)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(limit);
         _codeSettings.MaxConcurrency = limit < 1 ? Environment.ProcessorCount : limit;
         HasCodeSettings = true;
         return this;
@@ -118,6 +119,13 @@ internal sealed class WorkQueueBuilder<TInput> : IWorkQueueBuilder<TInput>
     public IWorkQueueBuilder<TInput> WithEnqueueStrategy(SaEnqueueStrategy strategy)
     {
         _codeSettings.EnqueueStrategy = strategy;
+        HasCodeSettings = true;
+        return this;
+    }
+
+    public IWorkQueueBuilder<TInput> WithProducerCancellation(SaProducerCancellationMode mode)
+    {
+        _codeSettings.ProducerCancellation = mode;
         HasCodeSettings = true;
         return this;
     }
@@ -210,6 +218,7 @@ internal sealed class WorkQueueBuilder<TInput> : IWorkQueueBuilder<TInput>
         target.MaxConcurrency = _codeSettings.MaxConcurrency;
         target.SingleWriter = _codeSettings.SingleWriter;
         target.EnqueueStrategy = _codeSettings.EnqueueStrategy;
+        target.ProducerCancellation = _codeSettings.ProducerCancellation;
         target.ReaderCancelMode = _codeSettings.ReaderCancelMode;
         target.ReaderCancellationOrder = _codeSettings.ReaderCancellationOrder;
         target.ShutdownTimeout = _codeSettings.ShutdownTimeout;

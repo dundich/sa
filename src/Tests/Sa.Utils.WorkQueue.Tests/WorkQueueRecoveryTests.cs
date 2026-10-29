@@ -36,14 +36,11 @@ public class SaWorkQueueRecoveryTests
         Assert.Equal(2, ((TestProcessor)options.Processor).ProcessedCount);
 
         await queue.ForceCancelReadersAsync(ct: TestToken);
-        await Task.Delay(100, TestToken);
 
+        // ForceCancelReadersAsync уже дождался ридеров, никакого «пусть уляжется» не нужно.
         Assert.True(queue.IsIdle());
 
-
         queue.ConcurrencyLimit = 2;
-
-        await Task.Delay(100, TestToken);
 
         await queue.Enqueue(3, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);

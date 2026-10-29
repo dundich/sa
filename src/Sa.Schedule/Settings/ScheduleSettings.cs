@@ -146,8 +146,27 @@ internal sealed class ScheduleSettings : IScheduleSettings
                 (s1, s2) => s1.Merge(s2))
         );
 
+        var storage = new Dictionary<Guid, JobSettings>();
+
+        foreach (JobSettings job in items)
+        {
+            // Grouping is by (JobId, JobType), so the same explicit id on two different
+            // job types survives grouping and used to fail here with a bare
+            // "An item with the same key has already been added" from ToDictionary.
+            // ScheduleBuilder already rejects this at registration time; this stays as
+            // the safety net for settings assembled by other means.
+            if (!storage.TryAdd(job.JobId, job))
+            {
+                JobIdGuard.Throw(
+                    job.JobId,
+                    storage[job.JobId].JobType,
+                    job.JobType,
+                    nameof(jobSettings));
+            }
+        }
+
         return new ScheduleSettings(
-            storage: items.ToDictionary(c => c.JobId),
+            storage: storage,
             handleError: handleError,
             isHostedService: isHostedService
         );

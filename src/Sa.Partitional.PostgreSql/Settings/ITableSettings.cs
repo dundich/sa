@@ -32,18 +32,21 @@ public interface ITableSettings
     string[] Fields { get; }
 
     /// <summary>
-    /// Gets the column names used for list partitioning. Empty when the table uses range partitioning.
+    /// Gets the column names used for list partitioning, outermost level first. Empty when the table
+    /// has no list levels (a range-only table).
     /// </summary>
     string[] PartByListFieldNames { get; }
 
     /// <summary>
-    /// Gets the column name used for range partitioning (typically a <c>timestamptz</c> column).
-    /// Empty when the table uses list partitioning.
+    /// Gets the column name used for range partitioning. The column is a <c>bigint</c> holding Unix
+    /// seconds, never a date/time type: the generated <c>FOR VALUES</c> bounds are integers.
     /// </summary>
     string PartByRangeFieldName { get; }
 
     /// <summary>
-    /// Gets the partitioning strategy — day, month, or year for range; <c>null</c> for list partitioning.
+    /// Gets the partitioning strategy — day, month, or year. Range partitioning is always present
+    /// (the list levels, when there are any, sit above the range leaf), so this is never <c>null</c>;
+    /// without an explicit <c>PartByRange</c> call it defaults to <see cref="PgPartBy.Day"/>.
     /// </summary>
     PgPartBy PartBy { get; }
 

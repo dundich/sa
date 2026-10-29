@@ -49,6 +49,29 @@ internal sealed class SaWorkQueueSettingsValidator : IValidateOptions<SaWorkQueu
             Fail(ref errors, "SaWorkQueueSettings:ShutdownTimeout must be positive.");
         }
 
+        // Undefined enum values would fall through to a default arm inside the queue and
+        // silently become Skip / Hard / Lifo — a configuration typo with no symptom.
+        if (!Enum.IsDefined(options.EnqueueStrategy))
+        {
+            Fail(ref errors, "SaWorkQueueSettings:EnqueueStrategy must be Wait, Skip or Throw.");
+        }
+
+        if (!Enum.IsDefined(options.ProducerCancellation))
+        {
+            Fail(ref errors, "SaWorkQueueSettings:ProducerCancellation must be Observe or Detached.");
+        }
+
+        if (!Enum.IsDefined(options.ReaderCancelMode))
+        {
+            Fail(ref errors, "SaWorkQueueSettings:ReaderCancelMode must be Hard or Soft.");
+        }
+
+        if (!Enum.IsDefined(options.ReaderCancellationOrder))
+        {
+            Fail(ref errors,
+                "SaWorkQueueSettings:ReaderCancellationOrder must be Lifo, Fifo, RoundRobin or Random.");
+        }
+
         return errors is null
             ? ValidateOptionsResult.Success
             : ValidateOptionsResult.Fail(errors);

@@ -3,8 +3,8 @@
     <Import Project="../Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
-        <Version>0.16.0</Version>
-        <Description>Async WAV file reader for .NET </Description>
+        <Version>0.17.0</Version>
+        <Description>Async WAV reader for .NET with stereo cross-feed suppression (Echo)</Description>
     </PropertyGroup>
 
     <PropertyGroup>

@@ -72,4 +72,56 @@ public sealed class CronFieldParserTests
         var ex = Assert.Throws<CronParseException>((Func<CronField>)act);
         Assert.DoesNotContain("Invalid value", ex.Message);
     }
+
+    [Fact]
+    public void Parse_LastDay_AndOffsets()
+    {
+        var last = CronFieldParser.Parse("L", CronFieldKind.DayOfMonth);
+        Assert.True(last.LastDay);
+        Assert.Empty(last.LastDayOffsets);
+
+        // "L-0" is the same day as "L" and folds into it.
+        var lastZero = CronFieldParser.Parse("L-0", CronFieldKind.DayOfMonth);
+        Assert.True(lastZero.LastDay);
+        Assert.Empty(lastZero.LastDayOffsets);
+
+        var lastThree = CronFieldParser.Parse("L-3", CronFieldKind.DayOfMonth);
+        Assert.False(lastThree.LastDay);
+        Assert.Equal([3], lastThree.LastDayOffsets);
+    }
+
+    [Fact]
+    public void Parse_LastWeekday_AndNearestWeekday()
+    {
+        var lastWeekday = CronFieldParser.Parse("LW", CronFieldKind.DayOfMonth);
+        Assert.True(lastWeekday.LastWeekday);
+        Assert.True(lastWeekday.HasSpecials);
+
+        var nearest = CronFieldParser.Parse("15W", CronFieldKind.DayOfMonth);
+        Assert.Equal([15], nearest.NearestWeekdays);
+        Assert.True(nearest.HasSpecials);
+    }
+
+    [Fact]
+    public void Parse_LastGivenWeekdayOfMonth_FoldsSevenIntoZero()
+    {
+        Assert.Equal([5], CronFieldParser.Parse("5L", CronFieldKind.DayOfWeek).LastWeekdaysOfMonth);
+        Assert.Equal([0], CronFieldParser.Parse("7L", CronFieldKind.DayOfWeek).LastWeekdaysOfMonth);
+    }
+
+    [Fact]
+    public void Parse_SecondsField_UsesTheSecondRange()
+    {
+        Assert.Equal([0, 20, 40], CronFieldParser.Parse("*/20", CronFieldKind.Second).Values);
+        Assert.Equal([59], CronFieldParser.Parse("59", CronFieldKind.Second).Values);
+    }
+
+    [Fact]
+    public void Parse_ListOfPlainValueAndSpecial_KeepsBoth()
+    {
+        var field = CronFieldParser.Parse("1,L", CronFieldKind.DayOfMonth);
+
+        Assert.Equal([1], field.Values);
+        Assert.True(field.LastDay);
+    }
 }

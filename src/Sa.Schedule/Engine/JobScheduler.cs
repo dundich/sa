@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Primitives;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Primitives;
 using Sa.Utils.WorkQueue;
 
 namespace Sa.Schedule.Engine;
@@ -26,9 +27,24 @@ internal sealed class JobScheduler : IJobScheduler
     // request is never silently dropped.
     private bool _stopRequested;
 
-    // The user-requested concurrency limit (initially the configured one).
-    // The queue itself tracks the effective limit; this copy is used to
-    // restore readers after they are force-cancelled.
+    // Set when the job's loop ended (RunOnce completion, unsatisfiable schedule,
+    // error abort) while a Start() is still spawning its slots. Start() consumes
+    // them: the start itself still succeeded, but there is nothing running to
+    // report — IsStarted must end up false, not true over a dead job.
+    private bool _jobEndedDuringStart;
+
+    // Subset of the above: the loop ended because a slot *faulted* (the job could
+    // not be constructed, a custom timing threw, ...). That is a failed start, so
+    // Start() also reports false.
+    private bool _faultedDuringStart;
+
+    private readonly ILogger<JobScheduler>? _logger;
+
+    // The user-requested concurrency limit (initially the configured one). The
+    // reader pool is pinned at MaxConcurrency from the first Start() (not at
+    // construction — see the queue options), and this value is the single source of
+    // truth for how many slots are active, applied by pausing/resuming the controller
+    // gates in RefreshConcurrency.
     private volatile int _limit;
 
     private readonly SaWorkQueue<IJobController> _queue;
@@ -53,11 +69,13 @@ internal sealed class JobScheduler : IJobScheduler
     public JobScheduler(
         IJobSettings settings,
         IJobRunner runner,
-        Func<int, IJobController> createController)
+        Func<int, IJobController> createController,
+        ILogger<JobScheduler>? logger = null)
     {
 
         _runner = runner;
         _createController = createController;
+        _logger = logger;
 
         JobId = settings.JobId;
 
@@ -82,7 +100,15 @@ internal sealed class JobScheduler : IJobScheduler
             SaWorkQueueOptions<IJobController>.Create(RunJob)
             .WithQueueCapacity(maxConcurrency)
             .WithMaxConcurrency(maxConcurrency)
-            .WithConcurrencyLimit(_limit)
+            // The reader pool is raised to MaxConcurrency on the first Start() and
+            // pinned there; the *effective* limit is applied by pausing/resuming the
+            // slot gates (see RefreshConcurrency). The pool starts paused, so a
+            // scheduler that is resolved but never started costs no reader tasks.
+            // Letting the queue shrink to the limit instead hard-cancels a reader's
+            // in-flight item — and an item here is a job's whole loop — so every slot
+            // above the new limit would be gone for good: raising the limit again could
+            // never bring it back without a full Stop+Start.
+            .WithConcurrencyLimit(0)
             .WithSingleWriter(true)
             .WithShutdownTimeout(_shutdownTimeout)
             // An unexpected fault must not kill the queue (the default
@@ -96,11 +122,10 @@ internal sealed class JobScheduler : IJobScheduler
 
     public int ConcurrencyLimit
     {
-        get => _queue.ConcurrencyLimit;
+        get => _limit;
         set
         {
             _limit = Math.Clamp(value, 0, _queue.MaxConcurrency);
-            _queue.ConcurrencyLimit = _limit;
             RefreshConcurrency();
         }
     }
@@ -144,6 +169,8 @@ internal sealed class JobScheduler : IJobScheduler
     public async Task<bool> Start(CancellationToken cancellationToken)
     {
         CancellationToken stoppingToken;
+        CancellationTokenSource? previousSource = null;
+        CancellationTokenSource source;
 
         lock (_lock)
         {
@@ -156,12 +183,31 @@ internal sealed class JobScheduler : IJobScheduler
 
             _started = null;
 
-            _stoppingTokenSource.Cancel();
-            _stoppingTokenSource.Dispose();
-
+            previousSource = _stoppingTokenSource;
             _stoppingTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            stoppingToken = _stoppingTokenSource.Token;
+            source = _stoppingTokenSource;
+            stoppingToken = source.Token;
+        }
+
+        // Arm the stop observation before anything can cancel the token (see the method: the state
+        // must follow the caller's token even when no slot ever runs to observe it).
+        RegisterStopObservation(source);
+
+        // Cancel and dispose outside the lock: cancellation callbacks run on this
+        // thread. (Stop() cancels under its lock on purpose — see the note there.)
+        if (previousSource is not null)
+        {
+            try
+            {
+                previousSource.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // ignore
+            }
+
+            previousSource.Dispose();
         }
 
         List<IJobController> controllers = new(capacity: _queue.MaxConcurrency);
@@ -170,11 +216,18 @@ internal sealed class JobScheduler : IJobScheduler
 
         try
         {
-            // Re-spawn readers lost by a previous abort/force-cancel
-            // (setting the same value is a no-op when the pool is healthy).
-            _queue.ConcurrencyLimit = _limit;
+            // Re-spawn readers lost by a previous abort/force-cancel, and spawn the
+            // whole pool on the first start (the queue is created paused).
+            // Setting the same value is a no-op when the pool is healthy.
+            _queue.ConcurrencyLimit = _queue.MaxConcurrency;
 
-            await _queue.WaitForIdleAsync(cancellationToken: cancellationToken);
+            // Bounded: a previous run's iteration may ignore cancellation (Stop only
+            // waits out the shutdown timeout), and an unbounded wait here would hang
+            // Restart()/Start() forever. A timeout fails this start instead.
+            using var idleCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            idleCts.CancelAfter(_shutdownTimeout);
+
+            await _queue.WaitForIdleAsync(cancellationToken: idleCts.Token);
 
             for (var i = 0; i < _queue.MaxConcurrency; i++)
             {
@@ -188,7 +241,8 @@ internal sealed class JobScheduler : IJobScheduler
         }
         catch (OperationCanceledException)
         {
-            // Shutdown requested during startup
+            // Shutdown requested during startup — or the previous run did not drain
+            // within the shutdown timeout.
         }
         catch (ObjectDisposedException)
         {
@@ -206,10 +260,29 @@ internal sealed class JobScheduler : IJobScheduler
                     success = false;
                 }
 
-                _stopRequested = false;
+                // The job already ended (or faulted) while the slots were being
+                // spawned. A fault is a failed start; a natural completion (immediate
+                // RunOnce, unsatisfiable schedule) did start the job — it just must
+                // not be reported as running.
+                bool endedDuringStart = _jobEndedDuringStart;
+                if (_faultedDuringStart)
+                {
+                    success = false;
+                }
 
-                _started = success;
-                _jobControllers = controllers;
+                _stopRequested = false;
+                _jobEndedDuringStart = false;
+                _faultedDuringStart = false;
+
+                _started = success && !endedDuringStart;
+
+                // Keep the previous list on a failed start: those controllers (and their
+                // DI scopes) still need to be reachable by Dispose. The controllers this
+                // failed attempt created are shut down by the failure branch below.
+                if (success)
+                {
+                    _jobControllers = controllers;
+                }
             }
 
             if (!success)
@@ -238,6 +311,69 @@ internal sealed class JobScheduler : IJobScheduler
         return success;
     }
 
+    /// <summary>
+    /// Marks the job stopped as soon as its stop token fires, whatever the slots are doing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The stop token is linked to the caller's token, so cancelling the caller's token (the host's
+    /// startup token, a scoped request, ...) ends the job without <see cref="Stop"/> being called. The
+    /// scheduler used to learn about that only from a slot, in <see cref="RunJob"/> — and the queue
+    /// drops an item whose producer token is already cancelled <i>before</i> invoking the processor
+    /// (<c>SaWorkQueue.ExecuteItemAsync</c> throws at its cancellation gate and reports the item as
+    /// <c>Aborted</c>), so a slot that never started left <see cref="IsStarted"/> true over a dead job
+    /// forever. Subscribing here makes the transition independent of slot timing.
+    /// </para>
+    /// <para>
+    /// Only the state is flipped: the readers are left to unwind on the cancellation they already
+    /// observe. <see cref="AbortJob"/> would additionally force-cancel the reader pool, which is what
+    /// <see cref="Stop"/> deliberately does <i>not</i> do — it drains for up to the shutdown timeout —
+    /// and <see cref="Stop"/> cancels this very token, so the callback must not decide that.
+    /// </para>
+    /// </remarks>
+    private void RegisterStopObservation(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token.Register(
+                static state =>
+                {
+                    var (scheduler, source) = ((JobScheduler Scheduler, CancellationTokenSource Source))state!;
+                    scheduler.OnStopTokenCancelled(source);
+                },
+                (Scheduler: this, Source: source));
+        }
+        catch (ObjectDisposedException)
+        {
+            // The scheduler was disposed between the lock and here: the job is over either way.
+        }
+    }
+
+    /// <summary>
+    /// Reflects a fired stop token in the scheduler state, unless the token belongs to a superseded
+    /// start (a new <see cref="Start"/> cancels the previous source before arming its own) or the
+    /// scheduler is already disposed.
+    /// </summary>
+    private void OnStopTokenCancelled(CancellationTokenSource source)
+    {
+        lock (_lock)
+        {
+            if (_disposed || !ReferenceEquals(_stoppingTokenSource, source)) return;
+
+            // A Start() is still spawning slots: record the end instead of racing its completion,
+            // which consumes the flag and reports the start as not started.
+            if (_started is null)
+            {
+                _jobEndedDuringStart = true;
+                return;
+            }
+
+            // Stop() sets this too, right after the Cancel() that lands here; both write the same
+            // value, and the drain that follows Stop() is untouched.
+            _started = false;
+        }
+    }
+
     private void RefreshConcurrency()
     {
         IReadOnlyList<IJobController> controllers;
@@ -247,7 +383,9 @@ internal sealed class JobScheduler : IJobScheduler
             controllers = _jobControllers;
         }
 
-        int limit = _queue.ConcurrencyLimit;
+        // The requested limit — not the queue's, which is pinned at MaxConcurrency
+        // so the default reader pool is never torn down by a limit change.
+        int limit = _limit;
 
         for (int i = 0; i < controllers.Count; i++)
         {
@@ -267,26 +405,74 @@ internal sealed class JobScheduler : IJobScheduler
     /// </summary>
     private async Task RunJob(IJobController controller, CancellationToken ct)
     {
-        bool finished = await _runner.Run(controller, ct);
+        JobRunResult result;
 
-        if (finished)
+        try
         {
-            // The loop ended because there is no more work: the run-once job
-            // completed, the schedule can never fire again (unsatisfiable cron),
-            // or the error handling requested an abort. In every such case the
-            // scheduler must reflect the stopped state and release the slot
-            // readers — otherwise IsStarted would stay true over a dead job.
-            if (!controller.AbortedByError && _isRunOnce)
+            result = await _runner.Run(controller, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // A normal stop: the token was cancelled while the slot was still waiting
+            // on its initial delay or pause gate. No fault, no teardown to run.
+            return;
+        }
+        catch (Exception ex)
+        {
+            // A fault outside the iteration loop (the job could not be constructed, a
+            // custom IJobTiming threw, ...) must not be left to the queue's
+            // faulted-item strategy alone: that drops the reader but keeps IsStarted
+            // true over a dead slot. The controller is already shut down by the
+            // runner's finally, so only the scheduler state is left to fix.
+            if (_logger is not null)
             {
-                lock (_lock)
-                {
-                    // A naturally completed run-once is consumed permanently:
-                    // per the RunOnce contract the job must not start again.
-                    _runOnceCompleted = true;
-                }
+                JobSchedulerLog.LogSlotFaulted(_logger, JobId, controller.Index, ex);
             }
 
-            AbortJob();
+            AbortJob(faulted: true);
+            return;
+        }
+
+        switch (result)
+        {
+            case JobRunResult.Finished:
+                // The loop ended because there is no more work: the run-once job
+                // completed, the schedule can never fire again (unsatisfiable cron),
+                // or the error handling requested an abort. In every such case the
+                // scheduler must reflect the stopped state and release the slot
+                // readers — otherwise IsStarted would stay true over a dead job.
+                if (!controller.AbortedByError && _isRunOnce)
+                {
+                    lock (_lock)
+                    {
+                        // A naturally completed run-once is consumed permanently:
+                        // per the RunOnce contract the job must not start again.
+                        _runOnceCompleted = true;
+                    }
+                }
+
+                AbortJob();
+                break;
+
+            case JobRunResult.Faulted:
+                // A fault is not a natural completion, so the RunOnce budget stays
+                // intact and the job can be started again once the cause is fixed.
+                // The slot is still torn down: the queue's faulted-item strategy alone
+                // would leave IsStarted true over a dead slot.
+                AbortJob(faulted: true);
+                break;
+
+            default:
+                // Stopped: the caller cancelled the token. Normally Stop/Dispose already
+                // moved the scheduler to the stopped state and this is a no-op. If it is
+                // still marked started, the run ended because the caller's own token (for
+                // example the host's startup token) was cancelled — reflect that in the
+                // state as well.
+                if (ct.IsCancellationRequested)
+                {
+                    AbortJob();
+                }
+                break;
         }
     }
 
@@ -298,7 +484,13 @@ internal sealed class JobScheduler : IJobScheduler
     /// again with <see cref="Start"/> (unless it was a RunOnce job, which
     /// refuses to run again).
     /// </summary>
-    private void AbortJob()
+    /// <param name="faulted">
+    /// <see langword="true"/> when the loop ended because a slot faulted rather than
+    /// because it ran out of work. The distinction matters in two places: while a start
+    /// is in flight (a fault fails that start, a normal completion does not) and for a
+    /// RunOnce job (only a normal completion consumes its single run).
+    /// </param>
+    private void AbortJob(bool faulted = false)
     {
         CancellationTokenSource stoppingTokenSource;
 
@@ -306,9 +498,21 @@ internal sealed class JobScheduler : IJobScheduler
         {
             if (_disposed) return;
 
-            // Only interrupt a job that is actually running. During an in-flight
-            // Start (null) the brand-new source must not be cancelled out from
-            // under it, and after a Stop there is nothing left to tear down.
+            // A Start() is still spawning slots: the brand-new source must not be
+            // cancelled out from under it. Record the end instead — Start()'s
+            // completion consumes it, so IsStarted never reports a dead job.
+            if (_started is null)
+            {
+                _jobEndedDuringStart = true;
+                if (faulted)
+                {
+                    _faultedDuringStart = true;
+                }
+                return;
+            }
+
+            // Only interrupt a job that is actually running. After a Stop there is
+            // nothing left to tear down.
             if (!_started.GetValueOrDefault()) return;
 
             _started = false;
@@ -365,6 +569,10 @@ internal sealed class JobScheduler : IJobScheduler
 
             if (!started.Value) return;
 
+            // Cancelled under the lock on purpose: this closes the race with Dispose(),
+            // which disposes the same source outside the lock — Cancel() on a disposed
+            // source throws ObjectDisposedException. System.Threading.Lock is reentrant,
+            // so a callback cannot deadlock on this lock from the same thread.
             stoppingTokenSource = _stoppingTokenSource;
             stoppingTokenSource.Cancel();
             _started = false;

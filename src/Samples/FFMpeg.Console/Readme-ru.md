@@ -13,7 +13,21 @@ dotnet run --project Samples/FFMpeg.Console
 
 Пример конвертирует `data/input.mp3` → `data/output.wav` (PCM S16 LE, моно, 16 кГц) и выводит информацию о версии + список кодеков.
 
-> **Зависимости Linux:** На Ubuntu/Debian установите `libmp3lame0 libopus0 libvorbis0a libvorbisenc2`. На Alpine: `lame-libs opus libvorbis`.
+Доустанавливать ничего не нужно — ни на Windows x64, ни на Linux x64 (включая musl/Alpine):
+встроенный FFmpeg полностью статический (`ldd sa/native/ffmpeg` → *not a dynamic executable*,
+у `readelf -d` нет `NEEDED`), кодеки `libmp3lame`/`libopus`/`libvorbis` и libc влинкованы внутрь.
+
+> ⚠️ Фолбэка «бандл не запустился → возьмём системный ffmpeg» нет: `IFFMpegLocator` выбирает первый
+> *существующий* файл. Неработоспособный `sa/native/ffmpeg` (битый пейлоад, `noexec`-монтирование,
+> чужая платформа) не пропускается молча — `GetVersion()`/`GetCodecs()` бросают
+> `ProcessExecutionResultException` с кодом возврата и хвостом stderr ffmpeg, так что причина видна
+> сразу. Свой бинарник подключается через `FFMpegOptions.ExecutablePath`.
+
+> **Почему `ProjectReference`, а не `PackageReference`.** Сэмпл намеренно ссылается на
+> `Sa.Media.FFmpeg.csproj`. Локальный фид `src/nupkgs` в git пустой, а `packageSourceMapping`
+> в `src/nuget.config` разрешает `Sa.*` только из него, поэтому `PackageReference` ломает
+> `dotnet restore src/Sa.slnx` на чистом клоне (NU1101). Путь упакованного пакета
+> (`buildTransitive/Sa.Media.FFmpeg.targets`) проверяет `./build-sh/do-package-check.sh` в CI.
 
 ---
 
@@ -36,16 +50,18 @@ var ffmpeg = IFFMpegExecutor.Default;
 
 // Проверить версию
 var ver = await ffmpeg.GetVersion();
-Console.WriteLine(ver.AsSpan(0, 21));
+Console.WriteLine(ver.Split('\n')[0].TrimEnd('\r'));
 
 // Список всех поддерживаемых кодеков
 var codecs = await ffmpeg.GetCodecs();
 Console.WriteLine(codecs);
 
 // Конвертировать MP3 → WAV (PCM S16 LE, моно)
+var dataDir = Path.Combine(AppContext.BaseDirectory, "data");
+
 await ffmpeg.ConvertToPcmS16Le(
-    "data/input.mp3",
-    "data/output.wav",
+    Path.Combine(dataDir, "input.mp3"),
+    Path.Combine(dataDir, "output.wav"),
     outputChannelCount: 1);
 ```
 

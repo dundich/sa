@@ -7,7 +7,8 @@
 /// The <c>With*</c> methods validate eagerly and are the preferred way to build options.
 /// The primary constructor is public, so its arguments bypass those guards: the queue
 /// constructor re-validates everything (<c>ConcurrencyLimit</c> must not be negative,
-/// <c>QueueCapacity</c> must be at least 1, <c>ShutdownTimeout</c> must be positive) and throws
+/// <c>QueueCapacity</c> must be at least 1, <c>ShutdownTimeout</c> must be positive, and
+/// the four strategy enums must be defined values) and throws
 /// <see cref="ArgumentOutOfRangeException"/> before creating the channel. Either way, an invalid
 /// value fails the same way.
 /// </remarks>
@@ -24,7 +25,8 @@ public sealed record SaWorkQueueOptions<TInput>(
     Action<TInput, SaWorkStatus, Exception?>? StatusChanged = null,
     Func<TInput, string>? GetItemDisplayName = null,
     TimeSpan? ShutdownTimeout = null,
-    TimeProvider? TimeProvider = null)
+    TimeProvider? TimeProvider = null,
+    SaProducerCancellationMode ProducerCancellation = SaProducerCancellationMode.Observe)
 {
     /// <summary>Creates a new options instance with the specified queue capacity.</summary>
     /// <param name="capacity">Must be at least 1.</param>
@@ -47,9 +49,16 @@ public sealed record SaWorkQueueOptions<TInput>(
     }
 
     /// <summary>Sets the absolute maximum number of reader tasks.</summary>
-    /// <param name="limit">If less than 1, defaults to CPU count.</param>
+    /// <param name="limit">
+    /// <c>0</c> defaults to the CPU count; otherwise must be positive. A negative value is
+    /// rejected, exactly as the queue constructor rejects one: folding a sign mistake into a
+    /// plausible default is how it stops being visible.
+    /// </param>
     public SaWorkQueueOptions<TInput> WithMaxConcurrency(int limit)
-        => this with { MaxConcurrency = limit < 1 ? Environment.ProcessorCount : limit };
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(limit);
+        return this with { MaxConcurrency = limit < 1 ? Environment.ProcessorCount : limit };
+    }
 
     /// <summary>Optimises for a single writer source.</summary>
     public SaWorkQueueOptions<TInput> WithSingleWriter(bool sw)
@@ -96,6 +105,18 @@ public sealed record SaWorkQueueOptions<TInput>(
     public SaWorkQueueOptions<TInput> WithEnqueueStrategy(SaEnqueueStrategy strategy)
         => this with { EnqueueStrategy = strategy };
 
+    /// <summary>
+    /// Sets whether an accepted item keeps observing the cancellation token its producer
+    /// passed to <c>Enqueue</c>.
+    /// </summary>
+    /// <param name="mode">
+    /// <see cref="SaProducerCancellationMode.Observe"/> (default) stores the token, so an
+    /// item can be aborted after acceptance; <see cref="SaProducerCancellationMode.Detached"/>
+    /// uses it only for the wait on buffer space and lets the item run to a terminal status.
+    /// </param>
+    public SaWorkQueueOptions<TInput> WithProducerCancellation(SaProducerCancellationMode mode)
+        => this with { ProducerCancellation = mode };
+
     /// <summary>Sets a function to obtain a display name for each work item (e.g., for logging).</summary>
     public SaWorkQueueOptions<TInput> WithItemDisplayName(Func<TInput, string> toString)
         => this with { GetItemDisplayName = toString };
@@ -125,7 +146,6 @@ public sealed record SaWorkQueueOptions<TInput>(
         ArgumentNullException.ThrowIfNull(timeProvider);
         return this with { TimeProvider = timeProvider };
     }
-
 
     /// <summary>Creates options from a delegate that processes a single item.</summary>
     /// <param name="process">Async delegate that receives the item and a cancellation token.</param>

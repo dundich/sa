@@ -189,6 +189,21 @@ public sealed class ScheduleOptionsConfigurationTests
     }
 
     [Fact]
+    public void Cron_SixFieldExpression_FiresOnSeconds()
+    {
+        // The config path detects the format the same way the code does: a leading seconds
+        // field switches the timing to second precision.
+        var settings = BuildSettings(
+            configure: b => b.AddJob<Job1>().WithName("J1"),
+            entries: new Dictionary<string, string?>
+            {
+                ["Schedule:Jobs:J1:Cron"] = "*/30 * * * * *",
+            });
+
+        Assert.Equal(From.AddSeconds(30), Next(GetJob(settings, "J1")));
+    }
+
+    [Fact]
     public void UserConfigure_HasLastWordOverSection()
     {
         var settings = BuildSettings(
@@ -232,6 +247,39 @@ public sealed class ScheduleOptionsConfigurationTests
             .GetRequiredService<IScheduleSettings>());
 
         Assert.Contains("not a valid", ex.Message);
+    }
+
+    [Fact]
+    public void Validator_UnsatisfiableCron_FailsOnResolve()
+    {
+        // Strict calendar validation on the config path: 31 April never exists, so the job
+        // would silently abort its loop on the first GetNextOccurrence == null.
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => NewServices(entries: new Dictionary<string, string?>
+            {
+                ["Schedule:Jobs:J1:Cron"] = "0 0 31 4 *",
+            })
+            .BuildServiceProvider()
+            .GetRequiredService<IScheduleSettings>());
+
+        Assert.Contains("no valid day", ex.Message);
+    }
+
+    [Fact]
+    public void Validator_LeapDayCron_IsAccepted()
+    {
+        // 29 February is reachable inside the 28-year horizon, so strict validation must
+        // not reject it.
+        var settings = BuildSettings(
+            configure: b => b.AddJob<Job1>().WithName("J1"),
+            entries: new Dictionary<string, string?>
+            {
+                ["Schedule:Jobs:J1:Cron"] = "0 0 29 2 *",
+            });
+
+        Assert.Equal(
+            new DateTimeOffset(2028, 2, 29, 0, 0, 0, TimeSpan.Zero),
+            Next(GetJob(settings, "J1")));
     }
 
     [Fact]
@@ -289,6 +337,79 @@ public sealed class ScheduleOptionsConfigurationTests
 
         Assert.Throws<InvalidOperationException>(
             () => services.AddSaSchedule(b => b.Options(o => o.Configure(_ => { }))));
+    }
+
+    [Fact]
+    public void AddJob_DuplicateExplicitIdForDifferentTypes_ThrowsAtRegistration()
+    {
+        // The duplicate used to be noticed only when IScheduleSettings was resolved
+        // (host start), with a generic "same key" exception. It now fails inside
+        // AddSaSchedule, naming the id and both types.
+        var id = Guid.NewGuid();
+        var services = new ServiceCollection();
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            services.AddSaSchedule(b =>
+            {
+                b.AddJob<Job1>(id);
+                b.AddJob<Job2>(id);
+            }));
+
+        Assert.Contains(id.ToString(), ex.Message);
+        Assert.Contains(nameof(Job1), ex.Message);
+        Assert.Contains(nameof(Job2), ex.Message);
+    }
+
+    [Fact]
+    public void AddJob_SameExplicitIdForSameType_StillAccumulates()
+    {
+        var id = Guid.NewGuid();
+        var services = new ServiceCollection();
+
+        var ex = Record.Exception(() => services.AddSaSchedule(b =>
+        {
+            b.AddJob<Job1>(id);
+            b.AddJob<Job1>(id);
+        }));
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void AddJob_SameIdInDifferentSchedules_IsAllowed()
+    {
+        // The guard is per schedule: two schedules may use the same explicit id.
+        var id = Guid.NewGuid();
+        var services = new ServiceCollection();
+
+        var ex = Record.Exception(() =>
+        {
+            services.AddSaSchedule("a", b => b.AddJob<Job1>(id));
+            services.AddSaSchedule("b", b => b.AddJob<Job2>(id));
+        });
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void SecondConfiguringCall_RollsBackTheJobsItRegistered()
+    {
+        // The rejected call must leave the collection exactly as it found it: its core
+        // registrations and jobs used to stay behind, so a later job-only call would
+        // silently inherit jobs from a call that threw.
+        var services = new ServiceCollection();
+        services.AddSaSchedule(b => b.FromConfiguration("Schedule"));
+
+        int countAfterFirst = services.Count;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            services.AddSaSchedule(b =>
+            {
+                b.AddJob<Job1>().WithName("Leaked").EveryTime(TimeSpan.FromSeconds(1));
+                b.FromConfiguration("Schedule");
+            }));
+
+        Assert.Equal(countAfterFirst, services.Count);
     }
 
     [Fact]

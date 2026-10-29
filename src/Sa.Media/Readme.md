@@ -23,9 +23,9 @@ Async, memory-efficient WAV file reader for .NET 10+. Designed for Native AOT co
 
 ```csharp
 using var stream = File.OpenRead("test.wav");
-var reader = new AsyncWavReader(stream);
+await using var reader = AsyncWavReader.Create(stream);
 
-var header = await reader.GetHeaderAsync();
+var header = await reader.GetHeaderAsync(ct);
 Console.WriteLine($"{header.NumChannels}ch @ {header.SampleRate}Hz, " +
     $"{header.BitsPerSample}-bit {header.AudioFormat}");
 ```
@@ -48,6 +48,18 @@ await foreach (var packet in reader.ReadSamplesPerChannelAsync(
 await using var reader = AsyncWavReader.CreateFromFile("test.wav");
 
 await foreach (var packet in reader.ReadDoubleSamplesAsync(cancellationToken: ct))
+{
+    Console.WriteLine($"Ch#{packet.ChannelId}: {packet.Sample:F4}");
+}
+```
+
+### Read normalized float samples (DSP path)
+
+```csharp
+await using var reader = AsyncWavReader.CreateFromFile("test.wav");
+
+// Same values as the double path, but converted straight to float — no double round-trip.
+await foreach (var packet in reader.ReadFloatSamplesAsync(cancellationToken: ct))
 {
     Console.WriteLine($"Ch#{packet.ChannelId}: {packet.Sample:F4}");
 }
@@ -129,7 +141,7 @@ await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
 The separator must run on a **2-channel (stereo)** recording. Output is 16-bit
 PCM WAV, peak-normalized. The linear path streams and avoids loading the whole
 file into memory; the in-memory path kicks in automatically for short
-recordings (≤ 100 Mframes).
+recordings (≤ 32 M frames, ~12 minutes at 44.1 kHz).
 
 ---
 
@@ -158,6 +170,7 @@ All formats support mono and stereo. Unknown chunks (`JUNK`, `LIST`, etc.) are a
 | `WavHeader` | Parsed RIFF/WAV header with computed properties (`IsPcm`, `IsStereo`, `Duration`) |
 | `AudioPacket` | Record: `(ChannelId, Sample, Position, IsEof)` — raw/conversion bytes |
 | `AudioNormalizedPacket` | Record: `(ChannelId, Sample, Position, IsEof)` — normalized double [-1.0, 1.0] |
+| `AudioFloatPacket` | Record: `(ChannelId, Sample, Position, IsEof)` — normalized float [-1.0, 1.0] |
 | `TimeRange` | Record: `(From, To)` — time-based trimming with factory methods |
 | `AudioEncoding` | Enum: PCM 8/16/24/32, IEEE Float 32/64 |
 | `WaveFormatType` | Enum: `Pcm`, `Adpcm`, `IeeeFloat`, `Extensible` |
@@ -182,9 +195,10 @@ All formats support mono and stereo. Unknown chunks (`JUNK`, `LIST`, etc.) are a
 |--------|---------|-------------|
 | `Create(Stream)` | `AsyncWavReader` | Factory from stream |
 | `CreateFromFile(string)` | `AsyncWavReader` | Factory from file path |
-| `GetHeaderAsync()` | `Task<WavHeader>` | Thread-safe lazy header parsing |
+| `GetHeaderAsync(ct)` | `Task<WavHeader>` | Thread-safe lazy header parsing; not poisoned by the first caller's cancellation |
 | `ReadSamplesPerChannelAsync()` | `IAsyncEnumerable<AudioPacket>` | Raw samples per channel |
 | `ReadDoubleSamplesAsync()` | `IAsyncEnumerable<AudioNormalizedPacket>` | Normalized double samples |
+| `ReadFloatSamplesAsync()` | `IAsyncEnumerable<AudioFloatPacket>` | Normalized float samples (DSP path, no double) |
 | `ConvertToFormatAsync()` | `IAsyncEnumerable<AudioPacket>` | Convert to target encoding |
 | `ReadStreamableChunksAsync()` | `IAsyncEnumerable<AudioPacket>` | Batched samples for pipelines |
 
@@ -204,7 +218,7 @@ All formats support mono and stereo. Unknown chunks (`JUNK`, `LIST`, etc.) are a
 
 - `allowBufferReuse=true` (default) reuses pooled buffers across yields — caller must copy before next iteration
 - `allowBufferReuse=false` allocates a fresh array per sample — safer for parallel consumers
-- `ReadStreamableChunksAsync` forces `allowBufferReuse:false` internally to prevent buffer aliasing
+- `ReadStreamableChunksAsync` keeps `allowBufferReuse:true` by default: each per-channel batch points at that channel's pooled buffer and is overwritten by the next batch of the same channel, so copy or process the memory before advancing (pass `allowBufferReuse:false` for independent arrays)
 - All internal awaits use `ConfigureAwait(false)` — safe in any synchronization context
 
 ---
@@ -214,11 +228,11 @@ All formats support mono and stereo. Unknown chunks (`JUNK`, `LIST`, etc.) are a
 ```
 src/Sa.Media/
 ├── AsyncWavReader.cs        # Main reader class
-├── AsyncWavWriter.cs        # Internal WAV writer
 ├── AudioEncoding.cs         # Format enum
 ├── AudioEncodingExtensions.cs
 ├── AudioPacket.cs           # Raw sample record
-├── AudioNormalizedPacket.cs # Normalized sample record
+├── AudioNormalizedPacket.cs # Normalized double sample record
+├── AudioFloatPacket.cs      # Normalized float sample record
 ├── BinaryPipeReader.cs      # Little-endian binary reader
 ├── PipeReaderExtensions.cs  # Skip helpers
 ├── SampleConverter.cs       # PCM ↔ double conversion

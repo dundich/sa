@@ -93,6 +93,44 @@ public sealed class SetupRegistrationTests
     }
 
     [Fact]
+    public async Task Register_ConfiguringCallAfterABareCall_KeepsTheProcessorAndCallbacks()
+    {
+        // Порядок обратный предыдущему тесту и куда менее очевидный: «голый» вызов первым
+        // регистрирует фабрику, которая ничего не знает о процессоре. Раньше он же и
+        // «выигрывал» навсегда — процессор с колбэками из второго вызова молча терялись,
+        // а на resolve прилетало «No processor…» с советом вызвать UseProcessor, который
+        // уже был вызван.
+        var statuses = new List<SaWorkStatus>();
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var services = new ServiceCollection();
+        services.AddSaWorkQueue<int>();
+        services.AddSaWorkQueue<int>(b => b
+            .WithProcess((_, _) => Task.CompletedTask)
+            .WithConcurrencyLimit(1)
+            .WithStatusCallback((_, status, _) =>
+            {
+                lock (statuses) statuses.Add(status);
+                if (status == SaWorkStatus.Completed) completed.TrySetResult();
+            }));
+
+        using var provider = services.BuildServiceProvider();
+        using var queue = provider.GetRequiredService<ISaWorkQueue<int>>();
+
+        Assert.Equal(1, queue.ConcurrencyLimit);
+
+        await queue.Enqueue(1, TestContext.Current.CancellationToken);
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        // Колбэк из второго вызова действительно подключён, а не просто «не упало».
+        lock (statuses)
+        {
+            Assert.Contains(SaWorkStatus.Running, statuses);
+            Assert.Contains(SaWorkStatus.Completed, statuses);
+        }
+    }
+
+    [Fact]
     public void Register_ReturnsTheCollection_SoChainingWorks()
     {
         var services = new ServiceCollection();
@@ -336,6 +374,34 @@ public sealed class SetupRegistrationTests
             () => provider.GetRequiredService<ISaWorkQueue<int>>());
 
         Assert.Contains("ConcurrencyLimit", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An undefined strategy enum in configuration used to be accepted and then read as
+    /// its default arm inside the queue — an unknown enqueue strategy behaved as Skip, an
+    /// unknown cancel mode as Hard, an unknown order as Lifo. A typo in appsettings looked
+    /// like a deliberate choice; it now fails the same way the numeric options do.
+    /// </summary>
+    [Fact]
+    public void Register_UndefinedEnqueueStrategy_FailsValidation()
+    {
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WorkQueue:EnqueueStrategy"] = "99",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(configuration);
+        services.AddSaWorkQueue<int>(b => b.WithProcess((_, _) => Task.CompletedTask).FromConfiguration("WorkQueue"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<ISaWorkQueue<int>>());
+
+        Assert.Contains("EnqueueStrategy", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

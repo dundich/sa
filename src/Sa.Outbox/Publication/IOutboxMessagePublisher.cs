@@ -80,7 +80,7 @@ public interface IOutboxMessagePublisher
         IReadOnlyCollection<TMessage> messages,
         object? context,
         CancellationToken cancellationToken = default)
-            where TMessage : class, IOutboxPublishable
+            where TMessage : IOutboxPublishable
     {
         ulong totals = 0;
         foreach (var group in messages.ToLookup(m => m.GetTenantId()))
@@ -99,7 +99,7 @@ public interface IOutboxMessagePublisher
     ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
         CancellationToken cancellationToken = default)
-            where TMessage : class, IOutboxPublishable
+            where TMessage : IOutboxPublishable
                 => Publish(messages, context: null, cancellationToken);
 
 
@@ -122,7 +122,7 @@ public interface IOutboxMessagePublisher
         TMessage message,
         int tenantId,
         CancellationToken cancellationToken = default)
-            => Publish<TMessage>([message], tenantId, context: null, cancellationToken);
+            => PublishSingle(message, tenantId, context: null, cancellationToken);
 
 
     /// <summary>
@@ -133,8 +133,8 @@ public interface IOutboxMessagePublisher
         TMessage message,
         object? context,
         CancellationToken cancellationToken = default)
-            where TMessage : class, IOutboxPublishable
-                => Publish<TMessage>([message], message.GetTenantId(), context, cancellationToken);
+            where TMessage : IOutboxPublishable
+                => PublishSingle(message, message.GetTenantId(), context, cancellationToken);
 
 
     /// <summary>
@@ -143,6 +143,6 @@ public interface IOutboxMessagePublisher
     ValueTask<ulong> PublishSingle<TMessage>(
         TMessage message,
         CancellationToken cancellationToken = default)
-            where TMessage : class, IOutboxPublishable
-                => Publish<TMessage>([message], message.GetTenantId(), context: null, cancellationToken);
+            where TMessage : IOutboxPublishable
+                => PublishSingle(message, message.GetTenantId(), context: null, cancellationToken);
 }

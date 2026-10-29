@@ -112,7 +112,10 @@ public sealed class WorkQueueSyncReaderTests
         {
             foreach (var tokenSource in new[] { "Loop", "Work" })
             {
-                var cts = (CancellationTokenSource)Prop(reader, tokenSource)!;
+                // Hard mode deliberately has no work source: the loop token owns the
+                // item in flight. There is nothing to check in that case.
+                if (Prop(reader, tokenSource) is not CancellationTokenSource cts) continue;
+
                 // CancellationTokenSource.Token throws ObjectDisposedException once disposed.
                 Assert.Null(Record.Exception(() => cts.Token));
             }

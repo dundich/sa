@@ -8,7 +8,7 @@
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Testcontainers.Minio" />
+    <PackageReference Include="Testcontainers" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\Sa.Data.S3\Sa.Data.S3.csproj" />

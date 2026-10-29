@@ -47,8 +47,10 @@ internal static class FileSystemStorageRegistrar
         }
 
         // One storage per name: two registrations under the same key would fight over the keyed
-        // temp folder and the named options instance. Different names are independent.
-        if (services.Any(d => d.ServiceType == typeof(FileSystemStorageRegistration) && Equals(d.ServiceKey, name)))
+        // temp folder and the named options instance. Different names are independent. The keyed
+        // IFileStorage is the registration's real handle, so the guard is anchored on it — and it
+        // is checked here, before AddSaTempFolder would raise its own (less specific) duplicate.
+        if (services.Any(d => d.ServiceType == typeof(IFileStorage) && Equals(d.ServiceKey, name)))
         {
             throw new InvalidOperationException(
                 $"A filesystem storage named '{name}' is already registered in this service " +
@@ -73,15 +75,11 @@ internal static class FileSystemStorageRegistrar
         // Options(...) actions replay — wherever those calls sit in the callback.
         var sectionPath = storageBuilder.ConfigSectionPath;
 
-        // One registration, one named options instance. The name is an internal detail (the
-        // section path or the registration key plus a sequence number) — tests read it back
-        // through the keyed registration marker. IOptionsMonitor resolves it, so an invalid
+        // One registration, one named options instance, named after the registration itself: the
+        // name is unique per collection (the guard above) and readable in diagnostics, which is
+        // all a named instance needs. Validation is deferred by IOptionsMonitor, so an invalid
         // configuration surfaces at first resolve / host start rather than at registration.
-        string optionsName = NextOptionsName(sectionPath ?? name);
-
-        services.AddKeyedSingleton(name, new FileSystemStorageRegistration(name, optionsName));
-
-        var builder = services.AddOptions<FileSystemStorageOptions>(optionsName);
+        var builder = services.AddOptions<FileSystemStorageOptions>(name);
 
         if (sectionPath is not null)
         {
@@ -148,10 +146,17 @@ internal static class FileSystemStorageRegistrar
                 "temp-folder instance)."));
         });
 
-        services.AddSingleton<IFileStorage>(sp => new FileSystemStorage(
+        // One storage per name, and the name keys everything: the keyed temp folder, the keyed
+        // IFileStorage and its named options instance. Both views — keyed and the historical
+        // unkeyed one — resolve the same instance, so one host can run several storages and
+        // `GetRequiredService<IFileStorage>()` keeps working for the single-storage case.
+        services.AddKeyedSingleton<IFileStorage>(name, (sp, _) => new FileSystemStorage(
             sp.GetRequiredKeyedService<ITempFolder>(name),
-            sp.GetRequiredService<IOptionsMonitor<FileSystemStorageOptions>>().Get(optionsName),
+            sp.GetRequiredService<IOptionsMonitor<FileSystemStorageOptions>>().Get(name),
             sp.GetRequiredService<TimeProvider>()));
+
+        services.AddSingleton<IFileStorage>(
+            sp => sp.GetRequiredKeyedService<IFileStorage>(name));
 
         return services;
     }
@@ -186,19 +191,4 @@ internal static class FileSystemStorageRegistrar
 
         return !string.Equals(full, systemTemp, comparison);
     }
-
-    /// <summary>
-    /// Sequence for unique options-instance names within this assembly — one registration,
-    /// one named instance (the name is an internal detail: tests read it back through the
-    /// registration marker, never by hardcoding it).
-    /// </summary>
-    private static int s_optionsSequence;
-
-    /// <summary>
-    /// Names this registration's options instance: the section path when one was given
-    /// (readable in diagnostics), the registration key otherwise, plus a sequence number that
-    /// makes the name unique per registration.
-    /// </summary>
-    private static string NextOptionsName(string label)
-        => $"{label}#{Interlocked.Increment(ref s_optionsSequence)}";
 }

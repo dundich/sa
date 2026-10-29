@@ -54,7 +54,6 @@ public sealed class JobRunOnceLifecycleTests : IAsyncDisposable
         R.Clear();
 
         Assert.Equal(1, await _scheduler.Start(TestContext.Current.CancellationToken));
-        Assert.True(_jobScheduler.IsStarted);
 
         // Exactly one iteration, and the job stops by itself — no error, no
         // Stop() call — IsStarted must go false (before the fix it stayed true

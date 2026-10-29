@@ -3,14 +3,9 @@
   <Import Project="../Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
-    <Version>0.16.0</Version>
+    <Version>0.17.0</Version>
     <Description>File storage management</Description>
   </PropertyGroup>
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="Sa.HybridFileStorage.FileSystemTests" />
-    <InternalsVisibleTo Include="Sa.HybridFileStorageTests" />
-  </ItemGroup>
 
   <ItemGroup>
     <!--

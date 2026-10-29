@@ -33,29 +33,19 @@ RUN ./build-linux.sh 2>&1 | tee build.log
 # Установка точки входа для возможности использования bash
 CMD ["/bin/bash"]
 
-# Второй этап для уменьшения размера образа (опционально)
+# Второй этап — только артефакты сборки. Рантайм-пакеты кодеков (libopus0/libvorbis0a/
+# libvorbisenc2/libmp3lame0) больше не нужны: linux-пейлоад собирается статически
+# (--pkg-config-flags=--static + -static в build-linux.sh).
 FROM ubuntu:22.04
 
 # Копируем только результаты сборки из builder stage
 COPY --from=builder /ffmpef_build /ffmpef_build
 
-# Устанавливаем только runtime зависимости
-RUN apt-get update && apt-get install -y \
-    libopus0 \
-    libvorbis0a \
-    libvorbisenc2 \
-    libmp3lame0 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
 WORKDIR /ffmpef_build
 
-# Добавляем путь к ffmpeg в PATH
-ENV PATH="/ffmpef_build/artifacts/ffmpeg-7.1.2-audio-x86_64-linux-gnu/bin:${PATH}"
-
 # Проверяем что ffmpeg доступен
-RUN ls -la /ffmpef_build/artifacts/ffmpeg-7.1.2-audio-x86_64-linux-gnu/bin/ && \
-    /ffmpef_build/artifacts/ffmpeg-7.1.2-audio-x86_64-linux-gnu/bin/ffmpeg -version
+RUN ls -la /ffmpef_build/artifacts/*/bin/ && \
+    /ffmpef_build/artifacts/*/bin/ffmpeg -version
 
 # Установка точки входа для возможности использования bash
 CMD ["/bin/bash"]

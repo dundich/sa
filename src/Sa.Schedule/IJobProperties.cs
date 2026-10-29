@@ -68,6 +68,10 @@ public interface IJobProperties
     /// Gets the current concurrency limit for the job when it starts.
     /// This value cannot exceed <see cref="MaxConcurrency"/>.
     /// Null means use the default limit = 1.
+    /// <para>
+    /// Each active slot runs its own loop, so N slots means N executions per scheduled
+    /// occurrence (a cron job with a limit of 3 fires three times at each match).
+    /// </para>
     /// </summary>
     int? ConcurrencyLimit { get; }
 

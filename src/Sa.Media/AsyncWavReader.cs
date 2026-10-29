@@ -14,8 +14,9 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
     private readonly PipeReader _reader;
     private readonly Stream? _stream;
     private readonly bool _ownsReader;
+    private readonly bool _ownsStream;
     private Task<WavHeader>? _headerTask;
-    private bool _disposed;
+    private int _disposed;
 
     public AsyncWavReader(PipeReader reader)
     {
@@ -25,15 +26,16 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
 
     public AsyncWavReader(PipeReader reader, bool ownsReader)
     {
-        _reader = reader;
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _ownsReader = ownsReader;
     }
 
-    private AsyncWavReader(PipeReader reader, Stream stream)
+    private AsyncWavReader(PipeReader reader, Stream stream, bool ownsStream)
     {
         _reader = reader;
         _stream = stream;
         _ownsReader = true;
+        _ownsStream = ownsStream;
     }
 
     public static AsyncWavReader Create(Stream stream, StreamPipeReaderOptions? options = null)
@@ -41,8 +43,14 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(stream);
         if (!stream.CanRead) throw new ArgumentException("Stream must be readable", nameof(stream));
 
+        // StreamPipeReaderOptions.LeaveOpen по умолчанию false: Complete() закрыл бы поток
+        // вызывающего. Ридер владеет только своим PipeReader, но не чужим Stream.
+        options ??= new StreamPipeReaderOptions(leaveOpen: true);
+
         var reader = PipeReader.Create(stream, options);
-        return new AsyncWavReader(reader, ownsReader: true);
+
+        // Поток не наш, но seekable-поток нужен, чтобы восстановить data size потоковых WAV.
+        return new AsyncWavReader(reader, stream, ownsStream: false);
     }
 
     public static AsyncWavReader CreateFromFile(string filePath, FileStreamOptions? fileOptions = null)
@@ -61,7 +69,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
 
         var reader = PipeReader.Create(stream);
 
-        return new AsyncWavReader(reader, stream);
+        return new AsyncWavReader(reader, stream, ownsStream: true);
     }
 
     public Task<WavHeader> GetHeaderAsync(CancellationToken cancellationToken)
@@ -70,10 +78,27 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         {
             lock (_headerLock)
             {
-                _headerTask ??= WavHeaderReader.ReadHeaderAsync(_reader, cancellationToken);
+                // Заголовок парсится без внешнего токена: отмена одного вызова не должна
+                // «отравлять» закэшированную задачу для всех последующих.
+                _headerTask ??= ReadHeaderAsync();
             }
         }
-        return _headerTask;
+
+        return cancellationToken.CanBeCanceled
+            ? _headerTask.WaitAsync(cancellationToken)
+            : _headerTask;
+    }
+
+    private async Task<WavHeader> ReadHeaderAsync()
+    {
+        WavHeader header = await WavHeaderReader
+            .ReadHeaderAsync(_reader, CancellationToken.None)
+            .ConfigureAwait(false);
+
+        // Для потоковых записей (data size == 0xFFFFFFFF) размер берём из длины файла,
+        // иначе GetDuration()/обрезка по времени получают фиктивные ~13 часов.
+        EnsureDataSize(header);
+        return header;
     }
 
 
@@ -93,7 +118,6 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
-        EnsureDataSize(header);
 
         var (cutFrom, cutTo) = header.CalculateCutOffsets(cutRange ?? TimeRange.Default);
 
@@ -208,6 +232,28 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
+    /// Читает нормализованные float-сэмплы [-1.0, 1.0] — путь для DSP без промежуточного double.
+    /// </summary>
+    /// <remarks>
+    /// Возвращаемый сэмпл — значение, а не ссылка на буфер, поэтому <c>allowBufferReuse</c>
+    /// здесь не нужен: внутренние буферы переиспользуются, а пакет переживает следующую итерацию.
+    /// </remarks>
+    public async IAsyncEnumerable<AudioFloatPacket> ReadFloatSamplesAsync(
+        TimeRange? cutRange = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        WavHeader header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
+        Func<ReadOnlySpan<byte>, float> convert = header.GetNormalizedFloatConverter();
+
+        await foreach (var (channelId, rawSample, offset, isEof) in
+            ReadSamplesPerChannelAsync(cutRange, allowBufferReuse: true, cancellationToken: cancellationToken)
+            .WithCancellation(cancellationToken))
+        {
+            yield return new AudioFloatPacket(channelId, convert(rawSample.Span), offset, isEof);
+        }
+    }
+
+    /// <summary>
     /// Конвертирует в целевой аудиоформат
     /// </summary>
     public async IAsyncEnumerable<AudioPacket> ConvertToFormatAsync(
@@ -245,6 +291,12 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
     /// <remarks>
     /// Для потоковой обработки или воспроизведения
     /// </remarks>
+    /// <param name="allowBufferReuse">
+    /// Если true (по умолчанию) — каждый пакет канала ссылается на пулированный буфер этого
+    /// канала, который перезаписывается следующей порцией того же канала. Данные нужно
+    /// скопировать (или обработать) до следующего <c>MoveNextAsync</c>.
+    /// Если false — пакеты независимы и переживают следующую итерацию.
+    /// </param>
     public async IAsyncEnumerable<AudioPacket> ReadStreamableChunksAsync(
         AudioEncoding targetFormat = AudioEncoding.Pcm16BitSigned,
         TimeRange? cutRange = null,
@@ -339,39 +391,57 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
 
     private void EnsureDataSize(WavHeader header)
     {
-        if (!header.HasDataSize && _stream?.CanSeek == true && _stream.Length > 0)
+        if (header.HasDataSize || _stream is null || !_stream.CanSeek)
+            return;
+
+        long length;
+        try
         {
-            header.DataSize = (uint)(_stream.Length - header.DataOffset);
+            length = _stream.Length;
         }
+        catch (NotSupportedException)
+        {
+            return;
+        }
+
+        long size = length - header.DataOffset;
+
+        // Отрицательное значение — заголовок длиннее файла, > uint.MaxValue — предел RIFF.
+        if (size <= 0 || size > uint.MaxValue)
+            return;
+
+        header.DataSize = (uint)size;
     }
 
     public void Dispose()
     {
-        if (!_disposed)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        if (_ownsReader)
         {
-            if (_ownsReader)
-            {
-                _reader.Complete();
-            }
+            _reader.Complete();
+        }
+
+        if (_ownsStream)
+        {
             _stream?.Dispose();
-            _disposed = true;
         }
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (!_disposed)
-        {
-            if (_ownsReader)
-            {
-                await _reader.CompleteAsync().ConfigureAwait(false);
-            }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
 
-            if (_stream != null)
-            {
-                await _stream.DisposeAsync().ConfigureAwait(false);
-            }
-            _disposed = true;
+        if (_ownsReader)
+        {
+            await _reader.CompleteAsync().ConfigureAwait(false);
+        }
+
+        if (_ownsStream && _stream is not null)
+        {
+            await _stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 }

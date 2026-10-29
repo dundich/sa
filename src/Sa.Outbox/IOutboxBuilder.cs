@@ -73,7 +73,7 @@ public interface IOutboxBuilder
     /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
     IOutboxBuilder AddMetadata<TMessage>(
         string partName,
-        Func<TMessage, string>? getPayloadId = null) where TMessage : class
+        Func<TMessage, string>? getPayloadId = null)
             => WithMetadata((_, m) => m.AddMetadata<TMessage>(partName, getPayloadId));
 
     /// <summary>
@@ -82,6 +82,6 @@ public interface IOutboxBuilder
     /// </summary>
     /// <typeparam name="TMessage">A message type implementing <see cref="IOutboxPublishable"/>.</typeparam>
     /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
-    IOutboxBuilder AddMetadata<TMessage>() where TMessage : class, IOutboxPublishable
+    IOutboxBuilder AddMetadata<TMessage>() where TMessage : IOutboxPublishable
         => WithMetadata((_, m) => m.AddMetadata<TMessage>());
 }

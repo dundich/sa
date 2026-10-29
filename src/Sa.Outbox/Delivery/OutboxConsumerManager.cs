@@ -1,23 +1,26 @@
 ﻿namespace Sa.Outbox.Delivery;
 
-using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 /// <summary>
 /// Thread-safe manager for runtime control of outbox consumer group settings.
 /// Uses atomic immutable snapshots — no mutation during active delivery, no race conditions.
 /// </summary>
-internal sealed class OutboxConsumerManager : IOutboxConsumerManager
+internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
 {
     private readonly Dictionary<string, OutboxConsumerSettings> _settings = [];
     private readonly Dictionary<string, List<Action<OutboxConsumerSettings>>> _listeners = [];
     private readonly Lock _lock = new();
+    private readonly ILogger _logger;
 
     /// <summary>
     /// Creates an empty manager (no delivery groups). Used by unit tests and anywhere a manager
     /// is constructed directly rather than through DI.
     /// </summary>
-    internal OutboxConsumerManager()
+    internal OutboxConsumerManager(ILogger<OutboxConsumerManager>? logger = null)
     {
+        _logger = logger ?? NullLogger<OutboxConsumerManager>.Instance;
     }
 
     /// <summary>
@@ -41,7 +44,8 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
     /// </summary>
     internal OutboxConsumerManager(
         IEnumerable<DeliveryGroupSettingsRegistration> registrations,
-        IServiceProvider sp)
+        IServiceProvider sp,
+        ILogger<OutboxConsumerManager>? logger = null) : this(logger)
     {
         foreach (var registration in registrations)
         {
@@ -82,6 +86,13 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
         return true;
     }
 
+    /// <summary>
+    /// How many times <see cref="Apply"/> re-runs a transform that lost a race. Contention is
+    /// bounded by a handful of writers in practice; the cap turns a pathological livelock into a
+    /// loud failure instead of a call that never returns.
+    /// </summary>
+    private const int MaxApplyAttempts = 64;
+
     /// <inheritdoc/>
     public void Apply(string consumerGroupId, Func<OutboxConsumerSettings, OutboxConsumerSettings> transform)
     {
@@ -90,27 +101,51 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
 
         ArgumentNullException.ThrowIfNull(transform);
 
-        OutboxConsumerSettings newSettings;
-
-        lock (_lock)
+        // The transform runs outside the lock. Lock is not reentrant: a callback that called
+        // Get/Pause/Apply used to deadlock. Snapshots are immutable, so a lost race is a
+        // reference mismatch and the transform is retried against the new snapshot. It must be
+        // safe to run more than once.
+        for (int attempt = 1; ; attempt++)
         {
-            if (!_settings.TryGetValue(consumerGroupId, out var existing))
+            if (attempt > MaxApplyAttempts)
             {
                 throw new InvalidOperationException(
-                    $"Consumer group '{consumerGroupId}' is not registered. Call Register() first.");
+                    $"Could not apply settings for consumer group '{consumerGroupId}': " +
+                    $"{MaxApplyAttempts} consecutive updates landed while the transform was running.");
             }
 
-            // Perform transformation outside the lock to avoid holding it during
-            // potentially expensive validation or copying operations.
-            newSettings = transform(existing);
+            OutboxConsumerSettings existing;
 
+            lock (_lock)
+            {
+                if (!_settings.TryGetValue(consumerGroupId, out existing!))
+                {
+                    throw new InvalidOperationException(
+                        $"Consumer group '{consumerGroupId}' is not registered. Call Register() first.");
+                }
+            }
+
+            OutboxConsumerSettings newSettings = transform(existing);
             newSettings.ThrowIfInvalid();
 
-            _settings[consumerGroupId] = newSettings;
-        }
+            lock (_lock)
+            {
+                if (!_settings.TryGetValue(consumerGroupId, out var current))
+                {
+                    throw new InvalidOperationException(
+                        $"Consumer group '{consumerGroupId}' is not registered. Call Register() first.");
+                }
 
-        // Notify subscribers OUTSIDE the lock to avoid deadlocks
-        NotifyListeners(consumerGroupId, newSettings);
+                if (!ReferenceEquals(current, existing))
+                    continue;
+
+                _settings[consumerGroupId] = newSettings;
+            }
+
+            // Notify subscribers OUTSIDE the lock to avoid deadlocks
+            NotifyListeners(consumerGroupId, newSettings);
+            return;
+        }
     }
 
     /// <inheritdoc/>
@@ -217,14 +252,18 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
 
     internal void NotifyListeners(string consumerGroupId, OutboxConsumerSettings newSettings)
     {
-        List<Action<OutboxConsumerSettings>>? listeners;
+        Action<OutboxConsumerSettings>[] listeners;
 
         lock (_lock)
         {
-            if (!_listeners.TryGetValue(consumerGroupId, out listeners)) return;
+            // Snapshot. The list is mutated by Subscribe/Dispose, and firing outside the lock
+            // used to enumerate that live list — InvalidOperationException, or a skipped callback.
+            if (!_listeners.TryGetValue(consumerGroupId, out var list) || list.Count == 0)
+                return;
+
+            listeners = list.ToArray();
         }
 
-        // Fire outside lock
         foreach (var listener in listeners)
         {
             try
@@ -233,11 +272,17 @@ internal sealed class OutboxConsumerManager : IOutboxConsumerManager
             }
             catch (Exception ex)
             {
-                Debug.WriteLine(
-                    $"[OutboxConsumerManager] Listener error for '{consumerGroupId}': {ex.Message}");
+                // Debug.WriteLine is compiled out of Release, so a throwing listener used to vanish.
+                LogListenerError(_logger, ex, consumerGroupId);
             }
         }
     }
+
+    [LoggerMessage(
+        EventId = 2101,
+        Level = LogLevel.Error,
+        Message = "Listener error for consumer group '{ConsumerGroupId}'")]
+    private static partial void LogListenerError(ILogger logger, Exception exception, string consumerGroupId);
 
     private sealed class Subscription : IDisposable
     {

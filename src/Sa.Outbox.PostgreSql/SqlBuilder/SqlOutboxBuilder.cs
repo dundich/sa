@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedTypeTableName()}
 (
   {settings.Type.Fields.TypeId} BIGINT NOT NULL,
   {settings.Type.Fields.TypeName} TEXT NOT NULL,
-  CONSTRAINT "pk_{settings.Type.TableName}" PRIMARY KEY ({settings.Type.Fields.TypeId})
+  CONSTRAINT {$"pk_{settings.Type.TableName}".QuoteDerivedIdentifier()} PRIMARY KEY ({settings.Type.Fields.TypeId})
 )
 ;
 """;
@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS {settings.GetQualifiedOffsetTableName()}
   {settings.Offset.Fields.GroupOffset} UUID NOT NULL DEFAULT '{Guid.Empty}', -- legacy cursor, kept for rolling upgrades; dropped by a later contract version
   {settings.Offset.Fields.GroupOffsetSeq} BIGINT NOT NULL DEFAULT 0, -- live cursor: msg_seq (C2)
   {settings.Offset.Fields.GroupUpdatedAt} TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  CONSTRAINT "pk_{settings.Offset.TableName}" PRIMARY KEY ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId})
+  CONSTRAINT {$"pk_{settings.Offset.TableName}".QuoteDerivedIdentifier()} PRIMARY KEY ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.TenantId})
 )
 ;
 """;

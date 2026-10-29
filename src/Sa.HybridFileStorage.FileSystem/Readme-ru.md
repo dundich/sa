@@ -50,8 +50,11 @@ fs://{basket}/{tenantId}/{fileName}
 - `fs://documents/42/report.pdf`
 - `fs://uploads/7/avatar.png`
 - `fs://share/100/data.bin`
+- `fs://share/7/sub/dir/file.txt` — вложенный `FileName` сохраняет свои директории
 
-> Примечание: слеши и обратные слеши в `FileName` санитизируются в разделитель платформы и очищаются от ведущих разделителей.
+> Примечание: ведущие разделители в `FileName` удаляются, обратные слеши считаются
+> разделителями, а File ID всегда использует `/` — вложенные имена читаются одинаково на любой ОС.
+> На диске раскладка повторяет ID (`{RootPath}/{basket}/{tenantId}/{fileName}`).
 
 ---
 
@@ -127,8 +130,17 @@ builder.Services.AddSaFileSystemFileStorage("documents", b => b
 
 Каждый вызов регистрирует одно хранилище под своим именем; разные имена независимы, поэтому один
 хост может обслуживать несколько файловых корней. Повтор имени выбрасывает
-`InvalidOperationException` — имя ключует и хранилище, и его temp-folder
-(`sp.GetRequiredKeyedService<ITempFolder>(name)`).
+`InvalidOperationException` — имя ключует хранилище, его именованный экземпляр опций и его
+temp-folder:
+
+```csharp
+var documents = sp.GetRequiredKeyedService<IFileStorage>("documents");
+var uploads   = sp.GetRequiredKeyedService<IFileStorage>("uploads");
+```
+
+Неkeyed-регистрация `IFileStorage` остаётся алиасом последнего зарегистрированного хранилища, поэтому
+`sp.GetRequiredService<IFileStorage>()` продолжает работать для случая одного хранилища (и для
+`IHybridFileStorage`, который перечисляет только неkeyed-регистрации).
 
 Пустой или отсутствующий `RootPath`, либо указывающий на системную временную директорию, приводит к
 `OptionsValidationException` — на старте хоста (`ValidateOnStart()`) либо на первом разрешении
@@ -143,6 +155,7 @@ builder.Services.AddSaFileSystemFileStorage("documents", b => b
 
 ```csharp
 var storage = sp.GetRequiredService<IFileStorage>();
+// несколько хранилищ в одном хосте: sp.GetRequiredKeyedService<IFileStorage>("documents")
 ```
 
 ### Загрузка из Stream
@@ -202,6 +215,11 @@ if (metadata != null)
 }
 ```
 
+`GetMetadataAsync` разбирает и оформляет File ID, как провайдеры S3 и Postgres: он отвечает для любого
+корректного ID, принадлежащего этому хранилищу, не проверяя наличие файла на диске (только in-memory
+провайдер ищет запись). Отсутствие файла сообщают `DownloadAsync` / `DeleteAsync`, а `Basket` в
+результате всегда равен настроенному.
+
 ### Удаление
 
 ```csharp
@@ -238,11 +256,19 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 
 | Свойство | Описание | По умолчанию |
 |----------|----------|-------------|
-| `RootPath` | Корневая директория хранилища; **не** должна быть пустой или системной временной директорией | `Path.GetTempPath()` (отклоняется) |
+| `RootPath` | Корневая директория хранилища; **не** должна быть пустой или совпадать с самой системной временной директорией (подпапка внутри неё допустима, но ОС может её вычистить) | `Path.GetTempPath()` (отклоняется) |
 | `MaxAge` | Возраст, после которого стратегия очистки удаляет просроченную подпапку | **30 дней** (дефолт хранилища) |
 | `CleanupEnabled` | Удаляет ли temp-folder хранилища просроченные подпапки вообще | `true` |
-| `TouchDebounce` | Задержка перед обновлением маркера активности папки после записи | 5 секунд |
 | `OverwriteFiles` | Перезаписывать ли существующий файл при записи | `true` |
+| `ReadOnly` | Отклоняет любую мутацию в temp-folder. Не зависит от `FileSystemStorageOptions.IsReadOnly` — см. ниже | `false` |
+| `TouchDebounce` | Задержка перед обновлением маркера активности папки после записи | 5 секунд |
+
+`FileSystemStorageOptions.IsReadOnly` и `TempFolderOptions.ReadOnly` — два переключателя для одного
+намерения: хранилище сообщает `IsReadOnly` в `HybridFileStorage` (который пропускает его при выборе
+цели записи), а temp-folder обеспечивает запрет на диске. Ставьте оба, когда хранилище не должно
+меняться: только флаг хранилища — гибридная цепочка его пропустит, но файлы всё равно будут
+вычищаться по возрасту; только флаг temp-folder — цепочка по-прежнему выберет хранилище для записи,
+и запись упадёт с `InvalidOperationException`.
 
 `Sa.HybridFileStorage.FileSystem` поднимает `MaxAge` хранилища с дефолтных для temp-folder 24 часов
 до **30 дней**, потому что файлы хранилища должны жить дольше черновой папки. Значение из секции
@@ -258,7 +284,7 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 |------------|------------------|
 | `StorageType` не длиннее 10 символов, без `:`, `/` и `\` | `StorageType` |
 | `Basket` 3–63 символа, начинается с буквы или `_`, без разделителя пути | `Basket` |
-| `RootPath` задан и не указывает на системную временную директорию | `TempFolderOptions` |
+| `RootPath` задан и не совпадает с самой системной временной директорией | `TempFolderOptions` |
 
 ### Своя валидация
 
@@ -278,15 +304,17 @@ builder.Services.AddSaFileSystemFileStorage("documents", b => b
 
 Провайдер защищает от обхода директорий и инъекций через защиту путей temp-folder:
 
-1. **Санитизация путей** — ведущие символы `/` или `\` в `FileName` удаляются; все разделители конвертируются в разделитель платформы
-2. **Контейнирование корня** — каждый разрешённый путь файла должен попадать в `{RootPath}/{Basket}`. Попытки побега через `..` отклоняются с `SecurityException`
+1. **Санитизация путей** — ведущие символы `/` или `\` в `FileName` удаляются; разделители нормализуются, поэтому вложенное имя — это набор директорий под тенантом
+2. **Контейнирование корня** — каждый разрешённый путь файла должен попадать в `{RootPath}/{Basket}` (соседний basket, лишь совпадающий по префиксу имени, этому хранилищу не принадлежит). Попытки побега через `..` отклоняются с `SecurityException`
 3. **Отклонение инъекций** — `~`, shell/glob-метасимволы (`< > | & ; ` $ ^ * ? " ' %`), управляющие и невидимые Unicode-символы отклоняются с `SecurityException`
-4. **Детерминированные пути** — File ID отображаются в относительные пути без вычисления, предотвращая атаки через симлинки
+4. **Переносимые имена** — зарезервированные имена устройств Windows (`CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, `COM0`–`COM9`, `LPT0`–`LPT9`, с расширением и без) и сегменты с точкой на конце отклоняются с `SecurityException` на любой платформе: Windows разрезолвит первое в устройство, а второе — в другой файл, так что `report.txt.` молча делил бы файл с `report.txt`
+5. **Детерминированные пути** — File ID отображаются в относительные пути без вычисления, предотвращая атаки через симлинки
 
 ```csharp
-// Безопасно — нормализуется до "report.pdf"
-new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
-// Создаёт: {RootPath}/documents/1/report.pdf
+// Безопасно — ведущие разделители отбрасываются, директории ниже сохраняются
+new UploadFileInput { FileName = "/api/files/var/www/report.pdf" }
+// Создаёт: {RootPath}/documents/1/api/files/var/www/report.pdf
+// File ID: fs://documents/1/api/files/var/www/report.pdf
 
 // Заблокировано — обнаружен обход пути
 // fileName = "../../../etc/passwd" → выбрасывается SecurityException
@@ -302,11 +330,14 @@ new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
 | Сценарий | Поведение |
 |----------|----------|
 | `IsReadOnly = true` + загрузка/удаление | Выбрасывает `HybridFileStorageWritableException` |
+| `TempFolderOptions.ReadOnly = true` + загрузка/удаление | Выбрасывает `InvalidOperationException` (переключателем владеет temp-folder; ставьте и `FileSystemStorageOptions.IsReadOnly`, чтобы гибридная цепочка пропускала это хранилище) |
 | Файл не найден при скачивании/удалении | Возвращает `false` (без исключения) |
 | Путь указывает на директорию при скачивании/удалении | Выбрасывает `InvalidOperationException` |
-| IOException при удалении | Повторяется temp-folder; возвращает `false`, если все повторы неудачны |
+| `IOException` / `UnauthorizedAccessException` при удалении | Повторяется temp-folder; возвращает `false`, если все повторы неудачны |
+| Нет прав при загрузке | `UnauthorizedAccessException` из temp-folder (повторы не спасают) |
 | Попытка обхода пути или инъекции | Выбрасывает `SecurityException` |
-| Неверный формат File ID | Выбрасывает `ArgumentException` |
+| Зарезервированное имя устройства (`NUL`, `COM1`, …) или сегмент с точкой на конце | Выбрасывает `SecurityException` |
+| Испорченный или чужой File ID | `CanProcess` возвращает `false`; скачивание/удаление возвращают `false`, `GetMetadataAsync` — `null` |
 | Невалидные опции | Выбрасывает `OptionsValidationException` на старте хоста (`ValidateOnStart`) или при первом разрешении |
 
 ---

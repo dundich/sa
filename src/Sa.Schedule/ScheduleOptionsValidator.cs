@@ -4,20 +4,23 @@ using Sa.Schedule.Cron;
 namespace Sa.Schedule;
 
 /// <summary>
-/// Валидирует <see cref="ScheduleOptions"/> для конвейера options.
+/// Validates <see cref="ScheduleOptions"/> for the options pipeline.
 /// </summary>
 /// <remarks>
-/// Проверяет *значения* секций, присутствующих в конфигурации, независимо от того,
-/// соответствует ли ключ какой-то зарегистрированной задаче: проверка синтаксиса не зависит
-/// от контейнера. Секции, которым задача не найдена, валидация не мешает — их просто
-/// никто не применит.
+/// Checks the <i>values</i> of every section present in configuration, regardless of whether
+/// its key matches a registered job: syntax validation does not depend on the container.
+/// Sections with no matching job are not an error — they are simply never applied.
 /// <para>
-/// Намеренно <c>IValidateOptions</c>, а не <c>ValidateDataAnnotations()</c>: последний
-/// помечен <c>RequiresUnreferencedCode</c> (IL2026) и ломает Native AOT, ради которого
-/// эта сборка и существует. Валидация срабатывает и при чтении
-/// <c>IOptions&lt;T&gt;.Value</c> (не только при <c>ValidateOnStart()</c>), поэтому
-/// ошибка всплывает как <see cref="OptionsValidationException"/> при первой сборке
-/// настроек планировщика.
+/// Cron values are checked with <see cref="CronTiming.Strict"/>: besides the syntax, an
+/// expression that can never fire (31 April) is rejected here instead of turning into a job
+/// loop that aborts on its first <c>GetNextOccurrence</c> returning null.
+/// </para>
+/// <para>
+/// Deliberately <c>IValidateOptions</c> rather than <c>ValidateDataAnnotations()</c>: the
+/// latter is marked <c>RequiresUnreferencedCode</c> (IL2026) and breaks Native AOT, which is
+/// why this assembly exists. Validation also runs when <c>IOptions&lt;T&gt;.Value</c> is read
+/// (not only under <c>ValidateOnStart()</c>), so an invalid value surfaces as an
+/// <see cref="OptionsValidationException"/> when the scheduler settings are first built.
 /// </para>
 /// </remarks>
 internal sealed class ScheduleOptionsValidator : IValidateOptions<ScheduleOptions>
@@ -47,13 +50,16 @@ internal sealed class ScheduleOptionsValidator : IValidateOptions<ScheduleOption
             {
                 try
                 {
-                    _ = new CronTiming(job.Cron);
+                    // Strict, not the lenient ctor: an expression that can never fire
+                    // (31 April, 30 February) would otherwise pass validation and then
+                    // abort the job loop silently on the first GetNextOccurrence == null.
+                    _ = CronTiming.Strict(job.Cron);
                 }
                 catch (Exception ex)
                 {
                     return ValidateOptionsResult.Fail(
                         $"ScheduleOptions:Jobs:{jobName}: 'Cron' value '{job.Cron}' is not a valid " +
-                        $"5-field cron expression: {ex.Message}");
+                        $"5- or 6-field cron expression: {ex.Message}");
                 }
             }
 

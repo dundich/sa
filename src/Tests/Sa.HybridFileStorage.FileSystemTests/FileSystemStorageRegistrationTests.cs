@@ -27,8 +27,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     }
 
     private static FileSystemStorageOptions Options(IServiceProvider provider)
-        => provider.GetRequiredService<IOptionsMonitor<FileSystemStorageOptions>>()
-            .Get(provider.GetRequiredKeyedService<FileSystemStorageRegistration>(Name).OptionsName);
+        => provider.GetRequiredService<IOptionsMonitor<FileSystemStorageOptions>>().Get(Name);
 
     private static ITempFolder TempFolder(IServiceProvider provider)
         => provider.GetRequiredKeyedService<ITempFolder>(Name);
@@ -472,7 +471,41 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
         var services = new ServiceCollection();
         services.AddFsStorage(_testDir);
 
-        Assert.Single(services, d => d.ServiceType == typeof(IFileStorage));
+        // One keyed handle (the registration's own key) plus one unkeyed alias that resolves the
+        // same instance — no second storage.
+        Assert.Single(services, d => d.ServiceType == typeof(IFileStorage) && d.ServiceKey is null);
+        Assert.Single(services, d => d.ServiceType == typeof(IFileStorage) && Equals(d.ServiceKey, FsTestSetup.StorageName));
+    }
+
+    [Fact]
+    public void Register_ResolvesTheStorageByName_AndByType()
+    {
+        var services = new ServiceCollection();
+        services.AddFsStorage(_testDir, Name);
+
+        using var provider = services.BuildServiceProvider();
+
+        var byName = provider.GetRequiredKeyedService<IFileStorage>(Name);
+        var byType = provider.GetRequiredService<IFileStorage>();
+
+        Assert.Same(byName, byType);
+        Assert.Equal(FileSystemStorageOptions.DefaultBasket, byName.Basket);
+    }
+
+    [Fact]
+    public void Register_NamesTheOptionsInstanceAfterTheRegistration()
+    {
+        // The options instance is not an internal sequence anymore: the registration key names it,
+        // so it can be read back straight from the monitor (and shows up by that name in an
+        // OptionsValidationException).
+        var services = new ServiceCollection();
+        services.AddFsStorage(_testDir, Name, b => b.Options(ob => ob.Configure(x => x.Basket = "documents")));
+
+        using var provider = services.BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptionsMonitor<FileSystemStorageOptions>>().Get(Name);
+
+        Assert.Equal("documents", options.Basket);
     }
 
     [Fact]
@@ -496,7 +529,7 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
             () => services.AddFsStorage(_testDir));
 
         Assert.Contains("already registered", ex.Message, StringComparison.Ordinal);
-        Assert.Single(services, d => d.ServiceType == typeof(IFileStorage));
+        Assert.Single(services, d => d.ServiceType == typeof(IFileStorage) && d.ServiceKey is null);
     }
 
     [Fact]

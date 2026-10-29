@@ -160,6 +160,8 @@ public sealed class FileRetryBehaviorTests : IAsyncLifetime
         Assert.Equal(42, metadata.TenantId);
         Assert.Equal("metadata.txt", metadata.FileName);
         Assert.Equal("fs", metadata.StorageType);
+        // The configured basket, not the one re-parsed out of the ID.
+        Assert.Equal(storage.Basket, metadata.Basket);
     }
 }
 

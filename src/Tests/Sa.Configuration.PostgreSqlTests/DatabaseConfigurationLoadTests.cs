@@ -59,7 +59,9 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
             using var insertDupesCommand = new NpgsqlCommand(@"
                 INSERT INTO config_load_dupes (key, value, ord) VALUES
                     ('dup', 'first', 1),
-                    ('dup', 'last', 2)
+                    ('dup', 'last', 2),
+                    ('dup__key', 'alias', 3),
+                    ('dup:key', 'canonical', 4)
                 ON CONFLICT DO NOTHING;", connection);
 
             await insertDupesCommand.ExecuteNonQueryAsync();
@@ -69,6 +71,8 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     private const string SelectSql = "SELECT key, value FROM config_load_test";
     private const string SingleRowSql = "SELECT key, value FROM config_load_test WHERE key = 'NormalKey'";
     private const string DupesSql = "SELECT key, value FROM config_load_dupes ORDER BY ord";
+    private const string SeparatorDupesSql =
+        "SELECT key, value FROM config_load_dupes WHERE key IN ('dup__key', 'dup:key') ORDER BY ord";
 
 
     #region Retry
@@ -467,6 +471,34 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
 
         // Assert — the key now exists in the database source, so it wins over the lower one.
         Assert.Equal(string.Empty, configuration["EmptyValueKey"]);
+    }
+
+    [Fact]
+    public void SeparatorAlias_NormalizationHappensBeforeDuplicateResolution()
+    {
+        // dup__key and dup:key are two rows but one canonical key. Normalization must therefore
+        // run before LastWins, so the configured tie-break applies to them.
+        var builder = new ConfigurationBuilder();
+        builder.Add(new DatabaseConfigurationSource(
+            Options(SeparatorDupesSql) with { DoubleUnderscoreAsSeparator = true },
+            DataSource(failuresBeforeSuccess: 0)));
+
+        var configuration = builder.Build();
+
+        Assert.Equal("canonical", configuration["dup:key"]);
+    }
+
+    [Fact]
+    public void SeparatorAlias_FirstWins_AppliesAfterNormalization()
+    {
+        var builder = new ConfigurationBuilder();
+        builder.Add(new DatabaseConfigurationSource(
+            Options(SeparatorDupesSql) with { DoubleUnderscoreAsSeparator = true, LastWins = false },
+            DataSource(failuresBeforeSuccess: 0)));
+
+        var configuration = builder.Build();
+
+        Assert.Equal("alias", configuration["dup:key"]);
     }
 
     #endregion

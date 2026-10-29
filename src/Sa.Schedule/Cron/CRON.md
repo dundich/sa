@@ -1,137 +1,213 @@
-# Cron Timing в Sa.Schedule
+# Cron Timing in Sa.Schedule
 
-`Sa.Schedule` поддерживает вычисление следующего срабатывания по cron-выражениям через `CronTiming`.
+`Sa.Schedule` computes the next firing time of cron expressions through `CronTiming`.
 
-## Общие сведения
+## Overview
 
-- Формат: **5 полей** — `минута час день_месяца месяц день_недели`
-- Интерфейс: `IJobTiming`
-- Метод: `GetNextOccurrence(DateTimeOffset dateTime, IJobContext context)`
-- Поведение: **exclusive** — если `dateTime` точно совпадает с расписанием, возвращается **следующее** срабатывание (> dateTime), обрезанное до минуты.
-- Горизонт поиска: **28 лет** вперёд. Если подходящее время не найдено в пределах 28 лет — возвращается `null` (выражение физически не может сработать, например `0 0 30 2 *`).
-- Семантика DOM ∩ DOW: **OR** (Vixie cron). Если одновременно заданы день месяца и день недели (не `*`), день подходит, если совпадает **либо день месяца, либо день недели**.
-- DOW: `0` и `7` оба интерпретируются как **воскресенье (Sunday)**. Значения 1–6 — Понедельник–Суббота.
+- Format: **5 fields** — `minute hour day-of-month month day-of-week` — or **6 fields** with a leading seconds field — `second minute hour day-of-month month day-of-week`. The form is detected by the field count; there is no year field.
+- Interface: `IJobTiming`
+- Method: `GetNextOccurrence(DateTimeOffset dateTime)`
+- Behavior: **exclusive** — when `dateTime` exactly matches the schedule, the **next** occurrence (> dateTime) is returned, truncated to the resolution of the expression (the second for 6 fields, the minute for 5).
+- Search horizon: **28 years** ahead. If no matching time is found within 28 years, `null` is returned (the expression can never fire, e.g. `0 0 30 2 *`). An input too close to the end of the representable range (year 9971 and later) also returns `null` instead of throwing, because the 28-year window no longer fits a `DateTimeOffset`.
+- DOM ∩ DOW semantics: **OR** (Vixie cron). When both day-of-month and day-of-week are restricted, a day matches if **either** field matches.
+- Day of week: `0` and `7` both mean **Sunday**; `1–6` are Monday–Saturday.
 
-## Формат полей
+## Field format
 
-| Поле | Диапазон | Описание |
+| Field | Range | Description |
 |---|---|---|
-| Минута | 0–59 | `*`, `,`, `-`, `/` |
-| Час | 0–23 | `*`, `,`, `-`, `/` |
-| День месяца (DOM) | 1–31 | `*`, `,`, `-`, `/` |
-| Месяц | 1–12 | `*`, `,`, `-`, `/` |
-| День недели (DOW) | 0–7 (0 и 7 = Sunday) | `*`, `,`, `-`, `/` |
+| Second (6-field form only) | 0–59 | `*`, `,`, `-`, `/` |
+| Minute | 0–59 | `*`, `,`, `-`, `/` |
+| Hour | 0–23 | `*`, `,`, `-`, `/` |
+| Day of month (DOM) | 1–31 | `*`, `,`, `-`, `/` |
+| Month | 1–12 | `*`, `,`, `-`, `/` |
+| Day of week (DOW) | 0–7 (0 and 7 = Sunday) | `*`, `,`, `-`, `/` |
 
-## Поддерживаемые синтаксисы
+## Supported syntax
 
-| Синтаксис | Пример | Описание |
+| Syntax | Example | Description |
 |---|---|---|
-| `*` | `* * * * *` | Каждую минуту |
-| Конкретное значение | `0 9 * * *` | В 9:00 каждый день |
-| Список | `10,30,50 * * * *` | В 10, 30 и 50 минут |
-| Диапазон | `30 14 * * 1-5` | В 14:30 Пн–Пт |
-| Шаг | `*/15 * * * *` | Каждые 15 минут (0,15,30,45) |
-| Диапазон с шагом | `9-17/2 * * *` | Каждые 2 часа с 9 до 17 (9,11,13,15,17) |
-| Шаг от диапазона | `0 8-17/3 * * *` | Каждые 3 часа 8,11,14,17 |
-| Последний день месяца | `0 0 L * *` | В полночь в последний день месяца |
-| Последний день месяца со смещением | `0 0 L-2 * *` | За 2 дня до конца месяца |
-| Последний будний день | `0 0 LW * *` | Последний день месяца, если это будний день (Пн–Пт); на выходные не сдвигается |
-| Ближайший рабочий день | `0 0 15W * *` | Ближайший будний день к 15-му числу (не выходит за пределы месяца) |
-| Последний указанный день недели | `0 0 * * 5L` | Последний пятничный день месяца |
-| Последний день недели (Sunday) | `0 0 * * 0L` | Последний воскресный день месяца |
+| `*` | `* * * * *` | Every minute |
+| Single value | `0 9 * * *` | At 09:00 every day |
+| List | `10,30,50 * * * *` | At minutes 10, 30 and 50 |
+| Range | `30 14 * * 1-5` | At 14:30, Monday–Friday |
+| Step | `*/15 * * * *` | Every 15 minutes (0, 15, 30, 45) |
+| Range with step | `0 9-17/2 * * *` | Every 2 hours from 9 to 17 (9, 11, 13, 15, 17) |
+| Step from a value | `0 8-17/3 * * *` | Every 3 hours: 8, 11, 14, 17 |
+| Last day of month | `0 0 L * *` | At midnight on the last day of the month |
+| Last day with offset | `0 0 L-2 * *` | Two days before the end of the month |
+| Last weekday | `0 0 LW * *` | The last day of the month if it is a weekday (Mon–Fri); never shifted |
+| Nearest weekday | `0 0 15W * *` | The weekday nearest to the 15th (never leaves the month) |
+| Last given weekday | `0 0 * * 5L` | The last Friday of the month |
+| Last Sunday | `0 0 * * 0L` | The last Sunday of the month |
 
-## Примеры
+## Examples
 
-| Выражение | Описание |
+| Expression | Description |
 |---|---|
-| `* * * * *` | Каждую минуту |
-| `0 * * * *` | Каждый час в 0 минут |
-| `0 0 * * *` | Ежедневно в полночь |
-| `0 0 * * 0` | Еженедельно в воскресенье в полночь |
-| `0 0 * * 7` | То же (воскресенье) |
-| `0 9 * * 1-5` | Понедельник–Пятница в 09:00 |
-| `0 0 1 * *` | 1-го числа каждого месяца в полночь |
-| `0 0 1 1 *` | 1 января в полночь (Новый год) |
-| `*/15 * * * *` | Каждые 15 минут |
-| `0 */2 * * *` | Каждые 2 часа |
-| `10,30,50 * * * *` | В 10,30,50 минут каждого часа |
-| `0 12 1-15 * *` | В 12:00 с 1 по 15 число каждого месяца |
-| `0 0 29 2 *` | 29 февраля (только в високосные годы, следующий високосный ищется в горизонте 28 лет) |
-| `0 0 15 * 1` | 15-е число **ИЛИ** понедельник (OR-семантика DOM∩DOW) |
-| `0 12 15 * 3` | 12:00 15-го числа **ИЛИ** в среду |
+| `* * * * *` | Every minute |
+| `0 * * * *` | Every hour at minute 0 |
+| `0 0 * * *` | Daily at midnight |
+| `0 0 * * 0` | Weekly, Sunday at midnight |
+| `0 0 * * 7` | Same (Sunday) |
+| `0 9 * * 1-5` | Monday–Friday at 09:00 |
+| `0 0 1 * *` | The 1st of every month at midnight |
+| `0 0 1 1 *` | January 1 at midnight (New Year) |
+| `*/15 * * * *` | Every 15 minutes |
+| `0 */2 * * *` | Every 2 hours |
+| `10,30,50 * * * *` | At minutes 10, 30, 50 of every hour |
+| `0 12 1-15 * *` | At 12:00, from the 1st to the 15th of every month |
+| `0 0 29 2 *` | February 29 (leap years only; the next leap year is searched within the 28-year horizon) |
+| `0 0 15 * 1` | The 15th **or** Monday (DOM∩DOW OR semantics) |
+| `0 12 15 * 3` | At 12:00 on the 15th **or** on a Wednesday |
 
-## Спец-знаки в днях: L, L-n, LW, dW
+## Seconds (6-field expressions)
 
-Поле «дня месяца» поддерживает четыре спец-знака по модели Quartz:
+Add a seconds field **in front of** the 5-field expression and the timing switches to second
+precision. The rule is purely positional — 6 fields means the first one is seconds:
 
-| Спец-знак | Пример | Что делает |
-|---|---|---|
-| `L` | `0 0 L * *` | Последний день месяца |
-| `L-n` | `0 0 L-2 * *` | День, стоящий на `n` дней раньше последнего дня месяца |
-| `LW` | `0 0 LW * *` | Последний день месяца, если это будний день (Пн–Пт) |
-| `dW` | `0 0 15W * *` | Ближайший будний день к `d`-му, без выхода за пределы месяца |
+| Expression | Description |
+|---|---|
+| `* * * * * *` | Every second |
+| `*/15 * * * * *` | Every 15 seconds (0, 15, 30, 45) |
+| `30 * * * * *` | At second 30 of every minute |
+| `0 0 9 * * *` | Daily at 09:00:00 — the same instant as `0 9 * * *` |
+| `0,30 */5 * * * *` | Seconds 0 and 30 of every fifth minute |
+| `5-10/2 0 9 * * 1-5` | Seconds 5, 7 and 9 at 09:00 on weekdays |
 
-Конкретные следующие срабатывания (поиск от указанного момента, исключающе, > dateTime):
+Concrete next occurrences (searched exclusively from the given instant, > dateTime):
 
-| Выражение | От | Следующее | Примечание |
+| Expression | From | Next | Note |
 |---|---|---|---|
-| `0 0 L * *` | 2026-06-25 | 2026-06-30 | Последний день июня (30-й) |
-| `0 0 L-2 * *` | 2026-06-25 | 2026-06-28 | 30 − 2 = 28-й |
-| `0 0 LW * *` | 2026-06-25 | 2026-06-30 | Месяц заканчивается вторником → 30-й |
-| `0 0 15W * *` | 2026-06-01 | 2026-06-15 | 15-й — понедельник → совпадает сразу |
-| `0 0 15W * *` | 2026-07-20 | 2026-08-14 | 15 авг — суббота → сдвиг на пятницу 14-й |
+| `* * * * * *` | 2026-06-25T10:30:00 | 2026-06-25T10:30:01 | The next second |
+| `* * * * * *` | 2026-06-25T10:30:00.500 | 2026-06-25T10:30:01 | A sub-second input still lands on a second boundary |
+| `*/15 * * * * *` | 2026-06-25T10:30:05 | 2026-06-25T10:30:15 | The next multiple of 15 |
+| `30 * * * * *` | 2026-06-25T10:30:00 | 2026-06-25T10:30:30 | Second 30 of the current minute |
+| `30 * * * * *` | 2026-06-25T10:30:30 | 2026-06-25T10:31:30 | Already at second 30 → the next minute |
+| `0,30 */5 * * * *` | 2026-06-25T10:30:10 | 2026-06-25T10:30:30 | List of seconds; 10:30 is a multiple of 5 |
+| `0 0 9 * * *` | 2026-06-25T08:59:59 | 2026-06-25T09:00:00 | The hour boundary |
+| `0 0 9 * * *` | 2026-06-25T09:00:00 | 2026-06-26T09:00:00 | Exclusive: the matching instant itself is skipped |
+| `5-10/2 0 9 * * 1-5` | 2026-06-26T09:00:06 | 2026-06-26T09:00:07 | Range with a step (5, 7, 9) on a Friday |
+| `5-10/2 0 9 * * 1-5` | 2026-06-26T09:00:09 | 2026-06-29T09:00:05 | Last slot on Friday → Monday; the day fields are unchanged |
+| `59 59 23 31 12 *` | 2026-12-31T23:59:58 | 2026-12-31T23:59:59 | The last second of the year |
+| `59 59 23 31 12 *` | 2026-12-31T23:59:59 | 2027-12-31T23:59:59 | Second → minute → hour → day → year rollover |
+| `0 0 0 L * *` | 2026-06-25T00:00:00 | 2026-06-30T00:00:00 | A day special combined with a seconds field |
 
-Дополнительно:
+The day fields keep their semantics: `L`/`LW`/`dW`/`dL`, the DOM∩DOW OR rule and the month
+list all work as in the 5-field form (`0 0 0 L * *` is midnight on the last day of the month).
 
-- `L-2` — на 2 дня раньше последнего дня месяца. Точное число зависит от длины месяца: 29-е в месяце из 31 дня, 28-е в месяце из 30 дней, 26-е в феврале из 28 дней, 27-е в феврале из 29 дней (високосный год).
-- `LW` **не сдвигается** на выходные: если месяц заканчивается субботой или воскресеньем, в этом месяце срабатывания нет (в 2026 году `0 0 LW * *` пропускает 31 янв, 28 фев, 31 май и 31 окт).
-- `dW` никогда не пересекает границы месяца. Суббота сдвигается на предыдущую пятницу (кроме субботы 1-го числа — она сдвигается на понедельник 3-го); воскресенье — на следующий понедельник (кроме воскресенья в последний день месяца — оно сдвигается на предыдущую пятницу).
-- `dL` (только в поле дня недели): `0 0 * * 5L` — срабатывает в последнюю пятницу месяца, `0 0 * * 0L` — в последнее воскресенье.
+**Careful with the same text meaning something else**: `0 9 * * *` is 09:00 every day, while
+`0 9 * * * *` is second 0 of minute 9 of every hour. There is no year field, so 7 fields is a
+parse error rather than a silently misread expression.
 
-## Особые случаи
+## Day specials: L, L-n, LW, dW
+
+The day-of-month field supports the four Quartz-style specials:
+
+| Special | Example | What it does |
+|---|---|---|
+| `L` | `0 0 L * *` | The last day of the month |
+| `L-n` | `0 0 L-2 * *` | The day `n` days before the last day of the month |
+| `LW` | `0 0 LW * *` | The last day of the month if it is a weekday (Mon–Fri) |
+| `dW` | `0 0 15W * *` | The weekday nearest to day `d`, without leaving the month |
+
+Concrete next occurrences (searched exclusively from the given instant, > dateTime):
+
+| Expression | From | Next | Note |
+|---|---|---|---|
+| `0 0 L * *` | 2026-06-25 | 2026-06-30 | Last day of June (the 30th) |
+| `0 0 L-2 * *` | 2026-06-25 | 2026-06-28 | 30 − 2 = the 28th |
+| `0 0 LW * *` | 2026-06-25 | 2026-06-30 | The month ends on a Tuesday → the 30th |
+| `0 0 15W * *` | 2026-06-01 | 2026-06-15 | The 15th is a Monday → matches as is |
+| `0 0 15W * *` | 2026-07-20 | 2026-08-14 | Aug 15 is a Saturday → shifted to Friday the 14th |
+
+Details:
+
+- `L-2` means two days before the last day of the month. The exact date depends on the month length: the 29th in a 31-day month, the 28th in a 30-day month, the 26th in a 28-day February, the 27th in a 29-day February (leap year).
+- The `L-n` offset is limited to `0`–`30` (`L-0` is exactly `L`); a larger offset is a parse error. Because the offset is resolved per month, `L-30` has no occurrence in a month shorter than 31 days.
+- `LW` here means **"the last day of the month, if it is a weekday"** — if the month ends on a Saturday or Sunday, there is no occurrence in that month (in 2026, `0 0 LW * *` skips Jan 31, Feb 28, May 31 and Oct 31). This deliberately differs from Quartz, whose `LW` always fires and shifts backwards to the preceding Friday. There is no single expression that reproduces the Quartz rule for every month length.
+- `dW` never crosses the month boundary. A Saturday shifts to the previous Friday (except a Saturday on the 1st, which shifts to Monday the 3rd); a Sunday shifts to the following Monday (except a Sunday on the last day, which shifts to the previous Friday).
+- `dL` (day-of-week field only): `0 0 * * 5L` fires on the last Friday of the month, `0 0 * * 0L` on the last Sunday.
+- `L`/`L-n`/`LW` cannot be combined with a separate `dW` element in the same list (`0 0 15W,L * *` is rejected): the two have no defined precedence. `LW` itself is the supported combination.
+
+## Special cases
 
 ### DOM ∩ DOW (OR)
-Если оба поля заданы и не `*` — совпадение по **ИЛИ**. Например `0 0 15 * 1` сработает **15-го числа** (независимо от дня недели) И/ИЛИ **в любой понедельник**.
+When both fields are set and neither is a wildcard, the day matches if **either** field matches. For example `0 0 15 * 1` fires on the **15th** (whatever the weekday) **and** on **every Monday**.
 
-### 29 февраля
-`0 0 29 2 *` в невисокосном году не даст совпадения в этом году — алгоритм продолжит поиск и вернёт 29 февраля **следующего високосного года** (в пределах 28-летнего горизонта).
+A field whose values cover the whole range (`*`, `*/1`, `1-31`, `0-7`) is treated as a wildcard, exactly as the literal `*` is.
 
-### Недостижимые выражения
-Выражения, которые физически не могут сработать (например `0 0 30 2 *` — 30 февраля не существует никогда), возвращают `null` (тест покрывает этот случай).
+### February 29
+`0 0 29 2 *` does not match in a non-leap year — the search continues and returns February 29 of the **next leap year** (within the 28-year horizon).
 
-### Временная зона
-`CronTiming` работает с `DateTimeOffset` (timezone-aware). Смещение сохраняется при вычислении следующего момента.
+### Unsatisfiable expressions
+Expressions that can never fire (for example `0 0 30 2 *` — February 30 never exists) return `null`.
 
-### Точность до минуты
-Вычисления ведутся с точностью **до минуты**. При наличии секунд/миллисекунд во входном `dateTime` поиск начинается с **+1 минуты** (exclusive-поведение).
+### Time zone
+`CronTiming` works with `DateTimeOffset`. The input offset is preserved when the next occurrence is computed: the fields are matched against the input's wall clock, and a DST transition is **not** re-evaluated. The scheduler always passes UTC, and `CronTimingAdapter` (used by `WithCron` / `WithTimeZone`) re-derives the offset for each occurrence from the configured zone. When using `CronTiming` directly, pass a UTC `DateTimeOffset`.
 
-## Использование
+### Precision
+The search runs at the resolution of the expression. A **5-field** expression is minute-precise: it only ever fires on second `0`, and an input with seconds/milliseconds starts the search at the next minute (`10:30:45` with `* * * * *` → `10:31:00`). A **6-field** expression is second-precise: the search starts at the next second (`10:30:45.500` with `* * * * * *` → `10:30:46`).
+
+Second precision is a scheduling resolution, not a real-time guarantee: the wait ends in `Task.Delay`, so a job fires a few milliseconds after the requested second. Missed occurrences are not replayed — the search is exclusive from "now", so after a long iteration the scheduler continues at the next boundary rather than catching up.
+
+For a plain "every N seconds" cadence prefer `EveryTime(TimeSpan.FromSeconds(n))`: it needs no cron parsing, is relative to the end of the previous iteration, and keeps the expression readable. A seconds field is worth it when the job must run **on a wall-clock boundary** (`*/30 * * * * *` fires at :00 and :30) or when migrating an expression from Spring/Quartz/node-cron.
+
+### Cost per firing
+
+One occurrence costs the engine one short iteration: a pause check, the next-occurrence search (a few timestamp comparisons), the wait, the job call and two counters. The run's DI scope and the job instance are opened **once per slot on the first execution** and reused by every later iteration, so a per-second job does not create a scope per call. On a normal server that overhead is on the order of **0.1 ms of CPU and a few hundred bytes per firing** (measured with a no-op job; a real job body dominates).
+
+It scales linearly, so the cadence matters more than the expression form:
+
+- a cron expression fires at most **once per second per slot** (`* * * * * *`) — seconds cannot go below that;
+- `ConcurrencyLimit` multiplies a timing: N slots run N independent loops, so one occurrence becomes N executions;
+- `EveryTime` *can* go below a second: 10 jobs at 100 ms are 100 executions/s, which is where CPU and allocations start to be visible.
+
+Prefer **one job that processes work in a loop** over N jobs on the same cadence: N jobs means N loops, N contexts and N pre-allocated slots for the same throughput.
+
+## Usage
 
 ```csharp
 var timing = new CronTiming("0 9 * * 1-5");
-var next = timing.GetNextOccurrence(DateTimeOffset.UtcNow, context);
+var next = timing.GetNextOccurrence(DateTimeOffset.UtcNow);
 ```
 
 ```csharp
-var timing = CronTiming.Every("*/15 * * * *", name: "every-15-min");
+var timing = CronTiming.For("*/15 * * * *", name: "every-15-min");
 ```
 
-## Строгая валидация календаря
+## Strict calendar validation
+
+By default (`new CronTiming(...)`) parsing does not check calendar validity: an impossible day+month combination (for example `31 4` or `30 2`) simply never fires, and `GetNextOccurrence` returns `null`.
+
+To catch these at construction time, use `CronTiming.Strict(...)`:
 
 ```csharp
 var timing = CronTiming.Strict("0 0 31 4 *", name: "bad-april-31");
 ```
 
-`CronTiming.Strict(...)` дополнительно проверяет, может ли выражение когда-либо сработать.
-При наличии фиксированного дня месяца, не существующего в выбранном месяце (например `31 4`, `30 2`), и при отсутствии ограничений по дню недели, на этапе создания выбрасывается `CronParseException`.
-День `29 2` разрешён, так как в 28-летнем горизонте поиска есть високосные годы.
+`CronTiming.Strict(...)` checks whether the expression can ever fire. A fixed day of month that does not exist in the selected month (for example `31 4`, `30 2`), with no day-of-week restriction, throws `CronParseException` at construction time.
+Day `29 2` is allowed, because the 28-year search horizon contains leap years.
 
-## Исключения
+The same check applies to the day specials: `31W 2` (February has no 31st) and `L-30 2` (shorter than any February) are rejected, while `L 2`, `29W 2` and `1W 2` are accepted.
 
-- `CronParseException` — ошибка парсинга cron-выражения (неверное количество полей, диапазоны, шаги, значения вне диапазона).
-- Наследует `FormatException`, поэтому существующие тесты на `FormatException` продолжают работать.
+The job's `Cron` option in `ScheduleOptions` — whether it comes from the configuration section or from `b.Options(...)` — is always validated strictly: an expression that can never fire is a configuration error (`OptionsValidationException`) rather than a job that silently never runs. `WithCron(...)`, `new CronTiming(...)` and `CronTiming.For(...)` stay lenient (they reject malformed syntax only), so a timing built imperatively can still be probed for `null`.
 
-## Примечания
+## Not supported
 
-- Горизонт 28 лет выбран исходя из цикла високосных лет (гарантирует нахождение следующего високосного 29 февраля для выражений `0 0 29 2 *`).
-- Алгоритм использует флаги и таблицы переходов (оптимизирован для поиска следующего момента).
+These are rejected with `CronParseException` — they are never silently ignored:
+
+- `?` (Quartz "no specific value") — use `*` instead.
+- `#` (nth weekday of the month, for example `5#3`).
+- Month and weekday names (`JAN`, `MON`) and `@daily`-style macros.
+- A year field: the expression is 5 or 6 fields (seconds first), never 7.
+- Lowercase specials (`l`, `w`): only uppercase `L` and `W` are recognized.
+
+## Exceptions
+
+- `CronParseException` — the cron expression cannot be parsed (wrong number of fields, invalid ranges, steps, out-of-range values) or, under `Strict`, can never fire. It derives from `FormatException`; `Field` and `Token` name the offending part.
+
+## Notes
+
+- The 28-year horizon is chosen for the leap-year cycle (it guarantees the next leap-year February 29 is found for `0 0 29 2 *`).
+- The algorithm uses bit flags and jump tables (optimized for next-occurrence search).

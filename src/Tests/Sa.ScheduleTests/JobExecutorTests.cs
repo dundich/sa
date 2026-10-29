@@ -139,6 +139,53 @@ public sealed class JobExecutorTests
 
         Assert.Throws<InvalidOperationException>(
             () => new JobExecutor(settings, new InterceptorSettings([]), factory));
+
+        // The failed construction must not leak the DI scope opened for the job.
+        Assert.Single(factory.Scopes);
+        Assert.True(factory.Scopes[0].Disposed);
+    }
+
+    [Fact]
+    public void Constructor_JobConstructorThrows_DisposesTheScope()
+    {
+        var jobId = Guid.NewGuid();
+        var factory = TrackingScopeFactory.Create(services =>
+            services.AddKeyedScoped<ExplodingJob>(jobId));
+
+        var settings = JobSettings.Create<ExplodingJob>(jobId);
+
+        var ex = Record.Exception(
+            () => new JobExecutor(settings, new InterceptorSettings([]), factory));
+
+        Assert.NotNull(ex);
+        Assert.Single(factory.Scopes);
+        Assert.True(factory.Scopes[0].Disposed);
+    }
+
+    [Fact]
+    public void Constructor_InterceptorMissing_DisposesTheScope()
+    {
+        var jobId = Guid.NewGuid();
+        var factory = TrackingScopeFactory.Create(services =>
+            services.AddKeyedScoped<RecordingJob>(jobId)); // interceptor not registered
+
+        var settings = JobSettings.Create<RecordingJob>(jobId);
+        var interceptorSettings = new InterceptorSettings(
+            [new JobInterceptorSettings(typeof(RecordingInterceptor), null)]);
+
+        Assert.Throws<InvalidOperationException>(
+            () => new JobExecutor(settings, interceptorSettings, factory));
+
+        Assert.Single(factory.Scopes);
+        Assert.True(factory.Scopes[0].Disposed);
+    }
+
+    sealed class ExplodingJob : IJob
+    {
+        public ExplodingJob() => throw new InvalidOperationException("job constructor failed");
+
+        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+            => Task.CompletedTask;
     }
 
     sealed class RecordingJob : IJob

@@ -185,4 +185,72 @@ public sealed class SymlinkProtectionTests : IDisposable
         Assert.True(single.Exceeded);
         Assert.Equal(200, single.TotalSize);
     }
+
+    [Fact]
+    public async Task Delete_ThroughASymlinkedDirectory_ThrowsAndLeavesTheTargetIntact()
+    {
+        // A directory link planted inside the root: resolving the path is textual, so without the
+        // component check File.Delete would unlink the target's file, outside the root.
+        var target = Path.Combine(_outside, "keep.bin");
+        await File.WriteAllBytesAsync(target, [7, 7, 7], TestTemp.Token);
+        CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
+
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        await Assert.ThrowsAsync<SecurityException>(
+            () => folder.DeleteFileAsync(Path.Combine("up_cache", "keep.bin"), TestTemp.Token));
+
+        Assert.Equal(new byte[] { 7, 7, 7 }, await File.ReadAllBytesAsync(target, TestTemp.Token));
+    }
+
+    [Fact]
+    public async Task Read_ThroughASymlinkedDirectory_Throws()
+    {
+        await File.WriteAllBytesAsync(Path.Combine(_outside, "secret.bin"), [1, 2, 3], TestTemp.Token);
+        CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
+
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        var invoked = false;
+
+        await Assert.ThrowsAsync<SecurityException>(
+            () => folder.ReadAsync(
+                Path.Combine("up_cache", "secret.bin"),
+                (_, _) =>
+                {
+                    invoked = true;
+                    return Task.CompletedTask;
+                },
+                TestTemp.Token));
+
+        Assert.False(invoked);
+    }
+
+    [Fact]
+    public async Task Enumerate_DoesNotFollowASymlinkedFolder()
+    {
+        // The link's tree is not this instance's: a recursive walk must neither report its files
+        // (paths outside the root) nor spin on a link cycle.
+        await File.WriteAllBytesAsync(Path.Combine(_outside, "outside.txt"), [1], TestTemp.Token);
+        CreateDirectoryLink(Path.Combine(_root, "up_link"), _outside);
+
+        var real = Path.Combine(_root, "up_data");
+        Directory.CreateDirectory(real);
+        await File.WriteAllTextAsync(Path.Combine(real, "inside.txt"), "x", TestTemp.Token);
+
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        var found = new List<string>();
+        await foreach (var file in folder.EnumerateFilesAsync(
+            "*.txt", recursive: true, cancellationToken: TestTemp.Token))
+        {
+            found.Add(file);
+        }
+
+        var single = Assert.Single(found);
+        Assert.Equal(Path.Combine(real, "inside.txt"), single);
+    }
 }

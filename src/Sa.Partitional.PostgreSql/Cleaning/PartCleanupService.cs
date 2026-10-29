@@ -11,8 +11,10 @@ internal sealed class PartCleanupService(
         int cnt = 0;
         bool archive = settings.CleanupMode == PartCleanupMode.Archive;
 
-        foreach (string tableName in sqlBuilder.Tables.Select(c => c.FullName))
+        foreach (ISqlTableBuilder table in sqlBuilder.Tables)
         {
+            string tableName = table.FullName;
+
             cnt += archive
                 ? await repository.ArchivePartsToDate(
                     tableName, toDate, settings.ArchiveSchemaName, cancellationToken).ConfigureAwait(false)

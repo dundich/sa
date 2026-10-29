@@ -147,12 +147,18 @@ public sealed class FreeSpaceTests : IDisposable
         Assert.Contains("MinFreeSpace", ex.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Register_NonPositiveFreeSpaceCheckInterval_FailsValidation()
+    [Theory]
+    [InlineData(-1, 0L)] // a negative interval is an error even while the check is off
+    [InlineData(-1, 100L)]
+    [InlineData(0, 100L)] // zero is "not used" only while the check is off
+    public void Register_InvalidFreeSpaceCheckInterval_FailsValidation(int seconds, long minFreeSpace)
     {
         var services = new ServiceCollection();
-        services.AddSaTempFolder("noint",
-            b => b.Options(o => o.Configure(x => x.FreeSpaceCheckInterval = TimeSpan.Zero)));
+        services.AddSaTempFolder("noint", b => b.Options(o => o.Configure(x =>
+        {
+            x.FreeSpaceCheckInterval = TimeSpan.FromSeconds(seconds);
+            x.MinFreeSpace = minFreeSpace;
+        })));
 
         using var provider = services.BuildServiceProvider();
 
@@ -160,6 +166,23 @@ public sealed class FreeSpaceTests : IDisposable
             () => provider.GetRequiredKeyedService<ITempFolder>("noint"));
 
         Assert.Contains("FreeSpaceCheckInterval", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Register_ZeroFreeSpaceCheckInterval_IsAcceptedWhileTheCheckIsOff()
+    {
+        // The check is off (MinFreeSpace = 0), so the interval is inert — a zero there is an
+        // explicit "not used", exactly like the cleanup knobs with the cleanup disabled.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("off", b => b.Options(o => o.Configure(x =>
+        {
+            x.FolderPrefix = "fsp_"; // the root stays the system temp dir — nothing touches the disk
+            x.FreeSpaceCheckInterval = TimeSpan.Zero;
+        })));
+
+        using var provider = services.BuildServiceProvider();
+
+        _ = provider.GetRequiredKeyedService<ITempFolder>("off");
     }
 
     // ---------- background wiring ----------

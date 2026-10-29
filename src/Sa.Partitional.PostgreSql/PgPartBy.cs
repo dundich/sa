@@ -73,15 +73,21 @@ public sealed record PgPartBy(
         => GetAll().FirstOrDefault(c => c.PartByRange == range) ?? Day;
 
     /// <summary>
-    /// Resolves a <see cref="PgPartBy"/> instance from a partition name (e.g. <c>"root"</c>, <c>"day"</c>).
+    /// Resolves a <see cref="PgPartBy"/> instance from the value stored in the partition cache's
+    /// <c>part_by</c> column, i.e. from <see cref="Name"/> (<c>"Day"</c>, <c>"Month"</c>, <c>"Year"</c>).
     /// </summary>
-    /// <param name="part">The display name of the partition kind; <c>null</c> or an unknown name falls back to <see cref="Part.Root"/>.</param>
+    /// <param name="part">The stored strategy name; <c>null</c> or an unknown name falls back to <see cref="Day"/>.</param>
     /// <returns>The corresponding <see cref="PgPartBy"/>.</returns>
+    /// <remarks>
+    /// The lookup is by <see cref="Name"/> because that is what <c>SqlTemplate</c> writes into
+    /// <c>part_by</c>. It used to go through <see cref="Part.TryFromName"/>, whose registry holds
+    /// the single entry <c>"root"</c>: every stored value therefore missed and resolved to
+    /// <see cref="Part.Root"/>, i.e. to <see cref="Day"/>. A month- or year-partitioned table was
+    /// then checked against a one-day range by <c>PartCache.InCache</c>, which never matched and
+    /// re-ran the partition DDL on every call.
+    /// </remarks>
     public static PgPartBy FromPartName(string? part)
-    {
-        Part current = Part.TryFromName(part, out Part? item) ? item : Part.Root;
-        return FromRange(current.PartBy);
-    }
+        => GetAll().FirstOrDefault(c => string.Equals(c.Name, part, StringComparison.Ordinal)) ?? Day;
 
     /// <summary>
     /// Returns the human-readable name of this partitioning strategy.
@@ -95,13 +101,25 @@ public sealed record PgPartBy(
 
         ReadOnlySpan<char> span = str.AsSpan();
 
-        return range switch
+        // The regexes validate the *shape* (a day/month/year suffix of the right digit count), not
+        // that the numbers are a real calendar value: "y2026m13d45" matches and then makes the
+        // DateTimeOffset constructor throw. The nullable return type promises "not parseable" for
+        // exactly that case, and a caller reading a cached or legacy name must not be taken down by
+        // one bad row, so the range check is an ordinary miss instead of an exception.
+        try
         {
-            PartByRange.Day => FmtRegex.GetDayRegEx().IsMatch(span) ? new DateTimeOffset(span[^10..^6].StrToInt()!.Value, span[^5..^3].StrToInt()!.Value, span[^2..].StrToInt()!.Value, 0, 0, 0, TimeSpan.Zero) : null,
-            PartByRange.Month => FmtRegex.GetMonthRegEx().IsMatch(span) ? new DateTimeOffset(span[^7..^3].StrToInt()!.Value, span[^2..].StrToInt()!.Value, 1, 0, 0, 0, TimeSpan.Zero) : null,
-            PartByRange.Year => FmtRegex.GetYearRegEx().IsMatch(span) ? new DateTimeOffset(span[^4..].StrToInt()!.Value, 1, 1, 0, 0, 0, TimeSpan.Zero) : null,
-            _ => null,
-        };
+            return range switch
+            {
+                PartByRange.Day => FmtRegex.GetDayRegEx().IsMatch(span) ? new DateTimeOffset(span[^10..^6].StrToInt()!.Value, span[^5..^3].StrToInt()!.Value, span[^2..].StrToInt()!.Value, 0, 0, 0, TimeSpan.Zero) : null,
+                PartByRange.Month => FmtRegex.GetMonthRegEx().IsMatch(span) ? new DateTimeOffset(span[^7..^3].StrToInt()!.Value, span[^2..].StrToInt()!.Value, 1, 0, 0, 0, TimeSpan.Zero) : null,
+                PartByRange.Year => FmtRegex.GetYearRegEx().IsMatch(span) ? new DateTimeOffset(span[^4..].StrToInt()!.Value, 1, 1, 0, 0, 0, TimeSpan.Zero) : null,
+                _ => null,
+            };
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
     }
 
     #endregion

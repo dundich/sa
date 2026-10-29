@@ -40,29 +40,42 @@ internal sealed class OutboxDeliveryManager(
         CancellationToken cancellationToken)
     {
         // One pass over the batch (M7): error contexts, delivery-part keys and error day keys are
-        // all derived here, each deduplicated as it goes. The old code walked the span three
-        // times — parts .SelectWhere + .Distinct, errs .SelectWhere, dates lazy re-enumeration —
-        // with three per-batch allocations. Delivery parts are keyed by day (M6): the partition is
-        // daily, so the exact timestamp is noise that used to fan one batch into several
-        // EnsureParts round trips.
+        // all derived here, each deduplicated as it goes. Delivery parts are keyed by day (M6):
+        // the partition is daily, so the exact timestamp is noise that used to fan one batch into
+        // several EnsureParts round trips.
+        //
+        // The parts are kept in a dictionary keyed by the same (day, tenant, part) tuple the
+        // repository dedupes by, so the record is copied once per *distinct* part instead of once
+        // per message. The old HashSet.Add(partInfo with {...}) allocated a new OutboxPartInfo for
+        // every delivered message, which is the common case: one part repeated across the batch.
         List<IOutboxContextOperations<TMessage>>? errs = null;
-        HashSet<OutboxPartInfo> deliveryParts = new(messages.Length);
-        HashSet<DateTimeOffset> errorDays = new(messages.Length);
+        Dictionary<(DateTimeOffset Day, int TenantId, string Part), OutboxPartInfo> deliveryParts = new();
+
+        // No pre-sized sets: distinct parts and error days are few even for a large batch, while
+        // messages.Length entries would be allocated for every call, empty or not.
+        HashSet<DateTimeOffset> errorDays = [];
 
         foreach (IOutboxContextOperations<TMessage> context in messages.Span)
         {
-            deliveryParts.Add(context.DeliveryInfo.PartInfo with { CreatedAt = context.DeliveryResult.CreatedAt.StartOfDay() });
+            var day = context.DeliveryResult.CreatedAt.StartOfDay();
+            OutboxPartInfo part = context.DeliveryInfo.PartInfo;
+            var partKey = (day, part.TenantId, part.Part);
+
+            if (!deliveryParts.ContainsKey(partKey))
+            {
+                deliveryParts[partKey] = part with { CreatedAt = day };
+            }
 
             if (context.Exception is not null && context.DeliveryResult.Code.IsError())
             {
                 (errs ??= []).Add(context);
-                errorDays.Add(context.DeliveryResult.CreatedAt.StartOfDay());
+                errorDays.Add(day);
             }
         }
 
         // Delivery-log and error-log partitions are independent DDL on different tables — run the
         // ensures concurrently instead of awaiting them in sequence (M6).
-        Task<int> ensureDelivery = partRepository.EnsureDeliveryParts(deliveryParts, cancellationToken);
+        Task<int> ensureDelivery = partRepository.EnsureDeliveryParts(deliveryParts.Values, cancellationToken);
         Task<int> ensureErrors = partRepository.EnsureErrorParts(errorDays, cancellationToken);
         await Task.WhenAll(ensureDelivery, ensureErrors).ConfigureAwait(false);
 

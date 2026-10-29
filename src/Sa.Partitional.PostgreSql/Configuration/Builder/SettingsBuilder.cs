@@ -15,6 +15,14 @@ internal sealed class SettingsBuilder(string? searchPath) : ISettingsBuilder
 
     public ISettingsBuilder AddSchema(string schemaName, Action<ISchemaBuilder> schemaBuilder)
     {
+        ArgumentNullException.ThrowIfNull(schemaBuilder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(schemaName);
+
+        // Identifiers are stored unquoted here and quoted again when the DDL is generated, so a name
+        // that arrives already quoted ("public") has to be normalised first: otherwise it opens a
+        // second schema group whose table full names collide with the unquoted ones.
+        schemaName = schemaName.Trim('"');
+
         if (!_schemas.TryGetValue(schemaName, out ISchemaBuilder? builder))
         {
             builder = new SchemaBuilder(schemaName);

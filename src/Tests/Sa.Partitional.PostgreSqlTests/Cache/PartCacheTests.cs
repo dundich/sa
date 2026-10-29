@@ -60,6 +60,18 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
                      .PartByList("tenant_id", "part")
                      ;
 
+                    // Month-partitioned: the partition being written to started on the 1st, which is
+                    // the case the one-day cache window used to miss.
+                    schema.AddTable("test_25",
+                        "id INT NOT NULL",
+                        "tenant_id INT NOT NULL",
+                        "part TEXT NOT NULL",
+                        "payload_id TEXT"
+                     )
+                     .PartByList("tenant_id", "part")
+                     .PartByRange(PgPartBy.Month)
+                     ;
+
                 });
             })
             .AddDataSource(configure => configure.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)))
@@ -108,7 +120,7 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
     }
 
     [Fact]
-    public async Task InCache_EnsureCache_ReturnsTrue()
+    public async Task InCache_EnsureCache_MakesThePartitionVisible()
     {
         DateTimeOffset date = DateTimeOffset.Now;
         StrOrNum[] parValues = [1, "some1"];
@@ -119,9 +131,9 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
         // Assert
         Assert.False(result);
 
-        result = await PartCache.EnsureCache("test_22", date, parValues, TestContext.Current.CancellationToken);
-
-        Assert.True(result);
+        // EnsureCache reports by outcome: it returns when the partition exists, and creation is
+        // verified through the cache rather than by a bool the call used to return.
+        await PartCache.EnsureCache("test_22", date, parValues, TestContext.Current.CancellationToken);
 
         result = await PartCache.InCache("test_22", date, parValues, TestContext.Current.CancellationToken);
 
@@ -133,14 +145,14 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
     {
         DateTimeOffset date = DateTimeOffset.Now;
 
-        bool result = await PartCache.EnsureCache("test_23", date, [], TestContext.Current.CancellationToken);
-
-        Assert.True(result);
+        await PartCache.EnsureCache("test_23", date, [], TestContext.Current.CancellationToken);
 
         await PartCache.RemoveCache("test_23", TestContext.Current.CancellationToken);
 
-        result = await PartCache.InCache("test_23", date, [], TestContext.Current.CancellationToken);
+        bool result = await PartCache.InCache("test_23", date, [], TestContext.Current.CancellationToken);
 
+        // The drop of the snapshot is not a drop of the partition: the next read reloads it from the
+        // cache table and finds it there.
         Assert.True(result);
     }
 
@@ -152,15 +164,34 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
         StrOrNum[] partValues_1 = [1, "some1"];
         StrOrNum[] partValues_2 = [2, "some1"];
 
-        var result = await PartCache.EnsureCache("test_24", date, partValues_1, TestContext.Current.CancellationToken);
+        await PartCache.EnsureCache("test_24", date, partValues_1, TestContext.Current.CancellationToken);
 
-        Assert.True(result);
-
-        result = await PartCache.InCache("test_24", date, partValues_2, TestContext.Current.CancellationToken);
+        var result = await PartCache.InCache("test_24", date, partValues_2, TestContext.Current.CancellationToken);
 
         Assert.False(result);
 
-        result = await PartCache.EnsureCache("test_24", date, partValues_2, TestContext.Current.CancellationToken);
+        await PartCache.EnsureCache("test_24", date, partValues_2, TestContext.Current.CancellationToken);
+
+        result = await PartCache.InCache("test_24", date, partValues_2, TestContext.Current.CancellationToken);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public async Task InCache_MonthPartition_MatchesEveryDayOfTheMonth()
+    {
+        // UTC, like the partition range: a local "month" can differ from the UTC one around the 1st.
+        DateTimeOffset date = DateTimeOffset.UtcNow;
+        StrOrNum[] partValues = [1, "some"];
+
+        await fixture.Sub.CreatePart("test_25", date, partValues, TestContext.Current.CancellationToken);
+
+        // Any day of the current month belongs to the created month partition. Before the fix the
+        // stored strategy resolved to Day, so `InCache` only matched on the 1st; the one-day snapshot
+        // window on top of that meant a month partition was never visible at all.
+        DateTimeOffset midMonth = new(date.Year, date.Month, 15, 12, 0, 0, TimeSpan.Zero);
+
+        bool result = await PartCache.InCache("test_25", midMonth, partValues, TestContext.Current.CancellationToken);
 
         Assert.True(result);
     }

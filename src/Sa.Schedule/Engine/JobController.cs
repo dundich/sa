@@ -58,7 +58,7 @@ internal sealed partial class JobController(
             && settings.Properties.InitialDelay is { } delay
             && delay != TimeSpan.Zero)
         {
-            await JobDelay.Wait(delay, cancellationToken);
+            await JobDelay.Wait(delay, timeProvider, cancellationToken);
         }
     }
 
@@ -93,6 +93,12 @@ internal sealed partial class JobController(
 
     public async ValueTask WaitIfPaused(CancellationToken cancellationToken)
     {
+        // Fast path for the ordinary running iteration: no lock when the slot is not paused.
+        // A Pause() that lands just after this check takes effect on the next iteration, which
+        // is exactly the guarantee the locked check provided.
+        if (_disposed) throw new OperationCanceledException(cancellationToken);
+        if (!_isPaused) return;
+
         while (true)
         {
             if (_disposed) throw new OperationCanceledException(cancellationToken);
@@ -135,12 +141,26 @@ internal sealed partial class JobController(
     {
         if (_disposed) return;
 
-        _executor = new JobExecutor(settings, interceptorSettings, scopeFactory);
-
-        _context.ServiceProvider = _executor.ServiceProvider;
-
+        // The DI scope is opened on the first execution, not here: a slot that is started
+        // for a job firing hours from now would otherwise pin its scoped services (a
+        // DbContext, a connection) for the whole wait. See EnsureExecutor.
         if (_context.NumRuns == 0) _context.CreatedAt = timeProvider.GetUtcNow();
         _context.NumRuns++;
+    }
+
+    /// <summary>
+    /// Opens the run's DI scope the first time the job actually executes. Every later
+    /// iteration of the same run reuses it (and the resolved job instance), so the cost is
+    /// paid once per run — but not one moment earlier than necessary.
+    /// </summary>
+    private void EnsureExecutor()
+    {
+        if (_executor is not null) return;
+
+        var executor = new JobExecutor(settings, interceptorSettings, scopeFactory);
+
+        _context.ServiceProvider = executor.ServiceProvider;
+        _executor = executor;
     }
 
     public void Shutdown()
@@ -177,7 +197,13 @@ internal sealed partial class JobController(
             return CanJobExecuteResult.Abort;
 
         if (_context.NumIterations == 0 && settings.Properties.Immediate == true)
+        {
+            // The immediate first run skips the timing wait, but the context stack must
+            // still receive this iteration's snapshot — otherwise the first entry is
+            // missing from every Immediate job's history.
+            PushStackSnapshot();
             return CanJobExecuteResult.Ok;
+        }
 
         IJobTiming? timing = settings.Properties.Timing;
 
@@ -194,7 +220,7 @@ internal sealed partial class JobController(
 
             if (delay.TotalMilliseconds > 0)
             {
-                await JobDelay.Wait(delay, cancellationToken);
+                await JobDelay.Wait(delay, timeProvider, cancellationToken);
             }
         }
 
@@ -220,6 +246,9 @@ internal sealed partial class JobController(
     {
         _context.NumIterations++;
         _context.ExecuteAt = timeProvider.GetUtcNow();
+
+        EnsureExecutor();
+
         return _executor!.Execute(_context, cancellationToken);
     }
 
@@ -232,8 +261,12 @@ internal sealed partial class JobController(
 
     public void ExecutionFailed(Exception exception)
     {
-        JobException error = new(_context, exception);
+        // Increment first: the snapshot attached to the JobException must describe the
+        // context *including* this failure (LastError is assigned afterwards on purpose —
+        // JobSnapshot.LastErrorMessage is documented as the previous failure).
         _context.FailedIterations++;
+
+        JobException error = new(_context, exception);
         _context.LastError = error;
         _retryOwed = false;
 
@@ -273,22 +306,76 @@ internal sealed partial class JobController(
         // the job continues; throwing means the configured action was applied
         // (abort job / stop all jobs / close application) and this job must stop.
         //
+        // The handler receives the ORIGINAL exception: retry/suppress already see it,
+        // and the wrapped JobException (with its ContextSnapshot) stays available as
+        // IJobContext.LastError.
+        //
         // A keyed (named) schedule registers its handler keyed: the job scope can resolve it
-        // because the schedule key was stamped onto the merged JobSettings. The resolution
-        // itself stays in the try: a handler whose factory throws must also abort this job.
+        // because the schedule key was stamped onto the merged JobSettings.
+        //
+        // Resolution is separated from handling: a handler whose *factory* throws cannot
+        // apply the policy at all, so the job is aborted (same contract as a throwing
+        // handler) but the failure is logged — otherwise the job just stops and nobody
+        // learns that the configured action was silently bypassed.
         string? scheduleKey = (settings as JobSettings)?.ScheduleKey;
+
+        // The run's scope is opened on the first execution (see EnsureExecutor). A failure
+        // that happens before that — a throwing timing, a failed pause gate — still has to
+        // apply the configured policy, so it gets a scope of its own for as long as the
+        // handling takes.
+        IServiceScope? transientScope = null;
+
+        if (_executor is null)
+        {
+            transientScope = scopeFactory.CreateScope();
+            _context.ServiceProvider = transientScope.ServiceProvider;
+        }
 
         try
         {
-            IJobErrorHandler? errorHandler = scheduleKey is null
-                ? _context.ServiceProvider.GetService<IJobErrorHandler>()
-                : _context.ServiceProvider.GetKeyedService<IJobErrorHandler>(scheduleKey);
+            IJobErrorHandler? errorHandler;
 
-            errorHandler?.HandleError(_context, error);
+            try
+            {
+                errorHandler = scheduleKey is null
+                    ? _context.ServiceProvider.GetService<IJobErrorHandler>()
+                    : _context.ServiceProvider.GetKeyedService<IJobErrorHandler>(scheduleKey);
+            }
+            catch (Exception ex)
+            {
+                LogErrorHandlerUnavailable(
+                    _context.Logger,
+                    _context.JobName,
+                    ex.GetType().Name,
+                    ex.Message);
+                _abortedByError = true;
+                return;
+            }
+
+            try
+            {
+                errorHandler?.HandleError(_context, exception);
+            }
+            catch
+            {
+                // DoHandleError always rethrows to signal "the configured action was applied".
+                _abortedByError = true;
+                return;
+            }
+
+            // The handler consumed the error and the job continues. The retry budget
+            // belongs to one failure, so it is reset here: leaving it at RetryCount would
+            // make every later failure skip its retries and go straight to the handler for
+            // the rest of the slot's life.
+            _context.FailedRetries = 0;
         }
-        catch
+        finally
         {
-            _abortedByError = true;
+            if (transientScope is not null)
+            {
+                _context.ServiceProvider = NullJobServices.Instance;
+                transientScope.Dispose();
+            }
         }
     }
 
@@ -305,6 +392,12 @@ internal sealed partial class JobController(
         Message = "[{JobName}] {FailedRetryAttempts} out of {RetryCount} reps when the job failed due to an error: {Type} “{Error}”")]
     static partial void LogFailedRetryAttempts(
         ILogger logger, string jobName, int failedRetryAttempts, int retryCount, string type, string error);
+
+    [LoggerMessage(
+        EventId = 403,
+        Level = LogLevel.Error,
+        Message = "[{JobName}] the job error handler could not be resolved — the configured error policy was NOT applied: {Type} “{Error}”")]
+    static partial void LogErrorHandlerUnavailable(ILogger logger, string jobName, string type, string error);
 
     public void Dispose() => Shutdown();
 }

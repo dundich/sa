@@ -33,14 +33,14 @@
 public static IPartConfiguration AddSaPartitional(
     this IServiceCollection services,
     Action<IServiceProvider, ISettingsBuilder> configure,
-    bool? AsBackgroundJob = null);
+    bool? asBackgroundJob = null);
 
 // Keyed — an independent module; every service of the module lives under `key`.
 public static IPartConfiguration AddSaPartitional(
     this IServiceCollection services,
     string key,
     Action<IServiceProvider, ISettingsBuilder> configure,
-    bool? AsBackgroundJob = null);
+    bool? asBackgroundJob = null);
 ```
 
 | Aspect | Keyless | Keyed |
@@ -105,8 +105,10 @@ public interface IPartitionManager
     /// <summary>
     /// Ensure a specific partition exists; create it if absent.
     /// Checks the in-memory cache first, falls back to direct DDL if needed.
+    /// Completes when the partition exists; failures surface as exceptions, so there is no result
+    /// to inspect (a cache miss is not a failure).
     /// </summary>
-    Task<bool> EnsureParts(
+    Task EnsureParts(
         string tableName,
         DateTimeOffset date,
         StrOrNum[] partValues,
@@ -123,7 +125,7 @@ public class MyService
 
     public MyService(IPartitionManager parts) => _parts = parts;
 
-    public async Task OnDataReceived(string tenant, DateTime now)
+    public async Task OnDataReceived(string tenant, DateTimeOffset now)
     {
         // Ensures partition for this tenant/date exists before writing data
         await _parts.EnsureParts("events", now, new StrOrNum[] { tenant });
@@ -166,6 +168,15 @@ public interface IPartRepository
     Task<int> DropPartsToDate(
         string tableName, DateTimeOffset toDate,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Detaches every partition whose FromDate ≤ <paramref name="toDate"/> and moves it, under the
+    /// same name, into <paramref name="archiveSchemaName"/> (created when missing). Its cache row is
+    /// marked archived instead of being deleted, so a repeated run is a no-op. PostgreSQL 13+.
+    /// </summary>
+    Task<int> ArchivePartsToDate(
+        string tableName, DateTimeOffset toDate, string archiveSchemaName,
+        CancellationToken cancellationToken = default);
 }
 ```
 
@@ -186,8 +197,10 @@ public interface IMigrationService
     Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Waits synchronously (up to timeout) for an in-flight migration to complete.
-    /// Returns immediately if migration has already finished.
+    /// Waits asynchronously (up to <paramref name="timeout"/>) for an in-flight migration to
+    /// complete. Returns <c>true</c> immediately when a migration has already completed - the signal
+    /// is one-shot, so it answers "has a migration ever completed". A timeout or a cancelled
+    /// <paramref name="cancellationToken"/> returns <c>false</c> rather than throwing.
     /// </summary>
     Task<bool> WaitMigration(TimeSpan timeout, CancellationToken cancellationToken = default);
 }
@@ -206,6 +219,12 @@ public interface IPartCleanupService
     /// <summary>Drops all partitions with FromDate ≤ <paramref name="toDate"/>.</summary>
     Task<int> Clean(DateTimeOffset toDate, CancellationToken cancellationToken);
 }
+
+`Clean` follows `PartCleanupScheduleSettings.CleanupMode`: `Drop` deletes the partitions, `Archive`
+detaches them and moves them into `PartCleanupScheduleSettings.ArchiveSchemaName` (see
+`IPartRepository.ArchivePartsToDate`). Either way the in-memory partition cache is **not** invalidated
+by a manual call, so the change becomes visible only after `PartCacheSettings.CacheTtl` - prefer the
+scheduled job when the same process must see it immediately.
 ```
 
 ## Internal Components

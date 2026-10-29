@@ -4,11 +4,8 @@ internal sealed class MetadataConfiguration : IOutboxMessageMetadataBuilder, IOu
 {
     private readonly Dictionary<Type, OutboxMessageMetadata> _metadata = [];
 
-    private static readonly Func<object, string> s_Dummy = _ => string.Empty;
-
 
     public IOutboxMessageMetadataBuilder AddMetadata<T>(string partName, Func<T, string>? getPayloadId = null)
-        where T : class
     {
         if (string.IsNullOrWhiteSpace(partName))
         {
@@ -17,15 +14,9 @@ internal sealed class MetadataConfiguration : IOutboxMessageMetadataBuilder, IOu
                 nameof(partName));
         }
 
-        var messageType = typeof(T);
-
-        Func<object, string> payloadIdGetter = getPayloadId != null
-            ? obj => getPayloadId((T)obj)
-            : s_Dummy;
-
-        _metadata[messageType] = new OutboxMessageMetadata(
-            PartName: partName,
-            GetPayloadId: payloadIdGetter);
+        // Keep the typed delegate: wrapping it in Func<object, string> boxed a value T on every
+        // publish. A null means "use the IOutboxPublishable fallback", resolved by the metadata.
+        _metadata[typeof(T)] = new OutboxMessageMetadata(partName, getPayloadId);
 
         return this;
     }

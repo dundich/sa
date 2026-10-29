@@ -8,6 +8,12 @@ namespace Sa.Media.Echo;
 internal static class WavIO
 {
     /// <summary>
+    /// Верхний предел для загрузки записи в память: 100 M кадров = 200 M float = ~800 МБ.
+    /// Совпадает по порядку с HardInMemorySamples линейного режима.
+    /// </summary>
+    private const long MaxInMemoryFrames = 100_000_000;
+
+    /// <summary>
     /// Читает стерео WAV в массив <see cref="float"/>, арендованный у <see cref="ArrayPool{T}"/>.
     /// Возвращает также фактическое число заполненных элементов (чётное: L,R пары).
     /// При успехе владение буфером передаётся вызывающему, который обязан вернуть его в пул:
@@ -19,20 +25,35 @@ internal static class WavIO
         await using AsyncWavReader reader = AsyncWavReader.CreateFromFile(path);
         var header = await reader.GetHeaderAsync(ct);
 
-        int frameCount = (int)(header.DataSize / 4);
-        float[] interleaved = ArrayPool<float>.Shared.Rent(frameCount * 2);
+        // data size == 0xFFFFFFFF (потоковая запись) раньше давал (int)(uint.MaxValue / 4)
+        // кадров и рент на ~8 ГБ; для файла >2 ГиБ — переполнение frameCount * 2.
+        long dataSize = header.ResolveDataSize(new FileInfo(path).Length);
+        if (dataSize <= 0)
+            throw new InvalidDataException($"Cannot determine the size of the WAV data in '{path}'.");
+
+        long frameCount = dataSize / 4;
+        if (frameCount > MaxInMemoryFrames)
+            throw new NotSupportedException(
+                $"Recording is too long for in-memory processing ({frameCount:N0} frames > {MaxInMemoryFrames:N0}). " +
+                "Use CrossFeedSeparator.ProcessingMode.MinimumMemory instead.");
+
+        int frames = (int)frameCount;
+        float[] interleaved = ArrayPool<float>.Shared.Rent(frames * 2);
 
         try
         {
             int idx = 0;
 
-            await foreach (var packet in reader.ReadDoubleSamplesAsync(allowBufferReuse: true, cancellationToken: ct)
+            await foreach (var packet in reader
+                .ReadFloatSamplesAsync(cancellationToken: ct)
                 .WithCancellation(ct))
             {
+                if (idx >= frames) break;
+
                 if (packet.ChannelId == 0)
-                    interleaved[idx * 2] = (float)packet.Sample;
+                    interleaved[idx * 2] = packet.Sample;
                 else
-                    interleaved[idx * 2 + 1] = (float)packet.Sample;
+                    interleaved[idx * 2 + 1] = packet.Sample;
                 if (packet.ChannelId == 1) idx++;
             }
 

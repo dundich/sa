@@ -86,4 +86,38 @@ public static class PgDataSourceResolver
             " in the service collection. Register one with AddSaPostgreSqlDataSource(...), " +
             "AddNpgsqlDataSource(...), or services.AddSingleton<NpgsqlDataSource>(...).");
     }
+
+    /// <summary>
+    /// Tries to resolve the data source for an optional key, without throwing when the container
+    /// simply has none.
+    /// </summary>
+    /// <remarks>
+    /// Exists for callers that treat a missing source as "not configured yet" rather than as an
+    /// error — a schema default, for instance, when the same registration is also used without a
+    /// database (unit tests, a design-time tool). A <em>registered</em> source is still returned
+    /// through its normal factory, so its own failures (such as options validation) surface exactly
+    /// as they do from <see cref="Resolve"/>.
+    /// </remarks>
+    /// <param name="serviceProvider">The service provider to resolve from.</param>
+    /// <param name="key">The key of the consumer's own data source, or <c>null</c>/empty for the default one.</param>
+    /// <param name="dataSource">The resolved source, or <c>null</c> when the container has none.</param>
+    /// <returns><see langword="true"/> when a source was resolved.</returns>
+    public static bool TryResolve(IServiceProvider serviceProvider, string? key, out IPgDataSource? dataSource)
+    {
+        ArgumentNullException.ThrowIfNull(serviceProvider);
+
+        try
+        {
+            dataSource = Resolve(serviceProvider, key);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            // Resolve throws exactly this when neither an IPgDataSource nor an NpgsqlDataSource is
+            // registered. A failure inside a registered factory is a different type (options
+            // validation, connection-string parsing), so it is not swallowed here.
+            dataSource = null;
+            return false;
+        }
+    }
 }

@@ -10,7 +10,6 @@
 - [Формат File ID](#формат-file-id)
 - [Установка](#установка)
 - [Быстрый старт](#быстрый-старт)
-  - [Без DI](#без-di)
   - [С DI](#с-di)
 - [Примеры CRUD](#примеры-crud)
 - [Партиционирование](#партиционирование)
@@ -161,6 +160,8 @@ builder.Services.AddSaPostgreSqlFileStorage("files", b => b
 | `StorageType` длиннее 10 символов или содержит `:`, `/`, `\` (становится схемой file ID) | `OptionsValidationException` |
 | `Basket` вне 3–63 символов, не начинается с буквы/`_`, или содержит разделитель пути | `OptionsValidationException` |
 | `ExpireDays`, `MigrationScheduleForwardDays` `< 1` | `OptionsValidationException` |
+| `MaxUploadSizeBytes` `< 0` | `OptionsValidationException` |
+| `FileName` длиннее 512 символов или содержит NUL-байт | `ArgumentException` при загрузке |
 | Две регистрации объявляют один и тот же `TableName` | `OptionsValidationException`, называющий оба ключа |
 | Повторная регистрация с тем же **ключом** | `InvalidOperationException` на регистрации |
 | `key` null/пуст/пробелы | `ArgumentException` на регистрации |
@@ -197,6 +198,10 @@ var result = await storage.UploadAsync(
 
 // Внутренне: скопирован → буферизован → upsert → буфер перезапущен
 ```
+
+> Поток целиком буферизуется в памяти перед записью (Npgsql нужна длина заранее). Задайте
+> `MaxUploadSizeBytes`, чтобы ограничить это выделение — слишком большая загрузка отклоняется
+> `InvalidOperationException`, строка не пишется.
 
 ### Скачивание в память
 
@@ -235,6 +240,13 @@ if (metadata != null)
 }
 ```
 
+`null` означает, что строки нет (удалена или файл никогда не загружался): значения читаются из
+таблицы, а не восстанавливаются из File ID. Парсируемый ID сам по себе файлом не является.
+
+То же и до первой записи: таблица создаётся первой загрузкой или расписанием миграции, поэтому
+чтение до этого отвечает «не найдено» — `DownloadAsync`/`DeleteAsync` возвращают `false`,
+`GetMetadataAsync` — `null`, а не `42P01`.
+
 ### Удаление
 
 ```csharp
@@ -256,7 +268,7 @@ bool deleted = await storage.DeleteAsync(result.FileId, ct);
 Провайдер использует `Sa.Partitional.PostgreSql` для управления партициями:
 
 ```sql
--- Автоматически созданная структура таблицы:
+-- Автоматически созданная структура таблицы (сокращённо):
 CREATE TABLE public.files (
     id         TEXT NOT NULL,
     name       VARCHAR(512) NOT NULL,
@@ -265,11 +277,19 @@ CREATE TABLE public.files (
     tenant_id  INT NOT NULL,
     basket     VARCHAR(63) NOT NULL,
     data       BYTEA NOT NULL,
-    created_at BIGINT NOT NULL       -- ключ range-партиционирования, Unix seconds
-) PARTITION BY RANGE (created_at);
+    created_at BIGINT NOT NULL,       -- ключ range-партиционирования, Unix seconds (UTC-полночь дня загрузки)
+    CONSTRAINT pk_files PRIMARY KEY (id, tenant_id, basket, created_at)
+) PARTITION BY LIST (tenant_id);
 
--- Каждая пара (tenant_id, basket) получает собственную list-партию внутри каждого диапазона дат
+-- Дерево вложенное, а не две независимые стратегии:
+--   PARTITION BY LIST (tenant_id)  →  PARTITION BY LIST (basket)  →  PARTITION BY RANGE (created_at)
+-- Поэтому каждая пара (tenant_id, basket) получает собственный набор партиций по датам.
 ```
+
+> Каждый тенант (и бакет) получает собственный набор партиций по датам, поэтому дефолтные
+> `PartByRange.Day` и `ExpireDays = 365 * 3` держат около 1095 листовых партиций на тенанта.
+> При большом числе тенантов выбирайте `PartByRange.Month`/`Year` или меньший срок хранения —
+> количество партиций и есть операционная цена этой схемы.
 
 ### Стратегии партиционирования
 
@@ -327,6 +347,7 @@ opts.ExpireDays = 365 * 3;  // удалять партиции старше 3 л
 | `PartByRange` | Гранулярность range-партиционирования | `PartByRange.Day` |
 | `MigrationScheduleForwardDays` | Дней заранее для предсоздания партиций | `2` |
 | `ExpireDays` | Период удержания перед удалением партиции (дни) | `365 * 3` |
+| `MaxUploadSizeBytes` | Максимальный размер загрузки в байтах; `0` — без лимита | `0` |
 
 ### Методы регистрации
 

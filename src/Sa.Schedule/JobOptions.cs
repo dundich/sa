@@ -1,70 +1,70 @@
 namespace Sa.Schedule;
 
 /// <summary>
-/// Параметры одной задачи из <see cref="ScheduleOptions.Jobs"/>.
-/// Все свойства nullable: «свойства нет в конфигурации» — значит «не переопределяется»,
-/// задача остаётся в той конфигурации, в какой она описана в коде.
+/// Options of a single job from <see cref="ScheduleOptions.Jobs"/>.
+/// Every property is nullable: "the property is absent from configuration" means
+/// "not overridden" — the job keeps the configuration it was registered with in code.
 /// </summary>
 public class JobOptions
 {
     /// <summary>
-    /// Включить или отключить задачу. Переопределяет <c>Disable()</c> из кода в обе
-    /// стороны: <c>false</c> включает задачу, отключённую в коде.
+    /// Enables or disables the job. Overrides <c>Disable()</c> from code in both
+    /// directions: <c>false</c> enables a job that was disabled in code.
     /// </summary>
     public bool? Disabled { get; set; }
 
     /// <summary>
-    /// Запустить задачу сразу, на первом тике планировщика, не дожидаясь тайминга.
-    /// Переопределяет <c>StartImmediate()</c> из кода в обе стороны: <c>false</c> отменяет
-    /// immediate-запуск, включённый в коде.
+    /// Runs the job immediately on the scheduler's first tick, without waiting for its
+    /// timing. Overrides <c>StartImmediate()</c> from code in both directions: <c>false</c>
+    /// cancels an immediate run enabled in code.
     /// </summary>
     public bool? Immediate { get; set; }
 
     /// <summary>
-    /// Выполнить задачу ровно один раз: после первого прогона планировщик её больше
-    /// не запускает. Переопределяет <c>RunOnce()</c> из кода в обе стороны: <c>false</c>
-    /// возвращает задачу к периодическому расписанию.
+    /// Runs the job exactly once: after the first run the scheduler never starts it again.
+    /// Overrides <c>RunOnce()</c> from code in both directions: <c>false</c> returns the job
+    /// to its periodic schedule.
     /// </summary>
     public bool? IsRunOnce { get; set; }
 
     /// <summary>
-    /// Cron-выражение (стандартные 5 полей) — заменяет любой тайминг из кода.
-    /// Взаимоисключается с <see cref="Every"/>: заданы оба — ошибка валидации.
-    /// Пробелы по краям допустимы — парсер тримит выражение.
+    /// A cron expression (standard 5 fields) — replaces any timing set in code.
+    /// Mutually exclusive with <see cref="Every"/>: setting both is a validation error.
+    /// Surrounding whitespace is allowed — the parser trims the expression.
     /// </summary>
     public string? Cron { get; set; }
 
     /// <summary>
-    /// Интервал выполнения — заменяет любой тайминг из кода. Формат <c>TimeSpan</c>
-    /// константной формы, например <c>00:05:00</c>. Должен быть больше нуля.
+    /// The execution interval — replaces any timing set in code. Uses the constant
+    /// <c>TimeSpan</c> form, for example <c>00:05:00</c>. Must be greater than zero.
     /// </summary>
     public TimeSpan? Every { get; set; }
 
     /// <summary>
-    /// Часовой пояс, в котором читается <see cref="Cron"/>: cron-выражение приобретает смысл
-    /// «стенных часов» этой зоны ("0 9 * * *" — это 9:00 там, где вы живёте), а не UTC.
-    /// Заменяет <c>WithTimeZone()</c> из кода; если у задачи нет своего <c>TimeZone</c>,
-    /// применяется <see cref="ScheduleOptions.TimeZone"/> — общий для всего планировщика.
-    /// Id — IANA ("Europe/Moscow") или Windows ("Russian Standard Time"); .NET 8+ понимает
-    /// оба. Интервалы (<see cref="Every"/>) смена часового пояса не касается.
+    /// The time zone the job's <see cref="Cron"/> is read in: the expression acquires the
+    /// meaning of that zone's wall clock ("0 9 * * *" is 09:00 where you live), not UTC.
+    /// Replaces <c>WithTimeZone()</c> from code; when the job has no <c>TimeZone</c> of its
+    /// own, <see cref="ScheduleOptions.TimeZone"/> (scheduler-wide) applies.
+    /// Id is either IANA ("Europe/Moscow") or Windows ("Russian Standard Time"); .NET 8+
+    /// understands both. Intervals (<see cref="Every"/>) are unaffected by the time zone.
     /// </summary>
     public string? TimeZone { get; set; }
 
     /// <summary>
-    /// Задержка перед первым запуском. Формат <c>TimeSpan</c> константной формы, например
-    /// <c>00:00:30</c>. Не может быть отрицательной.
+    /// Delay before the first run. Uses the constant <c>TimeSpan</c> form, for example
+    /// <c>00:00:30</c>. Must not be negative.
     /// </summary>
     public TimeSpan? InitialDelay { get; set; }
 
     /// <summary>
-    /// Сколько слотов задачи активно работают в любой момент. Не может быть отрицательным.
-    /// Если значение больше <see cref="MaxConcurrency"/>, планировщик обрезает его до
+    /// How many slots of the job are active at any moment. Must not be negative.
+    /// When greater than <see cref="MaxConcurrency"/>, the scheduler clamps it down to
     /// <see cref="MaxConcurrency"/>.
     /// </summary>
     public int? ConcurrencyLimit { get; set; }
 
     /// <summary>
-    /// Абсолютный максимум зарезервированных слотов задачи. Должен быть не меньше 1.
+    /// The absolute maximum number of slots allocated for the job. Must be at least 1.
     /// </summary>
     public int? MaxConcurrency { get; set; }
 }

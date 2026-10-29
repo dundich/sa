@@ -12,7 +12,7 @@ internal sealed class DeliveryJobInterceptor(IMigrationService migrationService)
         CancellationToken cancellationToken)
     {
         if (!migrationService.OnMigrated.IsCancellationRequested
-            && context.Settings.JobType.Name.StartsWith("DeliveryJob"))
+            && context.Settings.JobType.Name.StartsWith("DeliveryJob", StringComparison.Ordinal))
         {
             return;
         }

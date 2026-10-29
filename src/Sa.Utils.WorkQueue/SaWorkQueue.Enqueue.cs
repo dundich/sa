@@ -20,8 +20,9 @@ public sealed partial class SaWorkQueue<TInput>
     public async ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default)
     {
         ThrowIfNotActive();
+        ThrowIfDetachedAndCancelled(cancellationToken);
 
-        var item = new WorkItem(input, cancellationToken);
+        var item = new WorkItem(input, ItemToken(cancellationToken));
 
         if (_enqueueStrategy != SaEnqueueStrategy.Wait)
         {
@@ -42,6 +43,7 @@ public sealed partial class SaWorkQueue<TInput>
     /// <inheritdoc />
     public async ValueTask<int> EnqueueMany(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(inputs);
         ThrowIfNotActive();
 
         var accepted = 0;
@@ -49,8 +51,13 @@ public sealed partial class SaWorkQueue<TInput>
 
         foreach (var input in inputs)
         {
+            // Detached mode rejects an already-cancelled item before acceptance, so a
+            // cancellation that arrives mid-batch stops the batch instead of being
+            // silently ignored for every remaining item.
+            ThrowIfDetachedAndCancelled(cancellationToken);
+
             attempted++;
-            var item = new WorkItem(input, cancellationToken);
+            var item = new WorkItem(input, ItemToken(cancellationToken));
 
             if (_enqueueStrategy == SaEnqueueStrategy.Wait)
             {
@@ -191,4 +198,27 @@ public sealed partial class SaWorkQueue<TInput>
         => attempted is null
             ? new SaWorkQueueFullException(_queueCapacity, _queue.Reader.Count, _getItemDisplayName(item.Input))
             : new SaWorkQueueFullException(_queueCapacity, _queue.Reader.Count, accepted!.Value, attempted.Value);
+
+    /// <summary>
+    /// The token stored with an accepted item. In
+    /// <see cref="SaProducerCancellationMode.Detached"/> mode it is deliberately
+    /// <see langword="default"/>: the reader then sees a token it cannot link, skips the
+    /// per-item <see cref="CancellationTokenSource"/> entirely, and the item runs to a
+    /// terminal status. The producer's token still controls the channel write itself.
+    /// </summary>
+    private CancellationToken ItemToken(CancellationToken producerToken)
+        => _producerCancellation == SaProducerCancellationMode.Observe ? producerToken : default;
+
+    /// <summary>
+    /// In <see cref="SaProducerCancellationMode.Detached"/> mode, rejects an item whose
+    /// token is already cancelled. Once accepted, that token is no longer observed, so
+    /// this is the only point at which it can still prevent the work.
+    /// </summary>
+    private void ThrowIfDetachedAndCancelled(CancellationToken producerToken)
+    {
+        if (_producerCancellation == SaProducerCancellationMode.Detached)
+        {
+            producerToken.ThrowIfCancellationRequested();
+        }
+    }
 }

@@ -1,13 +1,16 @@
 ﻿namespace Sa.Schedule.Cron;
 
 /// <summary>
-/// Implements cron-based scheduling using standard 5-field cron expressions.
+/// Implements cron-based scheduling using 5-field cron expressions
+/// ("minute hour day-of-month month day-of-week") and the 6-field form that adds a
+/// leading seconds field ("second minute hour day-of-month month day-of-week") — the
+/// format is detected by the field count.
 /// When both day-of-month and day-of-week are restricted, a day matches when
 /// either field matches (standard vixie-cron OR semantics).
 /// The next occurrence is searched within a 28-year horizon — the full Gregorian
-/// day-of-week cycle — so every satisfiable 5-field expression is found; null means
+/// day-of-week cycle — so every satisfiable expression is found; null means
 /// the expression can never match (e.g. February 30).
-/// Optimized with O(1) membership tests and precomputed jump tables (.NET 8–10).
+/// Optimized with O(1) membership tests and precomputed jump tables.
 /// </summary>
 public sealed class CronTiming
 {
@@ -16,23 +19,34 @@ public sealed class CronTiming
     /// <summary>
     /// Search horizon in years. 28 years = 10,227 days = exactly 1,461 weeks — the full
     /// Gregorian date→day-of-week cycle (non-century years) — so any satisfiable
-    /// 5-field expression fires within this window.
+    /// expression fires within this window.
     /// </summary>
     private const int MaxSearchYears = 28;
 
+    /// <summary>
+    /// First year in which the 28-year window is no longer guaranteed to fit: a
+    /// <see cref="DateTimeOffset"/> cannot represent a local value past 9999-12-31, so from
+    /// this year on the horizon (or the one-minute step) could overflow for some offsets.
+    /// The search ends with a null there instead of throwing.
+    /// </summary>
+    private const int LastSearchableYear = 9999 - MaxSearchYears;
+
     // Flag arrays for O(1) membership checks
-    private readonly bool[] _minuteFlags = new bool[60];
-    private readonly bool[] _hourFlags = new bool[24];
-    private readonly bool[] _domFlags = new bool[32];   // index 1..31
-    private readonly bool[] _monthFlags = new bool[13];   // index 1..12
-    private readonly bool[] _dowFlags = new bool[7];    // 0=Sunday..6=Saturday
+    private readonly bool[] _secondFlags = new bool[CronLimits.SecondMax + 1];
+    private readonly bool[] _minuteFlags = new bool[CronLimits.MinuteMax + 1];
+    private readonly bool[] _hourFlags = new bool[CronLimits.HourMax + 1];
+    private readonly bool[] _domFlags = new bool[CronLimits.DayOfMonthMax + 1];  // index 1..31
+    private readonly bool[] _monthFlags = new bool[CronLimits.MonthMax + 1];     // index 1..12
+    private readonly bool[] _dowFlags = new bool[CronLimits.DayOfWeekCount];     // 0=Sunday..6=Saturday
 
     // Lookup tables: next valid value >= index (sentinel = -1)
-    private readonly int[] _nextMinute = new int[61];
-    private readonly int[] _nextHour = new int[25];
-    private readonly int[] _nextMonth = new int[14];
+    private readonly int[] _nextSecond = new int[CronLimits.SecondMax + 2];
+    private readonly int[] _nextMinute = new int[CronLimits.MinuteMax + 2];
+    private readonly int[] _nextHour = new int[CronLimits.HourMax + 2];
+    private readonly int[] _nextMonth = new int[CronLimits.MonthMax + 2];
 
     // First valid value in each field (used as default when jumping)
+    private readonly int _firstSecond;
     private readonly int _firstMinute;
 
     private readonly int _firstMonth;
@@ -44,16 +58,14 @@ public sealed class CronTiming
     private readonly bool _domHasSpecials;
     private readonly bool _domLastDay;
     private readonly bool _domLastWeekday;
-    private readonly bool[] _domLastDayOffsets = new bool[MaxLastDayOffset + 1];
+    private readonly bool[] _domLastDayOffsets = new bool[CronLimits.MaxLastDayOffset + 1];
 
     // "dW" — usually a single entry, matched against the real calendar of the candidate day
     private readonly int[] _nearestWeekdays;
 
     // Day-of-week special: "dL" — the last d-weekday of the month
     private readonly bool _dowHasSpecials;
-    private readonly bool[] _dowLastOfMonth = new bool[7];
-
-    private const int MaxLastDayOffset = 30;
+    private readonly bool[] _dowLastOfMonth = new bool[CronLimits.DayOfWeekCount];
 
     public string TimingName { get; }
 
@@ -63,7 +75,9 @@ public sealed class CronTiming
     public string Expression { get; }
 
     /// <summary>
-    /// Creates a cron timing from a 5-field expression: "minute hour day-of-month month day-of-week".
+    /// Creates a cron timing from a 5-field expression
+    /// ("minute hour day-of-month month day-of-week") or from the 6-field form with a
+    /// leading seconds field ("second minute hour day-of-month month day-of-week").
     /// </summary>
     /// <param name="expression">The cron expression.</param>
     /// <param name="name">Optional display name, defaults to "cron".</param>
@@ -83,28 +97,50 @@ public sealed class CronTiming
 
         var fields = SplitExpression(expression);
 
-        var minute = CronFieldParser.Parse(fields[(int)CronFieldKind.Minute], CronFieldKind.Minute);
-        var hour = CronFieldParser.Parse(fields[(int)CronFieldKind.Hour], CronFieldKind.Hour);
-        var dayOfMonth = CronFieldParser.Parse(fields[(int)CronFieldKind.DayOfMonth], CronFieldKind.DayOfMonth);
-        var month = CronFieldParser.Parse(fields[(int)CronFieldKind.Month], CronFieldKind.Month);
-        var dayOfWeek = CronFieldParser.Parse(fields[(int)CronFieldKind.DayOfWeek], CronFieldKind.DayOfWeek);
+        // Field positions depend on the format: a 6-field expression starts with seconds.
+        int next = 0;
+        var second = fields.Length == 6
+            ? CronFieldParser.Parse(fields[next++], CronFieldKind.Second)
+            : null;
+
+        var minute = CronFieldParser.Parse(fields[next++], CronFieldKind.Minute);
+        var hour = CronFieldParser.Parse(fields[next++], CronFieldKind.Hour);
+        var dayOfMonth = CronFieldParser.Parse(fields[next++], CronFieldKind.DayOfMonth);
+        var month = CronFieldParser.Parse(fields[next++], CronFieldKind.Month);
+        var dayOfWeek = CronFieldParser.Parse(fields[next], CronFieldKind.DayOfWeek);
 
         _nearestWeekdays = dayOfMonth.NearestWeekdays;
 
+        // Second — a 5-field expression only ever fires on the minute boundary, which is
+        // simply "second 0", so both formats share one search path.
+        if (second is not null)
+        {
+            PopulateFlags(second.Values, _secondFlags);
+        }
+        else
+        {
+            _secondFlags[0] = true;
+        }
+
+        _firstSecond = BuildNextTable(
+            _secondFlags, _nextSecond, CronLimits.SecondMin, CronLimits.SecondMax);
+
         // Minute
         PopulateFlags(minute.Values, _minuteFlags);
-        _firstMinute = BuildNextTable(_minuteFlags, _nextMinute, 0, 59);
+        _firstMinute = BuildNextTable(
+            _minuteFlags, _nextMinute, CronLimits.MinuteMin, CronLimits.MinuteMax);
 
         // Hour
         PopulateFlags(hour.Values, _hourFlags);
-        BuildNextTable(_hourFlags, _nextHour, 0, 23);
+        BuildNextTable(_hourFlags, _nextHour, CronLimits.HourMin, CronLimits.HourMax);
 
         // Day-of-month (no jump table needed, only flags)
         PopulateFlags(dayOfMonth.Values, _domFlags);
 
         // Month
         PopulateFlags(month.Values, _monthFlags);
-        _firstMonth = BuildNextTable(_monthFlags, _nextMonth, 1, 12);
+        _firstMonth = BuildNextTable(
+            _monthFlags, _nextMonth, CronLimits.MonthMin, CronLimits.MonthMax);
 
         // Day-of-week
         PopulateFlags(dayOfWeek.Values, _dowFlags);
@@ -124,8 +160,10 @@ public sealed class CronTiming
             _dowLastOfMonth[day] = true;
 
         // Wildcard detection — a field that restricts days through a special is never a wildcard
-        _dowWildcard = !_dowHasSpecials && AreAllFlagsSet(_dowFlags, 0, 6);
-        _domWildcard = !_domHasSpecials && AreAllFlagsSet(_domFlags, 1, 31);
+        _dowWildcard = !_dowHasSpecials
+            && AreAllFlagsSet(_dowFlags, CronLimits.DayOfWeekMin, CronLimits.DayOfWeekCount - 1);
+        _domWildcard = !_domHasSpecials
+            && AreAllFlagsSet(_domFlags, CronLimits.DayOfMonthMin, CronLimits.DayOfMonthMax);
 
         // A restricted day-of-week makes every day match on its own, so the calendar
         // combination of day-of-month and month is irrelevant in that case.
@@ -134,9 +172,16 @@ public sealed class CronTiming
     }
 
     /// <summary>
-    /// Creates a cron timing with the given expression and display name.
+    /// Creates a cron timing from a 5- or 6-field expression — the lenient counterpart of
+    /// <see cref="Strict"/>: malformed syntax throws, but an expression that can never fire
+    /// is accepted and simply makes <see cref="GetNextOccurrence"/> return <c>null</c>.
+    /// Equivalent to calling the constructor.
     /// </summary>
-    public static CronTiming Every(string expression, string? name = null) =>
+    /// <param name="expression">The cron expression.</param>
+    /// <param name="name">Optional display name, defaults to "cron".</param>
+    /// <exception cref="ArgumentNullException"><paramref name="expression"/> is null.</exception>
+    /// <exception cref="CronParseException">The expression is malformed.</exception>
+    public static CronTiming For(string expression, string? name = null) =>
         new(expression, name);
 
     /// <summary>
@@ -156,10 +201,30 @@ public sealed class CronTiming
     public static CronTiming Strict(string expression, string? name = null) =>
         new(expression, name, strictCalendarValidation: true);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Computes the first occurrence strictly after <paramref name="dateTime"/>, truncated to
+    /// the resolution of the expression: the second for a 6-field expression, the minute for
+    /// a 5-field one (which only ever fires on second 0).
+    /// </summary>
+    /// <param name="dateTime">The current instant; the search is exclusive.</param>
+    /// <returns>
+    /// The next occurrence, or <c>null</c> when the expression can never match — or when
+    /// <paramref name="dateTime"/> is too close to the end of the representable range
+    /// (year 9971 and later) for the one-minute step and the 28-year horizon to fit a
+    /// <see cref="DateTimeOffset"/>.
+    /// </returns>
     public DateTimeOffset? GetNextOccurrence(DateTimeOffset dateTime)
     {
-        var candidate = TruncateToMinute(dateTime.AddMinutes(1));
+        // A DateTimeOffset cannot hold a local value past 9999-12-31, and both the +1 minute
+        // start and the 28-year horizon are constructed as DateTimeOffset values. Inside the
+        // final window there is nothing to search: report "no next occurrence" (which the
+        // caller already handles) instead of throwing ArgumentOutOfRangeException.
+        if (dateTime.Year >= LastSearchableYear)
+            return null;
+
+        // One shared path: for a 5-field expression the only valid second is 0, so stepping
+        // to the next second and letting Matches reject it lands on the next minute anyway.
+        var candidate = TruncateToSecond(dateTime.AddSeconds(1));
         var maxSearch = dateTime.AddYears(MaxSearchYears);
 
         while (candidate <= maxSearch)
@@ -175,7 +240,8 @@ public sealed class CronTiming
         _monthFlags[dt.Month] &&
         MatchDay(dt) &&
         _hourFlags[dt.Hour] &&
-        _minuteFlags[dt.Minute];
+        _minuteFlags[dt.Minute] &&
+        _secondFlags[dt.Second];
 
     private bool MatchDay(DateTimeOffset dt)
     {
@@ -258,25 +324,34 @@ public sealed class CronTiming
 
     private DateTimeOffset Advance(DateTimeOffset dt, DateTimeOffset horizon)
     {
-        // 1. Try later minute this hour
+        // 1. Try a later second in this minute
+        int nextSec = dt.Second + 1;
+        if (nextSec <= CronLimits.SecondMax)
+        {
+            int s = _nextSecond[nextSec];
+            if (s != -1)
+                return new DateTimeOffset(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, s, dt.Offset);
+        }
+
+        // 2. Try a later minute this hour (with the first valid second)
         int nextMin = dt.Minute + 1;
-        if (nextMin <= 59)
+        if (nextMin <= CronLimits.MinuteMax)
         {
             int m = _nextMinute[nextMin];
             if (m != -1)
-                return new DateTimeOffset(dt.Year, dt.Month, dt.Day, dt.Hour, m, 0, dt.Offset);
+                return new DateTimeOffset(dt.Year, dt.Month, dt.Day, dt.Hour, m, _firstSecond, dt.Offset);
         }
 
-        // 2. Try later hour today (with first valid minute)
+        // 3. Try a later hour today (with the first valid minute and second)
         int nextH = dt.Hour + 1;
-        if (nextH <= 23)
+        if (nextH <= CronLimits.HourMax)
         {
             int h = _nextHour[nextH];
             if (h != -1)
-                return new DateTimeOffset(dt.Year, dt.Month, dt.Day, h, _firstMinute, 0, dt.Offset);
+                return new DateTimeOffset(dt.Year, dt.Month, dt.Day, h, _firstMinute, _firstSecond, dt.Offset);
         }
 
-        // 3. Jump to tomorrow and search forward up to the horizon
+        // 4. Jump to tomorrow and search forward up to the horizon
         var nextDay = new DateTimeOffset(dt.Year, dt.Month, dt.Day, 0, 0, 0, dt.Offset).AddDays(1);
         return FindEarliestOnOrAfter(nextDay, horizon);
     }
@@ -320,12 +395,15 @@ public sealed class CronTiming
             // First valid minute in that hour
             int minute = _nextMinute[current.Minute];
             if (minute != -1)
-                return new DateTimeOffset(current.Year, current.Month, current.Day, hour, minute, 0, current.Offset);
+                return new DateTimeOffset(
+                    current.Year, current.Month, current.Day, hour, minute, _firstSecond, current.Offset);
 
             // No minute at this hour → try next valid hour
             int nextHour = _nextHour[hour + 1];
             if (nextHour != -1)
-                return new DateTimeOffset(current.Year, current.Month, current.Day, nextHour, _firstMinute, 0, current.Offset);
+                return new DateTimeOffset(
+                    current.Year, current.Month, current.Day,
+                    nextHour, _firstMinute, _firstSecond, current.Offset);
 
             current = current.AddDays(1);
         }
@@ -337,8 +415,8 @@ public sealed class CronTiming
         return horizon;
     }
 
-    private static DateTimeOffset TruncateToMinute(DateTimeOffset dt) =>
-        new(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0, dt.Offset);
+    private static DateTimeOffset TruncateToSecond(DateTimeOffset dt) =>
+        new(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Offset);
 
     // -------------------------------------------------------
     // Strict calendar validation
@@ -353,7 +431,8 @@ public sealed class CronTiming
     {
         foreach (int m in month.Values)
         {
-            if (m is >= 1 and <= 12 && CanMatchDay(dayOfMonth, MaxDaysInMonth(m)))
+            if (m >= CronLimits.MonthMin && m <= CronLimits.MonthMax
+                && CanMatchDay(dayOfMonth, MaxDaysInMonth(m)))
                 return;
         }
 
@@ -405,8 +484,14 @@ public sealed class CronTiming
     {
         foreach (int value in values)
         {
-            if ((uint)value < (uint)flags.Length)
-                flags[value] = true;
+            // The parser validates the range before any value reaches this point, so an
+            // out-of-range index means the field bounds and the lookup table sizes have
+            // drifted apart — fail loudly instead of silently dropping the value.
+            if ((uint)value >= (uint)flags.Length)
+                throw new ArgumentOutOfRangeException(
+                    nameof(values), value, "Cron field value is outside its lookup table.");
+
+            flags[value] = true;
         }
     }
 
@@ -447,9 +532,12 @@ public sealed class CronTiming
 
         var fields = expression.Trim().Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
 
-        if (fields.Length != 5)
+        // The format is detected by the field count: 5 fields start at the minute, 6 fields
+        // start at the second. There is no year field — 7 fields is an error.
+        if (fields.Length is not (5 or 6))
             throw new CronParseException(
-                $"Cron expression must have exactly 5 fields, got {fields.Length}.", "expression", expression);
+                "Cron expression must have 5 fields (minute through day-of-week) or 6 fields " +
+                $"(second through day-of-week), got {fields.Length}.", "expression", expression);
 
         return fields;
     }

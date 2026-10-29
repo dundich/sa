@@ -15,7 +15,7 @@ public interface IOutboxMessageMetadataBuilder
     /// <returns>The same <see cref="IOutboxMessageMetadataBuilder"/> instance for chaining.</returns>
     IOutboxMessageMetadataBuilder AddMetadata<TMessage>(
         string partName,
-        Func<TMessage, string>? getPayloadId = null) where TMessage : class;
+        Func<TMessage, string>? getPayloadId = null);
 
     /// <summary>
     /// Registers metadata for a message type that implements <see cref="IOutboxPublishable"/>,
@@ -23,7 +23,7 @@ public interface IOutboxMessageMetadataBuilder
     /// </summary>
     /// <typeparam name="TMessage">A message type implementing <see cref="IOutboxPublishable"/>.</typeparam>
     /// <returns>The same <see cref="IOutboxMessageMetadataBuilder"/> instance for chaining.</returns>
-    IOutboxMessageMetadataBuilder AddMetadata<TMessage>() where TMessage : class, IOutboxPublishable
+    IOutboxMessageMetadataBuilder AddMetadata<TMessage>() where TMessage : IOutboxPublishable
     {
         return AddMetadata<TMessage>(TMessage.PartName, m => m.GetPayloadId());
     }

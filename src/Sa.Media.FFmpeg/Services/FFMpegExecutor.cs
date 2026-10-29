@@ -21,21 +21,25 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
         return Path.Combine(_writableDirectory, outputFileName);
     }
 
+    // GetVersion/GetFormats/GetCodecs раньше игнорировали код возврата: если ffmpeg не запускался
+    // вовсе (битый бандл, noexec на каталоге, чужая платформа), метод возвращал пустую строку,
+    // а вызывающий падал где-то дальше с невнятной ошибкой. Теперь причина видна сразу:
+    // ProcessExecutionResultException несёт код возврата и хвост stderr.
     public async Task<string> GetVersion(CancellationToken cancellationToken = default)
     {
-        var result = await executor.ExecuteAsync("-version", cancellationToken: cancellationToken);
+        var result = await executor.ExecuteAsync("-version", throwOnError: true, cancellationToken: cancellationToken);
         return result.StandardOutput;
     }
 
     public async Task<string> GetFormats(CancellationToken cancellationToken = default)
     {
-        var result = await executor.ExecuteAsync("-formats", cancellationToken: cancellationToken);
+        var result = await executor.ExecuteAsync("-formats", throwOnError: true, cancellationToken: cancellationToken);
         return result.StandardOutput;
     }
 
     public async Task<string> GetCodecs(CancellationToken cancellationToken = default)
     {
-        var result = await executor.ExecuteAsync("-codecs", cancellationToken: cancellationToken);
+        var result = await executor.ExecuteAsync("-codecs", throwOnError: true, cancellationToken: cancellationToken);
         return result.StandardOutput;
     }
 

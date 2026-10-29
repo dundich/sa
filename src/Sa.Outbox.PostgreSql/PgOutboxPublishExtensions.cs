@@ -38,5 +38,9 @@ public static class PgOutboxPublishExtensions
         int tenantId,
         NpgsqlTransaction transaction,
         CancellationToken cancellationToken = default)
-        => publisher.Publish([message], tenantId, transaction, cancellationToken);
+    {
+        ArgumentNullException.ThrowIfNull(publisher);
+        ArgumentNullException.ThrowIfNull(transaction);
+        return publisher.PublishSingle(message, tenantId, (object)transaction, cancellationToken);
+    }
 }

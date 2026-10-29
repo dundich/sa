@@ -13,7 +13,9 @@
 
     We point the fallback root at a real, existing directory so the resolver
     never touches the bogus Windows path. This only takes effect off Windows,
-    keeping Windows developers' behavior unchanged.
+    keeping Windows developers' behavior unchanged. The directory carries a
+    committed .gitkeep: NuGet fails the restore (NU1301) when it is missing,
+    and an empty folder cannot be tracked by git.
   -->
   <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
     <RestoreFallbackFolders>$(MSBuildThisFileDirectory).nuget/fallback</RestoreFallbackFolders>

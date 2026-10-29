@@ -175,7 +175,7 @@ public class CronTimingTests
     [Theory]
     [InlineData("invalid")]
     [InlineData("* *")]
-    [InlineData("* * * * * *")]
+    [InlineData("* * * * * * *")] // 7 fields — there is no year field
     [InlineData("60 * * * *")]
     [InlineData("* 24 * * *")]
     [InlineData("* * 32 * *")]
@@ -211,9 +211,9 @@ public class CronTimingTests
     }
 
     [Fact]
-    public void StaticEvery_Method_CreatesCronTimingWithName()
+    public void For_Factory_CreatesCronTimingWithName()
     {
-        var timing = CronTiming.Every("0 9 * * *", "Morning job");
+        var timing = CronTiming.For("0 9 * * *", "Morning job");
 
         Assert.Equal("Morning job", timing.TimingName);
     }
@@ -325,6 +325,22 @@ public class CronTimingTests
     }
 
     [Fact]
+    public void GetNextOccurrence_FullRangeDayOfMonth_IsTreatedAsWildcard()
+    {
+        // Wildcard detection is value-based: a day-of-month range covering every day
+        // (1-31) behaves like `*`, so the day is decided by day-of-week alone. Vixie
+        // cron would fire every day here — the difference is intentional and documented
+        // in CRON.md, and this test pins it against accidental changes.
+        var timing = new CronTiming("0 0 1-31 * 1"); // Mondays
+
+        var friday = new DateTimeOffset(2026, 6, 26, 10, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal(
+            new DateTimeOffset(2026, 6, 29, 0, 0, 0, TimeSpan.Zero),
+            timing.GetNextOccurrence(friday));
+    }
+
+    [Fact]
     public void GetNextOccurrence_PreciseMinute_NonZeroSeconds()
     {
         // When seconds are non-zero, we should still land on the next minute boundary
@@ -368,5 +384,31 @@ public class CronTimingTests
     {
         var timing = new CronTiming(expression, name);
         Assert.Equal(name, timing.TimingName);
+    }
+
+    [Fact]
+    public void GetNextOccurrence_NearEndOfRepresentableRange_ReturnsNull()
+    {
+        // A DateTimeOffset cannot step past 9999-12-31, so the +1 minute start and the
+        // 28-year horizon would overflow; the search reports "no next occurrence" instead
+        // of throwing ArgumentOutOfRangeException.
+        var timing = new CronTiming("* * * * *");
+
+        Assert.Null(timing.GetNextOccurrence(new DateTimeOffset(9990, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+        Assert.Null(timing.GetNextOccurrence(new DateTimeOffset(9999, 12, 31, 23, 58, 0, TimeSpan.Zero)));
+        Assert.Null(timing.GetNextOccurrence(
+            new DateTimeOffset(9999, 12, 31, 23, 58, 0, TimeSpan.FromHours(12))));
+    }
+
+    [Fact]
+    public void GetNextOccurrence_LastSearchableYear_StillSearches()
+    {
+        // 9970 + 28 = 9998, which stays representable even with a negative offset — the
+        // leap-day search across 9971 must keep working there.
+        var timing = new CronTiming("0 0 29 2 *");
+
+        Assert.Equal(
+            new DateTimeOffset(9972, 2, 29, 0, 0, 0, TimeSpan.FromHours(-12)),
+            timing.GetNextOccurrence(new DateTimeOffset(9970, 6, 1, 0, 0, 0, TimeSpan.FromHours(-12))));
     }
 }

@@ -96,6 +96,7 @@ SaWorkQueueOptions<TInput>.Create(processor)
     .WithReaderCancellationOrder(enum)             // Lifo | Fifo | RoundRobin | Random
     .WithReaderCancelMode(enum)                   // Hard | Soft — in-flight work on reader removal
     .WithEnqueueStrategy(enum)                    // Wait | Skip | Throw — behaviour when the buffer is full
+    .WithProducerCancellation(enum)               // Observe | Detached — keep or drop the producer's token after acceptance
     .WithStatusCallback(Action<TInput, SaWorkStatus, Exception?>)
     .WithHandleItemFaulted(Func<TInput, Exception, SaExecutionErrorStrategy>)
     .WithItemDisplayName(Func<TInput, string>)    // Custom display name for logging
@@ -136,6 +137,7 @@ standard options pipeline — bind a section with `.FromConfiguration(...)`:
     "MaxConcurrency": 16,
     "SingleWriter": false,
     "EnqueueStrategy": "Wait",
+    "ProducerCancellation": "Observe",
     "ReaderCancelMode": "Hard",
     "ReaderCancellationOrder": "RoundRobin",
     "ShutdownTimeout": "00:00:30"
@@ -314,6 +316,29 @@ A **stopped or disposed** queue always throws (`InvalidOperationException` / `Ob
 
 `EnqueueMany(inputs, ct)` adds several items in a single call and returns the number accepted (`ValueTask<int>`). Each item honors the configured strategy: `Wait` blocks until space is available, so all items are eventually accepted; `Skip` drops the items that no longer fit, reporting each of them as `Skipped`; `Throw` throws `SaWorkQueueFullException` as soon as the buffer becomes full, carrying `AcceptedCount` and `TotalCount`. Items accepted before a `Throw` failure remain in the queue.
 
+### Producer cancellation
+
+By default an accepted item keeps observing the token passed to `Enqueue`: cancelling it
+while the item is buffered or in flight reports `Aborted` and leaves the reader in the pool.
+That costs a linked `CancellationTokenSource` per item whenever the token is cancellable.
+
+```csharp
+var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
+    .WithProducerCancellation(SaProducerCancellationMode.Detached);
+```
+
+`Detached` keeps the token only for the wait on buffer space. An already-cancelled token
+still rejects the call, and cancelling a producer parked in `WriteAsync` still unblocks it,
+but once accepted the item runs to a terminal status — the queue's own shutdown and
+force-cancel still cancel it. Use this when work must outlive the scope that produced it
+(for example, a request token handed to background processing). `EnqueueMany` checks the
+token before each item, so a cancellation observed mid-batch stops the batch after the
+preceding items were accepted.
+
+`SaProducerCancellationMode.Observe` is the default, and the only mode in which producer
+cancellation can produce `SaWorkStatus.Aborted`. `TryEnqueue` carries no token at all and
+is therefore already detached.
+
 ---
 
 ## Error Strategies
@@ -394,12 +419,13 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 5. **Idempotent shutdown**: `ShutdownAsync`, `Shutdown`, `Dispose`, `DisposeAsync` are safe to call multiple times.
 6. **`ConcurrencyLimit = 0`**: pauses all processing (cancels all readers; in `Soft` mode the in-flight items are allowed to finish first). Restore a positive value to resume. While a **running** queue is paused with pending work, `WaitForIdleAsync` returns immediately (or throws `InvalidOperationException` with `failIfNoProgress: true`). The qualifier is load-bearing: a queue that was paused and *then* stopped reports `Stopped`, and the wait parks for the shutdown drain instead — that drain needs no reader, so a pause which is no longer the reason cannot be the answer. `QueuePaused` argues the point on its own: it tells the caller to raise `ConcurrencyLimit`, and on a stopped queue that assignment does nothing. Note an emergency loss of all readers (`ForceCancelReaders`, `StopReader` faults) is **not** a pause, but the wait returns early there as well — the empty pool cannot drain on its own; re-arm `ConcurrencyLimit` to restore readers. Either early return is logged as a warning, because it is not the same answer as "idle". On the producer side, `Enqueue` under the `Wait` strategy parks when the buffer is full — including while the queue is paused. Three things release it: a positive `ConcurrencyLimit`, a shutdown, and the caller's own `CancellationToken`. This is deliberate rather than a defect — parking is what bounds the producer, and refusing the item instead would turn a pause into data loss. Once the queue is **stopped or disposed**, assigning `ConcurrencyLimit` does nothing and the getter keeps reporting the limit the queue was stopped at — assigning 4 and reading back 4 would claim four readers that are never coming. Nothing is thrown: the assignment states an intent, and `IsEnabled` is the answer to "is there a pool to resize" for callers that need one to ask.
 7. **`ForceCancelReaders` / `ForceCancelReadersAsync`**: emergency stop — immediately cancels all reader tasks. The sync variant waits up to `ShutdownTimeout` (default 30s) for readers to terminate; the async variant accepts an optional `TimeSpan? timeout`. Items still in the buffer are dropped and reported as `Faulted` with a "readers were force-cancelled" reason (the queue itself stays active — the message must not claim a shutdown that did not happen). After calling, restore concurrency by setting `ConcurrencyLimit = X` to spawn replacement readers.
+   **The buffer is dropped only when the call actually stopped a reader.** A paused queue (`ConcurrencyLimit = 0`), or one whose readers are already unwinding, has nothing to cancel — so it also has nothing to discard: the accepted items stay queued, `QueueTasks` keeps counting them, and a re-armed pool finishes them. An emergency stop is a statement about the pool, not permission to empty the queue.
    **One exception:** if `ForceCancelReadersAsync` is given a `timeout` and it elapses (or its `ct` is cancelled), the buffer is **kept** — nobody rejected those items, and a re-armed pool can still take them. A warning is logged, the exception is rethrown so the caller knows the wait expired, and `IsIdle()` stays `false` until the buffer is drained. A `WaitForIdleAsync` that gives up for this reason also logs a warning naming the cause, so it never contradicts `IsIdle()`.
 8. **Processor sources**: the processor comes from the builder — `UseProcessor<TProcessor>()` (registered in the container if absent), `UseProcessor(instance)` or `WithProcess(delegate)` — with a fallback to an `ISaWork<TInput>` you register by hand, so a bare `AddSaWorkQueue<TInput>()` also works. A queue with no processor at all fails the first resolve with an `InvalidOperationException` naming both options. Callbacks that need services from the container go through the builder's `Configure((sp, opts) => ...)` escape hatch, which runs at resolve — capture only singletons there: the queue is a singleton, so a captured scoped service would live forever.
 9. **`Enqueue` return value**: `ValueTask<bool>` — `false` only in `Skip` mode with a full buffer (the item is dropped and reported as `Skipped` via `StatusChanged`). A stopped/disposed queue always throws; the exception is carried by the `ValueTask` and surfaced by `await`.
 10. **`AvailableCapacity`**: informational only — free slots in the buffer. It does not affect `IsIdle()`.
 11. **Never from inside `Execute`**: do not call `Shutdown`, `ShutdownAsync`, `ForceCancelReaders`, `ForceCancelReadersAsync`, or `Dispose`/`DisposeAsync` from within your `ISaWork<TInput>.Execute` implementation: the calling reader is one of the tasks those methods wait for, so the call blocks for the full `ShutdownTimeout` (30 s by default) before returning. Hand the work off to a background task instead (e.g. `Task.Run`).
-12. **Options validation**: the `SaWorkQueueOptions<TInput>` primary constructor is public, so its arguments bypass the `With*` guards; the `SaWorkQueue<TInput>` constructor re-validates and throws `ArgumentOutOfRangeException` before creating the channel — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, positive `ShutdownTimeout`. The same rules reach configuration earlier through `SaWorkQueueSettingsValidator`, which reports them as an `OptionsValidationException` — at host start (`ValidateOnStart()`) or on the first queue resolve — instead of an `ArgumentOutOfRangeException`. `MaxConcurrency = 0` and `null` both mean "processor count" (the same thing `WithMaxConcurrency(0)` produces); a negative value has no meaning and is rejected. Assigning a negative `ConcurrencyLimit` after construction throws too — a silent clamp to 0 would produce a permanently paused queue that still reports `IsEnabled == true`. Only a *positive* value above `MaxConcurrency` is clamped, not rejected.
+12. **Options validation**: the `SaWorkQueueOptions<TInput>` primary constructor is public, so its arguments bypass the `With*` guards; the `SaWorkQueue<TInput>` constructor re-validates and throws `ArgumentOutOfRangeException` before creating the channel — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, positive `ShutdownTimeout`, and the four strategy enums (`EnqueueStrategy`, `ProducerCancellation`, `ReaderCancelMode`, `ReaderCancellationOrder`) must be *defined* values: an undefined one would otherwise fall through to a default arm and quietly become `Skip`, `Hard` or `Lifo`. The same rules reach configuration earlier through `SaWorkQueueSettingsValidator`, which reports them as an `OptionsValidationException` — at host start (`ValidateOnStart()`) or on the first queue resolve — instead of an `ArgumentOutOfRangeException`. `MaxConcurrency = 0` and `null` both mean "processor count" (the same thing `WithMaxConcurrency(0)` produces); a negative value has no meaning and is rejected. Assigning a negative `ConcurrencyLimit` after construction throws too — a silent clamp to 0 would produce a permanently paused queue that still reports `IsEnabled == true`. Only a *positive* value above `MaxConcurrency` is clamped, not rejected.
 
 ---
 

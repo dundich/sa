@@ -26,22 +26,29 @@ internal sealed class JobExecutor : IJob, IDisposable
         IServiceScopeFactory scopeFactory)
     {
         _scope = scopeFactory.CreateScope();
-        IJob originalJob = (IJob)_scope.ServiceProvider.GetRequiredKeyedService(settings.JobType, settings.JobId);
 
-        if (interceptorSettings.Interceptors.Count > 0)
+        try
         {
-            _job = interceptorSettings
-                .Interceptors
-                .Reverse()
-                .Aggregate(originalJob, (job, s)
-                    => new JobProxy(
-                        job,
-                        (IJobInterceptor)_scope.ServiceProvider.GetRequiredKeyedService(s.HandlerType, s.Key),
-                        s.Key));
+            IJob originalJob = (IJob)_scope.ServiceProvider.GetRequiredKeyedService(settings.JobType, settings.JobId);
+
+            _job = interceptorSettings.Interceptors.Count > 0
+                ? interceptorSettings
+                    .Interceptors
+                    .Reverse()
+                    .Aggregate(originalJob, (job, s)
+                        => new JobProxy(
+                            job,
+                            (IJobInterceptor)_scope.ServiceProvider.GetRequiredKeyedService(s.HandlerType, s.Key),
+                            s.Key))
+                : originalJob;
         }
-        else
+        catch
         {
-            _job = originalJob;
+            // The job cannot be constructed (missing dependency, throwing constructor) or an
+            // interceptor cannot be resolved. The scope was opened just above, so it must not
+            // leak on the failure path — the caller never gets an instance to dispose.
+            _scope.Dispose();
+            throw;
         }
     }
 

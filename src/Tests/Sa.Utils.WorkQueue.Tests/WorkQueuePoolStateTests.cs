@@ -124,6 +124,49 @@ public sealed class WorkQueuePoolStateTests
         Assert.Equal(SaWorkPoolState.Stopped, queue.PoolState);
     }
 
+    /// <summary>
+    /// A stopped queue keeps reporting the limit it was stopped at — the reason assigning
+    /// to it afterwards is a documented no-op.
+    /// </summary>
+    /// <remarks>
+    /// Shutdown cancelled every reader's loop token, so each one unwound through
+    /// <c>RemoveReader</c> with its stop reason still <c>None</c>. Counting those as lost
+    /// slots decremented the limit once per reader, and a queue started with four readers
+    /// reported <c>0</c> after every shutdown — while the setter, whose whole justification
+    /// is "assigning 4 and reading back 4 would claim four readers that are never coming",
+    /// stayed silent. The two halves of the contract have to agree.
+    /// </remarks>
+    [Fact]
+    public async Task ConcurrencyLimit_AfterShutdown_KeepsTheLimitItWasStoppedAt()
+    {
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+                .WithConcurrencyLimit(4)
+                .WithMaxConcurrency(4));
+
+        await queue.ShutdownAsync();
+
+        Assert.False(queue.IsEnabled);
+        Assert.Equal(4, queue.ConcurrencyLimit);
+
+        // Still a no-op, as documented: the value it reads back is the one it already had.
+        queue.ConcurrencyLimit = 2;
+        Assert.Equal(4, queue.ConcurrencyLimit);
+    }
+
+    [Fact]
+    public async Task ConcurrencyLimit_AfterDispose_KeepsTheLimitItWasStoppedAt()
+    {
+        var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+                .WithConcurrencyLimit(3)
+                .WithMaxConcurrency(3));
+
+        await queue.DisposeAsync();
+
+        Assert.Equal(3, queue.ConcurrencyLimit);
+    }
+
     [Fact]
     public async Task PoolState_AfterDispose_IsStopped()
     {

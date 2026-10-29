@@ -43,7 +43,11 @@ public interface IPartRepository
     /// </summary>
     /// <param name="dates">Array of dates to migrate.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>Total number of newly created partitions across all tables.</returns>
+    /// <returns>
+    /// Number of DDL statements executed, not the number of partitions actually created: the
+    /// generated DDL is <c>IF NOT EXISTS</c>, so a re-run executes the same statements and counts
+    /// them again.
+    /// </returns>
     Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -52,7 +56,7 @@ public interface IPartRepository
     /// <param name="dates">Dates to ensure partitions for.</param>
     /// <param name="resolve">A function that receives a table name and returns the expected partition values.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>Total number of newly created partitions.</returns>
+    /// <returns>Number of DDL statements executed, not the number of partitions created (see the other overload).</returns>
     Task<int> Migrate(
         DateTimeOffset[] dates,
         Func<string, Task<StrOrNum[][]>> resolve,

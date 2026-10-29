@@ -803,14 +803,27 @@ src/.vscode/
 
 *.lscache
 
+# local secrets
+.env
+!.env.example
+.secrets/
+
 # ai
 .qwen/
 .agents/
 /.github/skills
+# Local opencode config: may reference machine-specific paths and secrets (.secrets/).
+/opencode.jsonc
+/opencode.json
 /src/Sa.Media.FFmpeg/sa/native/
 /src/Tests/Sa.MediaTests/data/pcm_s16le.wav
 /src/Sa.Media/Echo/output.wav
 src/Sa.Media/Echo/data/pcm_s16le.wav
 /src/.nuget
+# ... except the folder itself: Directory.Build.props points RestoreFallbackFolders at
+# src/.nuget/fallback and NuGet requires it to exist, so a fresh clone must carry it.
+!/src/.nuget/
+!/src/.nuget/fallback/
+!/src/.nuget/fallback/.gitkeep
 /src/.localpilot
 /.opencode/**

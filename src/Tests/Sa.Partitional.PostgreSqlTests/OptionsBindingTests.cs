@@ -48,13 +48,13 @@ public sealed class OptionsBindingTests
         AddDefaultDataSource(services);
 
         return services.AddSaPartitional((_, builder) => builder.AddSchema(schema => schema
-            .AddTable("t_part", "id bigint NOT NULL", "created_at timestamptz NOT NULL")
+            .AddTable("t_part", "id bigint NOT NULL", "created_at bigint NOT NULL")
             .PartByRange(PgPartBy.Day)), asBackgroundJob);
     }
 
     private static IPartConfiguration AddKeyedModule(IServiceCollection services, string key)
         => services.AddSaPartitional(key, (_, builder) => builder.AddSchema(schema => schema
-            .AddTable("t_part", "id bigint NOT NULL", "created_at timestamptz NOT NULL")
+            .AddTable("t_part", "id bigint NOT NULL", "created_at bigint NOT NULL")
             .PartByRange(PgPartBy.Day)));
 
     // ---------- defaults and section binding ----------

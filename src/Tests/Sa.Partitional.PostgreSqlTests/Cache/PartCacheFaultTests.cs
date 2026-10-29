@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using Sa.Partitional.PostgreSql;
 using Sa.Partitional.PostgreSql.Cache;
 using Sa.Partitional.PostgreSql.Classes;
@@ -62,10 +62,9 @@ public class PartCacheFaultTests
         await Assert.ThrowsAsync<PostgresException>(() => cache.EnsureCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
         Assert.Equal(0, repository.CreatePartCalls);
 
-        // 2nd EnsureCache: cache recovers, partition is created and the final InCache confirms it.
-        bool actual = await cache.EnsureCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
+        // 2nd EnsureCache: cache recovers and the partition is created exactly once.
+        await cache.EnsureCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
 
-        Assert.True(actual);
         Assert.Equal(1, repository.CreatePartCalls);
     }
 
@@ -333,15 +332,6 @@ internal sealed class FakeSqlBuilder : ISqlBuilder
     public IAsyncEnumerable<string> MigrateSql(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve)
         => throw new NotImplementedException();
 
-    public string CreatePartSql(string tableName, DateTimeOffset date, StrOrNum[] partValues)
-        => string.Empty;
-
-    public string SelectPartsQualifiedTablesSql(string tableName, StrOrNum[] partValues)
-        => string.Empty;
-
-    public string SelectPartsQualifiedTablesSql(string qualifiedTablesSql)
-        => string.Empty;
-
     public string SelectPartsFromDateSql(string tableName)
         => string.Empty;
 
@@ -355,11 +345,11 @@ internal sealed class FakeSqlTableBuilder : ISqlTableBuilder
 
     public ITableSettings Settings => throw new NotImplementedException();
 
+    public PgPartBy PartBy => PgPartBy.Day;
+
     public string SelectPartsFromDate => string.Empty;
 
     public string SelectPartsToDate => string.Empty;
-
-    public string GetPartsSql(StrOrNum[] partValues) => string.Empty;
 
     public string CreateSql(DateTimeOffset date, params StrOrNum[] partValues) => string.Empty;
 }

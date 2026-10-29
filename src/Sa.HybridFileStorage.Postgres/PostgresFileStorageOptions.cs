@@ -54,6 +54,17 @@ public sealed record PostgresFileStorageOptions
     public int MigrationScheduleForwardDays { get; set; } = 2;
 
     /// <summary>
+    /// Gets or sets the largest upload this storage accepts, in bytes. <c>0</c> (the default) means
+    /// no limit.
+    /// </summary>
+    /// <remarks>
+    /// A non-seekable stream is buffered in memory before it is written (Npgsql needs the length up
+    /// front), so an unbounded upload is an unbounded allocation. The check runs before the insert
+    /// for a seekable stream and while buffering a non-seekable one.
+    /// </remarks>
+    public long MaxUploadSizeBytes { get; set; }
+
+    /// <summary>
     /// Gets or sets the range-partitioning granularity (day, month, or year). Defaults to
     /// <see cref="PartByRange.Day"/>. This is the property the configuration binder reads: it is a
     /// real enum, so <c>FromConfiguration</c> can bind it. (A <see cref="PgPartBy"/> value is not
@@ -101,17 +112,19 @@ public sealed record PostgresFileStorageOptions
                 $"MigrationScheduleForwardDays must be greater than zero, but was {MigrationScheduleForwardDays}.",
                 nameof(MigrationScheduleForwardDays));
         }
+
+        if (MaxUploadSizeBytes < 0)
+        {
+            throw new ArgumentException(
+                $"MaxUploadSizeBytes must not be negative (0 means no limit), but was {MaxUploadSizeBytes}.",
+                nameof(MaxUploadSizeBytes));
+        }
     }
 
     /// <summary>
     /// Creates a copy of these options with identical values.
     /// </summary>
-    internal PostgresFileStorageOptions Copy()
-    {
-        PostgresFileStorageOptions copy = new();
-        CopyTo(copy);
-        return copy;
-    }
+    internal PostgresFileStorageOptions Copy() => this with { };
 
     /// <summary>
     /// Writes every property of these options into <paramref name="target"/> — used to seed
@@ -129,5 +142,6 @@ public sealed record PostgresFileStorageOptions
         target.ExpireDays = ExpireDays;
         target.MigrationScheduleForwardDays = MigrationScheduleForwardDays;
         target.PartByRange = PartByRange;
+        target.MaxUploadSizeBytes = MaxUploadSizeBytes;
     }
 }

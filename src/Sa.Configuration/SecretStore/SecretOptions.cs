@@ -18,6 +18,24 @@ public sealed record SecretOptions
 
     public string? EnvironmentName { get; init; }
 
+    /// <summary>
+    /// Encrypted layer options. <see langword="null"/> uses the defaults
+    /// (<see cref="SecretEncryptionOptions.Enabled"/> is <see langword="true"/>).
+    /// </summary>
+    public SecretEncryptionOptions? Encryption { get; init; }
+
+    /// <summary>Load <see cref="DotEnvFileName"/> and its environment-specific variant. Default is <see langword="true"/>.</summary>
+    public bool LoadDotEnv { get; init; } = true;
+
+    /// <summary>Base <c>.env</c> file name. The environment-specific file is <c>{DotEnvFileName}.{env}</c>.</summary>
+    public string DotEnvFileName { get; init; } = Stores.DotEnvSecretStore.DefaultFileName;
+
+    /// <summary>
+    /// Explicit key aliases applied after the secrets pass, over the merged configuration of all
+    /// providers — see <see cref="KeyAliasOptions"/>.
+    /// </summary>
+    public KeyAliasOptions KeyAliases { get; init; } = new();
+
     public SecretOptions()
     {
         FileName = Secrets.DefaultFileName;

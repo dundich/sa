@@ -1,0 +1,5 @@
+# Keeps the local `Sa.*` package feed directory in the repository.
+#
+# src/nuget.config maps `local.nupkgs` to ./nupkgs, and NuGet fails restore with NU1301 when the
+# source path does not exist. The directory is otherwise empty: packages published by
+# build-sh/do-package.sh land here and are ignored by `src/.gitignore` (nupkgs/*).

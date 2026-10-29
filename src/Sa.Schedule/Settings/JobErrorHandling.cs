@@ -11,7 +11,7 @@ internal sealed class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBui
         public readonly static Func<Exception, bool> SuppressError = ex => !ex.IsCritical();
     }
 
-    public ErrorHandlingAction ThenAction { get; private set; } = Default.Action;
+    public ErrorHandlingAction ThenAction => _thenAction;
 
     /// <summary>
     /// The configured retry count; <see langword="null"/> when
@@ -22,15 +22,32 @@ internal sealed class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBui
 
     public Func<Exception, bool>? SuppressError { get; private set; }
 
+    private ErrorHandlingAction _thenAction = Default.Action;
+
+    // ThenAction defaults to CloseApplication, so the value alone cannot tell "the
+    // caller chose CloseApplication" from "the caller said nothing". Merge needs
+    // that distinction to keep the first explicit choice.
+    private bool _thenActionSet;
+
     internal JobErrorHandling Merge(IJobErrorHandling handling)
     {
         // Same direction as JobProperties.Merge: the aggregate (the earlier
         // registration) keeps its explicit values, and only the gaps are filled
-        // from the later one. (Previously this merged the other way — the later
-        // registration's explicit values overwrote the aggregate's — which
-        // disagreed with every other merged property, where the first
-        // registration wins.)
-        if (ThenAction == Default.Action) { ThenAction = handling.ThenAction; }
+        // from the later one. An explicit ThenCloseApplication() is a choice like
+        // any other, so it must not be overwritten by a later ThenStopAllJobs().
+        if (!_thenActionSet)
+        {
+            bool explicitInSource = handling is JobErrorHandling other
+                ? other._thenActionSet
+                : handling.ThenAction != Default.Action;
+
+            if (explicitInSource)
+            {
+                _thenAction = handling.ThenAction;
+                _thenActionSet = true;
+            }
+        }
+
         if (RetryCount is null) { RetryCount = handling.RetryCount; }
         if (SuppressError is null) { SuppressError = handling.SuppressError; }
         return this;
@@ -45,19 +62,22 @@ internal sealed class JobErrorHandling : IJobErrorHandling, IJobErrorHandlingBui
 
     public IJobErrorHandlingBuilder ThenCloseApplication()
     {
-        ThenAction = ErrorHandlingAction.CloseApplication;
+        _thenAction = ErrorHandlingAction.CloseApplication;
+        _thenActionSet = true;
         return this;
     }
 
     public IJobErrorHandlingBuilder ThenAbortJob()
     {
-        ThenAction = ErrorHandlingAction.AbortJob;
+        _thenAction = ErrorHandlingAction.AbortJob;
+        _thenActionSet = true;
         return this;
     }
 
     public IJobErrorHandlingBuilder ThenStopAllJobs()
     {
-        ThenAction = ErrorHandlingAction.StopAllJobs;
+        _thenAction = ErrorHandlingAction.StopAllJobs;
+        _thenActionSet = true;
         return this;
     }
 

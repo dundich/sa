@@ -200,24 +200,59 @@ public sealed class TempFolderApiTests : IDisposable
 
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
 
+        // The copy is staged in a sibling dot-file and renamed into place only when it is complete,
+        // so the target does not exist yet — the reservation shows on the staged file.
+        var staged = Assert.Single(Directory.GetFiles(
+            Path.GetDirectoryName(target)!,
+            "*.tmp",
+            new EnumerationOptions { AttributesToSkip = 0 }));
+        Assert.False(File.Exists(target), "the target must not appear before the copy completes");
+
         // The source has not handed over a single byte yet (it blocks on its first read), so any
         // reservation came from the preallocation at open. The platforms observe it differently:
         // Windows extends the file length, Unix keeps i_size at 0 and reserves blocks instead
         // (FALLOC_FL_KEEP_SIZE) — blocks are visible via stat's %b (512-byte units).
         if (OperatingSystem.IsWindows())
         {
-            Assert.Equal(payload.Length, new FileInfo(target).Length);
+            Assert.Equal(payload.Length, new FileInfo(staged).Length);
         }
         else if (OperatingSystem.IsLinux())
         {
             Assert.True(
-                GetAllocatedBytes(target) >= payload.Length,
-                $"target reserved only {GetAllocatedBytes(target)} of {payload.Length} bytes");
+                GetAllocatedBytes(staged) >= payload.Length,
+                $"target reserved only {GetAllocatedBytes(staged)} of {payload.Length} bytes");
         }
 
         release.SetResult();
         await save;
         Assert.Equal(payload, await File.ReadAllBytesAsync(target, token));
+
+        // The rename consumed the staging file — nothing is left behind next to the target.
+        Assert.Empty(Directory.GetFiles(
+            Path.GetDirectoryName(target)!,
+            "*.tmp",
+            new EnumerationOptions { AttributesToSkip = 0 }));
+    }
+
+    [Fact]
+    public async Task SaveStream_FailedCopy_LeavesTheExistingFileIntact()
+    {
+        using var provider = Build(); // OverwriteFiles defaults to true
+        var folder = Resolve(provider);
+
+        var (_, absolute) = await folder.WriteAsync(
+            new MemoryStream("original"u8.ToArray()), "keep/f.bin", TestTemp.Token);
+
+        // A source that hands over a few bytes and then fails mid-copy: with a plain Create the
+        // target would already have been truncated, so the original would be lost.
+        await Assert.ThrowsAsync<IOException>(
+            () => folder.WriteAsync(new FailingStream("partial"u8.ToArray()), "keep/f.bin", TestTemp.Token).AsTask());
+
+        Assert.Equal("original"u8.ToArray(), await File.ReadAllBytesAsync(absolute, TestTemp.Token));
+        Assert.Empty(Directory.GetFiles(
+            Path.GetDirectoryName(absolute)!,
+            "*.tmp",
+            new EnumerationOptions { AttributesToSkip = 0 }));
     }
 
     [Fact]
@@ -260,7 +295,7 @@ public sealed class TempFolderApiTests : IDisposable
     [Fact]
     public async Task SaveStream_OverwritesAnExistingFileByDefault()
     {
-        using var provider = Build(); // OverwriteFiles по умолчанию = true
+        using var provider = Build(); // OverwriteFiles defaults to true
         var folder = Resolve(provider);
 
         await folder.WriteAsync(new MemoryStream("first"u8.ToArray()), "x/f.txt", TestTemp.Token);
@@ -889,6 +924,54 @@ public sealed class TempFolderApiTests : IDisposable
             var read = Math.Min(buffer.Length, data.Length - _position);
             data.AsSpan(_position, read).CopyTo(buffer.Span);
             _position += read;
+            return read;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+            => ReadAsync(buffer.AsMemory(offset, count), CancellationToken.None)
+                .AsTask().GetAwaiter().GetResult();
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Non-seekable source that yields its head and then fails — the copy dies mid-stream, which is
+    /// what the staged write must survive without damaging an existing target.
+    /// </summary>
+    private sealed class FailingStream(byte[] head) : Stream
+    {
+        private int _served;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+
+            if (_served >= head.Length)
+            {
+                throw new IOException("The source failed mid-copy.");
+            }
+
+            var read = Math.Min(buffer.Length, head.Length - _served);
+            head.AsSpan(_served, read).CopyTo(buffer.Span);
+            _served += read;
             return read;
         }
 

@@ -121,20 +121,57 @@ internal sealed class NpgsqlOutboxReader(PgOutboxTableSettings settings)
 
     public class TypeReader(PgOutboxTableSettings settings)
     {
-        public long GetTypeId(NpgsqlDataReader reader)
-            => reader.GetInt64(settings.Type.Fields.TypeId);
+        /// <summary>
+        /// Column positions for one statement execution, captured once on the first row.
+        /// <see cref="NpgsqlDataReader.GetOrdinal"/> scans the statement's field list by
+        /// name, so resolving it per row is the same avoidable cost the task queue reader
+        /// already removed (M3).
+        /// </summary>
+        public readonly record struct Ordinals(int TypeId, int TypeName)
+        {
+            public static Ordinals Capture(NpgsqlDataReader reader, PgOutboxTableSettings.TypeTable table)
+            {
+                var f = table.Fields;
+                return new Ordinals(
+                    reader.GetOrdinal(f.TypeId),
+                    reader.GetOrdinal(f.TypeName));
+            }
+        }
 
-        public string GetTypeName(NpgsqlDataReader reader)
-            => reader.GetString(settings.Type.Fields.TypeName);
+        public Ordinals GetOrdinals(NpgsqlDataReader reader) => Ordinals.Capture(reader, settings.Type);
+
+        public long GetTypeId(NpgsqlDataReader reader, in Ordinals o)
+            => reader.GetInt64(o.TypeId);
+
+        public string GetTypeName(NpgsqlDataReader reader, in Ordinals o)
+            => reader.GetString(o.TypeName);
     }
 
     public class MsgReader(PgOutboxTableSettings settings)
     {
-        public Stream GetMgsPayload(NpgsqlDataReader reader)
-            => reader.GetStream(settings.Message.Fields.MsgPayload);
+        /// <summary>
+        /// Payload-side column positions, captured once per result set. The payload is the
+        /// one column read for every delivered message, so a per-row
+        /// <see cref="NpgsqlDataReader.GetOrdinal"/> here was paid on the main delivery path.
+        /// </summary>
+        public readonly record struct Ordinals(int MsgPayload, int TenantId)
+        {
+            public static Ordinals Capture(NpgsqlDataReader reader, PgOutboxTableSettings.MessageTable table)
+            {
+                var f = table.Fields;
+                return new Ordinals(
+                    reader.GetOrdinal(f.MsgPayload),
+                    reader.GetOrdinal(f.TenantId));
+            }
+        }
 
-        public int GetTenantId(NpgsqlDataReader reader)
-            => reader.GetInt32(settings.Message.Fields.TenantId);
+        public Ordinals GetOrdinals(NpgsqlDataReader reader) => Ordinals.Capture(reader, settings.Message);
+
+        public Stream GetMgsPayload(NpgsqlDataReader reader, in Ordinals o)
+            => reader.GetStream(o.MsgPayload);
+
+        public int GetTenantId(NpgsqlDataReader reader, in Ordinals o)
+            => reader.GetInt32(o.TenantId);
     }
 
     #endregion

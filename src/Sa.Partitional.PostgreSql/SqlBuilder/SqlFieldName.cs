@@ -29,6 +29,41 @@ internal static class SqlFieldName
     {
         field = field.Trim();
 
+        int end = NameEnd(field);
+
+        return (end < 0 ? field : field[..end]).Trim('"');
+    }
+
+    /// <summary>
+    /// Extracts the declared type token of a field definition - <c>bigint</c> for
+    /// <c>"created_at" bigint NOT NULL</c>.
+    /// </summary>
+    /// <param name="field">A raw field definition.</param>
+    /// <returns>
+    /// The first token after the column name, or an empty span when the definition only names the
+    /// column.
+    /// </returns>
+    public static ReadOnlySpan<char> ExtractType(ReadOnlySpan<char> field)
+    {
+        field = field.Trim();
+
+        int end = NameEnd(field);
+
+        if (end < 0 || end + 1 >= field.Length) return default;
+
+        ReadOnlySpan<char> rest = field[(end + 1)..].TrimStart();
+
+        int firstSeparator = rest.IndexOfAny(FieldSeparators);
+
+        return firstSeparator < 0 ? rest : rest[..firstSeparator];
+    }
+
+    /// <summary>
+    /// Index of the whitespace that ends the column name, or <c>-1</c> when the definition is just
+    /// a name. Quote-aware, so a space inside <c>"my id"</c> is part of the name.
+    /// </summary>
+    private static int NameEnd(ReadOnlySpan<char> field)
+    {
         bool inQuotes = false;
 
         for (int i = 0; i < field.Length; i++)
@@ -48,10 +83,10 @@ internal static class SqlFieldName
                 continue;
             }
 
-            if (!inQuotes && FieldSeparators.Contains(c)) return field[..i].Trim('"');
+            if (!inQuotes && FieldSeparators.Contains(c)) return i;
         }
 
-        return field.Trim('"');
+        return -1;
     }
 
     /// <summary>
@@ -60,7 +95,7 @@ internal static class SqlFieldName
     /// <param name="fields">The raw field definitions of a table.</param>
     /// <param name="columnName">The column name to look for, compared exactly.</param>
     /// <returns><see langword="true"/> when one of the fields declares that column.</returns>
-    public static bool HasColumn(string[] fields, string columnName)
+    public static bool HasColumn(IReadOnlyList<string> fields, string columnName)
     {
         foreach (string field in fields)
         {

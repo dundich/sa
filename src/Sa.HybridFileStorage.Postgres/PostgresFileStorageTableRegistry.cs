@@ -40,8 +40,9 @@ internal sealed class PostgresFileStorageTableRegistry
     public string? Claim(string? registrationName, string tableName)
     {
         // An unnamed options instance cannot be told apart from another unnamed one, so tracking it
-        // would make the first such registration block every other. The keyed API always names them.
-        if (registrationName is null)
+        // would make the first such registration block every other. The keyed API always names them;
+        // IValidateOptions reports the default instance as "" rather than null.
+        if (string.IsNullOrEmpty(registrationName))
         {
             return null;
         }

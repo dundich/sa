@@ -42,7 +42,27 @@ using System.Threading.Channels;
 public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 {
     /// <summary>One item in the channel: the payload plus the token its producer owns.</summary>
-    private sealed record WorkItem(TInput Input, CancellationToken CancellationToken);
+    /// <remarks>
+    /// A struct rather than a class: the class added one 32-byte object per enqueue,
+    /// which was the dominant per-item allocation on the synchronous path. The
+    /// bounded channel preallocates its ring for the whole capacity, so this trades a
+    /// fixed <c>capacity × sizeof(WorkItem)</c> buffer for zero per-item objects —
+    /// good for reference payloads and small structs. A very large
+    /// <typeparamref name="TInput"/> pays for it in the preallocated buffer (the ring
+    /// stores the payload inline), which is the one case worth re-measuring.
+    /// </remarks>
+    private readonly struct WorkItem
+    {
+        public WorkItem(TInput input, CancellationToken cancellationToken)
+        {
+            Input = input;
+            CancellationToken = cancellationToken;
+        }
+
+        public TInput Input { get; }
+
+        public CancellationToken CancellationToken { get; }
+    }
 
     private enum QueueState
     {
@@ -77,7 +97,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     }
 
     /// <summary>
-    /// One reader task together with the two token sources that control it.
+    /// One reader task together with the token sources that control it.
     /// The registry holds a reader from the moment it is created until its loop's
     /// <c>finally</c> calls <see cref="RemoveReader"/> — including the window in
     /// between, where the reader has been cancelled but has not finished yet.
@@ -93,7 +113,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     /// </remarks>
     private sealed class Reader
     {
-        public Reader(CancellationTokenSource loop, CancellationTokenSource work)
+        public Reader(CancellationTokenSource loop, CancellationTokenSource? work)
         {
             Loop = loop;
             Work = work;
@@ -109,9 +129,11 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         /// <summary>
         /// Cancelling this interrupts the in-flight item. Only
         /// <c>ForceCancelReaders</c> uses it, to escalate a soft cancellation to a
-        /// hard one.
+        /// hard one. <see langword="null"/> in <see cref="SaReaderCancelMode.Hard"/>
+        /// mode: there the in-flight item already runs under <see cref="Loop"/>, so
+        /// a second source would be created, linked and never read.
         /// </summary>
-        public CancellationTokenSource Work { get; }
+        public CancellationTokenSource? Work { get; }
 
         /// <summary>
         /// Set once, by whoever decided to stop this reader, and only to a value
@@ -120,7 +142,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         public ReaderStop Stop { get; set; }
 
         /// <summary>
-        /// Completed by <see cref="LaunchReader"/> when the loop ends. Exists from
+        /// Completed by the loop's <c>finally</c> when it ends. Exists from
         /// construction, so <see cref="Task"/> is never <see langword="null"/> and no
         /// observer has to ask whether a reader is the one that has not started yet.
         /// </summary>
@@ -147,7 +169,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         public void Release()
         {
             Loop.Dispose();
-            Work.Dispose();
+            Work?.Dispose();
         }
     }
 
@@ -168,6 +190,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     private readonly SaReaderCancellationOrder _cancellationOrder;
     private readonly SaReaderCancelMode _cancelMode;
     private readonly SaEnqueueStrategy _enqueueStrategy;
+    private readonly SaProducerCancellationMode _producerCancellation;
     private readonly TimeSpan _shutdownTimeout;
 
     /// <summary>
@@ -192,7 +215,13 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     /// </summary>
     private volatile bool _paused;
 
-    /// <summary>The exception that triggered the shutdown, if any.</summary>
+    /// <summary>
+    /// The exception that triggered the shutdown, if any. <c>volatile</c> covers the read
+    /// side — <see cref="ShutdownError"/> returns it without a lock. The write side is a
+    /// compare-exchange, because two readers can fault at the same instant and the first
+    /// cause is the one worth keeping; that call passes the field by <c>ref</c>, which is
+    /// the one place CS0420 is suppressed (see <see cref="HandleShutdownOnError"/>).
+    /// </summary>
     private volatile Exception? _shutdownError;
 
     /// <summary>
@@ -226,14 +255,34 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     /// <summary>
     /// Single-flight dispose: 0 = not started, 1 = in progress. The winner runs
-    /// the shutdown and releases <c>_shutdownCts</c>; a concurrent
-    /// <see cref="Dispose()"/>/<see cref="DisposeAsync"/> loser waits for the
-    /// winner instead of racing it, which would otherwise dispose the token source
-    /// out from under a still-running shutdown.
+    /// the shutdown; a concurrent <see cref="Dispose()"/>/<see cref="DisposeAsync"/> loser
+    /// waits for the winner instead of racing it, which would otherwise tear the queue down
+    /// while a shutdown was still reporting what it dropped.
     /// </summary>
     private int _disposeStarted;
 
     private readonly TaskCompletionSource _disposeCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Signalled when the shutdown that won <c>_state</c> has finished: readers gone and
+    /// the buffer reported. A caller that arrives while that shutdown is still running
+    /// waits for this instead of returning early, so "the queue is shut down" means the
+    /// same thing to every caller — the same reason <see cref="_disposeCompleted"/> exists.
+    /// </summary>
+    private readonly TaskCompletionSource _shutdownCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Non-zero while the current logical flow is inside a shutdown body. A re-entrant call —
+    /// a status callback invoked by the drain asking to shut the queue down again — must not
+    /// wait for the completion that the flow it interrupts is going to signal: it would wait
+    /// on itself, and no timeout covers that wait. Async-local rather than thread-static
+    /// because a shutdown body crosses <c>await</c>s, and the callback that makes the
+    /// re-entrant call runs on whichever thread continues it.
+    /// </summary>
+    private static readonly AsyncLocal<int> ShutdownDepth = new();
+
+    /// <summary>Whether the current logical flow is already running a shutdown of this queue.</summary>
+    private static bool IsShuttingDownHere => ShutdownDepth.Value > 0;
 
     public SaWorkQueue(SaWorkQueueOptions<TInput> options, ILogger<SaWorkQueue<TInput>>? logger = null)
     {
@@ -273,12 +322,47 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
                 nameof(options.ShutdownTimeout), shutdownTimeout, "Shutdown timeout must be positive.");
         }
 
+        // The three strategy enums are read through switch arms and equality tests, so an
+        // undefined value does not fail — it quietly becomes one of the real ones: an
+        // unrecognised enqueue strategy behaves as Skip, an unrecognised cancel mode as
+        // Hard, an unrecognised cancellation order as Lifo. A typo in configuration then
+        // looks like a deliberate choice, which is the same failure the integer checks
+        // above exist to prevent, so it is rejected here next to them.
+        if (!Enum.IsDefined(options.EnqueueStrategy))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.EnqueueStrategy), options.EnqueueStrategy,
+                "Enqueue strategy must be Wait, Skip or Throw.");
+        }
+
+        if (!Enum.IsDefined(options.ReaderCancelMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ReaderCancelMode), options.ReaderCancelMode,
+                "Reader cancel mode must be Hard or Soft.");
+        }
+
+        if (!Enum.IsDefined(options.ReaderCancellationOrder))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ReaderCancellationOrder), options.ReaderCancellationOrder,
+                "Reader cancellation order must be Lifo, Fifo, RoundRobin or Random.");
+        }
+
+        if (!Enum.IsDefined(options.ProducerCancellation))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ProducerCancellation), options.ProducerCancellation,
+                "Producer cancellation mode must be Observe or Detached.");
+        }
+
         _logger = logger;
         _processor = options.Processor;
         _statusChanged = options.StatusChanged;
         _cancellationOrder = options.ReaderCancellationOrder;
         _cancelMode = options.ReaderCancelMode;
         _enqueueStrategy = options.EnqueueStrategy;
+        _producerCancellation = options.ProducerCancellation;
         _getItemDisplayName = options.GetItemDisplayName ?? (item => $"{item}");
         _handleItemFaulted = options.HandleItemFaulted ?? ((_, _) => SaExecutionErrorStrategy.ShutdownQueue);
         _shutdownTimeout = options.ShutdownTimeout ?? TimeSpan.FromSeconds(30);
@@ -292,10 +376,15 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         // AllowSynchronousContinuations = false is what lets a reader run to
         // completion on the thread that hands it an item, instead of handing that
         // thread's stack to the producer.
+        //
+        // SingleReader is safe to promise when the pool can never hold more than one
+        // reader: ConcurrencyLimit is clamped to _maxConcurrency, so a maximum of 1
+        // means no later resize can add a second one. The channel can then use its
+        // cheaper single-reader wake path.
         _queue = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(_queueCapacity)
         {
             AllowSynchronousContinuations = false,
-            SingleReader = false,
+            SingleReader = _maxConcurrency == 1,
             SingleWriter = options.SingleWriter ?? false,
             FullMode = BoundedChannelFullMode.Wait
         });
@@ -440,79 +529,21 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         if (!IsEnabled) ThrowHelper.QueueStopped();
     }
 
-    /// <summary>
-    /// Runs one item and reports its terminal status. Returns whether the reader
-    /// should keep going: <see langword="false"/> means the reader is done
-    /// (<see cref="SaExecutionErrorStrategy.StopReader"/>, or a cancellation that
-    /// takes the queue down with it).
-    /// </summary>
-    private async Task<bool> ExecuteItemAsync(WorkItem item, CancellationToken ct)
-    {
-        try
-        {
-            ct.ThrowIfCancellationRequested();
-            OnStatusChanged(item.Input, SaWorkStatus.Running);
-            await _processor.Execute(item.Input, ct).ConfigureAwait(false);
-            OnStatusChanged(item.Input, SaWorkStatus.Completed);
-            return true;
-        }
-        catch (OperationCanceledException ex) when (item.CancellationToken.IsCancellationRequested)
-        {
-            // The producer gave up on this item: the reader is fine, only the work
-            // is over, so the reader stays in the pool. The exception travels with
-            // the status — a callback has no logger of its own, so this is the only
-            // place it can learn why the item stopped.
-            OnStatusChanged(item.Input, SaWorkStatus.Aborted, ex);
-            SaWorkQueueLogMessages.LogItemAborted(_logger, _getItemDisplayName(item.Input), ex);
-            return true;
-        }
-        catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
-        {
-            // The queue, not the producer, cancelled the work: the reader is going
-            // down too.
-            OnStatusChanged(item.Input, SaWorkStatus.Cancelled, ex);
-            SaWorkQueueLogMessages.LogItemCancelled(_logger, _getItemDisplayName(item.Input), ex);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            var displayItem = _getItemDisplayName(item.Input);
-
-            SaExecutionErrorStrategy errorStrategy = SaExecutionErrorStrategy.ShutdownQueue;
-            try
-            {
-                OnStatusChanged(item.Input, SaWorkStatus.Faulted, ex);
-                SaWorkQueueLogMessages.LogItemExecutionFailed(_logger, displayItem, ex);
-
-                errorStrategy = _handleItemFaulted(item.Input, ex);
-            }
-            catch (Exception callbackEx)
-            {
-                // A throwing error handler must not decide the reader's fate; the
-                // conservative default (stop the queue) stays in place.
-                SaWorkQueueLogMessages.LogItemHandlerFailed(_logger, displayItem, callbackEx);
-            }
-
-            return errorStrategy switch
-            {
-                SaExecutionErrorStrategy.Continue => true,
-                SaExecutionErrorStrategy.StopReader => false,
-                SaExecutionErrorStrategy.ShutdownQueue => HandleShutdownOnError(ex),
-                _ => true
-            };
-        }
-        finally
-        {
-            MarkInactive();
-        }
-    }
-
     private bool HandleShutdownOnError(Exception ex)
     {
         // Keep the cause that started it. ShutdownAsync can return immediately when
         // a concurrent call has already moved the state, so a later fault must not
-        // overwrite the original — that one is the reason the queue is down.
-        _shutdownError ??= ex;
+        // overwrite the original — that one is the reason the queue is down. A
+        // compare-exchange, not a read-then-write: two readers can fault at the same
+        // moment, and a `??=` would let whichever finished last win rather than the one
+        // that got there first.
+        //
+        // The field is volatile for the lock-free read in ShutdownError, so passing it by
+        // ref here is exactly the case CS0420 describes as legitimate — an interlocked API
+        // — and the compiler asks only that it be spelled out.
+#pragma warning disable CS0420 // a volatile field is intentionally passed by ref to an interlocked API
+        Interlocked.CompareExchange(ref _shutdownError, ex, null);
+#pragma warning restore CS0420
         _ = ShutdownAsync().ConfigureAwait(false);
         return false;
     }
@@ -542,15 +573,29 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     /// one leaves. Never goes below zero: the count is raised before an item is
     /// known to be accepted, and a rejected item takes it straight back down.
     /// </summary>
-    private void MarkInactive()
+    private void MarkInactive() => MarkInactive(1);
+
+    /// <summary>
+    /// Records <paramref name="count"/> finished items under one hold of
+    /// <c>_pendingSync</c>. The drain uses it to give back a whole buffer at once
+    /// instead of taking the same lock once per dropped item.
+    /// </summary>
+    private void MarkInactive(int count)
     {
+        if (count <= 0) return;
+
         TaskCompletionSource? idle = null;
 
         lock (_pendingSync)
         {
-            if (_taskCount > 0 && --_taskCount == 0)
+            if (_taskCount > 0)
             {
-                idle = _idleTcs;
+                _taskCount -= Math.Min(count, _taskCount);
+
+                if (_taskCount == 0)
+                {
+                    idle = _idleTcs;
+                }
             }
         }
 
@@ -596,7 +641,10 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
         catch (Exception ex)
         {
-            SaWorkQueueLogMessages.LogItemHandlerFailed(_logger, _getItemDisplayName(item), ex);
+            if (_logger is not null)
+            {
+                SaWorkQueueLogMessages.LogItemHandlerFailed(_logger, _getItemDisplayName(item), ex);
+            }
         }
     }
 }

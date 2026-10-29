@@ -12,12 +12,18 @@ internal sealed partial class PartRepository(
     ISqlBuilder sqlBuilder,
     // Required, not optional: the [LoggerMessage] methods dereference it, so a null logger
     // turned the first drop/migrate into a NullReferenceException.
-    ILogger<PartRepository> logger) : IPartRepository, IDisposable
+    ILogger<PartRepository> logger) : IPartRepository
 {
 
     /// <summary>
     /// Semaphore to ensure we don't perform ddl sql concurrently for this data source.
     /// </summary>
+    /// <remarks>
+    /// Never disposed. <see cref="SemaphoreSlim"/> owns no unmanaged resource unless
+    /// <c>AvailableWaitHandle</c> is used (it is not), while disposing it does break a run that is
+    /// still queued on it: the host disposes singletons on its way out, and that run would then get
+    /// an <see cref="ObjectDisposedException"/> instead of finishing or waiting for its token.
+    /// </remarks>
     private readonly SemaphoreSlim _migrationSemaphore = new(1, 1);
 
     /// <summary>
@@ -126,6 +132,11 @@ internal sealed partial class PartRepository(
     {
         string sql = sqlBuilder.SelectPartsToDateSql(tableName);
 
+        // Deliberately NOT truncated to the start of the day, unlike GetPartsFromDate. `to_date` in
+        // the cache is the exclusive end of a partition range, and the predicate is `to_date <=
+        // @to_date`: truncating the cutoff would let a retention run drop the partition that contains
+        // the cutoff instant itself.
+        //
         // Same retry policy as GetPartsFromDate: both are the same read of the same cache table, and
         // a cleanup that gives up on one transient connection failure would silently skip a batch of
         // partitions to drop.
@@ -364,11 +375,9 @@ internal sealed partial class PartRepository(
     /// (<c>"public"."events__y2026m06d26"</c> becomes <c>events__y2026m06d26</c>).
     /// </summary>
     private static string BarePartName(string qualifiedPartName)
-    {
-        int separator = qualifiedPartName.LastIndexOf("\".\"", StringComparison.Ordinal);
-        string tail = separator < 0 ? qualifiedPartName : qualifiedPartName[(separator + 3)..];
-        return tail.Trim('"');
-    }
+        => SqlTemplate.TrySplitQualifiedName(qualifiedPartName, out string[] parts)
+            ? parts[^1]
+            : qualifiedPartName.Trim('"');
 
     /// <summary>
     /// Where an archive pass currently finds a partition.
@@ -394,11 +403,6 @@ internal sealed partial class PartRepository(
 
 
     private static bool UndefinedTable(PostgresException ex) => PgErrorCodes.IsUndefinedTable(ex);
-
-    public void Dispose()
-    {
-        _migrationSemaphore.Dispose();
-    }
 
 
     [LoggerMessage(

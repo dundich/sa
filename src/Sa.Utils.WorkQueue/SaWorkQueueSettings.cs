@@ -55,6 +55,12 @@ public sealed class SaWorkQueueSettings
     public SaEnqueueStrategy EnqueueStrategy { get; set; } = SaEnqueueStrategy.Wait;
 
     /// <summary>
+    /// Whether an accepted item keeps observing the producer's cancellation token.
+    /// Default: <see cref="SaProducerCancellationMode.Observe"/>.
+    /// </summary>
+    public SaProducerCancellationMode ProducerCancellation { get; set; } = SaProducerCancellationMode.Observe;
+
+    /// <summary>
     /// How in-flight work is treated when readers are cancelled.
     /// Default: <see cref="SaReaderCancelMode.Hard"/>.
     /// </summary>

@@ -27,7 +27,11 @@ public static class DbCommandExtensions
     }
 
     /// <summary>
-    /// Adds a parameter — infers the value type from the argument.
+    /// Adds a parameter with the provider's typed <see cref="NpgsqlParameter{T}"/>, so a value
+    /// type is not boxed on the way into the parameter. The old <c>CreateParameter()</c> path
+    /// assigned <c>(object)value</c>; bulk statements bind thousands of parameters per batch
+    /// (eight per finished delivery), making those boxes a measurable part of the batch's
+    /// allocation even though the parameter object itself is unavoidable.
     /// </summary>
     public static NpgsqlCommand AddParam<TProvider, T>(
         this NpgsqlCommand command,
@@ -37,9 +41,13 @@ public static class DbCommandExtensions
         where TProvider : INamePrefixProvider
     {
         var paramName = CachedParamNames<TProvider>.Default.Get(prefix, index);
-        var param = command.CreateParameter();
-        param.ParameterName = paramName;
-        param.Value = value is null ? DBNull.Value : (object)value!;
+
+        // A null reference keeps the untyped parameter with DBNull, exactly as before: a typed
+        // parameter for a null value has no type information to infer from.
+        NpgsqlParameter param = value is null
+            ? new NpgsqlParameter(paramName, DBNull.Value)
+            : new NpgsqlParameter<T>(paramName, value);
+
         command.Parameters.Add(param);
 
         return command;

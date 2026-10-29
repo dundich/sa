@@ -71,4 +71,34 @@ public class ArgumentsConfigurationProviderTests
         Assert.Equal("5432", r2);
         Assert.Equal("true", r3);
     }
+
+    /// <summary>
+    /// CLI arguments follow the environment-variable convention: <c>--sa__pg__host</c> exposes
+    /// the <c>sa:pg:host</c> configuration key, and both spellings resolve through the provider.
+    /// </summary>
+    [Fact]
+    public void Load_TreatsDoubleUnderscoreAsConfigurationSeparator()
+    {
+        // Arrange
+        var source = new ArgumentsConfigurationSource
+        {
+            Args = ["--sa__pg__host=db", "--theme=dark"]
+        };
+        var provider = new ArgumentsConfigurationProvider(source);
+
+        // Act
+        provider.Load();
+
+        // Assert — canonical storage…
+        Assert.True(provider.TryGet("sa:pg:host", out var host));
+        Assert.Equal("db", host);
+
+        // …and the alias answers for it on read, so consumers may use either spelling.
+        Assert.True(provider.TryGet("sa__pg__host", out var aliasHost));
+        Assert.Equal("db", aliasHost);
+
+        // Ordinary keys are unaffected.
+        Assert.True(provider.TryGet("theme", out var theme));
+        Assert.Equal("dark", theme);
+    }
 }

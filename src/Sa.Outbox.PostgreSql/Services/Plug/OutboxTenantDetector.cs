@@ -16,7 +16,7 @@ internal class OutboxTenantDetector(ISelectTenantCommand command) : IOutboxTenan
     private ValueTask<IReadOnlyCollection<int>> ExecuteWithRetry(CancellationToken cancellationToken)
     {
         return PgRetryStrategy.ExecuteWithRetry(
-            async ct => await command.Execute(cancellationToken),
+            async ct => await command.Execute(ct),
             cancellationToken: cancellationToken);
     }
 }

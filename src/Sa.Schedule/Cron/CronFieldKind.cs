@@ -1,22 +1,26 @@
 namespace Sa.Schedule.Cron;
 
 /// <summary>
-/// Identifies a positional field of a 5-field cron expression.
+/// Identifies a positional field of a cron expression: 5 fields, or 6 when the expression
+/// starts with an optional seconds field.
 /// </summary>
 internal enum CronFieldKind
 {
-    /// <summary>Field 1 — minute (0-59).</summary>
+    /// <summary>Field 0 of a 6-field expression — second (0-59). Absent in 5-field expressions.</summary>
+    Second,
+
+    /// <summary>Minute (0-59).</summary>
     Minute,
 
-    /// <summary>Field 2 — hour (0-23).</summary>
+    /// <summary>Hour (0-23).</summary>
     Hour,
 
-    /// <summary>Field 3 — day of month (1-31), the only field that supports the L/W specials.</summary>
+    /// <summary>Day of month (1-31), the only field that supports the L/W specials.</summary>
     DayOfMonth,
 
-    /// <summary>Field 4 — month (1-12).</summary>
+    /// <summary>Month (1-12).</summary>
     Month,
 
-    /// <summary>Field 5 — day of week (0-6, where 7 is also Sunday), supports the "dL" special.</summary>
+    /// <summary>Day of week (0-6, where 7 is also Sunday), supports the "dL" special.</summary>
     DayOfWeek,
 }

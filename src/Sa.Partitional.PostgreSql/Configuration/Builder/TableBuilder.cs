@@ -1,4 +1,4 @@
-﻿using Sa.Partitional.PostgreSql.SqlBuilder;
+using Sa.Partitional.PostgreSql.SqlBuilder;
 using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.Settings;
 using System.Text;
@@ -19,6 +19,10 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     /// PostgreSQL truncates identifiers to 63 <b>bytes</b> (UTF-8), not to 63 characters.
     /// </summary>
     private const int MaxIdentifierBytes = 63;
+
+    /// <summary>PostgreSQL's accepted range for the <c>fillfactor</c> storage parameter.</summary>
+    private const int MinFillFactor = 10;
+    private const int MaxFillFactor = 100;
 
 
     private readonly List<string> _fields = [];
@@ -83,13 +87,30 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
             throw new ArgumentException("Part separator cannot contain a double quote.", nameof(partSeparator));
         }
 
+        // A control character would end up inside every generated identifier. It is legal there, but
+        // it can never be intended, and it makes the DDL and the partition names unreadable in logs.
+        if (partSeparator.Any(char.IsControl))
+        {
+            throw new ArgumentException("Part separator cannot contain control characters.", nameof(partSeparator));
+        }
+
         _separator = partSeparator;
         return this;
     }
 
     public ITableBuilder WithFillFactor(int fillFactor)
     {
-        _fillFactor = Math.Clamp(fillFactor, 10, 100);
+        // PostgreSQL's own range for fillfactor is 10–100. Clamping silently created the table with a
+        // value nobody asked for; a value outside the range would otherwise only surface as an error
+        // from CREATE TABLE. Reject it here, where the offending setting is still identifiable.
+        if (fillFactor is < MinFillFactor or > MaxFillFactor)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(fillFactor), fillFactor,
+                $"FillFactor must be between {MinFillFactor} and {MaxFillFactor} (PostgreSQL constraint).");
+        }
+
+        _fillFactor = fillFactor;
         return this;
     }
 
@@ -111,6 +132,14 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         // empty postfix silently produced a cache table named exactly like the root table.
         ArgumentException.ThrowIfNullOrWhiteSpace(postfix);
 
+        // The postfix becomes part of the cache table's identifier. A quote or a control character
+        // there is never intended, and it would make every generated name unreadable.
+        if (postfix.Contains('"') || postfix.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                "Part table postfix cannot contain a double quote or control characters.", nameof(postfix));
+        }
+
         _postfix = postfix;
         return this;
     }
@@ -129,6 +158,8 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
         string idFieldName = GetIdFieldName();
         string partTablePostfix = _postfix ?? Default.PartTablePostfix;
+
+        ValidatePartitionColumns(partByListFieldNames, timestampField);
 
         // Fail fast on a name PostgreSQL would silently truncate: the truncated DDL would never
         // match the identifiers written to the cache table. The name carrying partition values
@@ -169,9 +200,78 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     }
 
     /// <summary>
+    /// Validates the columns the partitioning DDL depends on.
+    /// </summary>
+    /// <remarks>
+    /// Both mistakes this catches are otherwise reported by PostgreSQL at migration time, i.e. from
+    /// a background job, with a message that does not name the table definition that caused it:
+    /// <list type="bullet">
+    /// <item>a list-partition column that no field declares (<c>column "x" named in partition key
+    /// does not exist</c>), or that is listed twice (<c>PARTITION BY LIST ("x")</c> twice at
+    /// consecutive levels);</item>
+    /// <item>a range column declared with a date/time type. Range partitions are bounded by the
+    /// <c>bigint</c> Unix-seconds key, and PostgreSQL refuses to cast those bounds
+    /// (<c>specified value cannot be cast to type timestamp with time zone for column ...</c>).</item>
+    /// </list>
+    /// </remarks>
+    private void ValidatePartitionColumns(string[] partByListFieldNames, string timestampField)
+    {
+        var duplicates = partByListFieldNames
+            .GroupBy(c => c, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToArray();
+
+        if (duplicates.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' declares the list partition column(s) "
+                + $"{string.Join(", ", duplicates)} more than once. Every list level partitions on a "
+                + "distinct column.");
+        }
+
+        foreach (string listField in partByListFieldNames)
+        {
+            if (SqlFieldName.HasColumn(_fields, listField)) continue;
+
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' partitions by list on '{listField}', but no field "
+                + "declares that column. Add it with AddFields/AddTable - PostgreSQL would reject the "
+                + "generated PARTITION BY LIST otherwise.");
+        }
+
+        foreach (string field in _fields)
+        {
+            if (!SqlFieldName.Extract(field).SequenceEqual(timestampField)) continue;
+
+            ReadOnlySpan<char> type = SqlFieldName.ExtractType(field);
+
+            if (!IsDateTimeType(type)) return;
+
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' declares its range partition column '{timestampField}' "
+                + $"as '{type}'. Range partitions are bounded by the bigint Unix-seconds key, so a "
+                + $"date/time column cannot hold those bounds (PostgreSQL: \"specified value cannot be "
+                + $"cast to type ... for column '{timestampField}'\"). Declare it as "
+                + $"\"{timestampField}\" bigint NOT NULL, or drop the declaration and let the library "
+                + "add that column to the root table.");
+        }
+    }
+
+    /// <summary>
+    /// Reports whether <paramref name="type"/> is a PostgreSQL date/time type - the ones whose
+    /// <c>FOR VALUES FROM (...) TO (...)</c> bounds cannot be Unix seconds.
+    /// </summary>
+    private static bool IsDateTimeType(ReadOnlySpan<char> type)
+        => type.StartsWith("timestamp", StringComparison.OrdinalIgnoreCase)
+        || type.StartsWith("date", StringComparison.OrdinalIgnoreCase)
+        || type.StartsWith("time", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// The first declared column doubles as the primary key id column, so its name has to be
-    /// extracted from the raw SQL definition: cut at the first whitespace and drop the surrounding
-    /// quotes, because the value is quoted again by <c>QuoteIdentifier</c>.
+    /// extracted from the raw SQL definition: the name is the leading token (quotes included when the
+    /// identifier contains a space) and is dropped into the settings unquoted, because it is quoted
+    /// again by <c>QuoteIdentifier</c>.
     /// </summary>
     private string GetIdFieldName()
     {

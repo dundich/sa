@@ -12,9 +12,14 @@ namespace Sa.Data.TempFolder;
 /// input is rejected even when it would have stayed inside the root: <c>..</c> segments (on either
 /// separator), <c>~</c> (never expanded), shell/glob metacharacters (<c>&lt; &gt; | &amp; ; ` $ ^ * ? " ' %</c>),
 /// control and invisible Unicode characters (bidi overrides, zero-width), and — on Windows — a
-/// colon outside the drive spec. A read-only instance
-/// (<see cref="TempFolderOptions.ReadOnly"/>) rejects every mutating call with
-/// <see cref="InvalidOperationException"/> and is ignored by the background service entirely.
+/// colon outside the drive spec. Paths that pass through a symbolic link or junction inside the
+/// root are rejected too, for every operation — a mutation would otherwise land in the link's
+/// target, wherever that lives. A read-only instance
+/// (<see cref="TempFolderOptions.ReadOnly"/>) rejects every mutating call
+/// (<see cref="CreateSubfolder"/>, <see cref="WriteAsync"/>, <see cref="CopyFileAsync"/>,
+/// <see cref="DeleteFileAsync"/>) with <see cref="InvalidOperationException"/>, makes
+/// <see cref="CleanupExpiredAsync"/> a no-op returning 0, and is ignored by the background
+/// service entirely.
 /// </remarks>
 public interface ITempFolder : IDisposable
 {
@@ -47,8 +52,9 @@ public interface ITempFolder : IDisposable
     /// cleanup pass: a concurrent pass is cancelled rather than allowed to race it (see
     /// <see cref="CleanupExpiredAsync"/>). When the source's remaining length is known
     /// (<see cref="Stream.CanSeek"/>), the target file is preallocated to exactly that size so it
-    /// never grows in chunks during the copy. A failed or cancelled copy removes the partially
-    /// written target — no half-written file is left behind for a reader to take for complete.
+    /// never grows in chunks during the copy. The copy is staged in a sibling temp file and renamed
+    /// into place only when complete: a reader never observes a truncated target, and a failed or
+    /// cancelled copy leaves an existing file exactly as it was (the staged partial is removed).
     /// </summary>
     /// <param name="source">The stream to copy from; its current position is respected.</param>
     /// <param name="path">
@@ -132,7 +138,8 @@ public interface ITempFolder : IDisposable
     /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace.</exception>
     /// <exception cref="InvalidOperationException">The path points at a directory.</exception>
     /// <exception cref="System.Security.SecurityException">
-    /// The path resolves outside the root, or contains an injection-style construct (see the remarks above).
+    /// The path resolves outside the root, passes through a symbolic link inside the root, or
+    /// contains an injection-style construct (see the remarks above).
     /// </exception>
     Task<bool> ReadAsync(
         string path,
@@ -171,7 +178,8 @@ public interface ITempFolder : IDisposable
     /// A transient failure persisted through all retry attempts.
     /// </exception>
     /// <exception cref="System.Security.SecurityException">
-    /// The path resolves outside the root, or contains an injection-style construct (see the remarks above).
+    /// The path resolves outside the root, passes through a symbolic link inside the root, or
+    /// contains an injection-style construct (see the remarks above).
     /// </exception>
     Task<bool> DeleteFileAsync(string path, CancellationToken cancellationToken = default);
 
@@ -181,6 +189,10 @@ public interface ITempFolder : IDisposable
     /// cannot start or keep deleting while the walk is in flight, so the caller sees a consistent
     /// snapshot of the tree (see <see cref="CleanupExpiredAsync"/>).
     /// </summary>
+    /// <remarks>
+    /// Symbolic links and junctions are skipped — neither reported nor descended into — so every
+    /// returned path really lives under <see cref="RootPath"/> and a link cycle cannot hang the walk.
+    /// </remarks>
     /// <param name="pattern">File pattern, e.g. <c>"*.dat"</c> or <c>"report_?.csv"</c> — the
     /// pattern is a pattern, not a path, so <c>*</c>/<c>?</c> are allowed there.</param>
     /// <param name="subfolder">Subfolder to search — relative or absolute (when absolute
@@ -199,13 +211,15 @@ public interface ITempFolder : IDisposable
     /// <summary>
     /// Runs one cleanup pass: asks the instance's cleanup strategy for expired subfolders and
     /// deletes them (path-guarded, retrying transient failures), honouring
-    /// <see cref="TempFolderOptions.MaxFoldersPerPass"/>. When volume tracking is on, a
-    /// low-priority measurement runs first so <see cref="TempFolderOptions.OnVolumeExceeded"/> sees
-    /// current data.
+    /// <see cref="TempFolderOptions.MaxFoldersPerPass"/> — enforced by the instance, so it caps a
+    /// custom strategy's output too. When volume tracking is on, a low-priority measurement runs
+    /// first so <see cref="TempFolderOptions.OnVolumeExceeded"/> sees current data.
     /// </summary>
     /// <remarks>
-    /// A read-only instance and an instance with <see cref="TempFolderOptions.CleanupEnabled"/>
-    /// turned off do nothing at all: the pass returns 0 without touching the disk.
+    /// A read-only instance does nothing at all: the pass returns 0 without touching the disk. With
+    /// <see cref="TempFolderOptions.CleanupEnabled"/> turned off nothing is deleted either — but the
+    /// volume measurement still runs first (it only reports), so volume tracking keeps working with
+    /// the default <see cref="TempFolderOptions.VolumeScanInterval"/> of zero.
     /// <para>
     /// The pass always yields to file activity: it does not start while a
     /// <see cref="WriteAsync"/> / <see cref="CopyFileAsync"/> / <see cref="ReadAsync"/> /

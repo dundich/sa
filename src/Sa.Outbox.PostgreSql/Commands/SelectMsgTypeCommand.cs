@@ -10,8 +10,21 @@ internal sealed class SelectMsgTypeCommand(
 {
     public async Task<IReadOnlyCollection<(long id, string typeName)>> Execute(CancellationToken cancellationToken)
     {
+        NpgsqlOutboxReader.TypeReader.Ordinals ordinals = default;
+        bool haveOrdinals = false;
+
         return await dataSource.ExecuteReaderList(sql.SqlSelectType,
-            reader => (id: outboxReader.Type.GetTypeId(reader), typeName: outboxReader.Type.GetTypeName(reader))
+            reader =>
+            {
+                if (!haveOrdinals)
+                {
+                    ordinals = outboxReader.Type.GetOrdinals(reader);
+                    haveOrdinals = true;
+                }
+
+                return (id: outboxReader.Type.GetTypeId(reader, in ordinals),
+                        typeName: outboxReader.Type.GetTypeName(reader, in ordinals));
+            }
         , cancellationToken);
     }
 }

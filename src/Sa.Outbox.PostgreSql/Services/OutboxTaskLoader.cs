@@ -7,6 +7,7 @@ using Sa.Outbox.PostgreSql.Commands;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Outbox.PostgreSql.TypeResolve;
+using System.Collections.Concurrent;
 using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Services;
@@ -24,6 +25,13 @@ internal sealed partial class OutboxTaskLoader(
 
     private readonly ILogger _logger = logger ?? NullLogger<OutboxTaskLoader>.Instance;
 
+    /// <summary>
+    /// Advisory-lock keys by consumer group. <see cref="CalculateLockKey"/> renders the record's
+    /// <c>ToString()</c> and walks it byte by byte; the key is stable for a (group, tenant), so
+    /// caching it removes that string from every poll. Bounded by configured groups × tenants.
+    /// </summary>
+    private readonly ConcurrentDictionary<ConsumerGroupIdentifier, int> _lockKeys = new();
+
     internal sealed record ConsumerGroupIdentifier(string ConsumerGroupId, int TenantId);
 
     public async Task<LoadGroupResult> LoadNewTasks(
@@ -39,13 +47,18 @@ internal sealed partial class OutboxTaskLoader(
         }
         catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
+            // Do not turn a cancel into an empty queue: DeliveryJob would report idle and back
+            // the poll off while the host is shutting down.
             LogCanceledLoad(_logger, ex, filter);
-            return LoadGroupResult.Empty;
+            throw;
         }
         catch (Exception ex) when (!ex.IsCritical())
         {
+            // PgRetryStrategy has already retried transients. Swallowing what remains made a
+            // broken load look like an empty queue: the cursor did not advance (no message
+            // loss) but adaptive idle backed off, and the only signal was this log line.
             LogErrorLoad(_logger, ex, filter);
-            return LoadGroupResult.Empty;
+            throw;
         }
     }
 
@@ -55,7 +68,7 @@ internal sealed partial class OutboxTaskLoader(
         CancellationToken cancellationToken)
     {
         return await PgRetryStrategy.ExecuteWithRetry(
-            async t => await LoadGroupAndShiftOffset(filter, batchSize, cancellationToken),
+            async t => await LoadGroupAndShiftOffset(filter, batchSize, t),
             cancellationToken: cancellationToken);
     }
 
@@ -115,14 +128,15 @@ internal sealed partial class OutboxTaskLoader(
 
         if (await reader.ReadAsync(cancellationToken))
         {
-            if (await reader.IsDBNullAsync(0, cancellationToken))
-                return LoadGroupResult.Empty;
-
-            int copiedRows = reader.GetInt32(0);
+            // COUNT(*) is bigint. GetInt32 throws InvalidCastException on Npgsql 10, and the
+            // caller used to swallow that as an empty queue — no task was ever created.
+            // COUNT(*) is never NULL; the empty-insert case is a zero count, and only then is
+            // max_seq (column 1) NULL, so it must not be read.
+            long copiedRows = reader.GetInt64(0);
             if (copiedRows == 0)
                 return LoadGroupResult.Empty;
 
-            return new LoadGroupResult(copiedRows, reader.GetInt64(1));
+            return new LoadGroupResult(checked((int)copiedRows), reader.GetInt64(1));
         }
         else
         {
@@ -136,7 +150,7 @@ internal sealed partial class OutboxTaskLoader(
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
     {
-        int lockKey = CalculateLockKey(consumerGroup);
+        int lockKey = _lockKeys.GetOrAdd(consumerGroup, static group => CalculateLockKey(group));
 
         using var command = new NpgsqlCommand(sql.SqlLockOffset, conn, tx);
         command.AddParamAdvisoryXactLock(lockKey);
@@ -185,9 +199,11 @@ internal sealed partial class OutboxTaskLoader(
 
     /// <summary>
     /// Translates a configured floor into the exclusive <c>msg_seq</c> boundary below it — the
-    /// seq of the last message that still sorts below the floor (0 when none) — once per consumer
-    /// group, and keeps the result cached in <see cref="PgOutboxConsumeSettings"/>. Runs inside
-    /// the advisory lock so two workers of the same group cannot resolve different floors.
+    /// seq of the last message that still sorts below the floor (0 when none) — once per
+    /// (consumer group, tenant), and keeps the result cached in <see cref="PgOutboxConsumeSettings"/>.
+    /// The resolving queries filter by <c>tenant_id</c>, so a floor cached for one tenant is not
+    /// a floor for another. Runs inside the advisory lock so two workers of the same group and
+    /// tenant cannot resolve different floors.
     /// <c>SqlLoadConsumerGroup</c> compares <c>msg_seq &gt; @offset</c> against this boundary, so
     /// the first message at or above the floor is the first delivered (strict semantics, same set
     /// the old UUID cursor picked with <c>msg_id &gt; @offset</c>).
@@ -200,7 +216,7 @@ internal sealed partial class OutboxTaskLoader(
     {
         var groupId = consumerGroup.ConsumerGroupId;
 
-        if (consumeSettings.TryGetResolvedFloor(groupId, out long cached))
+        if (consumeSettings.TryGetResolvedFloor(groupId, consumerGroup.TenantId, out long cached))
             return cached;
 
         long floor = 0;
@@ -226,7 +242,7 @@ internal sealed partial class OutboxTaskLoader(
             floor = (long)(await command.ExecuteScalarAsync(cancellationToken) ?? 0L);
         }
 
-        consumeSettings.SetResolvedFloor(groupId, floor);
+        consumeSettings.SetResolvedFloor(groupId, consumerGroup.TenantId, floor);
         return floor;
     }
 

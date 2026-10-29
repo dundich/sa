@@ -137,9 +137,9 @@ public static class Setup
     /// error handlers and <see cref="ScheduleOptions"/> (bound from its own
     /// <c>FromConfiguration</c> section to its own named options instance). Repeated calls with
     /// the same name accumulate jobs into that schedule, exactly like the keyless overload does
-    /// for the default schedule. Explicit <c>jobId</c>s must stay unique across the whole
-    /// container — two schedules sharing a <c>jobId</c> would also share the keyed job
-    /// registration (auto-generated ids never clash).
+    /// for the default schedule. An explicit <c>jobId</c> must be unique within its schedule
+    /// across job types (the same type with the same id merges into one job); auto-generated
+    /// ids never clash.
     /// </remarks>
     public static IServiceCollection AddSaSchedule(
         this IServiceCollection services,
@@ -160,6 +160,10 @@ public static class Setup
         Action<IScheduleBuilder>? configure)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // Snapshot for rollback: a rejected configuring call must not leave half of its
+        // registrations (core services and jobs) behind in the collection.
+        int serviceCount = services.Count;
 
         var markerExists = scheduleKey is null
             ? services.Any(d => d.ServiceType == typeof(ScheduleOptionsConfigurationMarker))
@@ -185,13 +189,21 @@ public static class Setup
 
         // Both configuring intents — FromConfiguration(...) and Options(...) — live inside
         // `configure`, so they are only knowable once it has run: the guard fires here, before
-        // either is applied to the pipeline. By this point the call has already registered
-        // its jobs; the exception still aborts the registration, so no provider is ever built
-        // from the half-configured collection.
+        // either is applied to the pipeline. The registrations this call already appended are
+        // rolled back, so the rejected call leaves the collection exactly as it found it.
         var sectionPath = builder?.ConfigSectionPath;
 
         if (markerExists && (sectionPath is not null || builder is { SettingsActions.Count: > 0 }))
         {
+            // The call is rejected as a whole, so roll back what it appended: core
+            // registrations, jobs and any services the configure callback registered.
+            // Leaving them behind would make the container differ from what the caller
+            // sees, and a later job-only call would silently inherit them.
+            while (services.Count > serviceCount)
+            {
+                services.RemoveAt(services.Count - 1);
+            }
+
             throw SecondConfiguringCall(scheduleKey);
         }
 
@@ -257,7 +269,19 @@ public static class Setup
         {
             services.TryAddSingleton<IScheduler, Scheduler>();
             services.TryAddSingleton<IJobFactory, JobFactory>();
-            services.TryAddSingleton<IJobErrorHandler, JobErrorHandler>();
+
+            // Registered through a factory, not by implementation type: both
+            // IHostApplicationLifetime and ILogger<JobErrorHandler> are optional,
+            // and a nullable annotation does not make a constructor parameter
+            // optional for DI. Implementation-type registration therefore made the
+            // handler unresolvable in any container without a Generic Host (a bare
+            // ServiceCollection, a test fixture) — and JobController's error path
+            // then silently aborted the job instead of applying the policy. The
+            // keyed registration below has always used this shape.
+            services.TryAddSingleton<IJobErrorHandler>(static sp => new JobErrorHandler(
+                sp.GetRequiredService<IScheduleSettings>(),
+                sp.GetService<IHostApplicationLifetime>(),
+                sp.GetService<ILogger<JobErrorHandler>>()));
 
             // Not a side effect of `new ScheduleBuilder(...)` — the settings must exist even when
             // no builder is created, or a call to AddSaSchedule() without `configure` would leave
@@ -276,14 +300,16 @@ public static class Setup
             services.TryAddKeyedSingleton<IScheduler>(
                 scheduleKey, static (sp, key) => new Scheduler(
                     sp.GetRequiredKeyedService<IScheduleSettings>(key),
-                    sp.GetRequiredKeyedService<IJobFactory>(key)));
+                    sp.GetRequiredKeyedService<IJobFactory>(key),
+                    sp.GetService<ILogger<Scheduler>>()));
 
             services.TryAddKeyedSingleton<IJobFactory>(
                 scheduleKey, static (sp, key) => new JobFactory(
                     sp.GetRequiredService<IServiceScopeFactory>(),
                     sp.GetRequiredKeyedService<IInterceptorSettings>(key),
                     sp.GetRequiredService<IJobRunner>(),
-                    sp.GetService<TimeProvider>()));
+                    sp.GetService<TimeProvider>(),
+                    sp.GetService<ILogger<JobScheduler>>()));
 
             services.TryAddKeyedSingleton<IJobErrorHandler>(
                 scheduleKey, static (sp, key) => new JobErrorHandler(

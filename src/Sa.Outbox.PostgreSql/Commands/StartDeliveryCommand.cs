@@ -30,8 +30,11 @@ internal sealed class StartDeliveryCommand(
 
         // Column ordinals are resolved once, on the first row, and read by index afterwards (M3).
         // The locals live in this invocation's closure and the callback runs synchronously inside
-        // ExecuteReader, so the singleton command instance needs no synchronization.
+        // ExecuteReader, so the singleton command instance needs no synchronization. Both halves
+        // of the joined row are captured here: the payload column is read for every message, and
+        // its per-row GetOrdinal was the remaining scan on the delivery path.
         NpgsqlOutboxReader.TaskQueueReader.Ordinals ordinals = default;
+        NpgsqlOutboxReader.MsgReader.Ordinals msgOrdinals = default;
         bool haveOrdinals = false;
 
         return await dataSource.ExecuteReader(sql.SqlLockAndSelect
@@ -40,10 +43,12 @@ internal sealed class StartDeliveryCommand(
                 if (!haveOrdinals)
                 {
                     ordinals = outboxReader.TaskQueue.GetOrdinals(reader);
+                    msgOrdinals = outboxReader.Message.GetOrdinals(reader);
                     haveOrdinals = true;
                 }
 
-                OutboxDeliveryMessage<TMessage> deliveryMessage = Read<TMessage>(reader, in ordinals, serializer);
+                OutboxDeliveryMessage<TMessage> deliveryMessage =
+                    Read<TMessage>(reader, in ordinals, in msgOrdinals, serializer);
                 writeBuffer.Span[i] = contextFactory.Create<TMessage>(deliveryMessage);
             }
             , cmd => cmd
@@ -64,13 +69,14 @@ internal sealed class StartDeliveryCommand(
     private OutboxDeliveryMessage<TMessage> Read<TMessage>(
         NpgsqlDataReader reader,
         in NpgsqlOutboxReader.TaskQueueReader.Ordinals o,
+        in NpgsqlOutboxReader.MsgReader.Ordinals msgOrdinals,
         IOutboxMessageSerializer serializer)
     {
         Guid msgId = outboxReader.TaskQueue.GetMgsId(reader, in o);
         string payloadId = outboxReader.TaskQueue.GetMgsPayloadId(reader, in o);
         int tenantId = outboxReader.TaskQueue.GetTenantId(reader, in o);
 
-        TMessage payload = ReadPayload<TMessage>(reader, serializer);
+        TMessage payload = ReadPayload<TMessage>(reader, in msgOrdinals, serializer);
         OutboxPartInfo outboxPart = ReadOutboxMsgPart(reader, in o, tenantId);
         OutboxTaskDeliveryInfo deliveryInfo = ReadDeliveryInfo(reader, in o, tenantId);
 
@@ -109,9 +115,12 @@ internal sealed class StartDeliveryCommand(
         );
     }
 
-    private TMessage ReadPayload<TMessage>(NpgsqlDataReader reader, IOutboxMessageSerializer serializer)
+    private TMessage ReadPayload<TMessage>(
+        NpgsqlDataReader reader,
+        in NpgsqlOutboxReader.MsgReader.Ordinals msgOrdinals,
+        IOutboxMessageSerializer serializer)
     {
-        using Stream stream = outboxReader.Message.GetMgsPayload(reader);
+        using Stream stream = outboxReader.Message.GetMgsPayload(reader, in msgOrdinals);
         TMessage payload = serializer.Deserialize<TMessage>(stream)!;
         return payload;
     }

@@ -1,6 +1,6 @@
 # Sa.Media.FFmpeg
 
-Cross-platform .NET wrapper for FFmpeg (Windows x64, Linux x64) with **bundled fully-static binaries** — works out of the box without system-wide installation. Simplifies audio processing: metadata extraction, format conversion, channel split/join, and DI integration.
+Cross-platform .NET wrapper for FFmpeg (Windows x64, Linux x64) with **bundled fully static binaries** — works out of the box, no system-wide FFmpeg and no codec libraries required. Simplifies audio processing: metadata extraction, format conversion, channel split/join, and DI integration.
 
 ---
 
@@ -9,7 +9,7 @@ Cross-platform .NET wrapper for FFmpeg (Windows x64, Linux x64) with **bundled f
 - 🎵 **Metadata extraction** — duration, bitrate, format, size via `ffprobe`
 - 🔊 **Audio conversion** — PCM S16 LE WAV, PCM S32 LE WAV, raw PCM S16 LE/F32 LE binary, MP3, OGG Vorbis/Opus
 - 🎛️ **Channel manipulation** — split stereo to mono files, join two monos into stereo (via DI)
-- 📦 **Bundled FFmpeg binaries** — fully-static builds for `win-x64` and `linux-x64`, extracted into the app's output directory at build time (no system install, no native dependencies)
+- 📦 **Bundled FFmpeg binaries** — fully static builds for `win-x64` and `linux-x64`, extracted into the app's output directory at build time (no system install, no shared-library dependencies)
 - 💉 **DI support** — standard `IServiceCollection` integration with options configuration
 - ⚡ **Streaming I/O** — pipe audio directly from streams without intermediate files
 
@@ -364,9 +364,21 @@ public record ProcessExecutionResult(
 
 ## Bundled Binaries
 
-FFmpeg static builds are packed into the NuGet package and extracted by an MSBuild target into `sa/native/` next to the application at build time. No system installation required.
+FFmpeg builds are packed into the NuGet package and extracted by an MSBuild target into `sa/native/` next to the application at build time. No system FFmpeg installation is required.
 
 **Supported RIDs:** `win-x64`, `linux-x64`. **Payloads shipped in the package:** `win-x64` and `linux-x64` — the two lists are identical on purpose. Any other RID (`win-arm64`, Linux arm64, macOS) resolves to no payload: the build emits a loud warning, and at runtime the library falls back to a system FFmpeg (PATH or `ExecutablePath`).
+
+### Static payload
+
+Both payloads are fully static: `readelf -d sa/native/ffmpeg` has no dynamic section and `ldd` reports *not a dynamic executable*. The libav* libraries, the audio codecs (`libmp3lame`, `libopus`, `libvorbis`/`libvorbisenc`) and libc are all linked in, so nothing has to be installed on the host — `libmp3lame0`/`libopus0`/`libvorbis*` are **not** needed. Because the ELF needs no interpreter, the same Linux binary also runs on musl distributions (`linux-musl-x64` resolves to the `linux-x64` payload).
+
+`build/build-linux.sh` enforces this (`--pkg-config-flags=--static` plus `-static`) and fails the build if a codec library leaks back into the dynamic dependencies:
+
+```bash
+readelf -d sa/native/ffmpeg | grep NEEDED   # no output expected
+```
+
+⚠️ **No fallback from a broken bundle.** Discovery takes the first *existing* file, so when `sa/native/ffmpeg` is present but cannot run, the system FFmpeg is not tried — fix the bundle or set `FFMpegOptions.ExecutablePath`. The real cause is surfaced: `GetVersion()`, `GetFormats()` and `GetCodecs()` throw `ProcessExecutionResultException` with the exit code and the ffmpeg stderr tail.
 
 **Discovery order:**
 1. `AppContext.BaseDirectory/ffmpeg`

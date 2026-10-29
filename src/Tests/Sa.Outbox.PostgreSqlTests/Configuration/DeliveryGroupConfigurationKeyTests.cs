@@ -147,9 +147,8 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
     public void Stage1Snapshot_PredatesSection_AndStage2UpgradesIt()
     {
         DeliveryGroupSettingsRegistration registration = Assert.Single(
-            fixture.ServiceProvider
-                .GetServices<DeliveryGroupSettingsRegistration>()
-                .Where(r => r.ConsumerGroupId == GroupId));
+            fixture.ServiceProvider.GetServices<DeliveryGroupSettingsRegistration>(),
+            r => r.ConsumerGroupId == GroupId);
 
         // Stage 1 (registration time): defaults + configure only — no section yet.
         Assert.Equal(OutboxDefaults.MaxBatchSize, registration.RegistrationTimeSettings.MaxBatchSize);

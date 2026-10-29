@@ -248,6 +248,11 @@ options.AddMetadata<MyMessage>(partName: "orders", getPayloadId: m => m.Id);
 options.AddMetadata<MyMessage>();
 ```
 
+Both `class` and `struct` payloads are accepted. For a value type, register its metadata
+(`AddMetadata<T>()` when it implements `IOutboxPublishable`, or `AddMetadata<T>(partName, getter)`)
+so the payload id is resolved through a typed delegate. An unregistered struct that implements
+`IOutboxPublishable` still works, but its fallback path boxes the payload.
+
 ---
 
 ## Available Providers
@@ -268,6 +273,51 @@ A provider must implement three key interfaces:
 | `IOutboxBulkWriter` | Bulk message insertion into DB |
 | `IOutboxDeliveryManager` | Locking and message dispatch |
 | `ITenantSource` | Tenant ID source |
+
+> **Consumer ownership.** The `messages` memory passed to `IConsumer.Consume` and every context
+> in it are owned by the pipeline for the duration of that call. The contexts are recycled once
+> the statuses are persisted, so a consumer must not retain them (or the payload reached through
+> them) beyond the returned task. `OutboxMessage<T>`, `OutboxPartInfo`, `OutboxTaskDeliveryInfo`
+> and `OutboxDeliveryMessage<T>` are `readonly record struct`s.
+>
+> **Provider shape.** `IOutboxBulkWriter` has an `OutboxMessageBatch<T>` overload carrying one
+> shared part and no per-message wrapper. Its default implementation materializes the old
+> `OutboxMessage<T>` shape, so an existing provider keeps working until it overrides the overload.
+
+### Keeping the payload after the call
+
+Take the payload object itself, not the context:
+
+```csharp
+public async ValueTask Consume(
+    OutboxConsumerSettings settings,
+    OutboxMessageFilter filter,
+    ReadOnlyMemory<IOutboxContextOperations<OrderCreated>> messages,
+    CancellationToken ct)
+{
+    var owned = new List<OrderCreated>(messages.Length);
+
+    foreach (IOutboxContextOperations<OrderCreated> message in messages.Span)
+    {
+        // The reference (or the value, for a struct) belongs to you from here on.
+        owned.Add(message.Payload);
+        message.Ok();
+    }
+
+    // The contexts are recycled when Consume returns; `owned` is not.
+    await _inbox.SaveAsync(owned, ct);
+}
+```
+
+If `TMessage` is mutable, or a custom `IOutboxMessageSerializer` can return pooled/reused
+buffers, clone the data inside `Consume` instead of keeping the reference:
+
+```csharp
+byte[] owned = JsonSerializer.SerializeToUtf8Bytes(message.Payload);
+```
+
+Do not keep the `IOutboxContextOperations<T>` instance (or a `messages` slice) in a field,
+static collection, background task, or log scope.
 
 ---
 

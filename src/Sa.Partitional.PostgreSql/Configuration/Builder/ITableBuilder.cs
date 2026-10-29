@@ -9,7 +9,7 @@ namespace Sa.Partitional.PostgreSql;
 public interface ITableBuilder
 {
     /// <summary>
-    /// Appends raw SQL field definitions to the table (e.g. <c>"created_at timestamptz NOT NULL"</c>).
+    /// Appends raw SQL field definitions to the table (e.g. <c>"created_at bigint NOT NULL"</c>).
     /// </summary>
     /// <param name="sqlFields">One or more column definitions.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
@@ -24,8 +24,15 @@ public interface ITableBuilder
     ITableBuilder PartByList(params string[] fieldNames);
 
     /// <summary>
-    /// Configures the table for <strong>range partitioning</strong> using a timestamp/timestamptz column.
+    /// Configures the table for <strong>range partitioning</strong> on a <c>bigint</c> column that
+    /// holds Unix seconds.
     /// </summary>
+    /// <remarks>
+    /// The range key is an integer, not a timestamp: every <c>FOR VALUES</c> bound the library
+    /// generates is a Unix-second value, so a <c>timestamptz</c>/<c>date</c> column cannot hold the
+    /// partition bounds. When the column is not declared among the fields, the library adds
+    /// <c>"created_at" bigint NOT NULL</c> to the root table itself.
+    /// </remarks>
     /// <param name="partBy">The partitioning granularity — day, month, or year.</param>
     /// <param name="timestampFieldName">
     /// The column to partition on. Used only when <see cref="TimestampAs"/> was not called - that call
@@ -58,7 +65,8 @@ public interface ITableBuilder
     /// </summary>
     /// <remarks>Applied to the date-range child tables only - the root table and the intermediate
     /// list partitions are emitted without it.</remarks>
-    /// <param name="fillFactor">An integer; values are clamped to the 10..100 range.</param>
+    /// <param name="fillFactor">An integer between 10 and 100 (PostgreSQL's own range for
+    /// <c>fillfactor</c>); anything else throws <see cref="ArgumentOutOfRangeException"/>.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
     ITableBuilder WithFillFactor(int fillFactor);
 

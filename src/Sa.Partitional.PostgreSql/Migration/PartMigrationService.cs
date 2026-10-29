@@ -65,9 +65,12 @@ internal sealed partial class PartMigrationService(
         try
         {
             DateTimeOffset now = timeProvider.GetUtcNow().StartOfDay();
-            DateTimeOffset[] dates = [.. Enumerable
-                .Range(0, settings.ForwardDays)
-                .Select(i => now.AddDays(i))];
+            var dates = new DateTimeOffset[settings.ForwardDays];
+
+            for (int i = 0; i < dates.Length; i++)
+            {
+                dates[i] = now.AddDays(i);
+            }
 
             // The background job owns no token of its own: the scheduler's token is the host's,
             // and a started run has to reach the end.
@@ -100,12 +103,14 @@ internal sealed partial class PartMigrationService(
         using var deadlineCts = new CancellationTokenSource(settings.RunTimeout);
 
         // The repository (and through it user IPartTableMigrationSupport.GetParts code) only ever
-        // sees a token owned by this library.
-        using CancellationTokenSource runCts = honorCallerToken
+        // sees a token owned by this library. A manual run additionally honours the caller's token,
+        // which needs a second source; it is disposed below rather than by a second `using` on the
+        // same variable, so the deadline source is never disposed twice.
+        using CancellationTokenSource? linkedCts = honorCallerToken
             ? CancellationTokenSource.CreateLinkedTokenSource(deadlineCts.Token, callerToken)
-            : deadlineCts;
+            : null;
 
-        CancellationToken runToken = runCts.Token;
+        CancellationToken runToken = linkedCts?.Token ?? deadlineCts.Token;
 
         LogMigrating(dates.Length, settings.RunTimeout);
 

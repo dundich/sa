@@ -54,6 +54,36 @@ public sealed class JobControllerLifecycleTests
     }
 
     [Fact]
+    public void ExecutionFailed_BeforeAnyExecution_StillAppliesTheErrorPolicy()
+    {
+        // A throwing custom timing fails in CanExecute — after Start() but before the first
+        // execution opens the run's scope. The configured handler must still be resolved
+        // (in a short-lived scope of its own) and its decision honoured.
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<FailingJob>(jobId);
+        settings.ErrorHandling.IfErrorRetry(0);
+
+        int handlerCalls = 0;
+
+        var factory = TrackingScopeFactory.Create(services =>
+        {
+            services.AddKeyedScoped<RecordingJob>(jobId);
+            services.AddScoped<IJobErrorHandler>(_ =>
+                new ConsumingErrorHandler(() => handlerCalls++));
+        });
+
+        var controller = new JobController(0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
+
+        controller.Start();
+        controller.ExecutionFailed(new InvalidOperationException("timing failed"));
+
+        Assert.Equal(1, handlerCalls);
+        Assert.False(controller.AbortedByError);
+
+        controller.Shutdown();
+    }
+
+    [Fact]
     public async Task Execute_ExhaustsRetries_NoHandler_DoesNotSetAbortFlag()
     {
         // With no IJobErrorHandler registered, the exhausted-retry path resolves
@@ -168,7 +198,7 @@ public sealed class JobControllerLifecycleTests
     }
 
     [Fact]
-    public async Task Start_CreatesScope_Shutdown_DisposesScope_NoLeak()
+    public async Task FirstExecute_CreatesScope_Shutdown_DisposesScope_NoLeak()
     {
         var jobId = Guid.NewGuid();
         var settings = JobSettings.Create<RecordingJob>(jobId);
@@ -179,11 +209,34 @@ public sealed class JobControllerLifecycleTests
         var controller = new JobController(0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
 
         controller.Start();
+        await controller.Execute(TestContext.Current.CancellationToken);
         controller.Shutdown();
 
         var scopes = factory.Scopes;
         Assert.Single(scopes);
         Assert.True(scopes[0].Disposed);
+    }
+
+    [Fact]
+    public void Start_WithoutExecution_OpensNoScope()
+    {
+        // A slot that is started for a job firing hours from now must not pin its scoped
+        // services (a DbContext, a connection) for the whole wait: the scope is opened on
+        // the first execution and reused from then on.
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<RecordingJob>(jobId);
+        settings.Properties.WithCron("0 3 * * *");
+
+        var factory = TrackingScopeFactory.Create(services =>
+            services.AddKeyedScoped<RecordingJob>(jobId));
+
+        var controller = new JobController(0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
+
+        controller.Start();
+
+        Assert.Empty(factory.Scopes);
+
+        controller.Shutdown();
     }
 
     [Fact]
@@ -371,17 +424,186 @@ public sealed class JobControllerLifecycleTests
         var controller = new JobController(
             0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
 
-        bool aborted = await new JobRunner()
+        JobRunResult result = await new JobRunner()
             .Run(controller, TestContext.Current.CancellationToken);
 
         Assert.Equal(3, Volatile.Read(ref attempts)); // 1 attempt + 2 retries
 
         // The loop ended because a RunOnce job has no more work — from the
         // scheduler's point of view this is a finished job (it must stop and
-        // tear its readers down), so Run reports true. No error handler threw,
-        // so the controller itself is not marked AbortedByError.
-        Assert.True(aborted);
+        // tear its readers down). No error handler threw, so the controller
+        // itself is not marked AbortedByError.
+        Assert.Equal(JobRunResult.Finished, result);
         Assert.False(controller.AbortedByError);
+    }
+
+    [Fact]
+    public void Execute_ConsumedError_ResetsTheRetryBudgetForTheNextFailure()
+    {
+        // Regression: the budget was consumed exactly once per slot lifetime. After
+        // the first attempt+retries and a handler that *consumed* the error, every
+        // later failure went straight to the handler with zero retries, because
+        // FailedRetries was still equal to RetryCount.
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<FailingJob>(jobId);
+        settings.ErrorHandling.IfErrorRetry(1);
+
+        int handlerCalls = 0;
+
+        var controller = MakeController(settings, services =>
+            services.AddScoped<IJobErrorHandler>(_ =>
+                new ConsumingErrorHandler(() => Interlocked.Increment(ref handlerCalls))));
+
+        controller.Start();
+
+        // 1st failure: one retry owed, the handler is not involved yet.
+        controller.ExecutionFailed(new InvalidOperationException("1"));
+        Assert.Equal(0, handlerCalls);
+
+        // 2nd failure: budget spent -> handler consumes the error.
+        controller.ExecutionFailed(new InvalidOperationException("2"));
+        Assert.Equal(1, handlerCalls);
+
+        // 3rd failure: a fresh budget must apply, so the handler is NOT called.
+        controller.ExecutionFailed(new InvalidOperationException("3"));
+        Assert.Equal(1, handlerCalls);
+
+        // 4th failure: budget spent again -> handler, for the second time.
+        controller.ExecutionFailed(new InvalidOperationException("4"));
+        Assert.Equal(2, handlerCalls);
+
+        // The handler consumed every error, so the job was never aborted.
+        Assert.False(controller.AbortedByError);
+
+        controller.Shutdown();
+    }
+
+    [Fact]
+    public void Execute_ErrorHandlerCannotBeResolved_AbortsWithoutThrowing()
+    {
+        // A handler whose factory throws means the policy cannot be applied at all.
+        // The job must still abort (same contract as a throwing handler), and the
+        // failure must not escape ExecutionFailed — it is logged instead.
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<FailingJob>(jobId);
+        settings.ErrorHandling.IfErrorRetry(0);
+
+        var controller = MakeController(settings, services =>
+            services.AddScoped<IJobErrorHandler>(_ =>
+                throw new InvalidOperationException("handler factory failed")));
+
+        controller.Start();
+
+        controller.ExecutionFailed(new InvalidOperationException("boom"));
+
+        Assert.True(controller.AbortedByError);
+
+        controller.Shutdown();
+    }
+
+    [Fact]
+    public void Execute_ErrorHandlerReceivesTheOriginalException_NotTheWrapper()
+    {
+        // The handler is documented to receive the exception the job actually threw
+        // (the same object retry/suppress see); the JobException wrapper, with its
+        // ContextSnapshot, stays available as IJobContext.LastError.
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<FailingJob>(jobId);
+        settings.ErrorHandling.IfErrorRetry(0);
+
+        Exception? seen = null;
+        IJobContext? seenContext = null;
+
+        var controller = MakeController(settings, services =>
+            services.AddScoped<IJobErrorHandler>(_ =>
+                new RecordingErrorHandler((context, exception) =>
+                {
+                    seenContext = context;
+                    seen = exception;
+                })));
+
+        controller.Start();
+
+        var original = new InvalidOperationException("boom");
+        controller.ExecutionFailed(original);
+
+        controller.Shutdown();
+
+        Assert.Same(original, seen);
+        Assert.IsType<JobException>(seenContext!.LastError);
+    }
+
+    [Fact]
+    public async Task Runner_CanExecuteThrows_ReportsToPolicyAndEndsTheRun()
+    {
+        // A throwing custom timing used to escape RunLoop, fault the queue item and
+        // kill the slot while IsStarted still reported true. It must go through the
+        // job error policy and end the run (which the scheduler turns into teardown).
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<RecordingJob>(jobId);
+        settings.Properties.WithTiming(new ThrowingTiming());
+
+        var controller = MakeController(settings);
+        controller.Start();
+
+        JobRunResult result = await new JobRunner()
+            .Run(controller, TestContext.Current.CancellationToken);
+
+        // A loop-level failure is reported as "faulted", not "finished": the scheduler
+        // tears the slot down but must not consume a RunOnce budget for it.
+        Assert.Equal(JobRunResult.Faulted, result);
+
+        controller.Shutdown();
+    }
+
+    [Fact]
+    public void Execute_FailedSnapshot_IncludesTheFailureBeingReported()
+    {
+        // The snapshot used to be taken before FailedIterations was incremented, so
+        // ContextSnapshot.FailedIterations lagged the context by one.
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<FailingJob>(jobId);
+        settings.ErrorHandling.IfErrorRetry(0);
+
+        IJobContext? seenContext = null;
+
+        var controller = MakeController(settings, services =>
+            services.AddScoped<IJobErrorHandler>(_ =>
+                new RecordingErrorHandler((context, _) => seenContext = context)));
+
+        controller.Start();
+
+        controller.ExecutionFailed(new InvalidOperationException("boom"));
+
+        controller.Shutdown();
+
+        Assert.Equal(1UL, seenContext!.FailedIterations);
+        Assert.Equal(1UL, seenContext.LastError!.ContextSnapshot.FailedIterations);
+    }
+
+    [Fact]
+    public async Task Runner_ImmediateFirstIteration_PushesContextSnapshot()
+    {
+        // The Immediate early-return skipped PushStackSnapshot, so an immediate job's
+        // first (and, when RunOnce, only) iteration saw an empty context stack.
+        var jobId = Guid.NewGuid();
+        var settings = JobSettings.Create<StackProbeJob>(jobId);
+        settings.Properties.RunOnce().StartImmediate().WithContextStackSize(5);
+
+        int? observedDepth = null;
+
+        var factory = TrackingScopeFactory.Create(services =>
+            services.AddKeyedScoped<StackProbeJob>(jobId, (_, _) =>
+                new StackProbeJob(depth => observedDepth = depth)));
+
+        var controller = new JobController(
+            0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
+
+        JobRunResult result = await new JobRunner()
+            .Run(controller, TestContext.Current.CancellationToken);
+
+        Assert.Equal(JobRunResult.Finished, result);
+        Assert.Equal(1, observedDepth);
     }
 
     private static JobController MakeController(
@@ -409,6 +631,42 @@ public sealed class JobControllerLifecycleTests
     {
         public Task Execute(IJobContext context, CancellationToken cancellationToken)
             => throw new InvalidOperationException("always fails");
+    }
+
+    /// <summary>
+    /// Stands in for the schedule's <c>IJobErrorHandler</c>: returns normally, i.e.
+    /// "the error was consumed and the job continues".
+    /// </summary>
+    sealed class ConsumingErrorHandler(Action onHandle) : IJobErrorHandler
+    {
+        public void HandleError(IJobContext context, Exception exception) => onHandle();
+    }
+
+    /// <summary>
+    /// Captures what the error path actually passes to the handler.
+    /// </summary>
+    sealed class RecordingErrorHandler(Action<IJobContext, Exception> onHandle) : IJobErrorHandler
+    {
+        public void HandleError(IJobContext context, Exception exception) => onHandle(context, exception);
+    }
+
+    /// <summary>Fails the way a broken custom timing would.</summary>
+    sealed class ThrowingTiming : IJobTiming
+    {
+        public string TimingName => "throwing";
+
+        public DateTimeOffset? GetNextOccurrence(DateTimeOffset dateTime)
+            => throw new InvalidOperationException("timing failed");
+    }
+
+    /// <summary>Reports the context-stack depth it was handed on execution.</summary>
+    sealed class StackProbeJob(Action<int> onExecute) : IJob
+    {
+        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        {
+            onExecute(context.Stack.Count());
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>

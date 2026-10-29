@@ -90,6 +90,21 @@ public sealed class FilePathResolver : IFilePathResolver
 
     private static readonly char[] s_separators = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
+    /// <summary>
+    /// Comparison for deciding whether a resolved path lies under <see cref="ConfiguredPath"/>:
+    /// case-insensitive on Windows, where the file system is (by default) too.
+    /// </summary>
+    private static readonly StringComparison s_pathComparison =
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    /// <summary>
+    /// Upper bound on remembered per-path mappings. The cache exists to make repeated lookups
+    /// cheap; it must not grow with the number of distinct database paths a long-running process
+    /// sees, so it is dropped wholesale on overflow (an eviction policy would buy little here —
+    /// a re-resolution is a couple of probes).
+    /// </summary>
+    private const int MaxCacheEntries = 65_536;
+
     /// <summary>Immutable per-file resolution result.</summary>
     private readonly struct Resolution(ResolvedPathType type, string mapDir, string xDir)
     {
@@ -113,7 +128,10 @@ public sealed class FilePathResolver : IFilePathResolver
     private volatile bool _isForceSearch;
     private int _hasResolved;
 
-    /// <summary>Raised once, when the first mapping is established.</summary>
+    /// <summary>
+    /// Raised once, when the first mapping is established. A handler that throws cannot break the
+    /// resolver: the exception is swallowed, because resolution has already succeeded.
+    /// </summary>
     public event EventHandler? Resolved;
 
     /// <summary>
@@ -215,7 +233,7 @@ public sealed class FilePathResolver : IFilePathResolver
         if (_externalMap is { } map
             && TryResolveCached(map, normalized) is { } ext)
         {
-            _cache[normalized] = map;
+            Remember(normalized, map);
             return ToRelative(ext, asRelativePath);
         }
 
@@ -227,11 +245,22 @@ public sealed class FilePathResolver : IFilePathResolver
         // a file found anywhere in the tree carries no reliable directory mapping.
         if (res.Type != ResolvedPathType.None)
         {
-            _cache[normalized] = res;
+            Remember(normalized, res);
             RaiseResolvedIfNeeded();
         }
 
         return ToRelative(full, asRelativePath);
+    }
+
+    /// <summary>Stores a mapping, keeping the cache bounded (see <see cref="MaxCacheEntries"/>).</summary>
+    private void Remember(string dbPath, Resolution resolution)
+    {
+        if (_cache.Count >= MaxCacheEntries)
+        {
+            _cache.Clear();
+        }
+
+        _cache[dbPath] = resolution;
     }
 
     /// <summary>Resolves a previously cached mapping back to a concrete path, or <c>null</c> when the file has vanished.</summary>
@@ -398,7 +427,16 @@ public sealed class FilePathResolver : IFilePathResolver
     private void RaiseResolvedIfNeeded()
     {
         if (Interlocked.Exchange(ref _hasResolved, 1) == 0)
-            Resolved?.Invoke(this, EventArgs.Empty);
+        {
+            try
+            {
+                Resolved?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception)
+            {
+                // A subscriber must never break a lookup that has already succeeded.
+            }
+        }
     }
 
     /// <summary>
@@ -410,7 +448,7 @@ public sealed class FilePathResolver : IFilePathResolver
         if (!asRelativePath)
             return full;
 
-        return full.StartsWith(ConfiguredPath + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+        return full.StartsWith(ConfiguredPath + Path.DirectorySeparatorChar, s_pathComparison)
             ? Path.GetRelativePath(ConfiguredPath, full)
             : full;
     }

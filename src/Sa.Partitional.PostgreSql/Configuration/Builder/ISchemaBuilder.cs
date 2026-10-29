@@ -18,7 +18,7 @@ public interface ISchemaBuilder
     /// Creates a new table definition builder with explicitly provided SQL field definitions.
     /// </summary>
     /// <param name="tableName">The logical table name (without schema prefix).</param>
-    /// <param name="sqlFields">Raw SQL column definitions, e.g. <c>"created_at timestamptz NOT NULL"</c>.</param>
+    /// <param name="sqlFields">Raw SQL column definitions, e.g. <c>"created_at bigint NOT NULL"</c>.</param>
     /// <returns>A fluent <see cref="ITableBuilder"/> for further configuration.</returns>
     ITableBuilder AddTable(string tableName, params string[] sqlFields);
 

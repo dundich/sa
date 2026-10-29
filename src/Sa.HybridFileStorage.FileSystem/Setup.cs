@@ -15,9 +15,11 @@ public static class Setup
     /// </summary>
     /// <param name="services">The service collection to add the services to.</param>
     /// <param name="name">
-    /// The registration name — the key the filesystem storage and its <see cref="ITempFolder"/> are
-    /// registered under (<c>sp.GetRequiredKeyedService&lt;ITempFolder&gt;(name)</c>). Must be unique
-    /// per registration; a second call with the same name throws.
+    /// The registration name — the key the filesystem storage, its named options instance and its
+    /// <see cref="ITempFolder"/> are registered under
+    /// (<c>sp.GetRequiredKeyedService&lt;IFileStorage&gt;(name)</c>,
+    /// <c>sp.GetRequiredKeyedService&lt;ITempFolder&gt;(name)</c>). Must be unique per
+    /// registration; a second call with the same name throws.
     /// </param>
     /// <param name="configure">
     /// The configuration channel: the section via <see cref="IFileSystemStorageBuilder.FromConfiguration"/>,
@@ -37,9 +39,11 @@ public static class Setup
     /// </exception>
     /// <remarks>
     /// <para>
-    /// Registration is additive: every call registers one <see cref="IFileStorage"/> and one keyed
-    /// <see cref="ITempFolder"/>, so several filesystem storages — each with its own root, basket and
-    /// daily TTL — can coexist in one collection.
+    /// Registration is additive: every call registers one keyed <see cref="IFileStorage"/> (plus an
+    /// unkeyed alias resolving the same instance) and one keyed <see cref="ITempFolder"/>, so several
+    /// filesystem storages — each with its own root, basket and daily TTL — can coexist in one
+    /// collection. Resolve a specific one by its name:
+    /// <c>sp.GetRequiredKeyedService&lt;IFileStorage&gt;(name)</c>.
     /// </para>
     /// <para>
     /// The storage options pipeline runs in a fixed order: the section binding

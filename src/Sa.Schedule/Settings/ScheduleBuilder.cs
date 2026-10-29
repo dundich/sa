@@ -52,6 +52,7 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
             where T : class, IJob
     {
         Guid id = GetId(jobId);
+        RegisterJob(id, typeof(T), nameof(jobId));
         _services.TryAddKeyedScoped<T>(id);
 
         JobSettings jobSettings = JobSettings.Create<T>(id);
@@ -66,6 +67,7 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
             where T : class, IJob
     {
         Guid id = GetId(jobId);
+        RegisterJob(id, typeof(T), nameof(jobId));
         _services.TryAddKeyedScoped<T>(id);
 
         AddJobSettings(sp =>
@@ -81,6 +83,7 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
     public IJobBuilder AddJob(Func<IJobContext, CancellationToken, Task> action, Guid? jobId = null)
     {
         Guid id = GetId(jobId);
+        RegisterJob(id, typeof(FuncJob), nameof(jobId));
 
         // Remove by the actual key being registered (id), not by the raw
         // parameter: with a null jobId the parameter can never match the
@@ -118,6 +121,46 @@ internal sealed class ScheduleBuilder : IScheduleBuilder
     }
 
     private static Guid GetId(Guid? jobId) => jobId.GetValueOrDefault(Guid.NewGuid());
+
+    /// <summary>
+    /// Records a job registration and rejects a duplicate explicit id on a different type
+    /// immediately — the settings-level guard would only fire when the scheduler is
+    /// resolved, i.e. at host start.
+    /// </summary>
+    /// <remarks>
+    /// Markers are keyed by schedule, so the same id in two different schedules stays
+    /// allowed; the same id and the same type is the documented accumulation case.
+    /// </remarks>
+    private void RegisterJob(Guid id, Type jobType, string paramName)
+    {
+        bool alreadyRecorded = false;
+
+        foreach (ServiceDescriptor descriptor in _services)
+        {
+            if (descriptor.ServiceType != typeof(JobRegistration)) continue;
+            if (!Equals(descriptor.ServiceKey, _scheduleKey)) continue;
+            if (descriptor.ImplementationInstance is not JobRegistration existing) continue;
+            if (existing.JobId != id) continue;
+
+            if (existing.JobType != jobType)
+            {
+                JobIdGuard.Throw(id, existing.JobType, jobType, paramName);
+            }
+
+            alreadyRecorded = true;
+        }
+
+        if (alreadyRecorded) return;
+
+        if (_scheduleKey is null)
+        {
+            _services.AddSingleton(new JobRegistration(id, jobType));
+        }
+        else
+        {
+            _services.AddKeyedSingleton(_scheduleKey, new JobRegistration(id, jobType));
+        }
+    }
 
     public IScheduleBuilder UseHostedService()
     {

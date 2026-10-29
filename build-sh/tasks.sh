@@ -16,7 +16,7 @@ MSBUILD_VERBOSITY="n"
 CONFIG="Release"
 
 # How many test assemblies `dotnet test` may run at the same time. Most test assemblies here start
-# Testcontainers (PostgreSQL/Minio), so the default "all of them at once" means dozens of live
+# Testcontainers (PostgreSQL/SeaweedFS), so the default "all of them at once" means dozens of live
 # database containers and the machine runs out of memory. Override per machine:
 #   SA_TEST_PARALLELISM=6 ./build-sh/do-test.sh
 MAX_PARALLEL_TEST_MODULES="${SA_TEST_PARALLELISM:-2}"
@@ -46,6 +46,31 @@ PROJECTS=(
   "Sa.HybridFileStorage.FileSystem"
   "Sa.HybridFileStorage.Postgres"
   "Sa.HybridFileStorage.S3"
+)
+
+# Images the integration suites start (one container per test class, so they are pulled once and
+# then reused from the local daemon — after a pull the suites need no registry at all).
+#
+# Kept in sync by hand with the fixture defaults:
+#   src/Tests/Fixtures/Sa.Data.PostgreSql.Fixture/PostgreSqlFixtureSettings.cs  -> postgres
+#   src/Tests/Fixtures/Sa.Data.S3.Fixture/S3FixtureSettings.cs                  -> seaweedfs
+# The Ryuk image is pinned by the Testcontainers package itself (the version in
+# src/Directory.Packages.props decides it); bump this line when that version changes.
+DOCKER_TEST_IMAGES=(
+  "postgres:15"
+  "chrislusf/seaweedfs:4.50"
+  "testcontainers/ryuk:0.14.0"
+)
+
+DOCKER_IMAGE_ARCHIVE_DIR="$ROOT/dist/docker-images"
+
+# Docker Hub endpoints a pull talks to. The blobs themselves are served from a CDN that the
+# registry redirects to, so the CDN hosts have to be routed as well.
+DOCKER_REGISTRY_HOSTS=(
+  "auth.docker.io"
+  "registry-1.docker.io"
+  "production.cloudflare.docker.com"
+  "production.cloudfront.docker.com"
 )
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -136,6 +161,196 @@ test_ci() {
   # per-assembly concurrency is capped by src/Tests/xunit.runner.json anyway.
   ( cd "$SRC_DIR" && dotnet test "$SLN_FILE" --filter "Category!=Local" ) || { _assert_exec; return; }
   _assert_exec
+}
+
+# ── Testcontainers images ────────────────────────────────────────
+#
+# Every integration test class boots its own container, so the images below are pulled once and
+# then reused from the local daemon. After that the suites need no registry at all — which matters
+# on a machine where the registry is unreachable or (as behind a slow tunnel) effectively is.
+#
+# Usage: ./build-sh/do-docker-images.sh {status|pull|save|load}
+
+_docker_image_archive() {
+  # postgres:15 -> postgres_15.tar
+  echo "$DOCKER_IMAGE_ARCHIVE_DIR/$(echo "$1" | tr '/:' '__').tar"
+}
+
+docker_images_status() {
+  _step "Testcontainers images"
+  local image
+  for image in "${DOCKER_TEST_IMAGES[@]}"; do
+    if docker image inspect "$image" >/dev/null 2>&1; then
+      printf '  %-45s present\n' "$image"
+    else
+      printf '  %-45s MISSING\n' "$image"
+    fi
+  done
+}
+
+docker_images_pull() {
+  _step "Pulling Testcontainers images"
+  local image
+  for image in "${DOCKER_TEST_IMAGES[@]}"; do
+    _step "docker pull $image"
+    docker pull "$image" || { _assert_exec; return; }
+  done
+  docker_images_status
+}
+
+docker_images_save() {
+  local dir="${1:-$DOCKER_IMAGE_ARCHIVE_DIR}"
+  _step "Saving Testcontainers images to $dir"
+  mkdir -p "$dir"
+  local image archive
+  for image in "${DOCKER_TEST_IMAGES[@]}"; do
+    archive="$(_docker_image_archive "$image")"
+    # An image that was never pulled cannot be saved; fail loudly instead of writing an empty tar.
+    docker image inspect "$image" >/dev/null 2>&1 || {
+      echo "образ $image отсутствует локально — сначала ./build-sh/do-docker-images.sh pull" >&2
+      return 1
+    }
+    _step "docker save $image"
+    docker save -o "$archive" "$image" || { _assert_exec; return; }
+    printf '  %s (%s)\n' "$archive" "$(du -h "$archive" | cut -f1)"
+  done
+}
+
+docker_images_load() {
+  local dir="${1:-$DOCKER_IMAGE_ARCHIVE_DIR}"
+  _step "Loading Testcontainers images from $dir"
+  [[ -d "$dir" ]] || { echo "нет каталога $dir" >&2; return 1; }
+  local archive found=0
+  for archive in "$dir"/*.tar; do
+    [[ -e "$archive" ]] || continue
+    found=1
+    _step "docker load $archive"
+    docker load -i "$archive" || { _assert_exec; return; }
+  done
+  [[ $found -eq 1 ]] || { echo "в $dir нет *.tar" >&2; return 1; }
+  docker_images_status
+}
+
+# ── Docker Hub routing ───────────────────────────────────────────
+#
+# When a VPN/tunnel owns the default route, every pull is pushed through it — which on a throttled
+# tunnel turns a 150 MB image into an hours-long download. These helpers add host routes for the
+# registry and its CDN through the physical interface so pulls go direct, without touching the
+# tunnel for any other traffic.
+#
+# Usage: sudo ./build-sh/do-docker-bypass.sh {status|on|off}
+
+_docker_host_ips() {
+  local host
+  for host in "${DOCKER_REGISTRY_HOSTS[@]}"; do
+    getent ahostsv4 "$host" 2>/dev/null | awk '{print $1}'
+  done | sort -u
+}
+
+# Table id the tunnel keeps its default route in, as referenced by `ip rule`. A bypass route in
+# `main` alone is never consulted: the policy rules look up this table first, and its default route
+# wins before `main` is reached.
+_vpn_route_table() {
+  ip -4 rule show 2>/dev/null \
+    | awk '{for (i = 1; i <= NF; i++) if ($i == "lookup") print $(i + 1)}' \
+    | grep -E '^[0-9]+$' \
+    | grep -vxE '(0|253|254|255)' \
+    | sort -u | head -1
+}
+
+_phys_iface() {
+  ip -4 route show default table main 2>/dev/null \
+    | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") print $(i + 1)}' | head -1
+}
+
+_phys_gateway() {
+  ip -4 route show default table main 2>/dev/null \
+    | awk '{for (i = 1; i <= NF; i++) if ($i == "via") print $(i + 1)}' | head -1
+}
+
+_phys_address() {
+  ip -4 -o addr show dev "$1" scope global 2>/dev/null \
+    | awk '{print $4}' | cut -d/ -f1 | head -1
+}
+
+# Prints "<table> <gateway> <device> <address>" — the route every bypass entry is built from.
+_docker_bypass_plan() {
+  local dev gw src table
+  dev="$(_phys_iface)"
+  gw="$(_phys_gateway)"
+  table="$(_vpn_route_table)"
+  if [[ -z "$dev" || -z "$gw" ]]; then
+    echo "нет default-маршрута в таблице main — не от чего отталкиваться" >&2
+    return 1
+  fi
+  src="$(_phys_address "$dev")"
+  echo "${table:-main} $gw $dev $src"
+}
+
+docker_bypass_status() {
+  _step "Маршруты до Docker Hub"
+  local plan table gw dev src ip
+  plan="$(_docker_bypass_plan)" || return 1
+  read -r table gw dev src <<<"$plan"
+  echo "физический канал: $dev ${src:-?} через $gw"
+  echo "таблица туннеля:  ${table}"
+  echo ""
+  while read -r ip; do
+    [[ -n "$ip" ]] || continue
+    printf '  %-40s ' "$ip"
+    # `ip route get` honours the policy rules, so this shows the path a pull would really take.
+    ip -4 route get "$ip" 2>/dev/null | head -1
+  done < <(_docker_host_ips)
+}
+
+docker_bypass_on() {
+  _step "Направляю Docker Hub мимо туннеля"
+  local plan table gw dev src ip t
+  plan="$(_docker_bypass_plan)" || return 1
+  read -r table gw dev src <<<"$plan"
+
+  local tables=("main")
+  [[ "$table" != "main" ]] && tables+=("$table")
+
+  while read -r ip; do
+    [[ -n "$ip" ]] || continue
+    for t in "${tables[@]}"; do
+      if [[ -n "$src" ]]; then
+        sudo ip route replace "$ip/32" via "$gw" dev "$dev" src "$src" table "$t" >/dev/null
+      else
+        sudo ip route replace "$ip/32" via "$gw" dev "$dev" table "$t" >/dev/null
+      fi
+    done
+    printf '  %-40s -> %s dev %s (таблицы: %s)\n' "$ip" "$gw" "$dev" "${tables[*]}"
+  done < <(_docker_host_ips)
+
+  echo ""
+  docker_bypass_status
+  echo ""
+  echo "Проверка: путь должен идти через $dev, а не через tun0."
+  echo "Если путь всё ещё через tun0 — у туннеля kill switch (nftables); тогда надёжнее"
+  echo "поставить VPN на паузу на время pull."
+}
+
+docker_bypass_off() {
+  _step "Убираю маршруты до Docker Hub"
+  local plan table gw dev src ip t
+  plan="$(_docker_bypass_plan)" || return 1
+  read -r table gw dev src <<<"$plan"
+
+  local tables=("main")
+  [[ "$table" != "main" ]] && tables+=("$table")
+
+  while read -r ip; do
+    [[ -n "$ip" ]] || continue
+    for t in "${tables[@]}"; do
+      sudo ip route del "$ip/32" table "$t" >/dev/null 2>&1 || true
+    done
+    printf '  %-40s снят\n' "$ip"
+  done < <(_docker_host_ips)
+
+  echo ""
+  docker_bypass_status
 }
 
 nu_pack() {

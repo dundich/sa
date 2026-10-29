@@ -179,6 +179,25 @@ public sealed class PostgresFileStorageOptionsTests
     }
 
     [Fact]
+    public void Validate_Rejects_NegativeMaxUploadSizeBytes()
+    {
+        var options = ValidOptions();
+        options.MaxUploadSizeBytes = -1;
+
+        var ex = Assert.Throws<ArgumentException>(() => options.Validate());
+        Assert.Equal(nameof(options.MaxUploadSizeBytes), ex.ParamName);
+    }
+
+    [Fact]
+    public void Validate_Accepts_ZeroMaxUploadSizeBytes_AsNoLimit()
+    {
+        var options = ValidOptions();
+        options.MaxUploadSizeBytes = 0;
+
+        options.Validate();
+    }
+
+    [Fact]
     public void Validate_ReportsTheFirstOffendingProperty()
     {
         var options = new PostgresFileStorageOptions
@@ -205,5 +224,36 @@ public sealed class PostgresFileStorageOptionsTests
         Assert.Equal(365 * 3, options.ExpireDays);
         Assert.Equal(2, options.MigrationScheduleForwardDays);
         Assert.Equal(PartByRange.Day, options.PartByRange);
+        Assert.Equal(0, options.MaxUploadSizeBytes);
+    }
+
+    [Fact]
+    public void Copy_CopiesEveryProperty()
+    {
+        // A property added to the options without a line in CopyTo would be silently dropped for
+        // the explicit-instance overloads, which seed the pipeline through it. Record equality
+        // compares every property, so this fails as soon as the two lists drift apart.
+        var source = new PostgresFileStorageOptions
+        {
+            SchemaName = "storage",
+            TableName = "files",
+            StorageType = "pgc",
+            IsReadOnly = true,
+            Basket = "archive",
+            ExpireDays = 7,
+            MigrationScheduleForwardDays = 3,
+            PartByRange = PartByRange.Month,
+            MaxUploadSizeBytes = 1024,
+        };
+
+        PostgresFileStorageOptions copy = source.Copy();
+
+        Assert.NotSame(source, copy);
+        Assert.Equal(source, copy);
+
+        var target = new PostgresFileStorageOptions();
+        source.CopyTo(target);
+
+        Assert.Equal(source, target);
     }
 }

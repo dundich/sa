@@ -44,6 +44,21 @@ public sealed record PostgreSqlConfigurationOptions(
     public bool SkipEmptyValues { get; init; } = true;
 
     /// <summary>
+    /// When <see langword="true"/>, a double underscore in a key is read as the
+    /// <c>:</c> configuration separator, so <c>sa__pg__host</c> in the database addresses the
+    /// same setting as <c>sa:pg:host</c> — the convention <c>AddEnvironmentVariables()</c>
+    /// already applies to environment variables. Off by default: keys are stored verbatim, so
+    /// a key that legitimately contains <c>__</c> is not silently re-shaped.
+    /// </summary>
+    /// <remarks>
+    /// When on, keys are normalized after trimming and before duplicate resolution, so if
+    /// the query returns both <c>sa__pg__host</c> and <c>sa:pg:host</c>, <see cref="LastWins"/>
+    /// decides which value survives, and a request for either spelling answers for the same
+    /// setting.
+    /// </remarks>
+    public bool DoubleUnderscoreAsSeparator { get; init; }
+
+    /// <summary>
     /// When <see langword="true"/> (default), the last row wins for duplicated keys. When
     /// <see langword="false"/>, the first row wins.
     /// </summary>
@@ -63,6 +78,7 @@ public sealed record PostgreSqlConfigurationOptions(
          + $"{nameof(MaxAttempts)} = {MaxAttempts}, "
          + $"{nameof(MedianFirstRetryDelay)} = {MedianFirstRetryDelay}, "
          + $"{nameof(SkipEmptyValues)} = {SkipEmptyValues}, "
+         + $"{nameof(DoubleUnderscoreAsSeparator)} = {DoubleUnderscoreAsSeparator}, "
          + $"{nameof(LastWins)} = {LastWins} }}";
 
     private string RedactedConnectionString()

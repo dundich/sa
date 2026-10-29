@@ -34,8 +34,9 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <see cref="IsIdle"/> provokes: work is pending, so why is nothing happening to
     /// it? Without this, a caller can see that it is not idle and has no way to find out
     /// whether the queue was paused by hand, lost every reader to a
-    /// <see cref="ForceCancelReaders"/> or a fault, or has been stopped. Only the third
-    /// is a fault, and only the third has an obvious response.
+    /// <see cref="ForceCancelReaders"/> or a fault, or has been stopped. Only the second
+    /// is a fault; the other two are a decision the caller already made and a queue that
+    /// is simply gone.
     /// <para>
     /// <see cref="ConcurrencyLimit"/> does not answer it: a force-cancel releases the
     /// slots of the readers it stops, so the limit reads <c>0</c> afterwards exactly as
@@ -122,8 +123,13 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="input">The work item to process.</param>
     /// <param name="cancellationToken">
-    /// Token for caller-initiated cancellation. If this token is cancelled while the item is being processed,
-    /// the item is reported as <see cref="SaWorkStatus.Aborted"/> and the reader continues to the next item.
+    /// Token for caller-initiated cancellation. In the default
+    /// <see cref="SaProducerCancellationMode.Observe"/> mode it is stored with the item:
+    /// cancelling it while the item is buffered or being processed reports
+    /// <see cref="SaWorkStatus.Aborted"/> and the reader continues to the next item. In
+    /// <see cref="SaProducerCancellationMode.Detached"/> mode it only cancels the wait for
+    /// buffer space — once accepted, the item is no longer abortable by its producer, and
+    /// an already-cancelled token rejects the call with <see cref="OperationCanceledException"/>.
     /// </param>
     /// <returns>
     /// <see langword="true" /> if the item was accepted into the buffer;
@@ -134,7 +140,11 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <exception cref="SaWorkQueueFullException">If the buffer is full and the strategy is <see cref="SaEnqueueStrategy.Throw"/>.</exception>
     /// <exception cref="InvalidOperationException">If the queue has been shut down.</exception>
     /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
-    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled while waiting for buffer space (<see cref="SaEnqueueStrategy.Wait"/> only).</exception>
+    /// <exception cref="OperationCanceledException">
+    /// If <paramref name="cancellationToken"/> is cancelled while waiting for buffer space
+    /// (<see cref="SaEnqueueStrategy.Wait"/> only), or was already cancelled when the item
+    /// is offered in <see cref="SaProducerCancellationMode.Detached"/> mode.
+    /// </exception>
     ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -155,6 +165,11 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// Intended for hot paths where the caller cannot block or await:
     /// it offers the same "drop when full" outcome as <see cref="SaEnqueueStrategy.Skip"/>
     /// regardless of the configured strategy, without any asynchronous machinery.
+    /// <para>
+    /// The item carries no cancellation token, so it cannot be cancelled by the caller after
+    /// acceptance — the reader runs it to a terminal status. Use
+    /// <see cref="Enqueue(TInput, CancellationToken)"/> when the work must remain abortable.
+    /// </para>
     /// </remarks>
     bool TryEnqueue(TInput input);
 
@@ -171,8 +186,13 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="inputs">The work items to process, in the order they are enqueued.</param>
     /// <param name="cancellationToken">
-    /// Token for caller-initiated cancellation. All enqueued items share this token, so cancelling it
-    /// aborts every not-yet-completed item from this batch (<see cref="SaWorkStatus.Aborted"/>).
+    /// Token for caller-initiated cancellation. In
+    /// <see cref="SaProducerCancellationMode.Observe"/> mode all enqueued items share this
+    /// token, so cancelling it aborts every not-yet-completed item from this batch
+    /// (<see cref="SaWorkStatus.Aborted"/>). In
+    /// <see cref="SaProducerCancellationMode.Detached"/> mode it cancels only the waits for
+    /// buffer space, and a cancellation observed between items stops the batch with
+    /// <see cref="OperationCanceledException"/> after the preceding items were accepted.
     /// </param>
     /// <returns>
     /// The number of items accepted into the buffer
@@ -181,9 +201,13 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// </returns>
     /// <exception cref="SaWorkQueueFullException">If the buffer is full and the strategy is <see cref="SaEnqueueStrategy.Throw"/>
     /// (carries <see cref="SaWorkQueueFullException.AcceptedCount"/> and <see cref="SaWorkQueueFullException.TotalCount"/>).</exception>
+    /// <exception cref="ArgumentNullException">If <paramref name="inputs"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">If the queue has been shut down.</exception>
     /// <exception cref="ObjectDisposedException">If the queue has been disposed.</exception>
-    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled while waiting for space.</exception>
+    /// <exception cref="OperationCanceledException">
+    /// If <paramref name="cancellationToken"/> is cancelled while waiting for space, or is
+    /// observed cancelled between items in <see cref="SaProducerCancellationMode.Detached"/> mode.
+    /// </exception>
     ValueTask<int> EnqueueMany(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -253,6 +277,13 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// one of the tasks being awaited, so the call blocks for the full
     /// <see cref="SaWorkQueueOptions{TInput}.ShutdownTimeout"/> (30 s by default) and only then
     /// returns. Hand the work off to a background task instead (see <c>JobScheduler.AbortJob</c>).
+    /// <para>
+    /// A call that finds a shutdown already running waits for that one to finish instead of
+    /// returning early, so "shutdown completed" means the same thing to every caller: readers
+    /// gone and the buffer reported. Only a call made from inside that shutdown — a status
+    /// callback asking to stop the queue again — returns immediately, because waiting would
+    /// mean waiting on itself.
+    /// </para>
     /// </remarks>
     Task ShutdownAsync();
 
@@ -265,6 +296,8 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <remarks>
     /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/> — see
     /// <see cref="ShutdownAsync"/> for why, and use a background task instead.
+    /// A call that finds a shutdown already running blocks until it finishes, exactly as
+    /// <see cref="ShutdownAsync"/> awaits it.
     /// </remarks>
     void Shutdown();
 
@@ -280,6 +313,12 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/>: the calling reader is
     /// one of the tasks being awaited, so the call blocks for the full
     /// <see cref="SaWorkQueueOptions{TInput}.ShutdownTimeout"/>. Use a background task instead.
+    /// <para>
+    /// Items still in the buffer are dropped and reported as <see cref="SaWorkStatus.Faulted"/>
+    /// — but only when this call actually stopped a reader. On a paused queue, or on one whose
+    /// readers are already unwinding, there is nothing to cancel and therefore nothing to
+    /// discard: the items stay queued for a re-armed pool.
+    /// </para>
     /// </remarks>
     void ForceCancelReaders();
 
@@ -305,6 +344,10 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// on <see cref="TimeoutException"/> or cancellation the items still in the buffer are kept,
     /// no reader is picking them up, and a warning is logged saying so. Raise
     /// <see cref="ConcurrencyLimit"/> above 0 to spawn a replacement pool and let them run.
+    /// A <em>successful</em> wait, including the overload with no timeout, drains the buffer
+    /// just like the synchronous variant — provided this call actually stopped a reader. A
+    /// paused queue, or one whose readers were already unwinding, keeps its items: with
+    /// nothing cancelled, there is nothing to discard on its behalf.
     /// </para>
     /// <para>
     /// <see cref="IsIdle"/> reports <see langword="false"/> in that state, and keeps doing so until

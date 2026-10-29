@@ -9,7 +9,7 @@ internal interface IPartCache
         DateTimeOffset date,
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default);
-    Task<bool> EnsureCache(
+    Task EnsureCache(
         string tableName,
         DateTimeOffset date,
         StrOrNum[] partValues,

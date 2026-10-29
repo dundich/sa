@@ -50,8 +50,11 @@ fs://{basket}/{tenantId}/{fileName}
 - `fs://documents/42/report.pdf`
 - `fs://uploads/7/avatar.png`
 - `fs://share/100/data.bin`
+- `fs://share/7/sub/dir/file.txt` — a nested `FileName` keeps its directories
 
-> Note: slashes and backslashes in `FileName` are sanitized to the platform separator and stripped of leading separators.
+> Note: leading separators in `FileName` are stripped, backslashes are treated as separators, and a
+> File ID always uses `/` — nested names read the same on every OS. On disk the layout mirrors the
+> ID (`{RootPath}/{basket}/{tenantId}/{fileName}`).
 
 ---
 
@@ -125,8 +128,17 @@ The section binds in a fixed slot **before** the `Options(...)` actions replay, 
 ### Several storages in one host
 
 Each call registers one storage under its own name; different names are independent, so one host can
-run several filesystem roots. Repeating a name throws `InvalidOperationException` — the name keys
-both the storage and its temp folder (`sp.GetRequiredKeyedService<ITempFolder>(name)`).
+run several filesystem roots. Repeating a name throws `InvalidOperationException` — the name keys the
+storage, its named options instance and its temp folder:
+
+```csharp
+var documents = sp.GetRequiredKeyedService<IFileStorage>("documents");
+var uploads   = sp.GetRequiredKeyedService<IFileStorage>("uploads");
+```
+
+The unkeyed `IFileStorage` registration stays as an alias of the last registered storage, so
+`sp.GetRequiredService<IFileStorage>()` keeps working for the single-storage case (and for
+`IHybridFileStorage`, which enumerates the unkeyed registrations only).
 
 A blank or missing `RootPath`, or one pointing at the system temp directory, surfaces as
 `OptionsValidationException` — at host start (`ValidateOnStart()`) or at first resolve in a container
@@ -141,6 +153,7 @@ core package.
 
 ```csharp
 var storage = sp.GetRequiredService<IFileStorage>();
+// several storages in one host: sp.GetRequiredKeyedService<IFileStorage>("documents")
 ```
 
 ### Upload from Stream
@@ -208,6 +221,11 @@ if (metadata != null)
 }
 ```
 
+`GetMetadataAsync` parses and shapes the File ID, like the S3 and Postgres providers: it answers for
+any well-formed ID this storage owns without probing the disk (only the in-memory provider checks
+that the entry exists). `DownloadAsync` / `DeleteAsync` are the calls that report a missing file, and
+`Basket` in the result is always the configured basket.
+
 ---
 
 ## Options Reference
@@ -236,11 +254,19 @@ through. The properties that matter to a filesystem storage:
 
 | Property | Description | Default |
 |----------|-------------|---------|
-| `RootPath` | Root directory of the storage; **must not** be blank or the system temp directory | `Path.GetTempPath()` (rejected) |
+| `RootPath` | Root directory of the storage; **must not** be blank or the system temp directory itself (a subdirectory of it is accepted but the OS may wipe it) | `Path.GetTempPath()` (rejected) |
 | `MaxAge` | Age after which the cleanup strategy removes an expired subfolder | **30 days** (storage default) |
 | `CleanupEnabled` | Whether the storage's temp folder deletes expired subfolders at all | `true` |
-| `TouchDebounce` | Debounce before a write refreshes the folder's activity marker | 5 seconds |
 | `OverwriteFiles` | Whether an existing file is replaced on write | `true` |
+| `ReadOnly` | Rejects every mutation in the temp folder. Independent of `FileSystemStorageOptions.IsReadOnly` — see below | `false` |
+| `TouchDebounce` | Debounce before a write refreshes the folder's activity marker | 5 seconds |
+
+`FileSystemStorageOptions.IsReadOnly` and `TempFolderOptions.ReadOnly` are two switches for one
+intent: the storage reports `IsReadOnly` to `HybridFileStorage` (which skips it when choosing a
+target for a write), while the temp folder enforces it on the disk. Set both when a storage must
+not change — with only the storage flag set, `HybridFileStorage` skips the storage but its files are
+still cleaned up by age; with only the temp-folder flag set, the hybrid chain still picks the
+storage for a write and the write then fails with `InvalidOperationException`.
 
 `Sa.HybridFileStorage.FileSystem` raises a storage's `MaxAge` from the temp-folder default of 24
 hours to **30 days**, because storage files are meant to outlive a scratch folder. A section value
@@ -256,7 +282,7 @@ Validation runs after post-configuration and enforces:
 |-------------|------------|
 | `StorageType` at most 10 characters, no `:`, `/` or `\` | `StorageType` |
 | `Basket` 3-63 characters, starts with a letter or `_`, no path separator | `Basket` |
-| `RootPath` set, outside the system temp directory | `TempFolderOptions` |
+| `RootPath` set and not the system temp directory itself | `TempFolderOptions` |
 
 ### Adding your own validation
 
@@ -277,15 +303,17 @@ resulting `OptionsValidationException`.
 The provider protects against directory traversal and injection attacks through the temp folder's
 path guard:
 
-1. **Path sanitisation** — leading `/` or `\` characters in `FileName` are stripped; all separators are converted to the platform's directory separator
-2. **Root containment** — every resolved file path must land inside `{RootPath}/{Basket}`. Attempts to escape via `..` are rejected with `SecurityException`
+1. **Path sanitisation** — leading `/` or `\` characters in `FileName` are stripped; separators are normalised, so a nested name is a set of directories under the tenant
+2. **Root containment** — every resolved file path must land inside `{RootPath}/{Basket}` (a sibling basket that only shares the name prefix does not belong to this storage). Attempts to escape via `..` are rejected with `SecurityException`
 3. **Injection rejection** — `~`, shell/glob metacharacters (`< > | & ; ` $ ^ * ? " ' %`), control and invisible Unicode characters are rejected with `SecurityException`
-4. **Deterministic paths** — File IDs map to relative paths without resolution, preventing symlink-based attacks
+4. **Portable names** — reserved Windows device names (`CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, `COM0`–`COM9`, `LPT0`–`LPT9`, with or without an extension) and segments ending with a dot are rejected with `SecurityException`, on every platform: Windows would resolve the former to a device and alias the latter to another file, so `report.txt.` would silently share a file with `report.txt`
+5. **Deterministic paths** — File IDs map to relative paths without resolution, preventing symlink-based attacks
 
 ```csharp
-// Safe — normalised to "report.pdf"
-new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
-// Creates: {RootPath}/documents/1/report.pdf
+// Safe — leading separators are dropped, the directories below them are kept
+new UploadFileInput { FileName = "/api/files/var/www/report.pdf" }
+// Creates: {RootPath}/documents/1/api/files/var/www/report.pdf
+// File ID: fs://documents/1/api/files/var/www/report.pdf
 
 // Blocked — directory traversal detected
 // fileName = "../../../etc/passwd" → throws SecurityException
@@ -301,11 +329,14 @@ new UploadFileInput { FileName = "/api/files/download/file/var/www/report.pdf" }
 | Scenario | Behavior |
 |----------|----------|
 | `IsReadOnly = true` + upload/delete | Throws `HybridFileStorageWritableException` |
+| `TempFolderOptions.ReadOnly = true` + upload/delete | Throws `InvalidOperationException` (the temp folder owns the switch; set `FileSystemStorageOptions.IsReadOnly` too so the hybrid chain skips this storage) |
 | File not found during download/delete | Returns `false` (no exception) |
 | Path points at a directory during download/delete | Throws `InvalidOperationException` |
-| IOException on delete | Retried by the temp folder; returns `false` if all retries fail |
+| `IOException` / `UnauthorizedAccessException` on delete | Retried by the temp folder; returns `false` if all retries fail |
+| Permission failure on upload | Throws `UnauthorizedAccessException` from the temp folder (not retried away) |
 | Path escape or injection attempt | Throws `SecurityException` |
-| Invalid File ID format | Throws `ArgumentException` |
+| Reserved device name (`NUL`, `COM1`, …) or a segment ending with a dot | Throws `SecurityException` |
+| Malformed or foreign File ID | `CanProcess` returns `false`; download/delete return `false`, `GetMetadataAsync` returns `null` |
 | Invalid options | Throws `OptionsValidationException` at host start (`ValidateOnStart`) or on first resolve |
 
 ---

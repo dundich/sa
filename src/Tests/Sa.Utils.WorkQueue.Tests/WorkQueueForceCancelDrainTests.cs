@@ -199,16 +199,28 @@ public sealed class WorkQueueForceCancelDrainTests
     {
         var logger = new RecordingLogger<SaWorkQueue<int>>();
         var statuses = new StatusLog();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(async (_, _) => await gate.Task.ConfigureAwait(false))
+            SaWorkQueueOptions<int>.Create(async (_, _) =>
+                {
+                    started.TrySetResult();
+                    await gate.Task.ConfigureAwait(false);
+                })
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback(statuses.Record),
             logger);
 
-        _ = queue.Enqueue(1, TestToken);
-        _ = queue.Enqueue(2, TestToken);
+        await queue.Enqueue(1, TestToken);
+        await queue.Enqueue(2, TestToken);
+
+        // Дождаться, пока элемент 1 действительно окажется внутри процессора. Пауза отменяет
+        // ридера, а элемент, уже вынутый из буфера, но ещё не дошедший до процессора,
+        // отменяется на входе в ExecuteItemAsync и уходит в Cancelled — тогда в очереди
+        // остаётся один элемент, и тест проверял бы совсем другое состояние (и падал через
+        // раз). Здесь же «в полёте один, в буфере один» — гарантия, а не совпадение.
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestToken);
 
         // Item 1 is in flight, item 2 is buffered, and nothing will read either.
         queue.ConcurrencyLimit = 0;
@@ -218,6 +230,101 @@ public sealed class WorkQueueForceCancelDrainTests
 
         Assert.Equal(1, logger.Count(LogLevel.Warning, "WaitForIdleAsync returned with 2 item(s) still pending"));
         Assert.Equal(1, logger.Count(LogLevel.Warning, "Paused"));
+
+        // Отпустить ридера: иначе Dispose ждал бы его до самого shutdown-таймаута.
+        gate.TrySetResult();
+    }
+
+    /// <summary>
+    /// An emergency stop on a pool that has no readers stops nothing — and therefore must
+    /// not destroy the work it was never asked to cancel.
+    /// </summary>
+    /// <remarks>
+    /// A paused queue (<c>ConcurrencyLimit = 0</c>) has no readers at all, so
+    /// <c>ForceCancelReaders</c> had nobody to cancel — yet it still ran the drain, which
+    /// reported every accepted item as <see cref="SaWorkStatus.Faulted"/> and threw it
+    /// away. The caller asked to stop the pool, not to empty the queue. With the drain
+    /// gated on a reader having actually been stopped, the buffer survives and a re-armed
+    /// pool does the work.
+    /// </remarks>
+    [Fact]
+    public async Task ForceCancelReaders_OnAPausedQueue_StopsNothingAndKeepsTheBuffer()
+    {
+        var statuses = new StatusLog();
+        var processed = 0;
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create((_, _) =>
+                {
+                    Interlocked.Increment(ref processed);
+                    return Task.CompletedTask;
+                })
+                .WithConcurrencyLimit(1)
+                .WithMaxConcurrency(2)
+                .WithQueueCapacity(8)
+                .WithStatusCallback(statuses.Record));
+
+        // Paused before anything is enqueued, so all three items are accepted and none is
+        // in flight — the state the unconditional drain used to empty.
+        queue.ConcurrencyLimit = 0;
+
+        for (var i = 1; i <= 3; i++)
+        {
+            await queue.Enqueue(i, TestToken);
+        }
+
+        queue.ForceCancelReaders();
+
+        Assert.True(queue.IsEnabled, "a force-cancel never stops the queue");
+        Assert.Equal(3, queue.QueueTasks);
+        Assert.False(queue.IsIdle());
+        Assert.False(statuses.Has(1, SaWorkStatus.Faulted),
+            "nothing was cancelled, so nothing may be reported as dropped");
+
+        // Resume: a pool that kept its work has to be able to finish it.
+        queue.ConcurrencyLimit = 2;
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
+
+        Assert.True(queue.IsIdle());
+        Assert.Equal(3, Volatile.Read(ref processed));
+        Assert.Equal(SaWorkStatus.Completed, statuses.Terminal(1));
+        Assert.Equal(SaWorkStatus.Completed, statuses.Terminal(3));
+    }
+
+    /// <summary>
+    /// The asynchronous variant makes the same decision, and must not make the caller pay
+    /// for it: nothing was stopped, so nothing is thrown, nothing is drained, and the
+    /// buffer is still there to be processed.
+    /// </summary>
+    [Fact]
+    public async Task ForceCancelReadersAsync_OnAPausedQueue_StopsNothingAndKeepsTheBuffer()
+    {
+        var statuses = new StatusLog();
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+                .WithConcurrencyLimit(1)
+                .WithMaxConcurrency(1)
+                .WithQueueCapacity(4)
+                .WithStatusCallback(statuses.Record));
+
+        queue.ConcurrencyLimit = 0;
+
+        await queue.Enqueue(1, TestToken);
+        await queue.Enqueue(2, TestToken);
+
+        await queue.ForceCancelReadersAsync(ct: TestToken);
+
+        Assert.Equal(2, queue.QueueTasks);
+        Assert.False(statuses.Has(1, SaWorkStatus.Faulted));
+        Assert.False(statuses.Has(1, SaWorkStatus.Aborted));
+
+        queue.ConcurrencyLimit = 1;
+        await queue.WaitForIdleAsync(cancellationToken: TestToken);
+
+        Assert.True(queue.IsIdle());
+        Assert.Equal(SaWorkStatus.Completed, statuses.Terminal(1));
+        Assert.Equal(SaWorkStatus.Completed, statuses.Terminal(2));
     }
 
     static SaWorkQueue<int> Build(

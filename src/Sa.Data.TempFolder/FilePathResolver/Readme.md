@@ -87,6 +87,9 @@ lookup for the same path is a dictionary read plus one file probe instead of a f
   again and, with deep search on, the file is found at its new place.
 - `WithForceSearch(true)` re-runs the whole cascade on every call and rewrites the cache — useful
   when the layout changes under a running process.
+- The cache is bounded (65 536 remembered paths): on overflow it is dropped wholesale rather than
+  growing with every distinct database path a long-running process sees. A re-resolution is a
+  couple of probes, so the loss is cheap.
 
 ### Extensions
 
@@ -180,6 +183,7 @@ services.AddKeyedSingleton<IFileSystemService>("records", new FakeFileSystem());
 ## Notes
 
 - The resolver is thread-safe: the per-file cache is a `ConcurrentDictionary`, and the `Resolved`
-  event fires exactly once even under concurrent lookups.
+  event fires exactly once even under concurrent lookups. An exception thrown by a `Resolved`
+  handler is swallowed — a subscriber can never break a lookup that already succeeded.
 - The resolver never writes to the file system — it only probes it.
 - Paths are normalised to the platform separator, and a trailing separator is dropped.
