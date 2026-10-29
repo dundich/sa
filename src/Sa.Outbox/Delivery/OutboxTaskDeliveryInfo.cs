@@ -14,7 +14,7 @@
 /// Used for error tracking and monitoring.</param>
 /// <param name="Status">The current status of the delivery.</param>
 /// <param name="PartInfo">Information about the partition/segment of the Outbox.</param>
-public sealed record OutboxTaskDeliveryInfo(
+public readonly record struct OutboxTaskDeliveryInfo(
     long TaskId,
     long DeliveryId,
     int Attempt,

@@ -7,7 +7,7 @@
 /// <param name="Message">Message in the Outbox.</param>
 /// <param name="OutboxId">Gets information about the delivery of the Outbox message.</param>
 /// <typeparam name="TMessage">The type of the message payload.</typeparam>
-public sealed record OutboxDeliveryMessage<TMessage>(
+public readonly record struct OutboxDeliveryMessage<TMessage>(
     Guid OutboxId,
     OutboxMessage<TMessage> Message,
     OutboxTaskDeliveryInfo DeliveryInfo

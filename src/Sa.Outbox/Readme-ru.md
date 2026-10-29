@@ -274,7 +274,8 @@ options.AddMetadata<MyMessage>();
 > **Владение контекстами.** Память `messages`, переданная в `IConsumer.Consume`, и все контексты
 > в ней принадлежат пайплайну на время вызова. После сохранения статусов контексты
 > переиспользуются, поэтому потребитель не должен хранить их (или payload, полученный через них)
-> после завершения возвращённой задачи. `OutboxPartInfo` — это `readonly record struct`.
+> после завершения возвращённой задачи. `OutboxPartInfo`, `OutboxTaskDeliveryInfo` и
+> `OutboxDeliveryMessage<T>` — это `readonly record struct`.
 >
 > **Форма для провайдеров.** У `IOutboxBulkWriter` появился overload с `OutboxMessageBatch<T>`:
 > одна общая part-информация и никаких обёрток на сообщение. Реализация по умолчанию
