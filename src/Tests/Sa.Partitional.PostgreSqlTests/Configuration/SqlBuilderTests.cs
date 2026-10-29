@@ -520,15 +520,14 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     }
 
     [Theory]
-    [InlineData("timestamptz")]
-    [InlineData("TIMESTAMP")]
-    [InlineData("timestamp with time zone")]
-    [InlineData("date")]
     [InlineData("time")]
-    public void Build_RejectsADateTimeRangeColumn(string type)
+    [InlineData("timetz")]
+    [InlineData("integer")]
+    [InlineData("numeric")]
+    public void Build_RejectsAnUnsupportedRangeColumnType(string type)
     {
-        // The generated FOR VALUES bounds are Unix seconds; PostgreSQL refuses to cast them to a
-        // date/time type, and the failure would otherwise only appear in the migration job.
+        // These types cannot hold the generated range bounds; only bigint, timestamp and date are
+        // valid range keys.
         SchemaBuilder builder = new("public");
         builder.AddTable("t", "id INT NOT NULL", $"created_at {type} NOT NULL")
             .PartByRange(PgPartBy.Day);
@@ -536,7 +535,36 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
         Assert.Contains("created_at", error.Message);
-        Assert.Contains("bigint", error.Message);
+        Assert.Contains("not a supported range key", error.Message);
+    }
+
+    [Theory]
+    [InlineData("bigint", RangeKeyType.UnixSeconds)]
+    [InlineData("BIGINT", RangeKeyType.UnixSeconds)]
+    [InlineData("timestamptz", RangeKeyType.TimestampTz)]
+    [InlineData("TIMESTAMP", RangeKeyType.Timestamp)]
+    [InlineData("timestamp with time zone", RangeKeyType.TimestampTz)]
+    [InlineData("timestamp without time zone", RangeKeyType.Timestamp)]
+    [InlineData("timestamp(3) with time zone", RangeKeyType.TimestampTz)]
+    [InlineData("date", RangeKeyType.Date)]
+    public void Build_DetectsTheRangeKeyType(string type, RangeKeyType expected)
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", $"created_at {type} NOT NULL")
+            .PartByRange(PgPartBy.Day);
+
+        Assert.Equal(expected, builder.Build().Single().RangeKeyType);
+    }
+
+    [Fact]
+    public void Build_UsesTheExplicitRangeKeyOverride()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "created_at my_timestamp_domain NOT NULL")
+            .PartByRange(PgPartBy.Day)
+            .WithRangeKey(RangeKeyType.TimestampTz);
+
+        Assert.Equal(RangeKeyType.TimestampTz, builder.Build().Single().RangeKeyType);
     }
 
     [Fact]
@@ -547,5 +575,40 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
             .PartByRange(PgPartBy.Day);
 
         Assert.Equal("created_at", builder.Build().Single().PartByRangeFieldName);
+    }
+
+    [Theory]
+    [InlineData("timestamptz", "FOR VALUES FROM ('2026-10-29 00:00:00+00') TO ('2026-10-30 00:00:00+00')")]
+    [InlineData("timestamp", "FOR VALUES FROM ('2026-10-29 00:00:00') TO ('2026-10-30 00:00:00')")]
+    [InlineData("date", "FOR VALUES FROM ('2026-10-29') TO ('2026-10-30')")]
+    public void RangeKeyType_RendersBoundsInTheColumnType(string type, string expected)
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", $"created_at {type} NOT NULL")
+            .PartByRange(PgPartBy.Day);
+
+        ITableSettings settings = builder.Build().Single();
+        DateTimeOffset date = new(2026, 10, 29, 0, 0, 0, TimeSpan.Zero);
+
+        string sql = new SqlTableBuilder(settings).CreateSql(date);
+
+        Assert.Contains(expected, sql, StringComparison.Ordinal);
+
+        // The cache keeps Unix seconds regardless of the key type.
+        Assert.Contains($",{date.ToUnixTimeSeconds()},", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RangePartPredicate_UsesTheRangeKeyType()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "created_at timestamptz NOT NULL")
+            .PartByRange(PgPartBy.Day);
+
+        ITableSettings settings = builder.Build().Single();
+        string predicate = settings.RangePartPredicate(new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero));
+
+        Assert.Contains("\"created_at\" >= '2026-10-29 00:00:00+00'", predicate, StringComparison.Ordinal);
+        Assert.Contains("\"created_at\" < '2026-10-30 00:00:00+00'", predicate, StringComparison.Ordinal);
     }
 }

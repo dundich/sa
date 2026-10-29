@@ -352,4 +352,8 @@ internal sealed class FakeSqlTableBuilder : ISqlTableBuilder
     public string SelectPartsToDate => string.Empty;
 
     public string CreateSql(DateTimeOffset date, params StrOrNum[] partValues) => string.Empty;
+
+    public string CreateRootSql() => string.Empty;
+
+    public string CreateCacheSql() => string.Empty;
 }

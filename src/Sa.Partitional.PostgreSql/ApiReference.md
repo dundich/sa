@@ -87,6 +87,55 @@ the fluent chain. Validation is fail-fast through an `IValidateOptions<T>` valid
 together with `ValidateOnStart()`, so an invalid section or code value surfaces as an
 `OptionsValidationException` at host start and on the first read.
 
+## Adoption of an Existing Table
+
+`ISchemaBuilder` exposes one extra method next to `AddTable`:
+
+```csharp
+public interface ISchemaBuilder
+{
+    ITableBuilder CreateTable(string tableName);
+    ITableBuilder AddTable(string tableName, params string[] sqlFields);
+
+    /// <summary>
+    /// Existing ordinary table: converted into a partitioned one on the first migration and then
+    /// managed by the library. The column set must match the live table exactly.
+    /// </summary>
+    ITableBuilder AdoptTable(string tableName, params string[] sqlFields);
+}
+```
+
+`ITableSettings.RootMode` reports the mode (`Create` or `Adopt`). The conversion is performed by
+`PartTableAdopter` the first time the table is touched by `Migrate` or `EnsureParts`:
+
+| Observed state | Action |
+|---|---|
+| ordinary table (`relkind='r'`) | rename to `{table}__backup$`, create the partitioned root, create partitions for the existing rows, copy them, advance the identity sequence, verify the row counts, commit |
+| partitioned table **with** the library's cache table | already adopted: verify the declared columns, skip the conversion |
+| partitioned table **without** the cache table | rejected — the library does not take over somebody else's partitions |
+| missing table | rejected |
+
+The conversion holds a transaction-scoped advisory lock, so concurrent hosts convert once. Incoming
+foreign keys and dependent views abort the conversion; indexes and triggers stay on the backup. The
+original table is kept as the backup after a successful run; `.WithConversionBackup(ConversionBackupMode.Drop)`
+drops it inside the transaction after the row-count check.
+
+## Range Key Types
+
+`ITableSettings.RangeKeyType` is detected from the declared range column and controls how bounds are
+emitted:
+
+| Column declaration | Range key | Bounds |
+|---|---|---|
+| `bigint` / `int8` | `UnixSeconds` | `FOR VALUES FROM (1793001600) TO (1793088000)` |
+| `timestamptz` / `timestamp with time zone` | `TimestampTz` | `FROM ('2026-10-29 00:00:00+00') TO (...)` |
+| `timestamp` / `timestamp without time zone` | `Timestamp` (UTC) | `FROM ('2026-10-29 00:00:00') TO (...)` |
+| `date` | `Date` | `FROM ('2026-10-29') TO ('2026-10-30')` |
+
+The cache table keeps `from_date`/`to_date` as Unix seconds in every mode, so cleanup and the
+`DateTimeOffset` API are identical. `.WithRangeKey(RangeKeyType...)` overrides the detected type for
+a column declared through a domain or an alias; `time`, `integer` and `numeric` are rejected.
+
 ## Key Interfaces
 
 ### `IPartitionManager`
@@ -239,5 +288,6 @@ scheduled job when the same process must see it immediately.
 | `PartCleanupJob` | `Cleaning/PartCleanupJob.cs` | `IJob` wrapper for scheduled cleanup |
 | `SqlBuilder` | `SqlBuilder/SqlBuilder.cs` | Generates DDL templates from `ITableSettings` |
 | `PartRepository` | `Partitional/PartRepository.cs` | Executes DDL via Npgsql |
+| `PartTableAdopter` | `Partitional/PartTableAdopter.cs` | Converts an adopted plain table into a partitioned one (once, transactionally) |
 | `JobKeys` | `JobKeys.cs` | Deterministic per-key job ids/names for keyed modules |
 | `MigrationScheduleMarker` / `PartCleanupScheduleMarker` | `Migration/Setup.cs`, `Cleaning/Setup.cs` | Per-key sentinels so a repeated keyed registration does not duplicate jobs |

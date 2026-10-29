@@ -15,9 +15,12 @@ internal sealed record TableSettings(
     IPartTableMigrationSupport Migration,
 
     string PartByRangeFieldName,
+    RangeKeyType RangeKeyType,
     string[] PartByListFieldNames,
     string PartitionByFieldName,
 
+    TableRootMode RootMode,
+    ConversionBackupMode ConversionBackup,
     string SqlPartSeparator,
 
     Func<string>? PostRootSql,

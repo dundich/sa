@@ -35,14 +35,26 @@ internal sealed class SqlTableBuilder(ITableSettings settings) : ISqlTableBuilde
 
         // "O" (round-trip) keeps the annotating comment culture-independent, so the generated SQL
         // is byte-identical on every machine.
+        //
+        // An adopted table already exists as a plain table and is converted to a partitioned root by
+        // the adoption step; emitting CREATE TABLE IF NOT EXISTS here would silently no-op against a
+        // table the library does not own (or, worse, create an empty root when the real one is
+        // missing). The root DDL is therefore reserved for Create mode and for the conversion itself
+        // (see CreateRootSql).
+        string rootSql = settings.RootMode == TableRootMode.Adopt ? string.Empty : rootBuilder.CreateSql();
+
         return
 $"""
 -- {date:O}
-{rootBuilder.CreateSql()}
+{rootSql}
 {partListBuilder.CreateSql(partValues)}
 {partRangeBuilder.CreateSql(date, partValues)}
 """;
     }
+
+    public string CreateRootSql() => rootBuilder.CreateSql();
+
+    public string CreateCacheSql() => settings.CreateCacheSql();
 
     private static string Describe(string[] fieldNames)
         => fieldNames.Length == 0 ? " (the table is range-partitioned only)" : $" ({string.Join(", ", fieldNames)})";

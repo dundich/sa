@@ -10,6 +10,7 @@ namespace Sa.Partitional.PostgreSql.Repositories;
 internal sealed partial class PartRepository(
     IPgDataSource dataSource,
     ISqlBuilder sqlBuilder,
+    IPartTableAdopter adopter,
     // Required, not optional: the [LoggerMessage] methods dereference it, so a null logger
     // turned the first drop/migrate into a NullReferenceException.
     ILogger<PartRepository> logger) : IPartRepository
@@ -54,6 +55,11 @@ internal sealed partial class PartRepository(
         CancellationToken cancellationToken = default)
     {
         ISqlTableBuilder builder = sqlBuilder[tableName] ?? throw new KeyNotFoundException(tableName);
+
+        // An adopted table is a plain table until this call converts it; creating a partition on a
+        // plain table would fail, and the conversion is a no-op once it has happened.
+        await adopter.EnsureAdopted(tableName, cancellationToken).ConfigureAwait(false);
+
         string sql = builder.CreateSql(date, partValues);
 
         return await ExecuteDDL(sql, cancellationToken).ConfigureAwait(false);
@@ -69,7 +75,14 @@ internal sealed partial class PartRepository(
 
         int i = 0;
 
-        await foreach (string sql in sqlBuilder.MigrateSql(dates, resolve).ConfigureAwait(false))
+        await foreach (string sql in sqlBuilder.MigrateSql(dates, async table =>
+        {
+            // Convert adopted tables before any partition DDL is generated for them: the generated
+            // SQL assumes a partitioned root and never emits its CREATE TABLE in Adopt mode.
+            await adopter.EnsureAdopted(table, cancellationToken).ConfigureAwait(false);
+
+            return await resolve(table).ConfigureAwait(false);
+        }).ConfigureAwait(false))
         {
             await ExecuteDDL(sql, cancellationToken).ConfigureAwait(false);
             i++;

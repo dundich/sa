@@ -11,13 +11,20 @@ internal static class Setup
     {
         if (key is null)
         {
+            services.TryAddSingleton<IPartTableAdopter, PartTableAdopter>();
             services.TryAddSingleton<IPartRepository, PartRepository>();
         }
         else
         {
+            services.TryAddKeyedSingleton<IPartTableAdopter>(key, (sp, _) => new PartTableAdopter(
+                PgDataSourceResolver.Resolve(sp, key),
+                sp.GetRequiredKeyedService<ISqlBuilder>(key),
+                sp.GetRequiredService<ILogger<PartTableAdopter>>()));
+
             services.TryAddKeyedSingleton<IPartRepository>(key, (sp, _) => new PartRepository(
                 PgDataSourceResolver.Resolve(sp, key),
                 sp.GetRequiredKeyedService<ISqlBuilder>(key),
+                sp.GetRequiredKeyedService<IPartTableAdopter>(key),
                 sp.GetRequiredService<ILogger<PartRepository>>()));
         }
 

@@ -17,6 +17,22 @@ public interface ITableSettings
     string DatabaseSchemaName { get; }
 
     /// <summary>
+    /// Gets how the root table comes into existence: created by the library
+    /// (<see cref="TableRootMode.Create"/>) or adopted from an existing plain table
+    /// (<see cref="TableRootMode.Adopt"/>).
+    /// </summary>
+    TableRootMode RootMode { get; }
+
+    /// <summary>
+    /// Gets what happens to the original table after an adopted table is converted: it is kept as a
+    /// backup (<see cref="ConversionBackupMode.Keep"/>, the default) or dropped inside the
+    /// conversion transaction once the copied rows have been verified
+    /// (<see cref="ConversionBackupMode.Drop"/>).
+    /// </summary>
+    /// <remarks>Ignored in <see cref="TableRootMode.Create"/>: there is no original table then.</remarks>
+    ConversionBackupMode ConversionBackup { get; }
+
+    /// <summary>
     /// Gets the raw table name without schema prefix (e.g. <c>"events"</c>).
     /// </summary>
     string DatabaseTableName { get; }
@@ -39,9 +55,16 @@ public interface ITableSettings
 
     /// <summary>
     /// Gets the column name used for range partitioning. The column is a <c>bigint</c> holding Unix
-    /// seconds, never a date/time type: the generated <c>FOR VALUES</c> bounds are integers.
+    /// seconds by default; an adopted or explicitly declared <c>timestamptz</c>, <c>timestamp</c> or
+    /// <c>date</c> column is supported as well (see <see cref="RangeKeyType"/>).
     /// </summary>
     string PartByRangeFieldName { get; }
+
+    /// <summary>
+    /// Gets the type of the range partition column: Unix seconds (<c>bigint</c>) by default, or a
+    /// timestamp/date type when the declared column uses one.
+    /// </summary>
+    RangeKeyType RangeKeyType { get; }
 
     /// <summary>
     /// Gets the partitioning strategy — day, month, or year. Range partitioning is always present

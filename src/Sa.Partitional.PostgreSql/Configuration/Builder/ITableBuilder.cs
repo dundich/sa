@@ -24,14 +24,23 @@ public interface ITableBuilder
     ITableBuilder PartByList(params string[] fieldNames);
 
     /// <summary>
-    /// Configures the table for <strong>range partitioning</strong> on a <c>bigint</c> column that
-    /// holds Unix seconds.
+    /// Configures the table for <strong>range partitioning</strong> on a column holding either Unix
+    /// seconds (<c>bigint</c>, the default) or a timestamp/date value.
     /// </summary>
     /// <remarks>
-    /// The range key is an integer, not a timestamp: every <c>FOR VALUES</c> bound the library
-    /// generates is a Unix-second value, so a <c>timestamptz</c>/<c>date</c> column cannot hold the
-    /// partition bounds. When the column is not declared among the fields, the library adds
-    /// <c>"created_at" bigint NOT NULL</c> to the root table itself.
+    /// <para>
+    /// The range key type is detected from the declared column: <c>bigint</c>/<c>int8</c> means Unix
+    /// seconds, <c>timestamptz</c> and <c>timestamp [with|without time zone]</c> mean timestamps,
+    /// <c>date</c> means dates. A <c>timestamp without time zone</c> is treated as UTC. The cache
+    /// table keeps <c>from_date</c>/<c>to_date</c> as Unix seconds in every mode, so retention and
+    /// cleanup are unaffected.
+    /// </para>
+    /// <para>
+    /// When the column is not declared among the fields, the library adds
+    /// <c>"created_at" bigint NOT NULL</c> to the root table itself and uses the Unix-seconds mode.
+    /// Declare the column explicitly to use a timestamp/date key, or call
+    /// <see cref="ITableBuilder.WithRangeKey"/> for a domain/alias.
+    /// </para>
     /// </remarks>
     /// <param name="partBy">The partitioning granularity — day, month, or year.</param>
     /// <param name="timestampFieldName">
@@ -48,6 +57,19 @@ public interface ITableBuilder
     /// <param name="timestampFieldName">The column name to use as the partition key.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
     ITableBuilder TimestampAs(string timestampFieldName);
+
+    /// <summary>
+    /// Overrides the type of the range partition column (auto-detected from its declaration by
+    /// default).
+    /// </summary>
+    /// <remarks>
+    /// Auto-detection understands <c>bigint</c>/<c>int8</c>, <c>timestamptz</c>,
+    /// <c>timestamp [with|without time zone]</c> and <c>date</c>. Use this method for a column
+    /// declared through a domain or an alias the detector does not recognise.
+    /// </remarks>
+    /// <param name="rangeKeyType">The type of the range key.</param>
+    /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
+    ITableBuilder WithRangeKey(RangeKeyType rangeKeyType);
 
     /// <summary>
     /// Sets the separator placed between the table name and each partition key value in generated
@@ -126,6 +148,20 @@ public interface ITableBuilder
     /// </summary>
     /// <returns>The validated table settings.</returns>
     ITableSettings Build();
+
+    /// <summary>
+    /// Sets what happens to the original plain table after an adopted table is converted
+    /// (default: <see cref="ConversionBackupMode.Keep"/>).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ConversionBackupMode.Drop"/> removes the backup inside the conversion transaction,
+    /// after the copied row count has been verified. The transaction is still atomic, but a committed
+    /// conversion cannot be rolled back afterwards — keep the default when the data needs a recovery
+    /// window. Has no effect on tables created by the library.
+    /// </remarks>
+    /// <param name="mode">Whether to keep or drop the original table.</param>
+    /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
+    ITableBuilder WithConversionBackup(ConversionBackupMode mode);
 
     /// <summary>
     /// Attaches a custom migration provider that supplies list-partition values at runtime.

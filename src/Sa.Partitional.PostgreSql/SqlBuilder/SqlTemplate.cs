@@ -57,10 +57,8 @@ internal static class SqlTemplate
     /// sits on the untrusted-data path: quoting without escaping would still let a value holding
     /// <c>"</c> terminate the identifier and append SQL.
     /// </remarks>
-    private static string QuoteIdentifier(string? name)
-        => $"\"{(name ?? string.Empty).Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
-
-    /// <summary>
+    internal static string QuoteIdentifier(string? name)
+        => $"\"{(name ?? string.Empty).Replace("\"", "\"\"", StringComparison.Ordinal)}\"";    /// <summary>
     /// Renders a partition key value as a SQL literal: strings are quoted and escaped, numbers
     /// are emitted with the invariant culture.
     /// </summary>
@@ -291,7 +289,34 @@ DEFAULT
         LimSection<DateTimeOffset> range = settings.PartBy.GetRange(date);
         string column = QuoteIdentifier(settings.PartByRangeFieldName);
 
-        return $"{column} >= {range.Start.ToUnixTimeSeconds()} AND {column} < {range.End.ToUnixTimeSeconds()}";
+        return $"{column} >= {settings.RangeBoundSql(range.Start)} AND {column} < {settings.RangeBoundSql(range.End)}";
+    }
+
+    /// <summary>
+    /// Renders one range bound as a SQL literal matching the type of the range key: an integer for
+    /// the <c>bigint</c> Unix-seconds mode, a quoted UTC timestamp for a timestamp column, or a date.
+    /// </summary>
+    internal static string RangeBoundSql(this ITableSettings settings, DateTimeOffset value)
+    {
+        DateTime utc = value.UtcDateTime;
+
+        return settings.RangeKeyType switch
+        {
+            RangeKeyType.UnixSeconds
+                => value.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
+
+            RangeKeyType.TimestampTz
+                => QuoteLiteral(utc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "+00"),
+
+            RangeKeyType.Timestamp
+                => QuoteLiteral(utc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)),
+
+            RangeKeyType.Date
+                => QuoteLiteral(utc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+
+            _ => throw new InvalidOperationException(
+                $"Table '{settings.FullName}' has an unsupported range key type '{settings.RangeKeyType}'."),
+        };
     }
 
     /// <summary>
@@ -409,7 +434,6 @@ FOR VALUES IN ({QuoteValue(values[^1])})
         // built from the span plus the range suffix, and the parent name from the same span.
         string timeRangeTablename = settings.GetQualifiedTableName(date, values.AsSpan());
         LimSection<DateTimeOffset> range = settings.PartBy.GetRange(date);
-        string cacheTablename = settings.GetCacheByRangeTableName();
         var partValues = StrOrNumsToFmtString(values);
 
         return
@@ -420,12 +444,34 @@ $"""
 
 CREATE TABLE IF NOT EXISTS {timeRangeTablename}
 PARTITION OF {settings.GetQualifiedTableName(values.AsSpan())}
-FOR VALUES FROM ({range.Start.ToUnixTimeSeconds()}) TO ({range.End.ToUnixTimeSeconds()})
+FOR VALUES FROM ({settings.RangeBoundSql(range.Start)}) TO ({settings.RangeBoundSql(range.End)})
 {settings.GetFillFactorClause()}
 ;
 
 -- cache
 
+{settings.CreateCacheSql()}
+INSERT INTO {settings.GetCacheByRangeTableName()} (id,root,part_values,part_by,from_date,to_date)
+VALUES ({QuoteLiteral(timeRangeTablename)},{QuoteLiteral(settings.FullName)},{QuoteLiteral(partValues)},{QuoteLiteral(settings.PartBy.Name)},{range.Start.ToUnixTimeSeconds()},{range.End.ToUnixTimeSeconds()})
+ON CONFLICT (id) DO NOTHING
+;
+
+""";
+    }
+
+    /// <summary>
+    /// Creates the partition cache table and upgrades an existing one (<c>archived</c> column).
+    /// </summary>
+    /// <remarks>
+    /// The range-leaf DDL creates the cache table inline. The adoption path needs it separately: the
+    /// cache table is also the marker that tells a later start "this table is already managed", and
+    /// an adopted table may have no rows at all, so no leaf DDL would ever run.
+    /// </remarks>
+    public static string CreateCacheSql(this ITableSettings settings)
+    {
+        string cacheTablename = settings.GetCacheByRangeTableName();
+
+        return $"""
 CREATE TABLE IF NOT EXISTS {cacheTablename} (
   id TEXT PRIMARY KEY,
   root TEXT NOT NULL,
@@ -438,12 +484,6 @@ CREATE TABLE IF NOT EXISTS {cacheTablename} (
 ;
 
 ALTER TABLE IF EXISTS {cacheTablename} ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT FALSE;
-
-INSERT INTO {cacheTablename} (id,root,part_values,part_by,from_date,to_date)
-VALUES ({QuoteLiteral(timeRangeTablename)},{QuoteLiteral(settings.FullName)},{QuoteLiteral(partValues)},{QuoteLiteral(settings.PartBy.Name)},{range.Start.ToUnixTimeSeconds()},{range.End.ToUnixTimeSeconds()})
-ON CONFLICT (id) DO NOTHING
-;
-
 """;
     }
 

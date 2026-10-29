@@ -34,6 +34,9 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
     private string? _timestamp;
     private PgPartBy? _partBy;
+    private RangeKeyType? _rangeKey;
+    private TableRootMode _rootMode = TableRootMode.Create;
+    private ConversionBackupMode _conversionBackup = ConversionBackupMode.Keep;
     private string? _separator = null;
     private string? _postfix = null;
     private int? _fillFactor = null;
@@ -47,6 +50,60 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         ArgumentNullException.ThrowIfNull(sqlFields);
 
         if (sqlFields.Length == 0) throw new ArgumentException("fields is empty", nameof(sqlFields));
+
+        if (_rootMode == TableRootMode.Adopt)
+        {
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' is declared with AdoptTable. Its fields describe the "
+                + "existing table and are supplied in the AdoptTable call; do not add them separately.");
+        }
+
+        _fields.AddRange(sqlFields);
+        return this;
+    }
+
+    /// <summary>
+    /// Switches the table to <see cref="TableRootMode.Adopt"/> and records the fields that describe
+    /// the existing plain table.
+    /// </summary>
+    /// <remarks>
+    /// Registering the same table twice with the same field list is idempotent — the module's builder
+    /// already merges repeated declarations, and repeating an identical adopt call must stay a
+    /// no-op. A different field list (or a table already declared with fields through
+    /// <c>AddTable</c>) is a configuration error and fails here, while the offending declaration is
+    /// still identifiable.
+    /// </remarks>
+    internal TableBuilder DeclareAdopt(string[] sqlFields)
+    {
+        if (sqlFields.Length == 0)
+        {
+            throw new ArgumentException(
+                $"Table '{schemaName}.{tableName}' is adopted, so its fields are required: they describe "
+                + "the existing table and are used to build the partitioned root.",
+                nameof(sqlFields));
+        }
+
+        if (_rootMode == TableRootMode.Adopt)
+        {
+            if (!_fields.SequenceEqual(sqlFields, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Table '{schemaName}.{tableName}' is adopted twice with different fields. "
+                    + "Keep a single declaration, or make the repeated one identical.");
+            }
+
+            return this;
+        }
+
+        if (_fields.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' is already declared with fields (AddTable/CreateTable) "
+                + "and cannot be adopted as well. Use either AddTable (the library creates the table) "
+                + "or AdoptTable (the table already exists).");
+        }
+
+        _rootMode = TableRootMode.Adopt;
         _fields.AddRange(sqlFields);
         return this;
     }
@@ -62,6 +119,12 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     public ITableBuilder TimestampAs(string timestampFieldName)
     {
         _timestamp = timestampFieldName;
+        return this;
+    }
+
+    public ITableBuilder WithRangeKey(RangeKeyType rangeKeyType)
+    {
+        _rangeKey = rangeKeyType;
         return this;
     }
 
@@ -150,6 +213,12 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         return this;
     }
 
+    public ITableBuilder WithConversionBackup(ConversionBackupMode mode)
+    {
+        _conversionBackup = mode;
+        return this;
+    }
+
     public ITableSettings Build()
     {
         var databaseTableName = tableName.Trim('"');
@@ -159,7 +228,41 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         string idFieldName = GetIdFieldName();
         string partTablePostfix = _postfix ?? Default.PartTablePostfix;
 
-        ValidatePartitionColumns(partByListFieldNames, timestampField);
+        ValidatePartitionColumns(partByListFieldNames);
+
+        RangeKeyType rangeKeyType = ResolveRangeKeyType(timestampField);
+
+        if (!SqlFieldName.HasColumn(_fields, timestampField) && rangeKeyType != RangeKeyType.UnixSeconds)
+        {
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' selects the '{rangeKeyType}' range key, but its range "
+                + $"column '{timestampField}' is not declared. The library only adds a bigint column "
+                + "itself; declare the timestamp/date column explicitly.");
+        }
+
+        // A table that already exists cannot be extended by the library, so the range column has to
+        // be part of it. For a table the library creates itself the column is added on the fly.
+        if (_rootMode == TableRootMode.Adopt && !SqlFieldName.HasColumn(_fields, timestampField))
+        {
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' is adopted, but its range partition column "
+                + $"'{timestampField}' is not declared among its fields. An existing table cannot be "
+                + "extended by the library, so declare the column in the AdoptTable call.");
+        }
+
+        if (_rootMode == TableRootMode.Adopt)
+        {
+            string? inlinePk = _fields.FirstOrDefault(field =>
+                field.Contains("PRIMARY KEY", StringComparison.OrdinalIgnoreCase));
+
+            if (inlinePk is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Table '{schemaName}.{tableName}' declares an inline PRIMARY KEY ('{inlinePk}'). "
+                    + "AdoptTable generates its own primary-key constraint, which has to include the "
+                    + "partition key; remove the clause from the field declaration.");
+            }
+        }
 
         // Fail fast on a name PostgreSQL would silently truncate: the truncated DDL would never
         // match the identifiers written to the cache table. The name carrying partition values
@@ -185,9 +288,12 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
             Migration: new PartTableMigrationSupport(_migrationPartValues, _getPartValues, _migrationSupport),
 
             PartByRangeFieldName: timestampField,
+            RangeKeyType: rangeKeyType,
             PartByListFieldNames: partByListFieldNames,
             PartitionByFieldName: partByListFieldNames.Length == 0 ? timestampField : partByListFieldNames[0],
 
+            RootMode: _rootMode,
+            ConversionBackup: _conversionBackup,
             SqlPartSeparator: _separator ?? Default.SqlPartSeparator,
             PostRootSql: _postSql,
             ConstraintPkSql: _pkSql,
@@ -200,21 +306,15 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     }
 
     /// <summary>
-    /// Validates the columns the partitioning DDL depends on.
+    /// Validates the lists columns the partitioning DDL depends on.
     /// </summary>
     /// <remarks>
-    /// Both mistakes this catches are otherwise reported by PostgreSQL at migration time, i.e. from
-    /// a background job, with a message that does not name the table definition that caused it:
-    /// <list type="bullet">
-    /// <item>a list-partition column that no field declares (<c>column "x" named in partition key
-    /// does not exist</c>), or that is listed twice (<c>PARTITION BY LIST ("x")</c> twice at
-    /// consecutive levels);</item>
-    /// <item>a range column declared with a date/time type. Range partitions are bounded by the
-    /// <c>bigint</c> Unix-seconds key, and PostgreSQL refuses to cast those bounds
-    /// (<c>specified value cannot be cast to type timestamp with time zone for column ...</c>).</item>
-    /// </list>
+    /// A list-partition column that no field declares (<c>column "x" named in partition key does not
+    /// exist</c>), or that is listed twice (<c>PARTITION BY LIST ("x")</c> twice at consecutive
+    /// levels), is otherwise reported by PostgreSQL at migration time - from a background job, with
+    /// a message that does not name the table definition that caused it.
     /// </remarks>
-    private void ValidatePartitionColumns(string[] partByListFieldNames, string timestampField)
+    private void ValidatePartitionColumns(string[] partByListFieldNames)
     {
         var duplicates = partByListFieldNames
             .GroupBy(c => c, StringComparer.Ordinal)
@@ -239,33 +339,55 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
                 + "declares that column. Add it with AddFields/AddTable - PostgreSQL would reject the "
                 + "generated PARTITION BY LIST otherwise.");
         }
-
-        foreach (string field in _fields)
-        {
-            if (!SqlFieldName.Extract(field).SequenceEqual(timestampField)) continue;
-
-            ReadOnlySpan<char> type = SqlFieldName.ExtractType(field);
-
-            if (!IsDateTimeType(type)) return;
-
-            throw new InvalidOperationException(
-                $"Table '{schemaName}.{tableName}' declares its range partition column '{timestampField}' "
-                + $"as '{type}'. Range partitions are bounded by the bigint Unix-seconds key, so a "
-                + $"date/time column cannot hold those bounds (PostgreSQL: \"specified value cannot be "
-                + $"cast to type ... for column '{timestampField}'\"). Declare it as "
-                + $"\"{timestampField}\" bigint NOT NULL, or drop the declaration and let the library "
-                + "add that column to the root table.");
-        }
     }
 
     /// <summary>
-    /// Reports whether <paramref name="type"/> is a PostgreSQL date/time type - the ones whose
-    /// <c>FOR VALUES FROM (...) TO (...)</c> bounds cannot be Unix seconds.
+    /// Resolves the type of the range key from the declared range column.
     /// </summary>
-    private static bool IsDateTimeType(ReadOnlySpan<char> type)
-        => type.StartsWith("timestamp", StringComparison.OrdinalIgnoreCase)
-        || type.StartsWith("date", StringComparison.OrdinalIgnoreCase)
-        || type.StartsWith("time", StringComparison.OrdinalIgnoreCase);
+    /// <remarks>
+    /// A table whose range column is not declared has the column added by the library as
+    /// <c>bigint</c>, so <see cref="RangeKeyType.UnixSeconds"/> is the answer. An explicitly declared
+    /// column selects the matching type; the explicit <see cref="WithRangeKey"/> override wins for a
+    /// domain/alias the detector does not know.
+    /// </remarks>
+    private RangeKeyType ResolveRangeKeyType(string timestampField)
+    {
+        if (_rangeKey is { } explicitKey) return explicitKey;
+
+        string? rangeField = _fields.FirstOrDefault(field =>
+            SqlFieldName.Extract(field).SequenceEqual(timestampField));
+
+        if (rangeField is null) return RangeKeyType.UnixSeconds;
+
+        string type = SqlFieldName.ExtractType(rangeField).ToString().ToLowerInvariant();
+        string declaration = rangeField.ToLowerInvariant();
+
+        if (type is "bigint" or "int8")
+        {
+            return RangeKeyType.UnixSeconds;
+        }
+
+        if (type is "timestamptz" || declaration.Contains("with time zone", StringComparison.Ordinal))
+        {
+            return RangeKeyType.TimestampTz;
+        }
+
+        if (type.StartsWith("timestamp", StringComparison.Ordinal))
+        {
+            return RangeKeyType.Timestamp;
+        }
+
+        if (type is "date")
+        {
+            return RangeKeyType.Date;
+        }
+
+        throw new InvalidOperationException(
+            $"Table '{schemaName}.{tableName}' declares its range partition column '{timestampField}' "
+            + $"as '{type}', which is not a supported range key. Supported types are bigint (Unix "
+            + "seconds), timestamptz, timestamp [with|without time zone] and date. Use WithRangeKey(...) "
+            + "to override the auto-detected type when the column is declared through a domain.");
+    }
 
     /// <summary>
     /// The first declared column doubles as the primary key id column, so its name has to be
