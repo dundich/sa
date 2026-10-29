@@ -6,7 +6,6 @@ internal sealed class MetadataConfiguration : IOutboxMessageMetadataBuilder, IOu
 
 
     public IOutboxMessageMetadataBuilder AddMetadata<T>(string partName, Func<T, string>? getPayloadId = null)
-        where T : class
     {
         if (string.IsNullOrWhiteSpace(partName))
         {

@@ -248,6 +248,11 @@ options.AddMetadata<MyMessage>(partName: "orders", getPayloadId: m => m.Id);
 options.AddMetadata<MyMessage>();
 ```
 
+Both `class` and `struct` payloads are accepted. For a value type, register its metadata
+(`AddMetadata<T>()` when it implements `IOutboxPublishable`, or `AddMetadata<T>(partName, getter)`)
+so the payload id is resolved through a typed delegate. An unregistered struct that implements
+`IOutboxPublishable` still works, but its fallback path boxes the payload.
+
 ---
 
 ## Available Providers

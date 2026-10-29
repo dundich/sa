@@ -43,6 +43,7 @@ internal static class Program
         var writer = new NullBulkWriter();
         var metadata = new MetadataConfiguration();
         metadata.AddMetadata<RefPayload>("root", static _ => string.Empty);
+        ((IOutboxMessageMetadataBuilder)metadata).AddMetadata<PublishableStruct>();
 
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
@@ -92,6 +93,34 @@ internal static class Program
             for (var i = 0; i < PublishBatches; i++)
             {
                 await publisher.Publish(largeMessages, tenantId: 1, context: null, None);
+            }
+        });
+
+        var publishableMessages = new PublishableStruct[1024];
+        for (var i = 0; i < publishableMessages.Length; i++)
+        {
+            publishableMessages[i] = new PublishableStruct(i, TenantId: 1);
+        }
+
+        await publisher.Publish(publishableMessages, tenantId: 1, context: null, None);
+        Collect();
+
+        await MeasureAsync("publish/batch/struct-publishable", PublishBatches * publishableMessages.Length, async () =>
+        {
+            for (var i = 0; i < PublishBatches; i++)
+            {
+                await publisher.Publish(publishableMessages, tenantId: 1, context: null, None);
+            }
+        });
+
+        // Exercises the tenant-deriving overloads whose class constraint was removed.
+        IOutboxMessagePublisher tenantPublisher = publisher;
+
+        await MeasureAsync("publish/batch/struct-publishable/tenant", PublishBatches * publishableMessages.Length, async () =>
+        {
+            for (var i = 0; i < PublishBatches; i++)
+            {
+                await tenantPublisher.Publish(publishableMessages, None);
             }
         });
     }
@@ -198,6 +227,16 @@ internal static class Program
     private sealed record RefPayload(int Id);
 
     private readonly record struct StructPayload(int Id);
+
+    /// <summary>A value-type payload that supplies its own metadata.</summary>
+    private readonly record struct PublishableStruct(int Id, int TenantId) : IOutboxPublishable
+    {
+        public string GetPayloadId() => "id";
+
+        public int GetTenantId() => TenantId;
+
+        public static string PartName => "root";
+    }
 
     [System.Runtime.CompilerServices.InlineArray(64)]
     private struct LongBuffer
