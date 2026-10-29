@@ -282,6 +282,41 @@ options.AddMetadata<MyMessage>();
 > материализует старую форму `OutboxMessage<T>`, так что существующие провайдеры продолжают
 > работать, пока не переопределят overload.
 
+### Как сохранить payload после вызова
+
+Забирайте сам объект payload, а не контекст:
+
+```csharp
+public async ValueTask Consume(
+    OutboxConsumerSettings settings,
+    OutboxMessageFilter filter,
+    ReadOnlyMemory<IOutboxContextOperations<OrderCreated>> messages,
+    CancellationToken ct)
+{
+    var owned = new List<OrderCreated>(messages.Length);
+
+    foreach (IOutboxContextOperations<OrderCreated> message in messages.Span)
+    {
+        // Ссылка (или значение, если TMessage — struct) с этого момента принадлежит вам.
+        owned.Add(message.Payload);
+        message.Ok();
+    }
+
+    // После возврата из Consume контексты переиспользуются; `owned` — нет.
+    await _inbox.SaveAsync(owned, ct);
+}
+```
+
+Если `TMessage` mutable или кастомный `IOutboxMessageSerializer` может вернуть pooled/reused
+буфер, клонируйте данные прямо внутри `Consume`, а не храните ссылку:
+
+```csharp
+byte[] owned = JsonSerializer.SerializeToUtf8Bytes(message.Payload);
+```
+
+Не храните сам `IOutboxContextOperations<T>` (или срез `messages`) в поле, статической
+коллекции, фоновой задаче или logging-scope.
+
 ---
 
 ## Зависимости

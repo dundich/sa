@@ -279,6 +279,41 @@ A provider must implement three key interfaces:
 > shared part and no per-message wrapper. Its default implementation materializes the old
 > `OutboxMessage<T>` shape, so an existing provider keeps working until it overrides the overload.
 
+### Keeping the payload after the call
+
+Take the payload object itself, not the context:
+
+```csharp
+public async ValueTask Consume(
+    OutboxConsumerSettings settings,
+    OutboxMessageFilter filter,
+    ReadOnlyMemory<IOutboxContextOperations<OrderCreated>> messages,
+    CancellationToken ct)
+{
+    var owned = new List<OrderCreated>(messages.Length);
+
+    foreach (IOutboxContextOperations<OrderCreated> message in messages.Span)
+    {
+        // The reference (or the value, for a struct) belongs to you from here on.
+        owned.Add(message.Payload);
+        message.Ok();
+    }
+
+    // The contexts are recycled when Consume returns; `owned` is not.
+    await _inbox.SaveAsync(owned, ct);
+}
+```
+
+If `TMessage` is mutable, or a custom `IOutboxMessageSerializer` can return pooled/reused
+buffers, clone the data inside `Consume` instead of keeping the reference:
+
+```csharp
+byte[] owned = JsonSerializer.SerializeToUtf8Bytes(message.Payload);
+```
+
+Do not keep the `IOutboxContextOperations<T>` instance (or a `messages` slice) in a field,
+static collection, background task, or log scope.
+
 ---
 
 ## Dependencies
