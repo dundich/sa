@@ -13,6 +13,7 @@ internal sealed class DeliveryTenant(
     IDeliveryCourier deliveryCourier,
     IDeliveryBatcher batcher,
     FilterFactory filterFactory,
+    IOutboxContextFactory contextFactory,
     TimeProvider? timeProvider = null) : IDeliveryTenant
 {
 
@@ -45,9 +46,21 @@ internal sealed class DeliveryTenant(
 
         await ReleaseMessagesAsync(messages, filter, cancellationToken);
 
+        // Only after the statuses are persisted: a context may then be recycled by the factory.
+        // If ReleaseMessagesAsync throws, the contexts are left to the GC instead of being pooled.
+        ReturnContexts(messages);
+
         // Handled count, not success count: a batch that failed entirely is still processed
         // work and must not be mistaken for an empty queue by the greedy loop.
         return delivered;
+    }
+
+    private void ReturnContexts<TMessage>(ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages)
+    {
+        foreach (IOutboxContextOperations<TMessage> context in messages.Span)
+        {
+            contextFactory.Return(context);
+        }
     }
 
     private OutboxMessageFilter CreateFilter<TMessage>(int tenantId, OutboxConsumerSettings settings)

@@ -20,7 +20,7 @@ public sealed record OutboxMessage<TMessage>(
 /// <param name="TenantId">Gets the identifier for the tenant associated with the message..</param>
 /// <param name="Part">Gets the part identifier for the Outbox message.</param>
 /// <param name="CreatedAt">Gets the date and time when the part was created.</param>
-public sealed record OutboxPartInfo(
+public readonly record struct OutboxPartInfo(
     int TenantId,
     string Part,
     DateTimeOffset CreatedAt

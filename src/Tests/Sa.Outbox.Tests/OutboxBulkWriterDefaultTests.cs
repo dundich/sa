@@ -25,6 +25,22 @@ public class OutboxBulkWriterDefaultTests
     }
 
     [Fact]
+    public void InsertBulk_Batch_ForwardsAsLegacyMessages()
+    {
+        var fake = new FakeBulkWriter();
+        IOutboxBulkWriter writer = fake;
+        var part = new OutboxPartInfo(1, "part", DateTimeOffset.UtcNow);
+        var batch = new OutboxMessageBatch<string>(
+            new[] { new OutboxMessageBatchItem<string>("id", "payload") },
+            part);
+
+        ValueTask<ulong> task = writer.InsertBulk(batch, context: null, cancellationToken: TestToken);
+
+        Assert.Equal(1UL, task.GetAwaiter().GetResult());
+        Assert.Equal(1, fake.Calls);
+    }
+
+    [Fact]
     public void InsertBulk_NonNullContext_ThrowsNotSupported()
     {
         var fake = new FakeBulkWriter();

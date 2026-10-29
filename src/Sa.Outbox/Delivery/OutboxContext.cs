@@ -6,19 +6,50 @@ namespace Sa.Outbox.Delivery;
 
 
 [DebuggerDisplay("#{PayloadId}")]
-internal sealed class OutboxContext<TMessage>(
-    OutboxDeliveryMessage<TMessage> delivery,
-    TimeProvider? timeProvider = null)
-    : IOutboxContextOperations<TMessage>
+internal sealed class OutboxContext<TMessage> : IOutboxContextOperations<TMessage>
 {
+    private OutboxDeliveryMessage<TMessage> _delivery = default!;
+    private TimeProvider _timeProvider = TimeProvider.System;
 
-    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    /// <summary>Creates an empty context for the pool; <see cref="Reset"/> binds it to a message.</summary>
+    public OutboxContext()
+    {
+    }
 
-    public Guid OutboxId => delivery.OutboxId;
-    public string PayloadId => delivery.Message.PayloadId;
-    public TMessage Payload => delivery.Message.Payload;
-    public OutboxPartInfo PartInfo => delivery.Message.PartInfo;
-    public OutboxTaskDeliveryInfo DeliveryInfo => delivery.DeliveryInfo;
+    public OutboxContext(OutboxDeliveryMessage<TMessage> delivery, TimeProvider? timeProvider = null)
+        => Reset(delivery, timeProvider);
+
+    /// <summary>
+    /// Binds a pooled context to a delivery message and clears everything the previous delivery
+    /// left behind.
+    /// </summary>
+    internal void Reset(OutboxDeliveryMessage<TMessage> delivery, TimeProvider? timeProvider)
+    {
+        _delivery = delivery;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        DeliveryResult = default;
+        PostponeDelay = TimeSpan.Zero;
+        Exception = null;
+    }
+
+    /// <summary>
+    /// Drops the references a finished delivery held, so a pooled context does not keep the
+    /// payload, delivery info or exception alive until it is rented again.
+    /// </summary>
+    internal void Clear()
+    {
+        _delivery = default!;
+        _timeProvider = TimeProvider.System;
+        DeliveryResult = default;
+        PostponeDelay = TimeSpan.Zero;
+        Exception = null;
+    }
+
+    public Guid OutboxId => _delivery.OutboxId;
+    public string PayloadId => _delivery.Message.PayloadId;
+    public TMessage Payload => _delivery.Message.Payload;
+    public OutboxPartInfo PartInfo => _delivery.Message.PartInfo;
+    public OutboxTaskDeliveryInfo DeliveryInfo => _delivery.DeliveryInfo;
 
 
     public DeliveryStatus DeliveryResult { get; private set; }

@@ -53,6 +53,24 @@ public class OutboxMessagePublisherTests
     }
 
     [Fact]
+    public async Task Publish_UsesTheBatchOverload()
+    {
+        var writer = new BatchCapturingWriter();
+        var publisher = new OutboxMessagePublisher(
+            TimeProvider.System,
+            writer,
+            new OutboxPublishSettings(MaxBatchSize: 16),
+            new MetadataConfiguration());
+
+        ulong sent = await publisher.Publish(["a", "b"], tenantId: 5, context: null, TestToken);
+
+        Assert.Equal(2UL, sent);
+        Assert.Equal(2, writer.Count);
+        Assert.Equal(5, writer.Part.TenantId);
+        Assert.Equal(string.Empty, writer.FirstPayloadId);
+    }
+
+    [Fact]
     public async Task Publish_Batch_SharesOnePartInfo()
     {
         var writer = new CapturingBulkWriter();
@@ -65,7 +83,7 @@ public class OutboxMessagePublisherTests
         await publisher.Publish(["a", "b"], tenantId: 1, context: null, TestToken);
 
         Assert.Equal(2, writer.Parts.Count);
-        Assert.Same(writer.Parts[0], writer.Parts[1]);
+        Assert.Equal(writer.Parts[0], writer.Parts[1]);
     }
 
     [Fact]
@@ -112,6 +130,32 @@ public class OutboxMessagePublisherTests
 
             return new ValueTask<ulong>((ulong)messages.Length);
         }
+    }
+
+    /// <summary>Implements the batch overload so the test can see whether the publisher used it.</summary>
+    private sealed class BatchCapturingWriter : IOutboxBulkWriter
+    {
+        public int Count { get; private set; }
+
+        public OutboxPartInfo Part { get; private set; }
+
+        public string? FirstPayloadId { get; private set; }
+
+        public ValueTask<ulong> InsertBulk<TMessage>(
+            OutboxMessageBatch<TMessage> batch,
+            object? context,
+            CancellationToken cancellationToken = default)
+        {
+            Count = batch.Count;
+            Part = batch.PartInfo;
+            FirstPayloadId = batch.Messages.Span[0].PayloadId;
+            return new ValueTask<ulong>((ulong)batch.Count);
+        }
+
+        public ValueTask<ulong> InsertBulk<TMessage>(
+            ReadOnlyMemory<OutboxMessage<TMessage>> messages,
+            CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("The batch overload was expected.");
     }
 
     /// <summary>Advertises two items but yields one — the shape a buggy custom collection has.</summary>

@@ -33,18 +33,22 @@ internal sealed class OutboxMessagePublisher(
         // One pooled slot instead of the [message] collection the default interface method
         // allocated and re-enumerated through Send: a single publish is a common call, and the
         // array was pure overhead in front of a bulk writer that takes memory anyway.
-        OutboxMessage<TMessage>[] buffer = ArrayPool<OutboxMessage<TMessage>>.Shared.Rent(1);
+        OutboxMessageBatchItem<TMessage>[] buffer =
+            ArrayPool<OutboxMessageBatchItem<TMessage>>.Shared.Rent(1);
 
         try
         {
-            buffer[0] = CreateMessage(message, typeInfo, partInfo);
+            buffer[0] = CreateItem(message, typeInfo);
+
             return await bulkWriter.InsertBulk<TMessage>(
-                buffer.AsMemory(0, 1), context, cancellationToken).ConfigureAwait(false);
+                new OutboxMessageBatch<TMessage>(buffer.AsMemory(0, 1), partInfo),
+                context,
+                cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             // Same reason as in Send: the rented slot must not keep the payload rooted.
-            ArrayPool<OutboxMessage<TMessage>>.Shared.Return(buffer, clearArray: true);
+            ArrayPool<OutboxMessageBatchItem<TMessage>>.Shared.Return(buffer, clearArray: true);
         }
     }
 
@@ -76,8 +80,9 @@ internal sealed class OutboxMessagePublisher(
                 ? maxBatchSize
                 : messages.Count - start;
 
-            OutboxMessage<TMessage>[] payloads = ArrayPool<OutboxMessage<TMessage>>.Shared.Rent(len);
-            Span<OutboxMessage<TMessage>> payloadsSpan = payloads;
+            OutboxMessageBatchItem<TMessage>[] payloads =
+                ArrayPool<OutboxMessageBatchItem<TMessage>>.Shared.Rent(len);
+            Span<OutboxMessageBatchItem<TMessage>> payloadsSpan = payloads;
 
             try
             {
@@ -86,7 +91,7 @@ internal sealed class OutboxMessagePublisher(
                 {
                     TMessage message = enumerator.Current;
 
-                    payloadsSpan[count] = CreateMessage(message, typeInfo, partInfo);
+                    payloadsSpan[count] = CreateItem(message, typeInfo);
 
                     count++;
                 }
@@ -98,7 +103,9 @@ internal sealed class OutboxMessagePublisher(
                     break;
 
                 sent += await bulkWriter.InsertBulk<TMessage>(
-                    payloads.AsMemory()[..count], context, cancellationToken);
+                    new OutboxMessageBatch<TMessage>(payloads.AsMemory(0, count), partInfo),
+                    context,
+                    cancellationToken);
 
                 start += count;
                 if (count < len)
@@ -106,9 +113,9 @@ internal sealed class OutboxMessagePublisher(
             }
             finally
             {
-                // clearArray: the rented buffer is larger than `len` and holds TMessage. Without
-                // this, payloads stay rooted in the pool until those slots happen to be overwritten.
-                ArrayPool<OutboxMessage<TMessage>>.Shared.Return(payloads, clearArray: true);
+                // clearArray: the rented buffer is larger than `len` and holds payload references.
+                // Without this, they stay rooted in the pool until those slots are overwritten.
+                ArrayPool<OutboxMessageBatchItem<TMessage>>.Shared.Return(payloads, clearArray: true);
             }
         }
         while (start < messages.Count);
@@ -116,12 +123,10 @@ internal sealed class OutboxMessagePublisher(
         return sent;
     }
 
-    private static OutboxMessage<TMessage> CreateMessage<TMessage>(
+    private static OutboxMessageBatchItem<TMessage> CreateItem<TMessage>(
         TMessage message,
-        OutboxMessageMetadata typeInfo,
-        OutboxPartInfo partInfo)
+        OutboxMessageMetadata typeInfo)
         => new(
             PayloadId: typeInfo.GetPayloadId(message!) ?? string.Empty,
-            Payload: message,
-            PartInfo: partInfo);
+            Payload: message);
 }

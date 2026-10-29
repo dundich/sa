@@ -269,6 +269,15 @@ A provider must implement three key interfaces:
 | `IOutboxDeliveryManager` | Locking and message dispatch |
 | `ITenantSource` | Tenant ID source |
 
+> **Consumer ownership.** The `messages` memory passed to `IConsumer.Consume` and every context
+> in it are owned by the pipeline for the duration of that call. The contexts are recycled once
+> the statuses are persisted, so a consumer must not retain them (or the payload reached through
+> them) beyond the returned task. `OutboxPartInfo` is a `readonly record struct`.
+>
+> **Provider shape.** `IOutboxBulkWriter` has an `OutboxMessageBatch<T>` overload carrying one
+> shared part and no per-message wrapper. Its default implementation materializes the old
+> `OutboxMessage<T>` shape, so an existing provider keeps working until it overrides the overload.
+
 ---
 
 ## Dependencies
