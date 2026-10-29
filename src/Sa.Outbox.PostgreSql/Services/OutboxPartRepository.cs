@@ -27,11 +27,14 @@ internal sealed class OutboxPartRepository(
 
     public async Task<int> EnsureErrorParts(IEnumerable<DateTimeOffset> dates, CancellationToken cancellationToken)
     {
+        // Callers hand over a day-keyed set (ReturnDelivery builds it with StartOfDay), so the
+        // extra Select(...).Distinct() pass only allocated an iterator and a second set.
+        // StartOfDay is repeated defensively for any direct caller; it is a value-type operation.
         int i = 0;
-        foreach (DateTimeOffset date in dates.Select(c => c.StartOfDay()).Distinct())
+        foreach (DateTimeOffset date in dates)
         {
             i++;
-            await partManager.EnsureParts(tableSettings.Error.TableName, date, [], cancellationToken);
+            await partManager.EnsureParts(tableSettings.Error.TableName, date.StartOfDay(), [], cancellationToken);
         }
 
         return i;

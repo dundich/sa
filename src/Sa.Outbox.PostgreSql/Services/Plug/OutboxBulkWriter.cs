@@ -41,8 +41,25 @@ internal sealed class OutboxBulkWriter(
 
         if (messages.Length == 0) return 0;
 
-        OutboxPartInfo[] parts = messages.Span.SelectWhere(c => c.PartInfo);
-        await partRepository.EnsureMsgParts(parts, cancellationToken);
+        // Dedupe before the repository sees the parts. SelectWhere used to allocate an
+        // OutboxPartInfo[N] array and EnsureParts then filled an N-entry HashSet even when every
+        // message of the batch carried the same part — which is the normal publish shape. The
+        // dictionary keeps one entry per distinct (day, tenant, part); the repository truncates
+        // the day again, so copying it here is not required.
+        Dictionary<(DateTimeOffset Day, int TenantId, string Part), OutboxPartInfo> parts = new();
+
+        foreach (OutboxMessage<TMessage> message in messages.Span)
+        {
+            OutboxPartInfo part = message.PartInfo;
+            var key = (part.CreatedAt.StartOfDay(), part.TenantId, part.Part);
+
+            if (!parts.ContainsKey(key))
+            {
+                parts[key] = part;
+            }
+        }
+
+        await partRepository.EnsureMsgParts(parts.Values, cancellationToken);
 
         return transaction is null
             ? await bulkCmd.Execute(messages, cancellationToken)

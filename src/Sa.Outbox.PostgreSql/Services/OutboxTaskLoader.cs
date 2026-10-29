@@ -7,6 +7,7 @@ using Sa.Outbox.PostgreSql.Commands;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Outbox.PostgreSql.TypeResolve;
+using System.Collections.Concurrent;
 using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Services;
@@ -23,6 +24,13 @@ internal sealed partial class OutboxTaskLoader(
 {
 
     private readonly ILogger _logger = logger ?? NullLogger<OutboxTaskLoader>.Instance;
+
+    /// <summary>
+    /// Advisory-lock keys by consumer group. <see cref="CalculateLockKey"/> renders the record's
+    /// <c>ToString()</c> and walks it byte by byte; the key is stable for a (group, tenant), so
+    /// caching it removes that string from every poll. Bounded by configured groups × tenants.
+    /// </summary>
+    private readonly ConcurrentDictionary<ConsumerGroupIdentifier, int> _lockKeys = new();
 
     internal sealed record ConsumerGroupIdentifier(string ConsumerGroupId, int TenantId);
 
@@ -142,7 +150,7 @@ internal sealed partial class OutboxTaskLoader(
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
     {
-        int lockKey = CalculateLockKey(consumerGroup);
+        int lockKey = _lockKeys.GetOrAdd(consumerGroup, static group => CalculateLockKey(group));
 
         using var command = new NpgsqlCommand(sql.SqlLockOffset, conn, tx);
         command.AddParamAdvisoryXactLock(lockKey);
