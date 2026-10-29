@@ -93,6 +93,12 @@ internal sealed partial class JobController(
 
     public async ValueTask WaitIfPaused(CancellationToken cancellationToken)
     {
+        // Fast path for the ordinary running iteration: no lock when the slot is not paused.
+        // A Pause() that lands just after this check takes effect on the next iteration, which
+        // is exactly the guarantee the locked check provided.
+        if (_disposed) throw new OperationCanceledException(cancellationToken);
+        if (!_isPaused) return;
+
         while (true)
         {
             if (_disposed) throw new OperationCanceledException(cancellationToken);

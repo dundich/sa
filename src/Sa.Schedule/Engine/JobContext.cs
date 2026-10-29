@@ -7,7 +7,11 @@ namespace Sa.Schedule.Engine;
 
 internal sealed class JobContext(IJobSettings settings) : IJobContext
 {
-    public string JobName => settings.Properties.JobName ?? $"{settings.JobId}";
+    // The fallback used to format the GUID on every access. It is read on every snapshot and
+    // every error/log line, so resolve it once per context instead.
+    private readonly string _jobName = settings.Properties.JobName ?? settings.JobId.ToString();
+
+    public string JobName => _jobName;
 
     public IJobSettings Settings => settings;
 
