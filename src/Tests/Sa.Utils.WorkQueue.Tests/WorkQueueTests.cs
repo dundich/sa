@@ -194,10 +194,24 @@ public class WorkQueueTests
         ConcurrentBag<SaWorkStatus> errors = [];
 
         // Arrange
-        var processor = new TestWorkWithDelay(TimeSpan.FromMilliseconds(300));
+        // All five items have to be *in flight* when the shutdown starts. An item still sitting
+        // in the buffer is drained as Faulted ("dropped"), not Cancelled ("interrupted"), so with
+        // the default pool — ProcessorCount readers and a buffer of the same size — the expected
+        // count silently depended on the core count: a 4-core CI runner started 4 readers, left
+        // the fifth item buffered, and the assertion went 5 != 4. Hence the explicit pool size
+        // and the "started" signal below instead of a sleep.
+        using var started = new SemaphoreSlim(0);
+        using var gate = new SemaphoreSlim(0);
 
         using var queue = new SaWorkQueue<TestModel>(SaWorkQueueOptions<TestModel>
-            .Create(processor)
+            .Create(async (_, ct) =>
+            {
+                started.Release();
+                await gate.WaitAsync(ct);
+            })
+            .WithMaxConcurrency(5)
+            .WithConcurrencyLimit(5)
+            .WithQueueCapacity(5)
             .WithStatusCallback((m, s, e) =>
             {
                 if (s == SaWorkStatus.Cancelled)
@@ -212,8 +226,10 @@ public class WorkQueueTests
         for (int i = 0; i < 5; i++)
             await queue.Enqueue(new TestModel(), cancellationToken: CancellationToken.None);
 
-
-        await Task.Delay(50, TestToken);
+        for (int i = 0; i < 5; i++)
+            Assert.True(
+                await started.WaitAsync(TimeSpan.FromSeconds(5), TestToken),
+                "An enqueued item never started, so the shutdown would interrupt fewer than five.");
 
         // Act
         await queue.ShutdownAsync();
