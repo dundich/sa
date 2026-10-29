@@ -78,6 +78,22 @@ internal static class Program
                 await publisher.PublishSingle(payload, tenantId: 1, context: null, None);
             }
         });
+
+        var largeMessages = new LargePayload[1024];
+        for (var i = 0; i < largeMessages.Length; i++)
+        {
+            largeMessages[i] = new LargePayload(i, default);
+        }
+
+        await publisher.Publish(largeMessages, tenantId: 1, context: null, None);
+
+        await MeasureAsync("publish/batch/large-struct", PublishBatches * largeMessages.Length, async () =>
+        {
+            for (var i = 0; i < PublishBatches; i++)
+            {
+                await publisher.Publish(largeMessages, tenantId: 1, context: null, None);
+            }
+        });
     }
 
     private static void RunDelivery()
@@ -94,6 +110,7 @@ internal static class Program
 
         var reference = new RefPayload(1);
         var value = new StructPayload(1);
+        var large = new LargePayload(1, default);
 
         // One warm-up context, then the pool serves every iteration.
         CreateAndReturn(factory, reference, part, info);
@@ -112,6 +129,14 @@ internal static class Program
             for (var i = 0; i < 1_000_000; i++)
             {
                 CreateAndReturn(factory, value, part, info);
+            }
+        });
+
+        MeasureSync("delivery/context/large-struct", 1_000_000, () =>
+        {
+            for (var i = 0; i < 1_000_000; i++)
+            {
+                CreateAndReturn(factory, large, part, info);
             }
         });
     }
@@ -173,6 +198,15 @@ internal static class Program
     private sealed record RefPayload(int Id);
 
     private readonly record struct StructPayload(int Id);
+
+    [System.Runtime.CompilerServices.InlineArray(64)]
+    private struct LongBuffer
+    {
+        private long _element0;
+    }
+
+    /// <summary>~512-byte value payload: the worst case for a struct envelope.</summary>
+    private readonly record struct LargePayload(int Id, LongBuffer Padding);
 
     /// <summary>Accepts both bulk-writer shapes and allocates nothing itself.</summary>
     private sealed class NullBulkWriter : IOutboxBulkWriter

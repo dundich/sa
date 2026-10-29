@@ -127,6 +127,6 @@ internal sealed class OutboxMessagePublisher(
         TMessage message,
         OutboxMessageMetadata typeInfo)
         => new(
-            PayloadId: typeInfo.GetPayloadId(message!) ?? string.Empty,
+            PayloadId: typeInfo.GetPayloadId(message) ?? string.Empty,
             Payload: message);
 }
