@@ -21,6 +21,33 @@ internal sealed class OutboxMessagePublisher(
         return await Send(messages, tenantId, context, cancellationToken);
     }
 
+    public async ValueTask<ulong> PublishSingle<TMessage>(
+        TMessage message,
+        int tenantId,
+        object? context,
+        CancellationToken cancellationToken = default)
+    {
+        OutboxMessageMetadata typeInfo = metadataProvider.GetMetadata<TMessage>();
+        var partInfo = new OutboxPartInfo(tenantId, typeInfo.PartName, timeProvider.GetUtcNow());
+
+        // One pooled slot instead of the [message] collection the default interface method
+        // allocated and re-enumerated through Send: a single publish is a common call, and the
+        // array was pure overhead in front of a bulk writer that takes memory anyway.
+        OutboxMessage<TMessage>[] buffer = ArrayPool<OutboxMessage<TMessage>>.Shared.Rent(1);
+
+        try
+        {
+            buffer[0] = CreateMessage(message, typeInfo, partInfo);
+            return await bulkWriter.InsertBulk<TMessage>(
+                buffer.AsMemory(0, 1), context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Same reason as in Send: the rented slot must not keep the payload rooted.
+            ArrayPool<OutboxMessage<TMessage>>.Shared.Return(buffer, clearArray: true);
+        }
+    }
+
     private async ValueTask<ulong> Send<TMessage>(
         IReadOnlyCollection<TMessage> messages,
         int tenantId,
@@ -31,6 +58,11 @@ internal sealed class OutboxMessagePublisher(
 
         DateTimeOffset now = timeProvider.GetUtcNow();
         int maxBatchSize = publishSettings.MaxBatchSize;
+
+        // Every message of one publish call has the same tenant, part and timestamp, so one
+        // immutable OutboxPartInfo can be shared by the whole publish instead of allocating a
+        // fresh record per message. The providers only read its fields.
+        var partInfo = new OutboxPartInfo(TenantId: tenantId, typeInfo.PartName, now);
 
         using IEnumerator<TMessage> enumerator = messages.GetEnumerator();
 
@@ -54,12 +86,7 @@ internal sealed class OutboxMessagePublisher(
                 {
                     TMessage message = enumerator.Current;
 
-                    var payloadId = typeInfo.GetPayloadId(message!) ?? string.Empty;
-
-                    payloadsSpan[count] = new OutboxMessage<TMessage>(
-                        PayloadId: payloadId,
-                        Payload: message,
-                        PartInfo: new OutboxPartInfo(TenantId: tenantId, typeInfo.PartName, now));
+                    payloadsSpan[count] = CreateMessage(message, typeInfo, partInfo);
 
                     count++;
                 }
@@ -88,4 +115,13 @@ internal sealed class OutboxMessagePublisher(
 
         return sent;
     }
+
+    private static OutboxMessage<TMessage> CreateMessage<TMessage>(
+        TMessage message,
+        OutboxMessageMetadata typeInfo,
+        OutboxPartInfo partInfo)
+        => new(
+            PayloadId: typeInfo.GetPayloadId(message!) ?? string.Empty,
+            Payload: message,
+            PartInfo: partInfo);
 }

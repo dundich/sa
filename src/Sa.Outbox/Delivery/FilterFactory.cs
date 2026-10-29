@@ -30,5 +30,21 @@ internal sealed class FilterFactory(IOutboxMessageMetadataProvider metadata)
     }
 
     private static string GenerateTransactId()
-        => $"{Environment.MachineName}-{Guid.CreateVersion7():N}";
+    {
+        // One string instead of two: the interpolation used to call Guid.ToString("N") and then
+        // concatenate, allocating an intermediate 32-character string per filter (i.e. per tenant
+        // per delivery iteration). TryFormat writes straight into the destination.
+        Guid guid = Guid.CreateVersion7();
+        string machine = Environment.MachineName;
+
+        return string.Create(
+            machine.Length + 1 + 32,
+            (machine, guid),
+            static (span, state) =>
+            {
+                state.machine.AsSpan().CopyTo(span);
+                span[state.machine.Length] = '-';
+                state.guid.TryFormat(span[(state.machine.Length + 1)..], out _, "N");
+            });
+    }
 }

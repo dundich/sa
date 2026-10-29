@@ -167,15 +167,20 @@ internal sealed class DeliveryProcessor(
         OutboxConsumerSettings settings,
         CancellationToken cancellationToken)
     {
-        using var tenantCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // No timeout is the default, and a linked source per tenant per iteration was pure
+        // overhead in that case (two objects plus a registration on the caller's token).
+        CancellationTokenSource? tenantCts = null;
+
         if (settings.PerTenantTimeout > TimeSpan.Zero)
         {
+            tenantCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             tenantCts.CancelAfter(settings.PerTenantTimeout);
         }
 
         try
         {
-            return await processor.ProcessInTenant<TMessage>(tenantId, settings, tenantCts.Token).ConfigureAwait(false);
+            return await processor.ProcessInTenant<TMessage>(
+                tenantId, settings, tenantCts?.Token ?? cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -191,6 +196,10 @@ internal sealed class DeliveryProcessor(
             // designed to absorb. Counted as 0: the batch was released, but the count we lost is
             // the one ProcessInTenant never got to return.
             return 0;
+        }
+        finally
+        {
+            tenantCts?.Dispose();
         }
     }
 }

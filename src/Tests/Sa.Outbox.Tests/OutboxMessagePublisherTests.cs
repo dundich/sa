@@ -52,6 +52,42 @@ public class OutboxMessagePublisherTests
         Assert.Equal(["a", "b", "c"], writer.Seen.Select(m => m.Payload));
     }
 
+    [Fact]
+    public async Task Publish_Batch_SharesOnePartInfo()
+    {
+        var writer = new CapturingBulkWriter();
+        var publisher = new OutboxMessagePublisher(
+            TimeProvider.System,
+            writer,
+            new OutboxPublishSettings(MaxBatchSize: 16),
+            new MetadataConfiguration());
+
+        await publisher.Publish(["a", "b"], tenantId: 1, context: null, TestToken);
+
+        Assert.Equal(2, writer.Parts.Count);
+        Assert.Same(writer.Parts[0], writer.Parts[1]);
+    }
+
+    [Fact]
+    public async Task PublishSingle_ThroughTheInterface_UsesTheSingleMessagePath()
+    {
+        var writer = new CapturingBulkWriter();
+        IOutboxMessagePublisher publisher = new OutboxMessagePublisher(
+            TimeProvider.System,
+            writer,
+            new OutboxPublishSettings(MaxBatchSize: 16),
+            new MetadataConfiguration());
+
+        // The 3-argument overload is a default interface method; it must delegate to the
+        // 4-argument one so the publisher's single-message implementation is used.
+        ulong sent = await publisher.PublishSingle("a", tenantId: 3, TestToken);
+
+        Assert.Equal(1UL, sent);
+        var only = Assert.Single(writer.Seen);
+        Assert.Equal("a", only.Payload);
+        Assert.Equal(3, only.TenantId);
+    }
+
     private sealed class CapturingBulkWriter : IOutboxBulkWriter
     {
         /// <summary>
@@ -59,6 +95,8 @@ public class OutboxMessagePublisherTests
         /// holding the <see cref="ReadOnlyMemory{T}"/> would read zeroed slots afterwards.
         /// </summary>
         public List<(string? Payload, int TenantId)> Seen { get; } = [];
+
+        public List<OutboxPartInfo> Parts { get; } = [];
 
         public ValueTask<ulong> InsertBulk<TMessage>(
             ReadOnlyMemory<OutboxMessage<TMessage>> messages,
@@ -69,6 +107,7 @@ public class OutboxMessagePublisherTests
                 Seen.Add((
                     (string?)(object?)message.Payload,
                     message.PartInfo.TenantId));
+                Parts.Add(message.PartInfo);
             }
 
             return new ValueTask<ulong>((ulong)messages.Length);

@@ -122,7 +122,7 @@ public interface IOutboxMessagePublisher
         TMessage message,
         int tenantId,
         CancellationToken cancellationToken = default)
-            => Publish<TMessage>([message], tenantId, context: null, cancellationToken);
+            => PublishSingle(message, tenantId, context: null, cancellationToken);
 
 
     /// <summary>
@@ -134,7 +134,7 @@ public interface IOutboxMessagePublisher
         object? context,
         CancellationToken cancellationToken = default)
             where TMessage : class, IOutboxPublishable
-                => Publish<TMessage>([message], message.GetTenantId(), context, cancellationToken);
+                => PublishSingle(message, message.GetTenantId(), context, cancellationToken);
 
 
     /// <summary>
@@ -144,5 +144,5 @@ public interface IOutboxMessagePublisher
         TMessage message,
         CancellationToken cancellationToken = default)
             where TMessage : class, IOutboxPublishable
-                => Publish<TMessage>([message], message.GetTenantId(), context: null, cancellationToken);
+                => PublishSingle(message, message.GetTenantId(), context: null, cancellationToken);
 }
