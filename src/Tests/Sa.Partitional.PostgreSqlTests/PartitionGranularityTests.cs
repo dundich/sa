@@ -178,6 +178,7 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
         int afterSecond = (await Relations(table, ct)).Length;
 
         Assert.Equal(afterFirst, afterSecond);
+        Assert.Single(RangeLeaves(await Relations(table, ct), granularity, Day, "idem"));
     }
 
     [Theory]
@@ -204,6 +205,7 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
         await InsertRow(table, "write", id: 1, Day.AddHours(12), ct);
 
         Assert.Equal(1L, await Rows(table, "write", ct));
+        Assert.Single(RangeLeaves(await Relations(table, ct), granularity, Day, "write"));
     }
 
     [Theory]

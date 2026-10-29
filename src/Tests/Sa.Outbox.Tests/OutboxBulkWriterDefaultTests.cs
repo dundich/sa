@@ -13,19 +13,17 @@ public class OutboxBulkWriterDefaultTests
     private static CancellationToken TestToken => TestContext.Current.CancellationToken;
 
     [Fact]
-    public void InsertBulk_NullContext_ForwardsToContextlessOverload()
+    public async Task InsertBulk_NullContext_ForwardsToContextlessOverload()
     {
         var fake = new FakeBulkWriter();
         IOutboxBulkWriter writer = fake;
 
-        ValueTask<ulong> task = writer.InsertBulk(Messages(), context: null, cancellationToken: TestToken);
-
-        Assert.Equal(1UL, task.GetAwaiter().GetResult());
+        Assert.Equal(1UL, await writer.InsertBulk(Messages(), context: null, TestToken));
         Assert.Equal(1, fake.Calls);
     }
 
     [Fact]
-    public void InsertBulk_Batch_ForwardsAsLegacyMessages()
+    public async Task InsertBulk_Batch_ForwardsAsLegacyMessages()
     {
         var fake = new FakeBulkWriter();
         IOutboxBulkWriter writer = fake;
@@ -34,9 +32,7 @@ public class OutboxBulkWriterDefaultTests
             new[] { new OutboxMessageBatchItem<string>("id", "payload") },
             part);
 
-        ValueTask<ulong> task = writer.InsertBulk(batch, context: null, cancellationToken: TestToken);
-
-        Assert.Equal(1UL, task.GetAwaiter().GetResult());
+        Assert.Equal(1UL, await writer.InsertBulk(batch, context: null, TestToken));
         Assert.Equal(1, fake.Calls);
     }
 
