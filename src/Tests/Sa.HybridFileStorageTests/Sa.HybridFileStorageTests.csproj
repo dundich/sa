@@ -1,14 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="../Host.Test.Properties.xml" />
+  <Import Project="..\Host.Test.Properties.xml" />
 
   <PropertyGroup>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Libraries\Sa.HybridFileStorage.FileSystem\Sa.HybridFileStorage.FileSystem.csproj" />
-    <ProjectReference Include="..\..\Libraries\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
+    <ProjectReference Include="..\..\Libraries\Hybrid\Sa.HybridFileStorage.FileSystem\Sa.HybridFileStorage.FileSystem.csproj" />
+    <ProjectReference Include="..\..\Libraries\Hybrid\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
     <ProjectReference Include="..\Fixtures\Sa.Fixture\Sa.Fixture.csproj" />
   </ItemGroup>
 

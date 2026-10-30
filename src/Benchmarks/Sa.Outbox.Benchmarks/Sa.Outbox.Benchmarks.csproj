@@ -10,7 +10,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Libraries\Sa.Outbox\Sa.Outbox.csproj" />
+        <ProjectReference Include="..\..\Libraries\Outbox\Sa.Outbox\Sa.Outbox.csproj" />
     </ItemGroup>
 
 </Project>

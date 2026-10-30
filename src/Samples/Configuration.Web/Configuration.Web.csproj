@@ -9,8 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Libraries\Sa.Configuration.PostgreSql\Sa.Configuration.PostgreSql.csproj" />
-    <ProjectReference Include="..\..\Libraries\Sa.Configuration\Sa.Configuration.csproj" />
+    <ProjectReference Include="..\..\Libraries\Configuration\Sa.Configuration.PostgreSql\Sa.Configuration.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\Libraries\Configuration\Sa.Configuration\Sa.Configuration.csproj" />
   </ItemGroup>
   
 </Project>

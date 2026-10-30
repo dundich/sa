@@ -797,9 +797,9 @@ FodyWeavers.xsd
 src/.vscode/
 /build/do_push_prod-ex.ps1
 /build-sh/do-push-prod-ex.sh
-/src/Libraries/Sa.Media.FFmpeg/build/*.tar.gz
-/src/Libraries/Sa.Media.FFmpeg/build/artifacts/
-/src/Libraries/Sa.Media.FFmpeg/build/build.*/
+/src/Libraries/Media/Sa.Media.FFmpeg/build/*.tar.gz
+/src/Libraries/Media/Sa.Media.FFmpeg/build/artifacts/
+/src/Libraries/Media/Sa.Media.FFmpeg/build/build.*/
 
 *.lscache
 
@@ -815,10 +815,10 @@ src/.vscode/
 # Local opencode config: may reference machine-specific paths and secrets (.secrets/).
 /opencode.jsonc
 /opencode.json
-/src/Libraries/Sa.Media.FFmpeg/sa/native/
+/src/Libraries/Media/Sa.Media.FFmpeg/sa/native/
 /src/Tests/Sa.MediaTests/data/pcm_s16le.wav
-/src/Libraries/Sa.Media/Echo/output.wav
-src/Libraries/Sa.Media/Echo/data/pcm_s16le.wav
+/src/Libraries/Media/Sa.Media/Echo/output.wav
+src/Libraries/Media/Sa.Media/Echo/data/pcm_s16le.wav
 /src/.nuget
 # ... except the folder itself: Directory.Build.props points RestoreFallbackFolders at
 # src/.nuget/fallback and NuGet requires it to exist, so a fresh clone must carry it.

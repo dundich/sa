@@ -8,32 +8,32 @@
 
 ## Библиотеки
 
-### [Sa.Configuration](src/Libraries/Sa.Configuration) — Аргументы командной строки и секреты
+### [Sa.Configuration](src/Libraries/Configuration/Sa.Configuration) — Аргументы командной строки и секреты
 
 `Arguments` — парсер аргументов командной строки с типизированными геттерами (`GetBool`, `GetInt`, `GetTimeSpan` и т.д.). `Secrets` — безопасное управление секретами из файлов, переменных окружения и host-key файлов с цепочками хранилищ и шаблонизацией `${secret:key}`.
 
 ---
 
-### [Sa.Configuration.PostgreSql](src/Libraries/Sa.Configuration.PostgreSql) — Динамическая конфигурация из PostgreSQL
+### [Sa.Configuration.PostgreSql](src/Libraries/Configuration/Sa.Configuration.PostgreSql) — Динамическая конфигурация из PostgreSQL
 
 Добавляет источник конфигурации на основе PostgreSQL, поэтому изменения в базе применяются в приложении без редеплоя.
 
 
 ---
 
-### [Sa.Data.S3](src/Libraries/Sa.Data.S3) — S3-клиент для данных
+### [Sa.Data.S3](src/Libraries/Data/Sa.Data.S3) — S3-клиент для данных
 
 Minio-compatible S3-клиент для операций с данными.
 
 ---
 
-### [Sa.Data.TempFolder](src/Libraries/Sa.Data.TempFolder) — Управление временными каталогами
+### [Sa.Data.TempFolder](src/Libraries/Data/Sa.Data.TempFolder) — Управление временными каталогами
 
 `AddSaTempFolder` регистрирует ключевой `ITempFolder` (корневой каталог + стратегии): защищённые путём подпапки, отложенная фиксация активности записью, возрастная фоновая очистка с «спуском» по уровням, учёт объёма и контроль свободного места с edge-событиями, режим read-only и keyed-мультиинстансальную регистрацию.
 
 ---
 
-### [Sa.Outbox.PostgreSql](src/Libraries/Sa.Outbox.PostgreSql) — Реализация на PostgreSQL
+### [Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql) — Реализация на PostgreSQL
 
 Реализация **Transactional Outbox** на PostgreSQL. Сообщения фиксируются в outbox-таблице вместе с бизнес-операциями в одной транзакции, затем доставляются с повторами и отслеживанием статуса. Потребление — конкурентное (`SKIP LOCKED`), координация оффсетов — advisory-замками. Применение — на вашем страхе и риске.
 
@@ -51,21 +51,21 @@ Minio-compatible S3-клиент для операций с данными.
 
 ---
 
-### [Sa.HybridFileStorage](src/Libraries/Sa.HybridFileStorage) — Мульти- провайдерное хранилище
+### [Sa.HybridFileStorage](src/Libraries/Hybrid/Sa.HybridFileStorage) — Мульти- провайдерное хранилище
 
 `IHybridFileStorage` абстрагирует загрузку/выгрузку/удаление между несколькими провайдерами (FileSystem, S3, PostgreSQL) с автоматическим последовательным фейловером, пакетными операциями и интерцепторами на каждом провайдере. Провайдеры eagerly валидируют опции при регистрации, поэтому ошибка конфигурации проявляется рано, а не на каждой операции.
 
-Првайдеры: [`Sa.HybridFileStorage.FileSystem`](src/Libraries/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Libraries/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Libraries/Sa.HybridFileStorage.Postgres).
+Првайдеры: [`Sa.HybridFileStorage.FileSystem`](src/Libraries/Hybrid/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Libraries/Hybrid/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Libraries/Hybrid/Sa.HybridFileStorage.Postgres).
 
 ---
 
-### [Sa.Media](src/Libraries/Sa.Media) — Асинхронное чтение WAV
+### [Sa.Media](src/Libraries/Media/Sa.Media) — Асинхронное чтение WAV
 
 Памятно-эффективный полностью асинхронный читатель WAV на базе `System.IO.Pipelines`: разбирает заголовок, читает сырые или нормализованные double-сэмплы по каналам, конвертирует между PCM16/24/32 и IEEE float, выдаёт потоковые чанки с настраиваемым размером батча.
 
 ---
 
-### [Sa.Media.FFmpeg](src/Libraries/Sa.Media.FFmpeg) — Обёртка FFmpeg для .NET
+### [Sa.Media.FFmpeg](src/Libraries/Media/Sa.Media.FFmpeg) — Обёртка FFmpeg для .NET
 
 Кроссплатформная обёртка над FFmpeg со встроенными статическими бинарниками (win-x64, linux-x64) — работает без установки. Включает извлечение метаданных, конвертацию аудио (PCM S16/S32 LE, F32 LE, raw, MP3, OGG), разделение/объединение каналов, потоковый ввод/вывод через стримы и DI.
 

@@ -1,5 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="../../Host.Test.Properties.xml" />
+  <Import Project="..\..\Host.Test.Properties.xml" />
   <PropertyGroup>
     <IsTestProject>false</IsTestProject>
     <!-- Фикстура подключается к тестам как библиотека, но тестовым модулем не является:
@@ -11,7 +11,7 @@
     <PackageReference Include="Testcontainers.PostgreSql"/>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Libraries\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\..\Libraries\Data\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
     <ProjectReference Include="..\Sa.Fixture\Sa.Fixture.csproj" />
   </ItemGroup>
 </Project>

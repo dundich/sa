@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <Import Project="../Host.Test.Properties.xml" />
+    <Import Project="..\Host.Test.Properties.xml" />
 
     <PropertyGroup>
         <IsTestProject>true</IsTestProject>

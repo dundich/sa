@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-	<Import Project="../../Common.NuGet.Properties.xml" />
+	<Import Project="..\..\..\Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
 		<Version>0.17.0</Version>
@@ -18,8 +18,8 @@
 		  Retry.Linear для повторных попыток удаления. Retry.cs компилирует ExceptionExtensions.cs
 		  (см. комментарий в самом Retry.cs) — оба файла линкуются, как в Sa.Data.PostgreSql.
 		-->
-		<Compile Include="..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
-		<Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
+		<Compile Include="..\..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
+		<Compile Include="..\..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
 	</ItemGroup>
 
 	<ItemGroup>

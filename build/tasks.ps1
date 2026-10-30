@@ -129,7 +129,15 @@ function TestCi() {
 function NuPack() {
 	foreach ($project in $projects) {
 		_Step "Package project $project"
-		& dotnet pack "$root\src\Libraries\$project\$project.csproj" --output $dist_folder --configuration $config -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
+		# Locate the project by name anywhere under src\Libraries so a regrouping into domain
+		# folders does not require touching this list's path logic.
+		$csproj = Get-ChildItem -Path "$root\src\Libraries" -Filter "$project.csproj" -Recurse -File |
+			Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' } |
+			Select-Object -First 1
+		if (-not $csproj) {
+			throw "ERROR: не найден $project.csproj в $root\src\Libraries"
+		}
+		& dotnet pack $csproj.FullName --output $dist_folder --configuration $config -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
 		_AssertExec
 	}
 }

@@ -20,8 +20,10 @@
 	<!-- Source Link - Finish -->
 
 	<ItemGroup>
-		<None Include="..\..\..\docs\NuGet.md" Pack="true" PackagePath="\"/>
-		<None Include="..\..\..\icon.png" Pack="true" PackagePath="\"/>
+		<!-- Paths are resolved from this props file (src/), not from the importing project: library
+		     projects live at different depths under src/Libraries/ (SPEC-003 groups them by domain). -->
+		<None Include="$(MSBuildThisFileDirectory)..\docs\NuGet.md" Pack="true" PackagePath="\"/>
+		<None Include="$(MSBuildThisFileDirectory)..\icon.png" Pack="true" PackagePath="\"/>
 	</ItemGroup>
 
 </Project>

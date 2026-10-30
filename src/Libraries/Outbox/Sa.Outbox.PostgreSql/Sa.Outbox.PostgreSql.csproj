@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<Import Project="../../Common.NuGet.Properties.xml" />
+	<Import Project="../../../Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
 		<Version>0.17.0</Version>
@@ -8,17 +8,17 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="..\Sa\Classes\LockRenewer.cs" Link="AsLink\LockRenewer.cs" />
-		<Compile Include="..\Sa\Classes\MurmurHash3.cs" Link="AsLink\MurmurHash3.cs" />
-		<Compile Include="..\Sa\Classes\ResetLazy.cs" Link="AsLink\ResetLazy.cs" />
-		<Compile Include="..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
-		<Compile Include="..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\NumericExtensions.cs" Link="AsLink\NumericExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\SpanExtensions.cs" Link="AsLink\SpanExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\StringExtensions.cs" Link="AsLink\StringExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\StrToExtensions.cs" Link="AsLink\StrToExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\GuidExtensions.cs" Link="AsLink\GuidExtensions.cs" />
+		<Compile Include="..\..\Sa\Classes\LockRenewer.cs" Link="AsLink\LockRenewer.cs" />
+		<Compile Include="..\..\Sa\Classes\MurmurHash3.cs" Link="AsLink\MurmurHash3.cs" />
+		<Compile Include="..\..\Sa\Classes\ResetLazy.cs" Link="AsLink\ResetLazy.cs" />
+		<Compile Include="..\..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
+		<Compile Include="..\..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\NumericExtensions.cs" Link="AsLink\NumericExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\SpanExtensions.cs" Link="AsLink\SpanExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\StringExtensions.cs" Link="AsLink\StringExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\StrToExtensions.cs" Link="AsLink\StrToExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\GuidExtensions.cs" Link="AsLink\GuidExtensions.cs" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -36,7 +36,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Sa.Outbox\Sa.Outbox.csproj" />
-		<ProjectReference Include="..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
+		<ProjectReference Include="..\..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

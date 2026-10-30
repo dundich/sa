@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Libraries\Sa.Outbox.PostgreSql\Sa.Outbox.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\Libraries\Outbox\Sa.Outbox.PostgreSql\Sa.Outbox.PostgreSql.csproj" />
   </ItemGroup>
 
 </Project>

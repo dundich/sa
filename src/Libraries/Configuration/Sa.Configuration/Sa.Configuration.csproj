@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="../../Common.NuGet.Properties.xml" />
+  <Import Project="..\..\..\Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
     <Version>0.17.0</Version>
@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\Sa\Classes\ConfigurationKey.cs" Link="AsLink\ConfigurationKey.cs" />
+    <Compile Include="..\..\Sa\Classes\ConfigurationKey.cs" Link="AsLink\ConfigurationKey.cs" />
   </ItemGroup>
 
   <ItemGroup>

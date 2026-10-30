@@ -1,26 +1,36 @@
-<Solution>
+﻿<Solution>
   <Folder Name="/Benchmarks/">
     <Project Path="Benchmarks/Sa.Outbox.Benchmarks/Sa.Outbox.Benchmarks.csproj" />
     <Project Path="Benchmarks/Sa.Utils.WorkQueue.Benchmarks/Sa.Utils.WorkQueue.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/Libraries/">
     <Project Path="Libraries/Sa/Sa.csproj" />
-    <Project Path="Libraries/Sa.Configuration/Sa.Configuration.csproj" />
-    <Project Path="Libraries/Sa.Configuration.PostgreSql/Sa.Configuration.PostgreSql.csproj" />
-    <Project Path="Libraries/Sa.Data.PostgreSql/Sa.Data.PostgreSql.csproj" />
-    <Project Path="Libraries/Sa.Data.S3/Sa.Data.S3.csproj" />
-    <Project Path="Libraries/Sa.Data.TempFolder/Sa.Data.TempFolder.csproj" />
-    <Project Path="Libraries/Sa.HybridFileStorage/Sa.HybridFileStorage.csproj" />
-    <Project Path="Libraries/Sa.HybridFileStorage.FileSystem/Sa.HybridFileStorage.FileSystem.csproj" />
-    <Project Path="Libraries/Sa.HybridFileStorage.Postgres/Sa.HybridFileStorage.Postgres.csproj" />
-    <Project Path="Libraries/Sa.HybridFileStorage.S3/Sa.HybridFileStorage.S3.csproj" />
-    <Project Path="Libraries/Sa.Media/Sa.Media.csproj" />
-    <Project Path="Libraries/Sa.Media.FFmpeg/Sa.Media.FFmpeg.csproj" />
-    <Project Path="Libraries/Sa.Outbox/Sa.Outbox.csproj" />
-    <Project Path="Libraries/Sa.Outbox.PostgreSql/Sa.Outbox.PostgreSql.csproj" />
     <Project Path="Libraries/Sa.Partitional.PostgreSql/Sa.Partitional.PostgreSql.csproj" />
     <Project Path="Libraries/Sa.Schedule/Sa.Schedule.csproj" />
     <Project Path="Libraries/Sa.Utils.WorkQueue/Sa.Utils.WorkQueue.csproj" />
+  </Folder>
+  <Folder Name="/Libraries/Configuration/">
+    <Project Path="Libraries/Configuration/Sa.Configuration/Sa.Configuration.csproj" />
+    <Project Path="Libraries/Configuration/Sa.Configuration.PostgreSql/Sa.Configuration.PostgreSql.csproj" />
+  </Folder>
+  <Folder Name="/Libraries/Data/">
+    <Project Path="Libraries/Data/Sa.Data.PostgreSql/Sa.Data.PostgreSql.csproj" />
+    <Project Path="Libraries/Data/Sa.Data.S3/Sa.Data.S3.csproj" />
+    <Project Path="Libraries/Data/Sa.Data.TempFolder/Sa.Data.TempFolder.csproj" />
+  </Folder>
+  <Folder Name="/Libraries/Hybrid/">
+    <Project Path="Libraries/Hybrid/Sa.HybridFileStorage/Sa.HybridFileStorage.csproj" />
+    <Project Path="Libraries/Hybrid/Sa.HybridFileStorage.FileSystem/Sa.HybridFileStorage.FileSystem.csproj" />
+    <Project Path="Libraries/Hybrid/Sa.HybridFileStorage.Postgres/Sa.HybridFileStorage.Postgres.csproj" />
+    <Project Path="Libraries/Hybrid/Sa.HybridFileStorage.S3/Sa.HybridFileStorage.S3.csproj" />
+  </Folder>
+  <Folder Name="/Libraries/Media/">
+    <Project Path="Libraries/Media/Sa.Media/Sa.Media.csproj" />
+    <Project Path="Libraries/Media/Sa.Media.FFmpeg/Sa.Media.FFmpeg.csproj" />
+  </Folder>
+  <Folder Name="/Libraries/Outbox/">
+    <Project Path="Libraries/Outbox/Sa.Outbox/Sa.Outbox.csproj" />
+    <Project Path="Libraries/Outbox/Sa.Outbox.PostgreSql/Sa.Outbox.PostgreSql.csproj" />
   </Folder>
   <Folder Name="/Samples/">
     <File Path="Samples/docker-compose.yml" />

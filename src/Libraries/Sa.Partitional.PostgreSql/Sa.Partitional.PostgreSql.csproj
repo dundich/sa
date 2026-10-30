@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<Import Project="../../Common.NuGet.Properties.xml" />
+	<Import Project="..\..\Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
 		<Version>0.18.0</Version>
@@ -13,7 +13,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
-		<ProjectReference Include="..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
+		<ProjectReference Include="..\Data\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

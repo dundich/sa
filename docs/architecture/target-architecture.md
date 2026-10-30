@@ -38,24 +38,29 @@
 │   ├── Sa.slnx
 │   ├── Directory.Packages.props
 │   ├── Directory.Build.props     # если реально используется/появится
-│   ├── Libraries/
+│   ├── Libraries/                # проекты сгруппированы по домену (SPEC-003)
 │   │   ├── Sa/
-│   │   ├── Sa.Configuration/
-│   │   ├── Sa.Configuration.PostgreSql/
-│   │   ├── Sa.Data.PostgreSql/
-│   │   ├── Sa.Data.S3/
-│   │   ├── Sa.Data.TempFolder/
-│   │   ├── Sa.Outbox/
-│   │   ├── Sa.Outbox.PostgreSql/
 │   │   ├── Sa.Partitional.PostgreSql/
 │   │   ├── Sa.Schedule/
-│   │   ├── Sa.HybridFileStorage/
-│   │   ├── Sa.HybridFileStorage.FileSystem/
-│   │   ├── Sa.HybridFileStorage.S3/
-│   │   ├── Sa.HybridFileStorage.Postgres/
-│   │   ├── Sa.Media/
-│   │   ├── Sa.Media.FFmpeg/
-│   │   └── Sa.Utils.WorkQueue/
+│   │   ├── Sa.Utils.WorkQueue/
+│   │   ├── Configuration/
+│   │   │   ├── Sa.Configuration/
+│   │   │   └── Sa.Configuration.PostgreSql/
+│   │   ├── Data/
+│   │   │   ├── Sa.Data.PostgreSql/
+│   │   │   ├── Sa.Data.S3/
+│   │   │   └── Sa.Data.TempFolder/
+│   │   ├── Hybrid/
+│   │   │   ├── Sa.HybridFileStorage/
+│   │   │   ├── Sa.HybridFileStorage.FileSystem/
+│   │   │   ├── Sa.HybridFileStorage.S3/
+│   │   │   └── Sa.HybridFileStorage.Postgres/
+│   │   ├── Media/
+│   │   │   ├── Sa.Media/
+│   │   │   └── Sa.Media.FFmpeg/
+│   │   └── Outbox/
+│   │       ├── Sa.Outbox/
+│   │       └── Sa.Outbox.PostgreSql/
 │   ├── Samples/
 │   └── Tests/
 ├── README.md
@@ -67,8 +72,10 @@
 Это целевая **опция**, а не обязательное условие SDD. Если сейчас библиотеки уже лежат непосредственно в `src/`, самый безопасный первый этап — оставить физические пути без изменений. Переносить в `src/Libraries/` только отдельным PR после проверки относительных ссылок и build graph. Если дополнительная вложенность не даёт реальной пользы, оставьте текущую плоскую структуру `src/<PackageName>`.
 
 > **Статус:** перенос выполнен по SPEC-001 (`specs/001-src-libraries-layout/`): все 17 library-проектов,
-> включая непубликуемую `Sa`, находятся в `src/Libraries/`. `src/Samples`, `src/Tests` и
-> `src/Benchmarks` остались на месте.
+> включая непубликуемую `Sa`, находятся в `src/Libraries/`. Группировка по доменам выполнена по SPEC-003
+> (`specs/003-libraries-domain-groups/`): `Configuration/`, `Data/`, `Hybrid/`, `Media/`, `Outbox/`, а
+> `Sa`, `Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue` остались в корне `src/Libraries/`.
+> `src/Samples`, `src/Tests` и `src/Benchmarks` остались на месте.
 
 ## Правила размещения
 - `specs/`: нормативные требования, сценарии, acceptance criteria, ограничения и планы изменений.

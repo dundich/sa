@@ -8,32 +8,32 @@ Reusable infrastructure libraries for distributed .NET 10 systems — **Native A
 
 ## Libraries
 
-### [Sa.Configuration](src/Libraries/Sa.Configuration) — CLI Arguments & Secrets
+### [Sa.Configuration](src/Libraries/Configuration/Sa.Configuration) — CLI Arguments & Secrets
 
 `Arguments` is a dictionary-like command-line argument parser with typed getters (`GetBool`, `GetInt`, `GetTimeSpan`, etc.). `Secrets` provides secure management of secrets from files, environment variables, and host-key files, with chained stores and `${secret:key}` templating.
 
 ---
 
-### [Sa.Configuration.PostgreSql](src/Libraries/Sa.Configuration.PostgreSql) — Dynamic DB Configuration
+### [Sa.Configuration.PostgreSql](src/Libraries/Configuration/Sa.Configuration.PostgreSql) — Dynamic DB Configuration
 
 Adds a PostgreSQL-backed `IConfigurationSource` so configuration changes in the database take effect in-app without redeploy.
 
 ---
 
 
-### [Sa.Data.S3](src/Libraries/Sa.Data.S3) — S3 Data Client
+### [Sa.Data.S3](src/Libraries/Data/Sa.Data.S3) — S3 Data Client
 
 A Minio-compatible S3 client for data operations.
 
 ---
 
-### [Sa.Data.TempFolder](src/Libraries/Sa.Data.TempFolder) — Temporary Folder Manager
+### [Sa.Data.TempFolder](src/Libraries/Data/Sa.Data.TempFolder) — Temporary Folder Manager
 
 `AddSaTempFolder` registers a keyed `ITempFolder` (a root directory plus strategies): path-guarded subfolders, debounced activity marking, age-based background cleanup with level-by-level descent, volume tracking and free-space watching with edge-triggered events, read-only mode, and keyed multi-instance registration.
 
 ---
 
-### [Sa.Outbox.PostgreSql](src/Libraries/Sa.Outbox.PostgreSql) — PostgreSQL Provider
+### [Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql) — PostgreSQL Provider
 
 A PostgreSQL implementation of the **Transactional Outbox** pattern. Messages are recorded in an outbox table alongside business operations in a single transaction, then delivered with retries and status tracking. Consumption is concurrent (`SKIP LOCKED`); offset coordination uses advisory locks. Use at your own risk.
 
@@ -51,21 +51,21 @@ Configurable scheduled tasks supporting cron expressions, fixed intervals, and o
 
 ---
 
-### [Sa.HybridFileStorage](src/Libraries/Sa.HybridFileStorage) — Multi-Provider File Storage
+### [Sa.HybridFileStorage](src/Libraries/Hybrid/Sa.HybridFileStorage) — Multi-Provider File Storage
 
 `IHybridFileStorage` abstracts upload/download/delete across multiple storage providers (FileSystem, S3, PostgreSQL) with automatic sequential failover, batch operations, and per-provider interceptors. Providers validate their options eagerly at registration, so misconfiguration fails early instead of on every operation.
 
-Providers: [`Sa.HybridFileStorage.FileSystem`](src/Libraries/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Libraries/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Libraries/Sa.HybridFileStorage.Postgres).
+Providers: [`Sa.HybridFileStorage.FileSystem`](src/Libraries/Hybrid/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Libraries/Hybrid/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Libraries/Hybrid/Sa.HybridFileStorage.Postgres).
 
 ---
 
-### [Sa.Media](src/Libraries/Sa.Media) — Async WAV Reader
+### [Sa.Media](src/Libraries/Media/Sa.Media) — Async WAV Reader
 
 A memory-efficient, fully async WAV reader built on `System.IO.Pipelines` — parses the WAV header, reads raw or normalized double samples per channel, converts between PCM16/24/32 and IEEE float, and produces streaming chunks with a configurable batch size.
 
 ---
 
-### [Sa.Media.FFmpeg](src/Libraries/Sa.Media.FFmpeg) — FFmpeg .NET Wrapper
+### [Sa.Media.FFmpeg](src/Libraries/Media/Sa.Media.FFmpeg) — FFmpeg .NET Wrapper
 
 A cross-platform FFmpeg wrapper with bundled fully-static binaries (win-x64, linux-x64) that work out of the box — no system install. Covers metadata extraction, audio conversion (PCM S16/S32 LE, F32 LE, raw, MP3, OGG), channel split/join, streaming I/O via streams, and DI.
 

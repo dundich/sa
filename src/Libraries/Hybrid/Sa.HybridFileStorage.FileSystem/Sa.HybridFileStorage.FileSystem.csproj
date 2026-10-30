@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="../../Common.NuGet.Properties.xml" />
+  <Import Project="..\..\..\Common.NuGet.Properties.xml" />
 
   <PropertyGroup>
     <Version>0.17.0</Version>
@@ -22,7 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
     <!-- File I/O (write/read/delete, path guard, cleanup activity) is delegated to the temp folder. -->
-    <ProjectReference Include="..\Sa.Data.TempFolder\Sa.Data.TempFolder.csproj" />
+    <ProjectReference Include="..\..\Data\Sa.Data.TempFolder\Sa.Data.TempFolder.csproj" />
   </ItemGroup>
 
 </Project>

@@ -42,8 +42,10 @@
 
 **Выход:** один понятный PR на ограниченный набор перемещений.
 
-**Статус: выполнен для библиотек** — SPEC-001 перенёс 17 library-проектов в `src/Libraries/`
-(`specs/001-src-libraries-layout/`).
+**Статус: выполнен для библиотек** — SPEC-001 перенёс 17 library-проектов в `src/Libraries/`,
+SPEC-003 сгруппировал их по доменам (`Configuration/`, `Data/`, `Hybrid/`, `Media/`, `Outbox/`),
+оставив `Sa`, `Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue` в корне
+(`specs/001-src-libraries-layout/`, `specs/003-libraries-domain-groups/`).
 
 ## Этап 4 — закрепить SDD в процессе
 - Для новой функциональности PR ссылается на spec ID.

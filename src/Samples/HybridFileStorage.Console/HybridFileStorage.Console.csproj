@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Libraries\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
+    <ProjectReference Include="..\..\Libraries\Hybrid\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
   </ItemGroup>
 
 </Project>

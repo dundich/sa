@@ -1,4 +1,4 @@
-﻿#:project ../../src/Libraries/Sa.Configuration/Sa.Configuration.csproj
+﻿#:project ../../src/Libraries/Configuration/Sa.Configuration/Sa.Configuration.csproj
 
 using System.Globalization;
 using System.Text;

@@ -1,13 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="../Host.Test.Properties.xml" />
+  <Import Project="..\Host.Test.Properties.xml" />
 
   <PropertyGroup>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Libraries\Sa.HybridFileStorage.Postgres\Sa.HybridFileStorage.Postgres.csproj" />
+    <ProjectReference Include="..\..\Libraries\Hybrid\Sa.HybridFileStorage.Postgres\Sa.HybridFileStorage.Postgres.csproj" />
     <ProjectReference Include="..\Fixtures\Sa.Data.PostgreSql.Fixture\Sa.Data.PostgreSql.Fixture.csproj" />
   </ItemGroup>
 

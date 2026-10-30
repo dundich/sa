@@ -28,9 +28,16 @@ relying on them in a migration spec.
 │   ├── nuget.config                 sources + packageSourceMapping + local .packages cache
 │   ├── Common.Properties.xml        shared library properties
 │   ├── Common.NuGet.Properties.xml  packaging properties (imports the above)
-│   ├── Libraries/                   all 17 library projects
+│   ├── Libraries/                   all 17 library projects, grouped by domain
 │   │   ├── Sa/                      unpacked shared-source library
-│   │   └── Sa.*/                    16 publishable libraries
+│   │   ├── Sa.Partitional.PostgreSql/ ┐
+│   │   ├── Sa.Schedule/               ├ 4 standalone projects at the root
+│   │   ├── Sa.Utils.WorkQueue/       ┘
+│   │   ├── Configuration/           Sa.Configuration, Sa.Configuration.PostgreSql
+│   │   ├── Data/                    Sa.Data.PostgreSql, Sa.Data.S3, Sa.Data.TempFolder
+│   │   ├── Hybrid/                  Sa.HybridFileStorage + FileSystem/Postgres/S3
+│   │   ├── Media/                   Sa.Media, Sa.Media.FFmpeg
+│   │   └── Outbox/                  Sa.Outbox, Sa.Outbox.PostgreSql
 │   ├── Samples/                     9 console/web samples
 │   ├── Benchmarks/                  2 benchmark projects (not packed)
 │   └── Tests/                       17 test projects + 3 fixture projects
@@ -43,7 +50,9 @@ Counts: 48 `.csproj`, 1 solution, 1199 `.cs` files (including samples/tests/benc
 
 ## Publishable libraries (16 packages)
 
-All live in `src/Libraries/<ProjectName>/`. Package ID = assembly name = project name. There is no
+All live in `src/Libraries/[<Group>/]<ProjectName>/`, where `<Group>` is one of `Configuration`,
+`Data`, `Hybrid`, `Media`, `Outbox`; the standalone projects (`Sa.Partitional.PostgreSql`,
+`Sa.Schedule`, `Sa.Utils.WorkQueue`) have no group. Package ID = assembly name = project name. There is no
 explicit `<PackageId>` anywhere.
 All target `net10.0`, `PublishAot=true`, `IsAotCompatible=true`, `Nullable=enable`,
 analyzers on, SourceLink on, `GeneratePackageOnBuild=true`.
@@ -135,11 +144,11 @@ A structural move must update every item below:
 | MTP runner selection (must run `dotnet test` from `src/`) | `src/global.json` |
 | Feed mapping and global packages folder (`src/.packages`) | `src/nuget.config` |
 | Pack order / package check / push lists | `build-sh/tasks.sh` (`PROJECTS`, `DOCKER_TEST_IMAGES`), `build/tasks.ps1` |
-| FFmpeg payload script path normalization | `.github/workflows/dotnet.yml` (`src/Libraries/Sa.Media.FFmpeg/build/*.sh`) |
-| Ignored FFmpeg payload/artifacts | `.gitignore` (`src/Libraries/Sa.Media.FFmpeg/{build,sa/native}`, `src/Libraries/Sa.Media/Echo`) |
+| FFmpeg payload script path normalization | `.github/workflows/dotnet.yml` (`src/Libraries/Media/Sa.Media.FFmpeg/build/*.sh`) |
+| Ignored FFmpeg payload/artifacts | `.gitignore` (`src/Libraries/Media/Sa.Media.FFmpeg/{build,sa/native}`, `src/Libraries/Media/Sa.Media/Echo`) |
 | Consumer-from-nupkg check | `build-sh/package-check.sh`, `build-sh/do-package-check.sh` |
-| Relative project references and `<Compile Include="..\Sa\...">` links | every `src/Libraries/*/*.csproj` |
-| Shared props import depth (`../../Common.*.xml`) | every `src/Libraries/*/*.csproj` |
+| Relative project references and `<Compile Include="..\..\Sa\...">` links | every `src/Libraries/**/*.csproj` |
+| Shared props import depth (`../../../Common.*.xml` for grouped projects) | every `src/Libraries/**/*.csproj` |
 | Sample `docker-compose.yml` and per-sample paths | `src/Samples/*` |
 | Documentation links | `README.md`, `README-ru.md`, `AGENTS.md`, `docs/**`, `specs/**` |
 
@@ -147,6 +156,6 @@ A structural move must update every item below:
 
 ```bash
 find src -name '*.csproj' | sort
-grep -h -E '<(Version|ProjectReference|Compile Include|InternalsVisibleTo|PackageReference)' src/Libraries/*/*.csproj
+grep -h -E '<(Version|ProjectReference|Compile Include|InternalsVisibleTo|PackageReference)' src/Libraries/**/*.csproj
 git rev-parse --short HEAD && git describe --tags --always
 ```

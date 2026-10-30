@@ -358,9 +358,17 @@ docker_bypass_off() {
 }
 
 nu_pack() {
+  local project csproj
   for project in "${PROJECTS[@]}"; do
     _step "Package project $project"
-    dotnet pack "$ROOT/src/Libraries/$project/$project.csproj" \
+    # Locate the project by name anywhere under src/Libraries so a regrouping into domain
+    # folders does not require touching this list's path logic.
+    csproj="$(find "$ROOT/src/Libraries" \( -name bin -o -name obj \) -prune -o -name "$project.csproj" -print | head -1)"
+    if [[ -z "$csproj" ]]; then
+      echo "ERROR: не найден $project.csproj в $ROOT/src/Libraries" >&2
+      return 1
+    fi
+    dotnet pack "$csproj" \
       --output "$DIST_FOLDER" \
       --configuration Release \
       -p:IncludeSymbols=true \

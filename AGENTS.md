@@ -1,12 +1,12 @@
 # AGENTS.md — Sa
 
-Compact guidance for OpenCode. Full library docs live in `README.md` / `QWEN.md` and each `src/Libraries/<Lib>/Readme.md`; per-library testing/style patterns live in `.github/skills/` and `.qwen/skills/`.
+Compact guidance for OpenCode. Full library docs live in `README.md` / `QWEN.md` and each `src/Libraries/[<Group>/]<Lib>/Readme.md`; per-library testing/style patterns live in `.github/skills/` and `.qwen/skills/`.
 
 ## What this is
 A monorepo of independent **Native AOT** .NET libraries (`Sa.*`) for distributed-systems infrastructure. Not a single app — each package builds/packs/publishes on its own.
 
 - Root solution: `src/Sa.slnx` (XML `.slnx`, not `.sln`).
-- Layout: all 17 library projects live under `src/Libraries/<ProjectName>/`; samples, tests and benchmarks stay in `src/Samples/`, `src/Tests/`, `src/Benchmarks/`. The shared props/config files remain directly in `src/` (MSBuild/NuGet discover them by walking up from each project).
+- Layout: all 17 library projects live under `src/Libraries/` — grouped by domain in `Configuration/`, `Data/`, `Hybrid/`, `Media/`, `Outbox/`, with the four standalone projects (`Sa`, `Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue`) directly at the root. Samples, tests and benchmarks stay in `src/Samples/`, `src/Tests/`, `src/Benchmarks/`. The shared props/config files remain directly in `src/` (MSBuild/NuGet discover them by walking up from each project).
 - Requires **.NET 10 SDK** (local: 10.0.x). Everything targets `net10.0` — a .NET 9 SDK cannot build it.
 - **Central Package Management**: all versions live in `src/Directory.Packages.props`. In a `.csproj`, add `<PackageReference Include="X" />` with **no `<Version/>`**.
 
@@ -76,7 +76,7 @@ On SDK 10.0.112 a full `dotnet test --solution Sa.slnx` used to end with `Test r
 - Every test project imports `src/Tests/Host.Test.Properties.xml` (Exe output, MTP, `xunit.v3`, global `using Xunit`).
 
 ### ⚠️ Shared source is *linked*, not referenced
-`src/Libraries/Sa/Classes/*.cs` and `src/Libraries/Sa/Extensions/*.cs` are pulled into many packages via `<Compile Include="..\Sa\...cs" Link="..." />` (see Sa.Outbox, Sa.Outbox.PostgreSql, Sa.Partitional.PostgreSql, Sa.Schedule, Sa.Data.PostgreSql, Sa.HybridFileStorage.S3). Consequences:
+`src/Libraries/Sa/Classes/*.cs` and `src/Libraries/Sa/Extensions/*.cs` are pulled into many packages via `<Compile Include="..\..\Sa\...cs" Link="..." />` (`..\Sa\...` from the four root projects) — see Sa.Outbox, Sa.Outbox.PostgreSql, Sa.Partitional.PostgreSql, Sa.Schedule, Sa.Data.PostgreSql, Sa.HybridFileStorage.S3. Consequences:
 - Editing a shared file in `src/Libraries/Sa/` changes code compiled into **several packages at once** — rebuild/retest the affected consumers.
 - A new shared type must be **link-`Include`d into each consuming project** or it won't be visible there (it is *not* a normal project reference).
 - Don't also glob/`Compile` the same file directly, or you'll get duplicate-type errors.

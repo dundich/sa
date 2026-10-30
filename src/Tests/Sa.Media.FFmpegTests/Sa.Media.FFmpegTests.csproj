@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="../Host.Test.Properties.xml" />
+  <Import Project="..\Host.Test.Properties.xml" />
 
   <PropertyGroup>
     <IsTestProject>true</IsTestProject>
@@ -7,7 +7,7 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\..\Libraries\Sa.Media.FFmpeg\Sa.Media.FFmpeg.csproj" />
+    <ProjectReference Include="..\..\Libraries\Media\Sa.Media.FFmpeg\Sa.Media.FFmpeg.csproj" />
   </ItemGroup>
 
   <ItemGroup>

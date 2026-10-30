@@ -87,7 +87,7 @@ affected; everything else keeps using the tunnel. `off` removes the routes.
 ## Secrets tooling
 
 `do-secrets.sh` wraps `tools/secrets.cs` — a .NET 10 file-based app that references
-`src/Libraries/Sa.Configuration/Sa.Configuration.csproj`, so it always uses the in-repo format.
+`src/Libraries/Configuration/Sa.Configuration/Sa.Configuration.csproj`, so it always uses the in-repo format.
 
 - The key is read from `SA_SECRETS_DECRYPTION_KEY` (or `SA_SECRETS_DECRYPTION_KEY_<CLIENT>`),
   from `--key-file`, from `.env`, or typed interactively. `--key` is rejected on purpose:
