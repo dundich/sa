@@ -38,7 +38,7 @@ package_check() {
   fi
 
   _step "Packing Sa.Media.FFmpeg into a throwaway feed"
-  dotnet pack "$SRC_DIR/Sa.Media.FFmpeg/Sa.Media.FFmpeg.csproj" \
+  dotnet pack "$SRC_DIR/Libraries/Sa.Media.FFmpeg/Sa.Media.FFmpeg.csproj" \
     --output "$feed" \
     --configuration "$CONFIG" \
     -p:IncludeSymbols=false || { _assert_exec; return; }

@@ -129,7 +129,7 @@ function TestCi() {
 function NuPack() {
 	foreach ($project in $projects) {
 		_Step "Package project $project"
-		& dotnet pack "$root\src\$project\$project.csproj" --output $dist_folder --configuration $config -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
+		& dotnet pack "$root\src\Libraries\$project\$project.csproj" --output $dist_folder --configuration $config -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
 		_AssertExec
 	}
 }

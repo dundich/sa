@@ -13,8 +13,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Target the repository root, not the caller's cwd: the script lives in build-sh/.
+TARGET="$(cd "$SCRIPT_DIR/.." && pwd)"
 LINK="/sa"
-TARGET="$(pwd)"
 
 echo "Creating symlink $LINK -> $TARGET"
 

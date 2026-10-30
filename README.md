@@ -8,70 +8,70 @@ Reusable infrastructure libraries for distributed .NET 10 systems — **Native A
 
 ## Libraries
 
-### [Sa.Configuration](src/Sa.Configuration) — CLI Arguments & Secrets
+### [Sa.Configuration](src/Libraries/Sa.Configuration) — CLI Arguments & Secrets
 
 `Arguments` is a dictionary-like command-line argument parser with typed getters (`GetBool`, `GetInt`, `GetTimeSpan`, etc.). `Secrets` provides secure management of secrets from files, environment variables, and host-key files, with chained stores and `${secret:key}` templating.
 
 ---
 
-### [Sa.Configuration.PostgreSql](src/Sa.Configuration.PostgreSql) — Dynamic DB Configuration
+### [Sa.Configuration.PostgreSql](src/Libraries/Sa.Configuration.PostgreSql) — Dynamic DB Configuration
 
 Adds a PostgreSQL-backed `IConfigurationSource` so configuration changes in the database take effect in-app without redeploy.
 
 ---
 
 
-### [Sa.Data.S3](src/Sa.Data.S3) — S3 Data Client
+### [Sa.Data.S3](src/Libraries/Sa.Data.S3) — S3 Data Client
 
 A Minio-compatible S3 client for data operations.
 
 ---
 
-### [Sa.Data.TempFolder](src/Sa.Data.TempFolder) — Temporary Folder Manager
+### [Sa.Data.TempFolder](src/Libraries/Sa.Data.TempFolder) — Temporary Folder Manager
 
 `AddSaTempFolder` registers a keyed `ITempFolder` (a root directory plus strategies): path-guarded subfolders, debounced activity marking, age-based background cleanup with level-by-level descent, volume tracking and free-space watching with edge-triggered events, read-only mode, and keyed multi-instance registration.
 
 ---
 
-### [Sa.Outbox.PostgreSql](src/Sa.Outbox.PostgreSql) — PostgreSQL Provider
+### [Sa.Outbox.PostgreSql](src/Libraries/Sa.Outbox.PostgreSql) — PostgreSQL Provider
 
 A PostgreSQL implementation of the **Transactional Outbox** pattern. Messages are recorded in an outbox table alongside business operations in a single transaction, then delivered with retries and status tracking. Consumption is concurrent (`SKIP LOCKED`); offset coordination uses advisory locks. Use at your own risk.
 
 ---
 
-### [Sa.Partitional.PostgreSql](src/Sa.Partitional.PostgreSql) — Declarative Partitioning
+### [Sa.Partitional.PostgreSql](src/Libraries/Sa.Partitional.PostgreSql) — Declarative Partitioning
 
 Declarative PostgreSQL table partitioning (range by day/month/year and list) with a fluent builder, automated migration of future partitions, retention-based cleanup, and an in-memory cache that auto-invalidates on runtime changes.
 
 ---
 
-### [Sa.Schedule](src/Sa.Schedule) — Scheduled Task Executor
+### [Sa.Schedule](src/Libraries/Sa.Schedule) — Scheduled Task Executor
 
-Configurable scheduled tasks supporting cron expressions, fixed intervals, and one-shot delays, with per-job failure strategies, retries, concurrency limits, interceptors, and runtime start/stop/restart. ([Cron docs EN](src/Sa.Schedule/Cron/CRON.md), [Cron docs RU](src/Sa.Schedule/Cron/CRON-ru.md))
+Configurable scheduled tasks supporting cron expressions, fixed intervals, and one-shot delays, with per-job failure strategies, retries, concurrency limits, interceptors, and runtime start/stop/restart. ([Cron docs EN](src/Libraries/Sa.Schedule/Cron/CRON.md), [Cron docs RU](src/Libraries/Sa.Schedule/Cron/CRON-ru.md))
 
 ---
 
-### [Sa.HybridFileStorage](src/Sa.HybridFileStorage) — Multi-Provider File Storage
+### [Sa.HybridFileStorage](src/Libraries/Sa.HybridFileStorage) — Multi-Provider File Storage
 
 `IHybridFileStorage` abstracts upload/download/delete across multiple storage providers (FileSystem, S3, PostgreSQL) with automatic sequential failover, batch operations, and per-provider interceptors. Providers validate their options eagerly at registration, so misconfiguration fails early instead of on every operation.
 
-Providers: [`Sa.HybridFileStorage.FileSystem`](src/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Sa.HybridFileStorage.Postgres).
+Providers: [`Sa.HybridFileStorage.FileSystem`](src/Libraries/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Libraries/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Libraries/Sa.HybridFileStorage.Postgres).
 
 ---
 
-### [Sa.Media](src/Sa.Media) — Async WAV Reader
+### [Sa.Media](src/Libraries/Sa.Media) — Async WAV Reader
 
 A memory-efficient, fully async WAV reader built on `System.IO.Pipelines` — parses the WAV header, reads raw or normalized double samples per channel, converts between PCM16/24/32 and IEEE float, and produces streaming chunks with a configurable batch size.
 
 ---
 
-### [Sa.Media.FFmpeg](src/Sa.Media.FFmpeg) — FFmpeg .NET Wrapper
+### [Sa.Media.FFmpeg](src/Libraries/Sa.Media.FFmpeg) — FFmpeg .NET Wrapper
 
 A cross-platform FFmpeg wrapper with bundled fully-static binaries (win-x64, linux-x64) that work out of the box — no system install. Covers metadata extraction, audio conversion (PCM S16/S32 LE, F32 LE, raw, MP3, OGG), channel split/join, streaming I/O via streams, and DI.
 
 ---
 
-### [Sa.Utils.WorkQueue](src/Sa.Utils.WorkQueue) — Async Queue with Concurrency Limiting
+### [Sa.Utils.WorkQueue](src/Libraries/Sa.Utils.WorkQueue) — Async Queue with Concurrency Limiting
 
 A high-performance async task queue on `System.Threading.Channels` with bounded capacity and back-pressure (enqueue strategies on a full buffer: `Wait`/`Skip`/`Throw`), runtime-adjustable concurrency (`ConcurrencyLimit`/`MaxConcurrency`) with dynamic scaling, reader cancellation order (`Lifo`•`Fifo`•`RoundRobin`•`Random`) and cancel modes (`Hard`/`Soft`), DI, idempotent shutdown, error strategies, and status callbacks.
 
@@ -86,7 +86,7 @@ Located in `src/Samples/`:
 | [Configuration.Web](src/Samples/Configuration.Web) | CLI args + secrets in ASP.NET |
 | [FFMpeg.Console](src/Samples/FFMpeg.Console) | FFmpeg metadata extraction |
 | [HybridFileStorage.Console](src/Samples/HybridFileStorage.Console) | Multi-provider file storage |
-| [Partitational.ConsoleApp](src/Samples/Partitional.ConsoleApp) | Declarative partitioning |
+| [Partitional.ConsoleApp](src/Samples/Partitional.ConsoleApp) | Declarative partitioning |
 | [PgOutbox.ConsoleApp](src/Samples/PgOutbox.ConsoleApp) | Outbox pattern demo |
 | [Schedule.Console](src/Samples/Schedule.Console) | Scheduled task executor |
 | [Schedule.Configuration.Console](src/Samples/Schedule.Configuration.Console) | Scheduled jobs re-timed/disabled from appsettings.json |
@@ -97,7 +97,7 @@ Located in `src/Samples/`:
 
 ## Tests
 
-Located in `src/Tests/`: 15 test projects using **xunit v3** and **Testcontainers** (PostgreSQL + Minio) for integration tests.
+Located in `src/Tests/`: 17 test projects using **xunit v3** and **Testcontainers** (PostgreSQL + SeaweedFS) for integration tests.
 
 ---
 
@@ -122,6 +122,17 @@ dotnet test src/Sa.slnx -v n
 
 ---
 
+## Contributing, specs and decisions
+
+This repository is **spec-first**: requirements and acceptance criteria live in [`specs/`](specs)
+(see [`specs/000-project-baseline`](specs/000-project-baseline)), work templates in
+[`templates/`](templates), review gates in [`checklists/`](checklists), and ADRs in
+[`docs/decisions/`](docs/decisions). The process itself is described in
+[`docs/README.md`](docs/README.md) and [`docs/development/sdd-workflow.md`](docs/development/sdd-workflow.md);
+[`AGENTS.md`](AGENTS.md) holds the build/test/packaging constraints.
+
+---
+
 ## Architecture
 
 - Targets **.NET 10.0** with **Native AOT**
@@ -129,7 +140,7 @@ dotnet test src/Sa.slnx -v n
 - Shared utilities in **Sa** are linked into consuming projects
 - All packages use SDK-style csproj with implicit usings, nullable, and analyzers
 - Solution managed via `.slnx`
-- Tests use **xunit v3** and **Testcontainers** (PostgreSQL + Minio), isolated per test class
+- Tests use **xunit v3** and **Testcontainers** (PostgreSQL + SeaweedFS), isolated per test class
 
 ## License
 

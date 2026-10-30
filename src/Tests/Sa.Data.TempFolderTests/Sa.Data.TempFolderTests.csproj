@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Sa.Data.TempFolder\Sa.Data.TempFolder.csproj" />
+    <ProjectReference Include="..\..\Libraries\Sa.Data.TempFolder\Sa.Data.TempFolder.csproj" />
     <!-- IHostedService / BackgroundService — background cleanup loop tests. -->
     <PackageReference Include="Microsoft.Extensions.Hosting" />
   </ItemGroup>

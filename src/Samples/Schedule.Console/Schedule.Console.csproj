@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Sa.Schedule\Sa.Schedule.csproj" />
+    <ProjectReference Include="..\..\Libraries\Sa.Schedule\Sa.Schedule.csproj" />
   </ItemGroup>
 
   <ItemGroup>

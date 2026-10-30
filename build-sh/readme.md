@@ -14,11 +14,11 @@ Alternative to PowerShell `build/` — these scripts work on Linux/macOS.
 # Create NuGet packages
 ./do-package.sh
 
-# Push packages to local NuGet source
+# Push packages into the repository-local feed (src/nupkgs, the one src/nuget.config maps)
 ./do-push-local.sh
 
-# Push packages to nuget.org
-./do-push-prod.sh
+# Push packages to nuget.org (API key from the environment, never echoed)
+NUGET_API_KEY=... ./do-push-prod.sh
 
 # Enable long paths on Linux (create /sa symlink)
 sudo ./do-fix-max-path-linux.sh
@@ -87,7 +87,7 @@ affected; everything else keeps using the tunnel. `off` removes the routes.
 ## Secrets tooling
 
 `do-secrets.sh` wraps `tools/secrets.cs` — a .NET 10 file-based app that references
-`src/Sa.Configuration/Sa.Configuration.csproj`, so it always uses the in-repo format.
+`src/Libraries/Sa.Configuration/Sa.Configuration.csproj`, so it always uses the in-repo format.
 
 - The key is read from `SA_SECRETS_DECRYPTION_KEY` (or `SA_SECRETS_DECRYPTION_KEY_<CLIENT>`),
   from `--key-file`, from `.env`, or typed interactively. `--key` is rejected on purpose:
@@ -100,9 +100,17 @@ affected; everything else keeps using the tunnel. `off` removes the routes.
 ## Notes
 
 - All scripts use `set -euo pipefail` for strict error handling.
+- `./do-build.sh` really cleans: `dist/` is wiped and `dotnet clean` runs before `dotnet build`, so
+  stale `bin/`/`obj/` cannot mask a broken tree. This makes a cold build slower by design.
 - `dotnet test` runs from the `src/` directory (required by .NET 10 MTP runner).
 - Projects to package are defined in `tasks.sh` — same list as the PowerShell version.
-- The `local` NuGet source must be configured separately (`dotnet nuget add source ...`).
+- `./do-push-local.sh` pushes to `src/nupkgs` directly, so no machine-level NuGet source is needed;
+  that folder is already the `Sa.*` source in `src/nuget.config`. A folder feed stores only
+  `.nupkg` — `.snupkg` symbols need a symbol server, and NuGet warns that `--skip-duplicate` is not
+  supported for this feed type.
+- `./do-push-prod.sh` requires `NUGET_API_KEY` and exits before pushing anything when it is unset.
+  `./do-push-prod-ex.sh` is the variant that takes the key as an argument.
+- Both push scripts fail with a clear error when `dist/` has no packages: run `./do-package.sh` first.
 
 ## Test resource limits
 

@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Sa.Utils.WorkQueue\Sa.Utils.WorkQueue.csproj" />
+    <ProjectReference Include="..\..\Libraries\Sa.Utils.WorkQueue\Sa.Utils.WorkQueue.csproj" />
   </ItemGroup>
 
 </Project>

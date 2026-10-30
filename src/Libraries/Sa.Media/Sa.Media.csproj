@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="../../Common.NuGet.Properties.xml" />
+
+    <PropertyGroup>
+        <Version>0.17.0</Version>
+        <Description>Async WAV reader for .NET with stereo cross-feed suppression (Echo)</Description>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <NoWarn>S3776</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Sa.MediaTests" />
+    </ItemGroup>
+
+</Project>

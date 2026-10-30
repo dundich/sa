@@ -7,7 +7,7 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\..\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\Libraries\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
     <ProjectReference Include="..\Fixtures\Sa.Data.PostgreSql.Fixture\Sa.Data.PostgreSql.Fixture.csproj" />
   </ItemGroup>
 

@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\Libraries\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
   </ItemGroup>
 
 </Project>

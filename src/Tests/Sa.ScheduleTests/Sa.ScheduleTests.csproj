@@ -7,7 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Sa.Schedule\Sa.Schedule.csproj" />
+        <ProjectReference Include="..\..\Libraries\Sa.Schedule\Sa.Schedule.csproj" />
         <ProjectReference Include="..\Fixtures\Sa.Fixture\Sa.Fixture.csproj" />
     </ItemGroup>
 

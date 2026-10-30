@@ -105,7 +105,11 @@ clean() {
   _step "Clean folder $DIST_FOLDER"
   mkdir -p "$DIST_FOLDER"
   rm -rf "$DIST_FOLDER"/*
-  _msbuild "Clean"
+  # `dotnet build` alone does not clean: without this step stale bin/obj survive and an
+  # incremental build can hide artifacts from a previous tree state.
+  _step "Clean solution"
+  dotnet clean "$SLN_FILE" -c "$CONFIG" -v "$MSBUILD_VERBOSITY" || { _assert_exec; return; }
+  _assert_exec
 }
 
 build() {
@@ -356,7 +360,7 @@ docker_bypass_off() {
 nu_pack() {
   for project in "${PROJECTS[@]}"; do
     _step "Package project $project"
-    dotnet pack "$ROOT/src/$project/$project.csproj" \
+    dotnet pack "$ROOT/src/Libraries/$project/$project.csproj" \
       --output "$DIST_FOLDER" \
       --configuration Release \
       -p:IncludeSymbols=true \
@@ -367,14 +371,33 @@ nu_pack() {
 
 nu_push() {
   local nuget_source="$1"
+  local api_key="${2:-${NUGET_API_KEY:-}}"
   _step "Push packages to $nuget_source"
 
-  # Find both *.nupkg and *.snupkg files
+  # Find both *.nupkg and *.snupkg. An empty dist/ must fail loudly: the loop below would
+  # otherwise do nothing and the script would report success without pushing anything.
+  local packages=()
   while IFS= read -r -d '' package; do
-    _step "Push $(basename "$package") to $nuget_source"
-    dotnet nuget push "$package" --source "$nuget_source" --skip-duplicate || { _assert_exec; return; }
-    _assert_exec
+    packages+=("$package")
   done < <(find "$DIST_FOLDER" -maxdepth 1 \( -name "*.nupkg" -o -name "*.snupkg" \) -print0 | sort -z)
+
+  if [[ ${#packages[@]} -eq 0 ]]; then
+    echo "ERROR: в $DIST_FOLDER нет пакетов — сначала ./build-sh/do-package.sh" >&2
+    return 1
+  fi
+
+  local package
+  for package in "${packages[@]}"; do
+    _step "Push $(basename "$package") to $nuget_source"
+    if [[ -n "$api_key" ]]; then
+      dotnet nuget push "$package" --source "$nuget_source" --api-key "$api_key" --skip-duplicate \
+        || { _assert_exec; return; }
+    else
+      dotnet nuget push "$package" --source "$nuget_source" --skip-duplicate \
+        || { _assert_exec; return; }
+    fi
+    _assert_exec
+  done
 }
 
 nu_push_ex() {

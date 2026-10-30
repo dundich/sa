@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Sa.Media\Sa.Media.csproj" />
+    <ProjectReference Include="..\..\Libraries\Sa.Media\Sa.Media.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
