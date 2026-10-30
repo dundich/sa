@@ -153,7 +153,7 @@ var allGroups = manager.GetAllConsumerGroupIds();
 | `LockRenewal` | 3 sec | Lock renewal interval |
 | `LookbackInterval` | 7 days | History search window for unprocessed messages |
 | `MaxDeliveryAttempts` | 3 | Max delivery attempts before DLQ |
-| `MaxBatchSize` | 16 | Max messages per batch |
+| `MaxBatchSize` | 128 | Max messages per batch |
 | `BatchingWindow` | 3 sec | Message aggregation window |
 | `PerTenantTimeout` | 0 | Timeout per tenant processing |
 | `PerTenantMaxDegreeOfParallelism` | 1 | Tenant parallelism (1 = sequential, -1 = all cores) |

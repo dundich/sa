@@ -36,6 +36,7 @@ internal static class Setup
                     .AddPostSql(() => $"""
                         {sql.SqlCreateTypeTable}
                         {sql.SqlAddMsgSeqColumnToMsgTable}
+                        {sql.SqlCreateMsgCursorIndex}
                         """)
                 ;
 

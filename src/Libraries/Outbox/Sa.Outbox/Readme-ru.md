@@ -155,7 +155,7 @@ var allGroups = manager.GetAllConsumerGroupIds();
 | `LockRenewal` | 3 сек | Интервал продления блокировки |
 | `LookbackInterval` | 7 дней | Окно поиска истории необработанных сообщений |
 | `MaxDeliveryAttempts` | 3 | Макс. попыток доставки перед DLQ |
-| `MaxBatchSize` | 16 | Макс. сообщений в батче |
+| `MaxBatchSize` | 128 | Макс. сообщений в батче |
 | `BatchingWindow` | 3 сек | Окно агрегации сообщений |
 | `PerTenantTimeout` | 0 | Таймаут на обработку одного арендатора |
 | `PerTenantMaxDegreeOfParallelism` | 1 | Параллелизм по арендаторам (1 = последовательно, -1 = все ядра) |

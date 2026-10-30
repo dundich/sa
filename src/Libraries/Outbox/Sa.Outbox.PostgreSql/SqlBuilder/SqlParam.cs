@@ -31,6 +31,10 @@ internal static class SqlParam
     public const string Offset = "@offset";
     public const string Limit = "@lim";
     public const string LockOffset = "@lck_id";
+    /// <summary>First key of the publisher's two-int advisory lock form (see <c>PgAdvisoryKeys</c>).</summary>
+    public const string LockNamespace = "@lck_ns";
+    /// <summary>The set of per-(tenant, part) publish lock keys taken by one statement.</summary>
+    public const string LockKeys = "@lck_keys";
     public const string LockExpiresOn = "@lck_on";
     public const string PayloadId = "@p_id";
     public const string TaskId = "@tsk";

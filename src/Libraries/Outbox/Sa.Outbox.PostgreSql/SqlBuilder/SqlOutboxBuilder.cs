@@ -243,6 +243,34 @@ ON CONFLICT ({settings.Offset.Fields.ConsumerGroup},{settings.Offset.Fields.Tena
     public readonly string SqlLockOffset = $"SELECT pg_advisory_xact_lock(@lck_id);";
 
 
+    // Publish-side lock: serializes the publishes of one (tenant, part) so that msg_seq order equals
+    // commit order inside it.
+    //
+    // Why it is needed: msg_seq is allocated by nextval at COPY time, but the row becomes visible at
+    // COMMIT. Without the lock two publishers can interleave as "A takes 1..100 and commits late,
+    // B takes 101..200 and commits early"; the loader then sees B, advances the group cursor to 200,
+    // and A's rows — already below the cursor — are never delivered. Measured on 8 parallel
+    // publishers with batch 1024 and a caught-up consumer: 1.2–7 % of all rows lost, scaling with
+    // batch × writers. With the lock the sequence is only handed out under it, so a lower seq can no
+    // longer commit after a higher one.
+    //
+    // The cost is serialization *within* a part, which is free here: measured 8 writers into one leaf
+    // (41 914 rows/s) vs into 8 different leaves (40 874), i.e. same-leaf contention was never the
+    // limit. Distinct parts still publish in parallel.
+    //
+    // The keys are ordered by value before locking, so two publishers that share several parts cannot
+    // deadlock by taking them in different orders. MATERIALIZED is load-bearing: without it the planner
+    // is free to evaluate the lock call before the sort and reintroduce that deadlock.
+    public readonly string SqlLockPublishParts =
+$"""
+WITH keys AS MATERIALIZED (
+  SELECT unnest({SqlParam.LockKeys}) AS k ORDER BY 1
+)
+SELECT pg_advisory_xact_lock({SqlParam.LockNamespace}, k) FROM keys
+;
+""";
+
+
     // Legacy floor resolution (C2). With the cursor on msg_seq, a "start from this moment" floor
     // configured either as a v7 message id or as a date has to be translated into a seq boundary
     // once per consumer group (result cached by OutboxTaskLoader).
@@ -334,6 +362,39 @@ ADD COLUMN IF NOT EXISTS {settings.TaskQueue.Fields.MsgSeq} BIGINT NOT NULL DEFA
 $"""
 ALTER TABLE {settings.GetQualifiedOffsetTableName()}
 ADD COLUMN IF NOT EXISTS {settings.Offset.Fields.GroupOffsetSeq} BIGINT NOT NULL DEFAULT 0
+;
+""";
+
+
+    // The cursor query (`SqlLoadConsumerGroup`) filters on (tenant_id, msg_part, msg_seq) and orders
+    // by msg_seq, but the table's primary key is (msg_id, tenant_id, msg_part, msg_created_at) — its
+    // leading column is the message id, so nothing in the key can serve that predicate. Without this
+    // index the plan is a Seq Scan of *every daily leaf inside the window* plus a Sort of all matching
+    // rows — including on a poll that finds the queue empty. LookbackInterval defaults to 7 days, so
+    // that is seven leaves per poll per group per tenant: measured on 7 × 40k rows, 56.8 ms and
+    // 10 377 shared buffers, against 0.166 ms and 14 buffers with this index.
+    //
+    // Only msg_seq is indexed, although the query also filters on tenant_id and msg_part. Those two
+    // are the LIST partition keys: every row of a leaf already satisfies them by construction, so
+    // inside the leaf their selectivity is zero and prefixing the key with them would only widen it.
+    // Measured on the same 7 × 40k rows, (tenant_id, msg_part, msg_seq) cost 11 MB of index and 21
+    // buffers per poll against 6.1 MB and 14 for (msg_seq) — same plan, smaller key.
+    //
+    // Declared on the ROOT: PostgreSQL propagates a partitioned table's index to every existing leaf
+    // and to every partition created later, so no per-partition DDL is needed and future daily
+    // partitions cannot silently miss it. `CONCURRENTLY` is not supported on a partitioned table, so
+    // this is a regular (locking) DDL — it runs from the same add-post-sql hook, and on an existing
+    // deployment that is what turns an unbounded table scan into an index range scan.
+    //
+    // Order matters in the hook: this must come *after* SqlAddMsgSeqColumnToMsgTable, because a
+    // database upgraded from an older version gains msg_seq in that same pass. IF NOT EXISTS keeps
+    // every later pass a no-op.
+    public readonly string SqlCreateMsgCursorIndex =
+$"""
+CREATE INDEX IF NOT EXISTS {$"ix_{settings.Message.TableName}_cursor".QuoteDerivedIdentifier()}
+ON {settings.GetQualifiedMsgTableName()} (
+  {settings.Message.Fields.MsgSeq}
+)
 ;
 """;
 

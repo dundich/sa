@@ -188,7 +188,7 @@ services.AddSaOutbox(builder => builder
 | `ConcurrencyLimit` | 1 | `WithConcurrencyLimit` | Параллелизм расписания на уровне группы |
 | `MaxConcurrency` | 48 | `WithMaxConcurrency` | `AddDeliveryJob` переопределяет в 1 |
 | `RetryCountOnError` | 0 | `WithRetryCountOnError` / `WithNoRetries` / `WithInfiniteRetries` | Повторы **задачи**, а не сообщения |
-| `MaxBatchSize` | 16 | `WithMaxBatchSize` | Верхняя граница для `IDeliveryBatcher` |
+| `MaxBatchSize` | 128 | `WithMaxBatchSize` | Верхняя граница для `IDeliveryBatcher` |
 | `MaxProcessingIterations` | 10 | `WithMaxProcessingIterations` / `WithSingleIteration` / `WithUnlimitedIterations` | `-1` — жадно, пока очередь не опустеет; `AddDeliveryJob` ставит `-1` |
 | `IterationDelay` | ноль | `WithIterationDelay` | Вместе с нулём и `-1` цикл превращается в горячий слив |
 | `LockDuration` | 10 с | `WithLockDuration` / `WithNoLockDuration` | Должен быть `> 0` |

@@ -267,18 +267,7 @@ internal sealed partial class OutboxTaskLoader(
 
 
     public static int CalculateLockKey(ConsumerGroupIdentifier consumerGroup)
-    {
-        uint hash = 0xffffffff;
-        foreach (char c in consumerGroup.ToString())
-        {
-            hash ^= c;
-            for (int i = 0; i < 8; i++)
-            {
-                hash = hash >> 1 ^ ((hash & 1) != 0 ? 0xA6BCD5B9u : 0);
-            }
-        }
-        return (int)(hash ^ 0xffffffff);
-    }
+        => PgAdvisoryKeys.Fnv(consumerGroup.ToString());
 
 
     [LoggerMessage(

@@ -1,6 +1,7 @@
 ﻿using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.PostgreSql.Services;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;
@@ -77,6 +78,18 @@ internal static class NpgsqlCommandExtension
     public static NpgsqlCommand AddParamAdvisoryXactLock(this NpgsqlCommand command, int value)
     {
         command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.LockOffset, value));
+        return command;
+    }
+
+    /// <summary>
+    /// Binds the publish-side lock: the namespace constant plus the set of per-(tenant, part) keys.
+    /// The keys travel as one array and are unnest'ed by the statement, so a multi-part publish takes
+    /// all of its locks in a single round trip.
+    /// </summary>
+    public static NpgsqlCommand AddParamPublishLock(this NpgsqlCommand command, int[] keys)
+    {
+        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.LockNamespace, PgAdvisoryKeys.PublishPartNamespace));
+        command.Parameters.Add(new NpgsqlParameter<int[]>(SqlParam.LockKeys, keys));
         return command;
     }
 

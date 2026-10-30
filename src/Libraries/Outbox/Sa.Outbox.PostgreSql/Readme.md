@@ -2,6 +2,34 @@
 
 An AOT-compatible library for implementing the **Transactional Outbox** pattern using PostgreSQL in .NET applications. Provides guaranteed message delivery with support for multi-tenancy, concurrent processing, partitioning, and advanced consumer management.
 
+### What it actually looks like
+
+By its runtime model this is closer to **Redis Stream** and **Kafka** than to the classic "outbox → broker":
+
+| | Redis Stream | Kafka | here |
+|---|---|---|---|
+| Log | `XADD` into a stream | append-only partition | `__msg$` + `msg_seq` (BIGSERIAL) |
+| Groups | `XGROUP` / `XREADGROUP` | consumer group | `consumer_group` in the group settings |
+| Cursor | last-delivered-id per group | `__consumer_offsets` | `__offset$.group_offset_seq` per `(group, tenant)` |
+| Partitioning | — | partition | `(tenant, part)` → daily leaves |
+| Delivery | PEL + `XACK`, claim by timeout | poll + commit offset | `task_lock_expires_on` + `msg.Ok()/Warn()/…` |
+| Ordering | within a stream | within a partition | within `(tenant, part)` |
+| Retention | `XTRIM` / `MAXLEN` | time or size | `DROP PARTITION` per day |
+
+What it is *not*: the classic "put it in the outbox, a separate relay publishes it to Kafka/RabbitMQ"
+pipeline. There is no broker, no CDC/Debezium and no relay process — the PostgreSQL tables themselves
+are the log and the queue, and the consumer reads straight from the database. If you need a bus, this
+schema can play that role: consumer groups give the same fan-out.
+
+What a real broker has and this does not:
+
+- no wire protocol or client libraries — the "broker" is a PostgreSQL schema;
+- no dynamic rebalancing: groups are static (registered in DI), and parallelism inside a group comes
+  from `SKIP LOCKED`, not from partition assignment;
+- no global ordering: it exists only within `(tenant, part)`;
+- no retention by offset: retention drops whole daily partitions;
+- as a bus it works only inside one database — it is shared schema, not network transport.
+
 ---
 
 ## Quick Start (5 minutes)
@@ -228,7 +256,7 @@ The section just has to be part of the `IConfiguration` registered in DI (e.g. a
 | `WithRetryCountOnError(n)` | 0 | Job retries on error (`-1` = infinite) |
 | `WithNoRetries()` | — | Disable retries |
 | `WithInfiniteRetries()` | — | Infinite retries |
-| `WithMaxBatchSize(n)` | 16 | Max messages per batch |
+| `WithMaxBatchSize(n)` | 128 | Max messages per batch |
 | `WithMaxProcessingIterations(n)` | 10 | Iterations per cycle (`-1` = drain until empty) |
 | `WithSingleIteration()` | — | One iteration (testing) |
 | `WithUnlimitedIterations()` | — | Drain until empty |
@@ -419,23 +447,88 @@ if (!migrationService.OnMigrated.IsCancellationRequested)
 ## Message Lifecycle
 
 ```
-┌──────────────┐   BINARY COPY    ┌──────────────┐
-│  Your code   │ ───────────────→ │ outbox__msg$ │
-│  Publish()   │                  └──────┬───────┘
-└──────────────┘                         │ INSERT INTO outbox (SKIP LOCKED)
-                                         ↓
-                                    ┌──────────────┐
-                                    │    outbox     │ ← your IConsumer<T>
-                                    │  (task queue) │    reads & processes
-                                    └──────┬───────┘
-                                           │
-                              ┌────────────┼────────────┐
-                              ↓            ↓            ↓
-                        ┌──────────┐ ┌──────────┐ ┌──────────┐
-                        │ __log$   │ │ __error$ │ │ __offset │
-                        │ history  │ │ permanent│ │ updated  │
-                        └──────────┘ └──────────┘ └──────────┘
+Publish(messages)
+      │  COPY (BINARY) — one transaction + advisory lock (tenant, part)
+      ▼
+  outbox__msg$          ← the message lives here, msg_seq = nextval()
+      │
+      │ ① materialize — once per consumer group
+      │    INSERT INTO outbox … SELECT … WHERE msg_seq > @offset
+      │    under the (consumer_group, tenant) advisory lock;
+      │    __offset$ is advanced in the same transaction
+      ▼
+    outbox  (task queue)   ← one row per "message × group" pair
+      │
+      │ ② rent — SELECT … FOR UPDATE SKIP LOCKED
+      │    → delivery_status_code = Processing, task_lock_expires_on
+      ▼
+  IConsumer<T>.Consume
+      │
+      │ ③ finish — ReturnDelivery
+      │    __log$: one record per delivery attempt
+      │    __error$: terminal failures only
+      │    outbox: result status + attempt counter
+      ▼
+  the row stays in outbox with its status and is not rented again
+  (Pending/Processing/Postpone/Retry/Warn stay rentable);
+  it is physically removed only with its daily partition, on retention
 ```
+
+Note: `__offset$` is a *materialisation* watermark, not a *delivery* watermark. It moves when the
+tasks are created, before the consumer has seen them. That is safe: once it has moved, the tasks are
+already in `outbox`, so a crash between materialisation and delivery loses nothing — the tasks are
+simply rented later.
+
+### Consumer groups
+
+Every group is an independent copy of the stream. A message in `__msg$` is materialised **once per
+group** that subscribes to its type (part + payload type), so groups neither block nor consume each
+other's messages:
+
+```
+                         outbox__msg$   (shared: LIST(tenant) → LIST(part) → RANGE(day))
+                               │
+             ┌─────────────────┼─────────────────┐   one copy per group
+             ▼                 ▼                 ▼
+      ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+      │  "orders"   │   │   "audit"   │   │  "billing"  │
+      │ cursor      │   │ cursor      │   │ cursor      │
+      │ (grp,tenant)│   │ (grp,tenant)│   │ (grp,tenant)│
+      └──────┬──────┘   └──────┬──────┘   └──────┬──────┘
+             ▼                 ▼                 ▼
+       task queue        task queue        task queue        ← per-group partition
+             │                 │                 │
+      IConsumer<Order>  IConsumer<Order>  IConsumer<Invoice>  ← per-group handler
+             │                 │                 │
+             ▼                 ▼                 ▼
+      __log$ (grp)      __log$ (grp)      __log$ (grp)        ← per-group delivery log
+```
+
+`"orders"` and `"audit"` above are two groups on the **same** message type: both receive every
+message, each into its own queue. `"billing"` subscribes to a different type and only gets its own.
+
+What is per group and what is shared:
+
+| Resource | Where | Granularity |
+|---|---|---|
+| Cursor | `__offset$` | `(consumer_group, tenant)` |
+| Task queue | `outbox` | `LIST(tenant) → LIST(consumer_group) → RANGE(day)` |
+| Delivery log | `__log$` | `LIST(tenant) → LIST(consumer_group) → RANGE(day)` |
+| Schedule and settings (`Interval`, `MaxBatchSize`, `MaxProcessingIterations`, `LockDuration`, …) | the `DeliveryJob` in the scheduler | per group |
+| Materialisation lock | advisory lock | `(consumer_group, tenant)` — groups never block each other |
+| Messages | `__msg$` | shared |
+| Type registry | `__type$` | shared |
+| Terminal errors | `__error$` | shared, not split by group (partitioned by day) |
+
+Practical consequences:
+
+- **consumption capacity is per group**, not per database: `MaxBatchSize × MaxProcessingIterations`
+  per `Interval` (with the defaults 128 × 10 per minute ≈ 1 280 messages/min per group);
+- to consume faster, add groups (different types/parts) or raise the batch and poll frequency — but not
+  the number of workers on one group, which is bounded by that group's own lock;
+- each group has its own cursor, so a lagging group does not slow the others down;
+- a message whose type no group subscribes to stays in `__msg$` and leaves only with its partition on
+  retention.
 
 ---
 
@@ -445,12 +538,12 @@ After processing each message, call exactly one method:
 
 | Method | When to use | Next action |
 |---|---|---|
-| `msg.Ok()` | Everything went fine | Task removed |
-| `msg.Created()` | Side-effect resource created | Task removed |
-| `msg.Accepted()` | Accepted for async processing | Task removed |
-| `msg.NoContent()` | Processed, no data to return | Task removed |
+| `msg.Ok()` | Everything went fine | Status written, row is not rented again (removed with its partition) |
+| `msg.Created()` | Side-effect resource created | Status written, row is not rented again |
+| `msg.Accepted()` | Accepted for async processing | Status written, row is not rented again |
+| `msg.NoContent()` | Processed, no data to return | Status written, row is not rented again |
 | `msg.Error(ex)` | Unrecoverable failure | Logged to `__error$`, no retry |
-| `msg.Warn(ex)` | Transient issue (network, timeout) | Requeued, processed next poll |
+| `msg.Warn(ex)` | Transient issue (network, timeout) | Rented again after the batching window |
 | `msg.Postpone(ts)` | Need to wait before retry | Requeued after `ts` |
 | `msg.Retry(ts, reason)` | Retry with metadata | Requeued with attempt info |
 | `msg.Aborted(reason)` | Intentionally skip | Marked skipped, no retry |
@@ -474,12 +567,123 @@ After processing each message, call exactly one method:
 
 | Mechanism | What it solves |
 |---|---|
-| **UUID v7** | Monotonically increasing IDs from timestamp |
+| **`msg_seq` (BIGSERIAL)** | Database-assigned insertion order, and **the** consumption cursor (`__offset$.group_offset_seq`). Denormalised into the task table so `RETURNING msg_seq` advances the cursor in the same statement |
+| **UUID v7 message id** | Application-minted id, used as the join key between `__msg$` and the task queue. Deliberately **not** used for ordering: it comes from application clocks, which skew and get backdated |
 | **BINARY COPY** | Maximum throughput for bulk message insertion |
-| **SKIP LOCKED** | Multiple workers safely compete for tasks |
-| **Advisory Locks** | Offset coordination per consumer group + tenant |
+| **SKIP LOCKED** | Multiple workers safely compete for tasks — and only for tasks. On the single cursor row "skip" would mean reporting an empty queue while a backlog exists |
+| **Advisory Locks** | Offset coordination per `(consumer group, tenant)` |
+| **Publish lock** | `pg_advisory_xact_lock` per `(tenant, part)` around the COPY — makes `msg_seq` order equal commit order, so the `max(msg_seq)` cursor cannot pass a row that is still committing |
+| **Cursor index** | `(msg_seq)` on `__msg$` — turns the loader's cursor read into an index range scan instead of a Seq Scan of the whole lookback window (measured 56.8 ms → 0.166 ms on 7 × 40k rows) |
+| **Daily partitions** | Pruning keeps one poll on a few leaves, and retention is a `DROP PARTITION` (indexes leave with the leaf) instead of a `DELETE` |
 | **murmurHash3** | Compact type identification cached in `__type$` |
-| **SqlCacheSplitter** | Splits large UPDATE queries into chunks up to the shared `DefaultMaxLen` (1024) |
+| **SqlCacheSplitter** | Splits large multi-row INSERT/UPDATE statements into chunks up to the shared `DefaultMaxLen` (1024) |
+
+---
+
+## Bulk Publishing at Scale
+
+### Rules
+
+1. **Batch 256–1024, not less.** Throughput grows with the batch (4.7k → 58k rows/s without the
+   lock), because every publish pays a fixed price: BEGIN, lock, COPY, fsync on COMMIT. One publish =
+   one `COPY` = one transaction.
+2. **One producer per part.** The lock serializes not only the COPY but the commits of the part, so
+   group commit stops amortizing fsync: 8 producers into one part give 14.8k rows/s against 55.3k
+   without the lock (−67 %). With one producer per part the cost is zero; 8 parts give 43.7k rows/s
+   and p50 32 ms against 23.5k/77 ms over three.
+3. **Do not mix parts/tenants in one `Publish` call** — otherwise a single `COPY` takes N locks and
+   holds all of them until commit.
+4. **Keep transactions short.** Publishing inside a business transaction holds the part lock for its
+   whole duration. Atomicity requires the same transaction context — which means the business
+   transaction must be short, not "5 seconds with an external HTTP call inside".
+5. **Do not add indexes to `__msg$`.** Each one costs ~140–200 B of WAL per row and 30–50 % of
+   throughput. Exactly one is needed — the cursor index `(msg_seq)`. The PK is the most expensive;
+   drop it only deliberately (you lose the duplicate-`msg_id` protection).
+6. **Do not `COPY` directly into a leaf** — measured: not faster (72–78k against 87k), routing is not
+   the bottleneck.
+7. **Leave `msg_seq` alone.** The sequence costs ~4 B of WAL per row and contributes nothing to the
+   ceiling. `CACHE` breaks the cursor (message loss).
+8. **Server:** `wal_compression=lz4` (or `zstd`) — WAL is the biggest item, the `UNLOGGED` control
+   showed up to 2.9× of headroom; `max_wal_size`/`checkpoint_timeout` so checkpoints do not run
+   constantly; keep `full_page_writes` on; keep `synchronous_commit` on.
+9. **Connection pooling:** `pool_mode=transaction` (not `statement` — the library works in
+   transactions). The locks are transaction-scoped, so PgBouncer does not break them.
+10. **Partitions:** many daily partitions do not slow inserts down, and retention via `DROP PARTITION`
+    is free (indexes go away with the leaf).
+
+### Measurements
+
+Stand: PostgreSQL 15 in Docker, `__msg$` = `LIST(tenant) → LIST(part) → RANGE(day)`, 256 leaves,
+PK `(msg_id, tenant_id, msg_part, msg_created_at)` plus the cursor index `(msg_seq)`, 200 B payload,
+`synchronous_commit=on` (the real mode), fsync ≈ 11 ms. Client — Npgsql 10, `NpgsqlBinaryImporter`,
+exactly as in `BulkInsertMsgCommand`. 8 producers, 8-second runs, median of 3.
+
+The absolute numbers are a property of that stand. Carry them over with the formula at the end of the
+section rather than directly; run-to-run spread on this stand is ±30 % (latencies are steadier than
+throughput).
+
+**Batch and the cost of the lock** — 8 producers, one part:
+
+| batch | no lock, rows/s | with lock, rows/s | lock cost |
+|---|---|---|---|
+| 16 | 4 685 | 1 198 | −74 % |
+| 64 | 17 578 | 3 524 | −80 % |
+| 256 | 44 946 | 14 808 | −67 % |
+| 1024 | 58 450 | 26 222 | −55 % |
+
+**Scenarios** — batch 256, lock enabled (the "1 part" configuration is the 256 row above, measured in
+a different run):
+
+| parts | rows/s | tx/s | p50, ms | p99, ms |
+|---|---|---|---|---|
+| 1 | 17 183 | 67 | 99.1 | 413.4 |
+| 3 | 23 498 | 92 | 77.5 | 156.3 |
+| 8 | 43 683 | 171 | 32.2 | 176.0 |
+
+**WAL per row** — batch 1024, 8 producers:
+
+| table | WAL/row |
+|---|---|
+| PK + cursor index | 526 B |
+| cursor index only | 386 B |
+| no indexes | 319 B |
+| `UNLOGGED` (control) | 3 B |
+
+**Column legend:**
+
+- `batch` — rows in one `COPY`, i.e. in one publish and one transaction
+  (`OutboxPublishSettings.MaxBatchSize`).
+- `rows/s` — rows per second, summed over all producers.
+- `tx/s` — transactions (publishes) per second; with a known `batch` that is `rows/s / batch`.
+- `no lock` / `with lock` — before and after the `(tenant, part)` advisory lock was introduced;
+  `lock cost` is the throughput lost to it.
+- `parts` — how many distinct `(tenant, part)` are in play; 8 producers over 3 parts means ~2.7
+  producers per key.
+- `p50` / `p99` — percentiles of one publish's latency on the client, including lock wait.
+- `WAL/row` — WAL bytes per inserted row.
+
+**Formula for carrying this over to your hardware:**
+
+```
+t_txn ≈ F + batch × t_row
+rows/s per part ≈ batch / t_txn
+rows/s total    ≈ min(N_parts × rows/s per part, server ceiling)
+```
+
+`F` is the effective cost of one commit in your installation (group commit included), `t_row` ≈
+0.02 ms per row. Both follow from two points of the batch table: `1/R(B) = F/B + t_row`, so with
+`B` = 256 and `B` = 1024 (`R` = 44 946 and 58 450) we get `F ≈ 1.8 ms` and `t_row ≈ 15 µs` — effective
+values for 8 producers, not the raw disk fsync.
+
+### What to monitor in production
+
+- `xact_commit/s` and `rows/s` on `__msg$` — the actual cost of publishing;
+- WAL bytes/row (`pg_current_wal_lsn` before/after a window) — expect ~350–550 B; growth means extra
+  indexes or bloat;
+- `pg_stat_activity.wait_event` — `Lock:advisory` for more than a few ms means the key is overloaded
+  (too many producers per part);
+- delivery lag: `max(msg_seq) − group_offset_seq` per group;
+- publish p99 on the client, not only server-side time.
 
 ---
 

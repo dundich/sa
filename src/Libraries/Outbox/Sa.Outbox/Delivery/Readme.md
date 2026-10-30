@@ -188,7 +188,7 @@ services.AddSaOutbox(builder => builder
 | `ConcurrencyLimit` | 1 | `WithConcurrencyLimit` | Group-level schedule concurrency |
 | `MaxConcurrency` | 48 | `WithMaxConcurrency` | `AddDeliveryJob` overrides this to 1 |
 | `RetryCountOnError` | 0 | `WithRetryCountOnError` / `WithNoRetries` / `WithInfiniteRetries` | Retries of the **job**, not of the message |
-| `MaxBatchSize` | 16 | `WithMaxBatchSize` | Upper bound for `IDeliveryBatcher` |
+| `MaxBatchSize` | 128 | `WithMaxBatchSize` | Upper bound for `IDeliveryBatcher` |
 | `MaxProcessingIterations` | 10 | `WithMaxProcessingIterations` / `WithSingleIteration` / `WithUnlimitedIterations` | `-1` = greedy until the queue drains; `AddDeliveryJob` defaults to `-1` |
 | `IterationDelay` | zero | `WithIterationDelay` | With zero and `-1` the loop becomes a hot drain loop |
 | `LockDuration` | 10 s | `WithLockDuration` / `WithNoLockDuration` | Must be `> 0` |
