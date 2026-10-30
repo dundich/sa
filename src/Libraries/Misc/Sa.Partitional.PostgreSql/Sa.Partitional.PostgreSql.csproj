@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<Import Project="..\..\Common.NuGet.Properties.xml" />
+	<Import Project="..\..\..\Common.NuGet.Properties.xml" />
 
 	<PropertyGroup>
 		<Version>0.18.0</Version>
@@ -13,7 +13,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
-		<ProjectReference Include="..\Data\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
+		<ProjectReference Include="..\..\Data\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -29,13 +29,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Compile Include="..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
-		<Compile Include="..\Sa\Classes\Section.cs" Link="AsLink\Section.cs" />
-		<Compile Include="..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\EnumerableExtensions.cs" Link="AsLink\EnumerableExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\NumericExtensions.cs" Link="AsLink\NumericExtensions.cs" />
-		<Compile Include="..\Sa\Extensions\StrToExtensions.cs" Link="AsLink\StrToExtensions.cs" />
+		<Compile Include="..\..\Sa\Classes\Retry.cs" Link="AsLink\Retry.cs" />
+		<Compile Include="..\..\Sa\Classes\Section.cs" Link="AsLink\Section.cs" />
+		<Compile Include="..\..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\EnumerableExtensions.cs" Link="AsLink\EnumerableExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\NumericExtensions.cs" Link="AsLink\NumericExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\StrToExtensions.cs" Link="AsLink\StrToExtensions.cs" />
 	</ItemGroup>
 	<ItemGroup>
 		<Folder Include="AsLink\" />

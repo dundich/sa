@@ -30,9 +30,10 @@ relying on them in a migration spec.
 │   ├── Common.NuGet.Properties.xml  packaging properties (imports the above)
 │   ├── Libraries/                   all 17 library projects, grouped by domain
 │   │   ├── Sa/                      unpacked shared-source library
-│   │   ├── Sa.Partitional.PostgreSql/ ┐
-│   │   ├── Sa.Schedule/               ├ 4 standalone projects at the root
-│   │   ├── Sa.Utils.WorkQueue/       ┘
+│   │   └── Misc/                    Sa.Partitional.PostgreSql, Sa.Schedule, Sa.Utils.WorkQueue
+│   │       ├── Sa.Partitional.PostgreSql/
+│   │       ├── Sa.Schedule/
+│   │       └── Sa.Utils.WorkQueue/
 │   │   ├── Configuration/           Sa.Configuration, Sa.Configuration.PostgreSql
 │   │   ├── Data/                    Sa.Data.PostgreSql, Sa.Data.S3, Sa.Data.TempFolder
 │   │   ├── Hybrid/                  Sa.HybridFileStorage + FileSystem/Postgres/S3
@@ -51,8 +52,9 @@ Counts: 48 `.csproj`, 1 solution, 1199 `.cs` files (including samples/tests/benc
 ## Publishable libraries (16 packages)
 
 All live in `src/Libraries/[<Group>/]<ProjectName>/`, where `<Group>` is one of `Configuration`,
-`Data`, `Hybrid`, `Media`, `Outbox`; the standalone projects (`Sa.Partitional.PostgreSql`,
-`Sa.Schedule`, `Sa.Utils.WorkQueue`) have no group. Package ID = assembly name = project name. There is no
+`Data`, `Hybrid`, `Media`, `Misc`, `Outbox`; the shared-source project (`Sa`) has no group, and the
+infrastructure standalone projects (`Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue`) live in
+`Misc/`. Package ID = assembly name = project name. There is no
 explicit `<PackageId>` anywhere.
 All target `net10.0`, `PublishAot=true`, `IsAotCompatible=true`, `Nullable=enable`,
 analyzers on, SourceLink on, `GeneratePackageOnBuild=true`.

@@ -29,7 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sa.HybridFileStorage\Sa.HybridFileStorage.csproj" />
-    <ProjectReference Include="..\..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\Misc\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
   </ItemGroup>
 
 </Project>

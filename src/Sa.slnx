@@ -5,9 +5,6 @@
   </Folder>
   <Folder Name="/Libraries/">
     <Project Path="Libraries/Sa/Sa.csproj" />
-    <Project Path="Libraries/Sa.Partitional.PostgreSql/Sa.Partitional.PostgreSql.csproj" />
-    <Project Path="Libraries/Sa.Schedule/Sa.Schedule.csproj" />
-    <Project Path="Libraries/Sa.Utils.WorkQueue/Sa.Utils.WorkQueue.csproj" />
   </Folder>
   <Folder Name="/Libraries/Configuration/">
     <Project Path="Libraries/Configuration/Sa.Configuration/Sa.Configuration.csproj" />
@@ -27,6 +24,11 @@
   <Folder Name="/Libraries/Media/">
     <Project Path="Libraries/Media/Sa.Media/Sa.Media.csproj" />
     <Project Path="Libraries/Media/Sa.Media.FFmpeg/Sa.Media.FFmpeg.csproj" />
+  </Folder>
+  <Folder Name="/Libraries/Misc/">
+    <Project Path="Libraries/Misc/Sa.Partitional.PostgreSql/Sa.Partitional.PostgreSql.csproj" />
+    <Project Path="Libraries/Misc/Sa.Schedule/Sa.Schedule.csproj" />
+    <Project Path="Libraries/Misc/Sa.Utils.WorkQueue/Sa.Utils.WorkQueue.csproj" />
   </Folder>
   <Folder Name="/Libraries/Outbox/">
     <Project Path="Libraries/Outbox/Sa.Outbox/Sa.Outbox.csproj" />

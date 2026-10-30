@@ -6,7 +6,7 @@ Compact guidance for OpenCode. Full library docs live in `README.md` / `QWEN.md`
 A monorepo of independent **Native AOT** .NET libraries (`Sa.*`) for distributed-systems infrastructure. Not a single app — each package builds/packs/publishes on its own.
 
 - Root solution: `src/Sa.slnx` (XML `.slnx`, not `.sln`).
-- Layout: all 17 library projects live under `src/Libraries/` — grouped by domain in `Configuration/`, `Data/`, `Hybrid/`, `Media/`, `Outbox/`, with the four standalone projects (`Sa`, `Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue`) directly at the root. Samples, tests and benchmarks stay in `src/Samples/`, `src/Tests/`, `src/Benchmarks/`. The shared props/config files remain directly in `src/` (MSBuild/NuGet discover them by walking up from each project).
+- Layout: all 17 library projects live under `src/Libraries/` — grouped by domain in `Configuration/`, `Data/`, `Hybrid/`, `Media/`, `Misc/`, `Outbox/`, with the shared-source base `Sa` directly at the root (not packed) and the three infrastructure standalone projects (`Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue`) in `Misc/`. Samples, tests and benchmarks stay in `src/Samples/`, `src/Tests/`, `src/Benchmarks/`. The shared props/config files remain directly in `src/` (MSBuild/NuGet discover them by walking up from each project).
 - Requires **.NET 10 SDK** (local: 10.0.x). Everything targets `net10.0` — a .NET 9 SDK cannot build it.
 - **Central Package Management**: all versions live in `src/Directory.Packages.props`. In a `.csproj`, add `<PackageReference Include="X" />` with **no `<Version/>`**.
 

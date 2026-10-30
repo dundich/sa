@@ -39,13 +39,13 @@ Minio-compatible S3-клиент для операций с данными.
 
 ---
 
-### [Sa.Partitional.PostgreSql](src/Libraries/Sa.Partitional.PostgreSql) — Декларативное партиционирование
+### [Sa.Partitional.PostgreSql](src/Libraries/Misc/Sa.Partitional.PostgreSql) — Декларативное партиционирование
 
 Декларативное партиционирование таблиц PostgreSQL (range по дню/месяцу/году и list) с fluent-билдером, автоматической миграцией будущей партиций, очисткой по политике удержания и in-memory кэшем, автоматически инвалидируемым при runtime-изменениях.
 
 ---
 
-### [Sa.Schedule](src/Libraries/Sa.Schedule) — Планировщик задач
+### [Sa.Schedule](src/Libraries/Misc/Sa.Schedule) — Планировщик задач
 
 Конфигурируемые задачи по расписанию с поддержкой cron-выражений, фиксированных интервалов и одноразовых запусков, со стратегиями ошибок на уровне задачи, повторами, лимитами параллелизма, интерцепторами и управлением старт/стоп/перезапуск на лету.
 
@@ -71,7 +71,7 @@ Minio-compatible S3-клиент для операций с данными.
 
 ---
 
-### [Sa.Utils.WorkQueue](src/Libraries/Sa.Utils.WorkQueue) — Асинхронная очередь с ограничением параллелизма
+### [Sa.Utils.WorkQueue](src/Libraries/Misc/Sa.Utils.WorkQueue) — Асинхронная очередь с ограничением параллелизма
 
 Высокопроизводительная асинхронная очередь задач на `System.Threading.Channels` с ограниченной ёмкостью и back-pressure (стратегии заполнения при переполнении: `Wait`/`Skip`/`Throw`). Изменяемый на лету параллелизм (`ConcurrencyLimit`/`MaxConcurrency`) с динамическим масштабированием, порядком отмены ридеров (`Lifo`•`Fifo`•`RoundRobin`•`Random`) и режимами отмены (`Hard`/`Soft`). DI, безопасный (идемпотентный) shutdown, стратегии ошибок и обратные вызовы статусов.
 

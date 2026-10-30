@@ -234,7 +234,7 @@ services.AddSaSchedule(
 
 В рамках одной задачи порядок: регистрация в коде → привязка раздела → ваш `Options(...)`-колбэк (`b.Options(o => ...)` на том же билдере), поэтому `Configure` в нём имеет последнее слово над файлом. `ValidateOnStart()` превращает некорректное значение в `OptionsValidationException` при старте хоста, и та же проверка срабатывает при первом чтении options — так ошибка конфигурации всплывает сразу, а не внутри задачи.
 
-Полный работающий пример — в [`Samples/Schedule.Configuration.Console`](../../Samples/Schedule.Configuration.Console).
+Полный работающий пример — в [`Samples/Schedule.Configuration.Console`](../../../Samples/Schedule.Configuration.Console).
 
 ---
 

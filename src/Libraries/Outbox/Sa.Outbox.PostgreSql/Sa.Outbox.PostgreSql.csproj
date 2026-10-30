@@ -36,7 +36,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Sa.Outbox\Sa.Outbox.csproj" />
-		<ProjectReference Include="..\..\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
+		<ProjectReference Include="..\..\Misc\Sa.Partitional.PostgreSql\Sa.Partitional.PostgreSql.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

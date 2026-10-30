@@ -45,7 +45,9 @@
 **Статус: выполнен для библиотек** — SPEC-001 перенёс 17 library-проектов в `src/Libraries/`,
 SPEC-003 сгруппировал их по доменам (`Configuration/`, `Data/`, `Hybrid/`, `Media/`, `Outbox/`),
 оставив `Sa`, `Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue` в корне
-(`specs/001-src-libraries-layout/`, `specs/003-libraries-domain-groups/`).
+(`specs/001-src-libraries-layout/`, `specs/003-libraries-domain-groups/`). SPEC-004 перенёс инфраструктурные
+standalone-проекты (`Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue`) в `Misc/`
+(`specs/004-libraries-misc/`).
 
 ## Этап 4 — закрепить SDD в процессе
 - Для новой функциональности PR ссылается на spec ID.

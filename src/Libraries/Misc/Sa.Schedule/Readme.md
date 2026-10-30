@@ -234,7 +234,7 @@ A job is matched to a `Jobs:<key>` entry by its name (`WithName(...)`), falling 
 
 Within one job the order is code registration → section binding → your `Options(...)` callback (`b.Options(o => ...)` on the same builder), so a `Configure` call there has the last word over the file. `ValidateOnStart()` turns an invalid value into an `OptionsValidationException` at host start, and the same check runs the first time the options are read — so a misconfiguration fails fast rather than deep in a job run.
 
-A full working example lives in [`Samples/Schedule.Configuration.Console`](../../Samples/Schedule.Configuration.Console).
+A full working example lives in [`Samples/Schedule.Configuration.Console`](../../../Samples/Schedule.Configuration.Console).
 
 ---
 

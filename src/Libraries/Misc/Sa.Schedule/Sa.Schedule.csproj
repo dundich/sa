@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <Import Project="..\..\Common.NuGet.Properties.xml" />
+    <Import Project="..\..\..\Common.NuGet.Properties.xml" />
 
     <PropertyGroup>
         <Version>0.17.0</Version>
@@ -16,7 +16,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="..\Sa\Extensions\ExceptionExtensions.cs" Link="ExceptionExtensions.cs" />
+        <Compile Include="..\..\Sa\Extensions\ExceptionExtensions.cs" Link="ExceptionExtensions.cs" />
     </ItemGroup>
 
     <ItemGroup>

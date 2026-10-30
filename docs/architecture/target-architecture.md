@@ -40,9 +40,10 @@
 │   ├── Directory.Build.props     # если реально используется/появится
 │   ├── Libraries/                # проекты сгруппированы по домену (SPEC-003)
 │   │   ├── Sa/
-│   │   ├── Sa.Partitional.PostgreSql/
-│   │   ├── Sa.Schedule/
-│   │   ├── Sa.Utils.WorkQueue/
+│   │   └── Misc/
+│   │       ├── Sa.Partitional.PostgreSql/
+│   │       ├── Sa.Schedule/
+│   │       └── Sa.Utils.WorkQueue/
 │   │   ├── Configuration/
 │   │   │   ├── Sa.Configuration/
 │   │   │   └── Sa.Configuration.PostgreSql/
@@ -73,8 +74,10 @@
 
 > **Статус:** перенос выполнен по SPEC-001 (`specs/001-src-libraries-layout/`): все 17 library-проектов,
 > включая непубликуемую `Sa`, находятся в `src/Libraries/`. Группировка по доменам выполнена по SPEC-003
-> (`specs/003-libraries-domain-groups/`): `Configuration/`, `Data/`, `Hybrid/`, `Media/`, `Outbox/`, а
-> `Sa`, `Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue` остались в корне `src/Libraries/`.
+> (`specs/003-libraries-domain-groups/`): `Configuration/`, `Data/`, `Hybrid/`, `Media/`, `Outbox/`, а инфраструктурные
+> standalone-проекты — `Sa.Partitional.PostgreSql`, `Sa.Schedule`, `Sa.Utils.WorkQueue` — оставались в корне
+> `src/Libraries/`; `Sa` оставался там как shared-source base. Перенос инфраструктурных standalone-проектов
+> в `Misc/` выполнен по SPEC-004.
 > `src/Samples`, `src/Tests` и `src/Benchmarks` остались на месте.
 
 ## Правила размещения

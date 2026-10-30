@@ -39,15 +39,15 @@ A PostgreSQL implementation of the **Transactional Outbox** pattern. Messages ar
 
 ---
 
-### [Sa.Partitional.PostgreSql](src/Libraries/Sa.Partitional.PostgreSql) — Declarative Partitioning
+### [Sa.Partitional.PostgreSql](src/Libraries/Misc/Sa.Partitional.PostgreSql) — Declarative Partitioning
 
 Declarative PostgreSQL table partitioning (range by day/month/year and list) with a fluent builder, automated migration of future partitions, retention-based cleanup, and an in-memory cache that auto-invalidates on runtime changes.
 
 ---
 
-### [Sa.Schedule](src/Libraries/Sa.Schedule) — Scheduled Task Executor
+### [Sa.Schedule](src/Libraries/Misc/Sa.Schedule) — Scheduled Task Executor
 
-Configurable scheduled tasks supporting cron expressions, fixed intervals, and one-shot delays, with per-job failure strategies, retries, concurrency limits, interceptors, and runtime start/stop/restart. ([Cron docs EN](src/Libraries/Sa.Schedule/Cron/CRON.md), [Cron docs RU](src/Libraries/Sa.Schedule/Cron/CRON-ru.md))
+Configurable scheduled tasks supporting cron expressions, fixed intervals, and one-shot delays, with per-job failure strategies, retries, concurrency limits, interceptors, and runtime start/stop/restart. ([Cron docs EN](src/Libraries/Misc/Sa.Schedule/Cron/CRON.md), [Cron docs RU](src/Libraries/Misc/Sa.Schedule/Cron/CRON-ru.md))
 
 ---
 
@@ -71,7 +71,7 @@ A cross-platform FFmpeg wrapper with bundled fully-static binaries (win-x64, lin
 
 ---
 
-### [Sa.Utils.WorkQueue](src/Libraries/Sa.Utils.WorkQueue) — Async Queue with Concurrency Limiting
+### [Sa.Utils.WorkQueue](src/Libraries/Misc/Sa.Utils.WorkQueue) — Async Queue with Concurrency Limiting
 
 A high-performance async task queue on `System.Threading.Channels` with bounded capacity and back-pressure (enqueue strategies on a full buffer: `Wait`/`Skip`/`Throw`), runtime-adjustable concurrency (`ConcurrencyLimit`/`MaxConcurrency`) with dynamic scaling, reader cancellation order (`Lifo`•`Fifo`•`RoundRobin`•`Random`) and cancel modes (`Hard`/`Soft`), DI, idempotent shutdown, error strategies, and status callbacks.
 
