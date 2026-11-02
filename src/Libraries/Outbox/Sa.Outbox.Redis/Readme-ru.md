@@ -280,6 +280,34 @@ public sealed class MyPoisonHandler(MyStore store) : IRedisOutboxPoisonHandler
 нужно терпеть. Сама запись остаётся в stream до обрезки retention, поэтому даже выброшенное
 сообщение ещё какое-то время можно посмотреть через `XRANGE`.
 
+## Несколько провайдеров в контейнере
+
+`AddSaOutboxUsingRedis` принимает провайдерский ключ (он же `scopeKey`), поэтому в одном
+контейнере можно держать несколько Redis-outbox'ов — со своим подключением, настройками, расписанием
+и consumer-группами:
+
+```csharp
+services
+    .AddSaOutboxUsingRedis(
+        "cache",                                     // provider key
+        r => r.WithConnectionString("cache"),
+        outbox => outbox.WithDeliveries(d => d.AddDelivery<CacheConsumer, CacheEvent>("cache_events")))
+    .AddSaOutboxUsingRedis(
+        "billing",
+        r => r.WithConnectionString("billing"),
+        outbox => outbox.WithDeliveries(d => d.AddDelivery<InvoiceConsumer, Invoice>("invoices")));
+
+var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
+```
+
+- Настройки, named options, `IDatabase` и все команды — per provider; `WithOutboxSettings` /
+  `WithConfiguration` применяются только к своему ключу.
+- Если провайдер на не-дефолтном ключе не задал свой префикс, ключи автоматически получают суффикс
+  `:{providerKey}` (`sa:outbox:cache:...`) — два провайдера на одной Redis БД не пересекаются.
+- Без ключа (`AddSaOutboxUsingRedis(cfg)`) всё работает как раньше: default key `outbox`, префикс
+  `sa:outbox`, unkeyed-алиасы `IDatabase`/настроек/паблишера.
+- Тенанты общие на контейнер, а id consumer-групп должны быть уникальны между провайдерами.
+
 ## Ограничения
 
 - Обрезка встроена в публикацию и работает по stream; stream, который перестал получать публикации,

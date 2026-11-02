@@ -281,6 +281,34 @@ means the entry is left pending and will be claimed again, so handling is at-lea
 handler must tolerate duplicates. The entry body itself stays in the message stream until retention
 trims it, so even a dropped message can still be inspected with `XRANGE` for a while.
 
+## Several providers in one container
+
+`AddSaOutboxUsingRedis` takes a provider key (also the `scopeKey`), so one container can host several
+Redis outboxes — each with its own connection, settings, schedule and consumer groups:
+
+```csharp
+services
+    .AddSaOutboxUsingRedis(
+        "cache",                                     // provider key
+        r => r.WithConnectionString("cache"),
+        outbox => outbox.WithDeliveries(d => d.AddDelivery<CacheConsumer, CacheEvent>("cache_events")))
+    .AddSaOutboxUsingRedis(
+        "billing",
+        r => r.WithConnectionString("billing"),
+        outbox => outbox.WithDeliveries(d => d.AddDelivery<InvoiceConsumer, Invoice>("invoices")));
+
+var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
+```
+
+- Settings, named options, `IDatabase` and every command are per provider; `WithOutboxSettings` /
+  `WithConfiguration` apply to their own key only.
+- A provider registered under a non-default key without its own prefix automatically gets a
+  `:{providerKey}` suffix (`sa:outbox:cache:...`), so two providers on one Redis database never
+  collide.
+- Without a key (`AddSaOutboxUsingRedis(cfg)`) everything behaves as before: default key `outbox`,
+  prefix `sa:outbox`, unkeyed aliases for `IDatabase`/settings/publisher.
+- Tenants are shared per container, and consumer group ids must be unique across providers.
+
 ## Limitations
 
 - Retention is inline and per stream; a stream that stops receiving publishes is not trimmed (it is

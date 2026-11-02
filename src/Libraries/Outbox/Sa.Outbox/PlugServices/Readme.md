@@ -362,19 +362,16 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
 
 ## Status
 
-- **Slice 1 is implemented**: the provider key flows through
-  `OutboxConsumerSettings`/`OutboxMessageFilter`, contracts are keyed
-  (`AddOutboxProvider(providerKey, …)`), the publisher is keyed with an
-  `IOutboxPublisherResolver` facade, the whole PostgreSQL graph is keyed (settings, data source,
-  commands, loader, type resolver, poison handler, options/polling provider), delivery routes through
-  the `IOutboxStorage` router, and both the provider key and the consumer group id are validated for
-  uniqueness. The default key keeps unkeyed aliases, so single-provider applications and the existing
-  suites are unchanged.
-- **Slice 2 (Redis)** is next: keyed `RedisOutboxSettings`, provider-prefixed stream keys and keyed
-  commands. Until then Redis supports the default key only.
-- **Slice 3**: composite `(providerKey, groupId)` keys and per-provider health.
+- **Slice 1 is implemented** (core + PostgreSQL).
+- **Slice 2 is implemented** (Redis): settings, options and `WithOutboxSettings`/`WithConfiguration`
+  actions are per provider (named options), `IDatabase` / `IRedisOutboxConnectionProvider` /
+  connection options are keyed, commands and contracts are keyed, the poison handler is keyed with an
+  unkeyed default and keyed precedence, and `IOutboxProviderRegistry` is keyed. For a non-default key
+  the key prefix automatically gets a `:{providerKey}` suffix unless the configuration set its own, so
+  two providers on one Redis database never collide. The one-call
+  `AddSaOutboxUsingRedis(cfg, outbox, key)` overload was added.
+- **Slice 3** (composite `(providerKey, groupId)` keys, per-provider health) is not started.
 
-Slice-1 constraints: tenants are shared per container (`WithTenants` without a key); consumer group
-ids are unique across providers (validated when the manager is built); provider-internal services are
-resolved keyed, so user extensions registered as a type (for example a custom `IPgOutboxPoisonHandler`)
-must use the factory overloads.
+Constraints: tenants are shared per container; consumer group ids are unique across providers
+(validated when the manager is built); provider-internal services are resolved keyed, so user
+extensions registered as a type must use the factory overloads.

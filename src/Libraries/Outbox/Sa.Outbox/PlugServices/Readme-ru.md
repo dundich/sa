@@ -375,17 +375,15 @@ sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(i
 
 ## Статус
 
-- **Срез 1 реализован**: provider key в `OutboxConsumerSettings`/`OutboxMessageFilter`,
-  keyed-контракты (`AddOutboxProvider(providerKey, …)`), keyed-паблишер + `IOutboxPublisherResolver`,
-  keyed-граф PostgreSQL (настройки, data source, команды, загрузчик, резолвер типов, poison handler,
-  options/polling provider), роутер `IOutboxStorage` для доставки, уникальность provider key и
-  consumer group id. Дефолтный ключ получает unkeyed-алиасы, поэтому single-provider приложения и
-  существующие тесты не меняются.
-- **Срез 2 (Redis)** — следующий: `RedisOutboxSettings`/ключи стримов с префиксом провайдера,
-  keyed-команды. До него Redis поддерживает только default key.
-- **Срез 3** — составные ключи `(providerKey, groupId)` и health на провайдера.
+- **Срез 1 реализован** (core + PostgreSQL).
+- **Срез 2 реализован** (Redis): настройки, опции и действия `WithOutboxSettings`/`WithConfiguration`
+  — на провайдера (named options), keyed `IDatabase`/`IRedisOutboxConnectionProvider`/connection
+  options, keyed-команды и контракты, keyed poison handler (unkeyed-дефолт + keyed приоритет),
+  keyed `IOutboxProviderRegistry`. Для не-дефолтного ключа префикс ключей автоматически получает
+  суффикс `:{providerKey}`, если конфигурация не задала свой, — два провайдера на одной Redis БД не
+  пересекаются. Добавлен односрочный overload `AddSaOutboxUsingRedis(cfg, outbox, key)`.
+- **Срез 3** (составные ключи `(providerKey, groupId)`, health на провайдера) — не начат.
 
-Принятые в срезе 1 ограничения: тенанты общие на контейнер (`WithTenants` без ключа); id
-consumer-групп уникальны между провайдерами (проверяется при построении менеджера); внутренние
-сервисы провайдера разрешаются keyed, а пользовательские расширения провайдера (например кастомный
-`IPgOutboxPoisonHandler`, зарегистрированный типом) должны использовать фабричные overload'ы.
+Принятые ограничения: тенанты общие на контейнер; id consumer-групп уникальны между провайдерами
+(проверяется при построении менеджера); внутренние сервисы провайдера разрешаются keyed, поэтому
+пользовательские расширения, зарегистрированные типом, должны использовать фабричные overload'ы.

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Sa.Outbox;
 
 namespace Sa.Outbox.Redis.Configuration;
 
@@ -24,27 +25,41 @@ internal sealed class RedisOutboxSettingsState
 /// <c>Options(...)</c> actions are registered on the pipeline after this configurator, so they have
 /// the last word over both; validation runs after everything.
 /// </summary>
-internal sealed class RedisOutboxSettingsConfigurator(
-    RedisOutboxSettingsState state,
-    IServiceProvider services) : IConfigureOptions<RedisOutboxSettings>
+internal sealed class RedisOutboxSettingsConfigurator(IServiceProvider services)
+    : IConfigureNamedOptions<RedisOutboxSettings>
 {
-    public void Configure(RedisOutboxSettings options)
+    public void Configure(RedisOutboxSettings options) => Configure(Options.DefaultName, options);
+
+    public void Configure(string? name, RedisOutboxSettings options)
     {
+        string providerKey = string.IsNullOrEmpty(name) ? OutboxScope.DefaultKey : name;
+
         foreach (Action<IServiceProvider, RedisOutboxSettings> configureAction
-            in services.GetServices<Action<IServiceProvider, RedisOutboxSettings>>())
+            in services.GetKeyedServices<Action<IServiceProvider, RedisOutboxSettings>>(providerKey))
         {
             configureAction.Invoke(services, options);
         }
 
-        if (state.ConfigSectionPath is not { } sectionPath)
-            return;
+        if (services.GetKeyedService<RedisOutboxSettingsState>(providerKey) is { ConfigSectionPath: { } sectionPath })
+        {
+            IConfiguration configuration = services.GetService<IConfiguration>()
+                ?? throw new InvalidOperationException(
+                    $"Redis Outbox settings use WithConfiguration(\"{sectionPath}\"), but no IConfiguration " +
+                    "is registered. Add one (a host does it automatically) or configure the settings in code.");
 
-        IConfiguration configuration = services.GetService<IConfiguration>()
-            ?? throw new InvalidOperationException(
-                $"Redis Outbox settings use WithConfiguration(\"{sectionPath}\"), but no IConfiguration " +
-                "is registered. Add one (a host does it automatically) or configure the settings in code.");
+            BindFromConfiguration(options, configuration, sectionPath);
+        }
 
-        BindFromConfiguration(options, configuration, sectionPath);
+        // Several providers may share one Redis database. A non-default provider gets its own key
+        // prefix unless the configuration named one explicitly, so their streams never collide.
+        if (!string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal)
+            && string.Equals(
+                options.KeySettings.Prefix,
+                RedisOutboxKeySettings.Defaults.Prefix,
+                StringComparison.Ordinal))
+        {
+            options.KeySettings.Prefix = $"{RedisOutboxKeySettings.Defaults.Prefix}:{providerKey}";
+        }
     }
 
     /// <summary>

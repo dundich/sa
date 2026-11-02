@@ -6,9 +6,10 @@ internal static class Setup
 {
     public static IServiceCollection AddRedisOutboxSettings(
         this IServiceCollection services,
-        Action<IRedisOutboxConfiguration>? configure = null)
+        Action<IRedisOutboxConfiguration>? configure = null,
+        string providerKey = OutboxScope.DefaultKey)
     {
-        var configuration = new RedisOutboxConfiguration(services);
+        var configuration = new RedisOutboxConfiguration(services, providerKey);
 
         configuration.WithOutboxSettings();
         configuration.WithConnection();

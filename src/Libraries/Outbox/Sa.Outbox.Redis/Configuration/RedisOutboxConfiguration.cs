@@ -10,7 +10,9 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.Redis.Configuration;
 
-internal sealed class RedisOutboxConfiguration(IServiceCollection services) : IRedisOutboxConfiguration
+internal sealed class RedisOutboxConfiguration(
+    IServiceCollection services,
+    string providerKey = OutboxScope.DefaultKey) : IRedisOutboxConfiguration
 {
     /// <summary>
     /// The <see cref="OptionsBuilder{TOptions}"/> of the provider, created once by the first
@@ -93,7 +95,7 @@ internal sealed class RedisOutboxConfiguration(IServiceCollection services) : IR
     {
         if (configure != null)
         {
-            services.AddSingleton(configure);
+            services.AddKeyedSingleton<Action<IServiceProvider, RedisOutboxSettings>>(providerKey, configure);
         }
 
         RegisterOutboxSettings();
@@ -153,8 +155,8 @@ internal sealed class RedisOutboxConfiguration(IServiceCollection services) : IR
     {
         ArgumentNullException.ThrowIfNull(poisonHandlerFactory);
 
-        services.RemoveAll<IRedisOutboxPoisonHandler>();
-        services.TryAddSingleton<IRedisOutboxPoisonHandler>(poisonHandlerFactory);
+        services.RemoveAllKeyed<IRedisOutboxPoisonHandler>(providerKey);
+        services.TryAddKeyedSingleton<IRedisOutboxPoisonHandler>(providerKey, (sp, _) => poisonHandlerFactory(sp));
         return this;
     }
 
@@ -163,16 +165,16 @@ internal sealed class RedisOutboxConfiguration(IServiceCollection services) : IR
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        services.RemoveAll<IRedisOutboxPoisonHandler>();
-        services.TryAddSingleton<IRedisOutboxPoisonHandler>(instance);
+        services.RemoveAllKeyed<IRedisOutboxPoisonHandler>(providerKey);
+        services.TryAddKeyedSingleton<IRedisOutboxPoisonHandler>(providerKey, instance);
         return this;
     }
 
     public IRedisOutboxConfiguration WithPoisonHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
         where TService : class, IRedisOutboxPoisonHandler
     {
-        services.RemoveAll<IRedisOutboxPoisonHandler>();
-        services.TryAddSingleton<IRedisOutboxPoisonHandler, TService>();
+        services.RemoveAllKeyed<IRedisOutboxPoisonHandler>(providerKey);
+        services.TryAddKeyedSingleton<IRedisOutboxPoisonHandler, TService>(providerKey);
         return this;
     }
 
@@ -206,17 +208,27 @@ internal sealed class RedisOutboxConfiguration(IServiceCollection services) : IR
 
         // Recorded before the Outbox adds its own IDatabase: from then on a non-empty registration
         // may well be the Outbox's own factory, and resolving it from the provider would recurse.
-        _connectionOptions.UseRegisteredDatabase = services.Any(d => d.ServiceType == typeof(IDatabase));
+        // Only an application-registered *unkeyed* database counts as "already provided": the
+        // keyed registrations below are the Outbox's own and resolving them here would recurse.
+        _connectionOptions.UseRegisteredDatabase = services.Any(
+            d => d.ServiceType == typeof(IDatabase) && !d.IsKeyedService);
 
-        services.TryAddSingleton(_connectionOptions);
+        services.TryAddKeyedSingleton(providerKey, _connectionOptions);
 
-        services.TryAddSingleton<IRedisOutboxConnectionProvider>(sp =>
+        services.TryAddKeyedSingleton<IRedisOutboxConnectionProvider>(providerKey, (sp, _) =>
             new RedisOutboxConnectionProvider(
-                sp.GetRequiredService<RedisOutboxConnectionOptions>(),
+                sp.GetRequiredKeyedService<RedisOutboxConnectionOptions>(providerKey),
                 sp));
 
-        services.TryAddSingleton<IDatabase>(sp =>
-            sp.GetRequiredService<IRedisOutboxConnectionProvider>().Database);
+        services.TryAddKeyedSingleton<IDatabase>(providerKey, (sp, _) =>
+            sp.GetRequiredKeyedService<IRedisOutboxConnectionProvider>(providerKey).Database);
+
+        if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+        {
+            // Backward compatibility: single-provider code resolves IDatabase without a key.
+            services.TryAddSingleton<IDatabase>(
+                sp => sp.GetRequiredKeyedService<IDatabase>(providerKey));
+        }
 
         return this;
     }
@@ -226,13 +238,18 @@ internal sealed class RedisOutboxConfiguration(IServiceCollection services) : IR
         if (_optionsBuilder is not null)
             return;
 
-        OptionsBuilder<RedisOutboxSettings> options = services.AddOptions<RedisOutboxSettings>();
+        bool isDefaultKey = string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal);
+        string optionsName = isDefaultKey ? Microsoft.Extensions.Options.Options.DefaultName : providerKey;
 
-        RedisOutboxSettingsState? state = FindState(services);
+        OptionsBuilder<RedisOutboxSettings> options = isDefaultKey
+            ? services.AddOptions<RedisOutboxSettings>()
+            : services.AddOptions<RedisOutboxSettings>(optionsName);
+
+        RedisOutboxSettingsState? state = FindState(services, providerKey);
         if (state is null)
         {
             state = new RedisOutboxSettingsState();
-            services.AddSingleton(state);
+            services.TryAddKeyedSingleton(providerKey, state);
         }
 
         _optionsState = state;
@@ -253,17 +270,26 @@ internal sealed class RedisOutboxConfiguration(IServiceCollection services) : IR
         // The materialised instance keeps the existing single-settings contract: commands take
         // RedisOutboxSettings directly, and IOptions<T>.Value is cached, so this is the same object
         // for every resolution and every command.
-        services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<RedisOutboxSettings>>().Value);
+        services.TryAddKeyedSingleton<RedisOutboxSettings>(providerKey, (sp, _) =>
+            sp.GetRequiredService<IOptionsMonitor<RedisOutboxSettings>>().Get(optionsName));
+
+        if (isDefaultKey)
+        {
+            // Backward compatibility: commands used to take the materialised settings unkeyed.
+            services.TryAddSingleton<RedisOutboxSettings>(
+                sp => sp.GetRequiredKeyedService<RedisOutboxSettings>(providerKey));
+        }
 
         _optionsBuilder = options;
     }
 
-    private static RedisOutboxSettingsState? FindState(IServiceCollection services)
+    private static RedisOutboxSettingsState? FindState(IServiceCollection services, string providerKey)
     {
         foreach (ServiceDescriptor descriptor in services)
         {
             if (descriptor.ServiceType == typeof(RedisOutboxSettingsState)
-                && descriptor.ImplementationInstance is RedisOutboxSettingsState state)
+                && descriptor.ImplementationInstance is RedisOutboxSettingsState state
+                && Equals(descriptor.ServiceKey, providerKey))
             {
                 return state;
             }
