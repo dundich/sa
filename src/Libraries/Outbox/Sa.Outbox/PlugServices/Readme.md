@@ -370,8 +370,46 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
   the key prefix automatically gets a `:{providerKey}` suffix unless the configuration set its own, so
   two providers on one Redis database never collide. The one-call
   `AddSaOutboxUsingRedis(cfg, outbox, key)` overload was added.
-- **Slice 3** (composite `(providerKey, groupId)` keys, per-provider health) is not started.
+- **Slice 3, part 1 (health) is implemented**; part 2 (composite `(providerKey, groupId)` keys) is not started.
 
 Constraints: tenants are shared per container; consumer group ids are unique across providers
 (validated when the manager is built); provider-internal services are resolved keyed, so user
 extensions registered as a type must use the factory overloads.
+
+## Per-provider health (slice 3, part 1)
+
+The core does not depend on `Microsoft.Extensions.Diagnostics.HealthChecks`: the contract is
+transport-agnostic and the mapping is one line on the application side.
+
+```csharp
+public sealed record OutboxProviderHealthReport(
+    string ProviderKey, bool Healthy, string? Reason = null, TimeSpan Latency = default);
+
+public interface IOutboxProviderHealth
+{
+    ValueTask<OutboxProviderHealthReport> CheckAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IOutboxHealth
+{
+    ValueTask<IReadOnlyList<OutboxProviderHealthReport>> CheckAsync(CancellationToken cancellationToken = default);
+}
+```
+
+- A provider registers `IOutboxProviderHealth` **keyed**: PostgreSQL runs `SELECT 1` on its data
+  source, Redis runs `PING`. A provider without a check is reported healthy (`Reason = null`) so
+  adding one does not silently turn readiness red.
+- `IOutboxHealth` (unkeyed singleton) walks every registered provider key, stamps `ProviderKey`,
+  measures the latency, and turns a throwing check into `Healthy = false` with the error text — one
+  broken check does not fail the aggregate.
+- Endpoint example:
+
+```csharp
+app.MapGet("/health/outbox", async (IOutboxHealth health, CancellationToken ct) =>
+{
+    IReadOnlyList<OutboxProviderHealthReport> reports = await health.CheckAsync(ct);
+    return reports.All(r => r.Healthy)
+        ? Results.Ok(reports)
+        : Results.Problem(string.Join("; ", reports.Where(r => !r.Healthy).Select(r => $"{r.ProviderKey}: {r.Reason}")));
+});
+```

@@ -22,6 +22,9 @@ internal static class Setup
         services.TryAddKeyedSingleton<IPgOutboxDatabaseGuard>(providerKey, (sp, _) =>
             new PgOutboxDatabaseGuard(PgDataSourceResolver.Resolve(sp, providerKey)));
 
+        services.TryAddKeyedSingleton<IOutboxProviderHealth>(providerKey, (sp, _) =>
+            new PgOutboxHealth(PgDataSourceResolver.Resolve(sp, providerKey)));
+
         // The single provider-registration point: identity, capabilities, the three storage
         // contracts and the startup validation. Publish joins the caller's PgTransaction, tenant
         // detection reads the tenant list, lock renewal is honoured, and Postpone/Retry delays are

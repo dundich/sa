@@ -22,6 +22,17 @@ public class OutboxRedisTests(OutboxRedisFixture fixture) : IClassFixture<Outbox
     private RedisOutboxSettings Settings => Services.GetRequiredService<RedisOutboxSettings>();
 
     [Fact]
+    public async Task Health_ReportsTheProviderHealthy()
+    {
+        IReadOnlyList<OutboxProviderHealthReport> reports =
+            await Services.GetRequiredService<IOutboxHealth>().CheckAsync(TestContext.Current.CancellationToken);
+
+        OutboxProviderHealthReport report = Assert.Single(reports);
+        Assert.True(report.Healthy, report.Reason);
+        Assert.Equal(Sa.Outbox.OutboxScope.DefaultKey, report.ProviderKey);
+    }
+
+    [Fact]
     public async Task PublishRentFinish_Success_AcknowledgesMessages()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

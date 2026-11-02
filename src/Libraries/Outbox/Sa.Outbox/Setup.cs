@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.PlugServices;
 using Sa.Outbox.Publication;
 
 namespace Sa.Outbox;
@@ -36,6 +37,9 @@ public static class Setup
 
         // Keyed publisher lookup for multi-provider registrations.
         services.TryAddSingleton<IOutboxPublisherResolver, OutboxPublisherResolver>();
+
+        // Aggregated provider health (each provider may register its own keyed check).
+        services.TryAddSingleton<IOutboxHealth, OutboxHealth>();
 
         return services;
     }

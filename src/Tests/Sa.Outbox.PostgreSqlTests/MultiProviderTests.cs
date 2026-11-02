@@ -126,6 +126,19 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
     }
 
     [Fact]
+    public async Task Health_ReportsEveryProvider()
+    {
+        IReadOnlyList<OutboxProviderHealthReport> reports =
+            await fixture.ServiceProvider.GetRequiredService<IOutboxHealth>().CheckAsync(TestToken);
+
+        Assert.Equal(2, reports.Count);
+        Assert.All(reports, report => Assert.True(report.Healthy, report.Reason));
+        Assert.Equal(
+            new[] { ProviderA, ProviderB },
+            reports.Select(report => report.ProviderKey).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void ConsumerGroups_AreBoundToTheirProviderKey()
     {
         var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();

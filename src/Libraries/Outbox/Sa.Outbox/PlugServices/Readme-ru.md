@@ -382,8 +382,46 @@ sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(i
   keyed `IOutboxProviderRegistry`. Для не-дефолтного ключа префикс ключей автоматически получает
   суффикс `:{providerKey}`, если конфигурация не задала свой, — два провайдера на одной Redis БД не
   пересекаются. Добавлен односрочный overload `AddSaOutboxUsingRedis(cfg, outbox, key)`.
-- **Срез 3** (составные ключи `(providerKey, groupId)`, health на провайдера) — не начат.
+- **Срез 3, часть 1 (health) реализована**; часть 2 (составные ключи `(providerKey, groupId)`) — не начата.
 
 Принятые ограничения: тенанты общие на контейнер; id consumer-групп уникальны между провайдерами
 (проверяется при построении менеджера); внутренние сервисы провайдера разрешаются keyed, поэтому
 пользовательские расширения, зарегистрированные типом, должны использовать фабричные overload'ы.
+
+## Health на провайдера (срез 3, часть 1)
+
+Ядро не тащит `Microsoft.Extensions.Diagnostics.HealthChecks`: контракт нейтрален, маппинг — одна
+строка на стороне приложения.
+
+```csharp
+public sealed record OutboxProviderHealthReport(
+    string ProviderKey, bool Healthy, string? Reason = null, TimeSpan Latency = default);
+
+public interface IOutboxProviderHealth
+{
+    ValueTask<OutboxProviderHealthReport> CheckAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IOutboxHealth
+{
+    ValueTask<IReadOnlyList<OutboxProviderHealthReport>> CheckAsync(CancellationToken cancellationToken = default);
+}
+```
+
+- `IOutboxProviderHealth` регистрируется провайдером **keyed**; PG выполняет `SELECT 1` на своём
+  data source, Redis — `PING`. Провайдер без проверки считается здоровым (`Reason = null`), чтобы
+  добавление провайдера не делало readiness красным.
+- `IOutboxHealth` (unkeyed singleton) обходит **все** зарегистрированные provider key, штампует
+  `ProviderKey`, измеряет задержку, и превращает исключение проверки в `Healthy = false` с текстом
+  ошибки — одна сломанная проверка не роняет агрегат.
+- Пример эндпоинта:
+
+```csharp
+app.MapGet("/health/outbox", async (IOutboxHealth health, CancellationToken ct) =>
+{
+    IReadOnlyList<OutboxProviderHealthReport> reports = await health.CheckAsync(ct);
+    return reports.All(r => r.Healthy)
+        ? Results.Ok(reports)
+        : Results.Problem(string.Join("; ", reports.Where(r => !r.Healthy).Select(r => $"{r.ProviderKey}: {r.Reason}")));
+});
+```

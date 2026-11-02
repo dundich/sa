@@ -65,6 +65,9 @@ internal static class Setup
         // and the commands above prefer the keyed registration.
         services.TryAddSingleton<IRedisOutboxPoisonHandler, DropPoisonHandler>();
 
+        services.TryAddKeyedSingleton<IOutboxProviderHealth>(providerKey, (sp, _) =>
+            new RedisOutboxHealth(sp.GetRequiredKeyedService<IDatabase>(providerKey)));
+
         // Identity, capabilities and the three storage contracts in one place. Redis has no
         // publish context (publishing is append-only into a stream) and ignores a consumer-supplied
         // Postpone/Retry delay (the only retry clock is the PEL idle time), so neither capability
