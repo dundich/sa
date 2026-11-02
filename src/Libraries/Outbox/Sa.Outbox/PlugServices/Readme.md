@@ -148,7 +148,7 @@ Trigger points:
 
 - **B (health/lifecycle):** `IOutboxProviderHealth` with a report (healthy/reason/latency), an adapter for `Microsoft.Extensions.Diagnostics.HealthChecks`, and an optional `InitializeAsync` as a provider-owned hosted service.
 - **C (keyed):** `scopeKey` in the descriptor, keyed storage services, `(key, group)` consumer keys.
-- **Contracts:** drop the legacy `InsertBulk` overload, add an opaque rent token to `IOutboxContextFactory.Create`, type the publish context.
+- **Contracts:** the legacy `InsertBulk` overload is gone (0.18); the typed publish context shipped without a core major — the PG package adds `PublishInTransaction`/`PublishSingleInTransaction`; the opaque token in `IOutboxContextFactory.Create` is deliberately not introduced: the rent identity is the 16-byte `OutboxRentToken`, and a provider with more state keeps a side table keyed by it.
 
 ## Tests
 

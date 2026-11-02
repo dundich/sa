@@ -142,16 +142,16 @@ That's it. The library handles:
 Normally every `Publish(...)` writes on its own connection and commits immediately (auto-commit). When the outbox write must commit **atomically** with your own database changes (the classic outbox transactionality), publish inside an `NpgsqlTransaction` you control:
 
 ```csharp
-using Sa.Outbox.PostgreSql;      // PgOutboxPublishExtensions
+using Sa.Outbox.PostgreSql.Publication;   // PgOutboxPublisherExtensions
 using Sa.Outbox.Publication;
-using Sa.Data.PostgreSql;        // IPgDataSource / PgTransaction
+using Sa.Data.PostgreSql;                 // IPgDataSource / PgTransaction
 
 // Open the transaction through the base PostgreSQL data source:
 IPgDataSource dataSource = services.GetRequiredService<IPgDataSource>();
 await using PgTransaction sqlTx = await dataSource.BeginTransaction(ct);
 
 // Outbox rows go into the caller's transaction:
-await publisher.Publish(events, tenantId: 1, sqlTx.Transaction, ct);
+await publisher.PublishInTransaction(events, tenantId: 1, sqlTx.Transaction, ct);
 
 // ... your own inserts on sqlTx.Connection / sqlTx.Transaction ...
 
@@ -159,7 +159,7 @@ await sqlTx.CommitAsync(ct);     // outbox rows become visible atomically with y
 // -- dispose without commit (or RollbackAsync) discards everything, outbox rows included
 ```
 
-`PgOutboxPublishExtensions` adds `Publish(...)` / `PublishSingle(...)` overloads that accept an `NpgsqlTransaction`. The binary COPY then runs on that transaction's connection, inside that transaction, and **bypasses the automatic retry layer** — retrying over a foreign or aborted transaction is invalid, so failures bubble to the caller.
+`PgOutboxPublisherExtensions` adds typed `PublishInTransaction(...)` / `PublishSingleInTransaction(...)` helpers that accept an `NpgsqlTransaction` (for a `PgTransaction`, pass `sqlTx.Transaction`; a wrapper overload would duplicate the whole matrix). The name differs from `Publish` because an instance method always shadows a same-named extension — the typed call should be explicit in the code. The binary COPY then runs on that transaction's connection, inside that transaction, and **bypasses the automatic retry layer** — retrying over a foreign or aborted transaction is invalid, so failures bubble to the caller.
 
 Passing no context keeps the default auto-commit behavior. There is deliberately **no ambient/implicit scope** — the transaction is always an explicit argument.
 

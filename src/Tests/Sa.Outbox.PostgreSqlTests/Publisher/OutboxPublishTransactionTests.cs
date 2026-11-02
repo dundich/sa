@@ -1,6 +1,7 @@
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Configuration;
+using Sa.Outbox.PostgreSql.Publication;
 using Sa.Outbox.Publication;
 
 namespace Sa.Outbox.PostgreSqlTests.Publisher;
@@ -94,6 +95,48 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
             () => Publisher.Publish([Msg(110)], tenantId: 110, tx, Ct).AsTask());
 
         Assert.Contains("different database", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PublishInTransaction_DataSourceTransaction_Commit_MakesRowsVisible()
+    {
+        await using PgTransaction sqlTx = await DataSource.BeginTransaction(Ct);
+
+        ulong result = await Publisher.PublishInTransaction([Msg(111)], tenantId: 111, sqlTx.Transaction, Ct);
+
+        Assert.Equal(1UL, result);
+
+        await sqlTx.CommitAsync(Ct);
+
+        Assert.Equal(1, await Count(111));
+    }
+
+    [Fact]
+    public async Task PublishInTransaction_NpgsqlTransaction_Rollback_LeavesNoRows()
+    {
+        await using NpgsqlConnection conn = await DataSource.OpenDbConnection(Ct);
+        await using NpgsqlTransaction tx = await conn.BeginTransactionAsync(Ct);
+
+        await Publisher.PublishInTransaction([Msg(112)], tenantId: 112, tx, Ct);
+
+        await tx.RollbackAsync(Ct);
+
+        Assert.Equal(0, await Count(112));
+    }
+
+    [Fact]
+    public async Task PublishSingleInTransaction_DataSourceTransaction_Commit_MakesTheRowVisible()
+    {
+        await using PgTransaction sqlTx = await DataSource.BeginTransaction(Ct);
+
+        ulong result = await Publisher.PublishSingleInTransaction(
+            Msg(113), tenantId: 113, sqlTx.Transaction, Ct);
+
+        Assert.Equal(1UL, result);
+
+        await sqlTx.CommitAsync(Ct);
+
+        Assert.Equal(1, await Count(113));
     }
 
     private static TestMessage Msg(int tenantId) => new()

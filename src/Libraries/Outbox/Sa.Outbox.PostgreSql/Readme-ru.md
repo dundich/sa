@@ -145,16 +145,16 @@ public sealed class OrderConsumer : IConsumer<OrderCreated>
 (классическая транзакционность outbox), публикуйте внутри `NpgsqlTransaction`, которым управляете вы:
 
 ```csharp
-using Sa.Outbox.PostgreSql;      // PgOutboxPublishExtensions
+using Sa.Outbox.PostgreSql.Publication;   // PgOutboxPublisherExtensions
 using Sa.Outbox.Publication;
-using Sa.Data.PostgreSql;        // IPgDataSource / PgTransaction
+using Sa.Data.PostgreSql;                 // IPgDataSource / PgTransaction
 
 // Транзакцию открывает базовый data source PostgreSQL:
 IPgDataSource dataSource = services.GetRequiredService<IPgDataSource>();
 await using PgTransaction sqlTx = await dataSource.BeginTransaction(ct);
 
 // Строки outbox уходят в транзакцию вызывающего кода:
-await publisher.Publish(events, tenantId: 1, sqlTx.Transaction, ct);
+await publisher.PublishInTransaction(events, tenantId: 1, sqlTx.Transaction, ct);
 
 // ... ваши собственные INSERT на sqlTx.Connection / sqlTx.Transaction ...
 
@@ -162,8 +162,11 @@ await sqlTx.CommitAsync(ct);     // строки outbox становятся в�
 // -- dispose без commit (или RollbackAsync) откатывает всё, включая строки outbox
 ```
 
-`PgOutboxPublishExtensions` добавляет перегрузки `Publish(...)` / `PublishSingle(...)`, принимающие
-`NpgsqlTransaction`. Тогда binary COPY выполняется на подключении этой транзакции, внутри неё,
+`PgOutboxPublisherExtensions` добавляет типизированные `PublishInTransaction(...)` /
+`PublishSingleInTransaction(...)`, принимающие `NpgsqlTransaction` (у `PgTransaction` это
+`sqlTx.Transaction`; отдельной перегрузки для обёртки нет — она дублировала бы весь набор методов).
+Имя отличается от `Publish`, потому что одноимённый метод экземпляра всегда перекрывает extension-метод —
+типизированный вызов должен быть явно виден в коде. Тогда binary COPY выполняется на подключении этой транзакции, внутри неё,
 и **обходит слой автоматических повторов** — повторять поверх чужой или прерванной транзакции
 недопустимо, поэтому ошибки пробрасываются вызывающему коду.
 

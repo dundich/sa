@@ -152,7 +152,7 @@ public interface IOutboxProviderRegistry
 
 - **B (health/lifecycle):** `IOutboxProviderHealth` с отчётом (healthy/reason/latency), адаптер под `Microsoft.Extensions.Diagnostics.HealthChecks`, опциональный `InitializeAsync` как провайдерский hosted-service.
 - **C (keyed):** `scopeKey` в дескрипторе, keyed-регистрации всех storage-сервисов, `(key, group)` для консьюмеров.
-- **Контракты:** убрать legacy-перегрузку `InsertBulk`, добавить opaque-токен аренды в `IOutboxContextFactory.Create`, типизировать publish-context.
+- **Контракты:** legacy-перегрузка `InsertBulk` удалена (0.18); типизированный publish-context сделан без мажора — PG-пакет добавил `PublishInTransaction`/`PublishSingleInTransaction`; opaque-токен в `IOutboxContextFactory.Create` не вводится: арендная идентичность — 16-байтный `OutboxRentToken`, а провайдеру с бóльшим состоянием — side-table по токену.
 
 ## Тесты
 
