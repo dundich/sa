@@ -1,11 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Reflection;
 using Sa.Outbox;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.Redis;
 using Sa.Outbox.Redis.Configuration;
+using Sa.Outbox.Redis.Connection;
+using StackExchange.Redis;
 
 namespace Sa.Outbox.RedisTests;
 
@@ -91,6 +94,60 @@ public class MultiProviderRedisTests
         Assert.Equal("Redis", a.Descriptor.Name);
         Assert.Equal("Redis", b.Descriptor.Name);
         Assert.NotSame(a, b);
+    }
+
+    [Fact]
+    public void KeyedProvider_RegisteredAfterTheDefault_DoesNotBorrowItsDatabase()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+
+        services
+            .AddSaOutboxUsingRedis(
+                cfg => cfg.WithConnectionString("localhost:6379"),
+                outbox => outbox.WithDeliveries(d => d.AddDelivery<TestConsumer, TestMessage>("dp_default_group")))
+            .AddSaOutboxUsingRedis(
+                cfg => cfg.WithConnectionString("localhost:6380"),
+                outbox => outbox.WithDeliveries(d => d.AddDelivery<TestConsumer, TestMessage>("dp_keyed_group")),
+                "dp-keyed");
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        // The default provider registers an unkeyed IDatabase alias for backward compatibility; the
+        // keyed provider must not mistake it for an application-provided database, otherwise its own
+        // connection string would be silently ignored.
+        Assert.False(
+            sp.GetRequiredKeyedService<RedisOutboxConnectionOptions>("dp-keyed").UseRegisteredDatabase);
+        Assert.False(
+            sp.GetRequiredKeyedService<RedisOutboxConnectionOptions>(OutboxScope.DefaultKey).UseRegisteredDatabase);
+    }
+
+    [Fact]
+    public void ApplicationRegisteredDatabase_IsStillBorrowed()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddSingleton(DispatchProxy.Create<IDatabase, NoopProxy>());
+
+        services
+            .AddSaOutboxUsingRedis(
+                cfg => cfg.WithConnectionString("localhost:6379"),
+                outbox => outbox.WithDeliveries(d => d.AddDelivery<TestConsumer, TestMessage>("ad_default_group")))
+            .AddSaOutboxUsingRedis(
+                cfg => cfg.WithConnectionString("localhost:6380"),
+                outbox => outbox.WithDeliveries(d => d.AddDelivery<TestConsumer, TestMessage>("ad_keyed_group")),
+                "ad-keyed");
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        // An application-owned database wins for every provider, as documented.
+        Assert.True(
+            sp.GetRequiredKeyedService<RedisOutboxConnectionOptions>("ad-keyed").UseRegisteredDatabase);
+    }
+
+    public class NoopProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
     }
 
     [Fact]

@@ -55,7 +55,8 @@ await host.RunAsync();
 
 1. `WithDatabase(IDatabase)` / `WithDatabase(Func<IServiceProvider, IDatabase>)`
 2. `WithConnectionMultiplexer(IConnectionMultiplexer)` или его фабрика
-3. `IDatabase`, уже зарегистрированный в контейнере (до `AddSaOutboxUsingRedis`)
+3. `IDatabase`, который приложение зарегистрировало в контейнере (до `AddSaOutboxUsingRedis`);
+   собственный unkeyed-алиас default-провайдера не считается — keyed-провайдер его не занимает
 4. `IConnectionMultiplexer`, уже зарегистрированный в контейнере
 5. строка подключения: `WithConnectionString("…")` или `ConnectionStrings:Redis`
 

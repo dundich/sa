@@ -20,10 +20,11 @@ internal sealed class RedisOutboxConnectionOptions
     public int DatabaseIndex { get; set; }
 
     /// <summary>
-    /// Whether an <see cref="IDatabase"/> was already registered in the container when the Outbox
-    /// was configured. Checked at configuration time rather than resolution time: asking the
-    /// container for <see cref="IDatabase"/> from inside the Outbox's own registration would recurse
-    /// into the provider that is being resolved.
+    /// Whether the application registered an unkeyed <see cref="IDatabase"/> itself when the Outbox
+    /// was configured. The default provider's own unkeyed alias does not count, so a keyed provider
+    /// never borrows the default provider's connection. Checked at configuration time rather than
+    /// resolution time: asking the container for <see cref="IDatabase"/> from inside the Outbox's own
+    /// registration would recurse into the provider that is being resolved.
     /// </summary>
     public bool UseRegisteredDatabase { get; set; }
 }

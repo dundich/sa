@@ -340,12 +340,10 @@ internal sealed class RedisOutboxConfiguration(
         _connectionOptions.ConnectionStringFactory ??= sp =>
             sp.GetService<IConfiguration>()?.GetConnectionString("Redis");
 
-        // Recorded before the Outbox adds its own IDatabase: from then on a non-empty registration
-        // may well be the Outbox's own factory, and resolving it from the provider would recurse.
-        // Only an application-registered *unkeyed* database counts as "already provided": the
-        // keyed registrations below are the Outbox's own and resolving them here would recurse.
-        _connectionOptions.UseRegisteredDatabase = services.Any(
-            d => d.ServiceType == typeof(IDatabase) && !d.IsKeyedService);
+        // Only an application-registered *unkeyed* database counts as "already provided": the keyed
+        // registrations below are the Outbox's own and resolving them here would recurse. The
+        // default provider's unkeyed alias is excluded too — see HasApplicationRegisteredDatabase.
+        _connectionOptions.UseRegisteredDatabase = HasApplicationRegisteredDatabase();
 
         services.TryAddKeyedSingleton(providerKey, _connectionOptions);
 
@@ -360,9 +358,35 @@ internal sealed class RedisOutboxConfiguration(
         if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
         {
             // Backward compatibility: single-provider code resolves IDatabase without a key.
-            services.TryAddSingleton<IDatabase>(
+            var alias = ServiceDescriptor.Singleton<IDatabase>(
                 sp => sp.GetRequiredKeyedService<IDatabase>(providerKey));
+
+            services.TryAdd(alias);
+
+            // Remember the alias so a provider registered later does not mistake it for a database
+            // the application provided. Registered even when TryAdd kept an application's own
+            // registration: the marker only names a descriptor, it never replaces it.
+            services.TryAddSingleton(new OutboxDatabaseAlias(alias));
         }
+    }
+
+    /// <summary>
+    /// Whether the application registered an unkeyed <see cref="IDatabase"/> itself. The alias the
+    /// default provider adds for backward compatibility is excluded: treating it as "already
+    /// provided" made a provider registered later borrow the default provider's connection, so its
+    /// own connection string was silently ignored.
+    /// </summary>
+    private bool HasApplicationRegisteredDatabase()
+    {
+        HashSet<ServiceDescriptor> ownAliases = [.. services
+            .Where(static d => d.ServiceType == typeof(OutboxDatabaseAlias))
+            .Select(static d => d.ImplementationInstance)
+            .OfType<OutboxDatabaseAlias>()
+            .Select(static marker => marker.Descriptor)];
+
+        return services.Any(d => d.ServiceType == typeof(IDatabase)
+            && !d.IsKeyedService
+            && !ownAliases.Contains(d));
     }
 
     private void RegisterOutboxSettings()

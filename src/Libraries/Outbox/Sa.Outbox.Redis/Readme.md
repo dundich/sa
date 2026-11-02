@@ -54,7 +54,9 @@ Resolved lazily, on the first command, in this order:
 
 1. `WithDatabase(IDatabase)` / `WithDatabase(Func<IServiceProvider, IDatabase>)`
 2. `WithConnectionMultiplexer(IConnectionMultiplexer)` / its factory overload
-3. an `IDatabase` already registered in the container (before `AddSaOutboxUsingRedis`)
+3. an `IDatabase` the application registered in the container (before
+   `AddSaOutboxUsingRedis`); the default provider's own unkeyed alias does not count, so a keyed
+   provider never borrows it
 4. an `IConnectionMultiplexer` already registered in the container
 5. a connection string: `WithConnectionString("…")`, or the `ConnectionStrings:Redis` entry
 
