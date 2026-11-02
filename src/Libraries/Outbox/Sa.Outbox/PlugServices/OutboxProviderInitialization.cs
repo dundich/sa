@@ -14,6 +14,11 @@ namespace Sa.Outbox.PlugServices;
 /// instead of replaying the same exception forever.
 /// </para>
 /// <para>
+/// The task is published in the cache <b>before</b> the initializer is started. The failure path
+/// then always removes the entry it owns, so a fast fault (a refused connection, a synchronously
+/// faulted initializer) cannot be cached before the entry exists and stay there forever.
+/// </para>
+/// <para>
 /// Callers await with their own token (<see cref="Task.WaitAsync(CancellationToken)"/>), so a
 /// shutdown never waits for a connection attempt; the attempt itself uses the provider's own
 /// connection timeouts and is not tied to a single group's lifetime.
@@ -33,32 +38,66 @@ internal sealed class OutboxProviderInitialization(IServiceProvider services)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(providerKey);
 
+        // Fast path: once the provider is initialized (or known to have no initializer) a delivery
+        // tick costs one dictionary lookup and no keyed-service resolution.
+        if (_tasks.TryGetValue(providerKey, out Task? cached))
+            return cached.WaitAsync(cancellationToken);
+
         IOutboxProviderInitializer? initializer =
             services.GetKeyedService<IOutboxProviderInitializer>(providerKey);
 
-        if (initializer is null) return Task.CompletedTask;
+        if (initializer is null)
+        {
+            // A provider without a warm-up is a permanent no-op; remember it so the keyed lookup is
+            // not repeated on every tick.
+            _tasks.TryAdd(providerKey, Task.CompletedTask);
+            return Task.CompletedTask;
+        }
 
-        Task task = _tasks.GetOrAdd(providerKey, _ => RunAsync(initializer, providerKey));
-
-        return task.WaitAsync(cancellationToken);
+        return Start(providerKey, initializer).WaitAsync(cancellationToken);
     }
 
-    private async Task RunAsync(IOutboxProviderInitializer initializer, string providerKey)
+    private Task Start(string providerKey, IOutboxProviderInitializer initializer)
     {
-        // Yield first: the dictionary insertion (GetOrAdd) must publish this task before the
-        // initializer can fault, otherwise the failure path would remove a not-yet-inserted entry
-        // and the faulted task would stay cached.
-        await Task.Yield();
+        while (true)
+        {
+            if (_tasks.TryGetValue(providerKey, out Task? existing))
+                return existing;
 
+            // Publish before starting: the initializer may fault synchronously, and the failure
+            // path removes this entry. Inserting after the start (the old Task.Yield approach) left
+            // a window where the removal found nothing and the faulted task was cached forever.
+            var completion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            if (!_tasks.TryAdd(providerKey, completion.Task))
+                continue;
+
+            _ = RunAsync(providerKey, initializer, completion);
+            return completion.Task;
+        }
+    }
+
+    private async Task RunAsync(
+        string providerKey,
+        IOutboxProviderInitializer initializer,
+        TaskCompletionSource completion)
+    {
         try
         {
             await initializer.InitializeAsync().ConfigureAwait(false);
+            completion.TrySetResult();
         }
-        catch
+        catch (OperationCanceledException exception)
         {
             // Back to "not initialized": the next tick retries the whole warm-up.
             _tasks.TryRemove(providerKey, out _);
-            throw;
+            completion.TrySetCanceled(exception.CancellationToken);
+        }
+        catch (Exception exception)
+        {
+            _tasks.TryRemove(providerKey, out _);
+            completion.TrySetException(exception);
         }
     }
 }

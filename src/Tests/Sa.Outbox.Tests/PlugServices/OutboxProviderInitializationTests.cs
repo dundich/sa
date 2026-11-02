@@ -69,6 +69,34 @@ public class OutboxProviderInitializationTests
     }
 
     [Fact]
+    public async Task Failure_IsRetried_EvenWhenTheInitializerCompletesInline()
+    {
+        // Inline Post makes Task.Yield resume synchronously, i.e. *inside* the cache lookup and
+        // before the task is inserted. That is the window where a fast fault used to be cached
+        // forever; the gate must publish the task before it starts the initializer.
+        var initializer = new FailOnceInitializer();
+        using ServiceProvider sp = Build(initializer);
+
+        var gate = sp.GetRequiredService<OutboxProviderInitialization>();
+
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new InlineSynchronizationContext());
+        try
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => gate.EnsureAsync(ProviderKey, TestToken));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        await gate.EnsureAsync(ProviderKey, TestToken);
+
+        Assert.Equal(2, initializer.Calls);
+    }
+
+    [Fact]
     public async Task CancelledWaiter_DoesNotPoisonTheCache()
     {
         var initializer = new BlockingInitializer();
@@ -119,5 +147,14 @@ public class OutboxProviderInitializationTests
                 ? ValueTask.FromException(new InvalidOperationException("warm-up failed"))
                 : ValueTask.CompletedTask;
         }
+    }
+
+    /// <summary>
+    /// Runs posted continuations on the calling thread, so <c>Task.Yield</c> resumes before the
+    /// caller gets control back — the worst-case timing for a cache published after the start.
+    /// </summary>
+    private sealed class InlineSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state) => d(state);
     }
 }
