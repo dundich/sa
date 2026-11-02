@@ -361,7 +361,7 @@ public class PgPollingSettingsTests
     {
         var services = new ServiceCollection();
 
-        new PgOutboxConfiguration(services).WithOutboxSettings();
+        new PgOutboxConfiguration(services).WithOutboxSettings().Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
@@ -374,7 +374,7 @@ public class PgPollingSettingsTests
     {
         var services = new ServiceCollection();
 
-        new PgOutboxConfiguration(services).WithPollingBudget(TimeSpan.FromMinutes(1));
+        new PgOutboxConfiguration(services).WithPollingBudget(TimeSpan.FromMinutes(1)).Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
@@ -390,7 +390,8 @@ public class PgPollingSettingsTests
 
         new PgOutboxConfiguration(services)
             .WithPollingProfile(PgPollingProfile.Responsive)
-            .WithPollingProfile(PgPollingProfile.Quiet);
+            .WithPollingProfile(PgPollingProfile.Quiet)
+            .Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
@@ -409,7 +410,7 @@ public class PgPollingSettingsTests
             polling.Enabled = true;
             polling.Interval = TimeSpan.FromSeconds(10);
             polling.IdleMaxInterval = TimeSpan.FromSeconds(5);
-        });
+        }).Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
@@ -424,7 +425,8 @@ public class PgPollingSettingsTests
         new PgOutboxConfiguration(services).WithPolling((_, polling) =>
             polling.UseProfile(PgPollingProfile.Balanced)
                    .WithPerTenantParallelism(2)
-                   .WithBatchingWindow(TimeSpan.FromSeconds(2)));
+                   .WithBatchingWindow(TimeSpan.FromSeconds(2)))
+            .Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
 

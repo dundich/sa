@@ -62,6 +62,24 @@ Only the connection-string path creates the multiplexer, and only that path disp
 multiplexer or database handed in by the application (or registered in DI) belongs to the caller and
 is never disposed by the Outbox, so it can be shared with caching, SignalR, etc.
 
+## Turning the provider off
+
+`WithEnabled(false)` is a **registration** switch, not a runtime flag:
+
+```csharp
+services.AddSaOutboxUsingRedis(cfg => cfg
+    .WithEnabled(configuration.GetValue("Outbox:Redis:Enabled", true))
+    .WithConnectionString("localhost:6379"));
+```
+
+The call still runs the configuration callback, but nothing is applied to the container: no settings,
+no connection (multiplexer, database or factory), no serializer or poison override, no consumer groups
+and no `Sa.Schedule` jobs. `Enabled` is `true` by default; a disabled provider leaves no trace in DI,
+so the registration can stay in code for every environment and be switched off by configuration.
+Providers registered under other keys are unaffected. In the split form (`AddSaOutbox` + this call)
+the core still registers the consumer groups, so a disabled provider makes the startup scope-key
+check fail and names those groups — skip `AddSaOutbox` too, or use the one-call form.
+
 ## Publish: the algorithm
 
 ```

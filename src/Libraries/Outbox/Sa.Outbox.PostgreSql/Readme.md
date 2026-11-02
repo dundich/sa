@@ -202,6 +202,25 @@ services.AddSaOutboxUsingPostgreSql(
 > is registered separately, pass the same value to both calls. The reserved `"default"` key is
 > rejected.
 
+### Turning the provider off
+
+`WithEnabled(false)` is a **registration** switch, not a runtime flag:
+
+```csharp
+services.AddSaOutboxUsingPostgreSql(pg => pg
+    .WithEnabled(configuration.GetValue("Outbox:PostgreSql:Enabled", true))
+    .WithDataSource(...));
+```
+
+The call still runs the configuration callback, but nothing is applied to the container: no settings,
+no keyed data source (so `ValidateOnStart` cannot fail on an absent connection string), no serializer
+or poison override, no consumer groups and no `Sa.Schedule` jobs. `Enabled` is `true` by default; a
+disabled provider leaves no trace in DI, so the registration can stay in code for every environment
+and be switched off by configuration. Providers registered under other keys are unaffected. In the
+split form (`AddSaOutbox` + this call) the core still registers the consumer groups, so a disabled
+provider makes the startup scope-key check fail and names those groups — skip `AddSaOutbox` too, or
+use the one-call form.
+
 ### 1. Tenant Configuration
 
 Where inside `AddSaOutbox`:

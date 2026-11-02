@@ -4,10 +4,15 @@ namespace Sa.Outbox.Redis.Configuration;
 
 internal static class Setup
 {
-    public static IServiceCollection AddRedisOutboxSettings(
+    /// <summary>
+    /// Builds the configurator and records the built-in layers plus the user callback, without
+    /// writing anything to DI: the caller decides whether the provider is enabled and then calls
+    /// <see cref="RedisOutboxConfiguration.Commit"/>.
+    /// </summary>
+    public static RedisOutboxConfiguration CreateRedisOutboxConfiguration(
         this IServiceCollection services,
-        Action<IRedisOutboxConfiguration>? configure = null,
-        string providerKey = OutboxScope.DefaultKey)
+        string providerKey,
+        Action<IRedisOutboxConfiguration>? configure = null)
     {
         var configuration = new RedisOutboxConfiguration(services, providerKey);
 
@@ -21,6 +26,6 @@ internal static class Setup
         // core JSON fallback is used.
         configuration.WithSerializerCompatibilityBridge();
 
-        return services;
+        return configuration;
     }
 }

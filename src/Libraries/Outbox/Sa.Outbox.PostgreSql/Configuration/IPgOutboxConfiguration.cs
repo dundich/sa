@@ -13,6 +13,25 @@ namespace Sa.Outbox.PostgreSql.Configuration;
 public interface IPgOutboxConfiguration
 {
     /// <summary>
+    /// Whether the provider is registered at all. Default is <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// A disabled provider registers nothing — no settings, no keyed data source, no serializer or
+    /// poison overrides — and the caller skips its consumer groups and schedule too. Useful for a
+    /// configuration-driven on/off switch: the disabled provider cannot fail host validation with
+    /// an absent database.
+    /// </remarks>
+    bool Enabled { get; }
+
+    /// <summary>
+    /// Turns the provider registration on or off. The call order inside the configuration callback
+    /// does not matter: the value is evaluated when the registration is applied.
+    /// </summary>
+    /// <param name="enabled">Whether to register the provider.</param>
+    /// <returns>The same <see cref="IPgOutboxConfiguration"/> for chaining.</returns>
+    IPgOutboxConfiguration WithEnabled(bool enabled = true);
+
+    /// <summary>
     /// Replaces the default JSON serializer with a factory that produces
     /// <see cref="IOutboxMessageSerializer"/> instances from the DI container.
     /// </summary>

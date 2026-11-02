@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using Sa.Outbox.Redis.Poison;
 using Sa.Outbox.Serialization;
 using StackExchange.Redis;
@@ -19,6 +19,25 @@ namespace Sa.Outbox.Redis.Configuration;
 /// </remarks>
 public interface IRedisOutboxConfiguration
 {
+    /// <summary>
+    /// Whether the provider is registered at all. Default is <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// A disabled provider registers nothing — no settings, no connection (multiplexer, database or
+    /// factory), no serializer or poison overrides — and the caller skips its consumer groups and
+    /// schedule too. Useful for a configuration-driven on/off switch: the disabled provider cannot
+    /// fail host validation with an absent server.
+    /// </remarks>
+    bool Enabled { get; }
+
+    /// <summary>
+    /// Turns the provider registration on or off. The call order inside the configuration callback
+    /// does not matter: the value is evaluated when the registration is applied.
+    /// </summary>
+    /// <param name="enabled">Whether to register the provider.</param>
+    /// <returns>The same <see cref="IRedisOutboxConfiguration"/> for chaining.</returns>
+    IRedisOutboxConfiguration WithEnabled(bool enabled = true);
+
     /// <summary>
     /// Uses a ready <see cref="IConnectionMultiplexer"/>. Its lifetime stays the caller's: the Outbox
     /// never disposes a multiplexer it did not create.

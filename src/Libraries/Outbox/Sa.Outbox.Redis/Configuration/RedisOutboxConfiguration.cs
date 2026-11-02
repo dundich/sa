@@ -10,26 +10,58 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.Redis.Configuration;
 
+/// <summary>
+/// Collects the Redis provider configuration and applies it to the container on
+/// <see cref="Commit"/>.
+/// </summary>
+/// <remarks>
+/// Registration is deferred on purpose: <see cref="WithEnabled"/> must be able to turn the provider
+/// off before anything reaches DI. A disabled provider registers nothing at all — no settings, no
+/// connection, no serializer/poison overrides — and the caller skips the core deliveries too.
+/// </remarks>
 internal sealed class RedisOutboxConfiguration(
     IServiceCollection services,
     string providerKey = OutboxScope.DefaultKey) : IRedisOutboxConfiguration
 {
-    /// <summary>
-    /// The <see cref="OptionsBuilder{TOptions}"/> of the provider, created once by the first
-    /// <see cref="WithOutboxSettings"/> call so that <see cref="WithConfiguration"/> and
-    /// <see cref="Options"/> always find it.
-    /// </summary>
-    private OptionsBuilder<RedisOutboxSettings>? _optionsBuilder;
+    private readonly List<Action<IServiceProvider, RedisOutboxSettings>> _settingsActions = [];
+    private readonly List<Action<OptionsBuilder<RedisOutboxSettings>>> _optionsActions = [];
 
-    /// <summary>The mutable state the configurator reads at options-build time.</summary>
-    private RedisOutboxSettingsState _optionsState = null!;
-
-    /// <summary>
-    /// The connection sources collected by this builder. One instance for the whole configuration
-    /// chain, so a later <c>WithDatabase</c>/<c>WithConnectionString</c> simply replaces the earlier
-    /// choice.
-    /// </summary>
     private readonly RedisOutboxConnectionOptions _connectionOptions = new();
+
+    private string? _configSectionPath;
+    private bool _settingsRequested;
+    private bool _connectionRequested;
+    private bool _compatibilityBridge;
+    private bool _committed;
+
+    private Func<IServiceProvider, IOutboxMessageSerializer>? _serializerFactory;
+    private IOutboxMessageSerializer? _serializerInstance;
+
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)]
+    private Type? _serializerType;
+
+    private Func<IServiceProvider, IRedisOutboxPoisonHandler>? _poisonFactory;
+    private IRedisOutboxPoisonHandler? _poisonInstance;
+
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)]
+    private Type? _poisonType;
+    private bool _poisonConfigured;
+
+    /// <summary>The provider key this configuration registers.</summary>
+    internal string ProviderKey => providerKey;
+
+    /// <summary>
+    /// Whether the provider is registered at all. Default is <see langword="true"/>; a disabled
+    /// provider registers nothing, and the one-call form skips the core deliveries as well.
+    /// </summary>
+    public bool Enabled { get; private set; } = true;
+
+    /// <inheritdoc/>
+    public IRedisOutboxConfiguration WithEnabled(bool enabled = true)
+    {
+        Enabled = enabled;
+        return this;
+    }
 
     public IRedisOutboxConfiguration WithConnectionMultiplexer(IConnectionMultiplexer multiplexer)
     {
@@ -95,11 +127,10 @@ internal sealed class RedisOutboxConfiguration(
     {
         if (configure != null)
         {
-            services.AddKeyedSingleton<Action<IServiceProvider, RedisOutboxSettings>>(providerKey, configure);
+            _settingsActions.Add(configure);
         }
 
-        RegisterOutboxSettings();
-
+        _settingsRequested = true;
         return this;
     }
 
@@ -107,8 +138,8 @@ internal sealed class RedisOutboxConfiguration(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configSectionPath);
 
-        RegisterOutboxSettings();
-        _optionsState.ConfigSectionPath = configSectionPath;
+        _settingsRequested = true;
+        _configSectionPath = configSectionPath;
 
         return this;
     }
@@ -117,8 +148,8 @@ internal sealed class RedisOutboxConfiguration(
     {
         ArgumentNullException.ThrowIfNull(configureOptions);
 
-        RegisterOutboxSettings();
-        configureOptions(_optionsBuilder!);
+        _settingsRequested = true;
+        _optionsActions.Add(configureOptions);
 
         return this;
     }
@@ -128,8 +159,9 @@ internal sealed class RedisOutboxConfiguration(
     {
         ArgumentNullException.ThrowIfNull(messageSerializerFactory);
 
-        services.RemoveAll<IOutboxMessageSerializer>();
-        services.TryAddSingleton<IOutboxMessageSerializer>(messageSerializerFactory);
+        _serializerFactory = messageSerializerFactory;
+        _serializerInstance = null;
+        _serializerType = null;
         return this;
     }
 
@@ -138,16 +170,18 @@ internal sealed class RedisOutboxConfiguration(
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        services.RemoveAll<IOutboxMessageSerializer>();
-        services.TryAddSingleton<IOutboxMessageSerializer>(instance);
+        _serializerFactory = null;
+        _serializerInstance = instance;
+        _serializerType = null;
         return this;
     }
 
     public IRedisOutboxConfiguration WithMessageSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
         where TService : class, IOutboxMessageSerializer
     {
-        services.RemoveAll<IOutboxMessageSerializer>();
-        services.TryAddSingleton<IOutboxMessageSerializer, TService>();
+        _serializerFactory = null;
+        _serializerInstance = null;
+        _serializerType = typeof(TService);
         return this;
     }
 
@@ -155,8 +189,10 @@ internal sealed class RedisOutboxConfiguration(
     {
         ArgumentNullException.ThrowIfNull(poisonHandlerFactory);
 
-        services.RemoveAllKeyed<IRedisOutboxPoisonHandler>(providerKey);
-        services.TryAddKeyedSingleton<IRedisOutboxPoisonHandler>(providerKey, (sp, _) => poisonHandlerFactory(sp));
+        _poisonFactory = poisonHandlerFactory;
+        _poisonInstance = null;
+        _poisonType = null;
+        _poisonConfigured = true;
         return this;
     }
 
@@ -165,16 +201,20 @@ internal sealed class RedisOutboxConfiguration(
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        services.RemoveAllKeyed<IRedisOutboxPoisonHandler>(providerKey);
-        services.TryAddKeyedSingleton<IRedisOutboxPoisonHandler>(providerKey, instance);
+        _poisonFactory = null;
+        _poisonInstance = instance;
+        _poisonType = null;
+        _poisonConfigured = true;
         return this;
     }
 
     public IRedisOutboxConfiguration WithPoisonHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
         where TService : class, IRedisOutboxPoisonHandler
     {
-        services.RemoveAllKeyed<IRedisOutboxPoisonHandler>(providerKey);
-        services.TryAddKeyedSingleton<IRedisOutboxPoisonHandler, TService>(providerKey);
+        _poisonFactory = null;
+        _poisonInstance = null;
+        _poisonType = typeof(TService);
+        _poisonConfigured = true;
         return this;
     }
 
@@ -186,11 +226,74 @@ internal sealed class RedisOutboxConfiguration(
     /// </summary>
     internal IRedisOutboxConfiguration WithSerializerCompatibilityBridge()
     {
-        services.TryAddSingleton<IOutboxMessageSerializer>(static sp =>
-            (IOutboxMessageSerializer?)sp.GetService<Sa.Outbox.Redis.Serialization.IOutboxMessageSerializer>()
-            ?? JsonOutboxMessageSerializer.Instance);
-
+        _compatibilityBridge = true;
         return this;
+    }
+
+    /// <summary>
+    /// Records the provider-owned registration of the connection sources. The actual registrations
+    /// are applied by <see cref="Commit"/>.
+    /// </summary>
+    internal IRedisOutboxConfiguration WithConnection()
+    {
+        _connectionRequested = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Applies every recorded intent to the container. Idempotent; the root setup calls it only when
+    /// <see cref="Enabled"/> is true. Direct users of this type (tests) call it themselves.
+    /// </summary>
+    internal void Commit()
+    {
+        if (_committed) return;
+        _committed = true;
+
+        if (_settingsRequested)
+            RegisterOutboxSettings();
+
+        if (_connectionRequested)
+            RegisterConnection();
+
+        ApplySerializer();
+
+        if (_poisonConfigured)
+        {
+            services.RemoveAllKeyed<IRedisOutboxPoisonHandler>(providerKey);
+
+            if (_poisonFactory is not null)
+                services.TryAddKeyedSingleton<IRedisOutboxPoisonHandler>(providerKey, (sp, _) => _poisonFactory(sp));
+            else if (_poisonInstance is not null)
+                services.TryAddKeyedSingleton<IRedisOutboxPoisonHandler>(providerKey, _poisonInstance);
+            else if (_poisonType is not null)
+                services.TryAddKeyedSingleton(typeof(IRedisOutboxPoisonHandler), providerKey, _poisonType);
+        }
+
+        if (_compatibilityBridge)
+        {
+            services.TryAddSingleton<IOutboxMessageSerializer>(static sp =>
+                (IOutboxMessageSerializer?)sp.GetService<Sa.Outbox.Redis.Serialization.IOutboxMessageSerializer>()
+                ?? JsonOutboxMessageSerializer.Instance);
+        }
+    }
+
+    private void ApplySerializer()
+    {
+        if (_serializerFactory is not null)
+        {
+            services.RemoveAll<IOutboxMessageSerializer>();
+            services.TryAddSingleton<IOutboxMessageSerializer>(_serializerFactory);
+        }
+        else if (_serializerInstance is not null)
+        {
+            services.RemoveAll<IOutboxMessageSerializer>();
+            services.TryAddSingleton<IOutboxMessageSerializer>(_serializerInstance);
+        }
+        else if (_serializerType is not null)
+        {
+            services.RemoveAll<IOutboxMessageSerializer>();
+            services.TryAddSingleton(typeof(IOutboxMessageSerializer), _serializerType);
+        }
     }
 
     /// <summary>
@@ -198,7 +301,7 @@ internal sealed class RedisOutboxConfiguration(
     /// provider depends on the resolved <see cref="IDatabase"/>, so a connection is opened on the
     /// first command, not at container build time.
     /// </summary>
-    internal IRedisOutboxConfiguration WithConnection()
+    private void RegisterConnection()
     {
         // Configuration-driven by default: the "Redis" connection string, when present, is the
         // zero-configuration path. A multiplexer or database registered in the container still
@@ -229,15 +332,10 @@ internal sealed class RedisOutboxConfiguration(
             services.TryAddSingleton<IDatabase>(
                 sp => sp.GetRequiredKeyedService<IDatabase>(providerKey));
         }
-
-        return this;
     }
 
     private void RegisterOutboxSettings()
     {
-        if (_optionsBuilder is not null)
-            return;
-
         bool isDefaultKey = string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal);
         string optionsName = isDefaultKey ? Microsoft.Extensions.Options.Options.DefaultName : providerKey;
 
@@ -252,7 +350,11 @@ internal sealed class RedisOutboxConfiguration(
             services.TryAddKeyedSingleton(providerKey, state);
         }
 
-        _optionsState = state;
+        if (_configSectionPath is not null)
+            state.ConfigSectionPath = _configSectionPath;
+
+        foreach (Action<IServiceProvider, RedisOutboxSettings> configureAction in _settingsActions)
+            services.AddKeyedSingleton<Action<IServiceProvider, RedisOutboxSettings>>(providerKey, configureAction);
 
         // The code actions of WithOutboxSettings and the configuration section are applied by one
         // configurator, in that order. Options(...) actions are registered later on the pipeline by
@@ -280,7 +382,10 @@ internal sealed class RedisOutboxConfiguration(
                 sp => sp.GetRequiredKeyedService<RedisOutboxSettings>(providerKey));
         }
 
-        _optionsBuilder = options;
+        // Recorded actions run last: they see the builder created above and override both the code
+        // defaults and the configuration section.
+        foreach (Action<OptionsBuilder<RedisOutboxSettings>> configureAction in _optionsActions)
+            configureAction(options);
     }
 
     private static RedisOutboxSettingsState? FindState(IServiceCollection services, string providerKey)

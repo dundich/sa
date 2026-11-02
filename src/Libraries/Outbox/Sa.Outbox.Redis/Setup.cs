@@ -44,9 +44,14 @@ public static class Setup
     {
         OutboxScope.EnsureValid(scopeKey);
 
-        services
-            .AddRedisOutboxSettings(configure, scopeKey)
-            .AddOutboxServices(scopeKey);
+        RedisOutboxConfiguration redis = services.CreateRedisOutboxConfiguration(scopeKey, configure);
+
+        // A disabled provider registers nothing: no settings, no connection, no groups, no schedule.
+        if (!redis.Enabled) return services;
+
+        redis.Commit();
+
+        services.AddOutboxServices(scopeKey);
 
         // The core publisher takes a TimeProvider; Sa.Schedule registers System only as a side
         // effect of the partitional/migration module, which the Redis provider does not have.

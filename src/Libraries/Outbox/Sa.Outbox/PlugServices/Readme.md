@@ -393,6 +393,10 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
 - **Provider warm-up is implemented:** a keyed `IOutboxProviderInitializer` (PG `SELECT 1`, Redis
   `PING`) plus a memoized per-provider gate that `DeliveryJob` awaits before its first cycle; a
   warm-up failure goes through the job's error policy.
+- **Provider on/off switch is implemented:** `WithEnabled(false)` on `IPgOutboxConfiguration` /
+  `IRedisOutboxConfiguration` is a *registration* switch — the configurator records its intents but
+  commits nothing, so no settings, no connection/`ValidateOnStart`, no groups and no schedule reach
+  the container. `Enabled` defaults to `true`, so existing applications are unchanged.
 - **PG migration guard:** `PgMultiProviderGuard` fails the start when two PG providers point at the
   same tables (double delivery); the 0.17 → 0.18 migration section lives in the PG readme.
 
@@ -468,3 +472,26 @@ public interface IOutboxProviderInitializer
   service.
 - Implementations: PG runs `SELECT 1` on its data source; Redis runs `PING`. A provider without an
   initializer is valid (its first command already opens the connection lazily).
+
+## Disabling a provider
+
+Both provider configurators expose `WithEnabled(bool enabled = true)`. It is evaluated when the
+registration is applied, not per delivery cycle, so it is a *deployment* switch rather than a runtime
+flag:
+
+```csharp
+services.AddSaOutboxUsingPostgreSql(pg => pg
+    .WithEnabled(configuration.GetValue("Outbox:PostgreSql:Enabled", true))
+    .WithDataSource(...));
+```
+
+A disabled provider applies nothing: no settings, no keyed data source or Redis connection (so an
+absent server cannot fail startup validation), no serializer/poison overrides — and `Setup` returns
+before registering the core, the consumer groups and the `Sa.Schedule` jobs of that scope. The
+disabled key therefore never reaches `IOutboxProviderRegistry`, so the startup scope-key check does
+not complain either. Other providers keep working; `Enabled` is `true` by default.
+
+In the split registration form (`AddSaOutbox` + `AddSaOutboxUsing...`) the core still registers the
+consumer groups of that scope, so a disabled provider makes the startup scope-key check fail and name
+them. Skip `AddSaOutbox` for that scope too, or use the one-call form, which `Setup` short-circuits
+before registering the core.

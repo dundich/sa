@@ -8,35 +8,79 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 
+/// <summary>
+/// Collects the PostgreSQL provider configuration and applies it to the container on
+/// <see cref="Commit"/>.
+/// </summary>
+/// <remarks>
+/// Registration is deferred on purpose: <see cref="WithEnabled"/> must be able to turn the provider
+/// off before anything reaches DI. A disabled provider registers nothing at all — no settings, no
+/// keyed data source (whose <c>ValidateOnStart</c> would otherwise fail on an empty connection
+/// string), no serializer/poison overrides, and the caller skips the core deliveries too.
+/// </remarks>
 internal sealed class PgOutboxConfiguration(
     IServiceCollection services,
     string providerKey = OutboxScope.DefaultKey) : IPgOutboxConfiguration
 {
+    private readonly List<Action<IServiceProvider, PgOutboxSettings>> _settingsActions = [];
+    private readonly List<Action<IServiceProvider, PgPollingSettings>> _pollingActions = [];
+
+    private Action<IDataSourceBuilder>? _dataSourceConfigure;
+    private bool _dataSourceRequested;
+    private bool _settingsRequested;
+    private bool _pollingRequested;
+    private bool _compatibilityBridge;
+
+    private Func<IServiceProvider, IOutboxMessageSerializer>? _serializerFactory;
+    private IOutboxMessageSerializer? _serializerInstance;
+
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)]
+    private Type? _serializerType;
+
+    private Func<IServiceProvider, IPgOutboxPoisonHandler>? _poisonFactory;
+    private IPgOutboxPoisonHandler? _poisonInstance;
+
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)]
+    private Type? _poisonType;
+    private bool _poisonConfigured;
+
+    private bool _committed;
+
+    /// <summary>The provider key this configuration registers.</summary>
+    internal string ProviderKey => providerKey;
+
+    /// <summary>
+    /// Whether the provider is registered at all. Default is <see langword="true"/>; a disabled
+    /// provider registers nothing, and the one-call form skips the core deliveries as well.
+    /// </summary>
+    public bool Enabled { get; private set; } = true;
+
+    /// <inheritdoc/>
+    public IPgOutboxConfiguration WithEnabled(bool enabled = true)
+    {
+        Enabled = enabled;
+        return this;
+    }
+
     public IPgOutboxConfiguration WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
     {
         if (configure != null)
         {
-            services.AddKeyedSingleton<Action<IServiceProvider, PgOutboxSettings>>(providerKey, configure);
+            _settingsActions.Add(configure);
         }
 
-        RegisterOutboxSettings();
-
+        _settingsRequested = true;
         return this;
     }
 
     public IPgOutboxConfiguration WithDataSource(Action<IDataSourceBuilder>? configure = null)
     {
-        // A keyed provider gets its own keyed data source (pool + connection). The default key
-        // keeps the classic unkeyed registration, so an application that already registered an
-        // NpgsqlDataSource (or configured the unkeyed data source) keeps borrowing it.
-        if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+        if (configure != null)
         {
-            services.AddSaPostgreSqlDataSource(configure);
+            _dataSourceConfigure = configure;
         }
-        else
-        {
-            services.AddSaPostgreSqlDataSource(providerKey, configure);
-        }
+
+        _dataSourceRequested = true;
         return this;
     }
 
@@ -44,35 +88,41 @@ internal sealed class PgOutboxConfiguration(
     {
         if (configure != null)
         {
-            services.AddKeyedSingleton<Action<IServiceProvider, PgPollingSettings>>(providerKey, configure);
+            _pollingActions.Add(configure);
         }
 
-        RegisterPollingSettings();
-
+        _pollingRequested = true;
         return this;
     }
 
     public IPgOutboxConfiguration WithMessageSerializer(
         Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
     {
-        services.RemoveAll<IOutboxMessageSerializer>();
-        services.TryAddSingleton<IOutboxMessageSerializer>(messageSerializerFactory);
+        ArgumentNullException.ThrowIfNull(messageSerializerFactory);
+
+        _serializerFactory = messageSerializerFactory;
+        _serializerInstance = null;
+        _serializerType = null;
         return this;
     }
 
     public IPgOutboxConfiguration WithMessageSerializer<TService>(TService instance)
         where TService : class, IOutboxMessageSerializer
     {
-        services.RemoveAll<IOutboxMessageSerializer>();
-        services.TryAddSingleton<IOutboxMessageSerializer>(instance);
+        ArgumentNullException.ThrowIfNull(instance);
+
+        _serializerFactory = null;
+        _serializerInstance = instance;
+        _serializerType = null;
         return this;
     }
 
     public IPgOutboxConfiguration WithMessageSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
         where TService : class, IOutboxMessageSerializer
     {
-        services.RemoveAll<IOutboxMessageSerializer>();
-        services.TryAddSingleton<IOutboxMessageSerializer, TService>();
+        _serializerFactory = null;
+        _serializerInstance = null;
+        _serializerType = typeof(TService);
         return this;
     }
 
@@ -80,8 +130,10 @@ internal sealed class PgOutboxConfiguration(
     {
         ArgumentNullException.ThrowIfNull(poisonHandlerFactory);
 
-        services.RemoveAllKeyed<IPgOutboxPoisonHandler>(providerKey);
-        services.TryAddKeyedSingleton<IPgOutboxPoisonHandler>(providerKey, (sp, _) => poisonHandlerFactory(sp));
+        _poisonFactory = poisonHandlerFactory;
+        _poisonInstance = null;
+        _poisonType = null;
+        _poisonConfigured = true;
         return this;
     }
 
@@ -90,16 +142,20 @@ internal sealed class PgOutboxConfiguration(
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        services.RemoveAllKeyed<IPgOutboxPoisonHandler>(providerKey);
-        services.TryAddKeyedSingleton<IPgOutboxPoisonHandler>(providerKey, instance);
+        _poisonFactory = null;
+        _poisonInstance = instance;
+        _poisonType = null;
+        _poisonConfigured = true;
         return this;
     }
 
     public IPgOutboxConfiguration WithPoisonHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
         where TService : class, IPgOutboxPoisonHandler
     {
-        services.RemoveAllKeyed<IPgOutboxPoisonHandler>(providerKey);
-        services.TryAddKeyedSingleton<IPgOutboxPoisonHandler, TService>(providerKey);
+        _poisonFactory = null;
+        _poisonInstance = null;
+        _poisonType = typeof(TService);
+        _poisonConfigured = true;
         return this;
     }
 
@@ -111,11 +167,80 @@ internal sealed class PgOutboxConfiguration(
     /// </summary>
     internal IPgOutboxConfiguration WithSerializerCompatibilityBridge()
     {
-        services.TryAddSingleton<IOutboxMessageSerializer>(static sp =>
-            (IOutboxMessageSerializer?)sp.GetService<Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer>()
-            ?? JsonOutboxMessageSerializer.Instance);
-
+        _compatibilityBridge = true;
         return this;
+    }
+
+    /// <summary>
+    /// Applies every recorded intent to the container. Idempotent; the root setup calls it only when
+    /// <see cref="Enabled"/> is true. Direct users of this type (tests) call it themselves.
+    /// </summary>
+    internal void Commit()
+    {
+        if (_committed) return;
+        _committed = true;
+
+        if (_settingsRequested)
+        {
+            foreach (Action<IServiceProvider, PgOutboxSettings> action in _settingsActions)
+                services.AddKeyedSingleton<Action<IServiceProvider, PgOutboxSettings>>(providerKey, action);
+
+            RegisterOutboxSettings();
+        }
+
+        if (_pollingRequested)
+        {
+            foreach (Action<IServiceProvider, PgPollingSettings> action in _pollingActions)
+                services.AddKeyedSingleton<Action<IServiceProvider, PgPollingSettings>>(providerKey, action);
+
+            RegisterPollingSettings();
+        }
+
+        if (_dataSourceRequested)
+        {
+            // A keyed provider gets its own keyed data source (pool + connection). The default key
+            // keeps the classic unkeyed registration, so an application that already registered an
+            // NpgsqlDataSource (or configured the unkeyed data source) keeps borrowing it.
+            if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+                services.AddSaPostgreSqlDataSource(_dataSourceConfigure);
+            else
+                services.AddSaPostgreSqlDataSource(providerKey, _dataSourceConfigure);
+        }
+
+        if (_serializerFactory is not null)
+        {
+            services.RemoveAll<IOutboxMessageSerializer>();
+            services.TryAddSingleton<IOutboxMessageSerializer>(_serializerFactory);
+        }
+        else if (_serializerInstance is not null)
+        {
+            services.RemoveAll<IOutboxMessageSerializer>();
+            services.TryAddSingleton<IOutboxMessageSerializer>(_serializerInstance);
+        }
+        else if (_serializerType is not null)
+        {
+            services.RemoveAll<IOutboxMessageSerializer>();
+            services.TryAddSingleton(typeof(IOutboxMessageSerializer), _serializerType);
+        }
+
+        if (_poisonConfigured)
+        {
+            services.RemoveAllKeyed<IPgOutboxPoisonHandler>(providerKey);
+
+            if (_poisonFactory is not null)
+                services.TryAddKeyedSingleton<IPgOutboxPoisonHandler>(providerKey, (sp, _) => _poisonFactory(sp));
+            else if (_poisonInstance is not null)
+                services.TryAddKeyedSingleton<IPgOutboxPoisonHandler>(providerKey, _poisonInstance);
+            else if (_poisonType is not null)
+                services.TryAddKeyedSingleton(typeof(IPgOutboxPoisonHandler), providerKey, _poisonType);
+        }
+
+        if (_compatibilityBridge)
+        {
+            services.TryAddSingleton<IOutboxMessageSerializer>(static sp =>
+                (IOutboxMessageSerializer?)sp.GetService<Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer>()
+                ?? JsonOutboxMessageSerializer.Instance);
+        }
     }
 
     private void RegisterOutboxSettings()
@@ -124,7 +249,7 @@ internal sealed class PgOutboxConfiguration(
         {
             PgOutboxSettings settings = new();
 
-            var connectionSchema = Sa.Data.PostgreSql.PgDataSourceResolver.TryResolve(sp, providerKey, out IPgDataSource? dataSource)
+            var connectionSchema = PgDataSourceResolver.TryResolve(sp, providerKey, out IPgDataSource? dataSource)
                 ? dataSource!.GetSearchPath()
                 : null;
 
@@ -133,9 +258,7 @@ internal sealed class PgOutboxConfiguration(
                 settings.TableSettings.WithSchema(connectionSchema);
             }
 
-            var configureActions = sp.GetKeyedServices<Action<IServiceProvider, PgOutboxSettings>>(providerKey);
-
-            foreach (var configureAction in configureActions)
+            foreach (var configureAction in sp.GetKeyedServices<Action<IServiceProvider, PgOutboxSettings>>(providerKey))
                 configureAction.Invoke(sp, settings);
 
             // Validated here — after every configure action, before the SQL templates are built — so a

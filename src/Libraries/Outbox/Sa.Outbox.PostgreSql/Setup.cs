@@ -43,8 +43,16 @@ public static class Setup
     {
         OutboxScope.EnsureValid(scopeKey);
 
+        PgOutboxConfiguration pg = services.CreatePgOutboxConfiguration(scopeKey, configure);
+
+        // A disabled provider registers nothing: no settings, no keyed data source (whose
+        // ValidateOnStart would fail on an empty connection string), no groups, no schedule.
+        if (!pg.Enabled) return services;
+
+        pg.Commit();
+
         services
-            .AddOutboxSqlBuilder(scopeKey, configure)
+            .AddOutboxSqlBuilder(pg)
             .AddOutboxRepositories(scopeKey)
             .AddOutboxPartitional(scopeKey)
             .AddOutboxIdGen()

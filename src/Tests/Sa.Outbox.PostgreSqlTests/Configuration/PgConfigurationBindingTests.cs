@@ -209,7 +209,7 @@ public class PgConfigurationBindingTests
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
 
-        new PgOutboxConfiguration(services).WithPollingFromConfiguration("Sa:Outbox:Pg:Polling");
+        new PgOutboxConfiguration(services).WithPollingFromConfiguration("Sa:Outbox:Pg:Polling").Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
@@ -237,7 +237,7 @@ public class PgConfigurationBindingTests
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
 
-        new PgOutboxConfiguration(services).WithPollingFromConfiguration("Polling");
+        new PgOutboxConfiguration(services).WithPollingFromConfiguration("Polling").Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
@@ -258,7 +258,7 @@ public class PgConfigurationBindingTests
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
 
-        new PgOutboxConfiguration(services).WithPollingFromConfiguration("Polling");
+        new PgOutboxConfiguration(services).WithPollingFromConfiguration("Polling").Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
@@ -269,7 +269,7 @@ public class PgConfigurationBindingTests
     public void PollingFromConfiguration_MissingSectionOrConfiguration_IsNoOp()
     {
         var servicesWithoutConfig = new ServiceCollection();
-        new PgOutboxConfiguration(servicesWithoutConfig).WithPollingFromConfiguration("Polling");
+        new PgOutboxConfiguration(servicesWithoutConfig).WithPollingFromConfiguration("Polling").Commit();
 
         using (ServiceProvider provider = servicesWithoutConfig.BuildServiceProvider())
         {
@@ -285,7 +285,7 @@ public class PgConfigurationBindingTests
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
 
-        new PgOutboxConfiguration(services).WithPollingFromConfiguration("Polling");
+        new PgOutboxConfiguration(services).WithPollingFromConfiguration("Polling").Commit();
 
         using ServiceProvider withConfig = services.BuildServiceProvider();
         Assert.False(withConfig.GetRequiredService<PgPollingSettings>().Enabled);
@@ -315,7 +315,7 @@ public class PgConfigurationBindingTests
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
 
-        new PgOutboxConfiguration(services).WithOutboxSettingsFromConfiguration("Sa:Outbox:Pg");
+        new PgOutboxConfiguration(services).WithOutboxSettingsFromConfiguration("Sa:Outbox:Pg").Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
         PgOutboxSettings settings = provider.GetRequiredService<PgOutboxSettings>();
@@ -343,7 +343,7 @@ public class PgConfigurationBindingTests
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
 
-        new PgOutboxConfiguration(services).WithOutboxSettingsFromConfiguration("Pg");
+        new PgOutboxConfiguration(services).WithOutboxSettingsFromConfiguration("Pg").Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
         PgOutboxSettings settings = provider.GetRequiredService<PgOutboxSettings>();
@@ -364,7 +364,7 @@ public class PgConfigurationBindingTests
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
 
-        new PgOutboxConfiguration(services).WithOutboxSettingsFromConfiguration("Pg");
+        new PgOutboxConfiguration(services).WithOutboxSettingsFromConfiguration("Pg").Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
         PgOutboxSettings settings = provider.GetRequiredService<PgOutboxSettings>();
@@ -383,7 +383,7 @@ public class PgConfigurationBindingTests
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
 
-        new PgOutboxConfiguration(services).WithOutboxSettingsFromConfiguration("Pg");
+        new PgOutboxConfiguration(services).WithOutboxSettingsFromConfiguration("Pg").Commit();
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
