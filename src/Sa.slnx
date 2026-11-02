@@ -69,6 +69,7 @@
     <Project Path="Tests/Sa.HybridFileStorageTests/Sa.HybridFileStorageTests.csproj" />
     <Project Path="Tests/Sa.Media.FFmpegTests/Sa.Media.FFmpegTests.csproj" />
     <Project Path="Tests/Sa.MediaTests/Sa.MediaTests.csproj" />
+    <Project Path="Tests/Sa.Outbox.MultiProviderTests/Sa.Outbox.MultiProviderTests.csproj" />
     <Project Path="Tests/Sa.Outbox.PostgreSqlTests/Sa.Outbox.PostgreSqlTests.csproj" />
     <Project Path="Tests/Sa.Outbox.RedisTests/Sa.Outbox.RedisTests.csproj" />
     <Project Path="Tests/Sa.Outbox.Tests/Sa.Outbox.Tests.csproj" />

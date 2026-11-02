@@ -307,6 +307,18 @@ var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
 - Без ключа (`AddSaOutboxUsingRedis(cfg)`) всё работает как раньше: default key `outbox`, префикс
   `sa:outbox`, unkeyed-алиасы `IDatabase`/настроек/паблишера.
 - Тенанты общие на контейнер, а id consumer-групп должны быть уникальны между провайдерами.
+## Миграция 0.1 → 0.2
+
+- **Данные в Redis не мигрируют.** Default key (`AddSaOutboxUsingRedis(cfg)`) использует прежний
+  префикс `sa:outbox`; стримы, группы и PEL читаются как раньше.
+- **Перевод на не-дефолтный provider key** меняет ключи: провайдер получает суффикс `:{key}`
+  (`sa:outbox:billing:...`). Если нужно продолжить со старыми ключами, задайте префикс явно:
+  `WithOutboxSettings((_, s) => s.KeySettings.Prefix = "sa:outbox")`. Иначе это новые, пустые стримы.
+- **Регистрация**: односрочная форма `AddSaOutboxUsingRedis(cfg, outbox, key)`; настройки и команды
+  keyed, для default key сохранены unkeyed-алиасы (`IDatabase`, `RedisOutboxSettings`, паблишер).
+- **Контракты 0.18**: у `IOutboxBulkWriter` один batch-метод, `OutboxDeliveryMessage<T>` — плоская
+  запись с `RentToken` (см. `Sa.Outbox/PlugServices/Readme-ru.md`).
+
 
 ## Ограничения
 

@@ -337,12 +337,12 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
 
 ## Slices
 
-1. **Slice 1 (this one):** core plumbing + PostgreSQL. Two PG providers (different schemas) publish
-   and deliver independently; Redis stays on the default key.
-2. **Slice 2:** Redis — keyed settings (`RedisOutboxSettings`, stream keys prefixed per provider),
-   keyed commands and registration.
-3. **Slice 3:** composite `(providerKey, groupId)` for `IConsumer<T>`/the manager if group uniqueness
-   becomes a constraint; per-provider health.
+1. **Slice 1 (implemented):** core plumbing + PostgreSQL. Two PG providers (different schemas)
+   publish and deliver independently.
+2. **Slice 2 (implemented):** Redis — keyed settings (`RedisOutboxSettings`, provider-prefixed stream
+   keys), keyed commands and registration.
+3. **Slice 3 (implemented):** per-provider health and composite `(providerKey, groupId)` keys for
+   `IConsumer<T>`/the manager/idle state.
 
 ## Invariants
 
@@ -354,11 +354,13 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
 ## Tests
 
 - two PG providers with different schemas: publish to each, independent delivery, independent
-  migrations/cleanup;
-- the default-key PG path behaves as before (the whole existing suite);
-- a duplicate provider key and a duplicate consumer group id fail at startup;
-- `IOutboxPublisherResolver.For(unknown)` — clear error;
-- Redis (slice 1) — the existing suite stays green.
+  migrations/cleanup; the PG layout guard catches identical tables;
+- PostgreSQL and Redis in one container: publish to each, health over both, group-to-provider
+  binding (`Sa.Outbox.MultiProviderTests`);
+- composite keys: the same group id under two providers, a composite `Get`, the ambiguity error of
+  the string API;
+- the default-key PG/Redis paths behave as before (all existing suites);
+- a duplicate provider key fails at startup; `IOutboxPublisherResolver.For(unknown)` — clear error.
 
 ## Status
 
@@ -370,11 +372,21 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
   the key prefix automatically gets a `:{providerKey}` suffix unless the configuration set its own, so
   two providers on one Redis database never collide. The one-call
   `AddSaOutboxUsingRedis(cfg, outbox, key)` overload was added.
-- **Slice 3, part 1 (health) is implemented**; part 2 (composite `(providerKey, groupId)` keys) is not started.
+- **Slice 3, part 1 (health) is implemented**: keyed `IOutboxProviderHealth` (PG `SELECT 1`, Redis
+  `PING`) and the `IOutboxHealth` aggregate (stamps the key, measures latency, never fails on a
+  throwing check).
+- **Slice 3, part 2 (composite keys) is implemented**: `OutboxGroupKey(providerKey, groupId)` for the
+  settings registry, idle states, the delivery job and the consumer cache; composite
+  `IOutboxConsumerManager` overloads; `IConsumer<T>` keyed by the composite key with a string alias
+  for the default key. The string methods work while the id is unambiguous and throw an ambiguity
+  error otherwise.
+- **PG migration guard:** `PgMultiProviderGuard` fails the start when two PG providers point at the
+  same tables (double delivery); the 0.17 → 0.18 migration section lives in the PG readme.
 
-Constraints: tenants are shared per container; consumer group ids are unique across providers
-(validated when the manager is built); provider-internal services are resolved keyed, so user
-extensions registered as a type must use the factory overloads.
+Constraints: tenants are shared per container (`WithTenants` without a key); provider-internal
+services are resolved keyed, so user extensions registered as a type must use the factory overloads;
+two Redis providers with the **same explicitly configured** prefix share their streams (the automatic
+suffix only applies when the prefix was not set).
 
 ## Per-provider health (slice 3, part 1)
 

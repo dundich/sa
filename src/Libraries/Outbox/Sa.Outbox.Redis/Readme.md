@@ -308,6 +308,20 @@ var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
 - Without a key (`AddSaOutboxUsingRedis(cfg)`) everything behaves as before: default key `outbox`,
   prefix `sa:outbox`, unkeyed aliases for `IDatabase`/settings/publisher.
 - Tenants are shared per container, and consumer group ids must be unique across providers.
+## Migrating 0.1 → 0.2
+
+- **Nothing in Redis is migrated.** The default key (`AddSaOutboxUsingRedis(cfg)`) keeps the previous
+  `sa:outbox` prefix; streams, groups and the PEL are read as before.
+- **Moving to a non-default provider key** changes the keys: the provider gets a `:{key}` suffix
+  (`sa:outbox:billing:...`). To continue with the old keys, set the prefix explicitly:
+  `WithOutboxSettings((_, s) => s.KeySettings.Prefix = "sa:outbox")`. Otherwise these are new, empty
+  streams.
+- **Registration**: the one-call `AddSaOutboxUsingRedis(cfg, outbox, key)` overload; settings and
+  commands are keyed, and the default key keeps its unkeyed aliases (`IDatabase`,
+  `RedisOutboxSettings`, the publisher).
+- **0.18 contracts**: `IOutboxBulkWriter` has one batch method, `OutboxDeliveryMessage<T>` is a flat
+  record with a `RentToken` (see `Sa.Outbox/PlugServices/Readme.md`).
+
 
 ## Limitations
 
