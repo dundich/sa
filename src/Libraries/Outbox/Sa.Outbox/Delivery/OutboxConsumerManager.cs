@@ -1,4 +1,4 @@
-namespace Sa.Outbox.Delivery;
+﻿namespace Sa.Outbox.Delivery;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,10 +7,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// Thread-safe manager for runtime control of outbox consumer group settings.
 /// Uses atomic immutable snapshots — no mutation during active delivery, no race conditions.
 /// </summary>
+/// <remarks>
+/// Settings are keyed by <see cref="OutboxGroupKey"/> (provider + group), so two providers may use
+/// the same group id. The legacy string overloads address the default provider and keep working
+/// while the id is unambiguous.
+/// </remarks>
 internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
 {
-    private readonly Dictionary<string, OutboxConsumerSettings> _settings = [];
-    private readonly Dictionary<string, List<Action<OutboxConsumerSettings>>> _listeners = [];
+    private readonly Dictionary<OutboxGroupKey, OutboxConsumerSettings> _settings = [];
+    private readonly Dictionary<OutboxGroupKey, List<Action<OutboxConsumerSettings>>> _listeners = [];
     private readonly Lock _lock = new();
     private readonly ILogger _logger;
 
@@ -32,14 +37,14 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
     /// configuration section) is registered first — so the group is known the moment the manager
     /// is resolved, even before the scheduler starts. The full chain is then built with a live
     /// provider (configuration section included, when a key was given) and, when it differs from
-    /// the stage-1 snapshot, swapped in via <see cref="Apply(string, Func{OutboxConsumerSettings,
-    /// OutboxConsumerSettings})"/> — which also runs the final <see cref="OutboxConsumerSettings.
-    /// ThrowIfInvalid()"/> validation over the fully-composed settings.
+    /// the stage-1 snapshot, swapped in via <see cref="Apply(OutboxGroupKey, Func{OutboxConsumerSettings, OutboxConsumerSettings})"/> —
+    /// which also runs the final <see cref="OutboxConsumerSettings.ThrowIfInvalid()"/> validation
+    /// over the fully-composed settings.
     /// </para>
     /// <para>
-    /// A group that is already known (e.g. two delivery registrations sharing one group id) is
-    /// left as-is — the first registration wins, exactly as <see cref="TryRegister(string,
-    /// OutboxConsumerSettings)"/> guarantees elsewhere.
+    /// A group that is already known (the same provider + group id registered twice) is left as-is
+    /// — the first registration wins, exactly as <see cref="TryRegister(OutboxGroupKey, OutboxConsumerSettings)"/>
+    /// guarantees elsewhere. The same group id under a different provider is a separate group.
     /// </para>
     /// </summary>
     internal OutboxConsumerManager(
@@ -47,74 +52,75 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
         IServiceProvider sp,
         ILogger<OutboxConsumerManager>? logger = null) : this(logger)
     {
-        // Slice-1 multi-provider contract: group ids are unique across providers. The manager and
-        // IConsumer<T> are keyed by the group id alone, so a duplicate across providers would
-        // silently bind one group's settings to another provider's consumer.
-        Dictionary<string, string> providerByGroup = new(StringComparer.Ordinal);
-
         foreach (var registration in registrations)
         {
-            if (providerByGroup.TryGetValue(registration.ConsumerGroupId, out string? existingProvider)
-                && !string.Equals(existingProvider, registration.ProviderKey, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    $"Consumer group id '{registration.ConsumerGroupId}' is used by providers " +
-                    $"'{existingProvider}' and '{registration.ProviderKey}'. Group ids must be unique " +
-                    "across providers; rename one of the groups.");
-            }
+            var key = new OutboxGroupKey(registration.ProviderKey, registration.ConsumerGroupId);
 
-            providerByGroup[registration.ConsumerGroupId] = registration.ProviderKey;
-
-            if (!TryRegister(registration.ConsumerGroupId, registration.RegistrationTimeSettings))
+            if (!TryRegister(key, registration.RegistrationTimeSettings))
                 continue;
 
             OutboxConsumerSettings full = registration.BuildFull(sp);
             if (full != registration.RegistrationTimeSettings)
-                Apply(registration.ConsumerGroupId, _ => full);
+                Apply(key, _ => full);
         }
     }
 
     /// <inheritdoc/>
     public bool TryRegister(string consumerGroupId, OutboxConsumerSettings settings)
     {
-        if (string.IsNullOrWhiteSpace(consumerGroupId))
-            throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
+        EnsureGroupId(consumerGroupId);
+        return TryRegister(new OutboxGroupKey(OutboxScope.DefaultKey, consumerGroupId), settings);
+    }
 
+    /// <inheritdoc/>
+    public bool TryRegister(OutboxGroupKey key, OutboxConsumerSettings settings)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key.GroupId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key.ProviderKey);
         ArgumentNullException.ThrowIfNull(settings);
 
         settings.ThrowIfInvalid();
 
         lock (_lock)
         {
-            if (_settings.ContainsKey(consumerGroupId))
+            if (_settings.ContainsKey(key))
                 return false;
 
-            _settings[consumerGroupId] = settings;
+            _settings[key] = settings;
 
-            if (!_listeners.ContainsKey(consumerGroupId))
+            if (!_listeners.ContainsKey(key))
             {
-                _listeners[consumerGroupId] = [];
+                _listeners[key] = [];
             }
         }
 
         // Notify subscribers OUTSIDE the lock to avoid deadlocks
-        NotifyListeners(consumerGroupId, settings);
+        NotifyListeners(key, settings);
         return true;
     }
 
     /// <summary>
-    /// How many times <see cref="Apply"/> re-runs a transform that lost a race. Contention is
-    /// bounded by a handful of writers in practice; the cap turns a pathological livelock into a
-    /// loud failure instead of a call that never returns.
+    /// How many times <see cref="Apply(OutboxGroupKey, Func{OutboxConsumerSettings, OutboxConsumerSettings})"/>
+    /// re-runs a transform that lost a race. Contention is bounded by a handful of writers in
+    /// practice; the cap turns a pathological livelock into a loud failure instead of a call that
+    /// never returns.
     /// </summary>
     private const int MaxApplyAttempts = 64;
 
     /// <inheritdoc/>
     public void Apply(string consumerGroupId, Func<OutboxConsumerSettings, OutboxConsumerSettings> transform)
     {
-        if (string.IsNullOrWhiteSpace(consumerGroupId))
-            throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
+        EnsureGroupId(consumerGroupId);
+        ArgumentNullException.ThrowIfNull(transform);
 
+        Apply(ResolveUnique(consumerGroupId), transform);
+    }
+
+    /// <inheritdoc/>
+    public void Apply(OutboxGroupKey key, Func<OutboxConsumerSettings, OutboxConsumerSettings> transform)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key.GroupId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key.ProviderKey);
         ArgumentNullException.ThrowIfNull(transform);
 
         // The transform runs outside the lock. Lock is not reentrant: a callback that called
@@ -126,7 +132,7 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
             if (attempt > MaxApplyAttempts)
             {
                 throw new InvalidOperationException(
-                    $"Could not apply settings for consumer group '{consumerGroupId}': " +
+                    $"Could not apply settings for consumer group '{key}': " +
                     $"{MaxApplyAttempts} consecutive updates landed while the transform was running.");
             }
 
@@ -134,10 +140,10 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
 
             lock (_lock)
             {
-                if (!_settings.TryGetValue(consumerGroupId, out existing!))
+                if (!_settings.TryGetValue(key, out existing!))
                 {
                     throw new InvalidOperationException(
-                        $"Consumer group '{consumerGroupId}' is not registered. Call Register() first.");
+                        $"Consumer group '{key}' is not registered. Call Register() first.");
                 }
             }
 
@@ -146,20 +152,20 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
 
             lock (_lock)
             {
-                if (!_settings.TryGetValue(consumerGroupId, out var current))
+                if (!_settings.TryGetValue(key, out var current))
                 {
                     throw new InvalidOperationException(
-                        $"Consumer group '{consumerGroupId}' is not registered. Call Register() first.");
+                        $"Consumer group '{key}' is not registered. Call Register() first.");
                 }
 
                 if (!ReferenceEquals(current, existing))
                     continue;
 
-                _settings[consumerGroupId] = newSettings;
+                _settings[key] = newSettings;
             }
 
             // Notify subscribers OUTSIDE the lock to avoid deadlocks
-            NotifyListeners(consumerGroupId, newSettings);
+            NotifyListeners(key, newSettings);
             return;
         }
     }
@@ -167,14 +173,25 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
     /// <inheritdoc/>
     public OutboxConsumerSettings? Get(string consumerGroupId)
     {
-        if (string.IsNullOrWhiteSpace(consumerGroupId))
-            throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
+        EnsureGroupId(consumerGroupId);
 
         lock (_lock)
         {
-            return _settings.TryGetValue(consumerGroupId, out var settings)
-                ? settings
-                : null;
+            OutboxGroupKey? key = ResolveOrNull(consumerGroupId);
+            if (key is not { } resolved) return null;
+
+            return _settings.TryGetValue(resolved, out var settings) ? settings : null;
+        }
+    }
+
+    /// <inheritdoc/>
+    public OutboxConsumerSettings? Get(OutboxGroupKey key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key.GroupId);
+
+        lock (_lock)
+        {
+            return _settings.TryGetValue(key, out var settings) ? settings : null;
         }
     }
 
@@ -185,7 +202,19 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
 
         lock (_lock)
         {
-            return _settings.ContainsKey(consumerGroupId);
+            OutboxGroupKey? key = ResolveOrNull(consumerGroupId);
+            return key is { } resolved && _settings.ContainsKey(resolved);
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool IsRegistered(OutboxGroupKey key)
+    {
+        if (string.IsNullOrWhiteSpace(key.GroupId)) return false;
+
+        lock (_lock)
+        {
+            return _settings.ContainsKey(key);
         }
     }
 
@@ -196,38 +225,70 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
 
         lock (_lock)
         {
-            return _settings.TryGetValue(consumerGroupId, out var settings) && settings.Paused;
+            OutboxGroupKey? key = ResolveOrNull(consumerGroupId);
+            return key is { } resolved && _settings.TryGetValue(resolved, out var settings) && settings.Paused;
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool IsPaused(OutboxGroupKey key)
+    {
+        if (string.IsNullOrWhiteSpace(key.GroupId)) return false;
+
+        lock (_lock)
+        {
+            return _settings.TryGetValue(key, out var settings) && settings.Paused;
         }
     }
 
     /// <inheritdoc/>
     public void Pause(string consumerGroupId)
     {
-        if (string.IsNullOrWhiteSpace(consumerGroupId))
-            throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
-
-        Apply(consumerGroupId, s => s with { Paused = true });
+        EnsureGroupId(consumerGroupId);
+        Pause(ResolveUnique(consumerGroupId));
     }
+
+    /// <inheritdoc/>
+    public void Pause(OutboxGroupKey key)
+        => Apply(key, s => s with { Paused = true });
 
     /// <inheritdoc/>
     public void Resume(string consumerGroupId)
     {
-        if (string.IsNullOrWhiteSpace(consumerGroupId))
-            throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
-
-        Apply(consumerGroupId, s => s with { Paused = false });
+        EnsureGroupId(consumerGroupId);
+        Resume(ResolveUnique(consumerGroupId));
     }
+
+    /// <inheritdoc/>
+    public void Resume(OutboxGroupKey key)
+        => Apply(key, s => s with { Paused = false });
 
     /// <inheritdoc/>
     public void Unregister(string consumerGroupId)
     {
-        if (string.IsNullOrWhiteSpace(consumerGroupId))
-            throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
+        EnsureGroupId(consumerGroupId);
+
+        OutboxGroupKey key;
 
         lock (_lock)
         {
-            _settings.Remove(consumerGroupId);
-            _listeners.Remove(consumerGroupId);
+            // Unregistering an unknown group has always been a no-op; with composite keys there is
+            // nothing to remove, and the default provider is the only sensible guess.
+            key = ResolveOrNull(consumerGroupId) ?? new OutboxGroupKey(OutboxScope.DefaultKey, consumerGroupId);
+        }
+
+        Unregister(key);
+    }
+
+    /// <inheritdoc/>
+    public void Unregister(OutboxGroupKey key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key.GroupId);
+
+        lock (_lock)
+        {
+            _settings.Remove(key);
+            _listeners.Remove(key);
         }
     }
 
@@ -236,28 +297,50 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
     {
         lock (_lock)
         {
-            // Must be a copy: returning the live KeyCollection would let the caller observe
-            // concurrent Register/Unregister mutations (and throw on enumeration) long after
-            // the lock has been released.
-            return _settings.Keys.ToList().AsReadOnly();
+            // Must be a copy: returning the live collection would let the caller observe concurrent
+            // Register/Unregister mutations (and throw on enumeration) long after the lock has been
+            // released. Partition names are keyed by the plain group id, so duplicates across
+            // providers collapse here on purpose.
+            return _settings.Keys
+                .Select(static key => key.GroupId)
+                .Distinct(StringComparer.Ordinal)
+                .ToList()
+                .AsReadOnly();
         }
     }
 
     /// <inheritdoc/>
     public IDisposable Subscribe(string consumerGroupId, Action<OutboxConsumerSettings> onChanged)
     {
-        if (string.IsNullOrWhiteSpace(consumerGroupId))
-            throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
-
+        EnsureGroupId(consumerGroupId);
         ArgumentNullException.ThrowIfNull(onChanged);
 
-        var subscription = new Subscription(this, consumerGroupId, onChanged);
+        OutboxGroupKey key;
 
         lock (_lock)
         {
-            if (!_listeners.TryGetValue(consumerGroupId, out var list))
+            // Subscribing before the group is registered has always been allowed (the listener
+            // fires once the group appears). With composite keys an unknown id maps to the default
+            // provider, which is what the legacy API addresses.
+            key = ResolveOrNull(consumerGroupId) ?? new OutboxGroupKey(OutboxScope.DefaultKey, consumerGroupId);
+        }
+
+        return Subscribe(key, onChanged);
+    }
+
+    /// <inheritdoc/>
+    public IDisposable Subscribe(OutboxGroupKey key, Action<OutboxConsumerSettings> onChanged)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key.GroupId);
+        ArgumentNullException.ThrowIfNull(onChanged);
+
+        var subscription = new Subscription(this, key, onChanged);
+
+        lock (_lock)
+        {
+            if (!_listeners.TryGetValue(key, out var list))
             {
-                _listeners[consumerGroupId] = list = [];
+                _listeners[key] = list = [];
             }
 
             list.Add(onChanged);
@@ -266,7 +349,7 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
         return subscription;
     }
 
-    internal void NotifyListeners(string consumerGroupId, OutboxConsumerSettings newSettings)
+    internal void NotifyListeners(OutboxGroupKey key, OutboxConsumerSettings newSettings)
     {
         Action<OutboxConsumerSettings>[] listeners;
 
@@ -274,7 +357,7 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
         {
             // Snapshot. The list is mutated by Subscribe/Dispose, and firing outside the lock
             // used to enumerate that live list — InvalidOperationException, or a skipped callback.
-            if (!_listeners.TryGetValue(consumerGroupId, out var list) || list.Count == 0)
+            if (!_listeners.TryGetValue(key, out var list) || list.Count == 0)
                 return;
 
             listeners = list.ToArray();
@@ -289,8 +372,61 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
             catch (Exception ex)
             {
                 // Debug.WriteLine is compiled out of Release, so a throwing listener used to vanish.
-                LogListenerError(_logger, ex, consumerGroupId);
+                LogListenerError(_logger, ex, key.ToString());
             }
+        }
+    }
+
+    /// <summary>
+    /// The legacy guard: a plain <see cref="ArgumentException"/> for null, empty and whitespace,
+    /// which is what the string API always threw.
+    /// </summary>
+    private static void EnsureGroupId(string? consumerGroupId)
+    {
+        if (string.IsNullOrWhiteSpace(consumerGroupId))
+            throw new ArgumentException("Consumer group ID cannot be null or empty.", nameof(consumerGroupId));
+    }
+
+    /// <summary>
+    /// Resolves the single key carrying <paramref name="consumerGroupId"/>. The caller must hold
+    /// <see cref="_lock"/>. Throws when two providers use the same id: the legacy string API cannot
+    /// pick one, and silently picking the first would apply the change to the wrong storage.
+    /// </summary>
+    private OutboxGroupKey ResolveUnique(string consumerGroupId)
+    {
+        lock (_lock)
+        {
+            return ResolveOrNull(consumerGroupId) ?? throw new InvalidOperationException(
+                $"Consumer group '{consumerGroupId}' is not registered.");
+        }
+    }
+
+    /// <summary>
+    /// Finds the key for a group id, or <see langword="null"/> when none is registered. The caller
+    /// must hold <see cref="_lock"/>. Throws when the id is ambiguous across providers.
+    /// </summary>
+    private OutboxGroupKey? ResolveOrNull(string consumerGroupId)
+    {
+        lock (_lock)
+        {
+            OutboxGroupKey? found = null;
+
+            foreach (OutboxGroupKey key in _settings.Keys)
+            {
+                if (!string.Equals(key.GroupId, consumerGroupId, StringComparison.Ordinal)) continue;
+
+                if (found is { } existing)
+                {
+                    throw new InvalidOperationException(
+                        $"Consumer group id '{consumerGroupId}' is registered by providers " +
+                        $"'{existing.ProviderKey}' and '{key.ProviderKey}'. Use the OutboxGroupKey " +
+                        "overload of IOutboxConsumerManager to address one of them.");
+                }
+
+                found = key;
+            }
+
+            return found;
         }
     }
 
@@ -303,14 +439,14 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
     private sealed class Subscription : IDisposable
     {
         private readonly OutboxConsumerManager _manager;
-        private readonly string _consumerGroupId;
+        private readonly OutboxGroupKey _key;
         private readonly Action<OutboxConsumerSettings> _callback;
         private bool _disposed;
 
-        internal Subscription(OutboxConsumerManager manager, string consumerGroupId, Action<OutboxConsumerSettings> callback)
+        internal Subscription(OutboxConsumerManager manager, OutboxGroupKey key, Action<OutboxConsumerSettings> callback)
         {
             _manager = manager;
-            _consumerGroupId = consumerGroupId;
+            _key = key;
             _callback = callback;
         }
 
@@ -321,7 +457,7 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
 
             lock (_manager._lock)
             {
-                if (_manager._listeners.TryGetValue(_consumerGroupId, out var list))
+                if (_manager._listeners.TryGetValue(_key, out var list))
                 {
                     list.Remove(_callback);
                 }

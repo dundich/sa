@@ -76,7 +76,7 @@ public sealed class OutboxIdleBackoffTests(OutboxIdleBackoffTests.Fixture fixtur
         Assert.True(await scheduler.Start(ct) >= 1);
 
         var registry = fixture.ServiceProvider.GetRequiredService<IOutboxIdleStateRegistry>();
-        var state = registry.Get(fixture.ConsumerSettings.ConsumerGroupId);
+        var state = registry.Get(new OutboxGroupKey(OutboxScope.DefaultKey, fixture.ConsumerSettings.ConsumerGroupId));
         Assert.NotNull(state);
 
         var baseInterval = fixture.ConsumerSettings.Interval;

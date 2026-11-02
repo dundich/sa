@@ -7,10 +7,10 @@ namespace Sa.Outbox.Delivery;
 internal interface IOutboxIdleStateRegistry
 {
     /// <summary>Gets the state for a group, creating it on first use.</summary>
-    OutboxIdleState GetOrAdd(string consumerGroupId, TimeSpan baseInterval, TimeSpan maxInterval);
+    OutboxIdleState GetOrAdd(OutboxGroupKey key, TimeSpan baseInterval, TimeSpan maxInterval);
 
     /// <summary>Gets the state for a group, or <c>null</c> if it was never created.</summary>
-    OutboxIdleState? Get(string consumerGroupId);
+    OutboxIdleState? Get(OutboxGroupKey key);
 
     /// <summary>Resets every tracked group's back-off to its base interval.</summary>
     void ResetAll();
@@ -18,31 +18,32 @@ internal interface IOutboxIdleStateRegistry
 
 internal sealed class OutboxIdleStateRegistry(IEmptyQueueWaitStrategy strategy) : IOutboxIdleStateRegistry
 {
-    private readonly Dictionary<string, OutboxIdleState> _states = [];
+    private readonly Dictionary<OutboxGroupKey, OutboxIdleState> _states = [];
     private readonly Lock _lock = new();
 
-    public OutboxIdleState GetOrAdd(string consumerGroupId, TimeSpan baseInterval, TimeSpan maxInterval)
+    public OutboxIdleState GetOrAdd(OutboxGroupKey key, TimeSpan baseInterval, TimeSpan maxInterval)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(consumerGroupId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key.GroupId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key.ProviderKey);
 
         lock (_lock)
         {
-            if (_states.TryGetValue(consumerGroupId, out var existing))
+            if (_states.TryGetValue(key, out var existing))
                 return existing;
 
             var state = new OutboxIdleState(strategy, baseInterval, maxInterval);
-            _states[consumerGroupId] = state;
+            _states[key] = state;
             return state;
         }
     }
 
-    public OutboxIdleState? Get(string consumerGroupId)
+    public OutboxIdleState? Get(OutboxGroupKey key)
     {
-        if (string.IsNullOrWhiteSpace(consumerGroupId)) return null;
+        if (string.IsNullOrWhiteSpace(key.GroupId)) return null;
 
         lock (_lock)
         {
-            return _states.TryGetValue(consumerGroupId, out var state) ? state : null;
+            return _states.TryGetValue(key, out var state) ? state : null;
         }
     }
 

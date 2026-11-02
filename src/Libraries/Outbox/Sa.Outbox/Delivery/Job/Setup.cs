@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.PlugServices;
 using Sa.Schedule;
 using System.Diagnostics.CodeAnalysis;
@@ -39,10 +40,22 @@ internal static class Setup
         // stages — and the consumer the delivery resolves at runtime — always agree.
         OutboxConsumerSettings registrationSettings = BuildSettings(null);
 
+        var groupKey = new OutboxGroupKey(scopeKey, consumerGroupId);
+
+        // A job id we own: the delivery job is registered below with a factory carrying the
+        // composite group key, and AddJob's TryAddKeyedScoped must not replace it.
+        Guid resolvedJobId = jobId ?? Guid.NewGuid();
+
+        services.AddKeyedScoped<DeliveryJob<TMessage>>(resolvedJobId, (sp, _) => new DeliveryJob<TMessage>(
+            sp.GetRequiredService<IDeliveryProcessor>(),
+            sp.GetRequiredService<IOutboxConsumerManager>(),
+            sp.GetRequiredService<IOutboxIdleStateRegistry>(),
+            groupKey));
+
         // The consumer's DI lifetime is the registration identity and cannot be shaped by
         // configuration: AddDelivery = keyed singleton, AddDeliveryScoped = keyed scoped.
         // (The settings' AsSingleton flag mirrors this and is deliberately not a tunable.)
-        Registered<TConsumer, TMessage>(services, isSingleton, consumerGroupId);
+        Registered<TConsumer, TMessage>(services, isSingleton, scopeKey, consumerGroupId);
 
         services.AddSingleton(new DeliveryGroupSettingsRegistration(
             consumerGroupId,
@@ -68,16 +81,16 @@ internal static class Setup
                 // snapshot to the full chain (with a live provider), so the job simply reads the
                 // final settings — it does not rebuild or re-register them.
                 var manager = sp.GetRequiredService<IOutboxConsumerManager>();
-                OutboxConsumerSettings settings = manager.Get(consumerGroupId)
+                OutboxConsumerSettings settings = manager.Get(groupKey)
                     ?? throw new InvalidOperationException(
-                        $"No OutboxConsumerSettings for consumer group '{consumerGroupId}'.");
+                        $"No OutboxConsumerSettings for consumer group '{groupKey}'.");
 
                 // Timing is adaptive: the job reports each run's outcome into this state and the
                 // timing reads it back here. Fixed-interval behavior is preserved when
                 // IdleMaxInterval is zero.
                 var idleStates = sp.GetRequiredService<IOutboxIdleStateRegistry>();
                 OutboxIdleState idleState = idleStates.GetOrAdd(
-                    consumerGroupId,
+                    groupKey,
                     settings.Interval,
                     settings.IdleMaxInterval);
 
@@ -92,7 +105,7 @@ internal static class Setup
                         .ThenCloseApplication())
                     ;
 
-            }, jobId);
+            }, resolvedJobId);
 
             builder.AddInterceptor<DeliveryJobInterceptor>();
         });
@@ -143,15 +156,34 @@ internal static class Setup
     private static void Registered<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         IServiceCollection services,
         bool isSingleton,
+        string providerKey,
         string consumerGroupId) where TConsumer : class, IConsumer<TMessage>
     {
+        var key = new OutboxGroupKey(providerKey, consumerGroupId);
+
         if (isSingleton)
         {
-            services.AddKeyedSingleton<IConsumer<TMessage>, TConsumer>(consumerGroupId);
+            services.AddKeyedSingleton<IConsumer<TMessage>, TConsumer>(key);
         }
         else
         {
-            services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(consumerGroupId);
+            services.AddKeyedScoped<IConsumer<TMessage>, TConsumer>(key);
+        }
+
+        // Backward compatibility: the default provider's consumer is also reachable by the plain
+        // group id, which is what code (and tests) registered before multi-provider used.
+        if (!string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+            return;
+
+        if (isSingleton)
+        {
+            services.TryAddKeyedSingleton<IConsumer<TMessage>>(
+                consumerGroupId, (sp, _) => sp.GetRequiredKeyedService<IConsumer<TMessage>>(key));
+        }
+        else
+        {
+            services.TryAddKeyedScoped<IConsumer<TMessage>>(
+                consumerGroupId, (sp, _) => sp.GetRequiredKeyedService<IConsumer<TMessage>>(key));
         }
     }
 }

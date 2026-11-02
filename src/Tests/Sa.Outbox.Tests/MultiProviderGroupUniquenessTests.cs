@@ -5,8 +5,9 @@ using Sa.Outbox.Delivery;
 namespace Sa.Outbox.Tests;
 
 /// <summary>
-/// Slice-1 multi-provider contract: consumer group ids are unique across providers because the
-/// consumer manager and <see cref="IConsumer{TMessage}"/> are keyed by the group id alone.
+/// Multi-provider group identity: the same group id may exist under two providers. The manager and
+/// the consumers are keyed by <see cref="OutboxGroupKey"/>; the legacy string API fails loudly when
+/// the id is ambiguous instead of picking a provider.
 /// </summary>
 public class MultiProviderGroupUniquenessTests
 {
@@ -26,7 +27,7 @@ public class MultiProviderGroupUniquenessTests
     }
 
     [Fact]
-    public void SameGroupId_UnderDifferentProviders_ThrowsOnManagerResolution()
+    public void SameGroupId_UnderDifferentProviders_IsAddressableByCompositeKey()
     {
         var services = new ServiceCollection();
         services.AddSaOutbox(
@@ -39,9 +40,18 @@ public class MultiProviderGroupUniquenessTests
             "provider-b");
 
         using ServiceProvider sp = services.BuildServiceProvider();
+        var manager = sp.GetRequiredService<IOutboxConsumerManager>();
 
-        Assert.Throws<InvalidOperationException>(
-            () => sp.GetRequiredService<IOutboxConsumerManager>());
+        var a = manager.Get(new OutboxGroupKey("provider-a", "shared_group"));
+        var b = manager.Get(new OutboxGroupKey("provider-b", "shared_group"));
+
+        Assert.NotNull(a);
+        Assert.NotNull(b);
+        Assert.Equal("provider-a", a.ProviderKey);
+        Assert.Equal("provider-b", b.ProviderKey);
+
+        // The legacy string API cannot pick one provider and must not guess.
+        Assert.Throws<InvalidOperationException>(() => manager.Get("shared_group"));
     }
 
     [Fact]

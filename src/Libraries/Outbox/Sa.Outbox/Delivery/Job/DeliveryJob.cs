@@ -1,4 +1,4 @@
-﻿using Sa.Schedule;
+using Sa.Schedule;
 
 namespace Sa.Outbox.Delivery.Job;
 
@@ -9,7 +9,8 @@ public interface IDeliveryJob : IJob;
 internal sealed class DeliveryJob<TMessage>(
     IDeliveryProcessor processor,
     IOutboxConsumerManager settingsManager,
-    IOutboxIdleStateRegistry idleStates) : IDeliveryJob
+    IOutboxIdleStateRegistry idleStates,
+    OutboxGroupKey groupKey) : IDeliveryJob
 {
     /// <summary>
     /// Scheduled entry point: resolves the consumer group settings and runs one delivery cycle.
@@ -28,12 +29,12 @@ internal sealed class DeliveryJob<TMessage>(
     /// </summary>
     public async Task Execute(IJobContext context, CancellationToken cancellationToken)
     {
-        var settings = settingsManager.Get(context.JobName)
-            ?? throw new InvalidOperationException($"No OutboxConsumerSettings for consumer group '{context.JobName}'.");
+        var settings = settingsManager.Get(groupKey)
+            ?? throw new InvalidOperationException($"No OutboxConsumerSettings for consumer group '{groupKey}'.");
 
         long processed = await processor.ProcessMessages<TMessage>(settings, cancellationToken).ConfigureAwait(false);
 
-        OutboxIdleState? idleState = idleStates.Get(context.JobName);
+        OutboxIdleState? idleState = idleStates.Get(groupKey);
         if (idleState is null) return;
 
         // While paused a run always yields zero. Reset instead of backing off, so that resuming

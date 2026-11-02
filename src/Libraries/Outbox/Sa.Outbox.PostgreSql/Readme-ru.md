@@ -807,6 +807,64 @@ rows/s всего   ≈ min(N_партов × rows/s на парт, потоло
 - p99 публикации на клиенте, а не только серверное время.
 
 ---
+## Миграция 0.17 → 0.18 (существующие развёртывания)
+
+**Схема БД не меняется.** Таблицы, колонки, партиции, `__offset$` и курсор `msg_seq` те же;
+`OutboxRentToken` живёт только в памяти. Миграция данных не требуется.
+
+### Что поменялось в коде
+
+| Было | Стало |
+|---|---|
+| `IOutboxBulkWriter`: 4 перегрузки, абстрактна legacy | один абстрактный `InsertBulk(batch, context, ct)`; legacy-перегрузки и `OutboxMessage<T>` удалены |
+| `OutboxDeliveryMessage<T>(OutboxId, OutboxMessage<T>, DeliveryInfo)` | плоская запись `(OutboxId, PayloadId, Payload, PartInfo, DeliveryInfo, RentToken)` |
+| `IOutboxPlugin` (закомментирован) | `AddOutboxProvider(descriptor, builder)` |
+| — | `IOutboxProviderRegistry`, `IOutboxPublisherResolver`, `IOutboxHealth` |
+
+- **Свой writer** (если был): реализуйте `InsertBulk(batch, context, ct)` и зарегистрируйте через
+  `AddOutboxProvider(...).WithBulkWriter(sp => new MyWriter(...))`.
+- **Свой консьюмер** продолжает работать: строковые ключи и строковые методы
+  `IOutboxConsumerManager` сохранены.
+- Штатные пакеты PG/Redis уже переведены на новые контракты — приложение, которое пользуется
+  только `AddSaOutbox`/`AddSaOutboxUsingPostgreSql` и `IOutboxMessagePublisher`, правок не требует.
+
+### Регистрация
+
+- Default provider key остаётся `"outbox"`; для него сохранены unkeyed-алиасы:
+  `IOutboxMessagePublisher`, `IOutboxProviderRegistry`, `PgOutboxSettings` (+ компоненты),
+  `PgPollingSettings`, `IDatabase` (Redis), три storage-контракта. Старый код, резолвящий их без
+  ключа, продолжает работать.
+- Новый односрочный overload: `AddSaOutboxUsingPostgreSql(cfg, outbox)`, `scopeKey` пишется один раз.
+- `WithOutboxSettings`/`WithPolling` — теперь действия **своего** провайдера; одна и та же
+  регистрация не влияет на второй провайдер.
+
+### Если добавляете второй PG-провайдер
+
+1. Дайте ему **свою схему** (или свои имена таблиц): `WithOutboxSettings((_, s) => s.TableSettings.WithSchema("billing"))`.
+2. Стартовая проверка `PgMultiProviderGuard` падает, если два провайдера указывают на одни и те же
+   таблицы (иначе каждое сообщение доставлялось бы дважды), и на одном `(host, port, database)` с
+   одинаковой схемой/таблицами.
+3. Миграция партиций второго провайдера — его собственный job (создаст листья в своей схеме).
+4. Consumer-группы с одинаковыми id у разных провайдеров теперь допустимы: менеджер и консьюмеры
+   адресуются `(providerKey, groupId)`; строковые методы бросают ошибку неоднозначности.
+
+### Если переводите существующий outbox на не-дефолтный key
+
+- PG хранилище не меняется: те же схема/таблицы/курсоры, поэтому накопленные сообщения и offset'ы
+  читаются как раньше.
+- Data source становится keyed (`AddSaPostgreSqlDataSource(key, ...)`); заимствованный unkeyed
+  `NpgsqlDataSource` по-прежнему находится через `PgDataSourceResolver`.
+- Расписание и partitional-модуль переезжают под новый scope key.
+
+### Откат
+
+0.18 не пишет новую схему, поэтому откат на 0.17 безопасен. Единственный след — таблицы второго
+провайдера, если он успел создать партиции; они просто останутся неиспользуемыми.
+
+> Redis: перевод существующего провайдера на не-дефолтный ключ меняет префикс стримов
+> (`sa:outbox` → `sa:outbox:{key}`). Задайте префикс явно через `WithOutboxSettings`, чтобы сохранить
+> старые ключи.
+
 
 ## Требования
 

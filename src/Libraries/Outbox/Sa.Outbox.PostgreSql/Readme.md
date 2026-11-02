@@ -795,6 +795,64 @@ values for 8 producers, not the raw disk fsync.
 - publish p99 on the client, not only server-side time.
 
 ---
+## Migrating 0.17 → 0.18 (existing deployments)
+
+**The database schema does not change.** The tables, columns, partitions, `__offset$` and the
+`msg_seq` cursor are the same; `OutboxRentToken` lives in memory only. No data migration is needed.
+
+### Code changes
+
+| Before | After |
+|---|---|
+| `IOutboxBulkWriter`: 4 overloads, the legacy one abstract | one abstract `InsertBulk(batch, context, ct)`; the legacy overloads and `OutboxMessage<T>` are removed |
+| `OutboxDeliveryMessage<T>(OutboxId, OutboxMessage<T>, DeliveryInfo)` | a flat record `(OutboxId, PayloadId, Payload, PartInfo, DeliveryInfo, RentToken)` |
+| `IOutboxPlugin` (commented out) | `AddOutboxProvider(descriptor, builder)` |
+| — | `IOutboxProviderRegistry`, `IOutboxPublisherResolver`, `IOutboxHealth` |
+
+- **A custom writer** (if any): implement `InsertBulk(batch, context, ct)` and register it with
+  `AddOutboxProvider(...).WithBulkWriter(sp => new MyWriter(...))`.
+- **A custom consumer** keeps working: string keys and the string overloads of
+  `IOutboxConsumerManager` are preserved.
+- The PG/Redis packages are already on the new contracts — an application that only uses
+  `AddSaOutbox`/`AddSaOutboxUsingPostgreSql` and `IOutboxMessagePublisher` needs no changes.
+
+### Registration
+
+- The default provider key stays `"outbox"`; its unkeyed aliases are kept:
+  `IOutboxMessagePublisher`, `IOutboxProviderRegistry`, `PgOutboxSettings` (+ components),
+  `PgPollingSettings`, `IDatabase` (Redis), and the three storage contracts. Existing code that
+  resolves them without a key keeps working.
+- New one-call overload: `AddSaOutboxUsingPostgreSql(cfg, outbox)`, with `scopeKey` written once.
+- `WithOutboxSettings`/`WithPolling` actions are now per provider; one registration no longer affects
+  a second provider.
+
+### Adding a second PG provider
+
+1. Give it **its own schema** (or its own table names):
+   `WithOutboxSettings((_, s) => s.TableSettings.WithSchema("billing"))`.
+2. The startup `PgMultiProviderGuard` fails when two providers point at the same tables (every
+   message would be delivered twice), i.e. the same `(host, port, database)` with the same
+   schema/table names.
+3. The second provider's partitions are created by its own migration job (in its own schema).
+4. Consumer groups may now share an id across providers: the manager and consumers are addressed by
+   `(providerKey, groupId)`; the string overloads throw an ambiguity error.
+
+### Moving an existing outbox to a non-default key
+
+- The PG storage does not change: same schema/tables/cursors, so stored messages and offsets are read
+  as before.
+- The data source becomes keyed (`AddSaPostgreSqlDataSource(key, ...)`); a borrowed unkeyed
+  `NpgsqlDataSource` is still found through `PgDataSourceResolver`.
+- The schedule and the partitional module move to the new scope key.
+
+### Rollback
+
+0.18 writes no new schema, so rolling back to 0.17 is safe. The only trace is the second provider's
+tables if it already created partitions; they simply stay unused.
+
+> Redis: moving an existing provider to a non-default key changes the stream prefix
+> (`sa:outbox` → `sa:outbox:{key}`). Set the prefix explicitly via `WithOutboxSettings` to keep the old
+> keys.
 
 ## Requirements
 

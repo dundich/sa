@@ -25,6 +25,14 @@ internal static class Setup
         services.TryAddKeyedSingleton<IOutboxProviderHealth>(providerKey, (sp, _) =>
             new PgOutboxHealth(PgDataSourceResolver.Resolve(sp, providerKey)));
 
+        // Two providers on the same tables would deliver every message twice; the guard compares
+        // the layouts at host start. One marker per provider key, one guard for all of them.
+        // Unkeyed on purpose: an IEnumerable<T> injection does not see keyed registrations.
+        services.AddSingleton(new PgProviderLayout(providerKey));
+        services.TryAddEnumerable(
+            Microsoft.Extensions.DependencyInjection.ServiceDescriptor
+                .Singleton<Microsoft.Extensions.Hosting.IHostedService, PgMultiProviderGuard>());
+
         // The single provider-registration point: identity, capabilities, the three storage
         // contracts and the startup validation. Publish joins the caller's PgTransaction, tenant
         // detection reads the tenant list, lock renewal is honoured, and Postpone/Retry delays are

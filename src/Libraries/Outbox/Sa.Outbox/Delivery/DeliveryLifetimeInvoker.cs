@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent;
 
 namespace Sa.Outbox.Delivery;
@@ -12,7 +12,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
     // Keyed by (message type, consumer group) rather than by group alone: a group id is only unique
     // per message type, so keying by group alone would hand a second TMessage the first one's
     // consumer instance and fail the cast below with InvalidCastException inside the delivery path.
-    private readonly ConcurrentDictionary<(Type MessageType, string ConsumerGroupId), IConsumer> _singletonConsumers = new();
+    private readonly ConcurrentDictionary<(Type MessageType, string ProviderKey, string ConsumerGroupId), IConsumer> _singletonConsumers = new();
 
     // Method to process messages using a consumer in scope
     public Task ConsumeInScope<TMessage>(
@@ -32,7 +32,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
     {
-        var consumer = GetOrCreateSingletonConsumer<TMessage>(settings.ConsumerGroupId);
+        var consumer = GetOrCreateSingletonConsumer<TMessage>(settings);
         return ProcessMessages(consumer, settings, filter, messages, cancellationToken);
     }
 
@@ -43,12 +43,22 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         CancellationToken cancellationToken)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
-        IConsumer<TMessage> consumer = GetConsumer<TMessage>(scope.ServiceProvider, settings.ConsumerGroupId);
+        IConsumer<TMessage> consumer = GetConsumer<TMessage>(scope.ServiceProvider, settings);
         await ProcessMessages(consumer, settings, filter, messages, cancellationToken).ConfigureAwait(false);
     }
 
-    private static IConsumer<TMessage> GetConsumer<TMessage>(IServiceProvider sp, string key)
-        => sp.GetRequiredKeyedService<IConsumer<TMessage>>(key);
+    /// <summary>
+    /// Resolves the consumer by the provider + group key. Falls back to the plain group id, so a
+    /// consumer registered manually under the legacy string key (or before multi-provider existed)
+    /// keeps resolving.
+    /// </summary>
+    private static IConsumer<TMessage> GetConsumer<TMessage>(IServiceProvider sp, OutboxConsumerSettings settings)
+    {
+        var key = new OutboxGroupKey(settings.ProviderKey, settings.ConsumerGroupId);
+
+        return sp.GetKeyedService<IConsumer<TMessage>>(key)
+            ?? sp.GetRequiredKeyedService<IConsumer<TMessage>>(settings.ConsumerGroupId);
+    }
 
     private static async Task ProcessMessages<TMessage>(
         IConsumer<TMessage> consumer,
@@ -60,12 +70,12 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         await consumer.Consume(settings, filter, messages, cancellationToken).ConfigureAwait(false);
     }
 
-    private IConsumer<TMessage> GetOrCreateSingletonConsumer<TMessage>(string consumerGroupId)
+    private IConsumer<TMessage> GetOrCreateSingletonConsumer<TMessage>(OutboxConsumerSettings settings)
     {
-        var key = (typeof(TMessage), consumerGroupId);
+        var key = (typeof(TMessage), settings.ProviderKey, settings.ConsumerGroupId);
 
         return (IConsumer<TMessage>)_singletonConsumers.GetOrAdd(
             key,
-            k => GetConsumer<TMessage>(serviceProvider, k.ConsumerGroupId));
+            _ => GetConsumer<TMessage>(serviceProvider, settings));
     }
 }

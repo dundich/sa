@@ -157,14 +157,17 @@ public class OutboxIdleStateTests
 
 public class OutboxIdleStateRegistryTests
 {
+    private static OutboxGroupKey Key(string groupId)
+        => new(OutboxScope.DefaultKey, groupId);
+
     [Fact]
     public void GetOrAdd_ReturnsSameInstanceForSameGroup()
     {
         var registry = new OutboxIdleStateRegistry(new FixedIntervalWaitStrategy());
         var baseInterval = TimeSpan.FromSeconds(1);
 
-        var first = registry.GetOrAdd("group-a", baseInterval, TimeSpan.Zero);
-        var second = registry.GetOrAdd("group-a", baseInterval, TimeSpan.Zero);
+        var first = registry.GetOrAdd(Key("group-a"), baseInterval, TimeSpan.Zero);
+        var second = registry.GetOrAdd(Key("group-a"), baseInterval, TimeSpan.Zero);
 
         Assert.Same(first, second);
     }
@@ -175,8 +178,8 @@ public class OutboxIdleStateRegistryTests
         var registry = new OutboxIdleStateRegistry(new ExponentialIdleWaitStrategy(jitter: 0.0));
         var max = TimeSpan.FromSeconds(30);
 
-        var a = registry.GetOrAdd("group-a", TimeSpan.FromSeconds(1), max);
-        var b = registry.GetOrAdd("group-b", TimeSpan.FromSeconds(1), max);
+        var a = registry.GetOrAdd(Key("group-a"), TimeSpan.FromSeconds(1), max);
+        var b = registry.GetOrAdd(Key("group-b"), TimeSpan.FromSeconds(1), max);
 
         a.Report(0);
         a.Report(0);
@@ -194,7 +197,7 @@ public class OutboxIdleStateRegistryTests
     {
         var registry = new OutboxIdleStateRegistry(new FixedIntervalWaitStrategy());
 
-        Assert.Null(registry.Get("missing"));
+        Assert.Null(registry.Get(Key("missing")));
     }
 }
 
