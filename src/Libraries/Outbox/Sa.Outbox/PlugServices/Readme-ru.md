@@ -116,7 +116,7 @@ public interface IOutboxProviderRegistry
 | Зарегистрирован bulk-writer (`WithBulkWriter`) | `AddOutboxProvider` | `InvalidOperationException` |
 | Второй провайдер с **другим** `Name` | `AddOutboxProvider` | `InvalidOperationException` |
 | Повторный `AddOutboxProvider` с тем же `Name` | `AddOutboxProvider` | идемпотентно: маркер заменяется |
-| Провайдер вообще зарегистрирован | построение `IOutboxProviderRegistry` | `InvalidOperationException` |
+| Провайдер зарегистрирован под резолвимым ключом | построение `IOutboxProviderRegistry` | `InvalidOperationException` |
 | `IOutboxBulkWriter` **зарегистрирован** | построение реестра | `InvalidOperationException` |
 | `IOutboxDeliveryManager` **зарегистрирован** при наличии групп | построение реестра | `InvalidOperationException` |
 | Capability `TenantDetection` ⇒ детектор **зарегистрирован** | построение реестра | `InvalidOperationException` |
