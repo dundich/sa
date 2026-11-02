@@ -120,7 +120,7 @@ public interface IOutboxProviderRegistry
 | `IOutboxBulkWriter` **зарегистрирован** | построение реестра | `InvalidOperationException` |
 | `IOutboxDeliveryManager` **зарегистрирован** при наличии групп | построение реестра | `InvalidOperationException` |
 | Capability `TenantDetection` ⇒ детектор **зарегистрирован** | построение реестра | `InvalidOperationException` |
-| `scopeKey` ядра и провайдера совпадают | — | **не проверяется** в этой версии (см. «Следующие шаги») |
+| Каждая consumer-группа указывает на зарегистрированного провайдера (consistent `scopeKey`) | hosted-валидатор | `InvalidOperationException` с ключом группы и списком провайдеров |
 
 Проверки построения реестра смотрят на **регистрации**, а не конструируют сервисы провайдера
 (`IServiceProviderIsService`): построение storage-цепочки может открывать соединения и загружать
@@ -151,7 +151,8 @@ public interface IOutboxProviderRegistry
 ## Следующие шаги
 
 - **B (health/lifecycle):** `IOutboxProviderHealth` с отчётом (healthy/reason/latency), адаптер под `Microsoft.Extensions.Diagnostics.HealthChecks`, опциональный `InitializeAsync` как провайдерский hosted-service.
-- **C (keyed):** `scopeKey` в дескрипторе, keyed-регистрации всех storage-сервисов, `(key, group)` для консьюмеров.
+- **C (keyed):** реализовано — keyed storage-сервисы, `(providerKey, groupId)` для консьюмеров/менеджера,
+  проверка согласованности `scopeKey` на старте.
 - **Контракты:** legacy-перегрузка `InsertBulk` удалена (0.18); типизированный publish-context сделан без мажора — PG-пакет добавил `PublishInTransaction`/`PublishSingleInTransaction`; opaque-токен в `IOutboxContextFactory.Create` не вводится: арендная идентичность — 16-байтный `OutboxRentToken`, а провайдеру с бóльшим состоянием — side-table по токену.
 
 ## Тесты

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.PlugServices;
 
@@ -25,9 +26,31 @@ internal sealed partial class OutboxProviderValidationHostedService(
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        foreach (string providerKey in registrations
-            .Select(static r => r.ProviderKey)
-            .Distinct(StringComparer.Ordinal))
+        HashSet<string> providerKeys = new(
+            registrations.Select(static r => r.ProviderKey),
+            StringComparer.Ordinal);
+
+        // Scope-key consistency: every consumer group names the provider key its storage lives
+        // under. A group whose key has no provider means AddSaOutbox and the provider package were
+        // called with different scope keys — the group's delivery would resolve no storage at all.
+        string[] groupKeys = services.GetServices<DeliveryGroupSettingsRegistration>()
+            .Select(static registration => registration.ProviderKey)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (string groupKey in groupKeys)
+        {
+            if (providerKeys.Contains(groupKey)) continue;
+
+            throw new InvalidOperationException(
+                $"Outbox consumer groups are registered under the scope '{groupKey}', but no storage " +
+                $"provider is registered for that key (registered providers: " +
+                $"{string.Join(", ", providerKeys.Order(StringComparer.Ordinal))}). Pass the same " +
+                "scopeKey to AddSaOutbox and the provider package, or register the provider with " +
+                "that key.");
+        }
+
+        foreach (string providerKey in providerKeys.Order(StringComparer.Ordinal))
         {
             IOutboxProviderRegistry registry =
                 services.GetRequiredKeyedService<IOutboxProviderRegistry>(providerKey);

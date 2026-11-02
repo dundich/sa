@@ -116,7 +116,7 @@ A singleton registered by `AddOutboxProvider`, usable by the application's healt
 | `IOutboxBulkWriter` is **registered** | registry construction | `InvalidOperationException` |
 | `IOutboxDeliveryManager` is **registered** when groups exist | registry construction | `InvalidOperationException` |
 | `TenantDetection` capability ⇒ detector is **registered** | registry construction | `InvalidOperationException` |
-| Core and provider `scopeKey` agree | — | not checked in this version (see below) |
+| Every consumer group names a registered provider (consistent `scopeKey`) | hosted validator | `InvalidOperationException` with the group's key and the provider list |
 
 The registry checks look at **registrations** and never construct the provider's services
 (`IServiceProviderIsService`): building a storage chain can open connections and load state, and the
@@ -147,7 +147,8 @@ Trigger points:
 ## Follow-ups
 
 - **B (health/lifecycle):** `IOutboxProviderHealth` with a report (healthy/reason/latency), an adapter for `Microsoft.Extensions.Diagnostics.HealthChecks`, and an optional `InitializeAsync` as a provider-owned hosted service.
-- **C (keyed):** `scopeKey` in the descriptor, keyed storage services, `(key, group)` consumer keys.
+- **C (keyed):** implemented — keyed storage services, `(providerKey, groupId)` consumers/manager, and a
+  startup `scopeKey` consistency check.
 - **Contracts:** the legacy `InsertBulk` overload is gone (0.18); the typed publish context shipped without a core major — the PG package adds `PublishInTransaction`/`PublishSingleInTransaction`; the opaque token in `IOutboxContextFactory.Create` is deliberately not introduced: the rent identity is the 16-byte `OutboxRentToken`, and a provider with more state keeps a side table keyed by it.
 
 ## Tests
