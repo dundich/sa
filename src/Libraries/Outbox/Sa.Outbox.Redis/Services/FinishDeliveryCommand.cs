@@ -4,7 +4,7 @@ using Sa.Outbox.Delivery;
 using Sa.Outbox.Redis.Commands;
 using Sa.Outbox.Redis.Configuration;
 using Sa.Outbox.Redis.Poison;
-using Sa.Outbox.Redis.Serialization;
+using Sa.Outbox.Serialization;
 using StackExchange.Redis;
 
 namespace Sa.Outbox.Redis.Services;
@@ -62,7 +62,7 @@ internal sealed partial class FinishDeliveryCommand(
                 RedisOutboxPoisonMessage poison = RedisOutboxPoisonMessageFactory.FromContext(
                     context,
                     filter,
-                    PayloadCodec.Serialize(serializer, context.Payload));
+                    OutboxPayloadCodec.Serialize(serializer, context.Payload));
 
                 try
                 {

@@ -2,6 +2,7 @@
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;
+using Sa.Outbox.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox;
@@ -55,6 +56,36 @@ public interface IOutboxBuilder
     /// <param name="strategy">The wait-strategy instance to register.</param>
     /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
     IOutboxBuilder WithIdleWaitStrategy(IEmptyQueueWaitStrategy strategy);
+
+    /// <summary>
+    /// Replaces the default JSON serializer with a factory that produces
+    /// <see cref="IOutboxMessageSerializer"/> instances from the DI container. The registration is
+    /// the single serialization strategy of the Outbox: whichever provider stores the message uses
+    /// it for both publishing and delivery.
+    /// </summary>
+    /// <param name="messageSerializerFactory">Factory invoked to create the serializer instance.</param>
+    /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
+    IOutboxBuilder WithMessageSerializer(
+        Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory);
+
+    /// <summary>
+    /// Registers a concrete serializer instance as the Outbox's <see cref="IOutboxMessageSerializer"/>.
+    /// The instance is used directly without DI resolution.
+    /// </summary>
+    /// <typeparam name="TService">Concrete serializer type implementing <see cref="IOutboxMessageSerializer"/>.</typeparam>
+    /// <param name="instance">Pre-created serializer instance.</param>
+    /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
+    IOutboxBuilder WithMessageSerializer<TService>(TService instance)
+        where TService : class, IOutboxMessageSerializer;
+
+    /// <summary>
+    /// Registers a serializer type as the Outbox's <see cref="IOutboxMessageSerializer"/>, resolved
+    /// from DI as a singleton.
+    /// </summary>
+    /// <typeparam name="TService">Serializer type to register in DI.</typeparam>
+    /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
+    IOutboxBuilder WithMessageSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
+        where TService : class, IOutboxMessageSerializer;
 
 
     /// <summary>

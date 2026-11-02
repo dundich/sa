@@ -34,7 +34,7 @@ namespace Sa.Outbox.PostgreSql.Poison;
 /// <param name="StatusCode">The permanent code: <c>Error</c>/<c>Error5xx</c> or <c>MaximumAttemptsError</c>.</param>
 /// <param name="StatusMessage">The status text set by the consumer or the courier.</param>
 /// <param name="Exception">The consumer exception.</param>
-/// <param name="Payload">The payload serialized with the provider's <c>IOutboxMessageSerializer</c>.</param>
+/// <param name="Payload">The payload serialized with the core <c>IOutboxMessageSerializer</c>.</param>
 public sealed record PgOutboxPoisonMessage(
     Guid OutboxId,
     long TaskId,

@@ -1,6 +1,6 @@
 ﻿using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Poison;
-using Sa.Outbox.PostgreSql.Serialization;
+using Sa.Outbox.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql.Configuration;

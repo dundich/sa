@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sa.Outbox.Redis.Connection;
 using Sa.Outbox.Redis.Poison;
-using Sa.Outbox.Redis.Serialization;
+using Sa.Outbox.Serialization;
 using StackExchange.Redis;
 using System.Diagnostics.CodeAnalysis;
 
@@ -176,9 +176,18 @@ internal sealed class RedisOutboxConfiguration(IServiceCollection services) : IR
         return this;
     }
 
-    internal IRedisOutboxConfiguration WithDefaultSerializer()
+    /// <summary>
+    /// Bridges a serializer registered directly in DI under the legacy provider-specific
+    /// <see cref="Redis.Serialization.IOutboxMessageSerializer"/> type to the core service the
+    /// provider resolves. The default JSON serializer is registered by <c>AddSaOutbox</c>; this only
+    /// preserves the old registration style.
+    /// </summary>
+    internal IRedisOutboxConfiguration WithSerializerCompatibilityBridge()
     {
-        services.TryAddSingleton<IOutboxMessageSerializer>(OutboxMessageSerializer.Instance);
+        services.TryAddSingleton<IOutboxMessageSerializer>(static sp =>
+            (IOutboxMessageSerializer?)sp.GetService<Sa.Outbox.Redis.Serialization.IOutboxMessageSerializer>()
+            ?? JsonOutboxMessageSerializer.Instance);
+
         return this;
     }
 

@@ -206,6 +206,46 @@ Both are optional: `IDeliveryBatcher` defaults to `DeliveryBatcher` (passthrough
 
 ---
 
+### Serialization
+
+`IOutboxMessageSerializer` lives in the core (`Sa.Outbox.Serialization`) and is the **single**
+serialization strategy: a provider stores what it writes and reads what it produced, so the
+serializer is registered once and applies to publishing and delivery, whichever provider is used.
+
+The core registers `JsonOutboxMessageSerializer` (UTF-8 JSON, reflection-based) as a fallback. A
+provider with no serializer of its own uses it; to replace it, register the serializer either at the
+core level — one call for every provider — or through a provider's `WithMessageSerializer(...)`:
+
+```csharp
+builder.Services
+    .AddSaOutbox(builder => builder
+        .WithMessageSerializer<MyJsonSerializer>()   // or an instance / a factory
+    )
+    .AddSaOutboxUsingPostgreSql(cfg => cfg.WithDataSource(...));
+```
+
+```csharp
+// Same core service, configured on the provider instead:
+builder.Services.AddSaOutboxUsingPostgreSql(cfg => cfg
+    .WithMessageSerializer(MyJsonSerializer.Instance));
+```
+
+`WithMessageSerializer(...)` removes the existing registrations, so the last call wins; a serializer
+registered in DI before `AddSaOutbox` also wins over the fallback. The provider-specific
+`Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer` /
+`Sa.Outbox.Redis.Serialization.IOutboxMessageSerializer` interfaces remain only as compatibility
+subtypes of the core one — implement the core interface in new code.
+
+`OutboxPayloadCodec` is the matching byte bridge for providers that store a payload as a
+self-contained array (Redis streams): it serializes through a pooled stream and returns an
+exact-size array.
+
+For Native AOT, supply a source-generated `JsonSerializerContext`-based serializer (or another
+non-reflection format) and deploy the same serializer on the publishing and consuming side before
+the first message is written.
+
+---
+
 ### Multi-Tenancy
 
 The tenant source is set by choosing **one** of the modes below — they are mutually
@@ -259,8 +299,8 @@ so the payload id is resolved through a typed delegate. An unregistered struct t
 
 | Provider | Package | Status |
 |----------|---------|--------|
-| PostgreSQL | `Sa.Outbox.PostgreSql` | ✅ production-ready |
-| Redis | `Sa.Outbox.Redis` | 🔧 in development |
+| PostgreSQL | [`Sa.Outbox.PostgreSql`](../Sa.Outbox.PostgreSql) | ✅ production-ready |
+| Redis | [`Sa.Outbox.Redis`](../Sa.Outbox.Redis) | 🔧 in development |
 
 The core is provider-agnostic: the same `AddSaOutbox`, tenant/metadata registrations and consumer
 declarations work on top of either package. Only storage and delivery mechanics differ.
@@ -276,6 +316,8 @@ declarations work on top of either package. Only storage and delivery mechanics 
   simple name from different namespaces share a channel/stream.
 - The core owns batching, the delivery job, `LockRenewer`/`ExtendDelivery` and status interpretation;
   a provider implements `IOutboxBulkWriter`, `IOutboxDeliveryManager` and `IOutboxTenantDetector`.
+- One serialization strategy: `IOutboxMessageSerializer` and the JSON fallback live in the core, so
+  the same serializer is used by every provider (see *Serialization* above).
 - Permanent outcomes have a terminal path and a pluggable handler
   (`IPgOutboxPoisonHandler` / `IRedisOutboxPoisonHandler`).
 

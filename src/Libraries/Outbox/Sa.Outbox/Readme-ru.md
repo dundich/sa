@@ -208,6 +208,46 @@ builder.Services.AddSaOutbox(builder => builder
 
 ---
 
+### Сериализация
+
+`IOutboxMessageSerializer` живёт в ядре (`Sa.Outbox.Serialization`) и является **единой**
+стратегией сериализации: провайдер сохраняет ровно то, что она записала, и читает то, что она
+произвела. Сериализатор регистрируется один раз и действует и на публикацию, и на доставку, для
+любого провайдера.
+
+По умолчанию ядро регистрирует `JsonOutboxMessageSerializer` (UTF-8 JSON, на рефлексии) как
+fallback. Провайдер без собственного сериализатора использует его; заменить можно на уровне ядра —
+одним вызовом для всех провайдеров — или через `WithMessageSerializer(...)` провайдера:
+
+```csharp
+builder.Services
+    .AddSaOutbox(builder => builder
+        .WithMessageSerializer<MyJsonSerializer>()   // либо инстанс, либо фабрика
+    )
+    .AddSaOutboxUsingPostgreSql(cfg => cfg.WithDataSource(...));
+```
+
+```csharp
+// Тот же сервис ядра, но настроенный на провайдере:
+builder.Services.AddSaOutboxUsingPostgreSql(cfg => cfg
+    .WithMessageSerializer(MyJsonSerializer.Instance));
+```
+
+`WithMessageSerializer(...)` удаляет прежние регистрации, поэтому побеждает последний вызов;
+сериализатор, зарегистрированный в DI до `AddSaOutbox`, тоже перекрывает fallback. Интерфейсы
+`Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer` и
+`Sa.Outbox.Redis.Serialization.IOutboxMessageSerializer` оставлены только как совместимые подтипы
+основного — в новом коде реализуйте интерфейс ядра.
+
+`OutboxPayloadCodec` — парный мост в байты для провайдеров, которые хранят payload отдельным
+массивом (stream-ы Redis): сериализует через пул-стрим и возвращает массив точного размера.
+
+Для Native AOT подайте сериализатор на source-generated `JsonSerializerContext` (или другой
+формат без рефлексии) и разверните его и на публикующей, и на потребляющей стороне до публикации
+первого сообщения.
+
+---
+
 ### Мультитенантность
 
 Арендатор задаётся выбором **одного** из режимов ниже — они взаимоисключающие,
@@ -262,8 +302,8 @@ options.AddMetadata<MyMessage>();
 
 | Провайдер | Пакет | Статус |
 |-----------|-------|--------|
-| PostgreSQL | `Sa.Outbox.PostgreSql` | ✅ production-ready |
-| Redis | `Sa.Outbox.Redis` | 🔧 в разработке |
+| PostgreSQL | [`Sa.Outbox.PostgreSql`](../Sa.Outbox.PostgreSql) | ✅ production-ready |
+| Redis | [`Sa.Outbox.Redis`](../Sa.Outbox.Redis) | 🔧 в разработке |
 
 Ядро не зависит от провайдера: один и тот же `AddSaOutbox`, регистрация тенантов/метаданных и
 объявления consumer-ов работают поверх любого пакета. Различаются только хранилище и механика доставки.
@@ -279,6 +319,8 @@ options.AddMetadata<MyMessage>();
   namespace с одинаковым простым именем делят канал/stream.
 - Ядро владеет батчингом, job-ом доставки, `LockRenewer`/`ExtendDelivery` и трактовкой статусов;
   провайдер реализует `IOutboxBulkWriter`, `IOutboxDeliveryManager` и `IOutboxTenantDetector`.
+- Единая стратегия сериализации: `IOutboxMessageSerializer` и JSON-fallback живут в ядре, поэтому
+  один и тот же сериализатор используют все провайдеры (см. *Сериализация* выше).
 - У постоянных (permanent) исходов есть терминальный путь и подключаемый обработчик
   (`IPgOutboxPoisonHandler` / `IRedisOutboxPoisonHandler`).
 

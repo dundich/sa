@@ -320,12 +320,17 @@ Where inside `AddSaOutboxUsingPostgreSql`:
 
 ### 4. Message Serialization
 
+`IOutboxMessageSerializer` lives in the core (`Sa.Outbox.Serialization`) and is shared by every
+provider: the core registers `JsonOutboxMessageSerializer` (UTF-8 JSON) as the fallback, so this
+section is optional. A serializer set here replaces that core registration — configure it once at
+the core level (`AddSaOutbox(b => b.WithMessageSerializer(...))`) to cover all providers at once.
+
 Where inside `AddSaOutboxUsingPostgreSql`:
 
 ```csharp
 .AddSaOutboxUsingPostgreSql(cfg => cfg
-    .WithMessageSerializer(OutboxMessageSerializer.Instance)   // singleton instance
-    // .WithMessageSerializer<MySerializer>()                   // DI-resolved transient
+    .WithMessageSerializer(OrderSerializer.Instance)   // singleton instance
+    // .WithMessageSerializer<MySerializer>()                   // DI-resolved singleton
     // .WithMessageSerializer(sp => sp.GetRequiredService<MySerializer>())  // factory
 )
 ```
@@ -372,7 +377,7 @@ object storage, or raise an alert — register `IPgOutboxPoisonHandler`:
 
 The handler receives `PgOutboxPoisonMessage`: `OutboxId`, `TaskId`, `PayloadId`, `PayloadType`,
 `ConsumerGroup`, `TenantId`, `Part`, `Attempt`, `StatusCode`, `StatusMessage`, `Exception`, and the
-payload serialized with the provider's `IOutboxMessageSerializer`.
+payload serialized with the core `IOutboxMessageSerializer`.
 
 It is called for every `Error`/`Error5xx` and for `MaximumAttemptsError`, **before** the task is
 finalized, and its return value selects the strategy:

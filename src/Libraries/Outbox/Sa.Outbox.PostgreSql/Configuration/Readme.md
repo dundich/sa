@@ -17,19 +17,26 @@ services.AddSaOutboxUsingPostgreSql(configure)   // package root: Setup.cs (publ
 `AddPgOutboxSettings` constructs the configuration object and applies the defaults **before** the user delegate:
 
 ```csharp
-var configuration = new PgOutboxConfiguration(services)
-    .WithDefaultSerializer()   // ①
-    .WithOutboxSettings()      // ②
-    .WithDataSource();         // ③
+var configuration = new PgOutboxConfiguration(services);
 
-configure?.Invoke(configuration);   // ④ user delegate — always runs last
+configuration.WithOutboxSettings();   // ①
+configuration.WithDataSource();       // ②
+
+configure?.Invoke(configuration);     // ③ user delegate — always runs last
 ```
 
-### ① Default serializer
+### Serializer fallback
 
-`WithDefaultSerializer()` is an `internal` method (not part of `IPgOutboxConfiguration`). It registers the shared `OutboxMessageSerializer.Instance` as a singleton of `IOutboxMessageSerializer` using `TryAddSingleton` — so any `IOutboxMessageSerializer` registered earlier in your code wins, and a later `WithMessageSerializer(...)` call removes and replaces it.
+Serialization is a core concern: `AddSaOutbox` registers
+`Sa.Outbox.Serialization.JsonOutboxMessageSerializer` via `TryAddSingleton`, and the provider resolves
+`Sa.Outbox.Serialization.IOutboxMessageSerializer` from DI. After the user delegate,
+`AddPgOutboxSettings` adds a compatibility bridge: when a serializer was registered under the legacy
+provider-specific `Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer` type and no core
+serializer exists, the core service resolves that instance; otherwise it falls back to the JSON
+serializer. A serializer registered earlier in your code (or by another provider) also wins over the
+fallback.
 
-### ② Outbox settings
+### ① Outbox settings
 
 `WithOutboxSettings(configure)`:
 
@@ -49,22 +56,22 @@ configure?.Invoke(configuration);   // ④ user delegate — always runs last
 
    All use `TryAddSingleton`, so any injected `PgOutboxMigrationSettings` is the exact same object instance as `PgOutboxSettings.MigrationSettings`.
 
-### ③ Data source
+### ② Data source
 
 `WithDataSource(configure)` delegates to `AddSaPostgreSqlDataSource(configure)` from `Sa.Data.PostgreSql`, which registers the data source on the standard `Microsoft.Extensions.Options` pipeline:
 
 - The configuration surface is the flat options type `PgDataSourceOptions` — its single property is `ConnectionString`; pooling, timeout, and search path live inside the string itself.
-- The bare call in step ③ (no callback) is idempotent: `AddOptions<T>` registers its infrastructure via `TryAdd`, and the normaliser / validator / factory registrations are deduplicated via `TryAddEnumerable`, so a repeated bare call adds nothing. The step ④ `WithDataSource(configure)` call is the first *configuring* call — it is the one that adds the `Configure` callbacks / section binding — and it runs last, so it has the last word on the options value.
+- The bare call in step ② (no callback) is idempotent: `AddOptions<T>` registers its infrastructure via `TryAdd`, and the normaliser / validator / factory registrations are deduplicated via `TryAddEnumerable`, so a repeated bare call adds nothing. The step ③ `WithDataSource(configure)` call is the first *configuring* call — it is the one that adds the `Configure` callbacks / section binding — and it runs last, so it has the last word on the options value.
 - `IPgDataSource` is registered as a singleton; its factory reads `IOptions<PgDataSourceOptions>.Value` (which runs the validators) at first resolve: a non-empty `ConnectionString` builds an owned `NpgsqlDataSource`; an empty string falls back to an `NpgsqlDataSource` registered in DI (sharing its connection pool — the wrapper does not dispose it); neither available → `OptionsValidationException`.
-- The `Search Path` key of the connection string (or `"public"` when absent or unparseable) is the source for the schema auto-inheritance in step ②.
+- The `Search Path` key of the connection string (or `"public"` when absent or unparseable) is the source for the schema auto-inheritance in step ①.
 
-### ④ User delegate
+### ③ User delegate
 
 Your `configure` delegate runs **last** (after all defaults). Its three public methods:
 
-- `WithMessageSerializer(...)` — removes every existing `IOutboxMessageSerializer` registration (`RemoveAll`) and adds exactly one new one (`TryAddSingleton`), so it always wins over the default JSON serializer.
+- `WithMessageSerializer(...)` — removes every existing core `Sa.Outbox.Serialization.IOutboxMessageSerializer` registration (`RemoveAll`) and adds exactly one new one (`TryAddSingleton`), so it always wins over the core JSON fallback. The legacy provider-specific interface is accepted as a subtype, so an existing implementation keeps working.
 - `WithOutboxSettings(userAction)` — appends your delegate to the registered list of `Action<IServiceProvider, PgOutboxSettings>`; it will run after any previously registered delegate.
-- `WithDataSource(configure)` — delegates to `AddSaPostgreSqlDataSource(configure)`. The step ③ call is bare, so this is the first *configuring* call: its `Configure` callbacks / section binding (`Options(...)` / `FromConfiguration(...)` in the same delegate) are what actually shape `PgDataSourceOptions`. A second configuring call on the same service collection (e.g. a direct `services.AddSaPostgreSqlDataSource(configure)` earlier in your code) throws `InvalidOperationException`, because both `Configure` callbacks would otherwise stack onto the same unnamed options instance and the settings would silently merge.
+- `WithDataSource(configure)` — delegates to `AddSaPostgreSqlDataSource(configure)`. The step ② call is bare, so this is the first *configuring* call: its `Configure` callbacks / section binding (`Options(...)` / `FromConfiguration(...)` in the same delegate) are what actually shape `PgDataSourceOptions`. A second configuring call on the same service collection (e.g. a direct `services.AddSaPostgreSqlDataSource(configure)` earlier in your code) throws `InvalidOperationException`, because both `Configure` callbacks would otherwise stack onto the same unnamed options instance and the settings would silently merge.
 
 ### Where the values are actually consumed
 
@@ -93,7 +100,7 @@ All methods return the same `IPgOutboxConfiguration` for chaining.
 
 ### `WithMessageSerializer` — three overloads
 
-Each overload first removes all existing `IOutboxMessageSerializer` registrations (`RemoveAll`) and then adds exactly one, so any overload always replaces the default JSON serializer.
+Each overload first removes all existing core `IOutboxMessageSerializer` registrations (`RemoveAll`) and then adds exactly one, so any overload always replaces the core JSON fallback. The serializer is the shared core service: a serializer set here is also used by another provider in the same container.
 
 | Overload | DI registration | When to use |
 |---|---|---|
@@ -103,11 +110,11 @@ Each overload first removes all existing `IOutboxMessageSerializer` registration
 
 ### `WithOutboxSettings`
 
-Takes an optional `Action<IServiceProvider, PgOutboxSettings>`. When the delegate is non-null it is stored as a singleton and later applied inside the `PgOutboxSettings` factory (see Registration flow ②). The `IServiceProvider` parameter is available if you need to read other registered services while configuring (e.g. `IConfiguration`).
+Takes an optional `Action<IServiceProvider, PgOutboxSettings>`. When the delegate is non-null it is stored as a singleton and later applied inside the `PgOutboxSettings` factory (see Registration flow ①). The `IServiceProvider` parameter is available if you need to read other registered services while configuring (e.g. `IConfiguration`).
 
 ### `WithDataSource`
 
-Takes an optional `Action<IDataSourceBuilder>` callback and delegates it to `AddSaPostgreSqlDataSource(...)` from `Sa.Data.PostgreSql` — the section comes via `FromConfiguration(...)`, the options pipeline via `Options(...)`; see its Readme for the full pipeline (normalisation, validation, `ValidateOnStart()`). The only option is `ConnectionString`; pooling and other Npgsql options are configured inside the string itself (e.g. `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` additionally drives the automatic schema inheritance of the outbox tables (step ②); an empty string reuses an `NpgsqlDataSource` registered in DI instead of opening a second pool.
+Takes an optional `Action<IDataSourceBuilder>` callback and delegates it to `AddSaPostgreSqlDataSource(...)` from `Sa.Data.PostgreSql` — the section comes via `FromConfiguration(...)`, the options pipeline via `Options(...)`; see its Readme for the full pipeline (normalisation, validation, `ValidateOnStart()`). The only option is `ConnectionString`; pooling and other Npgsql options are configured inside the string itself (e.g. `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` additionally drives the automatic schema inheritance of the outbox tables (step ①); an empty string reuses an `NpgsqlDataSource` registered in DI instead of opening a second pool.
 
 ---
 
@@ -518,11 +525,27 @@ Static class with the default column names used by every `Fields` property. Grou
 
 ---
 
-## OutboxMessageSerializer
+## Serialization
 
-The default message serializer (internal, sealed). It implements the public `IOutboxMessageSerializer` interface (`Serialize<T>(Stream, T)` / `Deserialize<T>(Stream)`) by calling `System.Text.Json`'s `JsonSerializer.Serialize` / `Deserialize` directly — i.e. reflection-based, generic, type-agnostic JSON. The AOT warnings (`IL2026` / `IL3050`) are explicitly suppressed, which is why a single shared `OutboxMessageSerializer.Instance` is registered by `WithDefaultSerializer()` and works for any message type.
+Serialization lives in the core (`Sa.Outbox.Serialization`) and is shared by every provider:
 
-When to replace it: (a) you are publishing with **Native AOT** and want source-generated JSON (`[JsonSourceGenerationOptions]` + `JsonSerializerContext`) instead of reflection; (b) you need a non-JSON wire format (e.g. ProtoBuf, MessagePack); (c) you need custom options (naming policy, polymorphism, converters). Replace it with any of the three `WithMessageSerializer(...)` overloads — see the `IPgOutboxConfiguration` section. Note the class itself is `internal`, so user code can only reference the shared instance from code with `InternalsVisibleTo` access; normal consumers just omit `WithMessageSerializer(...)` (default JSON) or supply their own serializer type/instance/factory.
+- `IOutboxMessageSerializer` — the contract (`Serialize<T>(Stream, T)` / `Deserialize<T>(Stream)`).
+- `JsonOutboxMessageSerializer` — the default, reflection-based UTF-8 JSON (AOT warnings
+  `IL2026`/`IL3050` suppressed), registered by `AddSaOutbox` via `TryAddSingleton`.
+- `OutboxPayloadCodec` — the pooled-stream byte bridge for providers that store a payload as a
+  self-contained array (not used by the PostgreSQL `COPY` path, which streams directly).
+
+This provider resolves the core service and ships no serializer of its own. The
+`Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer` interface is a compatibility subtype of
+the core one: an existing implementation still compiles and still satisfies
+`WithMessageSerializer(...)`, and a direct DI registration under it is bridged to the core service.
+
+When to replace the default: (a) you are publishing with **Native AOT** and want source-generated
+JSON (`[JsonSourceGenerationOptions]` + `JsonSerializerContext`) instead of reflection; (b) you need
+a non-JSON wire format (e.g. ProtoBuf, MessagePack); (c) you need custom options (naming policy,
+polymorphism, converters). Use any of the three `WithMessageSerializer(...)` overloads — see the
+`IPgOutboxConfiguration` section — or configure the serializer once at the core level, where it
+covers every provider.
 
 ---
 

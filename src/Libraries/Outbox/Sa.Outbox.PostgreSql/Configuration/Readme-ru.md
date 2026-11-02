@@ -17,19 +17,25 @@ services.AddSaOutboxUsingPostgreSql(configure)   // корень пакета: S
 `AddPgOutboxSettings` создаёт объект конфигурации и применяет значения по умолчанию **до** делегата пользователя:
 
 ```csharp
-var configuration = new PgOutboxConfiguration(services)
-    .WithDefaultSerializer()   // ①
-    .WithOutboxSettings()      // ②
-    .WithDataSource();         // ③
+var configuration = new PgOutboxConfiguration(services);
 
-configure?.Invoke(configuration);   // ④ делегат пользователя — всегда выполняется последним
+configuration.WithOutboxSettings();   // ①
+configuration.WithDataSource();       // ②
+
+configure?.Invoke(configuration);     // ③ делегат пользователя — всегда выполняется последним
 ```
 
-### ① Сериализатор по умолчанию
+### Сериализатор по умолчанию
 
-`WithDefaultSerializer()` — `internal`-метод (не входит в `IPgOutboxConfiguration`). Он регистрирует общий `OutboxMessageSerializer.Instance` как singleton `IOutboxMessageSerializer` через `TryAddSingleton` — то есть любой `IOutboxMessageSerializer`, зарегистрированный раньше в вашем коде, имеет приоритет, а последующий вызов `WithMessageSerializer(...)` удаляет его и заменяет.
+Сериализация — забота ядра: `AddSaOutbox` регистрирует
+`Sa.Outbox.Serialization.JsonOutboxMessageSerializer` через `TryAddSingleton`, а провайдер резолвит
+из DI `Sa.Outbox.Serialization.IOutboxMessageSerializer`. После делегата пользователя
+`AddPgOutboxSettings` добавляет мост совместимости: если сериализатор зарегистрирован под старым
+провайдерским типом `Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer`, а core-сервиса
+нет, core-сервис резолвит этот инстанс; иначе используется JSON-сериализатор. Сериализатор,
+зарегистрированный раньше в вашем коде (или другим провайдером), тоже перекрывает fallback.
 
-### ② Настройки outbox
+### ① Настройки outbox
 
 `WithOutboxSettings(configure)`:
 
@@ -49,22 +55,22 @@ configure?.Invoke(configuration);   // ④ делегат пользовател
 
    Все через `TryAddSingleton`, поэтому любой внедрённый `PgOutboxMigrationSettings` — это тот самый объект, что и `PgOutboxSettings.MigrationSettings`.
 
-### ③ Источник данных
+### ② Источник данных
 
 `WithDataSource(configure)` делегирует в `AddSaPostgreSqlDataSource(configure)` из `Sa.Data.PostgreSql`, который регистрирует источник данных на стандартном конвейере `Microsoft.Extensions.Options`:
 
 - Поверхность конфигурации — плоский тип опций `PgDataSourceOptions`, единственное свойство — `ConnectionString`; пулинг, таймауты и search path задаются внутри самой строки.
-- «Голый» вызов в шаге ③ (без callback'а) идемпотентен: `AddOptions<T>` регистрирует свою инфраструктуру через `TryAdd`, а регистрации нормализатора / валидатора / фабрики дедуплицируются через `TryAddEnumerable`, поэтому повторный «голый» вызов ничего не добавляет. Именно настраивающий вызов `WithDataSource(configure)` из шага ④ — первый *настраивающий* — добавляет `Configure`-callback'и / привязку секции, и, поскольку выполняется последним, имеет последнее слово в значении опций.
+- «Голый» вызов в шаге ② (без callback'а) идемпотентен: `AddOptions<T>` регистрирует свою инфраструктуру через `TryAdd`, а регистрации нормализатора / валидатора / фабрики дедуплицируются через `TryAddEnumerable`, поэтому повторный «голый» вызов ничего не добавляет. Именно настраивающий вызов `WithDataSource(configure)` из шага ③ — первый *настраивающий* — добавляет `Configure`-callback'и / привязку секции, и, поскольку выполняется последним, имеет последнее слово в значении опций.
 - `IPgDataSource` регистрируется как singleton; его фабрика при первом resolve читает `IOptions<PgDataSourceOptions>.Value` (что прогоняет валидаторы): непустой `ConnectionString` строит собственный `NpgsqlDataSource`, пустая строка — фолбэк на `NpgsqlDataSource`, зарегистрированный в DI (общий pool соединений — обёртка не dispose его), ни того ни другого → `OptionsValidationException`.
-- Ключ `Search Path` в connection string (или `"public"`, если отсутствует или не разбирается) — источник авто-наследования схемы из шага ②.
+- Ключ `Search Path` в connection string (или `"public"`, если отсутствует или не разбирается) — источник авто-наследования схемы из шага ①.
 
-### ④ Делегат пользователя
+### ③ Делегат пользователя
 
 Ваш `configure`-делегат выполняется **последним** (после всех значений по умолчанию). Его три публичных метода:
 
-- `WithMessageSerializer(...)` — удаляет все существующие регистрации `IOutboxMessageSerializer` (`RemoveAll`) и добавляет ровно одну новую (`TryAddSingleton`), поэтому всегда перебивает дефолтный JSON-сериализатор.
+- `WithMessageSerializer(...)` — удаляет все существующие регистрации core-интерфейса `Sa.Outbox.Serialization.IOutboxMessageSerializer` (`RemoveAll`) и добавляет ровно одну новую (`TryAddSingleton`), поэтому всегда перебивает JSON-fallback ядра. Старый провайдерский интерфейс принимается как подтип, так что существующая реализация продолжает работать.
 - `WithOutboxSettings(userAction)` — дописывает ваш делегат в зарегистрированный список `Action<IServiceProvider, PgOutboxSettings>`; он выполнится после ранее зарегистрированных делегатов.
-- `WithDataSource(configure)` — делегирует в `AddSaPostgreSqlDataSource(configure)`. Вызов в шаге ③ «голый», поэтому это первый *настраивающий* вызов: именно его `Configure`-callback'и / привязка секции (`Options(...)` / `FromConfiguration(...)` в том же delegate'е) задают `PgDataSourceOptions`. Второй настраивающий вызов на той же service collection (например, прямой `services.AddSaPostgreSqlDataSource(configure)` раньше в коде) бросает `InvalidOperationException` — иначе два `Configure`-callback'а наслоились бы на один unnamed-инстанс опций и настройки тихо слитались бы.
+- `WithDataSource(configure)` — делегирует в `AddSaPostgreSqlDataSource(configure)`. Вызов в шаге ② «голый», поэтому это первый *настраивающий* вызов: именно его `Configure`-callback'и / привязка секции (`Options(...)` / `FromConfiguration(...)` в том же delegate'е) задают `PgDataSourceOptions`. Второй настраивающий вызов на той же service collection (например, прямой `services.AddSaPostgreSqlDataSource(configure)` раньше в коде) бросает `InvalidOperationException` — иначе два `Configure`-callback'а наслоились бы на один unnamed-инстанс опций и настройки тихо слитались бы.
 
 ### Где значения реально применяются
 
@@ -93,7 +99,7 @@ configure?.Invoke(configuration);   // ④ делегат пользовател
 
 ### `WithMessageSerializer` — три перегрузки
 
-Каждая перегрузка сначала удаляет все существующие регистрации `IOutboxMessageSerializer` (`RemoveAll`), затем добавляет ровно одну — поэтому любая перегрузка всегда заменяет дефолтный JSON-сериализатор.
+Каждая перегрузка сначала удаляет все существующие регистрации core-интерфейса `IOutboxMessageSerializer` (`RemoveAll`), затем добавляет ровно одну — поэтому любая перегрузка всегда заменяет JSON-fallback ядра. Сериализатор — общий сервис ядра: заданный здесь, он используется и другим провайдером в том же контейнере.
 
 | Перегрузка | Регистрация в DI | Когда использовать |
 |---|---|---|
@@ -103,11 +109,11 @@ configure?.Invoke(configuration);   // ④ делегат пользовател
 
 ### `WithOutboxSettings`
 
-Принимает опциональный `Action<IServiceProvider, PgOutboxSettings>`. Если делегат не null, он сохраняется как singleton и затем применяется внутри фабрики `PgOutboxSettings` (см. Поток регистрации ②). Параметр `IServiceProvider` доступен, если при настройке нужно почитать другие зарегистрированные сервисы (например, `IConfiguration`).
+Принимает опциональный `Action<IServiceProvider, PgOutboxSettings>`. Если делегат не null, он сохраняется как singleton и затем применяется внутри фабрики `PgOutboxSettings` (см. Поток регистрации ①). Параметр `IServiceProvider` доступен, если при настройке нужно почитать другие зарегистрированные сервисы (например, `IConfiguration`).
 
 ### `WithDataSource`
 
-Принимает опциональный callback `Action<IDataSourceBuilder>` и делегирует его в `AddSaPostgreSqlDataSource(...)` из `Sa.Data.PostgreSql` — секция приходит через `FromConfiguration(...)`, конвейер опций — через `Options(...)`; полный конвейер (нормализация, валидация, `ValidateOnStart()`) описан в её Readme. Единственная опция — `ConnectionString`; пулинг и прочие опции Npgsql настраиваются внутри самой строки (например, `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` дополнительно управляет авто-наследованием схемы outbox-таблиц (шаг ②); пустая строка переиспользует `NpgsqlDataSource`, зарегистрированный в DI, вместо открытия второго pool'а.
+Принимает опциональный callback `Action<IDataSourceBuilder>` и делегирует его в `AddSaPostgreSqlDataSource(...)` из `Sa.Data.PostgreSql` — секция приходит через `FromConfiguration(...)`, конвейер опций — через `Options(...)`; полный конвейер (нормализация, валидация, `ValidateOnStart()`) описан в её Readme. Единственная опция — `ConnectionString`; пулинг и прочие опции Npgsql настраиваются внутри самой строки (например, `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` дополнительно управляет авто-наследованием схемы outbox-таблиц (шаг ①); пустая строка переиспользует `NpgsqlDataSource`, зарегистрированный в DI, вместо открытия второго pool'а.
 
 ---
 
@@ -510,11 +516,27 @@ Static-класс с именами колонок по умолчанию, ко
 
 ---
 
-## OutboxMessageSerializer
+## Сериализация
 
-Сериализатор сообщений по умолчанию (internal, sealed). Реализует публичный интерфейс `IOutboxMessageSerializer` (`Serialize<T>(Stream, T)` / `Deserialize<T>(Stream)`) прямыми вызовами `JsonSerializer.Serialize` / `Deserialize` из `System.Text.Json` — то есть reflection-based, generic, не привязанный к типу. AOT-предупреждения (`IL2026` / `IL3050`) явно подавлены, поэтому общий `OutboxMessageSerializer.Instance` регистрируется через `WithDefaultSerializer()` и работает с любым типом сообщения.
+Сериализация живёт в ядре (`Sa.Outbox.Serialization`) и общая для всех провайдеров:
 
-Когда менять: (a) вы публикуете в **Native AOT** и хотите source-generated JSON (`[JsonSourceGenerationOptions]` + `JsonSerializerContext`) вместо рефлексии; (b) нужен не-JSON wire-формат (например, ProtoBuf, MessagePack); (c) нужны кастомные опции (naming policy, полиморфизм, конвертеры). Заменяйте любым из трёх перегрузок `WithMessageSerializer(...)` — см. секцию `IPgOutboxConfiguration`. Сам класс `internal`, поэтому пользовательский код может сослаться на общий инстанс только из кода с доступом `InternalsVisibleTo`; обычный потребитель просто не вызывает `WithMessageSerializer(...)` (получает дефолтный JSON) либо подаёт свой сериализатор (тип/инстанс/фабрика).
+- `IOutboxMessageSerializer` — контракт (`Serialize<T>(Stream, T)` / `Deserialize<T>(Stream)`).
+- `JsonOutboxMessageSerializer` — дефолт: UTF-8 JSON на рефлексии (AOT-предупреждения `IL2026`/`IL3050`
+  подавлены), регистрируется `AddSaOutbox` через `TryAddSingleton`.
+- `OutboxPayloadCodec` — мост в байты через пул-стрим для провайдеров, хранящих payload массивом
+  (путь `COPY` в PostgreSQL его не использует — он пишет поток напрямую).
+
+Этот провайдер резолвит core-сервис и своего сериализатора не имеет. Интерфейс
+`Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer` — совместимый подтип core-интерфейса:
+существующая реализация компилируется и проходит `WithMessageSerializer(...)`, а прямая регистрация
+в DI под ним мостится на core-сервис.
+
+Когда менять дефолт: (a) публикация в **Native AOT** и нужен source-generated JSON
+(`[JsonSourceGenerationOptions]` + `JsonSerializerContext`) вместо рефлексии; (b) нужен не-JSON
+wire-формат (ProtoBuf, MessagePack); (c) нужны кастомные опции (naming policy, полиморфизм,
+конвертеры). Используйте любую из трёх перегрузок `WithMessageSerializer(...)` — см. секцию
+`IPgOutboxConfiguration` — либо настройте сериализатор один раз на уровне ядра, где он покрывает
+все провайдеры.
 
 ---
 

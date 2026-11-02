@@ -141,7 +141,7 @@ Sa.Schedule job  (одна на consumer group; Interval / InitialDelay / IdleMa
    (`deliveryCount = 1`, `Attempt = 0`).
 5. Каждая запись превращается в `IOutboxContextOperations<TMessage>`: `OutboxId` — stream id,
    упакованный в `Guid`, `TaskId` выводится из той же пары, `Attempt = deliveryCount - 1`, payload
-   десериализуется через `IOutboxMessageSerializer`.
+   десериализуется через core-сериализатор `IOutboxMessageSerializer` (`Sa.Outbox.Serialization`; по умолчанию — UTF-8 JSON).
 
 ### Завершение: фиксация исхода
 

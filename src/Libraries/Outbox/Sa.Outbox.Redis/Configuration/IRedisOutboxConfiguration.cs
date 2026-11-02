@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 using Sa.Outbox.Redis.Poison;
-using Sa.Outbox.Redis.Serialization;
+using Sa.Outbox.Serialization;
 using StackExchange.Redis;
 using System.Diagnostics.CodeAnalysis;
 

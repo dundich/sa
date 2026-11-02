@@ -20,6 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\Misc\Sa.Schedule\Sa.Schedule.csproj" />
   </ItemGroup>
 

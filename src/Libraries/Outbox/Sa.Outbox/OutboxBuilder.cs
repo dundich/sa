@@ -4,6 +4,7 @@ using Sa.Outbox.Delivery;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;
+using Sa.Outbox.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox;
@@ -23,6 +24,12 @@ internal sealed class OutboxBuilder : IOutboxBuilder
 
     public static OutboxBuilder Create(IServiceCollection services, string scopeKey)
     {
+        // The shared serialization strategy: a JSON fallback every provider resolves unless the
+        // application registers its own serializer (a provider's WithMessageSerializer does exactly
+        // that). TryAdd keeps a serializer registered earlier — before AddSaOutbox or by a provider
+        // configured ahead of it — winning over the default.
+        services.TryAddSingleton<IOutboxMessageSerializer>(JsonOutboxMessageSerializer.Instance);
+
         services
             .AddMessagePublisher()
             .AddOutboxDelivery(scopeKey: scopeKey);
@@ -83,6 +90,38 @@ internal sealed class OutboxBuilder : IOutboxBuilder
         _services
             .RemoveAll<IEmptyQueueWaitStrategy>()
             .AddSingleton(strategy);
+
+        return this;
+    }
+
+    public IOutboxBuilder WithMessageSerializer(
+        Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
+    {
+        ArgumentNullException.ThrowIfNull(messageSerializerFactory);
+
+        _services.RemoveAll<IOutboxMessageSerializer>();
+        _services.TryAddSingleton<IOutboxMessageSerializer>(messageSerializerFactory);
+
+        return this;
+    }
+
+    public IOutboxBuilder WithMessageSerializer<TService>(TService instance)
+        where TService : class, IOutboxMessageSerializer
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        _services.RemoveAll<IOutboxMessageSerializer>();
+        _services.TryAddSingleton<IOutboxMessageSerializer>(instance);
+
+        return this;
+    }
+
+    public IOutboxBuilder WithMessageSerializer<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
+            where TService : class, IOutboxMessageSerializer
+    {
+        _services.RemoveAll<IOutboxMessageSerializer>();
+        _services.TryAddSingleton<IOutboxMessageSerializer, TService>();
 
         return this;
     }

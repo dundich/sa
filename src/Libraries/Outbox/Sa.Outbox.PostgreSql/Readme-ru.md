@@ -332,12 +332,17 @@ bool paused = manager.IsPaused("cg_order_consumer");
 
 ### 4. Сериализация сообщений
 
+`IOutboxMessageSerializer` живёт в ядре (`Sa.Outbox.Serialization`) и общий для всех провайдеров:
+ядро регистрирует `JsonOutboxMessageSerializer` (UTF-8 JSON) как fallback, поэтому этот раздел
+необязателен. Сериализатор, заданный здесь, заменяет регистрацию ядра — настройте его один раз на
+уровне ядра (`AddSaOutbox(b => b.WithMessageSerializer(...))`), чтобы покрыть сразу все провайдеры.
+
 Внутри `AddSaOutboxUsingPostgreSql`:
 
 ```csharp
 .AddSaOutboxUsingPostgreSql(cfg => cfg
-    .WithMessageSerializer(OutboxMessageSerializer.Instance)   // синглтон-экземпляр
-    // .WithMessageSerializer<MySerializer>()                   // DI-resolved transient
+    .WithMessageSerializer(OrderSerializer.Instance)   // синглтон-экземпляр
+    // .WithMessageSerializer<MySerializer>()                   // DI-resolved синглтон
     // .WithMessageSerializer(sp => sp.GetRequiredService<MySerializer>())  // фабрика
 )
 ```
@@ -384,7 +389,7 @@ object storage или поднять алерт — зарегистрируйт
 
 Обработчик получает `PgOutboxPoisonMessage`: `OutboxId`, `TaskId`, `PayloadId`, `PayloadType`,
 `ConsumerGroup`, `TenantId`, `Part`, `Attempt`, `StatusCode`, `StatusMessage`, `Exception` и payload,
-сериализованный сериализатором провайдера.
+сериализованный сериализатором ядра `IOutboxMessageSerializer`.
 
 Он вызывается для каждого `Error`/`Error5xx` и для `MaximumAttemptsError`, **до** финализации задачи,
 а возвращаемое значение выбирает стратегию:

@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Poison;
-using Sa.Outbox.PostgreSql.Serialization;
+using Sa.Outbox.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
@@ -79,9 +79,18 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         return this;
     }
 
-    internal IPgOutboxConfiguration WithDefaultSerializer()
+    /// <summary>
+    /// Bridges a serializer registered directly in DI under the legacy provider-specific
+    /// <see cref="PostgreSql.Serialization.IOutboxMessageSerializer"/> type to the core service the
+    /// provider resolves. The default JSON serializer is registered by <c>AddSaOutbox</c>; this only
+    /// preserves the old registration style.
+    /// </summary>
+    internal IPgOutboxConfiguration WithSerializerCompatibilityBridge()
     {
-        services.TryAddSingleton<IOutboxMessageSerializer>(OutboxMessageSerializer.Instance);
+        services.TryAddSingleton<IOutboxMessageSerializer>(static sp =>
+            (IOutboxMessageSerializer?)sp.GetService<Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer>()
+            ?? JsonOutboxMessageSerializer.Instance);
+
         return this;
     }
 

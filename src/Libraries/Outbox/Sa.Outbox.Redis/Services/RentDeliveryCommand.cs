@@ -4,7 +4,7 @@ using Sa.Outbox.Delivery;
 using Sa.Outbox.Redis.Commands;
 using Sa.Outbox.Redis.Configuration;
 using Sa.Outbox.Redis.Poison;
-using Sa.Outbox.Redis.Serialization;
+using Sa.Outbox.Serialization;
 using StackExchange.Redis;
 
 namespace Sa.Outbox.Redis.Services;
@@ -232,7 +232,7 @@ internal sealed partial class RentDeliveryCommand(
         string payloadId = (string?)entry[RedisOutboxFields.PayloadId] ?? string.Empty;
         long createdAt = (long)entry[RedisOutboxFields.CreatedAt];
 
-        TMessage payload = PayloadCodec.Deserialize<TMessage>(serializer, (byte[]?)entry[RedisOutboxFields.Payload] ?? [])
+        TMessage payload = OutboxPayloadCodec.Deserialize<TMessage>(serializer, (byte[]?)entry[RedisOutboxFields.Payload] ?? [])
             ?? throw new InvalidOperationException(
                 $"The Redis Outbox entry '{entry.Id}' of type '{typeof(TMessage).FullName}' deserialized to null.");
 

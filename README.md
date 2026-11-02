@@ -33,9 +33,23 @@ A Minio-compatible S3 client for data operations.
 
 ---
 
+### [Sa.Outbox](src/Libraries/Outbox/Sa.Outbox) — Transactional Outbox Core
+
+Provider-agnostic core of the **Transactional Outbox** pattern: publication and consumer contracts, tenant/metadata registration, batching, retry policy and delivery status handling. Storage and delivery mechanics come from a provider package.
+
+Providers: [Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql) — ✅ production-ready, [Sa.Outbox.Redis](src/Libraries/Outbox/Sa.Outbox.Redis) — 🔧 in development.
+
+---
+
 ### [Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql) — PostgreSQL Provider
 
 A PostgreSQL implementation of the **Transactional Outbox** pattern. Messages are recorded in an outbox table alongside business operations in a single transaction, then delivered with retries and status tracking. Consumption is concurrent (`SKIP LOCKED`); offset coordination uses advisory locks. Use at your own risk.
+
+---
+
+### [Sa.Outbox.Redis](src/Libraries/Outbox/Sa.Outbox.Redis) — Redis Provider (in development)
+
+A Redis Streams implementation of the same outbox contract: the log, consumer cursors and retry state live in streams and the consumer group's pending entries list (PEL), with no Lua and single-key commands only, so it works on Redis Cluster as is.
 
 ---
 

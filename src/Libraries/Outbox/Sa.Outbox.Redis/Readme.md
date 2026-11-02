@@ -140,7 +140,7 @@ Sa.Schedule job  (one per consumer group, Interval / InitialDelay / IdleMaxInter
    (`deliveryCount = 1`, `Attempt = 0`).
 5. Each entry becomes an `IOutboxContextOperations<TMessage>`: `OutboxId` is the stream id packed
    into a `Guid`, `TaskId` is derived from the same pair, `Attempt = deliveryCount - 1`, payload is
-   deserialized with `IOutboxMessageSerializer`.
+   deserialized with the core `IOutboxMessageSerializer` (`Sa.Outbox.Serialization`; the default is UTF-8 JSON).
 
 ### Finish: appending the outcome
 

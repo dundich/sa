@@ -10,11 +10,15 @@ internal static class Setup
     {
         var configuration = new RedisOutboxConfiguration(services);
 
-        configuration.WithDefaultSerializer();
         configuration.WithOutboxSettings();
         configuration.WithConnection();
 
         configure?.Invoke(configuration);
+
+        // After the user's configuration: a serializer registered under the legacy provider type
+        // must stay visible to the core service the provider resolves, and with none at all the
+        // core JSON fallback is used.
+        configuration.WithSerializerCompatibilityBridge();
 
         return services;
     }

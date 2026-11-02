@@ -4,7 +4,7 @@ using NpgsqlTypes;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.IdGen;
-using Sa.Outbox.PostgreSql.Serialization;
+using Sa.Outbox.Serialization;
 using Sa.Outbox.PostgreSql.Services;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Outbox.PostgreSql.TypeResolve;

@@ -5,7 +5,7 @@ using Sa.Outbox.Delivery;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 using Sa.Outbox.PostgreSql.Poison;
-using Sa.Outbox.PostgreSql.Serialization;
+using Sa.Outbox.Serialization;
 using System.Collections.ObjectModel;
 
 namespace Sa.Outbox.PostgreSql.Services.Plug;

@@ -1,15 +1,15 @@
 namespace Sa.Outbox.Redis.Serialization;
 
 /// <summary>
-/// Serializes and deserializes Outbox payloads to and from the bytes stored in a Redis stream
-/// entry. Replace the default JSON implementation with
-/// <see cref="Configuration.IRedisOutboxConfiguration.WithMessageSerializer(Func{IServiceProvider, IOutboxMessageSerializer})"/>.
+/// Compatibility alias for <see cref="Sa.Outbox.Serialization.IOutboxMessageSerializer"/>, kept so
+/// an existing Redis serializer implementation keeps compiling.
 /// </summary>
-public interface IOutboxMessageSerializer
+/// <remarks>
+/// Serialization is a core concern: the same serializer is used by every provider, and the Redis
+/// provider now resolves <see cref="Sa.Outbox.Serialization.IOutboxMessageSerializer"/> from DI.
+/// Implement the core interface in new code; this one is a subtype of it, so an implementation
+/// still satisfies the provider's <c>WithMessageSerializer(...)</c>.
+/// </remarks>
+public interface IOutboxMessageSerializer : Sa.Outbox.Serialization.IOutboxMessageSerializer
 {
-    /// <summary>Reads a payload from the entry body.</summary>
-    T? Deserialize<T>(Stream stream);
-
-    /// <summary>Writes a payload into the entry body.</summary>
-    void Serialize<T>(Stream stream, T value);
 }

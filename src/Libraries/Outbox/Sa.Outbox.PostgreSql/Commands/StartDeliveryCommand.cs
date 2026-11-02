@@ -2,7 +2,7 @@
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.Delivery;
-using Sa.Outbox.PostgreSql.Serialization;
+using Sa.Outbox.Serialization;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Outbox.PostgreSql.TypeResolve;
 

@@ -1,6 +1,6 @@
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.Redis.Configuration;
-using Sa.Outbox.Redis.Serialization;
+using Sa.Outbox.Serialization;
 using Sa.Outbox.Redis.Services;
 using StackExchange.Redis;
 
@@ -40,7 +40,7 @@ internal sealed class PublishMessagesCommand(
                 new(RedisOutboxFields.PayloadId, item.PayloadId),
                 new(RedisOutboxFields.PayloadType, typeName),
                 new(RedisOutboxFields.CreatedAt, createdAt),
-                new(RedisOutboxFields.Payload, PayloadCodec.Serialize(serializer, item.Payload)),
+                new(RedisOutboxFields.Payload, OutboxPayloadCodec.Serialize(serializer, item.Payload)),
             ];
 
             appends.Add(redisBatch.StreamAddAsync(streamKey, fields));
