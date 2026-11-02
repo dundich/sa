@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.Delivery;
@@ -8,13 +8,15 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 
-internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOutboxConfiguration
+internal sealed class PgOutboxConfiguration(
+    IServiceCollection services,
+    string providerKey = OutboxScope.DefaultKey) : IPgOutboxConfiguration
 {
     public IPgOutboxConfiguration WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null)
     {
         if (configure != null)
         {
-            services.AddSingleton(configure);
+            services.AddKeyedSingleton<Action<IServiceProvider, PgOutboxSettings>>(providerKey, configure);
         }
 
         RegisterOutboxSettings();
@@ -24,7 +26,17 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
 
     public IPgOutboxConfiguration WithDataSource(Action<IDataSourceBuilder>? configure = null)
     {
-        services.AddSaPostgreSqlDataSource(configure);
+        // A keyed provider gets its own keyed data source (pool + connection). The default key
+        // keeps the classic unkeyed registration, so an application that already registered an
+        // NpgsqlDataSource (or configured the unkeyed data source) keeps borrowing it.
+        if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+        {
+            services.AddSaPostgreSqlDataSource(configure);
+        }
+        else
+        {
+            services.AddSaPostgreSqlDataSource(providerKey, configure);
+        }
         return this;
     }
 
@@ -32,7 +44,7 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
     {
         if (configure != null)
         {
-            services.AddSingleton(configure);
+            services.AddKeyedSingleton<Action<IServiceProvider, PgPollingSettings>>(providerKey, configure);
         }
 
         RegisterPollingSettings();
@@ -68,8 +80,8 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
     {
         ArgumentNullException.ThrowIfNull(poisonHandlerFactory);
 
-        services.RemoveAll<IPgOutboxPoisonHandler>();
-        services.TryAddSingleton<IPgOutboxPoisonHandler>(poisonHandlerFactory);
+        services.RemoveAllKeyed<IPgOutboxPoisonHandler>(providerKey);
+        services.TryAddKeyedSingleton<IPgOutboxPoisonHandler>(providerKey, (sp, _) => poisonHandlerFactory(sp));
         return this;
     }
 
@@ -78,16 +90,16 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        services.RemoveAll<IPgOutboxPoisonHandler>();
-        services.TryAddSingleton<IPgOutboxPoisonHandler>(instance);
+        services.RemoveAllKeyed<IPgOutboxPoisonHandler>(providerKey);
+        services.TryAddKeyedSingleton<IPgOutboxPoisonHandler>(providerKey, instance);
         return this;
     }
 
     public IPgOutboxConfiguration WithPoisonHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
         where TService : class, IPgOutboxPoisonHandler
     {
-        services.RemoveAll<IPgOutboxPoisonHandler>();
-        services.TryAddSingleton<IPgOutboxPoisonHandler, TService>();
+        services.RemoveAllKeyed<IPgOutboxPoisonHandler>(providerKey);
+        services.TryAddKeyedSingleton<IPgOutboxPoisonHandler, TService>(providerKey);
         return this;
     }
 
@@ -108,18 +120,20 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
 
     private void RegisterOutboxSettings()
     {
-        services.TryAddSingleton<PgOutboxSettings>(sp =>
+        services.TryAddKeyedSingleton<PgOutboxSettings>(providerKey, (sp, _) =>
         {
             PgOutboxSettings settings = new();
 
-            var connectionSchema = sp.GetService<IPgDataSource>()?.GetSearchPath();
+            var connectionSchema = Sa.Data.PostgreSql.PgDataSourceResolver.TryResolve(sp, providerKey, out IPgDataSource? dataSource)
+                ? dataSource!.GetSearchPath()
+                : null;
 
             if (!string.IsNullOrWhiteSpace(connectionSchema))
             {
                 settings.TableSettings.WithSchema(connectionSchema);
             }
 
-            var configureActions = sp.GetServices<Action<IServiceProvider, PgOutboxSettings>>();
+            var configureActions = sp.GetKeyedServices<Action<IServiceProvider, PgOutboxSettings>>(providerKey);
 
             foreach (var configureAction in configureActions)
                 configureAction.Invoke(sp, settings);
@@ -137,14 +151,37 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         });
 
         RegisterComponentSettings();
+
+        if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+        {
+            // Backward compatibility: the single-provider API resolves the pg settings without a key.
+            services.TryAddSingleton<PgOutboxSettings>(
+                sp => sp.GetRequiredKeyedService<PgOutboxSettings>(providerKey));
+        }
     }
 
     private void RegisterComponentSettings()
     {
-        services.TryAddSingleton<PgOutboxTableSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().TableSettings);
-        services.TryAddSingleton<PgOutboxMigrationSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().MigrationSettings);
-        services.TryAddSingleton<PgOutboxCleanupSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().CleanupSettings);
-        services.TryAddSingleton<PgOutboxConsumeSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().ConsumeSettings);
+        services.TryAddKeyedSingleton<PgOutboxTableSettings>(providerKey,
+            (sp, _) => sp.GetRequiredKeyedService<PgOutboxSettings>(providerKey).TableSettings);
+        services.TryAddKeyedSingleton<PgOutboxMigrationSettings>(providerKey,
+            (sp, _) => sp.GetRequiredKeyedService<PgOutboxSettings>(providerKey).MigrationSettings);
+        services.TryAddKeyedSingleton<PgOutboxCleanupSettings>(providerKey,
+            (sp, _) => sp.GetRequiredKeyedService<PgOutboxSettings>(providerKey).CleanupSettings);
+        services.TryAddKeyedSingleton<PgOutboxConsumeSettings>(providerKey,
+            (sp, _) => sp.GetRequiredKeyedService<PgOutboxSettings>(providerKey).ConsumeSettings);
+
+        if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+        {
+            services.TryAddSingleton<PgOutboxTableSettings>(
+                sp => sp.GetRequiredKeyedService<PgOutboxTableSettings>(providerKey));
+            services.TryAddSingleton<PgOutboxMigrationSettings>(
+                sp => sp.GetRequiredKeyedService<PgOutboxMigrationSettings>(providerKey));
+            services.TryAddSingleton<PgOutboxCleanupSettings>(
+                sp => sp.GetRequiredKeyedService<PgOutboxCleanupSettings>(providerKey));
+            services.TryAddSingleton<PgOutboxConsumeSettings>(
+                sp => sp.GetRequiredKeyedService<PgOutboxConsumeSettings>(providerKey));
+        }
     }
 
     /// <summary>
@@ -157,12 +194,12 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
     /// </summary>
     private void RegisterPollingSettings()
     {
-        services.TryAddSingleton(sp =>
+        services.TryAddKeyedSingleton(providerKey, (sp, _) =>
         {
             PgPollingSettings settings = new();
 
             foreach (Action<IServiceProvider, PgPollingSettings> configureAction in
-                sp.GetServices<Action<IServiceProvider, PgPollingSettings>>())
+                sp.GetKeyedServices<Action<IServiceProvider, PgPollingSettings>>(providerKey))
             {
                 configureAction.Invoke(sp, settings);
             }
@@ -173,5 +210,11 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
 
             return settings;
         });
+
+        if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+        {
+            services.TryAddSingleton<PgPollingSettings>(
+                sp => sp.GetRequiredKeyedService<PgPollingSettings>(providerKey));
+        }
     }
 }

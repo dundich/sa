@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Delivery;
@@ -44,12 +44,12 @@ public static class Setup
         OutboxScope.EnsureValid(scopeKey);
 
         services
-            .AddOutboxSqlBuilder(configure)
+            .AddOutboxSqlBuilder(scopeKey, configure)
             .AddOutboxRepositories(scopeKey)
             .AddOutboxPartitional(scopeKey)
             .AddOutboxIdGen()
-            .AddOutboxCommands()
-            .AddOutboxTypeResolver()
+            .AddOutboxCommands(scopeKey)
+            .AddOutboxTypeResolver(scopeKey)
             .AddOutboxJobInterceptors(scopeKey)
             ;
 
@@ -60,12 +60,22 @@ public static class Setup
         // IConfiguration section named by the configurationKey (or the convention) passed to
         // AddDelivery/AddDeliveryScoped. Both IConfiguration and PgPollingSettings are resolved as
         // optional services — absent, the corresponding layer is simply not applied.
+        // Keyed per provider: polling defaults and the group section convention are provider-local.
         services
             .RemoveAll<IDeliveryGroupOptionsProvider>()
-            .AddSingleton<IDeliveryGroupOptionsProvider>(
-                sp => new PgOutboxDeliveryOptionsProvider(
+            .AddKeyedSingleton<IDeliveryGroupOptionsProvider>(
+                scopeKey,
+                (sp, _) => new PgOutboxDeliveryOptionsProvider(
                     sp.GetService<IConfiguration>(),
-                    sp.GetService<PgPollingSettings>()));
+                    sp.GetKeyedService<PgPollingSettings>(scopeKey)));
+
+        if (string.Equals(scopeKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+        {
+            // Backward compatibility: the classic single-provider API resolves the options provider
+            // without a key.
+            services.TryAddSingleton<IDeliveryGroupOptionsProvider>(
+                sp => sp.GetRequiredKeyedService<IDeliveryGroupOptionsProvider>(scopeKey));
+        }
 
         return services;
     }

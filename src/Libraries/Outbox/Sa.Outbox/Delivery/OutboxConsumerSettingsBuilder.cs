@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Delivery;
+namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Fluent builder for creating or mutating <see cref="OutboxConsumerSettings"/>.
@@ -25,6 +25,7 @@ public sealed class OutboxConsumerSettingsBuilder
     private int? _perTenantMaxDegreeOfParallelism;
     private bool? _paused;
     private TimeSpan? _idleMaxInterval;
+    private string? _providerKey;
     private object? _tag;
 
     // ── Bootstrap: build from scratch ─────────────────────────
@@ -55,6 +56,7 @@ public sealed class OutboxConsumerSettingsBuilder
             _perTenantMaxDegreeOfParallelism ?? OutboxDefaults.PerTenantMaxDegreeOfParallelism,
             _paused ?? OutboxDefaults.Paused,
             0,
+            _providerKey ?? OutboxScope.DefaultKey,
             _idleMaxInterval ?? OutboxDefaults.IdleMaxInterval,
             _tag);
     }
@@ -68,6 +70,18 @@ public sealed class OutboxConsumerSettingsBuilder
     public OutboxConsumerSettingsBuilder WithConsumerGroupId(string consumerGroupId)
     {
         _consumerGroupId = consumerGroupId ?? throw new ArgumentNullException(nameof(consumerGroupId));
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the provider key of the storage this group belongs to (the outbox scope key).
+    /// Pinned by the registration, like the group id: the key selects the keyed storage contracts
+    /// at delivery time.
+    /// </summary>
+    public OutboxConsumerSettingsBuilder WithProviderKey(string providerKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerKey);
+        _providerKey = providerKey;
         return this;
     }
 

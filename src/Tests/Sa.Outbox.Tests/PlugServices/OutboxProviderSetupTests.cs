@@ -142,16 +142,20 @@ public class OutboxProviderSetupTests
     }
 
     [Fact]
-    public void Registry_MissingBulkWriter_Throws()
+    public void TamperedBulkWriterRegistration_IsNotValidatedByConstruction_ButFailsOnResolve()
     {
+        // The registry validates the registration marker and never constructs provider services
+        // (building a storage chain can open connections while job settings are built). Removing a
+        // registration afterwards is a container-level misuse that DI reports on first resolve.
         var services = new ServiceCollection();
         services.AddOutboxProvider(Descriptor(), provider => provider.WithBulkWriter<FakeWriter>());
-        services.RemoveAll<IOutboxBulkWriter>();
+        services.RemoveAllKeyed<IOutboxBulkWriter>(Sa.Outbox.OutboxScope.DefaultKey);
 
         using ServiceProvider sp = services.BuildServiceProvider();
 
+        Assert.NotNull(sp.GetRequiredService<IOutboxProviderRegistry>());
         Assert.Throws<InvalidOperationException>(
-            () => sp.GetRequiredService<IOutboxProviderRegistry>());
+            () => sp.GetRequiredService<IOutboxBulkWriter>());
     }
 
     [Fact]

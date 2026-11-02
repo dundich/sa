@@ -31,6 +31,7 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 internal sealed class DeliveryGroupSettingsRegistration(
     string consumerGroupId,
+    string providerKey,
     OutboxConsumerSettings registrationTimeSettings,
     Func<IServiceProvider, OutboxConsumerSettings> buildFull)
 {
@@ -41,6 +42,9 @@ internal sealed class DeliveryGroupSettingsRegistration(
     /// the job name all use this value, so they always match.
     /// </summary>
     public string ConsumerGroupId { get; } = consumerGroupId;
+
+    /// <summary>The provider key (outbox scope key) this group belongs to.</summary>
+    public string ProviderKey { get; } = providerKey;
 
     /// <summary>The stage-1 snapshot, built eagerly at registration time.</summary>
     public OutboxConsumerSettings RegistrationTimeSettings { get; } = registrationTimeSettings;

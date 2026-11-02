@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Delivery;
+namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Immutable settings snapshot for a single outbox consumer group.
@@ -115,6 +115,13 @@ public sealed record OutboxConsumerSettings(
     int Version,
 
     /// <summary>
+    /// The provider key of the storage this group belongs to (equal to the outbox scope key).
+    /// The delivery pipeline resolves the keyed storage contracts by this value; a single-provider
+    /// application keeps <see cref="OutboxScope.DefaultKey"/>.
+    /// </summary>
+    string ProviderKey = OutboxScope.DefaultKey,
+
+    /// <summary>
     /// Upper bound for the adaptive poll interval used while the consumer group's queue stays
     /// empty. <see cref="TimeSpan.Zero"/> (default) disables adaptive back-off — the poll period
     /// stays at <see cref="Interval"/>. When set, it must be at least <see cref="Interval"/>, and
@@ -166,6 +173,9 @@ public sealed record OutboxConsumerSettings(
         if (PerTenantMaxDegreeOfParallelism == 0)
             errors.Add(
                 "PerTenantMaxDegreeOfParallelism cannot be 0. Use 1 for sequential or > 1 for parallel.");
+
+        if (string.IsNullOrWhiteSpace(ProviderKey))
+            errors.Add("ProviderKey cannot be null or empty.");
 
         if (LockRenewal <= TimeSpan.Zero || LockRenewal >= LockDuration)
             errors.Add(
@@ -223,6 +233,6 @@ public sealed record OutboxConsumerSettings(
 
     /// <inheritdoc/>
     public override string ToString()
-        => $"{ConsumerGroupId} v{Version} interval={Interval}, batchSize={MaxBatchSize}, " +
+        => $"{ProviderKey}/{ConsumerGroupId} v{Version} interval={Interval}, batchSize={MaxBatchSize}, " +
            $"parallelism={PerTenantMaxDegreeOfParallelism}, paused={Paused}";
 }

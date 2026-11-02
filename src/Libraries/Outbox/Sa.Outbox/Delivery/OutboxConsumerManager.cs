@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Delivery;
+namespace Sa.Outbox.Delivery;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -47,8 +47,24 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
         IServiceProvider sp,
         ILogger<OutboxConsumerManager>? logger = null) : this(logger)
     {
+        // Slice-1 multi-provider contract: group ids are unique across providers. The manager and
+        // IConsumer<T> are keyed by the group id alone, so a duplicate across providers would
+        // silently bind one group's settings to another provider's consumer.
+        Dictionary<string, string> providerByGroup = new(StringComparer.Ordinal);
+
         foreach (var registration in registrations)
         {
+            if (providerByGroup.TryGetValue(registration.ConsumerGroupId, out string? existingProvider)
+                && !string.Equals(existingProvider, registration.ProviderKey, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Consumer group id '{registration.ConsumerGroupId}' is used by providers " +
+                    $"'{existingProvider}' and '{registration.ProviderKey}'. Group ids must be unique " +
+                    "across providers; rename one of the groups.");
+            }
+
+            providerByGroup[registration.ConsumerGroupId] = registration.ProviderKey;
+
             if (!TryRegister(registration.ConsumerGroupId, registration.RegistrationTimeSettings))
                 continue;
 

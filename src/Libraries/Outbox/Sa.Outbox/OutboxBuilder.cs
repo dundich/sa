@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Metadata;
@@ -31,7 +31,7 @@ internal sealed class OutboxBuilder : IOutboxBuilder
         services.TryAddSingleton<IOutboxMessageSerializer>(JsonOutboxMessageSerializer.Instance);
 
         services
-            .AddMessagePublisher()
+            .AddMessagePublisher(scopeKey: scopeKey)
             .AddOutboxDelivery(scopeKey: scopeKey);
 
         return new OutboxBuilder(services, scopeKey);
@@ -39,7 +39,7 @@ internal sealed class OutboxBuilder : IOutboxBuilder
 
     public IOutboxBuilder WithPublishSettings(Action<IServiceProvider, OutboxPublishSettings> configure)
     {
-        _services.AddMessagePublisher(configure);
+        _services.AddMessagePublisher(configure, _scopeKey);
         return this;
     }
 

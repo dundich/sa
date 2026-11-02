@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Sa.Outbox.Metadata;
@@ -47,6 +47,10 @@ internal static class Setup
         services.TryAddSingleton(new OutboxDeliveryConfiguration());
 
         services.TryAddSingleton<IDeliveryTenant, DeliveryTenant>();
+
+        // Provider contracts are resolved by provider key through this router: the delivery
+        // pipeline itself stays provider-agnostic and singletons stay unkeyed.
+        services.TryAddSingleton<IOutboxStorage, OutboxStorage>();
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 

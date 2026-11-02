@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Outbox.PlugServices;
 using System.Buffers;
 
@@ -9,7 +9,7 @@ namespace Sa.Outbox.Delivery;
 /// Processes messages for a specific tenant with locking and delivery.
 /// </summary>
 internal sealed class DeliveryTenant(
-    IOutboxDeliveryManager deliveryMan,
+    IOutboxStorage storage,
     IDeliveryCourier deliveryCourier,
     IDeliveryBatcher batcher,
     FilterFactory filterFactory,
@@ -31,8 +31,12 @@ internal sealed class DeliveryTenant(
 
         using var memoryOwner = RentMemory<TMessage>(batchSize);
 
+        // The storage contracts are keyed by the provider: resolve the manager for this group once
+        // per pass and thread it through, instead of resolving it three times.
+        IOutboxDeliveryManager deliveryMan = storage.DeliveryManager(settings.ProviderKey);
 
         var messages = await AcquireMessagesAsync(
+            deliveryMan,
             settings,
             filter,
             memoryOwner.Memory[..batchSize],
@@ -40,11 +44,11 @@ internal sealed class DeliveryTenant(
 
         if (messages.IsEmpty) return 0;
 
-        await using IAsyncDisposable locker = RenewerLocker(settings, filter, cancellationToken);
+        await using IAsyncDisposable locker = RenewerLocker(deliveryMan, settings, filter, cancellationToken);
 
         var delivered = await deliveryCourier.Deliver(settings, filter, messages, cancellationToken);
 
-        await ReleaseMessagesAsync(messages, filter, cancellationToken);
+        await ReleaseMessagesAsync(deliveryMan, messages, filter, cancellationToken);
 
         // Only after the statuses are persisted: a context may then be recycled by the factory.
         // If ReleaseMessagesAsync throws, the contexts are left to the GC instead of being pooled.
@@ -70,7 +74,8 @@ internal sealed class DeliveryTenant(
             consumerGroupId: settings.ConsumerGroupId,
             now: GetUtcNow(),
             lookbackInterval: settings.LookbackInterval,
-            batchingWindow: settings.BatchingWindow);
+            batchingWindow: settings.BatchingWindow,
+            providerKey: settings.ProviderKey);
     }
 
     private DateTimeOffset GetUtcNow() => _timeProvider.GetUtcNow();
@@ -88,7 +93,8 @@ internal sealed class DeliveryTenant(
         return Math.Clamp(calculatedSize, 0, settings.MaxBatchSize);
     }
 
-    private async Task<ReadOnlyMemory<IOutboxContextOperations<TMessage>>> AcquireMessagesAsync<TMessage>(
+    private static async Task<ReadOnlyMemory<IOutboxContextOperations<TMessage>>> AcquireMessagesAsync<TMessage>(
+        IOutboxDeliveryManager deliveryMan,
         OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         Memory<IOutboxContextOperations<TMessage>> buffer,
@@ -105,6 +111,7 @@ internal sealed class DeliveryTenant(
 
 
     private Task<int> ReleaseMessagesAsync<TMessage>(
+        IOutboxDeliveryManager deliveryMan,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
@@ -116,6 +123,7 @@ internal sealed class DeliveryTenant(
     }
 
     private IAsyncDisposable RenewerLocker(
+        IOutboxDeliveryManager deliveryMan,
         OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)

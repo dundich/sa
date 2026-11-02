@@ -1,4 +1,4 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 using Sa.Outbox.Metadata;
 
 
@@ -15,7 +15,8 @@ internal sealed class FilterFactory(IOutboxMessageMetadataProvider metadata)
         string consumerGroupId,
         DateTimeOffset now,
         TimeSpan lookbackInterval,
-        TimeSpan batchingWindow)
+        TimeSpan batchingWindow,
+        string providerKey)
     {
         return new OutboxMessageFilter(
             TransactId: GenerateTransactId(),
@@ -25,7 +26,8 @@ internal sealed class FilterFactory(IOutboxMessageMetadataProvider metadata)
             Part: metadata.GetMetadata<TMessage>().PartName,
             FromDate: now.StartOfDay() - lookbackInterval,
             ToDate: now - batchingWindow,
-            NowDate: now
+            NowDate: now,
+            ProviderKey: providerKey
         );
     }
 

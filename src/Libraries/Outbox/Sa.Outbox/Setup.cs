@@ -1,6 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.Publication;
 
 namespace Sa.Outbox;
 
@@ -32,6 +33,9 @@ public static class Setup
         build?.Invoke(builder);
 
         services.TryAddSingleton<IDeliveryBackoffStrategy, ExponentialDeliveryBackoffStrategy>();
+
+        // Keyed publisher lookup for multi-provider registrations.
+        services.TryAddSingleton<IOutboxPublisherResolver, OutboxPublisherResolver>();
 
         return services;
     }

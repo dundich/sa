@@ -261,3 +261,120 @@ public readonly record struct OutboxDeliveryMessage<TMessage>(
 - PG: batch insert (one part), `(task, delivery)` token on return;
 - Redis: `(ms, seq)` token, `XACK` by token, poison path unchanged;
 - the existing PG/Redis integration suites stay green.
+
+---
+
+# Keyed multi-provider (C)
+
+## Goal
+
+Several outbox providers in one container: for example `billing` on PostgreSQL and `audit` on a
+different PostgreSQL schema (Redis follows in slice 2). Each provider has **its own** storage,
+schedule, migrations/cleanup, tenant set and consumer groups.
+
+## Decisions
+
+1. **Provider key = `scopeKey`.** One provider = one `Sa.Schedule` = one `Sa.Partitional.PostgreSql`
+   module. The classic `AddSaOutboxUsingPostgreSql(...)` uses `OutboxScope.DefaultKey` (`"outbox"`)
+   and is unchanged.
+2. **Metadata and serializer stay shared**: they describe the message format, not the storage.
+3. **Tenants are per provider**: `WithTenants` inside the provider's `configureOutbox` registers
+   `TenantSettings` under the provider key.
+4. **One message type may be published to several providers** — two independent at-least-once flows
+   sharing the metadata.
+5. **A group is bound to a provider through its `configureOutbox`**, so it cannot be attached to a
+   foreign storage by accident.
+6. **Configuration sections are `Outbox:{providerKey}:…`**; default-key paths keep their previous
+   shape (`Outbox:DeliveryGroups:{group}`).
+7. **Consumer group ids are unique in the container** (validated). That is the slice-1 contract: it
+   avoids keyed `IConsumer<T>` and composite keys in the manager. Composite keys are slice 3.
+
+## API
+
+```csharp
+services
+    .AddSaOutboxUsingPostgreSql(
+        "billing",                                   // provider key == scope key
+        pg => pg.WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = billingCs))),
+        outbox => outbox
+            .WithDeliveries(d => d.AddDelivery<InvoiceConsumer, Invoice>("invoices")))
+    .AddSaOutboxUsingPostgreSql(
+        "audit",
+        pg => pg.WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = auditCs))),
+        outbox => outbox
+            .WithDeliveries(d => d.AddDelivery<AuditConsumer, AuditEvent>("audit-events")));
+```
+
+Publishing:
+
+```csharp
+IOutboxMessagePublisher billing = sp.GetRequiredKeyedService<IOutboxMessagePublisher>("billing");
+
+sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(invoice, tenantId: 1);
+```
+
+## What is keyed
+
+| Layer | Registration |
+|---|---|
+| `IOutboxBulkWriter`, `IOutboxDeliveryManager`, `IOutboxTenantDetector` | keyed by provider key |
+| `IOutboxMessagePublisher`, `OutboxPublishSettings` | keyed (plus an unkeyed alias for the default key) |
+| `IOutboxProviderRegistry` | keyed per provider + aggregate `IOutboxProviders` |
+| `IDeliveryGroupOptionsProvider`, `PgPollingSettings`, `PgOutboxSettings`, `IPgDataSource`, `SqlOutboxBuilder`, commands, loader, type resolver | keyed per provider (PG) |
+| `TenantSettings` | keyed per provider |
+| `IScheduleSettings` / `IScheduler` / `IPartitionManager` | keyed by `scopeKey` — already |
+| `IOutboxMessageMetadataProvider`, `IOutboxMessageSerializer` | shared |
+| `IConsumer<T>` | keyed by group id (uniqueness validated) |
+
+The default provider (`"outbox"`) additionally registers an unkeyed `IOutboxMessagePublisher` alias,
+so existing code injecting the publisher without a key keeps working.
+
+## Delivery routing
+
+`OutboxConsumerSettings.ProviderKey` and `OutboxMessageFilter.ProviderKey` carry the provider key.
+`DeliveryTenant`/`DeliveryProcessor` resolve the keyed `IOutboxDeliveryManager` and `ITenantProvider`
+through an internal `IOutboxStorage` router. Public pipeline signatures do not change.
+
+## Slices
+
+1. **Slice 1 (this one):** core plumbing + PostgreSQL. Two PG providers (different schemas) publish
+   and deliver independently; Redis stays on the default key.
+2. **Slice 2:** Redis — keyed settings (`RedisOutboxSettings`, stream keys prefixed per provider),
+   keyed commands and registration.
+3. **Slice 3:** composite `(providerKey, groupId)` for `IConsumer<T>`/the manager if group uniqueness
+   becomes a constraint; per-provider health.
+
+## Invariants
+
+- The guarantees are the same and **per provider**: at-least-once, ordering in `(tenant, part, type)`,
+  DLQ/poison, lookback.
+- No distributed transactions across providers, no load-based routing.
+- Single-provider applications do not change: default key, publisher alias, previous sections.
+
+## Tests
+
+- two PG providers with different schemas: publish to each, independent delivery, independent
+  migrations/cleanup;
+- the default-key PG path behaves as before (the whole existing suite);
+- a duplicate provider key and a duplicate consumer group id fail at startup;
+- `IOutboxPublisherResolver.For(unknown)` — clear error;
+- Redis (slice 1) — the existing suite stays green.
+
+## Status
+
+- **Slice 1 is implemented**: the provider key flows through
+  `OutboxConsumerSettings`/`OutboxMessageFilter`, contracts are keyed
+  (`AddOutboxProvider(providerKey, …)`), the publisher is keyed with an
+  `IOutboxPublisherResolver` facade, the whole PostgreSQL graph is keyed (settings, data source,
+  commands, loader, type resolver, poison handler, options/polling provider), delivery routes through
+  the `IOutboxStorage` router, and both the provider key and the consumer group id are validated for
+  uniqueness. The default key keeps unkeyed aliases, so single-provider applications and the existing
+  suites are unchanged.
+- **Slice 2 (Redis)** is next: keyed `RedisOutboxSettings`, provider-prefixed stream keys and keyed
+  commands. Until then Redis supports the default key only.
+- **Slice 3**: composite `(providerKey, groupId)` keys and per-provider health.
+
+Slice-1 constraints: tenants are shared per container (`WithTenants` without a key); consumer group
+ids are unique across providers (validated when the manager is built); provider-internal services are
+resolved keyed, so user extensions registered as a type (for example a custom `IPgOutboxPoisonHandler`)
+must use the factory overloads.

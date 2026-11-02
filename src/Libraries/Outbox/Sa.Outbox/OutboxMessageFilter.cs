@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox;
+namespace Sa.Outbox;
 
 /// <summary>
 /// Represents a filter for querying Outbox messages based on specific criteria.
@@ -11,6 +11,8 @@
 /// <param name="Part">Gets the part identifier for the Outbox message.</param>
 /// <param name="FromDate">Gets the starting date and time for filtering messages.Only messages created on or after this date will be included.</param>
 /// <param name="ToDate">Gets the current date and time for filtering messages.</param>
+/// <param name="NowDate">Gets the wall clock at call time.</param>
+/// <param name="ProviderKey">The provider key of the storage this filter targets.</param>
 public sealed record OutboxMessageFilter(
     string TransactId,
     string ConsumerGroupId,
@@ -19,5 +21,6 @@ public sealed record OutboxMessageFilter(
     string Part,
     DateTimeOffset FromDate,
     DateTimeOffset ToDate,
-    DateTimeOffset NowDate
+    DateTimeOffset NowDate,
+    string ProviderKey = OutboxScope.DefaultKey
 );

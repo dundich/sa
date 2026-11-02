@@ -4,27 +4,27 @@ using Sa.Outbox.Delivery;
 namespace Sa.Outbox.PlugServices;
 
 /// <summary>
-/// Validates the installed provider and exposes its descriptor. Registered as a singleton by
-/// <c>AddOutboxProvider</c>; every check below fails the construction, i.e. the first resolution —
-/// which the hosted validator forces at startup and the delivery job settings build re-checks
-/// before the first tick.
+/// Validates the installation of one provider and exposes its descriptor. Registered keyed by
+/// provider key; every check below fails the construction, i.e. the first resolution — which the
+/// hosted validator forces for every registered key at startup.
 /// </summary>
 internal sealed class OutboxProviderRegistry : IOutboxProviderRegistry
 {
     public OutboxProviderDescriptor Descriptor { get; }
 
-    public OutboxProviderRegistry(
-        IEnumerable<OutboxProviderRegistration> registrations,
-        IServiceProvider services)
+    public OutboxProviderRegistry(string providerKey, IServiceProvider services)
     {
-        OutboxProviderRegistration[] registered = [.. registrations];
+        OutboxProviderRegistration[] registered =
+        [
+            .. services.GetServices<OutboxProviderRegistration>()
+                .Where(r => string.Equals(r.ProviderKey, providerKey, StringComparison.Ordinal)),
+        ];
 
         if (registered.Length == 0)
         {
             throw new InvalidOperationException(
-                "No outbox storage provider is registered. Add one of the provider packages " +
-                "(for example AddSaOutboxUsingPostgreSql(...) or AddSaOutboxUsingRedis(...)) — " +
-                "publishing and delivery both need an IOutboxBulkWriter from a provider.");
+                $"No outbox storage provider is registered under the key '{providerKey}'. " +
+                "Add one of the provider packages with that key.");
         }
 
         if (registered.Length > 1)
@@ -34,46 +34,33 @@ internal sealed class OutboxProviderRegistry : IOutboxProviderRegistry
                 registered.Select(static r => r.Descriptor.Name).Distinct(StringComparer.Ordinal));
 
             throw new InvalidOperationException(
-                $"Multiple outbox storage providers are registered ({names}). The Outbox supports one " +
-                "provider per container: remove one of the provider registrations.");
+                $"Multiple outbox providers are registered under the key '{providerKey}' ({names}). " +
+                "One provider per key: remove one of the registrations or use a different key.");
         }
 
-        Descriptor = registered[0].Descriptor;
+        OutboxProviderRegistration registration = registered[0];
+        Descriptor = registration.Descriptor;
 
-        // Validate the *registration*, never by constructing the provider's services: building a
-        // storage chain can open connections and load state, which must not happen while a
-        // schedule's job settings are being built. IServiceProviderIsService answers "is there a
-        // registration" without any side effect; the fallback is for a non-Microsoft container.
-        IServiceProviderIsService? isService = services.GetService<IServiceProviderIsService>();
+        // Presence checks use the registration marker, never service construction: building a
+        // provider's chain can open connections and load state, and the registry is also read while
+        // delivery job settings are being built.
+        bool hasConsumerGroups = services.GetServices<DeliveryGroupSettingsRegistration>()
+            .Any(g => string.Equals(g.ProviderKey, providerKey, StringComparison.Ordinal));
 
-        bool IsRegistered(Type type) => isService is not null
-            ? isService.IsService(type)
-            : services.GetService(type) is not null;
-
-        if (!IsRegistered(typeof(IOutboxBulkWriter)))
+        if (hasConsumerGroups && !registration.HasDeliveryManager)
         {
             throw new InvalidOperationException(
-                $"Outbox provider '{Descriptor.Name}' does not register an {nameof(IOutboxBulkWriter)}. " +
-                "Call AddOutboxProvider(..., provider => provider.WithBulkWriter<T>()).");
-        }
-
-        // The delivery manager is required only when the application actually consumes: a
-        // publish-only deployment has no consumer groups and no delivery to run.
-        bool hasConsumerGroups = services.GetServices<DeliveryGroupSettingsRegistration>().Any();
-
-        if (hasConsumerGroups && !IsRegistered(typeof(IOutboxDeliveryManager)))
-        {
-            throw new InvalidOperationException(
-                $"Outbox provider '{Descriptor.Name}' does not register an {nameof(IOutboxDeliveryManager)}, " +
-                "but the application registers consumer groups. Add it with " +
-                "AddOutboxProvider(..., provider => provider.WithDeliveryManager<T>()) or remove the deliveries.");
+                $"Outbox provider '{Descriptor.Name}' (key '{providerKey}') does not register an " +
+                $"{nameof(IOutboxDeliveryManager)}, but consumer groups are registered for it. " +
+                "Add it with AddOutboxProvider(..., provider => provider.WithDeliveryManager<T>()) " +
+                "or remove the deliveries.");
         }
 
         if (Descriptor.Supports(OutboxProviderCapabilities.TenantDetection)
-            && !IsRegistered(typeof(IOutboxTenantDetector)))
+            && !registration.HasTenantDetector)
         {
             throw new InvalidOperationException(
-                $"Outbox provider '{Descriptor.Name}' declares the " +
+                $"Outbox provider '{Descriptor.Name}' (key '{providerKey}') declares the " +
                 $"{nameof(OutboxProviderCapabilities.TenantDetection)} capability but registers no " +
                 $"{nameof(IOutboxTenantDetector)}. Register one or drop the capability flag.");
         }

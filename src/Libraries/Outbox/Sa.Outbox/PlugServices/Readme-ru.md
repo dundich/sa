@@ -269,3 +269,123 @@ public readonly record struct OutboxDeliveryMessage<TMessage>(
 - PG: batch-вставка (один part), токен `(task, delivery)` в возврате;
 - Redis: токен `(ms, seq)`, `XACK` по токену, poison-путь без изменений;
 - существующие интеграционные наборы PG/Redis остаются зелёными.
+
+---
+
+# Keyed-мультипровайдерность (C)
+
+## Цель
+
+Несколько outbox-провайдеров в одном контейнере: например, `billing` на PostgreSQL и `audit` на
+PostgreSQL с другой схемой (Redis — следующий срез). Каждый провайдер имеет **своё** хранилище,
+расписание, миграции/cleanup, наборы тенантов и consumer-группы.
+
+## Зафиксированные решения
+
+1. **Provider key = `scopeKey`.** Один провайдер = одно расписание `Sa.Schedule` = один модуль
+   `Sa.Partitional.PostgreSql`. Классический `AddSaOutboxUsingPostgreSql(...)` использует
+   `OutboxScope.DefaultKey` (`"outbox"`) и остаётся без изменений.
+2. **Метаданные и сериализатор — общие** на контейнер: это формат сообщения, а не хранилище.
+3. **Тенанты — per provider**: `WithTenants` внутри провайдерского `configureOutbox` регистрирует
+   `TenantSettings` под ключом провайдера.
+4. **Один тип сообщения можно публиковать в разные провайдеры** — это два независимых at-least-once
+   потока; метаданные у них общие.
+5. **Группа привязана к провайдеру через его `configureOutbox`** — нельзя случайно подключить
+   группу к чужому хранилищу.
+6. **Секции конфигурации — `Outbox:{providerKey}:…`**; для default-key пути сохраняются
+   (`Outbox:DeliveryGroups:{group}`).
+7. **Id consumer-групп уникальны в контейнере** (валидируется): это срез 1, он не требует keyed
+   `IConsumer<T>` и составных ключей в менеджере. Составные ключи — срез 3.
+
+## API
+
+```csharp
+services
+    .AddSaOutboxUsingPostgreSql(
+        "billing",                                   // provider key == scope key
+        pg => pg.WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = billingCs)))
+                 .WithPollingBudget(TimeSpan.FromMinutes(1)),
+        outbox => outbox
+            .WithTenants((_, t) => t.WithTenantIds(1, 2))
+            .WithDeliveries(d => d.AddDelivery<InvoiceConsumer, Invoice>("invoices")))
+    .AddSaOutboxUsingPostgreSql(
+        "audit",
+        pg => pg.WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = auditCs))),
+        outbox => outbox
+            .WithDeliveries(d => d.AddDelivery<AuditConsumer, AuditEvent>("audit-events")));
+```
+
+Публикация:
+
+```csharp
+// keyed DI
+IOutboxMessagePublisher billing = sp.GetRequiredKeyedService<IOutboxMessagePublisher>("billing");
+
+// фасад (основной UX)
+sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(invoice, tenantId: 1);
+```
+
+## Что ключуется
+
+| Слой | Регистрация |
+|---|---|
+| `IOutboxBulkWriter`, `IOutboxDeliveryManager`, `IOutboxTenantDetector` | keyed по provider key |
+| `IOutboxMessagePublisher`, `OutboxPublishSettings` | keyed (плюс unkeyed alias для default key) |
+| `IOutboxProviderRegistry` | keyed на провайдера + сводный `IOutboxProviders` (список дескрипторов) |
+| `IDeliveryGroupOptionsProvider`, `PgPollingSettings`, `PgOutboxSettings`, `IPgDataSource`, `SqlOutboxBuilder`, команды, загрузчик, резолвер типов | keyed на провайдера (PG) |
+| `TenantSettings` | keyed на провайдера |
+| `IScheduleSettings` / `IScheduler` / `IPartitionManager` | keyed по `scopeKey` — уже так |
+| `IOutboxMessageMetadataProvider`, `IOutboxMessageSerializer` | общие (unkeyed) |
+| `IConsumer<T>` | keyed по group id (уникальность групп валидируется) |
+
+Дефолтный провайдер (`"outbox"`) дополнительно регистрирует unkeyed alias для
+`IOutboxMessagePublisher` — существующий код, инжектящий паблишер без ключа, продолжает работать.
+
+## Маршрутизация в доставке
+
+`OutboxConsumerSettings.ProviderKey` и `OutboxMessageFilter.ProviderKey` несут ключ провайдера.
+`DeliveryTenant`/`DeliveryProcessor` резолвят keyed `IOutboxDeliveryManager` и `ITenantProvider` по
+этому ключу через внутренний `IOutboxStorage`-роутер. Публичные сигнатуры конвейера не меняются.
+
+## Срезы
+
+1. **Срез 1 (этот):** core-плумбинг + PostgreSQL. Два PG-провайдера (разные схемы) публикуют и
+   доставляют независимо; Redis остаётся на default key.
+2. **Срез 2:** Redis — keyed-настройки (`RedisOutboxSettings`, ключи стримов с префиксом провайдера),
+   keyed-команды и регистрация.
+3. **Срез 3:** составной ключ `(providerKey, groupId)` для `IConsumer<T>`/менеджера, если уникальность
+   групп окажется ограничением; health на провайдера.
+
+## Инварианты
+
+- Гарантии те же и **в пределах провайдера**: at-least-once, порядок в `(tenant, part, type)`,
+  DLQ/poison, lookback.
+- Нет распределённых транзакций между провайдерами.
+- Нет маршрутизации по нагрузке: провайдер выбирается статически.
+- Single-provider приложения не меняются: default key, unkeyed alias паблишера, прежние секции.
+
+## Тесты
+
+- два PG-провайдера с разными схемами: публикация в каждый, независимая доставка, независимые
+  миграции/cleanup;
+- default-key PG работает как раньше (весь существующий набор);
+- дубликат provider key и дубликат consumer group id — ошибка на старте;
+- `IOutboxPublisherResolver.For(unknown)` — понятная ошибка;
+- Redis (срез 1) — весь существующий набор зелёный.
+
+## Статус
+
+- **Срез 1 реализован**: provider key в `OutboxConsumerSettings`/`OutboxMessageFilter`,
+  keyed-контракты (`AddOutboxProvider(providerKey, …)`), keyed-паблишер + `IOutboxPublisherResolver`,
+  keyed-граф PostgreSQL (настройки, data source, команды, загрузчик, резолвер типов, poison handler,
+  options/polling provider), роутер `IOutboxStorage` для доставки, уникальность provider key и
+  consumer group id. Дефолтный ключ получает unkeyed-алиасы, поэтому single-provider приложения и
+  существующие тесты не меняются.
+- **Срез 2 (Redis)** — следующий: `RedisOutboxSettings`/ключи стримов с префиксом провайдера,
+  keyed-команды. До него Redis поддерживает только default key.
+- **Срез 3** — составные ключи `(providerKey, groupId)` и health на провайдера.
+
+Принятые в срезе 1 ограничения: тенанты общие на контейнер (`WithTenants` без ключа); id
+consumer-групп уникальны между провайдерами (проверяется при построении менеджера); внутренние
+сервисы провайдера разрешаются keyed, а пользовательские расширения провайдера (например кастомный
+`IPgOutboxPoisonHandler`, зарегистрированный типом) должны использовать фабричные overload'ы.

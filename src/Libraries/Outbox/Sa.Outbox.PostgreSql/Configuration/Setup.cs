@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 
@@ -6,9 +6,10 @@ internal static class Setup
 {
     public static IServiceCollection AddPgOutboxSettings(
         this IServiceCollection services,
+        string providerKey,
         Action<IPgOutboxConfiguration>? configure = null)
     {
-        var configuration = new PgOutboxConfiguration(services);
+        var configuration = new PgOutboxConfiguration(services, providerKey);
 
         configuration.WithOutboxSettings();
         configuration.WithDataSource();

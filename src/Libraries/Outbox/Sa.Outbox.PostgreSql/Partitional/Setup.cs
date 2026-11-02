@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
@@ -22,7 +22,7 @@ internal static class Setup
         // not pin a named one.
         _ = services.AddSaPartitional(scopeKey, (sp, builder) =>
         {
-            SqlOutboxBuilder sql = sp.GetRequiredService<SqlOutboxBuilder>();
+            SqlOutboxBuilder sql = sp.GetRequiredKeyedService<SqlOutboxBuilder>(scopeKey);
             var tableSettings = sql.TableSettings;
 
             builder.AddSchema(tableSettings.DatabaseSchemaName, schema =>
@@ -78,14 +78,14 @@ internal static class Setup
         })
         .AddPartMigrationSchedule(b => b.Configure((sp, opts) =>
         {
-            PgOutboxMigrationSettings settings = sp.GetRequiredService<PgOutboxMigrationSettings>();
+            PgOutboxMigrationSettings settings = sp.GetRequiredKeyedService<PgOutboxMigrationSettings>(scopeKey);
             opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.ForwardDays = settings.ForwardDays;
         }))
         .AddPartCleanupSchedule(b => b.Configure((sp, opts) =>
         {
-            PgOutboxCleanupSettings settings = sp.GetRequiredService<PgOutboxCleanupSettings>();
+            PgOutboxCleanupSettings settings = sp.GetRequiredKeyedService<PgOutboxCleanupSettings>(scopeKey);
             opts.AsBackgroundJob = settings.AsBackgroundJob;
             opts.ExecutionInterval = settings.ExecutionInterval;
             opts.DropPartsAfterRetention = settings.DropPartsAfterRetention;

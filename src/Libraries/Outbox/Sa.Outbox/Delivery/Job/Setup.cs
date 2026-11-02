@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Outbox.PlugServices;
 using Sa.Schedule;
 using System.Diagnostics.CodeAnalysis;
@@ -46,6 +46,7 @@ internal static class Setup
 
         services.AddSingleton(new DeliveryGroupSettingsRegistration(
             consumerGroupId,
+            scopeKey,
             registrationSettings,
             sp => BuildSettings(sp)));
 
@@ -60,7 +61,8 @@ internal static class Setup
                 // provider must not start delivering against a broken installation. The registry
                 // validates registrations without constructing provider services (no connections
                 // are opened while job settings are built). Absent a registry this is a no-op.
-                _ = sp.GetService<IOutboxProviderRegistry>();
+                _ = sp.GetKeyedService<IOutboxProviderRegistry>(scopeKey)
+                    ?? sp.GetService<IOutboxProviderRegistry>();
 
                 // Resolving the manager runs its factory, which has already upgraded this group's
                 // snapshot to the full chain (with a live provider), so the job simply reads the
@@ -107,11 +109,16 @@ internal static class Setup
             //   4. the user configure callback
             var builder = new OutboxConsumerSettingsBuilder()
                 .WithConsumerGroupId(consumerGroupId)
+                .WithProviderKey(scopeKey)
                 .AsSingleton(isSingleton);
 
             if (sp is not null)
             {
-                var provider = sp.GetRequiredService<IDeliveryGroupOptionsProvider>();
+                // The options provider is per provider: resolve this scope's keyed one, with an
+                // unkeyed fallback for the default-key registration and simple containers.
+                IDeliveryGroupOptionsProvider provider =
+                    sp.GetKeyedService<IDeliveryGroupOptionsProvider>(scopeKey)
+                    ?? sp.GetRequiredService<IDeliveryGroupOptionsProvider>();
 
                 // Section resolution: an explicit configurationKey always wins (an explicit empty
                 // string opts the group out), otherwise the Outbox:DeliveryGroups:{group} convention
