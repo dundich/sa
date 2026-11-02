@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<Import Project="../../../Common.NuGet.Properties.xml" />
+
+	<PropertyGroup>
+		<Version>0.1.0</Version>
+		<Description>Simple Outbox for Redis Streams (publishing and using messages)</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Include="..\..\Sa\Extensions\DateTimeExtensions.cs" Link="AsLink\DateTimeExtensions.cs" />
+		<Compile Include="..\..\Sa\Extensions\ExceptionExtensions.cs" Link="AsLink\ExceptionExtensions.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="StackExchange.Redis" />
+		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
+		<!-- IConfiguration is only read for the "Redis" connection string default. -->
+		<PackageReference Include="Microsoft.Extensions.Configuration" />
+		<!-- The settings type is a standard Microsoft.Extensions.Options instance. -->
+		<PackageReference Include="Microsoft.Extensions.Options" />
+		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Sa.Outbox\Sa.Outbox.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="Sa.Outbox.RedisTests" />
+	</ItemGroup>
+
+</Project>

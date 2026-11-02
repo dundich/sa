@@ -33,6 +33,7 @@
   <Folder Name="/Libraries/Outbox/">
     <Project Path="Libraries/Outbox/Sa.Outbox/Sa.Outbox.csproj" />
     <Project Path="Libraries/Outbox/Sa.Outbox.PostgreSql/Sa.Outbox.PostgreSql.csproj" />
+    <Project Path="Libraries/Outbox/Sa.Outbox.Redis/Sa.Outbox.Redis.csproj" />
   </Folder>
   <Folder Name="/Samples/">
     <File Path="Samples/docker-compose.yml" />
@@ -69,6 +70,7 @@
     <Project Path="Tests/Sa.Media.FFmpegTests/Sa.Media.FFmpegTests.csproj" />
     <Project Path="Tests/Sa.MediaTests/Sa.MediaTests.csproj" />
     <Project Path="Tests/Sa.Outbox.PostgreSqlTests/Sa.Outbox.PostgreSqlTests.csproj" />
+    <Project Path="Tests/Sa.Outbox.RedisTests/Sa.Outbox.RedisTests.csproj" />
     <Project Path="Tests/Sa.Outbox.Tests/Sa.Outbox.Tests.csproj" />
     <Project Path="Tests/Sa.Partitional.PostgreSqlTests/Sa.Partitional.PostgreSqlTests.csproj" />
     <Project Path="Tests/Sa.ScheduleTests/Sa.ScheduleTests.csproj" />

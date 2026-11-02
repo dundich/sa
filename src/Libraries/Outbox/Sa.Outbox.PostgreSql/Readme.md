@@ -356,7 +356,63 @@ public class OrderSerializer : IOutboxMessageSerializer
 }
 ```
 
-### 5. Table Settings
+### 5. Poison Handler (permanent failures)
+
+`__error$` and the task row already persist every terminal failure, so the provider does not need a
+dead-letter queue. If the application needs its own sink — forward the payload to another queue,
+object storage, or raise an alert — register `IPgOutboxPoisonHandler`:
+
+```csharp
+.AddSaOutboxUsingPostgreSql(cfg => cfg
+    .WithPoisonHandler<MyPoisonHandler>()                              // DI-resolved
+    // .WithPoisonHandler(new MyPoisonHandler())                       // instance
+    // .WithPoisonHandler(sp => new MyPoisonHandler(sp.GetRequiredService<MyStore>()))
+)
+```
+
+The handler receives `PgOutboxPoisonMessage`: `OutboxId`, `TaskId`, `PayloadId`, `PayloadType`,
+`ConsumerGroup`, `TenantId`, `Part`, `Attempt`, `StatusCode`, `StatusMessage`, `Exception`, and the
+payload serialized with the provider's `IOutboxMessageSerializer`.
+
+It is called for every `Error`/`Error5xx` and for `MaximumAttemptsError`, **before** the task is
+finalized, and its return value selects the strategy:
+
+| Return | Result |
+|---|---|
+| `PgOutboxPoisonAction.Default` | keep the built-in persistence: `__error$` row + task finalized with `error_id` |
+| `PgOutboxPoisonAction.Handled` | the handler owns the error record: `__error$` is skipped; the task is still finalized as `Error`/`MaximumAttemptsError` with `error_id = NULL` |
+| throw | the batch is not finalized, the task stays `Processing`, its lock expires and it is re-rented, so the handler runs again (at-least-once) |
+
+The default `NoOpPgOutboxPoisonHandler` returns `Default`, which keeps the previous behaviour.
+
+#### `Handled` with an empty handler
+
+Returning `Handled` and doing nothing is a **drop that leaves only the skeleton behind**:
+
+| Item | Result |
+|---|---|
+| `__error$` | not written |
+| `__log$` (delivery log) | a row is still written: status `Error`/`508`, `status_message`, `payload_id`, group, tenant, `task_id`, `transact_id`, `error_id = NULL` |
+| `task$` | terminal `Error`/`Error5xx`/`508`, `error_id = NULL`, `delivery_attempt + 1`, `lock_expires_on` updated |
+| `msg$` | the payload row stays unchanged |
+| re-delivery | none — `Error` is not in the rent status set |
+
+The payload is therefore not lost physically: it can still be found through `task$`/`__log$` by
+`msg_payload_id` and then through `msg$` by `msg_id`, until cleanup drops the partition. What is lost
+is the error record: no exception type or stack in `__error$`, and `status_message` holds only the text
+the consumer passed to `Error(...)`.
+
+| Handler result | `__error$` | `task$` | Retry | Data |
+|---|---|---|---|---|
+| `Default` | written (de-duplicated) | `Error`, `error_id` | no | payload in `msg$`, error in `__error$` |
+| `Handled` + own store | no | `Error`, `error_id = NULL` | no | payload owned by the handler |
+| `Handled` + nothing | no | `Error`, `error_id = NULL` | no | payload only in `msg$`/`__log$` until cleanup |
+| throw | no | stays `Processing` | yes, after the lock expires | payload in `msg$` |
+
+Return `Handled` only after the sink succeeded. If the write failed, either `throw` (the task stays
+claimable and the handler runs again) or return `Default` (the provider writes `__error$`).
+
+### 6. Table Settings
 
 Where inside `AddSaOutboxUsingPostgreSql`:
 
@@ -426,7 +482,7 @@ Where inside `AddSaOutboxUsingPostgreSql`:
 | Error | date only | `error_created_at` |
 | Type / Offset | none | — |
 
-### 6. Running Jobs Manually
+### 7. Running Jobs Manually
 
 By default migration and cleanup run as background jobs via `Sa.Schedule`. You can also trigger them on demand:
 
@@ -548,6 +604,9 @@ After processing each message, call exactly one method:
 | `msg.Retry(ts, reason)` | Retry with metadata | Requeued with attempt info |
 | `msg.Aborted(reason)` | Intentionally skip | Marked skipped, no retry |
 | `msg.ErrorMaxAttempts()` | Max attempts exhausted | Logged to `__error$`, no retry |
+
+`Error`/`Error5xx` and `ErrorMaxAttempts` are additionally handed to `IPgOutboxPoisonHandler` before
+the status is written; see [Poison Handler](#5-poison-handler-permanent-failures).
 
 ---
 

@@ -368,7 +368,63 @@ public class OrderSerializer : IOutboxMessageSerializer
 }
 ```
 
-### 5. Настройки таблиц
+### 5. Обработчик «ядовитых» сообщений (permanent failures)
+
+`__error$` и строка задачи уже сохраняют любую терминальную ошибку, поэтому dead-letter очередь
+провайдеру не нужна. Если приложению нужен собственный sink — переслать payload в другую очередь,
+object storage или поднять алерт — зарегистрируйте `IPgOutboxPoisonHandler`:
+
+```csharp
+.AddSaOutboxUsingPostgreSql(cfg => cfg
+    .WithPoisonHandler<MyPoisonHandler>()                              // из DI
+    // .WithPoisonHandler(new MyPoisonHandler())                       // экземпляр
+    // .WithPoisonHandler(sp => new MyPoisonHandler(sp.GetRequiredService<MyStore>()))
+)
+```
+
+Обработчик получает `PgOutboxPoisonMessage`: `OutboxId`, `TaskId`, `PayloadId`, `PayloadType`,
+`ConsumerGroup`, `TenantId`, `Part`, `Attempt`, `StatusCode`, `StatusMessage`, `Exception` и payload,
+сериализованный сериализатором провайдера.
+
+Он вызывается для каждого `Error`/`Error5xx` и для `MaximumAttemptsError`, **до** финализации задачи,
+а возвращаемое значение выбирает стратегию:
+
+| Возврат | Результат |
+|---|---|
+| `PgOutboxPoisonAction.Default` | встроенная стратегия: строка `__error$` + задача с `error_id` |
+| `PgOutboxPoisonAction.Handled` | обработчик берёт ошибку на себя: `__error$` не пишется; задача всё равно финализируется как `Error`/`MaximumAttemptsError`, но с `error_id = NULL` |
+| исключение | батч не финализируется, задача остаётся `Processing`, лок истекает → повторная аренда и повторный вызов (at-least-once) |
+
+Стандартный `NoOpPgOutboxPoisonHandler` возвращает `Default` — поведение остаётся прежним.
+
+#### `Handled` с пустым обработчиком
+
+Если вернуть `Handled` и ничего не сделать, это **выбрасывание, после которого остаётся только скелет**:
+
+| Что | Результат |
+|---|---|
+| `__error$` | не пишется |
+| `__log$` (журнал доставок) | строка всё равно пишется: статус `Error`/`508`, `status_message`, `payload_id`, группа, tenant, `task_id`, `transact_id`, `error_id = NULL` |
+| `task$` | терминальный `Error`/`Error5xx`/`508`, `error_id = NULL`, `delivery_attempt + 1`, `lock_expires_on` обновлён |
+| `msg$` | строка с payload остаётся без изменений |
+| повторная доставка | нет — `Error` не входит в набор статусов аренды |
+
+То есть payload физически не теряется: его ещё можно найти через `task$`/`__log$` по `msg_payload_id`, а
+затем через `msg$` по `msg_id`, пока cleanup не удалит партицию. Теряется именно запись об ошибке: в
+`__error$` нет ни типа исключения, ни стека, а `status_message` содержит только текст, переданный
+consumer-ом в `Error(...)`.
+
+| Результат handler-а | `__error$` | `task$` | Повтор | Данные |
+|---|---|---|---|---|
+| `Default` | пишется (дедуп) | `Error`, `error_id` | нет | payload в `msg$`, ошибка в `__error$` |
+| `Handled` + своё хранилище | нет | `Error`, `error_id = NULL` | нет | payload у вас |
+| `Handled` + ничего | нет | `Error`, `error_id = NULL` | нет | payload только в `msg$`/`__log$` до cleanup |
+| исключение | нет | остаётся `Processing` | да, после истечения лока | payload в `msg$` |
+
+Возвращайте `Handled` только после успешной записи в sink. Если запись не удалась — либо `throw`
+(задача останется арендуемой и handler вызовется снова), либо `Default` (провайдер запишет `__error$`).
+
+### 6. Настройки таблиц
 
 Внутри `AddSaOutboxUsingPostgreSql`:
 
@@ -438,7 +494,7 @@ public class OrderSerializer : IOutboxMessageSerializer
 | Error | только дата | `error_created_at` |
 | Type / Offset | нет | — |
 
-### 6. Управление задачами вручную
+### 7. Управление задачами вручную
 
 По умолчанию миграция и очистка работают как фоновые задания через `Sa.Schedule`. Можно управлять вручную:
 
@@ -560,6 +616,9 @@ Publish(messages)
 | `msg.Retry(ts, reason)` | Повтор с метаданными | Повтор с информацией о попытке |
 | `msg.Aborted(reason)` | Намеренно пропустить | Отмечено как пропущенное, без повтора |
 | `msg.ErrorMaxAttempts()` | Исчерпан максимум попыток | Запись в `__error$`, без повтора |
+
+`Error`/`Error5xx` и `ErrorMaxAttempts` дополнительно передаются в `IPgOutboxPoisonHandler` до
+записи статуса; см. [Обработчик «ядовитых» сообщений](#5-обработчик-ядовитых-сообщений-permanent-failures).
 
 ---
 

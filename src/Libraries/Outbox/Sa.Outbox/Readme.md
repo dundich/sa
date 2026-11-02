@@ -262,6 +262,45 @@ so the payload id is resolved through a typed delegate. An unregistered struct t
 | PostgreSQL | `Sa.Outbox.PostgreSql` | ✅ production-ready |
 | Redis | `Sa.Outbox.Redis` | 🔧 in development |
 
+The core is provider-agnostic: the same `AddSaOutbox`, tenant/metadata registrations and consumer
+declarations work on top of either package. Only storage and delivery mechanics differ.
+
+### What both providers share
+
+- The same contract: `IOutboxMessagePublisher`, `IConsumer<TMessage>`, `OutboxConsumerSettings`,
+  `IOutboxContextOperations<TMessage>` and delivery status codes.
+- Ordering per `(tenant, part, payload type)` — never global.
+- At-least-once delivery; consumers must be idempotent.
+- Tenant isolation and a per-group lookback window.
+- Payload identity is the simple type name (`typeof(TMessage).Name`), so two types with the same
+  simple name from different namespaces share a channel/stream.
+- The core owns batching, the delivery job, `LockRenewer`/`ExtendDelivery` and status interpretation;
+  a provider implements `IOutboxBulkWriter`, `IOutboxDeliveryManager` and `IOutboxTenantDetector`.
+- Permanent outcomes have a terminal path and a pluggable handler
+  (`IPgOutboxPoisonHandler` / `IRedisOutboxPoisonHandler`).
+
+### Differences at a glance
+
+| Aspect | `Sa.Outbox.PostgreSql` | `Sa.Outbox.Redis` |
+|---|---|---|
+| Storage | tables `msg$`, `task$`, `__log$`, `__error$`, `__offset$` | streams `stream:{tenant}:{part}:{type}` + PEL + `tenants` set |
+| Claiming | `SELECT … FOR UPDATE SKIP LOCKED` on `task$` with `lock_expires_on` | `XAUTOCLAIM` by idle time (`PendingClaimIdle`) |
+| Retry clock | `lock_expires_on` / `BatchingWindow` | PEL idle time only |
+| `Postpone`/`Retry` delay | honored (`lock_expires_on = now + delay`) | **ignored**; retried after `PendingClaimIdle` |
+| Provider-level attempt limit | consumer-level only (`MaxDeliveryAttempts` in the courier); a task stuck in `Processing` can be re-rented | `XPENDING` delivery count, capped by `RedisOutboxConsumeSettings.MaxDeliveryAttempts` |
+| Status persistence | every status is written to `task$`/`__log$` | only `XACK` / leave pending / poison |
+| Poison policy | de-duplicated `__error$` + optional `IPgOutboxPoisonHandler` (`Default` keeps `__error$`, `Handled` skips it) | `IRedisOutboxPoisonHandler` (default drops with `XACK`); no DLQ |
+| Retention | partition-based cleanup and migration (`CleanupSettings`) | inline `XTRIM MINID` with a safe floor, off by default |
+| Publish transaction | can join the caller's `PgTransaction` | no publish context (`NotSupportedException`) |
+| Schema/migration | migrations run as background jobs | none; keys appear on first publish |
+| Delivery log | `__log$` | none; the stream entry remains until retention trims it |
+| Group start | `__offset$` per `(group, tenant)` | group cursor (`RedisOutboxConsumeSettings.StartFrom` only when created) |
+| Cluster / HA | PostgreSQL replication/HA | single-key commands, safe on Redis Cluster |
+| Best fit | transactional consistency and audit | high-throughput append-only log, simple operations |
+
+> The providers are intentionally **not** interchangeable at the storage level: switching packages
+> does not migrate pending messages. Drain the old provider before switching.
+
 ---
 
 ## Provider Requirements

@@ -1,4 +1,5 @@
 ﻿using Sa.Data.PostgreSql;
+using Sa.Outbox.PostgreSql.Poison;
 using Sa.Outbox.PostgreSql.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
@@ -38,6 +39,23 @@ public interface IPgOutboxConfiguration
     /// <returns>The same <see cref="IPgOutboxConfiguration"/> for chaining.</returns>
     IPgOutboxConfiguration WithMessageSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
         where TService : class, IOutboxMessageSerializer;
+
+    /// <summary>
+    /// Registers an interceptor for permanent failures (a consumer <c>Error</c>/<c>Error5xx</c>, or
+    /// <c>MaximumAttemptsError</c>). Its return value chooses the strategy:
+    /// <c>Default</c> keeps the built-in <c>__error$</c> persistence, <c>Handled</c> skips it and
+    /// lets the handler own the error record.
+    /// </summary>
+    /// <param name="poisonHandlerFactory">A factory that produces the handler from DI.</param>
+    IPgOutboxConfiguration WithPoisonHandler(Func<IServiceProvider, IPgOutboxPoisonHandler> poisonHandlerFactory);
+
+    /// <summary>Registers a concrete poison handler instance.</summary>
+    IPgOutboxConfiguration WithPoisonHandler<TService>(TService instance)
+        where TService : class, IPgOutboxPoisonHandler;
+
+    /// <summary>Registers a poison handler type resolved from DI.</summary>
+    IPgOutboxConfiguration WithPoisonHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
+        where TService : class, IPgOutboxPoisonHandler;
 
     /// <summary>
     /// Applies a configuration delegate to the root <see cref="PgOutboxSettings"/> object.

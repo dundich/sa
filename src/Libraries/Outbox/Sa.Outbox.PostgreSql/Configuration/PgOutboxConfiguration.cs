@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.PostgreSql.Poison;
 using Sa.Outbox.PostgreSql.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
@@ -48,6 +49,33 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
     {
         services.RemoveAll<IOutboxMessageSerializer>();
         services.TryAddSingleton<IOutboxMessageSerializer, TService>();
+        return this;
+    }
+
+    public IPgOutboxConfiguration WithPoisonHandler(Func<IServiceProvider, IPgOutboxPoisonHandler> poisonHandlerFactory)
+    {
+        ArgumentNullException.ThrowIfNull(poisonHandlerFactory);
+
+        services.RemoveAll<IPgOutboxPoisonHandler>();
+        services.TryAddSingleton<IPgOutboxPoisonHandler>(poisonHandlerFactory);
+        return this;
+    }
+
+    public IPgOutboxConfiguration WithPoisonHandler<TService>(TService instance)
+        where TService : class, IPgOutboxPoisonHandler
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        services.RemoveAll<IPgOutboxPoisonHandler>();
+        services.TryAddSingleton<IPgOutboxPoisonHandler>(instance);
+        return this;
+    }
+
+    public IPgOutboxConfiguration WithPoisonHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
+        where TService : class, IPgOutboxPoisonHandler
+    {
+        services.RemoveAll<IPgOutboxPoisonHandler>();
+        services.TryAddSingleton<IPgOutboxPoisonHandler, TService>();
         return this;
     }
 

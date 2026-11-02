@@ -265,6 +265,45 @@ options.AddMetadata<MyMessage>();
 | PostgreSQL | `Sa.Outbox.PostgreSql` | ✅ production-ready |
 | Redis | `Sa.Outbox.Redis` | 🔧 в разработке |
 
+Ядро не зависит от провайдера: один и тот же `AddSaOutbox`, регистрация тенантов/метаданных и
+объявления consumer-ов работают поверх любого пакета. Различаются только хранилище и механика доставки.
+
+### Что общего
+
+- Один контракт: `IOutboxMessagePublisher`, `IConsumer<TMessage>`, `OutboxConsumerSettings`,
+  `IOutboxContextOperations<TMessage>` и коды статусов.
+- Порядок — в пределах `(tenant, part, тип payload)`, не глобальный.
+- Доставка at-least-once; consumer-ы должны быть идемпотентны.
+- Изоляция тенантов и окно lookback на группу.
+- Identity payload — простое имя типа (`typeof(TMessage).Name`), поэтому два типа из разных
+  namespace с одинаковым простым именем делят канал/stream.
+- Ядро владеет батчингом, job-ом доставки, `LockRenewer`/`ExtendDelivery` и трактовкой статусов;
+  провайдер реализует `IOutboxBulkWriter`, `IOutboxDeliveryManager` и `IOutboxTenantDetector`.
+- У постоянных (permanent) исходов есть терминальный путь и подключаемый обработчик
+  (`IPgOutboxPoisonHandler` / `IRedisOutboxPoisonHandler`).
+
+### Кратко о различиях
+
+| Аспект | `Sa.Outbox.PostgreSql` | `Sa.Outbox.Redis` |
+|---|---|---|
+| Хранилище | таблицы `msg$`, `task$`, `__log$`, `__error$`, `__offset$` | streams `stream:{tenant}:{part}:{type}` + PEL + set `tenants` |
+| Захват | `SELECT … FOR UPDATE SKIP LOCKED` по `task$` с `lock_expires_on` | `XAUTOCLAIM` по idle-времени (`PendingClaimIdle`) |
+| Часы повтора | `lock_expires_on` / `BatchingWindow` | только idle-время в PEL |
+| Задержка `Postpone`/`Retry` | учитывается (`lock_expires_on = now + delay`) | **игнорируется**; повтор после `PendingClaimIdle` |
+| Лимит попыток провайдера | только consumer-level (`MaxDeliveryAttempts` в courier); задача, застрявшая в `Processing`, может быть арендована повторно | счётчик доставок `XPENDING`, ограничен `RedisOutboxConsumeSettings.MaxDeliveryAttempts` |
+| Сохранение статусов | каждый статус пишется в `task$`/`__log$` | только `XACK` / оставить pending / poison |
+| Политика «яда» | дедуплицированный `__error$` + опциональный `IPgOutboxPoisonHandler` (`Default` оставляет `__error$`, `Handled` пропускает) | `IRedisOutboxPoisonHandler` (по умолчанию drop + `XACK`); DLQ нет |
+| Retention | очистка и миграция партиций (`CleanupSettings`) | встроенный `XTRIM MINID` по безопасной границе, по умолчанию выключен |
+| Транзакция публикации | может входить в `PgTransaction` вызывающего | контекста публикации нет (`NotSupportedException`) |
+| Схема/миграции | миграции фоновыми job-ами | схемы нет; ключи появляются при первой публикации |
+| Журнал доставок | `__log$` | нет; запись stream живёт до retention |
+| Старт группы | `__offset$` на `(group, tenant)` | курсор группы (`RedisOutboxConsumeSettings.StartFrom` только при создании) |
+| Кластер / HA | репликация/HA PostgreSQL | команды в один ключ, безопасно для Redis Cluster |
+| Когда выбирать | транзакционная согласованность и аудит | высокий throughput, append-only лог, простая эксплуатация |
+
+> Провайдеры намеренно **не** взаимозаменяемы на уровне хранилища: смена пакета не переносит
+> pending-сообщения. Перед переключением старый провайдер нужно опустошить (drain).
+
 ---
 
 ## Требования к провайдерам
