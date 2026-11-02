@@ -306,7 +306,10 @@ var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
   `:{providerKey}` (`sa:outbox:cache:...`) — два провайдера на одной Redis БД не пересекаются.
 - Без ключа (`AddSaOutboxUsingRedis(cfg)`) всё работает как раньше: default key `outbox`, префикс
   `sa:outbox`, unkeyed-алиасы `IDatabase`/настроек/паблишера.
-- Тенанты общие на контейнер, а id consumer-групп должны быть уникальны между провайдерами.
+- Стартовая проверка `RedisMultiProviderGuard` падает, если два провайдера смотрят в один endpoint
+  и базу с одинаковым префиксом (иначе каждое сообщение доставлялось бы дважды); явная фабрика
+  `IDatabase`/`IConnectionMultiplexer` не проверяется — её endpoint неизвестен до запуска.
+- Тенанты общие на контейнер, а id consumer-групп могут совпадать (композитные ключи).
 ## Миграция 0.1 → 0.2
 
 - **Данные в Redis не мигрируют.** Default key (`AddSaOutboxUsingRedis(cfg)`) использует прежний

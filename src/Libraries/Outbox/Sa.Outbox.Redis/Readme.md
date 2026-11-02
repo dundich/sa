@@ -307,7 +307,10 @@ var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
   collide.
 - Without a key (`AddSaOutboxUsingRedis(cfg)`) everything behaves as before: default key `outbox`,
   prefix `sa:outbox`, unkeyed aliases for `IDatabase`/settings/publisher.
-- Tenants are shared per container, and consumer group ids must be unique across providers.
+- The startup `RedisMultiProviderGuard` fails when two providers point at the same endpoint and
+  database with the same prefix (every message would be delivered twice); an explicit
+  `IDatabase`/`IConnectionMultiplexer` factory is not checked — its endpoint is unknown until it runs.
+- Tenants are shared per container, and consumer group ids may repeat (composite keys).
 ## Migrating 0.1 → 0.2
 
 - **Nothing in Redis is migrated.** The default key (`AddSaOutboxUsingRedis(cfg)`) keeps the previous

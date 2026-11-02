@@ -385,8 +385,9 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
 
 Constraints: tenants are shared per container (`WithTenants` without a key); provider-internal
 services are resolved keyed, so user extensions registered as a type must use the factory overloads;
-two Redis providers with the **same explicitly configured** prefix share their streams (the automatic
-suffix only applies when the prefix was not set).
+two Redis providers with the same endpoint/database/prefix are caught by the startup
+`RedisMultiProviderGuard` (an explicit `IDatabase`/`IConnectionMultiplexer` factory remains
+unchecked — its endpoint is unknown before it runs).
 
 ## Per-provider health (slice 3, part 1)
 

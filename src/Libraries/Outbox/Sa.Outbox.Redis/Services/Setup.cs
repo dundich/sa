@@ -68,6 +68,13 @@ internal static class Setup
         services.TryAddKeyedSingleton<IOutboxProviderHealth>(providerKey, (sp, _) =>
             new RedisOutboxHealth(sp.GetRequiredKeyedService<IDatabase>(providerKey)));
 
+        // Two providers on one stream namespace would deliver every message twice; the guard
+        // compares the layouts at host start. One unkeyed marker per provider, one guard for all.
+        services.AddSingleton(new RedisProviderLayout(providerKey));
+        services.TryAddEnumerable(
+            Microsoft.Extensions.DependencyInjection.ServiceDescriptor
+                .Singleton<Microsoft.Extensions.Hosting.IHostedService, RedisMultiProviderGuard>());
+
         // Identity, capabilities and the three storage contracts in one place. Redis has no
         // publish context (publishing is append-only into a stream) and ignores a consumer-supplied
         // Postpone/Retry delay (the only retry clock is the PEL idle time), so neither capability
