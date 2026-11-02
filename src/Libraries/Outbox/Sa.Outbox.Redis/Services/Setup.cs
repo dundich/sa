@@ -68,6 +68,10 @@ internal static class Setup
         services.TryAddKeyedSingleton<IOutboxProviderHealth>(providerKey, (sp, _) =>
             new RedisOutboxHealth(sp.GetRequiredKeyedService<IDatabase>(providerKey)));
 
+        // One-time warm-up before the first delivery cycle (PING on the provider's database).
+        services.TryAddKeyedSingleton<IOutboxProviderInitializer>(providerKey, (sp, _) =>
+            new RedisOutboxInitializer(sp.GetRequiredKeyedService<IDatabase>(providerKey)));
+
         // Two providers on one stream namespace would deliver every message twice; the guard
         // compares the layouts at host start. One unkeyed marker per provider, one guard for all.
         services.AddSingleton(new RedisProviderLayout(providerKey));

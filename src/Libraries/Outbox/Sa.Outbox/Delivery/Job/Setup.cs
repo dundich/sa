@@ -50,6 +50,7 @@ internal static class Setup
             sp.GetRequiredService<IDeliveryProcessor>(),
             sp.GetRequiredService<IOutboxConsumerManager>(),
             sp.GetRequiredService<IOutboxIdleStateRegistry>(),
+            sp.GetRequiredService<OutboxProviderInitialization>(),
             groupKey));
 
         // The consumer's DI lifetime is the registration identity and cannot be shaped by

@@ -11,7 +11,8 @@ namespace Sa.Outbox.Tests.PlugServices;
 /// <summary>
 /// Scope-key consistency: every consumer group names the provider key its storage lives under, so a
 /// group registered under a scope with no provider is a configuration error — its delivery would
-/// resolve no storage at all. The startup validator catches it instead of failing on the first tick.
+/// resolve no storage at all. The startup validator catches it instead of failing on the first tick,
+/// including when no provider package was registered at all.
 /// </summary>
 public class ScopeKeyConsistencyTests
 {
@@ -61,24 +62,35 @@ public class ScopeKeyConsistencyTests
             => Task.FromResult(0);
     }
 
-    private static ServiceProvider Build(string providerKey, string? groupScopeKey)
-    {
-        var services = new ServiceCollection();
-        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
-
-        services.AddOutboxProvider(
+    private static void AddProvider(IServiceCollection services, string providerKey)
+        => services.AddOutboxProvider(
             providerKey,
             new OutboxProviderDescriptor("Test"),
             provider => provider
                 .WithBulkWriter<FakeWriter>()
                 .WithDeliveryManager<FakeDeliveryManager>());
 
+    private static void AddGroups(IServiceCollection services, string scopeKey, params string[] groupIds)
+        => services.AddSaOutbox(
+            builder => builder.WithDeliveries(deliveries =>
+            {
+                foreach (string groupId in groupIds)
+                {
+                    deliveries.AddDelivery<TestConsumer, TestMessage>(groupId);
+                }
+            }),
+            scopeKey);
+
+    private static ServiceProvider Build(string providerKey, string? groupScopeKey)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+
+        AddProvider(services, providerKey);
+
         if (groupScopeKey is not null)
         {
-            services.AddSaOutbox(
-                builder => builder.WithDeliveries(deliveries => deliveries
-                    .AddDelivery<TestConsumer, TestMessage>("grp")),
-                groupScopeKey);
+            AddGroups(services, groupScopeKey, "grp");
         }
 
         return services.BuildServiceProvider();
@@ -96,6 +108,7 @@ public class ScopeKeyConsistencyTests
             () => Validator(sp).StartAsync(TestContext.Current.CancellationToken));
 
         Assert.Contains("other", error.Message, StringComparison.Ordinal);
+        Assert.Contains("grp", error.Message, StringComparison.Ordinal);
         Assert.Contains("no storage provider", error.Message, StringComparison.Ordinal);
     }
 
@@ -124,6 +137,61 @@ public class ScopeKeyConsistencyTests
     public async Task NoConsumerGroups_Passes()
     {
         using ServiceProvider sp = Build(providerKey: "a", groupScopeKey: null);
+
+        await Validator(sp).StartAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task GroupsWithoutAnyProvider_FailTheStart()
+    {
+        // The validator is registered by AddSaOutbox too, so forgetting the provider package is
+        // caught at start instead of on the first delivery tick.
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        AddGroups(services, OutboxScope.DefaultKey, "grp");
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Validator(sp).StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("grp", error.Message, StringComparison.Ordinal);
+        Assert.Contains("no storage provider", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MultipleGroups_OneUnderABadScope_FailsNamingTheGroups()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        AddProvider(services, "a");
+        // Group ids are sanitized by AddDelivery ("-" becomes "_"), which is the identity the
+        // message must report.
+        AddGroups(services, "a", "good-group");
+        AddGroups(services, "orphan-scope", "orphan-group", "second-orphan");
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Validator(sp).StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("orphan-scope", error.Message, StringComparison.Ordinal);
+        Assert.Contains("orphan_group", error.Message, StringComparison.Ordinal);
+        Assert.Contains("second_orphan", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("good_group", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TwoProviders_EachWithItsOwnGroups_Passes()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        AddProvider(services, "billing");
+        AddProvider(services, "audit");
+        AddGroups(services, "billing", "invoices");
+        AddGroups(services, "audit", "audit-events");
+
+        using ServiceProvider sp = services.BuildServiceProvider();
 
         await Validator(sp).StartAsync(TestContext.Current.CancellationToken);
     }

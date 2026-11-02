@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
+using Sa.Outbox.PlugServices;
 using Sa.Schedule;
 
 namespace Sa.Outbox.Delivery;
@@ -51,6 +52,9 @@ internal static class Setup
         // Provider contracts are resolved by provider key through this router: the delivery
         // pipeline itself stays provider-agnostic and singletons stay unkeyed.
         services.TryAddSingleton<IOutboxStorage, OutboxStorage>();
+
+        // One provider warm-up per provider key, shared by every consumer group of that provider.
+        services.TryAddSingleton<OutboxProviderInitialization>();
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 

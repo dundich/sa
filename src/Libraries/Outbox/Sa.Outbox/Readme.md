@@ -57,7 +57,9 @@ builder.Services
 > application's `AddSaSchedule()`. The PostgreSQL integration registers its
 > `Sa.Partitional.PostgreSql` module under the same key. Both `AddSaOutbox` and
 > `AddSaOutboxUsingPostgreSql` accept an optional trailing `scopeKey` argument — pass the same value
-> to both to move the Outbox to a different scope. The reserved `"default"` key is rejected.
+> to both to move the Outbox to a different scope. The reserved `"default"` key is rejected. A
+> consumer group registered under a scope with no matching provider fails the host start with an
+> explicit error instead of silently falling back to the default provider's storage.
 
 ---
 

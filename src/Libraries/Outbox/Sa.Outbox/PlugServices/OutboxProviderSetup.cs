@@ -7,8 +7,9 @@ namespace Sa.Outbox.PlugServices;
 /// <summary>
 /// The single registration point of a storage provider. A provider package calls
 /// <see cref="AddOutboxProvider(IServiceCollection, OutboxProviderDescriptor, Action{OutboxProviderBuilder})"/>
-/// (default key) or the keyed overload from its own <c>AddSaOutboxUsing...</c> method, before
-/// <c>AddSaOutbox</c>, so the startup validator runs before the delivery schedules.
+/// (default key) or the keyed overload from its own <c>AddSaOutboxUsing...</c> method, preferably
+/// before <c>AddSaOutbox</c>. The core registers the same startup validator, so a consumer group
+/// left without a provider fails the start even when no provider package was called at all.
 /// </summary>
 public static class OutboxProviderSetup
 {
@@ -32,8 +33,9 @@ public static class OutboxProviderSetup
     /// </para>
     /// <para>
     /// The rest of the validation happens when the keyed <see cref="IOutboxProviderRegistry"/> is
-    /// constructed: a <see cref="OutboxProviderValidationHostedService"/> forces that for every
-    /// registered key at host start.
+    /// constructed — a <see cref="OutboxProviderValidationHostedService"/> (registered by this
+    /// method and by <c>AddSaOutbox</c>) forces that for every registered key at host start and
+    /// checks that every consumer group names a registered provider key.
     /// </para>
     /// </remarks>
     /// <param name="services">The service collection.</param>

@@ -10,6 +10,7 @@ internal sealed class DeliveryJob<TMessage>(
     IDeliveryProcessor processor,
     IOutboxConsumerManager settingsManager,
     IOutboxIdleStateRegistry idleStates,
+    Sa.Outbox.PlugServices.OutboxProviderInitialization initialization,
     OutboxGroupKey groupKey) : IDeliveryJob
 {
     /// <summary>
@@ -31,6 +32,11 @@ internal sealed class DeliveryJob<TMessage>(
     {
         var settings = settingsManager.Get(groupKey)
             ?? throw new InvalidOperationException($"No OutboxConsumerSettings for consumer group '{groupKey}'.");
+
+        // The provider's one-time warm-up (connectivity, pooled connection) runs before the first
+        // delivery. It is memoized per provider, so every later tick returns immediately; a failed
+        // attempt is retried on the next tick and reported through the job's error policy.
+        await initialization.EnsureAsync(groupKey.ProviderKey, cancellationToken).ConfigureAwait(false);
 
         long processed = await processor.ProcessMessages<TMessage>(settings, cancellationToken).ConfigureAwait(false);
 

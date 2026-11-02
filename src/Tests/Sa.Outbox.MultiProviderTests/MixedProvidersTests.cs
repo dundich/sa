@@ -144,6 +144,15 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
     }
 
     [Fact]
+    public async Task WarmUp_RunsForBothProviders()
+    {
+        IServiceProvider sp = fixture.ServiceProvider;
+
+        await sp.GetRequiredKeyedService<IOutboxProviderInitializer>(PgKey).InitializeAsync(TestToken);
+        await sp.GetRequiredKeyedService<IOutboxProviderInitializer>(RedisKey).InitializeAsync(TestToken);
+    }
+
+    [Fact]
     public async Task EachProvider_HasItsOwnTenants()
     {
         IServiceProvider sp = fixture.ServiceProvider;

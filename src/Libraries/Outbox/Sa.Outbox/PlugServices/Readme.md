@@ -91,7 +91,10 @@ services.AddOutboxProvider(
         .WithTenantDetector<OutboxTenantDetector>());
 ```
 
-Provider packages call it **before** `AddSaOutbox`, so the validator starts before the schedules. `WithDeliveryManager` is optional: a publish-only provider omits it, which is valid while no consumer groups exist.
+Provider packages call it **before** `AddSaOutbox`; the order is not mandatory — `AddSaOutbox`
+registers the same startup validator (see below), so the scope-key check runs either way.
+`WithDeliveryManager` is optional: a publish-only provider omits it, which is valid while no
+consumer groups exist.
 
 ### Registry
 
@@ -112,7 +115,7 @@ A singleton registered by `AddOutboxProvider`, usable by the application's healt
 | A bulk writer is registered (`WithBulkWriter`) | `AddOutboxProvider` | `InvalidOperationException` |
 | A second provider with a **different** `Name` | `AddOutboxProvider` | `InvalidOperationException` |
 | `AddOutboxProvider` repeated with the same `Name` | `AddOutboxProvider` | idempotent: the marker is replaced |
-| A provider is registered at all | registry construction | `InvalidOperationException` |
+| A provider is registered under the resolved key | registry construction | `InvalidOperationException` |
 | `IOutboxBulkWriter` is **registered** | registry construction | `InvalidOperationException` |
 | `IOutboxDeliveryManager` is **registered** when groups exist | registry construction | `InvalidOperationException` |
 | `TenantDetection` capability ⇒ detector is **registered** | registry construction | `InvalidOperationException` |
@@ -125,13 +128,17 @@ registry is also read while delivery job settings are being built.
 Trigger points:
 
 1. `AddOutboxProvider` — static checks (name, writer, duplicate).
-2. `OutboxProviderValidationHostedService` — resolves the registry at host start and logs the provider once.
+2. `OutboxProviderValidationHostedService` — registered by both `AddSaOutbox` and `AddOutboxProvider`
+   (deduplicated by implementation type). It checks every consumer group's provider key, resolves the
+   registry of every registered provider at host start, and logs each provider once. Because
+   `AddSaOutbox` registers it, a group left without any provider fails the start even if the provider
+   package was never called.
 3. The delivery job settings build — when the registry is registered it is resolved and validated before the first tick, covering the case where the schedule was registered before the validator.
 
 ## Execution flow
 
 1. **Registration.** `AddSaOutboxUsingPostgreSql(...)` → provider services → `AddOutboxProvider(...)` → `AddSaOutbox(...)`. Order relative to the core does not matter: the registry is built lazily from `IEnumerable<OutboxProviderRegistration>`; a duplicate `Name` fails immediately.
-2. **Startup.** The hosted validator resolves the registry: one provider, writer, delivery manager when groups exist, detector when the capability is declared. Failure aborts the start with the provider name in the message.
+2. **Startup.** The hosted validator first checks that every consumer group names a registered provider key, then resolves the registry of every registered provider: writer, delivery manager when groups exist, detector when the capability is declared. Failure aborts the start with the offending group/scope or the provider name in the message.
 3. **Publish.** `IOutboxMessagePublisher` → `IOutboxBulkWriter`; `context` is passed through as before (the `PublishContext` flag only documents whether the provider honours it).
 4. **Delivery.** `Sa.Schedule` tick → `DeliveryJob` → `DeliveryProcessor` → `TenantProvider` → `DeliveryTenant` → `IOutboxDeliveryManager` → `DeliveryCourier` → `ReturnDelivery`.
 5. **Tenants.** `AutoDetect` → `IOutboxTenantDetector`; otherwise `TenantSettings`.
@@ -146,7 +153,7 @@ Trigger points:
 
 ## Follow-ups
 
-- **B (health/lifecycle):** `IOutboxProviderHealth` with a report (healthy/reason/latency), an adapter for `Microsoft.Extensions.Diagnostics.HealthChecks`, and an optional `InitializeAsync` as a provider-owned hosted service.
+- **B (health/lifecycle):** implemented — the health report and the provider warm-up; the `Microsoft.Extensions.Diagnostics.HealthChecks` adapter remains an application-side mapping.
 - **C (keyed):** implemented — keyed storage services, `(providerKey, groupId)` consumers/manager, and a
   startup `scopeKey` consistency check.
 - **Contracts:** the legacy `InsertBulk` overload is gone (0.18); the typed publish context shipped without a core major — the PG package adds `PublishInTransaction`/`PublishSingleInTransaction`; the opaque token in `IOutboxContextFactory.Create` is deliberately not introduced: the rent identity is the 16-byte `OutboxRentToken`, and a provider with more state keeps a side table keyed by it.
@@ -155,7 +162,9 @@ Trigger points:
 
 - registration: writer/descriptor/version, missing writer, two different providers, repeated registration;
 - registry: no provider, missing delivery manager with groups, publish-only without groups, `TenantDetection` without a detector;
-- hosted validator: registered and starts;
+- hosted validator: registered and starts; a group under a scope without a provider fails and names
+  the group(s) and the scope; groups without any provider fail too; two providers with their own
+  groups pass;
 - PG/Redis: descriptor names and capability flags;
 - the existing PG/Redis/core suites stay green.
 
@@ -381,6 +390,9 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
   `IOutboxConsumerManager` overloads; `IConsumer<T>` keyed by the composite key with a string alias
   for the default key. The string methods work while the id is unambiguous and throw an ambiguity
   error otherwise.
+- **Provider warm-up is implemented:** a keyed `IOutboxProviderInitializer` (PG `SELECT 1`, Redis
+  `PING`) plus a memoized per-provider gate that `DeliveryJob` awaits before its first cycle; a
+  warm-up failure goes through the job's error policy.
 - **PG migration guard:** `PgMultiProviderGuard` fails the start when two PG providers point at the
   same tables (double delivery); the 0.17 → 0.18 migration section lives in the PG readme.
 
@@ -432,3 +444,27 @@ app.MapGet("/health/outbox", async (IOutboxHealth health, CancellationToken ct) 
         : Results.Problem(string.Join("; ", reports.Where(r => !r.Healthy).Select(r => $"{r.ProviderKey}: {r.Reason}")));
 });
 ```
+
+## Provider warm-up (init/lifecycle)
+
+Provider services are lazy, so "the host started" does not mean "the storage is ready".
+`IOutboxProviderInitializer` is an optional keyed hook that runs **before the first delivery cycle**:
+
+```csharp
+public interface IOutboxProviderInitializer
+{
+    ValueTask InitializeAsync(CancellationToken cancellationToken = default);
+}
+```
+
+- The core keeps `OutboxProviderInitialization`: one `Task` per provider key, shared by every group
+  of that provider. After success it is an instant no-op; after a failure the entry is removed and
+  the next tick retries the warm-up.
+- `DeliveryJob` awaits the gate before `ProcessMessages`; a warm-up failure goes through the job's
+  usual error policy (`IfErrorRetry`/`ThenCloseApplication`) instead of surfacing on a random tick.
+- The wait observes the caller's `CancellationToken` (shutdown does not wait for a connection); the
+  warm-up itself runs on the provider's own timeouts.
+- Registration order of the provider and the core does not matter — the gate is lazy, not a hosted
+  service.
+- Implementations: PG runs `SELECT 1` on its data source; Redis runs `PING`. A provider without an
+  initializer is valid (its first command already opens the connection lazily).

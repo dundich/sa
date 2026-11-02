@@ -129,7 +129,11 @@ public interface IOutboxProviderRegistry
 Точки срабатывания:
 
 1. `AddOutboxProvider` — статические проверки (имя, writer, дубликат).
-2. `OutboxProviderValidationHostedService` — принудительно резолвит реестр на старте хоста и один раз пишет провайдера в лог.
+2. `OutboxProviderValidationHostedService` — регистрируется и из `AddSaOutbox`, и из `AddOutboxProvider`
+   (дедупликация по типу реализации). Сначала проверяет, что у каждой consumer-группы есть
+   зарегистрированный провайдер, затем принудительно резолвит реестр каждого провайдера на старте
+   хоста и один раз пишет провайдера в лог. Благодаря регистрации из `AddSaOutbox` группа без
+   провайдера валит старт, даже если пакет провайдера не подключён вовсе.
 3. Сборка настроек delivery-job'а — если реестр зарегистрирован, он резолвится и валидируется до первого тика. Это страхует случай, когда расписание зарегистрировано раньше валидатора.
 
 ## Поток исполнения
@@ -150,7 +154,7 @@ public interface IOutboxProviderRegistry
 
 ## Следующие шаги
 
-- **B (health/lifecycle):** `IOutboxProviderHealth` с отчётом (healthy/reason/latency), адаптер под `Microsoft.Extensions.Diagnostics.HealthChecks`, опциональный `InitializeAsync` как провайдерский hosted-service.
+- **B (health/lifecycle):** реализовано — health-отчёт и warm-up провайдера; адаптер под `Microsoft.Extensions.Diagnostics.HealthChecks` остаётся маппингом на стороне приложения.
 - **C (keyed):** реализовано — keyed storage-сервисы, `(providerKey, groupId)` для консьюмеров/менеджера,
   проверка согласованности `scopeKey` на старте.
 - **Контракты:** legacy-перегрузка `InsertBulk` удалена (0.18); типизированный publish-context сделан без мажора — PG-пакет добавил `PublishInTransaction`/`PublishSingleInTransaction`; opaque-токен в `IOutboxContextFactory.Create` не вводится: арендная идентичность — 16-байтный `OutboxRentToken`, а провайдеру с бóльшим состоянием — side-table по токену.
@@ -159,7 +163,9 @@ public interface IOutboxProviderRegistry
 
 - регистрация: writer/descriptor/version, отсутствие writer'а, два разных провайдера, повторная регистрация;
 - реестр: без провайдера, без delivery-manager'а при наличии групп, publish-only без групп, `TenantDetection` без детектора;
-- hosted-валидатор: присутствует и стартует;
+- hosted-валидатор: присутствует и стартует; группа под scope без провайдера валит старт и называет
+  группу(ы) и scope; группы без единого провайдера тоже валят старт; два провайдера со своими
+  группами проходят;
 - PG/Redis: имена и capability-флаги дескрипторов;
 - существующие тесты PG/Redis/ядра остаются зелёными.
 
@@ -391,6 +397,9 @@ sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(i
   реестра настроек, idle-состояний, delivery-job и кеша консьюмеров; композитные overload'ы
   `IOutboxConsumerManager`; `IConsumer<T>` keyed по композитному ключу со строковым алиасом для
   default key. Строковые методы работают, пока id однозначен, иначе — ошибка неоднозначности.
+- **Warm-up провайдера реализован:** keyed `IOutboxProviderInitializer` (PG `SELECT 1`, Redis `PING`)
+  + мемоизированный per-provider гейт, который `DeliveryJob` ждёт перед первым циклом; ошибка
+  прогрева идёт в политику ошибок job'а.
 - **PG-миграционная защита:** `PgMultiProviderGuard` валит старт, если два PG-провайдера указывают на
   одни таблицы (двойная доставка); раздел «Миграция 0.17 → 0.18» — в PG readme.
 
@@ -443,3 +452,27 @@ app.MapGet("/health/outbox", async (IOutboxHealth health, CancellationToken ct) 
         : Results.Problem(string.Join("; ", reports.Where(r => !r.Healthy).Select(r => $"{r.ProviderKey}: {r.Reason}")));
 });
 ```
+
+## Warm-up провайдера (init/lifecycle)
+
+Провайдерские сервисы ленивые, поэтому «хост стартовал» не значит «хранилище готово».
+`IOutboxProviderInitializer` — опциональный keyed-хук, который выполняется **до первого цикла
+доставки**:
+
+```csharp
+public interface IOutboxProviderInitializer
+{
+    ValueTask InitializeAsync(CancellationToken cancellationToken = default);
+}
+```
+
+- Core держит `OutboxProviderInitialization`: один `Task` на provider key, общий для всех групп
+  провайдера; после успеха — мгновенный no-op, после ошибки — запись сбрасывается, и следующий тик
+  повторяет прогрев.
+- `DeliveryJob` ждёт гейт перед `ProcessMessages`; ошибка прогрева уходит в обычную политику ошибок
+  job'а (`IfErrorRetry`/`ThenCloseApplication`), а не всплывает на случайном тике.
+- Ожидание наблюдает `CancellationToken` вызывающего (shutdown не ждёт коннект), сам прогрев живёт
+  на таймаутах провайдера.
+- Порядок регистрации провайдера и ядра не важен — гейт ленивый, а не hosted-service.
+- Реализации: PG — `SELECT 1` на своём data source; Redis — `PING`. Провайдер без инициализатора
+  валиден (первая команда и так открывает соединение).

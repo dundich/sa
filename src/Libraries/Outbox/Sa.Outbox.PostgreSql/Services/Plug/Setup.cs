@@ -25,6 +25,10 @@ internal static class Setup
         services.TryAddKeyedSingleton<IOutboxProviderHealth>(providerKey, (sp, _) =>
             new PgOutboxHealth(PgDataSourceResolver.Resolve(sp, providerKey)));
 
+        // One-time warm-up before the first delivery cycle (SELECT 1 on the provider's data source).
+        services.TryAddKeyedSingleton<IOutboxProviderInitializer>(providerKey, (sp, _) =>
+            new PgOutboxInitializer(PgDataSourceResolver.Resolve(sp, providerKey)));
+
         // Two providers on the same tables would deliver every message twice; the guard compares
         // the layouts at host start. One marker per provider key, one guard for all of them.
         // Unkeyed on purpose: an IEnumerable<T> injection does not see keyed registrations.

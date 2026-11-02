@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.Publication;
@@ -29,6 +30,14 @@ public static class Setup
         string scopeKey = OutboxScope.DefaultKey)
     {
         OutboxScope.EnsureValid(scopeKey);
+
+        // Registered here as well as by AddOutboxProvider (TryAddEnumerable deduplicates by
+        // implementation type): the scope-key check must also run when consumer groups were
+        // registered but no provider package was called at all. Registering it before the builder
+        // puts the validator ahead of the schedule host in the hosted-service list, so it runs
+        // before any delivery job can tick even when the provider is registered afterwards.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IHostedService, OutboxProviderValidationHostedService>());
 
         OutboxBuilder builder = OutboxBuilder.Create(services, scopeKey);
         build?.Invoke(builder);
