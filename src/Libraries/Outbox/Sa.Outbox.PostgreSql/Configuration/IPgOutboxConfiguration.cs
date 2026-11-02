@@ -32,8 +32,8 @@ public interface IPgOutboxConfiguration
     IPgOutboxConfiguration WithEnabled(bool enabled = true);
 
     /// <summary>
-    /// Replaces the default JSON serializer with a factory that produces
-    /// <see cref="IOutboxMessageSerializer"/> instances from the DI container.
+    /// Registers a serializer factory for this provider key. Providers without their own serializer
+    /// keep following the container-level registration (the core JSON serializer is the fallback).
     /// </summary>
     /// <param name="messageSerializerFactory">Factory invoked at runtime to create serializer instances.</param>
     /// <returns>The same <see cref="IPgOutboxConfiguration"/> for chaining.</returns>
@@ -41,8 +41,8 @@ public interface IPgOutboxConfiguration
         Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory);
 
     /// <summary>
-    /// Registers a concrete <typeparamref name="TService"/> instance as the global
-    /// <see cref="IOutboxMessageSerializer"/>. The instance is used directly without DI resolution.
+    /// Registers a concrete <typeparamref name="TService"/> instance for this provider key. The
+    /// instance is used directly without DI resolution.
     /// </summary>
     /// <typeparam name="TService">Concrete serializer type implementing <see cref="IOutboxMessageSerializer"/>.</typeparam>
     /// <param name="instance">Pre-created serializer instance.</param>
@@ -51,7 +51,7 @@ public interface IPgOutboxConfiguration
         where TService : class, IOutboxMessageSerializer;
 
     /// <summary>
-    /// Registers a transient serializer of type <typeparamref name="TService"/> in DI.
+    /// Registers a serializer of type <typeparamref name="TService"/> for this provider key.
     /// The type must implement <see cref="IOutboxMessageSerializer"/> and have a parameterless constructor.
     /// </summary>
     /// <typeparam name="TService">Serializer type to register in DI.</typeparam>

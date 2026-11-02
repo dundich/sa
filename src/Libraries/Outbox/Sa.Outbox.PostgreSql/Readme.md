@@ -221,6 +221,13 @@ split form (`AddSaOutbox` + this call) the core still registers the consumer gro
 provider makes the startup scope-key check fail and names those groups — skip `AddSaOutbox` too, or
 use the one-call form.
 
+### Registering the same key twice
+
+A repeated `AddSaOutboxUsingPostgreSql(..., scopeKey)` for one key is tolerated: the provider
+contracts, the startup validator, the migration guard, the consumer-group registrations and the
+schedule deduplicate. The **first** data-source registration owns the connection — a second call's
+data-source callback is ignored instead of throwing, so register the connection once.
+
 ### 1. Tenant Configuration
 
 Where inside `AddSaOutbox`:
@@ -384,10 +391,12 @@ Where inside `AddSaOutboxUsingPostgreSql`:
 
 ### 4. Message Serialization
 
-`IOutboxMessageSerializer` lives in the core (`Sa.Outbox.Serialization`) and is shared by every
-provider: the core registers `JsonOutboxMessageSerializer` (UTF-8 JSON) as the fallback, so this
-section is optional. A serializer set here replaces that core registration — configure it once at
-the core level (`AddSaOutbox(b => b.WithMessageSerializer(...))`) to cover all providers at once.
+`IOutboxMessageSerializer` lives in the core (`Sa.Outbox.Serialization`); the core registers
+`JsonOutboxMessageSerializer` (UTF-8 JSON) as the fallback, so this section is optional. A serializer
+set here is registered **for this provider key**: another provider keeps its own one (or the
+container-level one), so a container with several providers can hold different codecs side by side.
+Configure it at the core level (`AddSaOutbox(b => b.WithMessageSerializer(...))`) when every provider
+should share one.
 
 Where inside `AddSaOutboxUsingPostgreSql`:
 

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using Sa.Outbox.Redis.Poison;
 using Sa.Outbox.Serialization;
 using StackExchange.Redis;
@@ -116,7 +116,10 @@ public interface IRedisOutboxConfiguration
     /// <param name="configureOptions">The actions to add to the options pipeline.</param>
     IRedisOutboxConfiguration Options(Action<OptionsBuilder<RedisOutboxSettings>> configureOptions);
 
-    /// <summary>Replaces the default JSON serializer with a factory that produces instances from DI.</summary>
+    /// <summary>
+    /// Registers a serializer factory for this provider key. Providers without their own serializer
+    /// keep following the container-level registration (the core JSON serializer is the fallback).
+    /// </summary>
     IRedisOutboxConfiguration WithMessageSerializer(Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory);
 
     /// <summary>
@@ -135,11 +138,11 @@ public interface IRedisOutboxConfiguration
     IRedisOutboxConfiguration WithPoisonHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
         where TService : class, IRedisOutboxPoisonHandler;
 
-    /// <summary>Registers a concrete serializer instance as the global <see cref="IOutboxMessageSerializer"/>.</summary>
+    /// <summary>Registers a concrete serializer instance for this provider's key.</summary>
     IRedisOutboxConfiguration WithMessageSerializer<TService>(TService instance)
         where TService : class, IOutboxMessageSerializer;
 
-    /// <summary>Registers a serializer type resolved from DI.</summary>
+    /// <summary>Registers a serializer type for this provider key, resolved from DI.</summary>
     IRedisOutboxConfiguration WithMessageSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
         where TService : class, IOutboxMessageSerializer;
 }

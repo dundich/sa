@@ -34,7 +34,7 @@ internal static class Setup
             new PublishMessagesCommand(
                 sp.GetRequiredKeyedService<IDatabase>(providerKey),
                 sp.GetRequiredKeyedService<RedisOutboxSettings>(providerKey),
-                sp.GetRequiredService<IOutboxMessageSerializer>(),
+                sp.GetRequiredKeyedService<IOutboxMessageSerializer>(providerKey),
                 sp.GetRequiredKeyedService<RedisOutboxTrimmer>(providerKey)));
 
         services.TryAddKeyedSingleton<RentDeliveryCommand>(providerKey, (sp, _) =>
@@ -44,7 +44,7 @@ internal static class Setup
                 sp.GetRequiredKeyedService<RedisOutboxGroupRegistry>(providerKey),
                 ResolvePoisonHandler(sp, providerKey),
                 sp.GetRequiredService<IOutboxContextFactory>(),
-                sp.GetRequiredService<IOutboxMessageSerializer>(),
+                sp.GetRequiredKeyedService<IOutboxMessageSerializer>(providerKey),
                 sp.GetService<ILogger<RentDeliveryCommand>>()));
 
         services.TryAddKeyedSingleton<FinishDeliveryCommand>(providerKey, (sp, _) =>
@@ -52,7 +52,7 @@ internal static class Setup
                 sp.GetRequiredKeyedService<IDatabase>(providerKey),
                 sp.GetRequiredKeyedService<RedisOutboxSettings>(providerKey),
                 ResolvePoisonHandler(sp, providerKey),
-                sp.GetRequiredService<IOutboxMessageSerializer>(),
+                sp.GetRequiredKeyedService<IOutboxMessageSerializer>(providerKey),
                 sp.GetService<ILogger<FinishDeliveryCommand>>()));
 
         services.TryAddKeyedSingleton<ExtendDeliveryCommand>(providerKey, (sp, _) =>
@@ -74,6 +74,20 @@ internal static class Setup
 
         // Two providers on one stream namespace would deliver every message twice; the guard
         // compares the layouts at host start. One unkeyed marker per provider, one guard for all.
+        // A repeated registration of the same key replaces its marker, so the guard never compares
+        // a provider with itself.
+        for (int i = services.Count - 1; i >= 0; i--)
+        {
+            Microsoft.Extensions.DependencyInjection.ServiceDescriptor service = services[i];
+
+            if (service.ServiceType == typeof(RedisProviderLayout)
+                && service.ImplementationInstance is RedisProviderLayout existing
+                && string.Equals(existing.ProviderKey, providerKey, StringComparison.Ordinal))
+            {
+                services.RemoveAt(i);
+            }
+        }
+
         services.AddSingleton(new RedisProviderLayout(providerKey));
         services.TryAddEnumerable(
             Microsoft.Extensions.DependencyInjection.ServiceDescriptor

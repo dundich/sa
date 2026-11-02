@@ -277,23 +277,54 @@ internal sealed class RedisOutboxConfiguration(
         }
     }
 
+    /// <summary>
+    /// Registers the serializer per provider. The provider's commands resolve it keyed, so two
+    /// providers never overwrite each other's codec; a provider without an explicit serializer
+    /// shares the container-level one (the core JSON serializer is the last fallback). The default
+    /// key additionally keeps the unkeyed registration for the classic single-provider surface.
+    /// </summary>
     private void ApplySerializer()
     {
+        bool isDefaultKey = string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal);
+
         if (_serializerFactory is not null)
         {
-            services.RemoveAll<IOutboxMessageSerializer>();
-            services.TryAddSingleton<IOutboxMessageSerializer>(_serializerFactory);
+            services.RemoveAllKeyed<IOutboxMessageSerializer>(providerKey);
+            services.TryAddKeyedSingleton<IOutboxMessageSerializer>(providerKey, (sp, _) => _serializerFactory(sp));
+
+            if (isDefaultKey)
+            {
+                services.RemoveAll<IOutboxMessageSerializer>();
+                services.TryAddSingleton<IOutboxMessageSerializer>(_serializerFactory);
+            }
         }
         else if (_serializerInstance is not null)
         {
-            services.RemoveAll<IOutboxMessageSerializer>();
-            services.TryAddSingleton<IOutboxMessageSerializer>(_serializerInstance);
+            services.RemoveAllKeyed<IOutboxMessageSerializer>(providerKey);
+            services.TryAddKeyedSingleton<IOutboxMessageSerializer>(providerKey, _serializerInstance);
+
+            if (isDefaultKey)
+            {
+                services.RemoveAll<IOutboxMessageSerializer>();
+                services.TryAddSingleton<IOutboxMessageSerializer>(_serializerInstance);
+            }
         }
         else if (_serializerType is not null)
         {
-            services.RemoveAll<IOutboxMessageSerializer>();
-            services.TryAddSingleton(typeof(IOutboxMessageSerializer), _serializerType);
+            services.RemoveAllKeyed<IOutboxMessageSerializer>(providerKey);
+            services.TryAddKeyedSingleton(typeof(IOutboxMessageSerializer), providerKey, _serializerType);
+
+            if (isDefaultKey)
+            {
+                services.RemoveAll<IOutboxMessageSerializer>();
+                services.TryAddSingleton(typeof(IOutboxMessageSerializer), _serializerType);
+            }
         }
+
+        // Registered after the explicit case: TryAddKeyed keeps an explicit serializer above, and a
+        // provider without one follows the container-level registration.
+        services.TryAddKeyedSingleton<IOutboxMessageSerializer>(providerKey, static (sp, _) =>
+            sp.GetService<IOutboxMessageSerializer>() ?? JsonOutboxMessageSerializer.Instance);
     }
 
     /// <summary>

@@ -8,6 +8,7 @@ using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.Publication;
+using Sa.Outbox.Serialization;
 using Sa.Outbox.Redis;
 using Sa.Outbox.Redis.Configuration;
 using StackExchange.Redis;
@@ -36,6 +37,20 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
         public string PayloadId { get; set; } = string.Empty;
         public int TenantId { get; set; }
     }
+
+    /// <summary>Wraps JSON unchanged, so the storage behaviour is identical; the type is the marker.</summary>
+    internal sealed class WrappingSerializer(IOutboxMessageSerializer inner) : IOutboxMessageSerializer
+    {
+        public T? Deserialize<T>(Stream stream) => inner.Deserialize<T>(stream);
+
+        public void Serialize<T>(Stream stream, T value) => inner.Serialize(stream, value);
+    }
+
+    internal static readonly IOutboxMessageSerializer PgSerializer =
+        new WrappingSerializer(JsonOutboxMessageSerializer.Instance);
+
+    internal static readonly IOutboxMessageSerializer RedisSerializer =
+        new WrappingSerializer(JsonOutboxMessageSerializer.Instance);
 
     internal sealed class PgConsumer : IConsumer<TestMessage>
     {
@@ -85,7 +100,8 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
             => pg
                 .WithDataSource(ds => ds.Options(options => options.Configure(
                     o => o.ConnectionString = ConnectionString)))
-                .WithOutboxSettings((_, settings) => settings.TableSettings.WithSchema("mixed_pg"));
+                .WithOutboxSettings((_, settings) => settings.TableSettings.WithSchema("mixed_pg"))
+                .WithMessageSerializer(PgSerializer);
 
         private void ConfigureRedis(IRedisOutboxConfiguration redis)
             => redis
@@ -93,7 +109,8 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
                 .WithConnectionString(_ => _redis.GetConnectionString())
                 // An explicit prefix: the provider key suffix would also work, but the test pins
                 // the exact key it reads the stream from.
-                .WithOutboxSettings((_, settings) => settings.KeySettings.Prefix = "mp_mixed");
+                .WithOutboxSettings((_, settings) => settings.KeySettings.Prefix = "mp_mixed")
+                .WithMessageSerializer(RedisSerializer);
 
         public override async ValueTask InitializeAsync()
         {
@@ -150,6 +167,16 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
 
         await sp.GetRequiredKeyedService<IOutboxProviderInitializer>(PgKey).InitializeAsync(TestToken);
         await sp.GetRequiredKeyedService<IOutboxProviderInitializer>(RedisKey).InitializeAsync(TestToken);
+    }
+
+    [Fact]
+    public void Serializer_IsPerProvider()
+    {
+        IServiceProvider sp = fixture.ServiceProvider;
+
+        // Each provider resolves its own codec; the second registration no longer overwrites the first.
+        Assert.Same(PgSerializer, sp.GetRequiredKeyedService<IOutboxMessageSerializer>(PgKey));
+        Assert.Same(RedisSerializer, sp.GetRequiredKeyedService<IOutboxMessageSerializer>(RedisKey));
     }
 
     [Fact]

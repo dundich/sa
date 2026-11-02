@@ -80,6 +80,13 @@ Providers registered under other keys are unaffected. In the split form (`AddSaO
 the core still registers the consumer groups, so a disabled provider makes the startup scope-key
 check fail and names those groups — skip `AddSaOutbox` too, or use the one-call form.
 
+## Registering the same key twice
+
+A repeated `AddSaOutboxUsingRedis(..., scopeKey)` for one key is tolerated: the provider contracts,
+the startup validator, the layout guard, the consumer-group registrations and the schedule
+deduplicate. The **first** connection registration owns the `IDatabase`; repeated identical settings
+are harmless, so register the connection once.
+
 ## Publish: the algorithm
 
 ```
@@ -319,7 +326,9 @@ var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
 ```
 
 - Settings, named options, `IDatabase` and every command are per provider; `WithOutboxSettings` /
-  `WithConfiguration` apply to their own key only.
+  `WithConfiguration` apply to their own key only. `WithMessageSerializer` is keyed too: it affects
+  this provider only, and a provider without one follows the container-level serializer (the core
+  JSON serializer is the last fallback).
 - A provider registered under a non-default key without its own prefix automatically gets a
   `:{providerKey}` suffix (`sa:outbox:cache:...`), so two providers on one Redis database never
   collide.
@@ -333,10 +342,10 @@ var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
 
 - **Nothing in Redis is migrated.** The default key (`AddSaOutboxUsingRedis(cfg)`) keeps the previous
   `sa:outbox` prefix; streams, groups and the PEL are read as before.
-- **Moving to a non-default provider key** changes the keys: the provider gets a `:{key}` suffix
-  (`sa:outbox:billing:...`). To continue with the old keys, set the prefix explicitly:
-  `WithOutboxSettings((_, s) => s.KeySettings.Prefix = "sa:outbox")`. Otherwise these are new, empty
-  streams.
+- **A non-default provider key** gets a `:{key}` suffix (`sa:outbox:billing:...`), so providers on
+  one database never share streams. The suffix is applied after `WithOutboxSettings` and
+  `WithConfiguration`; to pin an exact prefix, add an `Options` action, which runs last:
+  `Options(o => o.Configure(s => s.KeySettings.Prefix = "sa:outbox"))`.
 - **Registration**: the one-call `AddSaOutboxUsingRedis(cfg, outbox, key)` overload; settings and
   commands are keyed, and the default key keeps its unkeyed aliases (`IDatabase`,
   `RedisOutboxSettings`, the publisher).

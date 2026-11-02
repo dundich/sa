@@ -28,7 +28,7 @@ internal static class Setup
             PgDataSourceResolver.Resolve(sp, providerKey),
             sp.GetRequiredKeyedService<SqlOutboxBuilder>(providerKey),
             sp.GetRequiredService<RecyclableMemoryStreamManager>(),
-            sp.GetRequiredService<IOutboxMessageSerializer>(),
+            sp.GetRequiredKeyedService<IOutboxMessageSerializer>(providerKey),
             sp.GetRequiredService<IOutboxIdGenerator>(),
             sp.GetRequiredKeyedService<IOutboxTypeResolver>(providerKey)));
 
@@ -36,7 +36,7 @@ internal static class Setup
             sp.GetRequiredService<IOutboxContextFactory>(),
             PgDataSourceResolver.Resolve(sp, providerKey),
             sp.GetRequiredKeyedService<SqlOutboxBuilder>(providerKey),
-            sp.GetRequiredService<IOutboxMessageSerializer>(),
+            sp.GetRequiredKeyedService<IOutboxMessageSerializer>(providerKey),
             sp.GetRequiredKeyedService<IOutboxTypeResolver>(providerKey),
             sp.GetRequiredKeyedService<NpgsqlOutboxReader>(providerKey)));
 

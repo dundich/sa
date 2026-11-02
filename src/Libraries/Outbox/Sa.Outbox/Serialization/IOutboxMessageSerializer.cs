@@ -8,9 +8,10 @@ namespace Sa.Outbox.Serialization;
 /// <remarks>
 /// <para>
 /// The default is <see cref="JsonOutboxMessageSerializer"/> (UTF-8 JSON). Replace it at the core
-/// level with <c>AddSaOutbox(b =&gt; b.WithMessageSerializer(...))</c>, or per provider with the
-/// provider's <c>WithMessageSerializer(...)</c>; both register the same service type, so the last
-/// registration wins and the other provider follows it too.
+/// level with <c>AddSaOutbox(b =&gt; b.WithMessageSerializer(...))</c> to cover every provider, or
+/// per provider with the provider's <c>WithMessageSerializer(...)</c>: a provider-level registration
+/// is keyed by the provider key, so it affects that provider only, and a provider without one follows
+/// the container-level serializer (with the JSON serializer as the last fallback).
 /// </para>
 /// <para>
 /// Payloads are written by the publisher and read by the consumer, so a non-JSON implementation

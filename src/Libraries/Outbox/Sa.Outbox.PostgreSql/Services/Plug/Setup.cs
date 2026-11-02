@@ -32,6 +32,20 @@ internal static class Setup
         // Two providers on the same tables would deliver every message twice; the guard compares
         // the layouts at host start. One marker per provider key, one guard for all of them.
         // Unkeyed on purpose: an IEnumerable<T> injection does not see keyed registrations.
+        // A repeated registration of the same key replaces its marker, so the guard never compares
+        // a provider with itself.
+        for (int i = services.Count - 1; i >= 0; i--)
+        {
+            Microsoft.Extensions.DependencyInjection.ServiceDescriptor service = services[i];
+
+            if (service.ServiceType == typeof(PgProviderLayout)
+                && service.ImplementationInstance is PgProviderLayout existing
+                && string.Equals(existing.ProviderKey, providerKey, StringComparison.Ordinal))
+            {
+                services.RemoveAt(i);
+            }
+        }
+
         services.AddSingleton(new PgProviderLayout(providerKey));
         services.TryAddEnumerable(
             Microsoft.Extensions.DependencyInjection.ServiceDescriptor
@@ -62,7 +76,7 @@ internal static class Setup
                     sp.GetRequiredKeyedService<IExtendDeliveryCommand>(providerKey),
                     sp.GetRequiredKeyedService<IOutboxPartRepository>(providerKey),
                     sp.GetRequiredKeyedService<IOutboxTaskLoader>(providerKey),
-                    sp.GetRequiredService<Sa.Outbox.Serialization.IOutboxMessageSerializer>(),
+                    sp.GetRequiredKeyedService<Sa.Outbox.Serialization.IOutboxMessageSerializer>(providerKey),
                     sp.GetKeyedService<IPgOutboxPoisonHandler>(providerKey)
                         ?? sp.GetRequiredService<IPgOutboxPoisonHandler>(),
                     sp.GetService<Microsoft.Extensions.Logging.ILogger<OutboxDeliveryManager>>()))

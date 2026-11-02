@@ -82,6 +82,13 @@ consumer-группы, ни задачи `Sa.Schedule`. `Enabled` по умол�
 стартовую проверку `scopeKey` с их именами в сообщении — не вызывайте `AddSaOutbox` или используйте
 форму одного вызова.
 
+## Повторная регистрация того же ключа
+
+Повторный `AddSaOutboxUsingRedis(..., scopeKey)` для одного ключа допустим: контракты провайдера,
+стартовый валидатор, layout guard, регистрации consumer-групп и расписание дедуплицируются.
+Подключение принадлежит **первой** регистрации; повторные идентичные настройки безвредны, поэтому
+соединение настраивайте один раз.
+
 ## Публикация: алгоритм
 
 ```
@@ -320,7 +327,9 @@ var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
 ```
 
 - Настройки, named options, `IDatabase` и все команды — per provider; `WithOutboxSettings` /
-  `WithConfiguration` применяются только к своему ключу.
+  `WithConfiguration` применяются только к своему ключу. `WithMessageSerializer` тоже keyed: влияет
+  только на этот провайдер, а провайдер без своего сериализатора следует общему уровня контейнера
+  (последний fallback — core JSON).
 - Если провайдер на не-дефолтном ключе не задал свой префикс, ключи автоматически получают суффикс
   `:{providerKey}` (`sa:outbox:cache:...`) — два провайдера на одной Redis БД не пересекаются.
 - Без ключа (`AddSaOutboxUsingRedis(cfg)`) всё работает как раньше: default key `outbox`, префикс
@@ -328,14 +337,16 @@ var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
 - Стартовая проверка `RedisMultiProviderGuard` падает, если два провайдера смотрят в один endpoint
   и базу с одинаковым префиксом (иначе каждое сообщение доставлялось бы дважды); явная фабрика
   `IDatabase`/`IConnectionMultiplexer` не проверяется — её endpoint неизвестен до запуска.
-- Тенанты общие на контейнер, а id consumer-групп могут совпадать (композитные ключи).
+- Тенанты — per provider (`TenantSettings` keyed; настройки дефолтного провайдера служат общим
+  fallback), а id consumer-групп могут совпадать (композитные ключи).
 ## Миграция 0.1 → 0.2
 
 - **Данные в Redis не мигрируют.** Default key (`AddSaOutboxUsingRedis(cfg)`) использует прежний
   префикс `sa:outbox`; стримы, группы и PEL читаются как раньше.
-- **Перевод на не-дефолтный provider key** меняет ключи: провайдер получает суффикс `:{key}`
-  (`sa:outbox:billing:...`). Если нужно продолжить со старыми ключами, задайте префикс явно:
-  `WithOutboxSettings((_, s) => s.KeySettings.Prefix = "sa:outbox")`. Иначе это новые, пустые стримы.
+- **Не-дефолтный provider key** получает суффикс `:{key}` (`sa:outbox:billing:...`), поэтому
+  провайдеры на одной БД никогда не делят стримы. Суффикс добавляется после `WithOutboxSettings` и
+  `WithConfiguration`; чтобы закрепить точный префикс, добавьте действие `Options`, которое
+  выполняется последним: `Options(o => o.Configure(s => s.KeySettings.Prefix = "sa:outbox"))`.
 - **Регистрация**: односрочная форма `AddSaOutboxUsingRedis(cfg, outbox, key)`; настройки и команды
   keyed, для default key сохранены unkeyed-алиасы (`IDatabase`, `RedisOutboxSettings`, паблишер).
 - **Контракты 0.18**: у `IOutboxBulkWriter` один batch-метод, `OutboxDeliveryMessage<T>` — плоская

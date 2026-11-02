@@ -196,7 +196,7 @@ internal sealed class PgOutboxConfiguration(
             RegisterPollingSettings();
         }
 
-        if (_dataSourceRequested)
+        if (_dataSourceRequested && !IsDataSourceRegistered())
         {
             // A keyed provider gets its own keyed data source (pool + connection). The default key
             // keeps the classic unkeyed registration, so an application that already registered an
@@ -207,21 +207,7 @@ internal sealed class PgOutboxConfiguration(
                 services.AddSaPostgreSqlDataSource(providerKey, _dataSourceConfigure);
         }
 
-        if (_serializerFactory is not null)
-        {
-            services.RemoveAll<IOutboxMessageSerializer>();
-            services.TryAddSingleton<IOutboxMessageSerializer>(_serializerFactory);
-        }
-        else if (_serializerInstance is not null)
-        {
-            services.RemoveAll<IOutboxMessageSerializer>();
-            services.TryAddSingleton<IOutboxMessageSerializer>(_serializerInstance);
-        }
-        else if (_serializerType is not null)
-        {
-            services.RemoveAll<IOutboxMessageSerializer>();
-            services.TryAddSingleton(typeof(IOutboxMessageSerializer), _serializerType);
-        }
+        RegisterSerializer();
 
         if (_poisonConfigured)
         {
@@ -241,6 +227,74 @@ internal sealed class PgOutboxConfiguration(
                 (IOutboxMessageSerializer?)sp.GetService<Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer>()
                 ?? JsonOutboxMessageSerializer.Instance);
         }
+    }
+
+    /// <summary>
+    /// Whether this provider key already owns a data source. A repeated registration of the same
+    /// key is tolerated: the first registration owns the connection, and passing the key to
+    /// <c>AddSaPostgreSqlDataSource</c> a second time would be rejected as a duplicate
+    /// configuration.
+    /// </summary>
+    private bool IsDataSourceRegistered()
+    {
+        // The default provider registers the unnamed ("") data source, a keyed one uses its scope.
+        string dataSourceKey = string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal)
+            ? string.Empty
+            : providerKey;
+
+        return services.Any(d => d.ServiceType == typeof(IPgDataSource)
+            && d.IsKeyedService
+            && Equals(d.ServiceKey, dataSourceKey));
+    }
+
+    /// <summary>
+    /// Registers the serializer per provider. The provider's commands resolve it keyed, so two
+    /// providers never overwrite each other's codec; a provider without an explicit serializer
+    /// shares the container-level one (the core JSON serializer is the last fallback). The default
+    /// key additionally keeps the unkeyed registration for the classic single-provider surface.
+    /// </summary>
+    private void RegisterSerializer()
+    {
+        bool isDefaultKey = string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal);
+
+        if (_serializerFactory is not null)
+        {
+            services.RemoveAllKeyed<IOutboxMessageSerializer>(providerKey);
+            services.TryAddKeyedSingleton<IOutboxMessageSerializer>(providerKey, (sp, _) => _serializerFactory(sp));
+
+            if (isDefaultKey)
+            {
+                services.RemoveAll<IOutboxMessageSerializer>();
+                services.TryAddSingleton<IOutboxMessageSerializer>(_serializerFactory);
+            }
+        }
+        else if (_serializerInstance is not null)
+        {
+            services.RemoveAllKeyed<IOutboxMessageSerializer>(providerKey);
+            services.TryAddKeyedSingleton<IOutboxMessageSerializer>(providerKey, _serializerInstance);
+
+            if (isDefaultKey)
+            {
+                services.RemoveAll<IOutboxMessageSerializer>();
+                services.TryAddSingleton<IOutboxMessageSerializer>(_serializerInstance);
+            }
+        }
+        else if (_serializerType is not null)
+        {
+            services.RemoveAllKeyed<IOutboxMessageSerializer>(providerKey);
+            services.TryAddKeyedSingleton(typeof(IOutboxMessageSerializer), providerKey, _serializerType);
+
+            if (isDefaultKey)
+            {
+                services.RemoveAll<IOutboxMessageSerializer>();
+                services.TryAddSingleton(typeof(IOutboxMessageSerializer), _serializerType);
+            }
+        }
+
+        // Registered after the explicit case: TryAddKeyed keeps an explicit serializer above, and a
+        // provider without one follows the container-level registration.
+        services.TryAddKeyedSingleton<IOutboxMessageSerializer>(providerKey, static (sp, _) =>
+            sp.GetService<IOutboxMessageSerializer>() ?? JsonOutboxMessageSerializer.Instance);
     }
 
     private void RegisterOutboxSettings()
