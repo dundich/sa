@@ -14,17 +14,21 @@ internal static class Setup
         // sink, no-op by default, replaced through WithPoisonHandler.
         services.TryAddSingleton<IPgOutboxPoisonHandler, NoOpPgOutboxPoisonHandler>();
 
-        services
-            .RemoveAll<IOutboxBulkWriter>()
-            .AddSingleton<IOutboxBulkWriter, OutboxBulkWriter>();
-
-        services
-            .RemoveAll<IOutboxDeliveryManager>()
-            .AddSingleton<IOutboxDeliveryManager, OutboxDeliveryManager>();
-
-        services
-            .RemoveAll<IOutboxTenantDetector>()
-            .AddSingleton<IOutboxTenantDetector, OutboxTenantDetector>();
+        // The single provider-registration point: identity, capabilities, the three storage
+        // contracts and the startup validation. Publish joins the caller's PgTransaction, tenant
+        // detection reads the tenant list, lock renewal is honoured, and Postpone/Retry delays are
+        // applied through lock_expires_on.
+        services.AddOutboxProvider(
+            new OutboxProviderDescriptor(
+                "PostgreSql",
+                OutboxProviderCapabilities.PublishContext
+                | OutboxProviderCapabilities.TenantDetection
+                | OutboxProviderCapabilities.LockExtension
+                | OutboxProviderCapabilities.Postponement),
+            provider => provider
+                .WithBulkWriter<OutboxBulkWriter>()
+                .WithDeliveryManager<OutboxDeliveryManager>()
+                .WithTenantDetector<OutboxTenantDetector>());
 
         services.TryAddSingleton<IPgOutboxDatabaseGuard, PgOutboxDatabaseGuard>();
 

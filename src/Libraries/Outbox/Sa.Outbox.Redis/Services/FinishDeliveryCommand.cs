@@ -45,7 +45,7 @@ internal sealed partial class FinishDeliveryCommand(
         for (int i = 0; i < messages.Length; i++)
         {
             IOutboxContextOperations<TMessage> context = messages.Span[i];
-            RedisValue streamId = RedisStreamId.ToStreamId(context.OutboxId);
+            RedisValue streamId = RedisStreamId.ToStreamId(context.RentToken);
 
             if (streamId.IsNull)
                 continue;

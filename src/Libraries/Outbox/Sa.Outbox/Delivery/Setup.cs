@@ -36,10 +36,15 @@ internal static class Setup
         services.AddOutboxPartitional();
 
         // Delivery-group options provider: the base no-op — a provider package replaces it
-        // with its own implementation. Resolved from the delivery job body, so a group
-        // without a configurationKey (or with the base package only) is shaped purely by
-        // OutboxDefaults and the user configure callback — nothing implicit sits in between.
+        // with its own implementation. Resolved from the delivery job body, so with the base
+        // package only, a group is shaped by OutboxDefaults, the section convention below and
+        // the user configure callback.
         services.AddDefaultDeliveryGroupOptionsProvider();
+
+        // The configuration-section convention for consumer groups: {prefix}:{group} is bound when
+        // the group was registered without an explicit configurationKey. Replaced by
+        // IOutboxBuilder.WithDeliveryConfigurationSection (null prefix disables it).
+        services.TryAddSingleton(new OutboxDeliveryConfiguration());
 
         services.TryAddSingleton<IDeliveryTenant, DeliveryTenant>();
 

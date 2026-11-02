@@ -318,7 +318,8 @@ options.AddMetadata<MyMessage>();
 - Identity payload — простое имя типа (`typeof(TMessage).Name`), поэтому два типа из разных
   namespace с одинаковым простым именем делят канал/stream.
 - Ядро владеет батчингом, job-ом доставки, `LockRenewer`/`ExtendDelivery` и трактовкой статусов;
-  провайдер реализует `IOutboxBulkWriter`, `IOutboxDeliveryManager` и `IOutboxTenantDetector`.
+  провайдер реализует `IOutboxBulkWriter`, `IOutboxDeliveryManager` и `IOutboxTenantDetector`
+  и регистрирует их через `AddOutboxProvider` с дескриптором (имя + возможности).
 - Единая стратегия сериализации: `IOutboxMessageSerializer` и JSON-fallback живут в ядре, поэтому
   один и тот же сериализатор используют все провайдеры (см. *Сериализация* выше).
 - У постоянных (permanent) исходов есть терминальный путь и подключаемый обработчик
@@ -356,18 +357,43 @@ options.AddMetadata<MyMessage>();
 |-----------|-----------|
 | `IOutboxBulkWriter` | Массовая вставка сообщений в БД |
 | `IOutboxDeliveryManager` | Блокировки и диспетчеризация сообщений |
-| `ITenantSource` | Источник ID арендатора |
+| `IOutboxTenantDetector` | Источник ID арендатора (опционален; базовый контракт — `ITenantSource`) |
+
+### Регистрация и валидация на старте
+
+Пакет-провайдер регистрирует три контракта одним вызовом, который заодно объявляет идентичность,
+возможности и проверяет установку на старте:
+
+```csharp
+services.AddOutboxProvider(
+    new OutboxProviderDescriptor(
+        "PostgreSql",
+        OutboxProviderCapabilities.PublishContext
+        | OutboxProviderCapabilities.TenantDetection
+        | OutboxProviderCapabilities.LockExtension
+        | OutboxProviderCapabilities.Postponement),
+    provider => provider
+        .WithBulkWriter<OutboxBulkWriter>()
+        .WithDeliveryManager<OutboxDeliveryManager>()
+        .WithTenantDetector<OutboxTenantDetector>());
+```
+
+`AddOutboxProvider` отвергает второго провайдера с другим именем и провайдера без bulk-writer'а;
+построение `IOutboxProviderRegistry` отвергает отсутствие delivery-manager'а при наличии групп и
+отсутствие детектора при заявленной capability `TenantDetection`. Провайдер пишется в лог один раз
+на старте. Полный контракт — в [`PlugServices/Readme-ru.md`](PlugServices/Readme-ru.md).
 
 > **Владение контекстами.** Память `messages`, переданная в `IConsumer.Consume`, и все контексты
 > в ней принадлежат пайплайну на время вызова. После сохранения статусов контексты
 > переиспользуются, поэтому потребитель не должен хранить их (или payload, полученный через них)
-> после завершения возвращённой задачи. `OutboxMessage<T>`, `OutboxPartInfo`,
-> `OutboxTaskDeliveryInfo` и `OutboxDeliveryMessage<T>` — это `readonly record struct`.
+> после завершения возвращённой задачи. `OutboxPartInfo`, `OutboxTaskDeliveryInfo`,
+> `OutboxRentToken` и `OutboxDeliveryMessage<T>` — это `readonly record struct`.
 >
-> **Форма для провайдеров.** У `IOutboxBulkWriter` появился overload с `OutboxMessageBatch<T>`:
-> одна общая part-информация и никаких обёрток на сообщение. Реализация по умолчанию
-> материализует старую форму `OutboxMessage<T>`, так что существующие провайдеры продолжают
-> работать, пока не переопределят overload.
+> **Форма для провайдеров (0.18).** У `IOutboxBulkWriter` ровно один абстрактный метод — batch с
+> общей part-информацией и без обёрток на сообщение; прежние per-message перегрузки удалены.
+> `OutboxDeliveryMessage<T>` — плоская запись (`PayloadId`, `Payload`, `PartInfo`, `DeliveryInfo`) с
+> явным `RentToken`, который провайдер получает обратно в `IOutboxContext.RentToken`. Подробности и
+> миграция — в [`PlugServices/Readme-ru.md`](PlugServices/Readme-ru.md).
 
 ### Как сохранить payload после вызова
 

@@ -31,46 +31,6 @@ internal sealed class OutboxBulkWriter(PublishMessagesCommand publishCommand) : 
             : publishCommand.ExecuteAsync(batch, cancellationToken);
     }
 
-    public ValueTask<ulong> InsertBulk<TMessage>(
-        ReadOnlyMemory<OutboxMessage<TMessage>> messages,
-        CancellationToken cancellationToken = default)
-            => InsertBulk(messages, context: null, cancellationToken);
-
-    public async ValueTask<ulong> InsertBulk<TMessage>(
-        ReadOnlyMemory<OutboxMessage<TMessage>> messages,
-        object? context,
-        CancellationToken cancellationToken = default)
-    {
-        EnsureNoContext(context);
-
-        if (messages.Length == 0) return 0;
-
-        // The old (per-message) shape carries a part on every message, so a call may span several
-        // parts. Group them back into per-part batches, the shape one stream expects.
-        Dictionary<OutboxPartInfo, List<OutboxMessageBatchItem<TMessage>>> groups = new();
-
-        foreach (OutboxMessage<TMessage> message in messages.Span)
-        {
-            if (!groups.TryGetValue(message.PartInfo, out List<OutboxMessageBatchItem<TMessage>>? items))
-            {
-                items = [];
-                groups[message.PartInfo] = items;
-            }
-
-            items.Add(new OutboxMessageBatchItem<TMessage>(message.PayloadId, message.Payload));
-        }
-
-        ulong inserted = 0;
-
-        foreach ((OutboxPartInfo partInfo, List<OutboxMessageBatchItem<TMessage>> items) in groups)
-        {
-            var batch = new OutboxMessageBatch<TMessage>(items.ToArray(), partInfo);
-            inserted += await publishCommand.ExecuteAsync(batch, cancellationToken).ConfigureAwait(false);
-        }
-
-        return inserted;
-    }
-
     private static void EnsureNoContext(object? context)
     {
         if (context is not null)

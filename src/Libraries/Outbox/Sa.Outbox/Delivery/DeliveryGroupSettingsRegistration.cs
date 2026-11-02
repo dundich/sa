@@ -18,7 +18,8 @@ namespace Sa.Outbox.Delivery;
 /// </item>
 /// <item>
 /// <b>Startup</b> — <see cref="BuildFull"/> rebuilds the full chain (<see cref="OutboxDefaults"/>
-/// → configuration section, when a key is given → user <c>configure</c> with a live provider)
+/// → provider defaults → the group's section (explicit key or the <c>Outbox:DeliveryGroups:{group}</c>
+/// convention) → user <c>configure</c> with a live provider)
 /// and the delivery job factory swaps the snapshot with this result via
 /// <see cref="IOutboxConsumerManager.Apply(string, Func{OutboxConsumerSettings, OutboxConsumerSettings})"/>,
 /// so the configuration section lands in the actually-scheduled job.

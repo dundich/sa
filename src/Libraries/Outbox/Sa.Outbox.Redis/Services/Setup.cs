@@ -22,17 +22,19 @@ internal static class Setup
         // default drops them with a warning; WithPoisonHandler replaces it.
         services.TryAddSingleton<IRedisOutboxPoisonHandler, DropPoisonHandler>();
 
-        services
-            .RemoveAll<IOutboxBulkWriter>()
-            .AddSingleton<IOutboxBulkWriter, OutboxBulkWriter>();
-
-        services
-            .RemoveAll<IOutboxDeliveryManager>()
-            .AddSingleton<IOutboxDeliveryManager, OutboxDeliveryManager>();
-
-        services
-            .RemoveAll<IOutboxTenantDetector>()
-            .AddSingleton<IOutboxTenantDetector, OutboxTenantDetector>();
+        // Identity, capabilities and the three storage contracts in one place. Redis has no
+        // publish context (publishing is append-only into a stream) and ignores a consumer-supplied
+        // Postpone/Retry delay (the only retry clock is the PEL idle time), so neither capability
+        // is declared; lock extension is honoured through ExtendDelivery.
+        services.AddOutboxProvider(
+            new OutboxProviderDescriptor(
+                "Redis",
+                OutboxProviderCapabilities.TenantDetection
+                | OutboxProviderCapabilities.LockExtension),
+            provider => provider
+                .WithBulkWriter<OutboxBulkWriter>()
+                .WithDeliveryManager<OutboxDeliveryManager>()
+                .WithTenantDetector<OutboxTenantDetector>());
 
         return services;
     }

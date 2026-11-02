@@ -106,6 +106,61 @@ public class OutboxMessagePublisherTests
         Assert.Equal(3, only.TenantId);
     }
 
+    [Fact]
+    public async Task Publish_ContextWithoutProviderCapability_ThrowsBeforeTheWrite()
+    {
+        var writer = new CapturingBulkWriter();
+        var publisher = new OutboxMessagePublisher(
+            TimeProvider.System,
+            writer,
+            new OutboxPublishSettings(MaxBatchSize: 16),
+            new MetadataConfiguration(),
+            new FakeRegistry("Redis", OutboxProviderCapabilities.TenantDetection));
+
+        await Assert.ThrowsAsync<NotSupportedException>(async () =>
+            await publisher.Publish(["a"], tenantId: 1, context: new object(), TestToken));
+
+        // The writer was never called: the check runs before any storage work.
+        Assert.Empty(writer.Seen);
+    }
+
+    [Fact]
+    public async Task Publish_ContextWithProviderCapability_ReachesTheWriter()
+    {
+        var writer = new CapturingBulkWriter();
+        var publisher = new OutboxMessagePublisher(
+            TimeProvider.System,
+            writer,
+            new OutboxPublishSettings(MaxBatchSize: 16),
+            new MetadataConfiguration(),
+            new FakeRegistry("PostgreSql", OutboxProviderCapabilities.PublishContext));
+
+        ulong sent = await publisher.Publish(["a"], tenantId: 1, context: new object(), TestToken);
+
+        Assert.Equal(1UL, sent);
+        Assert.Single(writer.Seen);
+    }
+
+    [Fact]
+    public async Task Publish_NoContext_DoesNotConsultTheProviderRegistry()
+    {
+        var writer = new CapturingBulkWriter();
+        var publisher = new OutboxMessagePublisher(
+            TimeProvider.System,
+            writer,
+            new OutboxPublishSettings(MaxBatchSize: 16),
+            new MetadataConfiguration(),
+            new FakeRegistry("Redis", OutboxProviderCapabilities.None));
+
+        Assert.Equal(1UL, await publisher.Publish(["a"], tenantId: 1, context: null, TestToken));
+    }
+
+    private sealed class FakeRegistry(string name, OutboxProviderCapabilities capabilities)
+        : IOutboxProviderRegistry
+    {
+        public OutboxProviderDescriptor Descriptor { get; } = new(name, capabilities);
+    }
+
     private sealed class CapturingBulkWriter : IOutboxBulkWriter
     {
         /// <summary>
@@ -117,18 +172,19 @@ public class OutboxMessagePublisherTests
         public List<OutboxPartInfo> Parts { get; } = [];
 
         public ValueTask<ulong> InsertBulk<TMessage>(
-            ReadOnlyMemory<OutboxMessage<TMessage>> messages,
+            OutboxMessageBatch<TMessage> batch,
+            object? context,
             CancellationToken cancellationToken = default)
         {
-            foreach (OutboxMessage<TMessage> message in messages.Span)
+            foreach (OutboxMessageBatchItem<TMessage> message in batch.Messages.Span)
             {
                 Seen.Add((
                     (string?)(object?)message.Payload,
-                    message.PartInfo.TenantId));
-                Parts.Add(message.PartInfo);
+                    batch.PartInfo.TenantId));
+                Parts.Add(batch.PartInfo);
             }
 
-            return new ValueTask<ulong>((ulong)messages.Length);
+            return new ValueTask<ulong>((ulong)batch.Count);
         }
     }
 
@@ -151,11 +207,6 @@ public class OutboxMessagePublisherTests
             FirstPayloadId = batch.Messages.Span[0].PayloadId;
             return new ValueTask<ulong>((ulong)batch.Count);
         }
-
-        public ValueTask<ulong> InsertBulk<TMessage>(
-            ReadOnlyMemory<OutboxMessage<TMessage>> messages,
-            CancellationToken cancellationToken = default)
-            => throw new InvalidOperationException("The batch overload was expected.");
     }
 
     /// <summary>Advertises two items but yields one — the shape a buggy custom collection has.</summary>

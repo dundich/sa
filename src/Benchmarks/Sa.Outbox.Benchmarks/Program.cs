@@ -176,8 +176,12 @@ internal static class Program
         OutboxPartInfo part,
         OutboxTaskDeliveryInfo info)
     {
-        var message = new OutboxMessage<TMessage>("id", payload, part);
-        var delivery = new OutboxDeliveryMessage<TMessage>(Guid.Empty, message, info);
+        var delivery = new OutboxDeliveryMessage<TMessage>(
+            OutboxId: Guid.Empty,
+            PayloadId: "id",
+            Payload: payload,
+            PartInfo: part,
+            DeliveryInfo: info);
 
         IOutboxContextOperations<TMessage> context = factory.Create(delivery);
         context.Ok();
@@ -247,7 +251,7 @@ internal static class Program
     /// <summary>~512-byte value payload: the worst case for a struct envelope.</summary>
     private readonly record struct LargePayload(int Id, LongBuffer Padding);
 
-    /// <summary>Accepts both bulk-writer shapes and allocates nothing itself.</summary>
+    /// <summary>Accepts a publish batch and allocates nothing itself.</summary>
     private sealed class NullBulkWriter : IOutboxBulkWriter
     {
         public ValueTask<ulong> InsertBulk<TMessage>(
@@ -255,10 +259,5 @@ internal static class Program
             object? context,
             CancellationToken cancellationToken = default)
             => new((ulong)batch.Count);
-
-        public ValueTask<ulong> InsertBulk<TMessage>(
-            ReadOnlyMemory<OutboxMessage<TMessage>> messages,
-            CancellationToken cancellationToken = default)
-            => new((ulong)messages.Length);
     }
 }

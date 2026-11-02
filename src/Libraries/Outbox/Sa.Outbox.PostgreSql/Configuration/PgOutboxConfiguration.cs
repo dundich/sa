@@ -28,6 +28,18 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         return this;
     }
 
+    public IPgOutboxConfiguration WithPolling(Action<IServiceProvider, PgPollingSettings>? configure = null)
+    {
+        if (configure != null)
+        {
+            services.AddSingleton(configure);
+        }
+
+        RegisterPollingSettings();
+
+        return this;
+    }
+
     public IPgOutboxConfiguration WithMessageSerializer(
         Func<IServiceProvider, IOutboxMessageSerializer> messageSerializerFactory)
     {
@@ -133,5 +145,33 @@ internal sealed class PgOutboxConfiguration(IServiceCollection services) : IPgOu
         services.TryAddSingleton<PgOutboxMigrationSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().MigrationSettings);
         services.TryAddSingleton<PgOutboxCleanupSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().CleanupSettings);
         services.TryAddSingleton<PgOutboxConsumeSettings>(sp => sp.GetRequiredService<PgOutboxSettings>().ConsumeSettings);
+    }
+
+    /// <summary>
+    /// Registers the polling defaults as their own singleton (not as a part of
+    /// <see cref="PgOutboxSettings"/>): the delivery-options provider reads it while a consumer group's
+    /// settings are being built, and that happens inside the consumer manager's own factory —
+    /// resolving <see cref="PgOutboxSettings"/> from there would ask the manager for its groups while
+    /// it is still being constructed. Registered only when <c>WithPolling</c> is called, so a container
+    /// that never opts in has no such service and the provider keeps the previous behaviour.
+    /// </summary>
+    private void RegisterPollingSettings()
+    {
+        services.TryAddSingleton(sp =>
+        {
+            PgPollingSettings settings = new();
+
+            foreach (Action<IServiceProvider, PgPollingSettings> configureAction in
+                sp.GetServices<Action<IServiceProvider, PgPollingSettings>>())
+            {
+                configureAction.Invoke(sp, settings);
+            }
+
+            // Validated after every configure action: a profile that leaves an inconsistent pair
+            // (idle bound below the base interval) fails at startup instead of on the first group build.
+            settings.Validate();
+
+            return settings;
+        });
     }
 }

@@ -30,6 +30,13 @@ public interface IOutboxContext
     OutboxTaskDeliveryInfo DeliveryInfo { get; }
 
     /// <summary>
+    /// Gets the provider's opaque rent identity for this message (see <see cref="OutboxRentToken"/>).
+    /// The delivery manager reads it back on return/extend, so a provider never has to encode its
+    /// row identity into <see cref="OutboxId"/> or re-derive it from <see cref="DeliveryInfo"/>.
+    /// </summary>
+    OutboxRentToken RentToken { get; }
+
+    /// <summary>
     /// Gets the result of the delivery attempt.
     /// </summary>
     DeliveryStatus DeliveryResult { get; }

@@ -46,10 +46,11 @@ internal sealed class OutboxContext<TMessage> : IOutboxContextOperations<TMessag
     }
 
     public Guid OutboxId => _delivery.OutboxId;
-    public string PayloadId => _delivery.Message.PayloadId;
-    public TMessage Payload => _delivery.Message.Payload;
-    public OutboxPartInfo PartInfo => _delivery.Message.PartInfo;
+    public string PayloadId => _delivery.PayloadId;
+    public TMessage Payload => _delivery.Payload;
+    public OutboxPartInfo PartInfo => _delivery.PartInfo;
     public OutboxTaskDeliveryInfo DeliveryInfo => _delivery.DeliveryInfo;
+    public OutboxRentToken RentToken => _delivery.RentToken;
 
 
     public DeliveryStatus DeliveryResult { get; private set; }

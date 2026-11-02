@@ -1,5 +1,36 @@
 # Configuration
 
+## Contents
+
+- [Overview](#overview)
+- [Registration flow (DI)](#registration-flow-di)
+- [IPgOutboxConfiguration](#ipgoutboxconfiguration)
+- [PgOutboxSettings](#pgoutboxsettings)
+- [PgOutboxTableSettings](#pgoutboxtablesettings)
+- [PgOutboxMigrationSettings](#pgoutboxmigrationsettings)
+- [PgOutboxCleanupSettings](#pgoutboxcleanupsettings)
+- [PgOutboxConsumeSettings](#pgoutboxconsumesettings)
+- [PgOutboxDeliveryOptions](#pgoutboxdeliveryoptions) — per-group settings from a section
+- [PgPollingSettings](#pgpollingsettings) — polling profiles and budgeting
+- [OutboxFieldDefaults](#outboxfielddefaults)
+- [Serialization](#serialization)
+- [Usage examples](#usage-examples)
+- [Cheat sheet: what to change where](#cheat-sheet-what-to-change-where)
+
+## Cheat sheet: what to change where
+
+| Task | Where |
+|---|---|
+| Connection, pool, `Search Path` | `WithDataSource(ds => ds.Options(...))` |
+| Schema, table names, fill factors, migration, cleanup | `WithOutboxSettings(...)` (code) or `WithOutboxSettingsFromConfiguration("Sa:Outbox:Pg")` (appsettings) |
+| One group's settings: batch, locks, attempts, intervals | section `Outbox:DeliveryGroups:{group}` or the `AddDelivery` callback |
+| Polling latency for every group | `WithPollingBudget(...)`, `WithPollingProfile(...)`, `WithPollingFromConfiguration(...)` |
+| Tenants | `WithTenants(...)` in `AddSaOutbox` / `AddSaOutboxUsingPostgreSql(configureOutbox: ...)` |
+| Serializer | `WithMessageSerializer(...)` — in the core (shared) or in the PG provider |
+| Permanent-failure handler | `WithPoisonHandler(...)` |
+| Runtime: pause, live changes | `IOutboxConsumerManager` (`Pause` / `Resume` / `Apply`) |
+| A custom schedule scope | one `scopeKey` in `AddSaOutboxUsingPostgreSql(pg, outbox, scopeKey)` |
+
 ## Overview
 
 ---
@@ -94,6 +125,10 @@ The public fluent surface received as the `configure` argument of `AddSaOutboxUs
 | `WithMessageSerializer<TService>(TService instance)` | Replace the serializer with a pre-created instance |
 | `WithMessageSerializer<TService>()` | Register a serializer type with a parameterless constructor |
 | `WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>?)` | Register a delegate that customizes `PgOutboxSettings` (table / migration / cleanup / consume) |
+| `WithOutboxSettingsFromConfiguration(string)` *(extension)* | Bind the scalar part of `PgOutboxSettings` from an `IConfiguration` section (see `PgOutboxOptions`) |
+| `WithPolling(Action<IServiceProvider, PgPollingSettings>?)` | Register polling defaults for every group (see `PgPollingSettings`); without this call the service is not registered at all |
+| `WithPollingBudget(TimeSpan)` / `WithPollingProfile(PgPollingProfile)` *(extensions)* | Set the same profile from one number or a preset |
+| `WithPollingFromConfiguration(string)` *(extension)* | Bind the polling profile from an `IConfiguration` section (see `PgPollingOptions`) |
 | `WithDataSource(Action<IDataSourceBuilder>?)` | Configure the PostgreSQL data source (connection string): the section via `FromConfiguration`, the options pipeline via `Options(...)` |
 
 All methods return the same `IPgOutboxConfiguration` for chaining.
@@ -115,6 +150,46 @@ Takes an optional `Action<IServiceProvider, PgOutboxSettings>`. When the delegat
 ### `WithDataSource`
 
 Takes an optional `Action<IDataSourceBuilder>` callback and delegates it to `AddSaPostgreSqlDataSource(...)` from `Sa.Data.PostgreSql` — the section comes via `FromConfiguration(...)`, the options pipeline via `Options(...)`; see its Readme for the full pipeline (normalisation, validation, `ValidateOnStart()`). The only option is `ConnectionString`; pooling and other Npgsql options are configured inside the string itself (e.g. `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` additionally drives the automatic schema inheritance of the outbox tables (step ①); an empty string reuses an `NpgsqlDataSource` registered in DI instead of opening a second pool.
+
+### `WithPolling` and the presets
+
+Sets **polling defaults for every consumer group** of the provider without repeating a `configure` callback on each `AddDelivery`. These are defaults, not overrides: a group's section and its callback are applied later and win.
+
+| Method | What it sets |
+|---|---|
+| `WithPollingBudget(TimeSpan)` | Everything from one number: the "published → processing started" SLA for an idle group |
+| `WithPollingProfile(PgPollingProfile)` | A ready-made `Quiet` / `Balanced` / `Responsive` preset |
+| `WithPolling((sp, s) => ...)` | Manual tuning of `PgPollingSettings` (including `WithBatchingWindow`, `WithPerTenantParallelism`, `Disable`) |
+| `WithPollingFromConfiguration(path)` | Profile/budget/explicit values from an `IConfiguration` section (`PgPollingOptions`) |
+
+```csharp
+services.AddSaOutboxUsingPostgreSql(cfg => cfg
+    .WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = cs)))
+    .WithPollingBudget(TimeSpan.FromMinutes(1)));   // ≤ 1 min for every group
+```
+
+```jsonc
+// appsettings.json — change the latency without a rebuild
+{
+  "Sa": {
+    "Outbox": {
+      "Pg": {
+        "Polling": {
+          "Budget": "00:01:00",
+          // or "Profile": "Quiet",
+          "Interval": "00:00:10"   // an explicit value wins over the profile/budget
+        }
+      }
+    }
+  }
+}
+```
+
+```csharp
+.WithPollingFromConfiguration("Sa:Outbox:Pg:Polling")
+```
+
+> If none of these methods is called, no `PgPollingSettings` is registered and the provider's behaviour is exactly the same as before (core `OutboxDefaults` + section + callback).
 
 ---
 
@@ -138,6 +213,36 @@ PgOutboxSettings
 | `ConsumeSettings` | `PgOutboxConsumeSettings` | `new()` | Minimum offsets per consumer group |
 
 > Note: the class XML comment also mentions "serialization, caching" — there are no such sub-settings in this class; that wording is stale.
+
+### Settings from configuration — `PgOutboxOptions`
+
+The scalar part can live in `appsettings.json` instead of code:
+
+```jsonc
+{
+  "Sa": {
+    "Outbox": {
+      "Pg": {
+        "Schema": "messaging",
+        "Tables": {
+          "TaskQueue": { "TableName": "outbox", "FillFactor": 70 },
+          "Message":   { "TableName": "outbox__msg$" }
+        },
+        "Migration": { "ForwardDays": 3, "ExecutionInterval": "06:00:00" },
+        "Cleanup":   { "DropPartsAfterRetention": "30.00:00:00", "CleanupMode": "Drop" }
+      }
+    }
+  }
+}
+```
+
+```csharp
+.AddSaOutboxUsingPostgreSql(cfg => cfg
+    .WithDataSource(...)
+    .WithOutboxSettingsFromConfiguration("Sa:Outbox:Pg"))
+```
+
+Only the scalar surface is bound: `Schema`, `UseDefaultPartition`, the six table names and fill factors, and the migration/cleanup schedules. Column definitions (`Fields.*`) stay in code — they are raw SQL fragments spliced into DDL verbatim. A missing section is a no-op; an unusable value (for example a `FillFactor` outside 10–100) fails at startup during validation.
 
 ---
 
@@ -405,14 +510,17 @@ Per-consumer-group delivery settings bound from a single `IConfiguration` sectio
 
 ### Precedence
 
-Each group's final `OutboxConsumerSettings` is composed in three layers, lowest → highest:
+Each group's final `OutboxConsumerSettings` is composed in four layers, lowest → highest:
 
 ```
-OutboxDefaults  →  this section (only when a configurationKey is given)  →  the configure callback
+OutboxDefaults  →  PgPollingSettings (only with WithPolling*)  →  the group's section  →  the configure callback
 ```
 
-- A **partially-filled** section overrides only the properties it names; every other property keeps whatever the builder already carries (the `OutboxDefaults` value, or an earlier override).
-- A group registered **without** a `configurationKey` is shaped by `OutboxDefaults` + `configure` only — a matching section is never read, even if it exists.
+**Which section.** By convention a group reads `Outbox:DeliveryGroups:{groupId}` (the prefix is changed by `IOutboxBuilder.WithDeliveryConfigurationSection`; `null` disables the convention). An explicit `configurationKey` on `AddDelivery` wins over the convention, and an explicit empty string (`configurationKey: ""`) opts that group out. A missing section is a no-op.
+
+- **`PgPollingSettings`** is applied first, and only for the properties it sets (`Interval`, `IdleMaxInterval`, `InitialDelay`, `MaxProcessingIterations` and — only when set explicitly — `BatchingWindow` / `PerTenantMaxDegreeOfParallelism`). Without `WithPolling*` the layer does not exist at all.
+- A **partially-filled** section overrides only the properties it names; every other property keeps whatever the builder already carries (`OutboxDefaults`, a `PgPollingSettings` value, or an earlier override).
+- A group **without** a `configurationKey` reads the conventional section `Outbox:DeliveryGroups:{groupId}` (when it exists) and is shaped by `OutboxDefaults` + `PgPollingSettings` + `configure`; sections under other prefixes are not read.
 - An **absent** or **present-but-empty** section is a no-op (every property binds to null → nothing is applied).
 
 ### Bindable properties
@@ -449,10 +557,11 @@ Two `OutboxConsumerSettings` members are **not** bindable, and on purpose:
 
 ### How it is applied
 
-`PgOutboxDeliveryOptionsProvider` — the `IDeliveryGroupOptionsProvider` this package registers (replacing the base no-op) — resolves the `IConfiguration` once at construction (optional: no `IConfiguration` in the container makes the provider a no-op), then per delivery group:
+`PgOutboxDeliveryOptionsProvider` — the `IDeliveryGroupOptionsProvider` this package registers (replacing the base no-op) — resolves the `IConfiguration` and `PgPollingSettings` once at construction (both optional: no `IConfiguration`, or no `WithPolling*` call, simply means the corresponding layer is absent), then per delivery group:
 
-1. `PgOutboxDeliveryOptions.FromConfiguration(configuration, configurationKey)` — returns `null` when the key is empty or the section is absent; otherwise binds the section via the source-generated `IConfigurationSection.Bind` (AOT-safe, the same choice as the partitional PostgreSql settings).
-2. `PgOutboxDeliveryOptions.ApplyTo(builder)` — applies every non-null property to the settings builder, leaving nulls untouched; `IdleMaxInterval == 0` maps to `WithFixedInterval()`, a positive value to `WithIdleBackoff(...)`.
+1. `PgPollingSettings.ApplyTo(builder)` — the provider-wide polling defaults (only when `Enabled`); applied **before** the section, so the section and the callback override them.
+2. `PgOutboxDeliveryOptions.FromConfiguration(configuration, configurationKey)` — returns `null` when the key is empty or the section is absent; otherwise binds the section via the source-generated `IConfigurationSection.Bind` (AOT-safe, the same choice as the partitional PostgreSql settings).
+3. `PgOutboxDeliveryOptions.ApplyTo(builder)` — applies every non-null property to the settings builder, leaving nulls untouched; `IdleMaxInterval == 0` maps to `WithFixedInterval()`, a positive value to `WithIdleBackoff(...)`.
 
 The provider is consulted only in the **stage-2 (startup)** settings build — the stage-1 registration-time snapshot is pre-registered first (it cannot see the section, since `IConfiguration` needs a live provider).
 
@@ -482,6 +591,97 @@ services.AddSaOutbox(builder => builder
 ```
 
 Here `MaxBatchSize` / `Interval` / `IdleMaxInterval` / `MaxDeliveryAttempts` come from the section (over `OutboxDefaults`), while `StartImmediately()` from the callback is the final word on `InitialDelay`.
+
+---
+
+## PgPollingSettings
+
+Provider-wide **polling defaults** for every consumer group that does not override them. Registered by `WithPolling` / `WithPollingProfile` / `WithPollingBudget` (see `IPgOutboxConfiguration`); without such a call the `PgPollingSettings` service is absent from the container and the provider behaves as before.
+
+There is no reactivity here: it is plain periodic polling. The worst case for an idle group is
+
+```
+BatchingWindow + IdleMaxInterval + drain time
+```
+
+so the latency budget is split with a reserve: `BatchingWindow (3 s) + reserve + IdleMaxInterval`, where `reserve = max(5 s, 20% of the budget)`.
+
+### Named profiles (`WithPollingProfile`)
+
+| Profile | `Interval` | `IdleMaxInterval` | `InitialDelay` | `MaxProcessingIterations` | Worst case |
+|---|---|---|---|---|---|
+| `Quiet` | 30 s | 45 s | 5 s | −1 | ~48 s |
+| `Balanced` (default) | 10 s | 30 s | 5 s | −1 | ~33 s |
+| `Responsive` | 3 s | 15 s | 3 s | −1 | ~18 s |
+
+### Budgeting (`WithPollingBudget`)
+
+The budget is the upper bound of "published → processing started" for an **idle** group. It is split into three parts:
+
+```
+budget   = BatchingWindow (3 s) + reserve + IdleMaxInterval
+reserve  = max(5 s, 20% of the budget)      // room for draining, many tenants and back-off jitter
+Interval = max(1 s, IdleMaxInterval / 3)    // while there is work, poll three times as often
+```
+
+| Budget | `Interval` | `IdleMaxInterval` | `InitialDelay` | Worst case |
+|---|---|---|---|---|
+| 30 s | 7 s | 21 s | 5 s | ~24 s |
+| 60 s | 15 s | 45 s | 5 s | ~48 s |
+| 120 s | 31 s | 93 s | 5 s | ~96 s |
+
+`MaxProcessingIterations` always becomes `-1`: a burst is drained in the same cycle instead of waiting for the next tick. A budget below `BatchingWindow + reserve` (i.e. ≤ 8 s with the default window) is rejected during validation. The budget does not change `BatchingWindow` itself — the window stays whatever the group or `OutboxDefaults` set.
+
+#### Example: a one-minute budget with one exception
+
+```csharp
+services
+    .AddSaOutbox(b => b.WithDeliveries(d => d
+        .AddDelivery<OrderConsumer, OrderCreated>("orders")            // the budget defaults
+        .AddDelivery<AuditConsumer, AuditEvent>("audit", (_, cs) => cs // exception: SLA matters more
+            .WithInterval(TimeSpan.FromSeconds(2))
+            .WithFixedInterval())))
+    .AddSaOutboxUsingPostgreSql(cfg => cfg
+        .WithDataSource(...)
+        .WithPollingBudget(TimeSpan.FromMinutes(1)));
+```
+
+The resulting group settings — the configuration section and the callback are applied after the budget and therefore override it:
+
+| Group | `Interval` | `IdleMaxInterval` | `InitialDelay` | `MaxProcessingIterations` | Source |
+|---|---|---|---|---|---|
+| `orders` | 15 s | 45 s | 5 s | −1 | `WithPollingBudget(1 min)` |
+| `audit` | 2 s | 0 (fixed) | 5 s | −1 | the callback overrode `Interval` and `IdleMaxInterval` |
+
+The same result for `audit` can be expressed in configuration, without a callback:
+
+```jsonc
+{
+  "DeliveryGroups": {
+    "audit": { "Interval": "00:00:02", "IdleMaxInterval": "00:00:00" }
+  }
+}
+```
+
+> The budget is a **default, not a hard limit**: once a group overrides `Interval` / `IdleMaxInterval`, its worst case is derived from its own values.
+
+### Manual tuning (`WithPolling`)
+
+```csharp
+.WithPolling((_, polling) => polling
+    .UseProfile(PgPollingProfile.Balanced)
+    .WithPerTenantParallelism(4)                      // many tenants behind one group
+    .WithBatchingWindow(TimeSpan.FromSeconds(1)))     // deliberate: affects Warn retries too
+```
+
+### Deliberately untouched
+
+- `BatchingWindow` — `null` by default: the window is also the retry delay of an un-backoff-ed `Warn`, so it must not be changed "for free".
+- `LockDuration` / `LockRenewal` / `LookbackInterval` / `MaxBatchSize` / `MaxDeliveryAttempts` — per-group decisions with their own defaults.
+- `PerTenantMaxDegreeOfParallelism` — only set explicitly (`WithPerTenantParallelism`).
+- `Paused` / `AsSingleton` — not polling settings (see `PgOutboxDeliveryOptions`).
+
+Every value is validated when `PgPollingSettings` is first resolved: `Interval > 0`, `IdleMaxInterval ≥ Interval` (when enabled), `InitialDelay ≥ 0`, `MaxProcessingIterations ≥ -1`.
 
 ---
 

@@ -62,11 +62,11 @@ public class ValueTypePublishableTests
         }
 
         public ValueTask<ulong> InsertBulk<TMessage>(
-            ReadOnlyMemory<OutboxMessage<TMessage>> messages,
+            OutboxMessageBatch<TMessage> batch,
             CancellationToken cancellationToken = default)
         {
-            Count += messages.Length;
-            return new ValueTask<ulong>((ulong)messages.Length);
+            Count += batch.Count;
+            return new ValueTask<ulong>((ulong)batch.Count);
         }
     }
 }

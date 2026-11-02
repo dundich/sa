@@ -16,9 +16,10 @@ namespace Sa.Outbox.Delivery;
 /// </para>
 /// <para>
 /// A provider package (e.g. <c>Sa.Outbox.PostgreSql</c>) registers its own implementation that
-/// binds a configuration section addressed by <paramref name="configurationKey"/>. It is only
-/// consulted when <paramref name="configurationKey"/> is non-empty; an empty key is a no-op and
-/// <see langword="true"/> is never returned for it.
+/// binds a configuration section addressed by <paramref name="configurationKey"/>. An empty key
+/// means "no section to bind" — it is never a <em>group-level</em> configuration source. A provider
+/// may still apply its own provider-wide defaults before the section (for example the PostgreSQL
+/// package's polling defaults), so an empty key is not necessarily a no-op.
 /// </para>
 /// <para>
 /// Applied before the user <c>configure</c> callback, so the callback always has the final word.
@@ -27,17 +28,19 @@ namespace Sa.Outbox.Delivery;
 public interface IDeliveryGroupOptionsProvider
 {
     /// <summary>
-    /// Applies the group's configuration-section settings to <paramref name="builder"/>.
+    /// Applies the group's configuration settings to <paramref name="builder"/>: the provider-wide
+    /// defaults first, then the section addressed by <paramref name="configurationKey"/> (when one
+    /// is given).
     /// </summary>
     /// <param name="consumerGroupId">The (sanitized) consumer group id.</param>
     /// <param name="configurationKey">
-    /// The configuration section path for this group. When null or empty the provider does
-    /// nothing and returns <see langword="false"/>.
+    /// The configuration section path for this group. When null or empty no section is bound, but
+    /// provider-wide defaults may still be applied.
     /// </param>
     /// <param name="builder">The settings builder to apply non-null values to.</param>
     /// <returns>
-    /// <see langword="true"/> when at least one value was applied; <see langword="false"/> when
-    /// the key was empty or the section was missing/empty.
+    /// <see langword="true"/> when at least one value was applied (a provider default or a section
+    /// value); <see langword="false"/> when nothing was applied.
     /// </returns>
     bool TryApply(string consumerGroupId, string? configurationKey, OutboxConsumerSettingsBuilder builder);
 }

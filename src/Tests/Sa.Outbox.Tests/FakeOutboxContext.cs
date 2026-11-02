@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Tests;
+namespace Sa.Outbox.Tests;
 
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Exceptions;
@@ -19,6 +19,7 @@ public sealed class FakeOutboxContext<TMessage>(
     public string PayloadId { get; set; } = payloadId;
     public TMessage Payload { get; set; } = default!;
     public OutboxPartInfo PartInfo { get; set; } = new(1, "part-1", DateTimeOffset.UtcNow);
+    public OutboxRentToken RentToken { get; set; } = OutboxRentToken.None;
 
     private int _attempt = attempt;
 

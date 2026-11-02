@@ -8,7 +8,8 @@ internal sealed class OutboxMessagePublisher(
     TimeProvider timeProvider,
     IOutboxBulkWriter bulkWriter,
     OutboxPublishSettings publishSettings,
-    IOutboxMessageMetadataProvider metadataProvider) : IOutboxMessagePublisher
+    IOutboxMessageMetadataProvider metadataProvider,
+    IOutboxProviderRegistry? providerRegistry = null) : IOutboxMessagePublisher
 {
     public async ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
@@ -17,6 +18,8 @@ internal sealed class OutboxMessagePublisher(
         CancellationToken cancellationToken = default)
     {
         if (messages.Count == 0) return 0;
+
+        EnsureContextSupported(context);
 
         return await Send(messages, tenantId, context, cancellationToken);
     }
@@ -27,6 +30,8 @@ internal sealed class OutboxMessagePublisher(
         object? context,
         CancellationToken cancellationToken = default)
     {
+        EnsureContextSupported(context);
+
         OutboxMessageMetadata typeInfo = metadataProvider.GetMetadata<TMessage>();
         var partInfo = new OutboxPartInfo(tenantId, typeInfo.PartName, timeProvider.GetUtcNow());
 
@@ -50,6 +55,22 @@ internal sealed class OutboxMessagePublisher(
             // Same reason as in Send: the rented slot must not keep the payload rooted.
             ArrayPool<OutboxMessageBatchItem<TMessage>>.Shared.Return(buffer, clearArray: true);
         }
+    }
+
+    /// <summary>
+    /// Rejects a publish context before the write when the installed provider does not declare
+    /// <see cref="OutboxProviderCapabilities.PublishContext"/>. The provider would reject it anyway,
+    /// but its message cannot name the provider or the capability — and a provider that silently
+    /// ignored the context would break the caller's transactional guarantee.
+    /// </summary>
+    private void EnsureContextSupported(object? context)
+    {
+        if (context is null || providerRegistry is null) return;
+        if (providerRegistry.Descriptor.Supports(OutboxProviderCapabilities.PublishContext)) return;
+
+        throw new NotSupportedException(
+            $"Outbox provider '{providerRegistry.Descriptor.Name}' does not support publish contexts. " +
+            "Publish without a context, or install a provider that declares the PublishContext capability.");
     }
 
     private async ValueTask<ulong> Send<TMessage>(

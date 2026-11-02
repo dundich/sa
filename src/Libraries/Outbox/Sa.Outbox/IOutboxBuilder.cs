@@ -24,6 +24,23 @@ public interface IOutboxBuilder
     IOutboxBuilder WithDeliveries(Action<IDeliveryBuilder> build);
 
     /// <summary>
+    /// Sets the <c>IConfiguration</c> section prefix a consumer group's settings are bound from when
+    /// the group is registered without an explicit <c>configurationKey</c>.
+    /// </summary>
+    /// <remarks>
+    /// The section is addressed as <c>{sectionPrefix}:{consumerGroupId}</c>, so with the default
+    /// prefix (<see cref="OutboxDeliveryConfiguration.DefaultSectionPrefix"/>, <c>Outbox:DeliveryGroups</c>)
+    /// group <c>orders</c> reads <c>Outbox:DeliveryGroups:orders</c>. An explicit
+    /// <c>configurationKey</c> on <c>AddDelivery</c> still wins, and an explicit empty string opts that
+    /// group out. Pass <see langword="null"/> to disable the convention for the whole application.
+    /// A missing section is a no-op, so enabling the convention changes nothing unless the section exists.
+    /// </remarks>
+    /// <param name="sectionPrefix">The prefix, or <see langword="null"/> to disable the convention.</param>
+    /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
+    IOutboxBuilder WithDeliveryConfigurationSection(
+        string? sectionPrefix = OutboxDeliveryConfiguration.DefaultSectionPrefix);
+
+    /// <summary>
     /// Enables partitioning support for the outbox.
     /// </summary>
     /// <param name="configure">An action to configure the partitioning settings.</param>

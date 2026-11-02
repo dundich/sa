@@ -66,6 +66,32 @@ public interface IPgOutboxConfiguration
     IPgOutboxConfiguration WithOutboxSettings(Action<IServiceProvider, PgOutboxSettings>? configure = null);
 
     /// <summary>
+    /// Registers polling defaults for every consumer group of this PostgreSQL Outbox that does not
+    /// override them (a group's <c>IConfiguration</c> section and its <c>AddDelivery</c> callback
+    /// both win over these values).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Optional: without this call no <see cref="PgPollingSettings"/> service is registered at all,
+    /// so the provider keeps the previous behaviour (the core <c>OutboxDefaults</c> and the group's
+    /// own configuration). This is the polling-only way to bound delivery latency — no notifications
+    /// or other push mechanisms are involved.
+    /// </para>
+    /// <para>
+    /// Prefer the <see cref="PgOutboxPollingExtensions.WithPollingBudget"/> /
+    /// <see cref="PgOutboxPollingExtensions.WithPollingProfile"/> /
+    /// <see cref="PgOutboxPollingExtensions.WithPollingFromConfiguration"/> helpers, which derive a
+    /// consistent profile from a latency budget, from a named preset, or from configuration.
+    /// </para>
+    /// </remarks>
+    /// <param name="configure">
+    /// A delegate that mutates the settings; it runs once, when the settings are materialised from
+    /// the container, after which they are validated.
+    /// </param>
+    /// <returns>The same <see cref="IPgOutboxConfiguration"/> for chaining.</returns>
+    IPgOutboxConfiguration WithPolling(Action<IServiceProvider, PgPollingSettings>? configure = null);
+
+    /// <summary>
     /// Configures the PostgreSQL data source through the standard options pipeline
     /// (<see cref="PgDataSourceOptions"/>).
     /// </summary>

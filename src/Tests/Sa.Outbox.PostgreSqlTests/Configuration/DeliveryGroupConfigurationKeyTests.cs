@@ -47,6 +47,8 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
     public sealed class Fixture : PgDataSourceFixture
     {
         private const string OtherGroupKey = "DeliveryGroups:prio_cfg";
+        private const string ConventionGroupKey = "Outbox:DeliveryGroups:convention_grp";
+        private const string OptedOutGroupKey = "Outbox:DeliveryGroups:opted_out";
 
         public Fixture() : base()
         {
@@ -58,9 +60,14 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
                     // Group "prio_cfg" (keyed) — section values that must land in the settings.
                     [OtherGroupKey + ":MaxBatchSize"] = "64",
                     [OtherGroupKey + ":InitialDelay"] = "00:00:07",
-                    // Group "no_config_key" — a section that must be IGNORED: the group was
-                    // registered without a configurationKey.
+                    // Group "no_config_key" — a section under the *explicit-key* prefix; the group
+                    // is registered without a key, so only the convention prefix below is consulted
+                    // and this one must be IGNORED.
                     ["DeliveryGroups:no_config_key:MaxBatchSize"] = "999",
+                    // Groups without an explicit key read the Outbox:DeliveryGroups:{group} convention.
+                    [ConventionGroupKey + ":MaxBatchSize"] = "777",
+                    // …unless the group opts out with an explicit empty key.
+                    [OptedOutGroupKey + ":MaxBatchSize"] = "888",
                 })
                 .Build();
 
@@ -77,12 +84,23 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
                                 // where it does (none here) the callback has the final word.
                                 .WithInterval(TimeSpan.FromMilliseconds(200)),
                             configurationKey: ConfigurationKey)
-                        // No configurationKey: the group is shaped by defaults + code only —
-                        // the matching section in the configuration must be ignored.
+                        // No configurationKey: a section under any *other* prefix must be ignored;
+                        // the Outbox:DeliveryGroups:{group} convention is what this group reads.
                         .AddDeliveryScoped<NoConfigKeyConsumer, PriorityMessage>(
                             "no_config_key",
                             (_, b) => b
                                 .WithInterval(TimeSpan.FromMilliseconds(250)))
+                        // No key at all: the convention section applies.
+                        .AddDeliveryScoped<NoConfigKeyConsumer, PriorityMessage>(
+                            "convention_grp",
+                            (_, b) => b
+                                .WithInterval(TimeSpan.FromMilliseconds(300)))
+                        // Explicit empty key: the convention is opted out for this group.
+                        .AddDeliveryScoped<NoConfigKeyConsumer, PriorityMessage>(
+                            "opted_out",
+                            (_, b) => b
+                                .WithInterval(TimeSpan.FromMilliseconds(350)),
+                            configurationKey: string.Empty)
                     )
                 )
                 .AddSaOutboxUsingPostgreSql(cfg =>
@@ -126,21 +144,47 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
     }
 
     [Fact]
-    public void GroupWithoutKey_IgnoresMatchingSection()
+    public void GroupWithoutKey_IgnoresSectionUnderAnotherPrefix()
     {
         var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();
 
         OutboxConsumerSettings settings = manager.Get("no_config_key")
             ?? throw new InvalidOperationException("Group 'no_config_key' is not registered.");
 
-        // The section named after the group exists in the configuration, but without a
-        // configurationKey it must not be consulted.
+        // The section exists, but under an explicit-key prefix — without a configurationKey the
+        // group reads only Outbox:DeliveryGroups:{group}, so this one must not be consulted.
         Assert.Equal(OutboxDefaults.MaxBatchSize, settings.MaxBatchSize);
         Assert.Equal(OutboxDefaults.InitialDelay, settings.InitialDelay);
 
         // The configure callback still applies, and AddDeliveryScoped registers a scoped consumer.
         Assert.Equal(TimeSpan.FromMilliseconds(250), settings.Interval);
         Assert.False(settings.AsSingleton);
+    }
+
+    [Fact]
+    public void GroupWithoutKey_BindsTheConventionSection()
+    {
+        var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();
+
+        OutboxConsumerSettings settings = manager.Get("convention_grp")
+            ?? throw new InvalidOperationException("Group 'convention_grp' is not registered.");
+
+        // The Outbox:DeliveryGroups:{group} convention is applied without an explicit key.
+        Assert.Equal(777, settings.MaxBatchSize);
+        Assert.Equal(TimeSpan.FromMilliseconds(300), settings.Interval);
+    }
+
+    [Fact]
+    public void GroupWithExplicitEmptyKey_OptsOutOfTheConvention()
+    {
+        var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();
+
+        OutboxConsumerSettings settings = manager.Get("opted_out")
+            ?? throw new InvalidOperationException("Group 'opted_out' is not registered.");
+
+        // An explicit empty configurationKey disables the convention for this group.
+        Assert.Equal(OutboxDefaults.MaxBatchSize, settings.MaxBatchSize);
+        Assert.Equal(TimeSpan.FromMilliseconds(350), settings.Interval);
     }
 
     [Fact]

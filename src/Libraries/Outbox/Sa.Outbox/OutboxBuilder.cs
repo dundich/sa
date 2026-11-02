@@ -55,6 +55,15 @@ internal sealed class OutboxBuilder : IOutboxBuilder
         return this;
     }
 
+    public IOutboxBuilder WithDeliveryConfigurationSection(
+        string? sectionPrefix = OutboxDeliveryConfiguration.DefaultSectionPrefix)
+    {
+        // Replace the default convention registration: the last call wins, and null disables it.
+        _services.RemoveAll<OutboxDeliveryConfiguration>();
+        _services.AddSingleton(new OutboxDeliveryConfiguration(sectionPrefix));
+        return this;
+    }
+
     public IOutboxBuilder WithTenants(Action<IServiceProvider, TenantSettings> configure)
     {
         _services.AddTenantSettings(configure);

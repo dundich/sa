@@ -236,10 +236,10 @@ internal sealed partial class RentDeliveryCommand(
             ?? throw new InvalidOperationException(
                 $"The Redis Outbox entry '{entry.Id}' of type '{typeof(TMessage).FullName}' deserialized to null.");
 
-        var message = new OutboxMessage<TMessage>(
-            payloadId,
-            payload,
-            new OutboxPartInfo(filter.TenantId, filter.Part, DateTimeOffset.FromUnixTimeMilliseconds(createdAt)));
+        var partInfo = new OutboxPartInfo(
+            filter.TenantId,
+            filter.Part,
+            DateTimeOffset.FromUnixTimeMilliseconds(createdAt));
 
         var deliveryInfo = new OutboxTaskDeliveryInfo(
             TaskId: ToTaskId(entry.Id),
@@ -249,7 +249,18 @@ internal sealed partial class RentDeliveryCommand(
             Status: default,
             PartInfo: new OutboxPartInfo(filter.TenantId, filter.ConsumerGroupId, filter.NowDate));
 
-        return new OutboxDeliveryMessage<TMessage>(RedisStreamId.ToOutboxId(entry.Id), message, deliveryInfo);
+        // The stream id is the provider's rent identity. It used to be packed into the Guid
+        // OutboxId and unpacked on finish; now it travels in the explicit token, so the public id
+        // and the rent identity are separate concerns.
+        OutboxRentToken rentToken = RedisStreamId.ParseRentToken(entry.Id);
+
+        return new OutboxDeliveryMessage<TMessage>(
+            OutboxId: RedisStreamId.ToOutboxId(entry.Id),
+            PayloadId: payloadId,
+            Payload: payload,
+            PartInfo: partInfo,
+            DeliveryInfo: deliveryInfo,
+            RentToken: rentToken);
     }
 
     /// <summary>

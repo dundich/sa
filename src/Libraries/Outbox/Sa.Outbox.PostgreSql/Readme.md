@@ -2,6 +2,25 @@
 
 An AOT-compatible library for implementing the **Transactional Outbox** pattern using PostgreSQL in .NET applications. Provides guaranteed message delivery with support for multi-tenancy, concurrent processing, partitioning, and advanced consumer management.
 
+## Contents
+
+- [What it actually looks like](#what-it-actually-looks-like) — the model compared with Redis Stream and Kafka
+- [Quick Start](#quick-start-5-minutes)
+- [Publishing inside a Caller Transaction](#publishing-inside-a-caller-transaction)
+- [Configuration Guide](#configuration-guide)
+  - [Per-group settings from configuration](#per-group-settings-from-configuration-configurationkey)
+  - [Consumer group settings (`OutboxConsumerSettingsBuilder`)](#consumer-group-settings-outboxconsumersettingsbuilder)
+  - [Latency budget for every group at once](#latency-budget-for-every-group-at-once) — `WithPollingBudget` / `WithPollingProfile`
+  - [Runtime settings management](#runtime-settings-management)
+- [Message Lifecycle](#message-lifecycle)
+- [Result Statuses](#result-statuses)
+- [Database Architecture](#database-architecture)
+- [Bulk Publishing at Scale](#bulk-publishing-at-scale)
+- [Requirements](#requirements)
+- [License](#license)
+
+Detailed configuration (tables, migrations, cleanup, `PgPollingSettings`) lives in [`Configuration/Readme.md`](Configuration/Readme.md).
+
 ### What it actually looks like
 
 By its runtime model this is closer to **Redis Stream** and **Kafka** than to the classic "outbox → broker":
@@ -157,19 +176,31 @@ Guards:
 
 ## Configuration Guide
 
-Everything flows through two registration calls:
+One registration call or two:
 
 | Call | Purpose |
 |---|---|
 | `AddSaOutbox(...)` | Core: tenants, consumers, schedules |
-| `AddSaOutboxUsingPostgreSql(...)` | PostgreSQL: connection, tables, migration, cleanup |
+| `AddSaOutboxUsingPostgreSql(cfg)` | PostgreSQL: connection, tables, migration, cleanup |
+| `AddSaOutboxUsingPostgreSql(cfg, outbox)` | **One call**: core + provider, `scopeKey` written once |
+
+One registration instead of two:
+
+```csharp
+services.AddSaOutboxUsingPostgreSql(
+    pg => pg.WithDataSource(...).WithPollingBudget(TimeSpan.FromMinutes(1)),
+    outbox => outbox
+        .WithTenants((_, t) => t.WithTenantIds(1, 2, 3))
+        .WithDeliveries(d => d.AddDelivery<OrderConsumer, OrderCreated>("orders")));
+```
 
 > **Isolation.** The Outbox registers its internal `Sa.Schedule` schedule and its
 > `Sa.Partitional.PostgreSql` module under the scope key `"outbox"`
 > (`Sa.Outbox.OutboxScope.DefaultKey`), and never touches the application's default schedule or
-> partitional module. Both entry points take an optional trailing `scopeKey` parameter — pass the
-> same value to `AddSaOutbox` and `AddSaOutboxUsingPostgreSql` to move the Outbox to a different
-> scope. The reserved `"default"` key is rejected.
+> partitional module. Both entry points take an optional trailing `scopeKey` parameter. In the
+> one-call form `AddSaOutboxUsingPostgreSql(cfg, outbox, scopeKey)` it is written once; when the core
+> is registered separately, pass the same value to both calls. The reserved `"default"` key is
+> rejected.
 
 ### 1. Tenant Configuration
 
@@ -232,17 +263,18 @@ The explicit-`consumerGroupId` overloads of `AddDelivery` / `AddDeliveryScoped` 
 The group's settings are composed in three layers, lowest → highest:
 
 ```
-OutboxDefaults  →  configuration section (only when a key is given)  →  configure callback
+OutboxDefaults  →  configuration section  →  configure callback
 ```
 
+- **Which section** — by convention `Outbox:DeliveryGroups:{groupId}`; an explicit `configurationKey` wins over it, and `configurationKey: ""` opts the group out. The convention prefix is changed by `IOutboxBuilder.WithDeliveryConfigurationSection(...)`; `null` disables it.
 - **Key given** — the section's non-null values land between the defaults and the `configure` callback; a partially-filled section overrides only what it names.
-- **No key** — the group is shaped by `OutboxDefaults` + `configure` only; a matching section (if any exists) is never read.
+- **No key** — the group reads the conventional section when it exists; sections under other prefixes are not read.
 - An absent or empty section is a no-op.
 - `Paused` is runtime state (`IOutboxConsumerManager`), `AsSingleton` is fixed by which method you call, and the group identity is pinned to the explicit `consumerGroupId` argument — none of them comes from the section.
 
 The section just has to be part of the `IConfiguration` registered in DI (e.g. appsettings.json under `Host.CreateDefaultBuilder`); the provider reads it lazily at startup, so editing the section and restarting is the configuration workflow.
 
-### Consumer group settings
+### Consumer group settings (`OutboxConsumerSettingsBuilder`)
 
 `OutboxConsumerSettingsBuilder` — the single fluent builder for all consumer group settings:
 
@@ -277,6 +309,19 @@ The section just has to be part of the `IConfiguration` registered in DI (e.g. a
 | `Resumed()` | — | Unpause |
 | `AsSingleton(bool)` | true | Singleton (one per cluster) vs scoped consumer |
 | `WithTag(object)` | — | Free-form tag for the group (diagnostics) |
+
+### Latency budget for every group at once
+
+Instead of repeating `Interval` / `IdleMaxInterval` / `InitialDelay` on each `AddDelivery`, set them once on the provider. These are defaults — a group's configuration section and its callback still win:
+
+```csharp
+services.AddSaOutboxUsingPostgreSql(cfg => cfg
+    .WithDataSource(...)
+    .WithPollingBudget(TimeSpan.FromMinutes(1)));   // idle group: ~48 s worst case
+// or: .WithPollingProfile(PgPollingProfile.Quiet | Balanced | Responsive)
+```
+
+`WithPollingBudget` splits the budget as `BatchingWindow (3 s) + reserve (max(5 s, 20%)) + IdleMaxInterval` and sets `MaxProcessingIterations = -1` so a burst is drained in the same cycle. See `Configuration/Readme.md` → `PgPollingSettings` for the value tables. Nothing is registered unless one of these methods is called.
 
 ### Runtime settings management
 

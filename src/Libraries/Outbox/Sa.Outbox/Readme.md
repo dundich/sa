@@ -315,7 +315,8 @@ declarations work on top of either package. Only storage and delivery mechanics 
 - Payload identity is the simple type name (`typeof(TMessage).Name`), so two types with the same
   simple name from different namespaces share a channel/stream.
 - The core owns batching, the delivery job, `LockRenewer`/`ExtendDelivery` and status interpretation;
-  a provider implements `IOutboxBulkWriter`, `IOutboxDeliveryManager` and `IOutboxTenantDetector`.
+  a provider implements `IOutboxBulkWriter`, `IOutboxDeliveryManager` and `IOutboxTenantDetector`,
+  and registers them through `AddOutboxProvider` with a descriptor (name + capabilities).
 - One serialization strategy: `IOutboxMessageSerializer` and the JSON fallback live in the core, so
   the same serializer is used by every provider (see *Serialization* above).
 - Permanent outcomes have a terminal path and a pluggable handler
@@ -353,17 +354,43 @@ A provider must implement three key interfaces:
 |-----------|---------|
 | `IOutboxBulkWriter` | Bulk message insertion into DB |
 | `IOutboxDeliveryManager` | Locking and message dispatch |
-| `ITenantSource` | Tenant ID source |
+| `IOutboxTenantDetector` | Tenant ID source (optional; `ITenantSource` is the base contract) |
+
+### Registration and startup validation
+
+A provider package registers the three contracts through one call, which also declares its identity
+and capabilities and validates the installation at startup:
+
+```csharp
+services.AddOutboxProvider(
+    new OutboxProviderDescriptor(
+        "PostgreSql",
+        OutboxProviderCapabilities.PublishContext
+        | OutboxProviderCapabilities.TenantDetection
+        | OutboxProviderCapabilities.LockExtension
+        | OutboxProviderCapabilities.Postponement),
+    provider => provider
+        .WithBulkWriter<OutboxBulkWriter>()
+        .WithDeliveryManager<OutboxDeliveryManager>()
+        .WithTenantDetector<OutboxTenantDetector>());
+```
+
+`AddOutboxProvider` rejects a second provider with a different name and a provider without a bulk
+writer; constructing `IOutboxProviderRegistry` rejects a missing delivery manager when consumer groups
+exist and a missing detector when the `TenantDetection` capability is declared. The provider is logged
+once at startup. See [`PlugServices/Readme.md`](PlugServices/Readme.md) for the full contract.
 
 > **Consumer ownership.** The `messages` memory passed to `IConsumer.Consume` and every context
 > in it are owned by the pipeline for the duration of that call. The contexts are recycled once
 > the statuses are persisted, so a consumer must not retain them (or the payload reached through
-> them) beyond the returned task. `OutboxMessage<T>`, `OutboxPartInfo`, `OutboxTaskDeliveryInfo`
+> them) beyond the returned task. `OutboxPartInfo`, `OutboxTaskDeliveryInfo`, `OutboxRentToken`
 > and `OutboxDeliveryMessage<T>` are `readonly record struct`s.
 >
-> **Provider shape.** `IOutboxBulkWriter` has an `OutboxMessageBatch<T>` overload carrying one
-> shared part and no per-message wrapper. Its default implementation materializes the old
-> `OutboxMessage<T>` shape, so an existing provider keeps working until it overrides the overload.
+> **Provider shape (0.18).** `IOutboxBulkWriter` has exactly one abstract method — the batch shape,
+> with one shared part and no per-message wrapper; the per-message overloads were removed.
+> `OutboxDeliveryMessage<T>` is a flat record (`PayloadId`, `Payload`, `PartInfo`, `DeliveryInfo`)
+> with an explicit `RentToken` the provider reads back from `IOutboxContext.RentToken`. See
+> [`PlugServices/Readme.md`](PlugServices/Readme.md) for the details and the migration.
 
 ### Keeping the payload after the call
 

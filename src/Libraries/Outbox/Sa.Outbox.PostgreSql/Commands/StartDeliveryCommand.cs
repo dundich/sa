@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.Delivery;
@@ -80,9 +80,16 @@ internal sealed class StartDeliveryCommand(
         OutboxPartInfo outboxPart = ReadOutboxMsgPart(reader, in o, tenantId);
         OutboxTaskDeliveryInfo deliveryInfo = ReadDeliveryInfo(reader, in o, tenantId);
 
-        OutboxMessage<TMessage> msg = new(payloadId, payload, outboxPart);
-
-        return new OutboxDeliveryMessage<TMessage>(msgId, msg, deliveryInfo);
+        // The rent token is the provider's own row identity: task + delivery attempt. The
+        // pipeline hands it back on ReturnDelivery, so this command never has to reconstruct it
+        // from the public OutboxId or from DeliveryInfo.
+        return new OutboxDeliveryMessage<TMessage>(
+            OutboxId: msgId,
+            PayloadId: payloadId,
+            Payload: payload,
+            PartInfo: outboxPart,
+            DeliveryInfo: deliveryInfo,
+            RentToken: new OutboxRentToken(deliveryInfo.TaskId, deliveryInfo.DeliveryId));
     }
 
     private OutboxPartInfo ReadOutboxMsgPart(NpgsqlDataReader reader, in NpgsqlOutboxReader.TaskQueueReader.Ordinals o, int tenantId)

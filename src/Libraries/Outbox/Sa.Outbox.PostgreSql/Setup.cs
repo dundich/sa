@@ -20,18 +20,25 @@ public static class Setup
     /// </summary>
     /// <param name="services">The service collection to add outbox services to.</param>
     /// <param name="configure">An optional action to configure the outbox through <see cref="IPgOutboxConfiguration"/>.</param>
+    /// <param name="configureOutbox">
+    /// An optional action to configure the provider-agnostic Outbox core (<see cref="IOutboxBuilder"/>):
+    /// tenants, deliveries, metadata, serializer. Supplying it here is the one-call form and removes
+    /// the need to repeat <paramref name="scopeKey"/> in a separate <c>AddSaOutbox</c> call.
+    /// </param>
     /// <param name="scopeKey">
     /// The dependency-injection scope of the outbox — the key under which its internal
     /// <c>Sa.Partitional.PostgreSql</c> module and its named <c>Sa.Schedule</c> schedule (migration,
     /// cleanup and delivery jobs) are registered. Defaults to <see cref="OutboxScope.DefaultKey"/>.
-    /// Pass the same value to <c>AddSaOutbox</c> when you override it.
+    /// Pass it once here; the core is registered by this method, so no separate <c>AddSaOutbox</c>
+    /// call is needed.
     /// </param>
     /// <returns>The updated <see cref="IServiceCollection"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="scopeKey"/> is null, empty,
     /// whitespace, or <see cref="Sa.Schedule.Setup.DefaultName"/>.</exception>
     public static IServiceCollection AddSaOutboxUsingPostgreSql(
         this IServiceCollection services,
-        Action<IPgOutboxConfiguration>? configure = null,
+        Action<IPgOutboxConfiguration>? configure,
+        Action<IOutboxBuilder>? configureOutbox,
         string scopeKey = OutboxScope.DefaultKey)
     {
         OutboxScope.EnsureValid(scopeKey);
@@ -46,18 +53,39 @@ public static class Setup
             .AddOutboxJobInterceptors(scopeKey)
             ;
 
-        services.AddSaOutbox(scopeKey: scopeKey);
+        services.AddSaOutbox(configureOutbox, scopeKey);
 
         // Replace the base no-op delivery-group options provider with the PostgreSQL
-        // implementation: it binds a group's settings from the IConfiguration section
-        // named by the configurationKey passed to AddDelivery/AddDeliveryScoped. The
-        // IConfiguration is resolved as an optional service — absent, the provider is a
-        // no-op and the group is shaped purely by OutboxDefaults and the configure callback.
+        // implementation: it applies the polling defaults and binds a group's settings from the
+        // IConfiguration section named by the configurationKey (or the convention) passed to
+        // AddDelivery/AddDeliveryScoped. Both IConfiguration and PgPollingSettings are resolved as
+        // optional services — absent, the corresponding layer is simply not applied.
         services
             .RemoveAll<IDeliveryGroupOptionsProvider>()
             .AddSingleton<IDeliveryGroupOptionsProvider>(
-                sp => new PgOutboxDeliveryOptionsProvider(sp.GetService<IConfiguration>()));
+                sp => new PgOutboxDeliveryOptionsProvider(
+                    sp.GetService<IConfiguration>(),
+                    sp.GetService<PgPollingSettings>()));
 
         return services;
     }
+
+    /// <summary>
+    /// Registers the PostgreSQL-backed Outbox and the provider-agnostic core in one call.
+    /// </summary>
+    /// <remarks>
+    /// Convenience overload: identical to <c>AddSaOutboxUsingPostgreSql(configure, scopeKey)</c>
+    /// followed by <c>AddSaOutbox(configureOutbox, scopeKey)</c>, with the scope key written once.
+    /// </remarks>
+    /// <param name="services">The service collection to add outbox services to.</param>
+    /// <param name="configure">An optional action to configure the PostgreSQL provider.</param>
+    /// <param name="scopeKey">The shared outbox scope key.</param>
+    /// <returns>The updated <see cref="IServiceCollection"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="scopeKey"/> is null, empty,
+    /// whitespace, or <see cref="Sa.Schedule.Setup.DefaultName"/>.</exception>
+    public static IServiceCollection AddSaOutboxUsingPostgreSql(
+        this IServiceCollection services,
+        Action<IPgOutboxConfiguration>? configure = null,
+        string scopeKey = OutboxScope.DefaultKey)
+        => services.AddSaOutboxUsingPostgreSql(configure, configureOutbox: null, scopeKey);
 }

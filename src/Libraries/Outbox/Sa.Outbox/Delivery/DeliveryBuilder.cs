@@ -27,10 +27,10 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services, strin
     }
 
     public IDeliveryBuilder AddDeliveryScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>
-        (Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null, Guid? jobId = null)
+        (Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null, Guid? jobId = null, string? configurationKey = null)
           where TConsumer : class, IConsumer<TMessage>
     {
-        return AddDeliveryScoped<TConsumer, TMessage>(GetConsumerGroupName<TConsumer>(), configure, jobId);
+        return AddDeliveryScoped<TConsumer, TMessage>(GetConsumerGroupName<TConsumer>(), configure, jobId, configurationKey);
     }
 
     public IDeliveryBuilder AddDelivery<
@@ -49,10 +49,10 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services, strin
 
     public IDeliveryBuilder AddDelivery<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
-        Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null, Guid? jobId = null)
+        Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null, Guid? jobId = null, string? configurationKey = null)
           where TConsumer : class, IConsumer<TMessage>
     {
-        return AddDelivery<TConsumer, TMessage>(GetConsumerGroupName<TConsumer>(), configure, jobId);
+        return AddDelivery<TConsumer, TMessage>(GetConsumerGroupName<TConsumer>(), configure, jobId, configurationKey);
     }
 
     public IDeliveryBuilder AddDeliveryBatching<

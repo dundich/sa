@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Sa.Outbox.PlugServices;
 using Sa.Schedule;
 using System.Diagnostics.CodeAnalysis;
 
@@ -54,6 +55,13 @@ internal static class Setup
 
             builder.AddJob<DeliveryJob<TMessage>>((sp, jobBuilder) =>
             {
+                // Second line of defence for the provider installation: the hosted validator
+                // normally runs first, but a container whose schedule was registered before the
+                // provider must not start delivering against a broken installation. The registry
+                // validates registrations without constructing provider services (no connections
+                // are opened while job settings are built). Absent a registry this is a no-op.
+                _ = sp.GetService<IOutboxProviderRegistry>();
+
                 // Resolving the manager runs its factory, which has already upgraded this group's
                 // snapshot to the full chain (with a live provider), so the job simply reads the
                 // final settings — it does not rebuild or re-register them.
@@ -93,8 +101,10 @@ internal static class Setup
         {
             // Precedence, lowest → highest:
             //   1. OutboxDefaults — a fresh builder carries them (Build falls back per field)
-            //   2. the group's configuration section (stage 2 only, when configurationKey is given)
-            //   3. the user configure callback
+            //   2. the provider's own defaults, e.g. the PostgreSQL polling profile (stage 2 only)
+            //   3. the group's configuration section (stage 2 only; explicit key or the
+            //      Outbox:DeliveryGroups:{group} convention)
+            //   4. the user configure callback
             var builder = new OutboxConsumerSettingsBuilder()
                 .WithConsumerGroupId(consumerGroupId)
                 .AsSingleton(isSingleton);
@@ -102,7 +112,15 @@ internal static class Setup
             if (sp is not null)
             {
                 var provider = sp.GetRequiredService<IDeliveryGroupOptionsProvider>();
-                provider.TryApply(consumerGroupId, configurationKey, builder);
+
+                // Section resolution: an explicit configurationKey always wins (an explicit empty
+                // string opts the group out), otherwise the Outbox:DeliveryGroups:{group} convention
+                // applies — when it is enabled and the section actually exists (a missing section is
+                // a no-op inside the provider).
+                string? sectionKey = configurationKey
+                    ?? sp.GetService<OutboxDeliveryConfiguration>()?.ResolveSection(consumerGroupId);
+
+                provider.TryApply(consumerGroupId, sectionKey, builder);
             }
 
             configure?.Invoke(sp ?? default!, builder);

@@ -36,21 +36,17 @@ internal static class RedisStreamId
         return new Guid(bytes);
     }
 
-    /// <summary>Recovers the stream id of a message rented earlier. <see cref="RedisValue.Null"/> when it cannot be decoded.</summary>
-    public static RedisValue ToStreamId(Guid outboxId)
-    {
-        if (outboxId == Guid.Empty)
-            return RedisValue.Null;
+    /// <summary>Packs the stream id into the rent token the pipeline hands back on finish.</summary>
+    public static Sa.Outbox.Delivery.OutboxRentToken ParseRentToken(RedisValue streamId)
+        => TryParse(streamId, out ulong milliseconds, out ulong sequence)
+            ? new Sa.Outbox.Delivery.OutboxRentToken((long)milliseconds, (long)sequence)
+            : Sa.Outbox.Delivery.OutboxRentToken.None;
 
-        Span<byte> bytes = stackalloc byte[16];
-        if (!outboxId.TryWriteBytes(bytes))
-            return RedisValue.Null;
-
-        ulong milliseconds = BinaryPrimitives.ReadUInt64BigEndian(bytes[..8]);
-        ulong sequence = BinaryPrimitives.ReadUInt64BigEndian(bytes[8..]);
-
-        return FormattableString.Invariant($"{milliseconds}-{sequence}");
-    }
+    /// <summary>Recovers the stream id from the rent token. <see cref="RedisValue.Null"/> when there is none.</summary>
+    public static RedisValue ToStreamId(Sa.Outbox.Delivery.OutboxRentToken token)
+        => token.IsNone
+            ? RedisValue.Null
+            : FormattableString.Invariant($"{token.Key}-{token.SubKey}");
 
     /// <summary>Parses <c>milliseconds-sequence</c>.</summary>
     public static bool TryParse(RedisValue streamId, out ulong milliseconds, out ulong sequence)

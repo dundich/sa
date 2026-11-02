@@ -3,6 +3,25 @@
 AOT-библиотека для реализации паттерна **Transactional Outbox** с использованием PostgreSQL в .NET приложениях.
 Обеспечивает гарантированную доставку сообщений с поддержкой мультитенантности, конкурентной обработки и расширенным управлением консьюмерами.
 
+## Содержание
+
+- [На что это похоже](#на-что-это-похоже) — сравнение модели с Redis Stream и Kafka
+- [Быстрый старт](#быстрый-старт-5-минут)
+- [Публикация внутри транзакции вызывающего кода](#публикация-внутри-транзакции-вызывающего-кода)
+- [Руководство по настройке](#руководство-по-настройке)
+  - [Настройки группы из конфигурации](#настройки-группы-из-конфигурации-configurationkey)
+  - [Справочник `OutboxConsumerSettingsBuilder`](#справочник-настроек-outboxconsumersettingsbuilder)
+  - [Бюджет латентности сразу для всех групп](#бюджет-латентности-сразу-для-всех-групп) — `WithPollingBudget` / `WithPollingProfile`
+  - [Runtime-управление настройками](#runtime-управление-настройками)
+- [Жизненный цикл сообщения](#жизненный-цикл-сообщения)
+- [Статусы результата](#статусы-результата)
+- [Архитектура БД](#архитектура-бд)
+- [Массовая вставка](#массовая-вставка)
+- [Требования](#требования)
+- [Лицензия](#лицензия)
+
+Подробная конфигурация (таблицы, миграции, очистка, `PgPollingSettings`) — в [`Configuration/Readme-ru.md`](Configuration/Readme-ru.md).
+
 ### На что это похоже
 
 По модели работы это ближе к **Redis Stream** и **Kafka**, чем к классическому «outbox → брокер»:
@@ -171,19 +190,31 @@ scope** — транзакция всегда передаётся явным а
 
 ## Руководство по настройке
 
-Вся конфигурация разбивается на два вызова регистрации:
+Регистрация — один вызов или два:
 
 | Вызов | Назначение |
 |---|---|
 | `AddSaOutbox(...)` | Ядро: тенанты, консьюмеры, расписание |
-| `AddSaOutboxUsingPostgreSql(...)` | PostgreSQL: подключение, таблицы, миграция, очистка |
+| `AddSaOutboxUsingPostgreSql(cfg)` | PostgreSQL: подключение, таблицы, миграция, очистка |
+| `AddSaOutboxUsingPostgreSql(cfg, outbox)` | **Один вызов**: ядро + провайдер, `scopeKey` пишется один раз |
+
+Одна регистрация вместо двух:
+
+```csharp
+services.AddSaOutboxUsingPostgreSql(
+    pg => pg.WithDataSource(...).WithPollingBudget(TimeSpan.FromMinutes(1)),
+    outbox => outbox
+        .WithTenants((_, t) => t.WithTenantIds(1, 2, 3))
+        .WithDeliveries(d => d.AddDelivery<OrderConsumer, OrderCreated>("orders")));
+```
 
 > **Изоляция.** Outbox регистрирует своё внутреннее расписание `Sa.Schedule` и свой модуль
 > `Sa.Partitional.PostgreSql` под ключом скопа `"outbox"` (`Sa.Outbox.OutboxScope.DefaultKey`) и
 > никогда не трогает расписание/партициальный модуль приложения по умолчанию. Оба входных метода
-> принимают необязательный последний параметр `scopeKey` — передайте одно и то же значение в
-> `AddSaOutbox` и `AddSaOutboxUsingPostgreSql`, чтобы перенести Outbox в другой скоп. Зарезервированный
-> ключ `"default"` отклоняется.
+> принимают необязательный последний параметр `scopeKey`. В форме одного вызова
+> `AddSaOutboxUsingPostgreSql(cfg, outbox, scopeKey)` он задаётся один раз; при раздельной
+> регистрации передайте одно и то же значение в `AddSaOutbox` и `AddSaOutboxUsingPostgreSql`.
+> Зарезервированный ключ `"default"` отклоняется.
 
 ### 1. Настройка тенантов
 
@@ -246,11 +277,12 @@ scope** — транзакция всегда передаётся явным а
 Настройки группы складываются из трёх слоёв, от низшего к высшему:
 
 ```
-OutboxDefaults  →  секция конфигурации (только если задан ключ)  →  callback configure
+OutboxDefaults  →  секция конфигурации  →  callback configure
 ```
 
+- **Какая секция** — по умолчанию конвенция `Outbox:DeliveryGroups:{groupId}`; явный `configurationKey` её перекрывает, а `configurationKey: ""` отключает чтение секции для этой группы. Префикс конвенции меняется `IOutboxBuilder.WithDeliveryConfigurationSection(...)`, `null` выключает её.
 - **Ключ задан** — non-null значения секции вставляются между дефолтами и callback `configure`; частично заполненная секция переопределяет только то, что в ней названо.
-- **Ключа нет** — группа настраивается только `OutboxDefaults` + `configure`; совпадающая по имени секция (даже если существует) не читается.
+- **Группа без ключа** читает конвенционную секцию, если она существует; секции под другими префиксами не читаются.
 - Отсутствующая или пустая секция — no-op.
 - `Paused` — runtime-состояние (`IOutboxConsumerManager`), `AsSingleton` фиксируется тем, какой метод вы вызываете, а identность группы привязана к явному аргументу `consumerGroupId` — ни одно из них не берётся из секции.
 
@@ -287,6 +319,19 @@ OutboxDefaults  →  секция конфигурации (только есл�
 | `Paused(bool)` | false | Пауза consumer group |
 | `Resumed()` | — | Снять с паузы |
 | `AsSingleton(bool)` | true | Singleton (один на кластер) vs Scoped |
+
+#### Бюджет латентности сразу для всех групп
+
+Вместо повторения `Interval` / `IdleMaxInterval` / `InitialDelay` в каждом `AddDelivery` их можно задать один раз на провайдере. Это дефолты — секция группы и её callback по-прежнему побеждают:
+
+```csharp
+services.AddSaOutboxUsingPostgreSql(cfg => cfg
+    .WithDataSource(...)
+    .WithPollingBudget(TimeSpan.FromMinutes(1)));   // простаивающая группа: ~48 с худший случай
+// или: .WithPollingProfile(PgPollingProfile.Quiet | Balanced | Responsive)
+```
+
+`WithPollingBudget` делит бюджет как `BatchingWindow (3 с) + reserve (max(5 с, 20%)) + IdleMaxInterval` и ставит `MaxProcessingIterations = -1`, чтобы всплеск дренировался в том же цикле. Таблицы значений — в `Configuration/Readme-ru.md` → `PgPollingSettings`. Без вызова этих методов не регистрируется ничего.
 
 #### Runtime-управление настройками
 
