@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sa.Outbox.Partitional;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Partitional.PostgreSql;
@@ -13,8 +14,11 @@ internal static class Setup
 
     public static IServiceCollection AddOutboxPartitional(this IServiceCollection services, string scopeKey)
     {
-        services.TryAddTransient<MsgMigrationSupport>();
-        services.TryAddTransient<TaskMigrationSupport>();
+        // Keyed by the provider: the support enumerates this provider's own tenants/parts.
+        services.TryAddKeyedTransient<MsgMigrationSupport>(scopeKey, (sp, _) =>
+            new MsgMigrationSupport(sp.GetKeyedService<IOutboxPartitionalSupport>(scopeKey)));
+        services.TryAddKeyedTransient<TaskMigrationSupport>(scopeKey, (sp, _) =>
+            new TaskMigrationSupport(sp.GetKeyedService<IOutboxPartitionalSupport>(scopeKey)));
 
         // Keyed module: the outbox tables, migration/cleanup settings and the migration/cleanup
         // jobs live in the outbox's own scope, never in the application's default partitional
@@ -69,9 +73,9 @@ internal static class Setup
                 ;
 
 
-                outboxTableBuilder.AddMigration(sp.GetRequiredService<MsgMigrationSupport>());
-                queueTableBuilder.AddMigration(sp.GetRequiredService<TaskMigrationSupport>());
-                deliveryTableBuilder.AddMigration(sp.GetRequiredService<TaskMigrationSupport>());
+                outboxTableBuilder.AddMigration(sp.GetRequiredKeyedService<MsgMigrationSupport>(scopeKey));
+                queueTableBuilder.AddMigration(sp.GetRequiredKeyedService<TaskMigrationSupport>(scopeKey));
+                deliveryTableBuilder.AddMigration(sp.GetRequiredKeyedService<TaskMigrationSupport>(scopeKey));
                 errorTableBuilder.AddMigration();
             })
             ;

@@ -1,11 +1,12 @@
-﻿using Sa.Outbox.Delivery;
+using Sa.Outbox.Delivery;
 
 namespace Sa.Outbox.Partitional;
 
 
 internal sealed class OutboxPartitionalSupport(
     IDeliverySnapshot? snapshot = null,
-    ITenantProvider? tenantProvider = null) : IOutboxPartitionalSupport
+    ITenantProvider? tenantProvider = null,
+    string providerKey = OutboxScope.DefaultKey) : IOutboxPartitionalSupport
 {
     public async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetMsgParts(CancellationToken cancellationToken)
     {
@@ -21,7 +22,7 @@ internal sealed class OutboxPartitionalSupport(
     {
         if (tenantProvider == null) return [];
 
-        return await tenantProvider.GetTenantIds(cancellationToken).ConfigureAwait(false);
+        return await tenantProvider.GetTenantIds(providerKey, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPairs(

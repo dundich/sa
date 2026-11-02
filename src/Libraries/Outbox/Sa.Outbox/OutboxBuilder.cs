@@ -66,7 +66,7 @@ internal sealed class OutboxBuilder : IOutboxBuilder
 
     public IOutboxBuilder WithTenants(Action<IServiceProvider, TenantSettings> configure)
     {
-        _services.AddTenantSettings(configure);
+        _services.AddTenantSettings(_scopeKey, configure);
         return this;
     }
 

@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Outbox.Partitional;
 
 namespace Sa.Outbox.Delivery;
@@ -30,7 +30,9 @@ internal sealed class DeliveryProcessor(
         int batchSize = settings.MaxBatchSize;
         if (batchSize == 0) return 0;
 
-        int[] tenantIds = await tenantProvider.GetTenantIds(cancellationToken).ConfigureAwait(false);
+        int[] tenantIds = await tenantProvider
+            .GetTenantIds(settings.ProviderKey, cancellationToken)
+            .ConfigureAwait(false);
         if (tenantIds.Length == 0) return 0;
 
         long totalProcessed = 0;

@@ -74,8 +74,10 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
                     PgKey)
                 .AddSaOutboxUsingRedis(
                     ConfigureRedis,
-                    outbox => outbox.WithDeliveries(deliveries => deliveries
-                        .AddDelivery<RedisConsumer, TestMessage>("mixed_redis_group")),
+                    outbox => outbox
+                        .WithTenants((_, tenants) => tenants.WithTenantIds(2))
+                        .WithDeliveries(deliveries => deliveries
+                            .AddDelivery<RedisConsumer, TestMessage>("mixed_redis_group")),
                     RedisKey);
         }
 
@@ -139,6 +141,18 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
         Assert.Equal(
             new[] { PgKey, RedisKey },
             reports.Select(report => report.ProviderKey).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task EachProvider_HasItsOwnTenants()
+    {
+        IServiceProvider sp = fixture.ServiceProvider;
+
+        var pg = sp.GetRequiredKeyedService<Sa.Outbox.Partitional.TenantSettings>(PgKey);
+        var redis = sp.GetRequiredKeyedService<Sa.Outbox.Partitional.TenantSettings>(RedisKey);
+
+        Assert.Equal(new[] { 1 }, await pg.GetTenantIds(TestToken));
+        Assert.Equal(new[] { 2 }, await redis.GetTenantIds(TestToken));
     }
 
     [Fact]

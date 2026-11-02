@@ -1,3 +1,4 @@
+using Sa.Outbox.Delivery;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.PlugServices;
 
@@ -23,7 +24,19 @@ public class TenantSourceAuthoritativeTests
     }
 
     private static TenantProvider Provider(TenantSettings settings, IOutboxTenantDetector? detector = null) =>
-        new(settings, detector);
+        new(new FakeStorage(settings, detector));
+
+    /// <summary>Minimal storage router: only the tenant half is exercised here.</summary>
+    private sealed class FakeStorage(TenantSettings settings, IOutboxTenantDetector? detector) : IOutboxStorage
+    {
+        public IOutboxBulkWriter Writer(string providerKey) => throw new NotSupportedException();
+
+        public IOutboxDeliveryManager DeliveryManager(string providerKey) => throw new NotSupportedException();
+
+        public IOutboxTenantDetector? TenantDetector(string providerKey) => detector;
+
+        public TenantSettings TenantSettings(string providerKey) => settings;
+    }
 
     [Fact]
     public async Task WithTenantIdsDisablesAutoDetect()

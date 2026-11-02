@@ -140,5 +140,8 @@ public class DeliveryProcessorTests
     private sealed class FakeTenantProvider(int[] tenantIds) : ITenantProvider
     {
         public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken) => ValueTask.FromResult(tenantIds);
+
+        public ValueTask<int[]> GetTenantIds(string providerKey, CancellationToken cancellationToken)
+            => ValueTask.FromResult(tenantIds);
     }
 }

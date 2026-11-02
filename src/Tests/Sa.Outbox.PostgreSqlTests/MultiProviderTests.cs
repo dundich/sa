@@ -3,6 +3,7 @@ using Sa.Data.PostgreSql;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.Partitional;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Configuration;
@@ -67,8 +68,10 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
                     ProviderA)
                 .AddSaOutboxUsingPostgreSql(
                     ConfigureProvider(SchemaB),
-                    outbox => outbox.WithDeliveries(deliveries => deliveries
-                        .AddDelivery<ConsumerB, TestMessage>("mp_b_group")),
+                    outbox => outbox
+                        .WithTenants((_, tenants) => tenants.WithTenantIds(2, 3))
+                        .WithDeliveries(deliveries => deliveries
+                            .AddDelivery<ConsumerB, TestMessage>("mp_b_group")),
                     ProviderB);
         }
 
@@ -136,6 +139,18 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
         Assert.Equal(
             new[] { ProviderA, ProviderB },
             reports.Select(report => report.ProviderKey).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task EachProvider_EnumeratesItsOwnTenants()
+    {
+        IServiceProvider sp = fixture.ServiceProvider;
+
+        IOutboxPartitionalSupport a = sp.GetRequiredKeyedService<IOutboxPartitionalSupport>(ProviderA);
+        IOutboxPartitionalSupport b = sp.GetRequiredKeyedService<IOutboxPartitionalSupport>(ProviderB);
+
+        Assert.Equal(new[] { 1 }, await a.GetTenantIds(TestToken));
+        Assert.Equal(new[] { 2, 3 }, await b.GetTenantIds(TestToken));
     }
 
     [Fact]

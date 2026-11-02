@@ -383,11 +383,16 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
 - **PG migration guard:** `PgMultiProviderGuard` fails the start when two PG providers point at the
   same tables (double delivery); the 0.17 → 0.18 migration section lives in the PG readme.
 
-Constraints: tenants are shared per container (`WithTenants` without a key); provider-internal
-services are resolved keyed, so user extensions registered as a type must use the factory overloads;
-two Redis providers with the same endpoint/database/prefix are caught by the startup
-`RedisMultiProviderGuard` (an explicit `IDatabase`/`IConnectionMultiplexer` factory remains
-unchecked — its endpoint is unknown before it runs).
+- **Tenants are per provider**: `WithTenants` inside a provider's `configureOutbox` registers a
+  keyed `TenantSettings`; the default provider's settings act as the shared fallback. Auto-detection
+  resolves the provider's keyed detector, while a detector registered without a key is an explicit
+  global override. `IOutboxPartitionalSupport` (migration/cleanup) is keyed too, so every provider
+  creates partitions for its own tenants.
+
+Constraints: provider-internal services are resolved keyed, so user extensions registered as a type
+must use the factory overloads; two Redis providers with the same endpoint/database/prefix are caught
+by the startup `RedisMultiProviderGuard` (an explicit `IDatabase`/`IConnectionMultiplexer` factory
+remains unchecked — its endpoint is unknown before it runs).
 
 ## Per-provider health (slice 3, part 1)
 

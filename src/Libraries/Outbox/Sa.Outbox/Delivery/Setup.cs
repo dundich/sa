@@ -54,11 +54,25 @@ internal static class Setup
 
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
-        // DeliverySnapshot reads the outbox's own (keyed) schedule, not the application's default one.
-        services.TryAddSingleton<IDeliverySnapshot>(sp => new DeliverySnapshot(
+        // The snapshot and the partitional support are per provider: the snapshot reads the
+        // provider's own schedule, and the support enumerates the provider's own tenants.
+        services.TryAddKeyedSingleton<IDeliverySnapshot>(scopeKey, (sp, _) => new DeliverySnapshot(
             sp.GetRequiredKeyedService<IScheduleSettings>(scopeKey),
             sp.GetRequiredService<IOutboxConsumerManager>(),
             sp.GetRequiredService<IOutboxMessageMetadataProvider>()));
+
+        services.TryAddKeyedSingleton<IOutboxPartitionalSupport>(scopeKey, (sp, _) =>
+            new OutboxPartitionalSupport(
+                sp.GetKeyedService<IDeliverySnapshot>(scopeKey),
+                sp.GetService<ITenantProvider>(),
+                scopeKey));
+
+        if (string.Equals(scopeKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+        {
+            // Backward compatibility: the classic single-provider surface.
+            services.TryAddSingleton<IOutboxPartitionalSupport>(
+                sp => sp.GetRequiredKeyedService<IOutboxPartitionalSupport>(scopeKey));
+        }
         services.TryAddSingleton<IOutboxConsumerManager>(sp => new OutboxConsumerManager(
             sp.GetServices<DeliveryGroupSettingsRegistration>(),
             sp,

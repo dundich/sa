@@ -10,6 +10,8 @@ internal interface IOutboxStorage
     IOutboxDeliveryManager DeliveryManager(string providerKey);
 
     IOutboxTenantDetector? TenantDetector(string providerKey);
+
+    Sa.Outbox.Partitional.TenantSettings TenantSettings(string providerKey);
 }
 
 /// <summary>
@@ -28,6 +30,13 @@ internal sealed class OutboxStorage(IServiceProvider services) : IOutboxStorage
            ?? services.GetRequiredService<IOutboxDeliveryManager>();
 
     public IOutboxTenantDetector? TenantDetector(string providerKey)
-        => services.GetKeyedService<IOutboxTenantDetector>(providerKey)
-           ?? services.GetService<IOutboxTenantDetector>();
+        // Unkeyed first: a detector registered without a key is an explicit global override (the
+        // pre-multi-provider way to replace the provider's detector). Without one, the provider's
+        // own keyed detector is used.
+        => services.GetService<IOutboxTenantDetector>()
+           ?? services.GetKeyedService<IOutboxTenantDetector>(providerKey);
+
+    public Sa.Outbox.Partitional.TenantSettings TenantSettings(string providerKey)
+        => services.GetKeyedService<Sa.Outbox.Partitional.TenantSettings>(providerKey)
+           ?? services.GetRequiredService<Sa.Outbox.Partitional.TenantSettings>();
 }
