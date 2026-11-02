@@ -59,11 +59,13 @@ internal static class Setup
         services.TryAddSingleton<IDeliveryLifetimeInvoker, DeliveryLifetimeInvoker>();
 
         // The snapshot and the partitional support are per provider: the snapshot reads the
-        // provider's own schedule, and the support enumerates the provider's own tenants.
+        // provider's own schedule and consumer groups, and the support enumerates the provider's own
+        // tenants.
         services.TryAddKeyedSingleton<IDeliverySnapshot>(scopeKey, (sp, _) => new DeliverySnapshot(
             sp.GetRequiredKeyedService<IScheduleSettings>(scopeKey),
             sp.GetRequiredService<IOutboxConsumerManager>(),
-            sp.GetRequiredService<IOutboxMessageMetadataProvider>()));
+            sp.GetRequiredService<IOutboxMessageMetadataProvider>(),
+            scopeKey));
 
         services.TryAddKeyedSingleton<IOutboxPartitionalSupport>(scopeKey, (sp, _) =>
             new OutboxPartitionalSupport(

@@ -75,8 +75,7 @@ internal static class Setup
                 // provider must not start delivering against a broken installation. The registry
                 // validates registrations without constructing provider services (no connections
                 // are opened while job settings are built). Absent a registry this is a no-op.
-                _ = sp.GetKeyedService<IOutboxProviderRegistry>(scopeKey)
-                    ?? sp.GetService<IOutboxProviderRegistry>();
+                _ = OutboxProviderResolution.Optional<IOutboxProviderRegistry>(sp, scopeKey);
 
                 // Resolving the manager runs its factory, which has already upgraded this group's
                 // snapshot to the full chain (with a live provider), so the job simply reads the

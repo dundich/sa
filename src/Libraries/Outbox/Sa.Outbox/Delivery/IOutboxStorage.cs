@@ -15,19 +15,18 @@ internal interface IOutboxStorage
 }
 
 /// <summary>
-/// Keyed-first resolution of the provider contracts with an unkeyed fallback: a single-provider
-/// application (or a test double registered without a key) keeps working while providers migrate to
-/// keyed registrations, and once the keyed registration exists it wins.
+/// Keyed-first resolution of the provider storage contracts. The unkeyed fallback is limited to the
+/// default provider key, so a single-provider application (or a test double registered without a
+/// key) keeps working while a non-default key can never resolve another provider's storage. Tenant
+/// settings are the exception: they intentionally fall back to the default provider's shared list.
 /// </summary>
 internal sealed class OutboxStorage(IServiceProvider services) : IOutboxStorage
 {
     public IOutboxBulkWriter Writer(string providerKey)
-        => services.GetKeyedService<IOutboxBulkWriter>(providerKey)
-           ?? services.GetRequiredService<IOutboxBulkWriter>();
+        => OutboxProviderResolution.Required<IOutboxBulkWriter>(services, providerKey);
 
     public IOutboxDeliveryManager DeliveryManager(string providerKey)
-        => services.GetKeyedService<IOutboxDeliveryManager>(providerKey)
-           ?? services.GetRequiredService<IOutboxDeliveryManager>();
+        => OutboxProviderResolution.Required<IOutboxDeliveryManager>(services, providerKey);
 
     public IOutboxTenantDetector? TenantDetector(string providerKey)
         // Unkeyed first: a detector registered without a key is an explicit global override (the
@@ -37,6 +36,8 @@ internal sealed class OutboxStorage(IServiceProvider services) : IOutboxStorage
            ?? services.GetKeyedService<IOutboxTenantDetector>(providerKey);
 
     public Sa.Outbox.Partitional.TenantSettings TenantSettings(string providerKey)
+        // Tenants deliberately keep the shared fallback: a provider without its own settings uses
+        // the default provider's list (the documented per-provider tenant model).
         => services.GetKeyedService<Sa.Outbox.Partitional.TenantSettings>(providerKey)
            ?? services.GetRequiredService<Sa.Outbox.Partitional.TenantSettings>();
 }

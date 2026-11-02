@@ -37,7 +37,8 @@ internal sealed class OutboxBuilder : IOutboxBuilder
         return new OutboxBuilder(services, scopeKey);
     }
 
-    public IOutboxBuilder WithPublishSettings(Action<IServiceProvider, OutboxPublishSettings> configure)
+    public IOutboxBuilder WithPublishSettings(
+        Func<IServiceProvider, OutboxPublishSettings, OutboxPublishSettings> configure)
     {
         _services.AddMessagePublisher(configure, _scopeKey);
         return this;

@@ -7,7 +7,8 @@ namespace Sa.Outbox.Delivery;
 internal sealed class DeliverySnapshot(
     IScheduleSettings scheduleSettings,
     IOutboxConsumerManager consumerManager,
-    IOutboxMessageMetadataProvider metadataProvider) : IDeliverySnapshot
+    IOutboxMessageMetadataProvider metadataProvider,
+    string providerKey) : IDeliverySnapshot
 {
 
     private readonly Lazy<IJobSettings[]> _lazyJobs = new(() => [.. scheduleSettings.GetJobSettings()]);
@@ -28,9 +29,13 @@ internal sealed class DeliverySnapshot(
 
     private readonly Lazy<OutboxConsumerSettings[]> _lazyDeliveries = new(() =>
     {
+        // Only this provider's groups: the manager is container-wide, and a group id may repeat
+        // across providers, so the composite key is the only unambiguous lookup. Enumerating all
+        // ids and keeping the ones this provider owns also excludes the other providers' groups from
+        // partition creation.
         OutboxConsumerSettings[] settings = [.. consumerManager
                 .GetAllConsumerGroupIds()
-                .Select(groupId => consumerManager.Get(groupId))
+                .Select(groupId => consumerManager.Get(new OutboxGroupKey(providerKey, groupId)))
                 .Where(s => s != null)
                 .Cast<OutboxConsumerSettings>()];
         return settings;

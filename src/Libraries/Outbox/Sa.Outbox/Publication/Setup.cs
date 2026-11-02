@@ -9,23 +9,30 @@ internal static class Setup
 {
     public static IServiceCollection AddMessagePublisher(
         this IServiceCollection services,
-        Action<IServiceProvider, OutboxPublishSettings>? configure = null,
+        Func<IServiceProvider, OutboxPublishSettings, OutboxPublishSettings>? configure = null,
         string scopeKey = OutboxScope.DefaultKey)
     {
         services.AddMessagesMetadata();
 
         if (configure != null)
         {
-            services.AddSingleton(configure);
+            // Keyed by the outbox scope: publish settings are per provider. The settings factory
+            // below is registered on the first AddMessagePublisher call, so later
+            // WithPublishSettings calls still contribute through this list.
+            services.AddKeyedSingleton<Func<IServiceProvider, OutboxPublishSettings, OutboxPublishSettings>>(
+                scopeKey,
+                configure);
         }
 
         services.TryAddKeyedSingleton<OutboxPublishSettings>(scopeKey, (sp, _) =>
         {
             OutboxPublishSettings settings = new();
 
-            foreach (var build in sp.GetServices<Action<IServiceProvider, OutboxPublishSettings>>())
+            foreach (var build in sp.GetKeyedServices<
+                Func<IServiceProvider, OutboxPublishSettings, OutboxPublishSettings>>(scopeKey))
             {
-                build(sp, settings);
+                // The settings are immutable: each delegate returns the next snapshot.
+                settings = build(sp, settings);
             }
 
             return settings;
@@ -37,12 +44,10 @@ internal static class Setup
         services.TryAddKeyedSingleton<IOutboxMessagePublisher>(scopeKey, (sp, _) =>
             new OutboxMessagePublisher(
                 sp.GetRequiredService<TimeProvider>(),
-                sp.GetKeyedService<IOutboxBulkWriter>(scopeKey)
-                    ?? sp.GetRequiredService<IOutboxBulkWriter>(),
+                OutboxProviderResolution.Required<IOutboxBulkWriter>(sp, scopeKey),
                 sp.GetRequiredKeyedService<OutboxPublishSettings>(scopeKey),
                 sp.GetRequiredService<IOutboxMessageMetadataProvider>(),
-                sp.GetKeyedService<IOutboxProviderRegistry>(scopeKey)
-                    ?? sp.GetService<IOutboxProviderRegistry>()));
+                OutboxProviderResolution.Optional<IOutboxProviderRegistry>(sp, scopeKey)));
 
         if (string.Equals(scopeKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
         {

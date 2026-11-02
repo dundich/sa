@@ -10,11 +10,18 @@ namespace Sa.Outbox;
 public interface IOutboxBuilder
 {
     /// <summary>
-    /// Configures publish settings for the outbox.
+    /// Configures publish settings for this outbox scope.
     /// </summary>
-    /// <param name="configure">An action to configure <see cref="OutboxPublishSettings"/> within the service provider scope.</param>
+    /// <remarks>
+    /// <see cref="OutboxPublishSettings"/> is immutable, so the delegate receives the current
+    /// instance and returns the updated one (<c>(_, settings) =&gt; settings.WithMaxBatchSize(1024)</c>).
+    /// It runs once, when the settings are first resolved, and is keyed by the outbox scope: two
+    /// providers in one container keep their own publish settings.
+    /// </remarks>
+    /// <param name="configure">Receives the current settings and returns the updated ones.</param>
     /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>
-    IOutboxBuilder WithPublishSettings(Action<IServiceProvider, OutboxPublishSettings> configure);
+    IOutboxBuilder WithPublishSettings(
+        Func<IServiceProvider, OutboxPublishSettings, OutboxPublishSettings> configure);
 
     /// <summary>
     /// Configures the delivery settings for the outbox.
