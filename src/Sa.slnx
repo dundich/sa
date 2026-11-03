@@ -1,38 +1,39 @@
-<Solution>
+﻿<Solution>
   <Folder Name="/Benchmarks/">
     <Project Path="Benchmarks/Sa.Outbox.Benchmarks/Sa.Outbox.Benchmarks.csproj" />
     <Project Path="Benchmarks/Sa.Utils.WorkQueue.Benchmarks/Sa.Utils.WorkQueue.Benchmarks.csproj" />
   </Folder>
-  <Folder Name="/Configuration/">
-    <Project Path="Sa.Configuration.PostgreSql/Sa.Configuration.PostgreSql.csproj" />
-    <Project Path="Sa.Configuration/Sa.Configuration.csproj" />
+  <Folder Name="/Libraries/">
+    <Project Path="Libraries/Sa/Sa.csproj" />
   </Folder>
-  <Folder Name="/Data/" />
-  <Folder Name="/Data/PostgreSql/">
-    <Project Path="Sa.Data.PostgreSql/Sa.Data.PostgreSql.csproj" />
+  <Folder Name="/Libraries/Configuration/">
+    <Project Path="Libraries/Configuration/Sa.Configuration/Sa.Configuration.csproj" />
+    <Project Path="Libraries/Configuration/Sa.Configuration.PostgreSql/Sa.Configuration.PostgreSql.csproj" />
   </Folder>
-  <Folder Name="/Data/S3/">
-    <Project Path="Sa.Data.S3/Sa.Data.S3.csproj" />
+  <Folder Name="/Libraries/Data/">
+    <Project Path="Libraries/Data/Sa.Data.PostgreSql/Sa.Data.PostgreSql.csproj" />
+    <Project Path="Libraries/Data/Sa.Data.S3/Sa.Data.S3.csproj" />
+    <Project Path="Libraries/Data/Sa.Data.TempFolder/Sa.Data.TempFolder.csproj" />
   </Folder>
-  <Folder Name="/Data/TempFolder/">
-    <Project Path="Sa.Data.TempFolder/Sa.Data.TempFolder.csproj" />
+  <Folder Name="/Libraries/Hybrid/">
+    <Project Path="Libraries/Hybrid/Sa.HybridFileStorage/Sa.HybridFileStorage.csproj" />
+    <Project Path="Libraries/Hybrid/Sa.HybridFileStorage.FileSystem/Sa.HybridFileStorage.FileSystem.csproj" />
+    <Project Path="Libraries/Hybrid/Sa.HybridFileStorage.Postgres/Sa.HybridFileStorage.Postgres.csproj" />
+    <Project Path="Libraries/Hybrid/Sa.HybridFileStorage.S3/Sa.HybridFileStorage.S3.csproj" />
   </Folder>
-  <Folder Name="/HybridFileStorage/">
-    <Project Path="Sa.HybridFileStorage.FileSystem/Sa.HybridFileStorage.FileSystem.csproj" />
-    <Project Path="Sa.HybridFileStorage.Postgres/Sa.HybridFileStorage.Postgres.csproj" />
-    <Project Path="Sa.HybridFileStorage.S3/Sa.HybridFileStorage.S3.csproj" />
-    <Project Path="Sa.HybridFileStorage/Sa.HybridFileStorage.csproj" />
+  <Folder Name="/Libraries/Media/">
+    <Project Path="Libraries/Media/Sa.Media/Sa.Media.csproj" />
+    <Project Path="Libraries/Media/Sa.Media.FFmpeg/Sa.Media.FFmpeg.csproj" />
   </Folder>
-  <Folder Name="/Media/">
-    <Project Path="Sa.Media.FFmpeg/Sa.Media.FFmpeg.csproj" />
-    <Project Path="Sa.Media/Sa.Media.csproj" />
+  <Folder Name="/Libraries/Misc/">
+    <Project Path="Libraries/Misc/Sa.Partitional.PostgreSql/Sa.Partitional.PostgreSql.csproj" />
+    <Project Path="Libraries/Misc/Sa.Schedule/Sa.Schedule.csproj" />
+    <Project Path="Libraries/Misc/Sa.Utils.WorkQueue/Sa.Utils.WorkQueue.csproj" />
   </Folder>
-  <Folder Name="/Outbox/">
-    <Project Path="Sa.Outbox.PostgreSql/Sa.Outbox.PostgreSql.csproj" />
-    <Project Path="Sa.Outbox/Sa.Outbox.csproj" />
-  </Folder>
-  <Folder Name="/Partitional/">
-    <Project Path="Sa.Partitional.PostgreSql/Sa.Partitional.PostgreSql.csproj" />
+  <Folder Name="/Libraries/Outbox/">
+    <Project Path="Libraries/Outbox/Sa.Outbox/Sa.Outbox.csproj" />
+    <Project Path="Libraries/Outbox/Sa.Outbox.PostgreSql/Sa.Outbox.PostgreSql.csproj" />
+    <Project Path="Libraries/Outbox/Sa.Outbox.Redis/Sa.Outbox.Redis.csproj" />
   </Folder>
   <Folder Name="/Samples/">
     <File Path="Samples/docker-compose.yml" />
@@ -40,14 +41,12 @@
     <Project Path="Samples/Echo/Echo.csproj" />
     <Project Path="Samples/FFMpeg.Console/FFMpeg.Console.csproj" />
     <Project Path="Samples/HybridFileStorage.Console/HybridFileStorage.Console.csproj" />
+    <Project Path="Samples/InMemoryOutbox.ConsoleApp/InMemoryOutbox.ConsoleApp.csproj" />
     <Project Path="Samples/Partitional.ConsoleApp/Partitional.ConsoleApp.csproj" />
     <Project Path="Samples/PgOutbox.ConsoleApp/PgOutbox.ConsoleApp.csproj" />
     <Project Path="Samples/Schedule.Configuration.Console/Schedule.Configuration.Console.csproj" />
     <Project Path="Samples/Schedule.Console/Schedule.Console.csproj" />
     <Project Path="Samples/WorkQueue.Console/WorkQueue.Console.csproj" />
-  </Folder>
-  <Folder Name="/Schedule/">
-    <Project Path="Sa.Schedule/Sa.Schedule.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
@@ -71,7 +70,9 @@
     <Project Path="Tests/Sa.HybridFileStorageTests/Sa.HybridFileStorageTests.csproj" />
     <Project Path="Tests/Sa.Media.FFmpegTests/Sa.Media.FFmpegTests.csproj" />
     <Project Path="Tests/Sa.MediaTests/Sa.MediaTests.csproj" />
+    <Project Path="Tests/Sa.Outbox.MultiProviderTests/Sa.Outbox.MultiProviderTests.csproj" />
     <Project Path="Tests/Sa.Outbox.PostgreSqlTests/Sa.Outbox.PostgreSqlTests.csproj" />
+    <Project Path="Tests/Sa.Outbox.RedisTests/Sa.Outbox.RedisTests.csproj" />
     <Project Path="Tests/Sa.Outbox.Tests/Sa.Outbox.Tests.csproj" />
     <Project Path="Tests/Sa.Partitional.PostgreSqlTests/Sa.Partitional.PostgreSqlTests.csproj" />
     <Project Path="Tests/Sa.ScheduleTests/Sa.ScheduleTests.csproj" />
@@ -83,8 +84,4 @@
     <Project Path="Tests/Fixtures/Sa.Data.S3.Fixture/Sa.Data.S3.Fixture.csproj" />
     <Project Path="Tests/Fixtures/Sa.Fixture/Sa.Fixture.csproj" />
   </Folder>
-  <Folder Name="/Utils/">
-    <Project Path="Sa.Utils.WorkQueue/Sa.Utils.WorkQueue.csproj" />
-  </Folder>
-  <Project Path="Sa/Sa.csproj" />
 </Solution>

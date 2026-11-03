@@ -1,0 +1,555 @@
+# PlugServices: the provider plug point
+
+**English** | [Русский](Readme-ru.md)
+
+## Contents
+
+- [Why](#why)
+- [Scope](#scope)
+- [Public API](#public-api)
+  - [Capabilities](#capabilities)
+  - [Descriptor](#descriptor)
+  - [Registration](#registration)
+  - [Registry](#registry)
+- [Validation rules](#validation-rules)
+- [Execution flow](#execution-flow)
+- [Compatibility](#compatibility)
+- [Follow-ups](#follow-ups)
+- [Tests](#tests)
+- [Why](#why-1)
+- [Breaking changes](#breaking-changes)
+- [Publishing](#publishing)
+- [Delivery and the rent token](#delivery-and-the-rent-token)
+- [Provider migration](#provider-migration)
+- [Versioning](#versioning)
+- [Tests](#tests-1)
+- [Goal](#goal)
+- [Decisions](#decisions)
+- [API](#api)
+- [What is keyed](#what-is-keyed)
+- [Delivery routing](#delivery-routing)
+- [Slices](#slices)
+- [Invariants](#invariants)
+- [Tests](#tests-2)
+- [Status](#status)
+- [Per-provider health (slice 3, part 1)](#per-provider-health-slice-3-part-1)
+- [Provider warm-up (init/lifecycle)](#provider-warm-up-initlifecycle)
+- [Disabling a provider](#disabling-a-provider)
+
+## Why
+
+`Sa.Outbox` does not know where messages live. The whole storage is described by three contracts:
+
+> One deliberate exception: `Sa.Outbox` ships an in-memory provider (`Sa.Outbox.InMemory`) as a
+> reference implementation and a dev/test substitute. It implements the same three contracts and
+> registers through the same `AddOutboxProvider`, so it is an example of the plug point, not a
+> bypass of it — see ADR-0003.
+
+| Contract | Core consumer | When |
+|---|---|---|
+| `IOutboxBulkWriter` | `OutboxMessagePublisher` | on every publish |
+| `IOutboxDeliveryManager` | `DeliveryTenant` | on every rent/return/extend |
+| `IOutboxTenantDetector` | `TenantProvider` (optional) | when tenants are auto-detected |
+
+Before this spec each provider package registered them by hand (`RemoveAll<T>().AddSingleton<T, Impl>()` in its own `Setup`), and the commented-out `IOutboxPlugin` gave nothing: the container could not report which provider was installed, a partial registration failed on the first publish/tick instead of at startup, and a second provider package silently overwrote the first.
+
+The goal is a **thin metadata/registration layer**, with no change to the hot path or the public contracts.
+
+## Scope
+
+In:
+
+- provider identity (name, version) and capability declaration;
+- one-call registration of the three services;
+- fail-fast: a duplicate provider and an incomplete registration are caught at startup;
+- a diagnostics registry (`IOutboxProviderRegistry`).
+
+Out (separate stages):
+
+- health checks and `InitializeAsync` (option B) — since implemented, see *Follow-ups*;
+- several providers in one container via keyed registrations (option C) — since implemented, see
+  *Follow-ups*;
+- changing the contracts (`InsertBulk`, `Memory<IOutboxContextOperations<T>>`, `IOutboxContextFactory`) — a separate major only.
+
+## Public API
+
+### Capabilities
+
+```csharp
+[Flags]
+public enum OutboxProviderCapabilities
+{
+    None = 0,
+    PublishContext  = 1 << 0,  // InsertBulk(..., context) really joins the caller's transaction
+    TenantDetection = 1 << 1,  // IOutboxTenantDetector is present, CanDetect may be true
+    LockExtension   = 1 << 2,  // ExtendDelivery is meaningful (lease renewal)
+    Postponement    = 1 << 3,  // Postpone/Retry delays are honoured by the provider
+}
+```
+
+The flags are declarative: diagnostics plus one validation rule (the `TenantDetection` capability requires a registered detector). They make known divergences explicit — Redis supports no publish context and ignores `Postpone/Retry` delays.
+
+### Descriptor
+
+```csharp
+public sealed record OutboxProviderDescriptor(
+    string Name,
+    OutboxProviderCapabilities Capabilities = OutboxProviderCapabilities.None,
+    string? Version = null)
+{
+    public bool Supports(OutboxProviderCapabilities capability);
+}
+```
+
+`Version` is for logs and diagnostics; when omitted it is taken from the bulk writer's assembly.
+
+### Registration
+
+```csharp
+// default provider key ("outbox")
+public static IServiceCollection AddOutboxProvider(
+    this IServiceCollection services,
+    OutboxProviderDescriptor descriptor,
+    Action<OutboxProviderBuilder> configure);
+
+// explicit provider key — several providers in one container
+public static IServiceCollection AddOutboxProvider(
+    this IServiceCollection services,
+    string providerKey,
+    OutboxProviderDescriptor descriptor,
+    Action<OutboxProviderBuilder> configure);
+
+public sealed class OutboxProviderBuilder
+{
+    public OutboxProviderBuilder WithBulkWriter<T>()      where T : class, IOutboxBulkWriter;
+    public OutboxProviderBuilder WithDeliveryManager<T>() where T : class, IOutboxDeliveryManager;
+    public OutboxProviderBuilder WithTenantDetector<T>()  where T : class, IOutboxTenantDetector;
+}
+```
+
+```csharp
+services.AddOutboxProvider(
+    new OutboxProviderDescriptor(
+        "PostgreSql",
+        OutboxProviderCapabilities.PublishContext
+        | OutboxProviderCapabilities.TenantDetection
+        | OutboxProviderCapabilities.LockExtension
+        | OutboxProviderCapabilities.Postponement),
+    provider => provider
+        .WithBulkWriter<OutboxBulkWriter>()
+        .WithDeliveryManager<OutboxDeliveryManager>()
+        .WithTenantDetector<OutboxTenantDetector>());
+```
+
+Provider packages call it **before** `AddSaOutbox`; the order is not mandatory — `AddSaOutbox`
+registers the same startup validator (see below), so the scope-key check runs either way.
+`WithDeliveryManager` is optional: a publish-only provider omits it, which is valid while no
+consumer groups exist.
+
+### Registry
+
+```csharp
+public interface IOutboxProviderRegistry
+{
+    OutboxProviderDescriptor Descriptor { get; }
+}
+```
+
+A singleton registered by `AddOutboxProvider`, usable by the application's health/diagnostics.
+
+## Validation rules
+
+| Check | When | Result |
+|---|---|---|
+| `Name` is not blank | `AddOutboxProvider` | `ArgumentException` |
+| A bulk writer is registered (`WithBulkWriter`) | `AddOutboxProvider` | `InvalidOperationException` |
+| A second provider with a **different** `Name` | `AddOutboxProvider` | `InvalidOperationException` |
+| `AddOutboxProvider` repeated with the same `Name` | `AddOutboxProvider` | idempotent: the marker is replaced |
+| A provider is registered under the resolved key | registry construction | `InvalidOperationException` |
+| `IOutboxBulkWriter` is **registered** | registry construction | `InvalidOperationException` |
+| `IOutboxDeliveryManager` is **registered** when groups exist | registry construction | `InvalidOperationException` |
+| `TenantDetection` capability ⇒ detector is **registered** | registry construction | `InvalidOperationException` |
+| Every consumer group names a registered provider (consistent `scopeKey`) | hosted validator | `InvalidOperationException` with the group's key and the provider list |
+
+The registry checks look at **registrations** and never construct the provider's services
+(`IServiceProviderIsService`): building a storage chain can open connections and load state, and the
+registry is also read while delivery job settings are being built.
+
+Trigger points:
+
+1. `AddOutboxProvider` — static checks (name, writer, duplicate).
+2. `OutboxProviderValidationHostedService` — registered by both `AddSaOutbox` and `AddOutboxProvider`
+   (deduplicated by implementation type). It checks every consumer group's provider key, resolves the
+   registry of every registered provider at host start, and logs each provider once. Because
+   `AddSaOutbox` registers it, a group left without any provider fails the start even if the provider
+   package was never called.
+3. The delivery job settings build — when the registry is registered it is resolved and validated before the first tick, covering the case where the schedule was registered before the validator.
+
+## Execution flow
+
+1. **Registration.** `AddSaOutboxUsingPostgreSql(...)` → provider services → `AddOutboxProvider(...)` → `AddSaOutbox(...)`. Order relative to the core does not matter: the registry is built lazily from `IEnumerable<OutboxProviderRegistration>`; a duplicate `Name` fails immediately.
+2. **Startup.** The hosted validator first checks that every consumer group names a registered provider key, then resolves the registry of every registered provider: writer, delivery manager when groups exist, detector when the capability is declared. Failure aborts the start with the offending group/scope or the provider name in the message.
+3. **Publish.** `IOutboxMessagePublisher` → `IOutboxBulkWriter`; `context` is passed through as before (the `PublishContext` flag only documents whether the provider honours it).
+4. **Delivery.** `Sa.Schedule` tick → `DeliveryJob` → `DeliveryProcessor` → `TenantProvider` → `DeliveryTenant` → `IOutboxDeliveryManager` → `DeliveryCourier` → `ReturnDelivery`.
+5. **Tenants.** `AutoDetect` → `IOutboxTenantDetector`; otherwise `TenantSettings`.
+6. **Shutdown.** The descriptor owns no resources; disposal stays with DI and the singletons.
+
+## Compatibility
+
+- Public contracts are unchanged; existing applications behave exactly as before.
+- One provider per **provider key** (the key is the outbox scope key), and that is now enforced
+  instead of "last one wins". Because the core ships keyed support, one container may host several
+  providers under different keys; see the *Follow-ups* section.
+- `Sa.Outbox.PlugServices.IOutboxPlugin` (commented out) is **removed**: the descriptor and the registry replace its role, while the services stay in DI.
+- Keyed multi-provider support and health were follow-up stages and are implemented (see *Follow-ups*); the descriptor was shaped so `Name` could become a `ServiceKey` without breaking the API.
+
+## Follow-ups
+
+- **B (health/lifecycle):** implemented — the health report and the provider warm-up; the `Microsoft.Extensions.Diagnostics.HealthChecks` adapter remains an application-side mapping.
+- **C (keyed):** implemented — keyed storage services, `(providerKey, groupId)` consumers/manager, and a
+  startup `scopeKey` consistency check.
+- **Contracts:** the legacy `InsertBulk` overload is gone (0.18); the typed publish context shipped without a core major — the PG package adds `PublishInTransaction`/`PublishSingleInTransaction`; the opaque token in `IOutboxContextFactory.Create` is deliberately not introduced: the rent identity is the 16-byte `OutboxRentToken`, and a provider with more state keeps a side table keyed by it.
+
+## Tests
+
+- registration: writer/descriptor/version, missing writer, two different providers, repeated registration;
+- registry: no provider, missing delivery manager with groups, publish-only without groups, `TenantDetection` without a detector;
+- hosted validator: registered and starts; a group under a scope without a provider fails and names
+  the group(s) and the scope; groups without any provider fail too; two providers with their own
+  groups pass;
+- PG/Redis: descriptor names and capability flags;
+- the existing PG/Redis/core suites stay green.
+
+---
+
+# Contract simplification (major 0.18)
+
+## Why
+
+The current contracts carry two API generations at once:
+
+- `IOutboxBulkWriter` has four overloads, and **only the legacy one is abstract** — the "simple"
+  implementation silently goes through an allocating adapter while the fast path is optional.
+  `OutboxMessage<T>` (payload + part wrapper) exists both in publishing and inside the delivery record.
+- A rent has no slot for the provider's own identity: Redis packs the stream id into the `Guid
+  OutboxId`, PostgreSQL reads `TaskId`/`DeliveryId` from `DeliveryInfo` — the contract never states
+  what a provider needs to return a message to the right storage row.
+
+This major removes both layers.
+
+## Breaking changes
+
+| Before | After |
+|---|---|
+| `InsertBulk(batch, ct)` + `InsertBulk(batch, context, ct)` + two legacy `InsertBulk(ReadOnlyMemory<OutboxMessage<T>>, …)` overloads | one abstract `InsertBulk(batch, context, ct)` + a context-less convenience overload |
+| `OutboxMessage<T>(PayloadId, Payload, PartInfo)` | removed; publishing uses `OutboxMessageBatchItem<T>` |
+| `OutboxDeliveryMessage<T>(OutboxId, OutboxMessage<T> Message, DeliveryInfo)` | `OutboxDeliveryMessage<T>(OutboxId, PayloadId, Payload, PartInfo, DeliveryInfo, RentToken)` |
+| rent identity implicit in `OutboxId` / `DeliveryInfo` | explicit `OutboxRentToken(long Key, long SubKey)`, exposed to the provider as `IOutboxContext.RentToken` |
+| "context not supported" thrown by the provider at runtime | `OutboxMessagePublisher` checks the `PublishContext` capability before calling the writer |
+
+## Publishing
+
+```csharp
+public interface IOutboxBulkWriter
+{
+    ValueTask<ulong> InsertBulk<TMessage>(
+        OutboxMessageBatch<TMessage> batch,
+        object? context,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<ulong> InsertBulk<TMessage>(
+        OutboxMessageBatch<TMessage> batch,
+        CancellationToken cancellationToken = default)
+            => InsertBulk(batch, context: null, cancellationToken);
+}
+```
+
+- One abstract method: a provider must implement the fast batch path.
+- `context` stays `object?` (a typed context is a separate topic); with `context != null` and no
+  `PublishContext` capability the publisher throws `NotSupportedException` naming the provider
+  **before** any write.
+
+## Delivery and the rent token
+
+```csharp
+public readonly record struct OutboxRentToken(long Key, long SubKey = 0)
+{
+    public static OutboxRentToken None => default;
+    public bool IsNone => Key == 0 && SubKey == 0;
+}
+
+public readonly record struct OutboxDeliveryMessage<TMessage>(
+    Guid OutboxId,
+    string PayloadId,
+    TMessage Payload,
+    OutboxPartInfo PartInfo,
+    OutboxTaskDeliveryInfo DeliveryInfo,
+    OutboxRentToken RentToken = default);
+```
+
+- The provider fills the token on rent and reads it back from `IOutboxContext.RentToken` in
+  `ReturnDelivery`/`ExtendDelivery` — no parsing of `OutboxId`, no side tables.
+- Two 64-bit halves are exactly what addresses a row: PostgreSQL `(task_id, delivery_id)`, Redis
+  `(stream ms, seq)`. Allocation-free.
+- `IOutboxContextFactory.Create(delivery)` is unchanged: the token travels inside the delivery record.
+- `OutboxId` remains the provider's public message identity (in Redis, the packed stream id as before).
+
+## Provider migration
+
+**PostgreSQL**
+
+- `IBulkInsertMsgCommand`/`BulkInsertMsgCommand`: batch overloads only (tx / no-tx); the legacy
+  `Execute(ReadOnlyMemory<OutboxMessage<T>>, …)`, `DistinctPartKeys` and legacy `WriteRows` are
+  removed — a batch is always one part, so one advisory key is locked.
+- `StartDeliveryCommand`: flat record, `RentToken = (TaskId, DeliveryId)`.
+
+**Redis**
+
+- `OutboxBulkWriter`: two overloads; the legacy part-grouping branch is removed.
+- `RentDeliveryCommand`: flat record, `RentToken = (ms, seq)` from the stream id.
+- `FinishDeliveryCommand`: the stream id is rebuilt from `context.RentToken` instead of `OutboxId`;
+  `RedisStreamId.ToStreamId(Guid)` becomes unused.
+
+## Versioning
+
+- `Sa.Outbox`, `Sa.Outbox.PostgreSql` → **0.18.0**; `Sa.Outbox.Redis` → **0.2.0** (the provider is still in development).
+- Third-party provider checklist: implement `InsertBulk(batch, context, ct)`; move to the flat
+  `OutboxDeliveryMessage<T>`; fill `RentToken` on rent and use it on return.
+
+## Tests
+
+- core: a single abstract writer method; the publisher throws `NotSupportedException` for a context
+  without the capability; `RentToken` reaches the context and comes back to the provider;
+- PG: batch insert (one part), `(task, delivery)` token on return;
+- Redis: `(ms, seq)` token, `XACK` by token, poison path unchanged;
+- the existing PG/Redis integration suites stay green.
+
+---
+
+# Keyed multi-provider (C)
+
+## Goal
+
+Several outbox providers in one container: for example `billing` on PostgreSQL and `audit` on a
+different PostgreSQL schema (Redis follows in slice 2). Each provider has **its own** storage,
+schedule, migrations/cleanup, tenant set and consumer groups.
+
+## Decisions
+
+1. **Provider key = `scopeKey`.** One provider = one `Sa.Schedule` = one `Sa.Partitional.PostgreSql`
+   module. The classic `AddSaOutboxUsingPostgreSql(...)` uses `OutboxScope.DefaultKey` (`"outbox"`)
+   and is unchanged.
+2. **Metadata and serializer stay shared**: they describe the message format, not the storage.
+3. **Tenants are per provider**: `WithTenants` inside the provider's `configureOutbox` registers
+   `TenantSettings` under the provider key.
+4. **One message type may be published to several providers** — two independent at-least-once flows
+   sharing the metadata.
+5. **A group is bound to a provider through its `configureOutbox`**, so it cannot be attached to a
+   foreign storage by accident.
+6. **Consumer-group sections are application-wide** — `Outbox:DeliveryGroups:{group}` by default,
+   changed or disabled by `IOutboxBuilder.WithDeliveryConfigurationSection`; the prefix is not
+   derived from the provider key. Provider-level settings sections (polling via
+   `WithPollingFromConfiguration`, Redis options via `WithConfiguration`) are passed explicitly per
+   registration, so each provider can point at its own path.
+7. **Consumer group ids may repeat across providers** since slice 3: the settings registry, idle
+   states, the delivery job and the consumer cache are addressed by `OutboxGroupKey(providerKey,
+   groupId)`, and the string overloads throw an ambiguity error while the id is not unique.
+
+## API
+
+```csharp
+services
+    .AddSaOutboxUsingPostgreSql(
+        "billing",                                   // provider key == scope key
+        pg => pg.WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = billingCs))),
+        outbox => outbox
+            .WithDeliveries(d => d.AddDelivery<InvoiceConsumer, Invoice>("invoices")))
+    .AddSaOutboxUsingPostgreSql(
+        "audit",
+        pg => pg.WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = auditCs))),
+        outbox => outbox
+            .WithDeliveries(d => d.AddDelivery<AuditConsumer, AuditEvent>("audit-events")));
+```
+
+Publishing:
+
+```csharp
+IOutboxMessagePublisher billing = sp.GetRequiredKeyedService<IOutboxMessagePublisher>("billing");
+
+sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(invoice, tenantId: 1);
+```
+
+## What is keyed
+
+| Layer | Registration |
+|---|---|
+| `IOutboxBulkWriter`, `IOutboxDeliveryManager`, `IOutboxTenantDetector` | keyed by provider key |
+| `IOutboxMessagePublisher`, `OutboxPublishSettings` | keyed (plus an unkeyed alias for the default key) |
+| `IOutboxProviderRegistry` | keyed per provider + aggregate `IOutboxProviders` |
+| `IDeliveryGroupOptionsProvider`, `PgPollingSettings`, `PgOutboxSettings`, `IPgDataSource`, `SqlOutboxBuilder`, commands, loader, type resolver | keyed per provider (PG) |
+| `TenantSettings` | keyed per provider |
+| `IScheduleSettings` / `IScheduler` / `IPartitionManager` | keyed by `scopeKey` — already |
+| `IOutboxMessageMetadataProvider`, `IOutboxMessageSerializer` | shared |
+| `IConsumer<T>` | keyed by group id (uniqueness validated) |
+
+The default provider (`"outbox"`) additionally registers an unkeyed `IOutboxMessagePublisher` alias,
+so existing code injecting the publisher without a key keeps working.
+
+## Delivery routing
+
+`OutboxConsumerSettings.ProviderKey` and `OutboxMessageFilter.ProviderKey` carry the provider key.
+`DeliveryTenant`/`DeliveryProcessor` resolve the keyed `IOutboxDeliveryManager` and `ITenantProvider`
+through an internal `IOutboxStorage` router. Public pipeline signatures do not change.
+
+## Slices
+
+1. **Slice 1 (implemented):** core plumbing + PostgreSQL. Two PG providers (different schemas)
+   publish and deliver independently.
+2. **Slice 2 (implemented):** Redis — keyed settings (`RedisOutboxSettings`, provider-prefixed stream
+   keys), keyed commands and registration.
+3. **Slice 3 (implemented):** per-provider health and composite `(providerKey, groupId)` keys for
+   `IConsumer<T>`/the manager/idle state.
+
+## Invariants
+
+- The guarantees are the same and **per provider**: at-least-once, ordering in `(tenant, part, type)`,
+  DLQ/poison, lookback.
+- No distributed transactions across providers, no load-based routing.
+- Single-provider applications do not change: default key, publisher alias, previous sections.
+
+## Tests
+
+- two PG providers with different schemas: publish to each, independent delivery, independent
+  migrations/cleanup; the PG layout guard catches identical tables;
+- PostgreSQL and Redis in one container: publish to each, health over both, group-to-provider
+  binding (`Sa.Outbox.MultiProviderTests`);
+- composite keys: the same group id under two providers, a composite `Get`, the ambiguity error of
+  the string API;
+- the default-key PG/Redis paths behave as before (all existing suites);
+- a duplicate provider key fails at startup; `IOutboxPublisherResolver.For(unknown)` — clear error.
+
+## Status
+
+- **Slice 1 is implemented** (core + PostgreSQL).
+- **Slice 2 is implemented** (Redis): settings, options and `WithOutboxSettings`/`WithConfiguration`
+  actions are per provider (named options), `IDatabase` / `IRedisOutboxConnectionProvider` /
+  connection options are keyed, commands and contracts are keyed, the poison handler is keyed with an
+  unkeyed default and keyed precedence, and `IOutboxProviderRegistry` is keyed. For a non-default key
+  the key prefix automatically gets a `:{providerKey}` suffix unless the configuration set its own, so
+  two providers on one Redis database never collide. The one-call
+  `AddSaOutboxUsingRedis(cfg, outbox, key)` overload was added.
+- **Slice 3, part 1 (health) is implemented**: keyed `IOutboxProviderHealth` (PG `SELECT 1`, Redis
+  `PING`) and the `IOutboxHealth` aggregate (stamps the key, measures latency, never fails on a
+  throwing check).
+- **Slice 3, part 2 (composite keys) is implemented**: `OutboxGroupKey(providerKey, groupId)` for the
+  settings registry, idle states, the delivery job and the consumer cache; composite
+  `IOutboxConsumerManager` overloads; `IConsumer<T>` keyed by the composite key with a string alias
+  for the default key. The string methods work while the id is unambiguous and throw an ambiguity
+  error otherwise.
+- **Provider warm-up is implemented:** a keyed `IOutboxProviderInitializer` (PG `SELECT 1`, Redis
+  `PING`) plus a memoized per-provider gate that `DeliveryJob` awaits before its first cycle; a
+  warm-up failure goes through the job's error policy.
+- **Provider on/off switch is implemented:** `WithEnabled(false)` on `IPgOutboxConfiguration` /
+  `IRedisOutboxConfiguration` is a *registration* switch — the configurator records its intents but
+  commits nothing, so no settings, no connection/`ValidateOnStart`, no groups and no schedule reach
+  the container. `Enabled` defaults to `true`, so existing applications are unchanged.
+- **PG migration guard:** `PgMultiProviderGuard` fails the start when two PG providers point at the
+  same tables (double delivery); the 0.17 → 0.18 migration section lives in the
+  [PG readme](../../Sa.Outbox.PostgreSql/Readme.md#migrating-017--018-existing-deployments).
+
+- **Tenants are per provider**: `WithTenants` inside a provider's `configureOutbox` registers a
+  keyed `TenantSettings`; the default provider's settings act as the shared fallback. Auto-detection
+  resolves the provider's keyed detector, while a detector registered without a key is an explicit
+  global override. `IOutboxPartitionalSupport` (migration/cleanup) is keyed too, so every provider
+  creates partitions for its own tenants.
+
+Constraints: provider-internal services are resolved keyed, so user extensions registered as a type
+must use the factory overloads; two Redis providers with the same endpoint/database/prefix are caught
+by the startup `RedisMultiProviderGuard` (an explicit `IDatabase`/`IConnectionMultiplexer` factory
+remains unchecked — its endpoint is unknown before it runs).
+
+## Per-provider health (slice 3, part 1)
+
+The core does not depend on `Microsoft.Extensions.Diagnostics.HealthChecks`: the contract is
+transport-agnostic and the mapping is one line on the application side.
+
+```csharp
+public sealed record OutboxProviderHealthReport(
+    string ProviderKey, bool Healthy, string? Reason = null, TimeSpan Latency = default);
+
+public interface IOutboxProviderHealth
+{
+    ValueTask<OutboxProviderHealthReport> CheckAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IOutboxHealth
+{
+    ValueTask<IReadOnlyList<OutboxProviderHealthReport>> CheckAsync(CancellationToken cancellationToken = default);
+}
+```
+
+- A provider registers `IOutboxProviderHealth` **keyed**: PostgreSQL runs `SELECT 1` on its data
+  source, Redis runs `PING`. A provider without a check is reported healthy (`Reason = null`) so
+  adding one does not silently turn readiness red.
+- `IOutboxHealth` (unkeyed singleton) walks every registered provider key, stamps `ProviderKey`,
+  measures the latency, and turns a throwing check into `Healthy = false` with the error text — one
+  broken check does not fail the aggregate.
+- Endpoint example:
+
+```csharp
+app.MapGet("/health/outbox", async (IOutboxHealth health, CancellationToken ct) =>
+{
+    IReadOnlyList<OutboxProviderHealthReport> reports = await health.CheckAsync(ct);
+    return reports.All(r => r.Healthy)
+        ? Results.Ok(reports)
+        : Results.Problem(string.Join("; ", reports.Where(r => !r.Healthy).Select(r => $"{r.ProviderKey}: {r.Reason}")));
+});
+```
+
+## Provider warm-up (init/lifecycle)
+
+Provider services are lazy, so "the host started" does not mean "the storage is ready".
+`IOutboxProviderInitializer` is an optional keyed hook that runs **before the first delivery cycle**:
+
+```csharp
+public interface IOutboxProviderInitializer
+{
+    ValueTask InitializeAsync();
+}
+```
+
+- The core keeps `OutboxProviderInitialization`: one `Task` per provider key, shared by every group
+  of that provider. After success it is an instant no-op; after a failure the entry is removed and
+  the next tick retries the warm-up.
+- `DeliveryJob` awaits the gate before `ProcessMessages`; a warm-up failure goes through the job's
+  usual error policy (`IfErrorRetry`/`ThenCloseApplication`) instead of surfacing on a random tick.
+- The wait observes the caller's `CancellationToken` (shutdown does not wait for a connection); the
+  hook itself takes no token, because the warm-up is shared by every group of the provider and must
+  not be cancelled by one caller's token. The provider's own command timeouts bound it.
+- Registration order of the provider and the core does not matter — the gate is lazy, not a hosted
+  service.
+- Implementations: PG runs `SELECT 1` on its data source; Redis runs `PING`. A provider without an
+  initializer is valid (its first command already opens the connection lazily).
+
+## Disabling a provider
+
+Both provider configurators expose `WithEnabled(bool enabled = true)`. It is evaluated when the
+registration is applied, not per delivery cycle, so it is a *deployment* switch rather than a runtime
+flag:
+
+```csharp
+services.AddSaOutboxUsingPostgreSql(pg => pg
+    .WithEnabled(configuration.GetValue("Outbox:PostgreSql:Enabled", true))
+    .WithDataSource(...));
+```
+
+A disabled provider applies nothing: no settings, no keyed data source or Redis connection (so an
+absent server cannot fail startup validation), no serializer/poison overrides — and `Setup` returns
+before registering the core, the consumer groups and the `Sa.Schedule` jobs of that scope. The
+disabled key therefore never reaches `IOutboxProviderRegistry`, so the startup scope-key check does
+not complain either. Other providers keep working; `Enabled` is `true` by default.
+
+In the split registration form (`AddSaOutbox` + `AddSaOutboxUsing...`) the core still registers the
+consumer groups of that scope, so a disabled provider makes the startup scope-key check fail and name
+them. Skip `AddSaOutbox` for that scope too, or use the one-call form, which `Setup` short-circuits
+before registering the core.

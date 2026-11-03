@@ -1,3 +1,4 @@
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using System.Text;
@@ -40,6 +41,27 @@ public class SqlOutboxBuilderTests
         => string.Join('\n', sql
             .Split('\n')
             .Select(line => line.Contains("--", StringComparison.Ordinal) ? line[..line.IndexOf("--", StringComparison.Ordinal)] : line));
+
+    [Fact]
+    public void SqlExtendDelivery_DoesNotGateRenewalOnTheExpiryClock()
+    {
+        // Ownership of a rented batch is `task_transact_id` (+ Processing), not the lock timestamp.
+        // The removed `task_lock_expires_on > now` guard looked like a safety net but was a false
+        // negative generator: the column keeps unix *seconds*, so a sub-second LockDuration
+        // truncates to "now" and every renewal matched nothing — the lease quietly expired under a
+        // consumer that believed it still owned the batch. With the guard gone, 0 rows means one
+        // thing only: another worker re-rented the batch.
+        var settings = new PgOutboxTableSettings();
+        var sql = ExecutableSql(Create().SqlExtendDelivery);
+
+        Assert.DoesNotContain(SqlParam.NowDate, sql, StringComparison.Ordinal);
+        Assert.Contains(settings.TaskQueue.Fields.TaskTransactId, sql, StringComparison.Ordinal);
+        Assert.Contains(SqlParam.TransactId, sql, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{settings.TaskQueue.Fields.DeliveryStatusCode}={(int)DeliveryStatusCode.Processing}",
+            sql,
+            StringComparison.Ordinal);
+    }
 
     [Fact]
     public void SqlSelectTenant_UsesDistinct_NotAWindowFunction()
@@ -303,6 +325,51 @@ public class SqlOutboxBuilderTests
         Assert.Equal("@rty_at", SqlParam.RetryAfter);
     }
 
+    [Fact]
+    public void SqlCreateMsgCursorIndex_IsARootLevelIndexOnMsgSeqOnly()
+    {
+        // The cursor read used to Seq Scan every daily leaf inside the window on every poll —
+        // including the ones that find the queue empty (measured on 7 × 40k rows: 56.8 ms and
+        // 10 377 shared buffers, against 0.166 ms and 14 buffers with this index).
+        //
+        // Only msg_seq: tenant_id and msg_part are the LIST partition keys, so every row of a leaf
+        // already satisfies them and their selectivity inside the leaf is zero. Prefixing the key
+        // with them widened the index from 6.1 MB to 11 MB and cost 21 buffers per poll against 14,
+        // without changing the plan — hence the narrower key is pinned here.
+        var sql = ExecutableSql(Create().SqlCreateMsgCursorIndex);
+
+        Assert.Contains("CREATE INDEX IF NOT EXISTS \"ix_outbox__msg$_cursor\"", sql, StringComparison.Ordinal);
+        Assert.Contains("ON \"public\".\"outbox__msg$\"", sql, StringComparison.Ordinal);
+        Assert.Contains("msg_seq", sql, StringComparison.Ordinal);
+
+        // Exactly one column: the statement contains no comma at all, and neither partition key
+        // appears in it.
+        Assert.DoesNotContain(",", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("tenant_id", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("msg_part", sql, StringComparison.Ordinal);
+
+        // CONCURRENTLY is not supported on a partitioned table; the hook runs under the migration job.
+        Assert.DoesNotContain("CONCURRENTLY", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SqlLockPublishParts_TakesTheLocksInAStableOrder()
+    {
+        // The lock is what keeps msg_seq order equal to commit order inside a (tenant, part) — see
+        // PublishPartLockTests for the behaviour. The shape matters too:
+        //   * the two-int form keeps it out of the cursor lock's space;
+        //   * ORDER BY before the lock call is what prevents a deadlock between two publishers that
+        //     share several parts, and MATERIALIZED is what stops the planner from evaluating the
+        //     lock call before the sort.
+        var sql = ExecutableSql(Create().SqlLockPublishParts);
+
+        Assert.Contains("pg_advisory_xact_lock", sql, StringComparison.Ordinal);
+        Assert.Contains("MATERIALIZED", sql, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY 1", sql, StringComparison.Ordinal);
+        Assert.Contains("@lck_keys", sql, StringComparison.Ordinal);
+        Assert.Contains("@lck_ns", sql, StringComparison.Ordinal);
+    }
+
     private static int CountDistinctParams(string sql)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
@@ -327,12 +394,14 @@ public class SqlOutboxBuilderTests
         (nameof(b.SqlUpdateOffset), b.SqlUpdateOffset),
         (nameof(b.SqlInitOffset), b.SqlInitOffset),
         (nameof(b.SqlLockOffset), b.SqlLockOffset),
+        (nameof(b.SqlLockPublishParts), b.SqlLockPublishParts),
         (nameof(b.SqlLoadConsumerGroup), b.SqlLoadConsumerGroup),
         (nameof(b.SqlResolveMsgIdFloor), b.SqlResolveMsgIdFloor),
         (nameof(b.SqlResolveDateFloor), b.SqlResolveDateFloor),
         (nameof(b.SqlAddMsgSeqColumnToMsgTable), b.SqlAddMsgSeqColumnToMsgTable),
         (nameof(b.SqlAddMsgSeqColumnToTaskTable), b.SqlAddMsgSeqColumnToTaskTable),
         (nameof(b.SqlAddGroupOffsetSeqColumnToOffsetTable), b.SqlAddGroupOffsetSeqColumnToOffsetTable),
+        (nameof(b.SqlCreateMsgCursorIndex), b.SqlCreateMsgCursorIndex),
         (nameof(b.SqlError), b.SqlError(1)),
         (nameof(b.SqlFinishDelivery), b.SqlFinishDelivery(1)),
     };

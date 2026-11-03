@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.Delivery;
@@ -67,7 +67,8 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
 
             Services
                 .RemoveAll<IOutboxTenantDetector>()
-                .AddSingleton<IOutboxTenantDetector, TenantStubDetector>();
+                .AddSingleton<IOutboxTenantDetector>(sp => new TenantStubDetector(
+                    sp.GetRequiredKeyedService<ISelectTenantCommand>(Sa.Outbox.OutboxScope.DefaultKey)));
         }
 
         public OutboxConsumerSettings OutboxSettings { get; set; } = default!;

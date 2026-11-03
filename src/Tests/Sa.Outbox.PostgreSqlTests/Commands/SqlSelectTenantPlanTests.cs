@@ -49,7 +49,7 @@ public class SqlSelectTenantPlanTests(SqlSelectTenantPlanTests.Fixture fixture)
     private IPgDataSource DataSource => fixture.DataSource;
 
     private SqlOutboxBuilder Builder =>
-        fixture.ServiceProvider.GetRequiredService<SqlOutboxBuilder>();
+        fixture.ServiceProvider.GetRequiredKeyedService<SqlOutboxBuilder>(Sa.Outbox.OutboxScope.DefaultKey);
 
     private PgOutboxTableSettings TableSettings =>
         fixture.ServiceProvider.GetRequiredService<PgOutboxTableSettings>();

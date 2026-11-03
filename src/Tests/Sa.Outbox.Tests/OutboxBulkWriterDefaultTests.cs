@@ -4,26 +4,16 @@ using Sa.Outbox.PlugServices;
 namespace Sa.Outbox.Tests;
 
 /// <summary>
-/// Verifies the default <see cref="IOutboxBulkWriter"/> contract: the context overload forwards
-/// <c>null</c> to the context-less method (unchanged behavior) and fails loudly for providers that
-/// do not understand publish contexts.
+/// Verifies the 0.18 <see cref="IOutboxBulkWriter"/> contract: the context-less overload is a
+/// default interface method that forwards <c>null</c> to the single abstract batch method, and the
+/// legacy per-message overloads no longer exist.
 /// </summary>
 public class OutboxBulkWriterDefaultTests
 {
     private static CancellationToken TestToken => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task InsertBulk_NullContext_ForwardsToContextlessOverload()
-    {
-        var fake = new FakeBulkWriter();
-        IOutboxBulkWriter writer = fake;
-
-        Assert.Equal(1UL, await writer.InsertBulk(Messages(), context: null, TestToken));
-        Assert.Equal(1, fake.Calls);
-    }
-
-    [Fact]
-    public async Task InsertBulk_Batch_ForwardsAsLegacyMessages()
+    public async Task InsertBulk_WithoutContext_ForwardsNullToTheContextOverload()
     {
         var fake = new FakeBulkWriter();
         IOutboxBulkWriter writer = fake;
@@ -32,40 +22,47 @@ public class OutboxBulkWriterDefaultTests
             new[] { new OutboxMessageBatchItem<string>("id", "payload") },
             part);
 
-        Assert.Equal(1UL, await writer.InsertBulk(batch, context: null, TestToken));
+        ulong inserted = await writer.InsertBulk(batch, TestToken);
+
+        Assert.Equal(1UL, inserted);
         Assert.Equal(1, fake.Calls);
+        Assert.Null(fake.LastContext);
+        Assert.Equal(part, fake.LastPart);
     }
 
     [Fact]
-    public void InsertBulk_NonNullContext_ThrowsNotSupported()
+    public async Task InsertBulk_WithContext_PassesItToTheProvider()
     {
         var fake = new FakeBulkWriter();
         IOutboxBulkWriter writer = fake;
+        var part = new OutboxPartInfo(1, "part", DateTimeOffset.UtcNow);
+        var batch = new OutboxMessageBatch<string>(
+            new[] { new OutboxMessageBatchItem<string>("id", "payload") },
+            part);
+        object context = new();
 
-        Assert.Throws<NotSupportedException>(() =>
-        {
-            _ = writer.InsertBulk(Messages(), context: "ctx", cancellationToken: TestToken);
-        });
+        await writer.InsertBulk(batch, context, TestToken);
 
-        Assert.Equal(0, fake.Calls);
+        Assert.Same(context, fake.LastContext);
     }
-
-    private static ReadOnlyMemory<OutboxMessage<string>> Messages()
-        => new OutboxMessage<string>[]
-        {
-            new("id", "payload", new OutboxPartInfo(1, "part", DateTimeOffset.UtcNow)),
-        };
 
     private sealed class FakeBulkWriter : IOutboxBulkWriter
     {
         public int Calls { get; private set; }
 
+        public object? LastContext { get; private set; }
+
+        public OutboxPartInfo LastPart { get; private set; }
+
         public ValueTask<ulong> InsertBulk<TMessage>(
-            ReadOnlyMemory<OutboxMessage<TMessage>> messages,
+            OutboxMessageBatch<TMessage> batch,
+            object? context,
             CancellationToken cancellationToken = default)
         {
             Calls++;
-            return new ValueTask<ulong>(1);
+            LastContext = context;
+            LastPart = batch.PartInfo;
+            return new ValueTask<ulong>((ulong)batch.Count);
         }
     }
 }

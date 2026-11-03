@@ -1,0 +1,557 @@
+# PlugServices: точка подключения провайдера
+
+**Русский** | [English](Readme.md)
+
+## Содержание
+
+- [Зачем](#зачем)
+- [Границы](#границы)
+- [Публичный API](#публичный-api)
+  - [Возможности](#возможности)
+  - [Дескриптор](#дескриптор)
+  - [Регистрация](#регистрация)
+  - [Реестр](#реестр)
+- [Правила валидации](#правила-валидации)
+- [Поток исполнения](#поток-исполнения)
+- [Совместимость](#совместимость)
+- [Следующие шаги](#следующие-шаги)
+- [Тесты](#тесты)
+- [Зачем](#зачем-1)
+- [Ломающие изменения](#ломающие-изменения)
+- [Публикация](#публикация)
+- [Доставка и rent-токен](#доставка-и-rent-токен)
+- [Миграция провайдеров](#миграция-провайдеров)
+- [Версионирование](#версионирование)
+- [Тесты](#тесты-1)
+- [Цель](#цель)
+- [Зафиксированные решения](#зафиксированные-решения)
+- [API](#api)
+- [Что ключуется](#что-ключуется)
+- [Маршрутизация в доставке](#маршрутизация-в-доставке)
+- [Срезы](#срезы)
+- [Инварианты](#инварианты)
+- [Тесты](#тесты-2)
+- [Статус](#статус)
+- [Health на провайдера (срез 3, часть 1)](#health-на-провайдера-срез-3-часть-1)
+- [Warm-up провайдера (init/lifecycle)](#warm-up-провайдера-initlifecycle)
+- [Выключение провайдера](#выключение-провайдера)
+
+## Зачем
+
+`Sa.Outbox` не знает, где хранятся сообщения. Всё хранилище описано тремя контрактами:
+
+| Контракт | Кто в ядре вызывает | Когда |
+|---|---|---|
+| `IOutboxBulkWriter` | `OutboxMessagePublisher` | на каждый publish |
+| `IOutboxDeliveryManager` | `DeliveryTenant` | на каждый rent/return/extend |
+| `IOutboxTenantDetector` | `TenantProvider` (опционален) | при автодетекте тенантов |
+
+До этой спеки каждый пакет-провайдер регистрировал их вручную (`RemoveAll<T>().AddSingleton<T, Impl>()` в собственном `Setup`), а закомментированный `IOutboxPlugin` не давал ничего: в контейнере нельзя было узнать, какой провайдер установлен, нельзя было упасть на старте при неполной регистрации, а второй пакет провайдера молча перезаписывал первый.
+
+Цель — **тонкий слой метаданных и регистрации**, без изменения горячего пути и публичных контрактов.
+
+## Границы
+
+Входит:
+
+- идентичность провайдера (имя, версия) и декларация возможностей;
+- единая регистрация трёх сервисов одним вызовом;
+- fail-fast: дубликат провайдера и неполная регистрация обнаруживаются на старте, а не на первой публикации/тике;
+- реестр для диагностики (`IOutboxProviderRegistry`).
+
+Не входит (отдельные этапы):
+
+- health-check и `InitializeAsync` (вариант B) — с тех пор реализовано, см. *Дальнейшие шаги*;
+- несколько провайдеров в одном контейнере через keyed-регистрации (вариант C) — с тех пор
+  реализовано, см. *Дальнейшие шаги*;
+- изменение контрактов (`InsertBulk`, `Memory<IOutboxContextOperations<T>>`, `IOutboxContextFactory`) — только отдельным мажором.
+
+## Публичный API
+
+### Возможности
+
+```csharp
+[Flags]
+public enum OutboxProviderCapabilities
+{
+    None = 0,
+    PublishContext  = 1 << 0,  // InsertBulk(..., context) реально участвует в транзакции вызывающего
+    TenantDetection = 1 << 1,  // есть IOutboxTenantDetector, CanDetect может быть true
+    LockExtension   = 1 << 2,  // ExtendDelivery осмыслен (продление аренды)
+    Postponement    = 1 << 3,  // Postpone/Retry с задержкой соблюдаются провайдером
+}
+```
+
+Флаги — только декларация для диагностики и валидации. Ядро не меняет поведение по ним, кроме одной проверки: capability `TenantDetection` требует зарегистрированного детектора.
+
+Известные расхождения, которые флаги делают явными: Redis не поддерживает publish-context и игнорирует задержку `Postpone/Retry`.
+
+### Дескриптор
+
+```csharp
+public sealed record OutboxProviderDescriptor(
+    string Name,
+    OutboxProviderCapabilities Capabilities = OutboxProviderCapabilities.None,
+    string? Version = null)
+{
+    public bool Supports(OutboxProviderCapabilities capability);
+}
+```
+
+`Version` — для логов и диагностики. Если не задана явно, берётся из сборки bulk-writer'а.
+
+### Регистрация
+
+```csharp
+// ключ провайдера по умолчанию ("outbox")
+public static IServiceCollection AddOutboxProvider(
+    this IServiceCollection services,
+    OutboxProviderDescriptor descriptor,
+    Action<OutboxProviderBuilder> configure);
+
+// явный ключ провайдера — несколько провайдеров в одном контейнере
+public static IServiceCollection AddOutboxProvider(
+    this IServiceCollection services,
+    string providerKey,
+    OutboxProviderDescriptor descriptor,
+    Action<OutboxProviderBuilder> configure);
+
+public sealed class OutboxProviderBuilder
+{
+    public OutboxProviderBuilder WithBulkWriter<T>()      where T : class, IOutboxBulkWriter;
+    public OutboxProviderBuilder WithDeliveryManager<T>() where T : class, IOutboxDeliveryManager;
+    public OutboxProviderBuilder WithTenantDetector<T>()  where T : class, IOutboxTenantDetector;
+}
+```
+
+Пример (пакет провайдера, вызывается **до** `AddSaOutbox`, чтобы валидатор стартовал раньше расписаний):
+
+```csharp
+services.AddOutboxProvider(
+    new OutboxProviderDescriptor(
+        "PostgreSql",
+        OutboxProviderCapabilities.PublishContext
+        | OutboxProviderCapabilities.TenantDetection
+        | OutboxProviderCapabilities.LockExtension
+        | OutboxProviderCapabilities.Postponement),
+    provider => provider
+        .WithBulkWriter<OutboxBulkWriter>()
+        .WithDeliveryManager<OutboxDeliveryManager>()
+        .WithTenantDetector<OutboxTenantDetector>());
+```
+
+`WithDeliveryManager` опционален: провайдер только для публикации его не вызывает, и это корректно, пока в приложении нет consumer-групп.
+
+### Реестр
+
+```csharp
+public interface IOutboxProviderRegistry
+{
+    OutboxProviderDescriptor Descriptor { get; }
+}
+```
+
+Синглтон, регистрируется `AddOutboxProvider`. Может использоваться в health/диагностике приложения.
+
+## Правила валидации
+
+| Проверка | Когда | Результат |
+|---|---|---|
+| `Name` не пуст | `AddOutboxProvider` | `ArgumentException` |
+| Зарегистрирован bulk-writer (`WithBulkWriter`) | `AddOutboxProvider` | `InvalidOperationException` |
+| Второй провайдер с **другим** `Name` | `AddOutboxProvider` | `InvalidOperationException` |
+| Повторный `AddOutboxProvider` с тем же `Name` | `AddOutboxProvider` | идемпотентно: маркер заменяется |
+| Провайдер зарегистрирован под резолвимым ключом | построение `IOutboxProviderRegistry` | `InvalidOperationException` |
+| `IOutboxBulkWriter` **зарегистрирован** | построение реестра | `InvalidOperationException` |
+| `IOutboxDeliveryManager` **зарегистрирован** при наличии групп | построение реестра | `InvalidOperationException` |
+| Capability `TenantDetection` ⇒ детектор **зарегистрирован** | построение реестра | `InvalidOperationException` |
+| Каждая consumer-группа указывает на зарегистрированного провайдера (consistent `scopeKey`) | hosted-валидатор | `InvalidOperationException` с ключом группы и списком провайдеров |
+
+Проверки построения реестра смотрят на **регистрации**, а не конструируют сервисы провайдера
+(`IServiceProviderIsService`): построение storage-цепочки может открывать соединения и загружать
+состояние, а реестр читается в том числе при сборке настроек delivery-job'ов.
+
+Точки срабатывания:
+
+1. `AddOutboxProvider` — статические проверки (имя, writer, дубликат).
+2. `OutboxProviderValidationHostedService` — регистрируется и из `AddSaOutbox`, и из `AddOutboxProvider`
+   (дедупликация по типу реализации). Сначала проверяет, что у каждой consumer-группы есть
+   зарегистрированный провайдер, затем принудительно резолвит реестр каждого провайдера на старте
+   хоста и один раз пишет провайдера в лог. Благодаря регистрации из `AddSaOutbox` группа без
+   провайдера валит старт, даже если пакет провайдера не подключён вовсе.
+3. Сборка настроек delivery-job'а — если реестр зарегистрирован, он резолвится и валидируется до первого тика. Это страхует случай, когда расписание зарегистрировано раньше валидатора.
+
+## Поток исполнения
+
+1. **Регистрация.** `AddSaOutboxUsingPostgreSql(...)` → провайдерные сервисы → `AddOutboxProvider(...)` → `AddSaOutbox(...)`. Порядок с ядром не важен: реестр строится лениво из `IEnumerable<OutboxProviderRegistration>`, дубликат `Name` ловится сразу.
+2. **Старт.** Hosted-валидатор сначала проверяет, что каждая консьюмер-группа ссылается на зарегистрированный ключ провайдера, затем резолвит реестр каждого зарегистрированного провайдера: writer, delivery-manager при наличии групп, детектор при заявленной capability. Ошибка — падение старта с указанием проблемной группы/скопа или имени провайдера.
+3. **Publish.** `IOutboxMessagePublisher` → `IOutboxBulkWriter`. `context` передаётся только если провайдер заявил `PublishContext` (проверка — на стороне вызывающего/документации; ядро по-прежнему пробрасывает его как есть).
+4. **Delivery.** Тик `Sa.Schedule` → `DeliveryJob` → `DeliveryProcessor` → `TenantProvider` → `DeliveryTenant` → `IOutboxDeliveryManager` → `DeliveryCourier` → `ReturnDelivery`.
+5. **Тенанты.** `AutoDetect` → `IOutboxTenantDetector`; иначе `TenantSettings`.
+6. **Shutdown.** Дескриптор ресурсами не владеет; dispose — за DI и самими синглтонами.
+
+## Совместимость
+
+- Публичные контракты не меняются; поведение существующих приложений не меняется.
+- Один провайдер на **ключ провайдера** (ключ = ключ скопа outbox), но теперь это проверяется, а не «побеждает последний». Ядро поддерживает keyed-регистрации, поэтому в одном контейнере может жить несколько провайдеров под разными ключами — см. *Дальнейшие шаги*.
+- `Sa.Outbox.PlugServices.IOutboxPlugin` (закомментированный) **удаляется**: его роль выполняют дескриптор + реестр, а сервисы остаются в DI.
+- Keyed-мультипровайдерность и health были следующими этапами и уже реализованы (см. *Дальнейшие шаги*); дескриптор спроектирован так, чтобы `Name` мог стать `ServiceKey` без ломки API.
+
+## Следующие шаги
+
+- **B (health/lifecycle):** реализовано — health-отчёт и warm-up провайдера; адаптер под `Microsoft.Extensions.Diagnostics.HealthChecks` остаётся маппингом на стороне приложения.
+- **C (keyed):** реализовано — keyed storage-сервисы, `(providerKey, groupId)` для консьюмеров/менеджера,
+  проверка согласованности `scopeKey` на старте.
+- **Контракты:** legacy-перегрузка `InsertBulk` удалена (0.18); типизированный publish-context сделан без мажора — PG-пакет добавил `PublishInTransaction`/`PublishSingleInTransaction`; opaque-токен в `IOutboxContextFactory.Create` не вводится: арендная идентичность — 16-байтный `OutboxRentToken`, а провайдеру с бóльшим состоянием — side-table по токену.
+
+## Тесты
+
+- регистрация: writer/descriptor/version, отсутствие writer'а, два разных провайдера, повторная регистрация;
+- реестр: без провайдера, без delivery-manager'а при наличии групп, publish-only без групп, `TenantDetection` без детектора;
+- hosted-валидатор: присутствует и стартует; группа под scope без провайдера валит старт и называет
+  группу(ы) и scope; группы без единого провайдера тоже валят старт; два провайдера со своими
+  группами проходят;
+- PG/Redis: имена и capability-флаги дескрипторов;
+- существующие тесты PG/Redis/ядра остаются зелёными.
+
+---
+
+# Упрощение контрактов (мажор 0.18)
+
+## Зачем
+
+Текущие контракты несут два поколения API сразу:
+
+- `IOutboxBulkWriter` — четыре перегрузки, из которых абстрактна **только legacy**; «простая»
+  реализация тихо едет через аллоцирующий адаптер, а быстрый путь необязателен. `OutboxMessage<T>`
+  (обёртка payload + part) живёт и в публикации, и внутри записи доставки.
+- Аренда не имеет слота для собственной идентичности: Redis пакует stream id в `Guid OutboxId`,
+  PostgreSQL читает `TaskId`/`DeliveryId` из `DeliveryInfo` — контракт молчит о том, что провайдеру
+  нужно, чтобы вернуть сообщение в нужную строку.
+
+Мажор убирает оба наслоения.
+
+## Ломающие изменения
+
+| Было | Стало |
+|---|---|
+| `InsertBulk(batch, ct)` + `InsertBulk(batch, context, ct)` + две legacy-перегрузки `InsertBulk(ReadOnlyMemory<OutboxMessage<T>>, …)` | один абстрактный `InsertBulk(batch, context, ct)` + convenience-перегрузка без контекста |
+| `OutboxMessage<T>(PayloadId, Payload, PartInfo)` | удалён; батч публикации — `OutboxMessageBatchItem<T>` |
+| `OutboxDeliveryMessage<T>(OutboxId, OutboxMessage<T> Message, DeliveryInfo)` | `OutboxDeliveryMessage<T>(OutboxId, PayloadId, Payload, PartInfo, DeliveryInfo, RentToken)` |
+| арендная идентичность — неявно в `OutboxId` / `DeliveryInfo` | явный `OutboxRentToken(long Key, long SubKey)`, доступный и провайдеру (`IOutboxContext.RentToken`) |
+| ошибка «контекст не поддерживается» — из провайдера в рантайме | `OutboxMessagePublisher` проверяет capability `PublishContext` до вызова writer'а |
+
+## Публикация
+
+```csharp
+public interface IOutboxBulkWriter
+{
+    ValueTask<ulong> InsertBulk<TMessage>(
+        OutboxMessageBatch<TMessage> batch,
+        object? context,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<ulong> InsertBulk<TMessage>(
+        OutboxMessageBatch<TMessage> batch,
+        CancellationToken cancellationToken = default)
+            => InsertBulk(batch, context: null, cancellationToken);
+}
+```
+
+- Один абстрактный метод: провайдер обязан реализовать именно быстрый batch-путь.
+- `context` остаётся `object?` (типизированный контекст — отдельная тема), но при `context != null`
+  и отсутствии capability `PublishContext` паблишер бросает `NotSupportedException` с именем
+  провайдера **до** записи.
+- `OutboxMessage<T>` удаляется: публикация использует `OutboxMessageBatchItem<T>`, доставка —
+  плоскую запись.
+
+## Доставка и rent-токен
+
+```csharp
+public readonly record struct OutboxRentToken(long Key, long SubKey = 0)
+{
+    public static OutboxRentToken None => default;
+    public bool IsNone => Key == 0 && SubKey == 0;
+}
+
+public readonly record struct OutboxDeliveryMessage<TMessage>(
+    Guid OutboxId,
+    string PayloadId,
+    TMessage Payload,
+    OutboxPartInfo PartInfo,
+    OutboxTaskDeliveryInfo DeliveryInfo,
+    OutboxRentToken RentToken = default);
+```
+
+- Провайдер заполняет токен при аренде и читает его обратно из `IOutboxContext.RentToken`
+  в `ReturnDelivery`/`ExtendDelivery` — без парсинга `OutboxId` и без побочных таблиц.
+- Две 64-битные части — ровно то, чем адресуется строка: PostgreSQL `(task_id, delivery_id)`,
+  Redis `(stream ms, seq)`. Ноль аллокаций.
+- `IOutboxContextFactory.Create(delivery)` не меняется: токен путешествует внутри записи доставки.
+- `OutboxId` остаётся публичной идентичностью сообщения провайдера (в Redis — упакованный stream id,
+  как и раньше); токен — её арендная проекция.
+
+## Миграция провайдеров
+
+**PostgreSQL**
+
+- `IBulkInsertMsgCommand`/`BulkInsertMsgCommand`: только batch-перегрузки (tx / no-tx); legacy
+  `Execute(ReadOnlyMemory<OutboxMessage<T>>, …)`, `DistinctPartKeys` и legacy `WriteRows` удаляются —
+  батч всегда один part, поэтому advisory-лок берётся по одному ключу.
+- `StartDeliveryCommand`: плоская запись, `RentToken = (TaskId, DeliveryId)`.
+
+**Redis**
+
+- `OutboxBulkWriter`: две перегрузки (batch + context); legacy-ветка с группировкой по part удаляется.
+- `RentDeliveryCommand`: плоская запись, `RentToken = (ms, seq)` из stream id.
+- `FinishDeliveryCommand`: stream id восстанавливается из `context.RentToken`, а не из `OutboxId`;
+  `RedisStreamId.ToStreamId(Guid)` становится ненужным.
+
+## Версионирование
+
+- `Sa.Outbox`, `Sa.Outbox.PostgreSql` → **0.18.0**; `Sa.Outbox.Redis` → **0.2.0** (провайдер ещё в разработке).
+- Чек-лист для стороннего провайдера: реализовать `InsertBulk(batch, context, ct)`; перейти на
+  плоскую `OutboxDeliveryMessage<T>`; заполнять `RentToken` при аренде и использовать его при
+  возврате.
+
+## Тесты
+
+- ядро: единственный абстрактный метод writer'а; паблишер бросает `NotSupportedException` для
+  контекста без capability; `RentToken` доходит до контекста и возвращается провайдеру;
+- PG: batch-вставка (один part), токен `(task, delivery)` в возврате;
+- Redis: токен `(ms, seq)`, `XACK` по токену, poison-путь без изменений;
+- существующие интеграционные наборы PG/Redis остаются зелёными.
+
+---
+
+# Keyed-мультипровайдерность (C)
+
+## Цель
+
+Несколько outbox-провайдеров в одном контейнере: например, `billing` на PostgreSQL и `audit` на
+PostgreSQL с другой схемой (Redis — следующий срез). Каждый провайдер имеет **своё** хранилище,
+расписание, миграции/cleanup, наборы тенантов и consumer-группы.
+
+## Зафиксированные решения
+
+1. **Provider key = `scopeKey`.** Один провайдер = одно расписание `Sa.Schedule` = один модуль
+   `Sa.Partitional.PostgreSql`. Классический `AddSaOutboxUsingPostgreSql(...)` использует
+   `OutboxScope.DefaultKey` (`"outbox"`) и остаётся без изменений.
+2. **Метаданные и сериализатор — общие** на контейнер: это формат сообщения, а не хранилище.
+3. **Тенанты — per provider**: `WithTenants` внутри провайдерского `configureOutbox` регистрирует
+   `TenantSettings` под ключом провайдера.
+4. **Один тип сообщения можно публиковать в разные провайдеры** — это два независимых at-least-once
+   потока; метаданные у них общие.
+5. **Группа привязана к провайдеру через его `configureOutbox`** — нельзя случайно подключить
+   группу к чужому хранилищу.
+6. **Секции consumer-групп — общие на приложение**: по умолчанию `Outbox:DeliveryGroups:{group}`,
+   префикс меняется или отключается через `IOutboxBuilder.WithDeliveryConfigurationSection`; из
+   ключа провайдера он не выводится. Секции настроек уровня провайдера (polling через
+   `WithPollingFromConfiguration`, опции Redis через `WithConfiguration`) передаются явно в каждой
+   регистрации, поэтому каждый провайдер может указывать свой путь.
+7. **Id consumer-групп могут повторяться у разных провайдеров** начиная со среза 3: реестр настроек,
+   idle-состояния, delivery-job и кэш консьюмеров адресуются через `OutboxGroupKey(providerKey,
+   groupId)`, а строковые перегрузки бросают ошибку неоднозначности, пока id не уникален.
+
+## API
+
+```csharp
+services
+    .AddSaOutboxUsingPostgreSql(
+        "billing",                                   // provider key == scope key
+        pg => pg.WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = billingCs)))
+                 .WithPollingBudget(TimeSpan.FromMinutes(1)),
+        outbox => outbox
+            .WithTenants((_, t) => t.WithTenantIds(1, 2))
+            .WithDeliveries(d => d.AddDelivery<InvoiceConsumer, Invoice>("invoices")))
+    .AddSaOutboxUsingPostgreSql(
+        "audit",
+        pg => pg.WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = auditCs))),
+        outbox => outbox
+            .WithDeliveries(d => d.AddDelivery<AuditConsumer, AuditEvent>("audit-events")));
+```
+
+Публикация:
+
+```csharp
+// keyed DI
+IOutboxMessagePublisher billing = sp.GetRequiredKeyedService<IOutboxMessagePublisher>("billing");
+
+// фасад (основной UX)
+sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(invoice, tenantId: 1);
+```
+
+## Что ключуется
+
+| Слой | Регистрация |
+|---|---|
+| `IOutboxBulkWriter`, `IOutboxDeliveryManager`, `IOutboxTenantDetector` | keyed по provider key |
+| `IOutboxMessagePublisher`, `OutboxPublishSettings` | keyed (плюс unkeyed alias для default key) |
+| `IOutboxProviderRegistry` | keyed на провайдера + сводный `IOutboxProviders` (список дескрипторов) |
+| `IDeliveryGroupOptionsProvider`, `PgPollingSettings`, `PgOutboxSettings`, `IPgDataSource`, `SqlOutboxBuilder`, команды, загрузчик, резолвер типов | keyed на провайдера (PG) |
+| `TenantSettings` | keyed на провайдера |
+| `IScheduleSettings` / `IScheduler` / `IPartitionManager` | keyed по `scopeKey` — уже так |
+| `IOutboxMessageMetadataProvider`, `IOutboxMessageSerializer` | общие (unkeyed) |
+| `IConsumer<T>` | keyed по group id (уникальность групп валидируется) |
+
+Дефолтный провайдер (`"outbox"`) дополнительно регистрирует unkeyed alias для
+`IOutboxMessagePublisher` — существующий код, инжектящий паблишер без ключа, продолжает работать.
+
+## Маршрутизация в доставке
+
+`OutboxConsumerSettings.ProviderKey` и `OutboxMessageFilter.ProviderKey` несут ключ провайдера.
+`DeliveryTenant`/`DeliveryProcessor` резолвят keyed `IOutboxDeliveryManager` и `ITenantProvider` по
+этому ключу через внутренний `IOutboxStorage`-роутер. Публичные сигнатуры конвейера не меняются.
+
+## Срезы
+
+1. **Срез 1 (реализован):** core-плумбинг + PostgreSQL. Два PG-провайдера (разные схемы) публикуют и
+   доставляют независимо.
+2. **Срез 2 (реализован):** Redis — keyed-настройки (`RedisOutboxSettings`, префикс стримов на
+   провайдера), keyed-команды и регистрация.
+3. **Срез 3 (реализован):** health на провайдера и составной ключ `(providerKey, groupId)` для
+   `IConsumer<T>`/менеджера/idle-состояний.
+
+## Инварианты
+
+- Гарантии те же и **в пределах провайдера**: at-least-once, порядок в `(tenant, part, type)`,
+  DLQ/poison, lookback.
+- Нет распределённых транзакций между провайдерами.
+- Нет маршрутизации по нагрузке: провайдер выбирается статически.
+- Single-provider приложения не меняются: default key, unkeyed alias паблишера, прежние секции.
+
+## Тесты
+
+- два PG-провайдера с разными схемами: публикация в каждый, независимая доставка, независимые
+  миграции/cleanup; PG layout-guard ловит одинаковые таблицы;
+- PostgreSQL и Redis в одном контейнере: публикация в каждый, health по обоим, привязка групп
+  (`Sa.Outbox.MultiProviderTests`);
+- составные ключи: одинаковый group id у двух провайдеров, композитный `Get`, ошибка неоднозначности
+  строкового API;
+- default-key PG/Redis работают как раньше (все существующие наборы);
+- дубликат provider key — ошибка на старте; `IOutboxPublisherResolver.For(unknown)` — понятная ошибка.
+
+## Статус
+
+- **Срез 1 реализован** (core + PostgreSQL).
+- **Срез 2 реализован** (Redis): настройки, опции и действия `WithOutboxSettings`/`WithConfiguration`
+  — на провайдера (named options), keyed `IDatabase`/`IRedisOutboxConnectionProvider`/connection
+  options, keyed-команды и контракты, keyed poison handler (unkeyed-дефолт + keyed приоритет),
+  keyed `IOutboxProviderRegistry`. Для не-дефолтного ключа префикс ключей автоматически получает
+  суффикс `:{providerKey}`, если конфигурация не задала свой, — два провайдера на одной Redis БД не
+  пересекаются. Добавлен односрочный overload `AddSaOutboxUsingRedis(cfg, outbox, key)`.
+- **Срез 3, часть 1 (health) реализована**: keyed `IOutboxProviderHealth` (PG `SELECT 1`, Redis
+  `PING`), агрегат `IOutboxHealth` (штампует ключ, меряет задержку, не падает на исключении).
+- **Срез 3, часть 2 (составные ключи) реализована**: `OutboxGroupKey(providerKey, groupId)` для
+  реестра настроек, idle-состояний, delivery-job и кеша консьюмеров; композитные overload'ы
+  `IOutboxConsumerManager`; `IConsumer<T>` keyed по композитному ключу со строковым алиасом для
+  default key. Строковые методы работают, пока id однозначен, иначе — ошибка неоднозначности.
+- **Warm-up провайдера реализован:** keyed `IOutboxProviderInitializer` (PG `SELECT 1`, Redis `PING`)
+  + мемоизированный per-provider гейт, который `DeliveryJob` ждёт перед первым циклом; ошибка
+  прогрева идёт в политику ошибок job'а.
+- **Выключатель провайдера реализован:** `WithEnabled(false)` на `IPgOutboxConfiguration` /
+  `IRedisOutboxConfiguration` — **регистрационный** выключатель: конфигуратор запоминает намерения,
+  но ничего не коммитит, поэтому в контейнер не попадают ни настройки, ни соединение/`ValidateOnStart`,
+  ни группы, ни расписание. `Enabled` по умолчанию `true` — существующие приложения не меняются.
+- **PG-миграционная защита:** `PgMultiProviderGuard` валит старт, если два PG-провайдера указывают на
+  одни таблицы (двойная доставка); раздел «Миграция 0.17 → 0.18» — в
+  [PG readme](../../Sa.Outbox.PostgreSql/Readme-ru.md#миграция-017--018-существующие-развёртывания).
+
+- **Тенанты — per provider**: `WithTenants` внутри провайдерского `configureOutbox` регистрирует
+  keyed `TenantSettings`; настройки default-провайдера служат общим fallback'ом. Auto-detect
+  резолвит keyed детектор провайдера, а детектор без ключа — это явный глобальный override.
+  `IOutboxPartitionalSupport` (миграция/cleanup) тоже keyed, поэтому каждый провайдер создаёт
+  партиции для своих тенантов.
+
+Принятые ограничения: внутренние сервисы провайдера разрешаются keyed, поэтому пользовательские
+расширения, зарегистрированные типом, должны использовать фабричные overload'ы; два Redis-провайдера
+с одинаковым endpoint/базой/префиксом ловятся стартовым `RedisMultiProviderGuard` (непроверяемым
+остаётся случай явной фабрики `IDatabase`/`IConnectionMultiplexer` — endpoint неизвестен до её
+запуска).
+
+## Health на провайдера (срез 3, часть 1)
+
+Ядро не тащит `Microsoft.Extensions.Diagnostics.HealthChecks`: контракт нейтрален, маппинг — одна
+строка на стороне приложения.
+
+```csharp
+public sealed record OutboxProviderHealthReport(
+    string ProviderKey, bool Healthy, string? Reason = null, TimeSpan Latency = default);
+
+public interface IOutboxProviderHealth
+{
+    ValueTask<OutboxProviderHealthReport> CheckAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IOutboxHealth
+{
+    ValueTask<IReadOnlyList<OutboxProviderHealthReport>> CheckAsync(CancellationToken cancellationToken = default);
+}
+```
+
+- `IOutboxProviderHealth` регистрируется провайдером **keyed**; PG выполняет `SELECT 1` на своём
+  data source, Redis — `PING`. Провайдер без проверки считается здоровым (`Reason = null`), чтобы
+  добавление провайдера не делало readiness красным.
+- `IOutboxHealth` (unkeyed singleton) обходит **все** зарегистрированные provider key, штампует
+  `ProviderKey`, измеряет задержку, и превращает исключение проверки в `Healthy = false` с текстом
+  ошибки — одна сломанная проверка не роняет агрегат.
+- Пример эндпоинта:
+
+```csharp
+app.MapGet("/health/outbox", async (IOutboxHealth health, CancellationToken ct) =>
+{
+    IReadOnlyList<OutboxProviderHealthReport> reports = await health.CheckAsync(ct);
+    return reports.All(r => r.Healthy)
+        ? Results.Ok(reports)
+        : Results.Problem(string.Join("; ", reports.Where(r => !r.Healthy).Select(r => $"{r.ProviderKey}: {r.Reason}")));
+});
+```
+
+## Warm-up провайдера (init/lifecycle)
+
+Провайдерские сервисы ленивые, поэтому «хост стартовал» не значит «хранилище готово».
+`IOutboxProviderInitializer` — опциональный keyed-хук, который выполняется **до первого цикла
+доставки**:
+
+```csharp
+public interface IOutboxProviderInitializer
+{
+    ValueTask InitializeAsync();
+}
+```
+
+- Core держит `OutboxProviderInitialization`: один `Task` на provider key, общий для всех групп
+  провайдера; после успеха — мгновенный no-op, после ошибки — запись сбрасывается, и следующий тик
+  повторяет прогрев.
+- `DeliveryJob` ждёт гейт перед `ProcessMessages`; ошибка прогрева уходит в обычную политику ошибок
+  job'а (`IfErrorRetry`/`ThenCloseApplication`), а не всплывает на случайном тике.
+- Ожидание наблюдает `CancellationToken` вызывающего (shutdown не ждёт коннект); сам хук токена не
+  принимает, потому что прогрев общий для всех групп провайдера и не должен отменяться отменой
+  одного вызывающего. Ограничивают его таймауты команд провайдера.
+- Порядок регистрации провайдера и ядра не важен — гейт ленивый, а не hosted-service.
+- Реализации: PG — `SELECT 1` на своём data source; Redis — `PING`. Провайдер без инициализатора
+  валиден (первая команда и так открывает соединение).
+
+## Выключение провайдера
+
+У обоих конфигураторов провайдеров есть `WithEnabled(bool enabled = true)`. Значение вычисляется в
+момент применения регистрации, а не на каждом цикле доставки, — это **переключатель развёртывания**,
+а не runtime-флаг:
+
+```csharp
+services.AddSaOutboxUsingPostgreSql(pg => pg
+    .WithEnabled(configuration.GetValue("Outbox:PostgreSql:Enabled", true))
+    .WithDataSource(...));
+```
+
+Выключенный провайдер не применяет ничего: ни настройки, ни keyed data source / соединение Redis
+(поэтому отсутствующий сервер не может уронить стартовую валидацию), ни переопределения
+сериализатора/poison — а `Setup` выходит до регистрации ядра, consumer-групп и задач `Sa.Schedule`
+этого скоупа. Ключ выключенного провайдера не попадает в `IOutboxProviderRegistry`, поэтому
+стартовая проверка согласованности `scopeKey` тоже молчит. Остальные провайдеры работают как
+обычно; `Enabled` по умолчанию `true`.
+
+В раздельной форме регистрации (`AddSaOutbox` + `AddSaOutboxUsing...`) ядро всё равно регистрирует
+consumer-группы этого скоупа, поэтому выключенный провайдер уронит стартовую проверку `scopeKey` с их
+именами в сообщении. Не вызывайте `AddSaOutbox` для этого скоупа или используйте форму одного
+вызова — `Setup` в ней выходит до регистрации ядра.

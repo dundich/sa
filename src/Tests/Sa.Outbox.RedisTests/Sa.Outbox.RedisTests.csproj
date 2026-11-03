@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\Host.Test.Properties.xml" />
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <GarbageCollectionAdaptationMode>1</GarbageCollectionAdaptationMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Libraries\Outbox\Sa.Outbox.Redis\Sa.Outbox.Redis.csproj" />
+    <ProjectReference Include="..\Fixtures\Sa.Fixture\Sa.Fixture.csproj" />
+  </ItemGroup>
+
+</Project>

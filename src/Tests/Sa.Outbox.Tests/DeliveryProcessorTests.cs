@@ -125,6 +125,48 @@ public class DeliveryProcessorTests
         Assert.Equal(0, processed);
     }
 
+    /// <summary>
+    /// A stop is not a tenant that timed out: when the cycle's own token is cancelled, the
+    /// cancellation must escape instead of being reported as an empty pass.
+    /// </summary>
+    [Fact]
+    public async Task CallerCancellationIsNotAbsorbed()
+    {
+        using var cts = new CancellationTokenSource();
+
+        var processor = CreateProcessor([1, 2], _ =>
+        {
+            cts.Cancel();
+            return Task.FromCanceled<int>(cts.Token);
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => processor.ProcessMessages<TestMessage>(CreateSettings(), cts.Token));
+    }
+
+    /// <summary>
+    /// The sequential pass must not open another tenant's rent after the stop: the old loop walked
+    /// every remaining tenant, each doing round trips against a cancelled token.
+    /// </summary>
+    [Fact]
+    public async Task CancellationBetweenTenantsStopsTheSequentialPass()
+    {
+        using var cts = new CancellationTokenSource();
+        int tenantsVisited = 0;
+
+        var processor = CreateProcessor([1, 2, 3], _ =>
+        {
+            tenantsVisited++;
+            cts.Cancel();
+            return Task.FromResult(1); // keep the drain loop interested
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => processor.ProcessMessages<TestMessage>(CreateSettings(), cts.Token));
+
+        Assert.Equal(1, tenantsVisited);
+    }
+
     private sealed class FakeDeliveryTenant(Func<int, Task<int>> onProcess) : IDeliveryTenant
     {
         public Task<int> ProcessInTenant<TMessage>(
@@ -140,5 +182,8 @@ public class DeliveryProcessorTests
     private sealed class FakeTenantProvider(int[] tenantIds) : ITenantProvider
     {
         public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken) => ValueTask.FromResult(tenantIds);
+
+        public ValueTask<int[]> GetTenantIds(string providerKey, CancellationToken cancellationToken)
+            => ValueTask.FromResult(tenantIds);
     }
 }

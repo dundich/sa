@@ -1,0 +1,748 @@
+# Sa.Partitional.PostgreSql
+
+**Русский** | [English](Readme.md)
+
+Библиотека декларативного партиционирования таблиц PostgreSQL для .NET 10 — поддерживает **range** (день / месяц / год) и **list** партиционирование с автоматической миграцией, планировщиком очистки и in-memory кэшированием.
+
+---
+
+## Содержание
+
+- [Свойства](#свойства)
+  - [Управление партициями](#управление-партициями)
+  - [Fluent Builder](#fluent-builder)
+  - [Дефолтная партиция](#дефолтная-партиция)
+  - [Режимы очистки](#режимы-очистки)
+  - [Именованные модули](#именованные-модули)
+  - [Настройки](#настройки)
+  - [Общая информация](#общая-информация)
+- [Требования](#требования)
+- [Быстрый старт](#быстрый-старт)
+  - [Минимальный пример — одна таблица, один уровень партиций](#минимальный-пример--одна-таблица-один-уровень-партиций)
+  - [Два уровня — list + range (многопользовательская схема)](#два-уровня--list--range-многопользовательская-схема)
+  - [Три уровня — география → клиент → день](#три-уровня--география--клиент--день)
+  - [Несколько модулей — изолированные конфигурации в одном контейнере](#несколько-модулей--изолированные-конфигурации-в-одном-контейнере)
+  - [Адоптация существующей обычной таблицы](#адоптация-существующей-обычной-таблицы)
+- [Настройка — конвейер options](#настройка--конвейер-options)
+- [Настройки через код — полный перечень](#настройки-через-код--полный-перечень)
+  - [PartCacheSettings — кэш метаданных партиций](#partcachesettings--кэш-метаданных-партиций)
+  - [MigrationScheduleSettings — авто-миграция (пре-создание)](#migrationschedulesettings--авто-миграция-пре-создание)
+  - [PartCleanupScheduleSettings — авто-очистка](#partcleanupschedulesettings--авто-очистка)
+- [Поддерживаемые стратегии](#поддерживаемые-стратегии)
+  - [Типы range-ключа](#типы-range-ключа)
+- [Fluent Builder API](#fluent-builder-api)
+  - [Объявление схем и таблиц](#объявление-схем-и-таблиц)
+  - [Методы ITableBuilder — в действии](#методы-itablebuilder--в-действии)
+- [Ключевые типы](#ключевые-типы)
+  - [IPartitionManager](#ipartitionmanager)
+  - [IMigrationService](#imigrationservice)
+  - [IPartCleanupService](#ipartcleanupservice)
+  - [PgPartBy](#pgpartby)
+- [Соглашения об именовании](#соглашения-об-именовании)
+  - [Как уложить идентификаторы в 63 байта](#как-уложить-идентификаторы-в-63-байта)
+- [Особенности поведения](#особенности-поведения)
+- [Документация](#документация)
+- [Архитектура](#архитектура)
+- [Зависимости](#зависимости)
+- [Лицензия](#лицензия)
+
+## Свойства
+
+Библиотека собирает всё необходимое для партиционирования в трёх типах настроек, fluent builder и трёх публичных сервисах. Ниже — обзор возможностей со ссылками на детали.
+
+### Управление партициями
+
+- **Авто-миграция** — фоновая задача заранее создаёт будущые партии, чтобы INSERT не пропускался на CREATE. [`MigrationScheduleSettings`](#migration), [`IMigrationService`](#api-migration)
+- **Защита от промахов.** «Промах» — INSERT в партицию, которой ещё нет: либо ошибка вставки, либо (с `WithDefaultPartition()`) попадание в catch-all. Миграция создаёт партиции заранее — на несколько дней/месяцев вперёд (`ForwardDays`), поэтому трафик не застывает «в пустоту». [`MigrationScheduleSettings`](#migration)
+- **Авто-очистка** — выводит старые партии из оборота: [`Drop`](#cleanup-mode-drop) (удаление) или [`Archive`](#cleanup-mode-archive) (перемещение в архивную схему). [`PartCleanupScheduleSettings`](#cleanup), [`IPartCleanupService`](#api-cleanup)
+- **In-memory кэш** метаданных партий — проверка не ходит в базу при каждой операции. [`PartCacheSettings`](#partcache)
+- **Программный контроль** — [`IPartitionManager`](#api-manager): `Migrate`, `EnsureParts`, ручное управление окном.
+- **Адоптация существующей таблицы** — [`AdoptTable`](#адоптация-существующей-обычной-таблицы) один раз конвертирует обычную таблицу с данными и дальше управляет её партициями.
+
+### Fluent Builder
+
+- **Range- и list-партиционирование**, комбинируемые иерархически до любого уровня вложенности. [`Поддерживаемые стратегии`](#поддерживаемые-стратегии)
+- **Несколько уровней** на одной таблице: `PartByList` + `PartByRange` + `TimestampAs`. [`Fluent Builder API`](#fluent-builder-api)
+- **Тюнинг**: `WithFillFactor`, `WithPartSeparator`, `WithPartTablePostfix`, пользовательские constraint и post-SQL хуки.
+
+### Дефолтная партиция
+
+- **Catch-all** для строк, которые не подошли ни одной партиции, через `WithDefaultPartition()`. [`Fluent Builder API`](#fluent-builder-api)
+- Нужна, когда в таблицу пишут сторонние сервисы, не знающие о партиционировании: пока нужной партиции ещё нет, такие строки складываются в `def$`, а не ломают вставку. [`Быстрый старт`](#быстрый-старт)
+- **Снимает конфликт при создании партиции.** Когда фоновая миграция создаёт настоящую партицию, PostgreSQL отказывается, если в `def$` уже лежат строки, подходящие под новую партицию. Библиотека переносит их из `def$` в новую партицию без коллизий — через промежуточную таблицу в рамках транзакции — поэтому catch-all не блокирует последующие миграции. [`Особенности поведения`](#особенности-поведения)
+
+### Режимы очистки
+
+- **Drop** — физическое удаление (`DROP TABLE`). Подходит для временных данных (outbox, audit, логи). [`CleanupMode = Drop`](#cleanup-mode-drop)
+- **Archive** — перемещение в отдельную схему (`ALTER TABLE ... SET SCHEMA`). Архивная схема создаётся автоматически, таблица сохраняет имя. [`CleanupMode = Archive`](#cleanup-mode-archive)
+
+### Именованные модули
+
+- Каждый модуль — свои таблицы, кэш, планировщики миграции и очистки. Можно разделить по БД (`AddDataSource`) или по бизнес-логике (ключевой `AddSaPartitional("name", ...)`). [`Быстрый старт`](#быстрый-старт)
+
+### Настройки
+
+- Привязка к [`конфигурации`](#настройка--конвейер-options) или [`коду`](#настройки-через-код--полный-перечень) — единый конвейер `Microsoft.Extensions.Options` по одному именованному экземпляру на модуль.
+- Все три тип настроек: [`PartCacheSettings`](#partcache), [`MigrationScheduleSettings`](#migration), [`PartCleanupScheduleSettings`](#cleanup).
+
+### Общая информация
+
+- **Весь расчёт в UTC** — имени партий, границы диапазонов, окно кэша не зависят от часового места хоста. [`Особенности поведения`](#особенности-поведения)
+- **Согласованность кэша**, повторы транзентных ошибок и серизация DDL описаны в [`Особенности поведения`](#особенности-поведения).
+- Форматы имени партий — в [`Соглашениях об именовании`](#соглашения-об-именовании).
+
+---
+## Требования
+
+- **.NET 10**, совместима с Native AOT.
+- Транзитивные зависимости: `Sa.Data.PostgreSql` (обёртка Npgsql со стратегией повторов), `Sa.Schedule` (фоновые задачи).
+- **Логирование должно быть доступно из DI** — репозиторий и сервис миграции принимают `ILogger<T>`. Хосты ASP.NET Core и Worker предоставляют его из коробки; для голого `ServiceCollection` нужен `services.AddLogging()`.
+
+---
+
+## Быстрый старт
+
+### Минимальный пример — одна таблица, один уровень партиций
+
+Простейший случай: таблица с daily range-партиционированием по дате создания. Миграция создаёт партиции на **3 дня вперёд**, очистка удаляет всё, что старше **7 дней**.
+
+```csharp
+builder.Services.AddSaPartitional((sp, builder) =>
+{
+    // Без имени схемы => использует "public" (или current_search_path)
+    builder.AddSchema(schema =>
+    {
+        schema.AddTable("events",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "message text NOT NULL",
+                "created_at bigint NOT NULL")
+            .PartByRange(PgPartBy.Day, "created_at");
+    });
+})
+// Миграция: создавать партиции на 3 дня вперёд
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
+    opts.ForwardDays = 3))
+// Очистка: удалять партиции старше 7 дней
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
+    opts.DropPartsAfterRetention = TimeSpan.FromDays(7)));
+```
+
+После старта приложения библиотека проверит, какие партиции отсутствуют, и создаст недостающие (сегодня + следующие 3 дня). Фоновая задача будет делать это каждые ~4 часа.
+
+### Два уровня — list + range (многопользовательская схема)
+
+Разделяем данные по клиентам (list), а внутри каждого клиента партиционируем по дням (range). Каждая комбинация получает свою таблицу: `orders__acme_corp__y2026m10m13`.
+
+```csharp
+builder.Services.AddSaPartitional((sp, builder) =>
+{
+    builder.AddSchema(schema =>
+    {
+        schema.AddTable("orders",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "client_id varchar(50) NOT NULL",
+                "amount decimal(18,2) NOT NULL",
+                "created_at bigint NOT NULL")
+            .PartByList("client_id")     // первый уровень: клиенты
+            .PartByRange(PgPartBy.Day, "created_at")  // второй уровень: дни
+            .WithDefaultPartition();    // ловим «прочие» заказы
+    });
+})
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
+    opts.ForwardDays = 3))
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
+    opts.DropPartsAfterRetention = TimeSpan.FromDays(7)));
+```
+
+Здесь `.WithDefaultPartition()` гарантирует, что заказ неизвестного клиента не выбросит ошибку, а запишется в дефолтную партицию на каждом уровне вложенности.
+
+### Три уровня — география → клиент → день
+
+Глубокая иерархия для глобальных систем: регион → город → день. Имена партиций: `log__EU__Paris__y2026m10m13`.
+
+```csharp
+builder.Services.AddSaPartitional((sp, builder) =>
+{
+    builder.AddSchema(schema =>
+    {
+        schema.AddTable("logs",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "region varchar(10) NOT NULL",
+                "city varchar(50) NOT NULL",
+                "level varchar(5) NOT NULL",
+                "created_at bigint NOT NULL")
+            .PartByList("region", "city")  // два list-поля на одном уровне
+            .PartByRange(PgPartBy.Month, "created_at");  // месяцы вместо дней
+    });
+})
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
+    opts.ForwardDays = 90))  // месячные партиции — смотрим дальше
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
+    opts.DropPartsAfterRetention = TimeSpan.FromDays(90)));
+```
+
+Для месячных партиций имеет смысл смотреть на **90 дней вперёд** (3 месяца) и хранить данные **90 дней** вместо привычных 7–30.
+
+### Несколько модулей — изолированные конфигурации в одном контейнере
+
+Каждый модуль хранит свои таблицы, свой кэш, свой планировщик миграции и очистки. Ключевая регистрация позволяет разделить их по БД или по бизнес-логике.
+
+```csharp
+// Модуль "outbox" — своя БД, own data source
+services.AddSaPartitional("outbox", (sp, builder) =>
+{
+    builder.AddSchema("public", schema =>
+    {
+        schema.AddTable("outbox_messages",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "payload jsonb NOT NULL",
+                "created_at bigint NOT NULL")
+            .PartByRange(PgPartBy.Day, "created_at");
+    })
+    .AddDataSource(ds => ds.Options(ob => ob.Configure(o =>
+        o.ConnectionString = "Host=db1;Database=outbox_db")));
+})
+.AddPartMigrationSchedule(b => b.Configure((_, opts) => opts.ForwardDays = 3));
+
+// Модуль "audit" — общая БД, default data source
+services.AddSaPartitional("audit", (sp, builder) =>
+{
+    builder.AddSchema("public", schema =>
+    {
+        schema.AddTable("audit_events",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "entity_type varchar(50) NOT NULL",
+                "created_at bigint NOT NULL")
+            .PartByList("entity_type")
+            .PartByRange(PgPartBy.Day, "created_at");
+    });
+    // Data source берётся из shared-регистрации ниже
+})
+.AddPartMigrationSchedule(b => b.Configure((_, opts) => opts.ForwardDays = 3));
+
+// Общий data source для всех модулей без собственного DataSource
+services.AddSaPostgreSqlDataSource(ds => ds
+    .Options(ob => ob.Configure(o =>
+        o.ConnectionString = "Host=db-shared;Database=all_in_one")));
+```
+
+Модуль `"outbox"` работает со своей БД `outbox_db`, модуль `"audit"` — с общей. Каждый имеет собственные фоновые задачи: `Migration job [outbox]`, `Cleanup job [outbox]`, `Migration job [audit]` и т.д.
+
+### Адоптация существующей обычной таблицы
+
+Если таблица уже существует и содержит данные, объявите её через `AdoptTable` вместо `AddTable`.
+Первая миграция конвертирует её **один раз**, в одной транзакции:
+
+- исходная таблица переименовывается в `{table}__backup$` и сохраняется;
+- из тех же объявлений полей создаётся партиционированный root;
+- создаются партиции на диапазон `min(range-колонки) … max(range-колонки)`, а для list-уровня
+  значения берутся из данных (`SELECT DISTINCT`);
+- все строки переносятся с явным списком колонок, identity-последовательность сдвигается за
+  скопированные id, количество строк сверяется до коммита.
+
+```csharp
+services.AddSaPartitional((sp, builder) =>
+{
+    builder.AddSchema(schema =>
+    {
+        schema.AdoptTable("orders",
+                "id bigint GENERATED BY DEFAULT AS IDENTITY",
+                "client_id varchar(50) NOT NULL",
+                "amount decimal(18,2) NOT NULL",
+                "created_at bigint NOT NULL")   // обязательно: существующую таблицу нельзя расширить
+            .PartByRange(PgPartBy.Day, "created_at");
+    });
+});
+```
+
+Требования и ограничения:
+
+- таблица должна быть обычной (`relkind = 'r'`); уже партиционированная отвергается — библиотека
+  не адоптирует таблицы, у которых есть партиции;
+- набор объявленных колонок должен **точно** совпадать с живой таблицей;
+- не переносите `PRIMARY KEY` из исходной таблицы в объявления полей: библиотека сама генерирует
+  первичный ключ (он обязан включать ключ партиционирования);
+- входящие внешние ключи и зависимые представления блокируют конвертацию: после переименования они
+  продолжат смотреть на backup;
+- индексы, триггеры и ограничения кроме сгенерированного первичного ключа остаются на backup;
+- копирование **не** онлайн: `ALTER TABLE … RENAME` берёт `ACCESS EXCLUSIVE`, все строки
+  перезаписываются;
+- backup сохраняется после успешной конвертации — удалите его вручную после проверки либо задайте
+  `.WithConversionBackup(ConversionBackupMode.Drop)`, чтобы удалить его в той же транзакции после
+  сверки количества строк;
+- одна таблица должна принадлежать одному модулю: два модуля, адоптирующие одну таблицу, начнут
+  конфликтовать за её партиции;
+- конвертация выполняется в рамках `RunTimeout` миграции; для больших таблиц увеличьте его.
+
+Повторные запуски — no-op: когда root уже партиционирован и кэш-таблица существует, таблица
+считается управляемой, а старые методы (`Migrate`, `EnsureParts`, `Clean`, `Archive`) работают как
+обычно.
+
+---
+
+## Настройка — конвейер options
+
+Три типа скалярных настроек — `PartCacheSettings`, `MigrationScheduleSettings`,
+`PartCleanupScheduleSettings` — обслуживаются стандартным конвейером
+`Microsoft.Extensions.Options`, по **одному именованному экземпляру на модуль** (имя — ключ модуля,
+для keyless — безымянный экземпляр). Каждый метод `AddPart*` принимает один callback, собирающий
+три вида намерений:
+
+| Вызов | Назначение |
+|-------|------------|
+| `FromConfiguration(path)` | Привязать настройки к секции конфигурации, например `"Partitional:Cache"` или `"Partitional:outbox:Cache"` (побеждает последний вызов) |
+| `Configure((sp, settings) => ...)` | Задать настройки кодом — тот же делегат `(IServiceProvider, TSettings)`, что и раньше |
+| `Options(ob => ...)` | Запасной выход: «сырой» `OptionsBuilder<T>` (`Configure` / `PostConfigure` / `Validate`) |
+
+Порядок конвейера фиксирован — **секция → код → действия `Options(...)` → валидация** — независимо
+от того, как вызовы разложены по fluent-цепочке: конфигурация это база, код её перекрывает, а
+`Options(...)` принимает окончательное решение.
+
+```csharp
+builder.Services.AddSaPartitional((sp, builder) => { /* объявления таблиц */ })
+    .AddPartCache(b => b
+        .FromConfiguration("Partitional:Cache")
+        .Configure((_, s) => s.CacheTtl = TimeSpan.FromMinutes(10)))
+    .AddPartMigrationSchedule(b => b
+        .FromConfiguration("Partitional:Migration")
+        .Configure((_, s) => s.AsBackgroundJob = true))
+    .AddPartCleanupSchedule(b => b.FromConfiguration("Partitional:Cleanup"));
+```
+
+```json
+{
+  "Partitional": {
+    "Cache":     { "CacheTtl": "00:10:00", "CachedFromDate": "1.00:00:00" },
+    "Migration": { "ForwardDays": 3, "AsBackgroundJob": true, "ExecutionInterval": "02:00:00" },
+    "Cleanup":   { "DropPartsAfterRetention": "14.00:00:00", "InitialDelay": "00:05:00" }
+  }
+}
+```
+
+Keyed-модуль привязывается к своей секции — по одному именованному экземпляру на модуль, поэтому
+модули изолированы:
+
+```csharp
+services.AddSaPartitional("outbox", ...)
+    .AddPartCache(b => b.FromConfiguration("Partitional:outbox:Cache"));
+```
+
+---
+
+## Настройки через код — полный перечень
+
+Ниже перечислены все свойства трёх типов настроек с комментариями и значениями по умолчанию.
+
+### <a name="partcache"></a>PartCacheSettings — кэш метаданных партиций
+
+In-memory кэш, чтобы не ходить в кэш-таблицу при каждой проверке.
+
+| Свойство | По умолчанию | Описание |
+|----------|-------------|----------|
+| [`CachedFromDate`](#partcache) | `1 день` | Окно перезагрузки: партиции, чей диапазон начинается раньше `now − CachedFromDate`, выпадают из снимка. Достаточно для захвата текущей партиции, в которую идёт запись. |
+| [`CacheTtl`](#partcache) | `5 мин` | Сколько загруженный снимок остаётся пригодным. Дедлайн проверяется на чтении, поэтому кэш не держит фоновых таймеров. |
+
+```csharp
+.AddPartCache(b => b.Configure((_, opts) =>
+{
+    opts.CachedFromDate = TimeSpan.FromDays(1);  // захватить текущую партицию
+    opts.CacheTtl = TimeSpan.FromMinutes(5);     // обновлять каждые 5 минут
+}))
+```
+
+### <a name="migration"></a>MigrationScheduleSettings — авто-миграция (пре-создание)
+
+Фоновая задача, которая заранее создаёт будущие партиции, чтобы INSERT не блокировался на создании таблицы.
+
+| Свойство | По умолчанию | Описание |
+|----------|-------------|----------|
+| [`ForwardDays`](#migration) | `2 дня` | Сколько дней вперёд создавать партиции на каждом тике. Установите `3` для уверенности, что завтрашний трафик не столкнётся с отсутствующей партицией. |
+| [`AsBackgroundJob`](#migration) | `false` | Запускать как hosted service (`true`) или только вручную через [`IMigrationService`](#api-migration)? |
+| [`MigrationJobName`](#migration) | `"Migration job"` | Имя задачи в логах и планировщике. При наличии нескольких модулей рекомендуется уточнить: `"Migration job [outbox]"`. |
+| [`ExecutionInterval`](#migration) | `~4 ч ± джиттер` | Интервал между тиками миграционной задачи. Джиттер до 59 минут предотвращает thundering-herd при рестарте нескольких инстансов. |
+| [`WaitMigrationTimeout`](#migration) | `3 сек` | Сколько ждать мьютекс миграции. Если занято — тик пропускается (возврат `-1`), следующий тик попробует снова. Не ставит в очередь. |
+| [`RunTimeout`](#migration) | `10 сек` | Лимит времени одного прогона, считая с момента получения мьютекса. Стоит держать меньше `HostOptions.ShutdownTimeout` (30 с по умолчанию). DDL идемпотентен, поэтому прерванный прогон безопасно добьётся следующий тик. |
+
+```csharp
+.AddPartMigrationSchedule(b => b.Configure((_, opts) =>
+{
+    opts.ForwardDays = 3;                          // 3 дня вперёд
+    opts.AsBackgroundJob = true;                   // запустить фоново
+    opts.MigrationJobName = "Migration job [outbox]";
+    opts.ExecutionInterval = TimeSpan.FromHours(4);
+    opts.WaitMigrationTimeout = TimeSpan.FromSeconds(3);
+    opts.RunTimeout = TimeSpan.FromSeconds(10);
+}))
+```
+
+### <a name="cleanup"></a>PartCleanupScheduleSettings — авто-очистка
+
+Фоновая задача, которая выводит старые партиции из оборота.
+
+| Свойство | По умолчанию | Описание |
+|----------|-------------|----------|
+| [`DropPartsAfterRetention`](#cleanup) | `30 дней` | Возраст партиции, по достижении которой она выводится из оборота. Для event-sourcing часто ставят 90–365 дней; для outbox-сообщений — 7–30 дней. |
+| [`CleanupMode`](#cleanup) | `Drop` | Что делать со старой партицией: [`Drop`](#cleanup-mode-drop) — удалить полностью, [`Archive`](#cleanup-mode-archive) — переместить в архивную схему. |
+| [`ArchiveSchemaName`](#cleanup) | `"archive"` | Схема, куда перемещаются партиции при `CleanupMode = Archive`. Игнорируется при `Drop`. Таблицы сохраняют имя — коллизии имён в рамках одной схемы приведут к ошибке. |
+| [`AsBackgroundJob`](#cleanup) | `false` | Запускать как hosted service или только вручную через [`IPartCleanupService`](#api-cleanup)? |
+| [`ExecutionInterval`](#cleanup) | `~4 ч ± джиттер` | Интервал между тиками очистки. |
+| [`InitialDelay`](#cleanup) | `1 мин` | Задержка перед первым запуском после старта приложения. Позволяет дождаться завершения миграции и первичного заполнения данных. |
+
+```csharp
+.AddPartCleanupSchedule(b => b.Configure((_, opts) =>
+{
+    opts.DropPartsAfterRetention = TimeSpan.FromDays(7);
+    opts.CleanupMode = PartCleanupMode.Drop;
+    opts.ArchiveSchemaName = "archive";
+    opts.AsBackgroundJob = true;
+    opts.InitialDelay = TimeSpan.FromMinutes(1);
+}))
+```
+
+#### <a name="cleanup-mode-drop"></a>CleanupMode = Drop
+
+Стандартное поведение — физически удалять партицию командом `DROP TABLE`. Данные безвозвратно теряются. Подходит для временных данных (outbox, audit, логи).
+
+#### <a name="cleanup-mode-archive"></a>CleanupMode = Archive
+
+Перемещает партицию в другую схему (`ALTER TABLE ... SET SCHEMA "archive"`). Таблица сохраняется, но перестаёт участвовать в запросах к основной схеме. Архивная схема создаётся автоматически, если её не было.
+
+> **Права в БД.** Библиотека создаёт архивную схему автоматически, если её не было, а фоновая миграция — партиции и кэш-таблицы. Для этого нужны права `CREATE` на соответствующие схемы (обычно это владелец схемы или суперпользователь). Если прав на создание схем и таблиц нет, создайте нужные схемы заранее — в том числе архивную `archive`, тогда библиотека не будет дублировать `CREATE SCHEMA`.
+
+---
+
+## Поддерживаемые стратегии
+
+| Стратегия | Описание | Пример |
+|-----------|----------|--------|
+| **Range** | Партиционирование по временным интервалам — день, месяц или год | `events__y2026m06d26`, `events__y2026m07` |
+| **List** | Партиционирование по дискретным значениям ключей (строки или числа) | `orders__RU`, `orders__42` |
+
+Обе стратегии можно комбинировать иерархически: root-таблица с list-партиционированием может иметь range-разделённых детей (`orders__RU__y2026m06d26`).
+
+### Типы range-ключа
+
+Range-колонка может быть `bigint` с Unix-секундами (по умолчанию) либо timestamp/date. Тип
+определяется по объявленному полю:
+
+| Объявление колонки | Границы в DDL | Примечание |
+|---|---|---|
+| `bigint` / `int8` | `FOR VALUES FROM (1793001600) TO (1793088000)` | По умолчанию; библиотека добавляет колонку, если она не объявлена |
+| `timestamptz` / `timestamp with time zone` | `FROM ('2026-10-29 00:00:00+00') TO (...)` | UTC |
+| `timestamp` / `timestamp without time zone` | `FROM ('2026-10-29 00:00:00') TO (...)` | Трактуется как UTC |
+| `date` | `FROM ('2026-10-29') TO ('2026-10-30')` | |
+
+Кэш-таблица по-прежнему хранит `from_date`/`to_date` в Unix-секундах, поэтому cleanup, retention и
+публичный API `DateTimeOffset` одинаковы для всех режимов. Для колонки через домен/алиас используйте
+`.WithRangeKey(RangeKeyType...)`.
+
+---
+
+## Fluent Builder API
+
+### Объявление схем и таблиц
+
+```csharp
+services.AddSaPartitional((sp, builder) =>
+{
+    builder.AddSchema("outbox", schema =>
+    {
+        // Range-партиционирование по дням
+        schema.AddTable("messages",
+            "id bigint GENERATED BY DEFAULT AS IDENTITY",
+            "tenant_id varchar(50) NOT NULL",
+            "created_at bigint NOT NULL")
+            .PartByRange(PgPartBy.Day, "created_at")
+            .WithFillFactor(80);
+
+        // List-партиционирование по региону
+        schema.AddTable("orders",
+            "id bigint GENERATED BY DEFAULT AS IDENTITY",
+            "region varchar(10) NOT NULL",
+            "created_at bigint NOT NULL")
+            .PartByList("region")
+            .AddMigration("EU", "US", "APAC");
+    });
+});
+```
+
+- `CreateTable(name)` + `AddFields(...)` и `AddTable(name, fields...)` — одно и то же, выбирайте удобный вариант. Первая объявленная колонка автоматически становится первичным ключом `id`, поэтому у таблицы всегда есть ключ.
+- Колонка, нужная для партиционирования, но не объявленная среди полей, добавляется библиотекой в корневую таблицу сама — как `bigint NOT NULL`, поэтому range-колонку обычно объявляют явно (как выше).
+- `PartByRange(partBy, fieldName?)` и `TimestampAs(fieldName?)` не зависят от порядка вызовов — более специфичный `TimestampAs` всегда побеждает. Если не вызваны оба, используется `created_at`.
+
+### Методы ITableBuilder — в действии
+
+Ниже таблица, настроенная всеми доступными методами. Каждый блок прокомментирован:
+
+```csharp
+schema.AddTable("events",
+        // ── Колонки ───────────────────────────────────────────
+        // Первая объявленная колонка становится PK id-колонкой.
+        "id bigint GENERATED BY DEFAULT AS IDENTITY",
+
+        // Дополнительные колонки (принимается любой DDL PostgreSQL).
+        "tenant_id varchar(50) NOT NULL",
+        "message text",
+        "status varchar(20)")
+
+    // ── Стратегия партиционирования ─────────────────────────
+    // Range по дням на "created_at". Колонка по умолчанию — "created_at";
+    // PartByRange и TimestampAs не зависят от порядка,
+    // причём TimestampAs всегда побеждает.
+    .PartByRange(PgPartBy.Day, "created_at")
+
+    // Переопределить колонку range явно (более специфичное, чем
+    // второй аргумент PartByRange).
+    .TimestampAs("updated_at")
+
+    // List поверх range — каждый вызов PartByList добавляет один уровень
+    // вложенности (одна колонка на уровень).
+    .PartByList("region", "priority")
+
+    // ── Именование и форматирование ─────────────────────────
+    // Разделитель между именем таблицы и значениями ключей (по умолч. "__").
+    // Не может быть пустым или содержать '"'.
+    .WithPartSeparator("_")
+
+    // Суффикс кэш-таблицы (по умолч. "part$").
+    // Результат: {table}{sep}{postfix}, напр. "events__part$".
+    .WithPartTablePostfix("meta$")
+
+    // Ловушка DEFAULT на каждом уровне вложенности — строки с никогда
+    // не мигрированным ключом остаются, а не отбрасываются.
+    // Создаёт имена "{table}{sep}def$", "{table}{sep}{val}{sep}def$".
+    .WithDefaultPartition()
+
+    // Зачем: другие сервисы могут писать в эту таблицу, не зная о партиционировании.
+    // Пока нужной партиции ещё нет, такие строки падают в def$ (catch-all), а не ломают вставку.
+    // Когда фоновая миграция создаёт настоящую партицию, библиотека переносит накопленные
+    // строки из def$ в неё без коллизий (через промежуточную таблицу в транзакции),
+    // поэтому дефолтная партиция не блокирует последующие миграции.
+
+    // ── Тюнинг хранилища ─────────────────────────────────────
+    // fillfactor только для создаваемых range-листьев (диапазон 10..100).
+    // Root-таблица и list-партиции создаются без него.
+    .WithFillFactor(80)
+
+    // ── Хуки дополнительного SQL ─────────────────────────────
+    // Сырой SQL, добавляемый после CREATE TABLE корневой таблицы.
+    .AddPostSql(() => "INCLUDE (tenant_id, status)")
+
+    // Переопределить имя PK-constraint (по умолч. "pk_{table}").
+    // Возвращайте только имя — библиотеку генерирует CONSTRAINT ... PRIMARY KEY.
+    .AddConstraintPkSql(() => "pk_events_created_at_tenant_id")
+
+    // ── Значения миграции ────────────────────────────────────
+    // Inline list-значения (один уровень вложенности).
+    // ПРЕДУПРЕЖДЕНИЕ: AddMigration("a", "b") связывается с params → два
+    // независимых значения, НЕ пара родитель-потомок. Вложенность требует
+    // явного массива: AddMigration("a", new StrOrNum[] { "b" }).
+    .AddMigration("active", "archived")
+
+    // Иерархическая миграция: родитель + дети под ним.
+    .AddMigration("EU", new StrOrNum[] { "DE", "FR" })
+
+    // Пользовательский провайдер, реализующий IPartTableMigrationSupport.
+    .AddMigration(myCustomProvider)
+
+    // Асинхронный lazy-фабрика — разрешается по требованию во время миграции.
+    .AddMigration(async ct => { /* запрос к БД, вернуть StrOrNum[][] */ })
+
+    // ── Финализация ─────────────────────────────────────────
+    // Собирает и валидирует неизменяемый снапшот ITableSettings.
+    .Build();
+```
+
+> **Ловушка перегрузок.** `AddMigration("a", "b")` связывается с перегрузкой `params` и объявляет **два независимых значения**, а не пару родитель-потомок. Вложенность задаётся только массивом:
+> ```csharp
+> .AddMigration("a", "b")                          // две отдельные партиции
+> .AddMigration("a", new StrOrNum[] { "b" })      // "b" вложена в "a"
+> ```
+
+---
+
+## Ключевые типы
+
+### <a name="api-manager"></a>IPartitionManager
+
+Главная точка входа для программного управления партициями:
+
+```csharp
+public interface IPartitionManager
+{
+    Task<int> Migrate(CancellationToken ct = default);
+    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken ct = default);
+    Task EnsureParts(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken ct = default);
+}
+```
+
+- [`Migrate()`](#api-manager) — предварительное создание всех отсутствующих партиций на сегодня + окно вперёд
+- [`Migrate(dates[])`](#api-manager) — предварительное создание только для конкретных дат
+- [`EnsureParts()`](#api-manager) — гарантировать существование конкретной партиции (создаёт при необходимости). Завершается, когда партиция существует, а ошибки сообщает исключением; `bool` больше не возвращается, потому что промах кэша — не ошибка
+
+### <a name="api-migration"></a>IMigrationService
+
+Сервис, стоящий за `IPartitionManager`; его можно получить напрямую, чтобы дождаться уже идущего прогона:
+
+```csharp
+public interface IMigrationService
+{
+    CancellationToken OnMigrated { get; }
+    Task<int> Migrate(CancellationToken ct = default);
+    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken ct = default);
+    Task<bool> WaitMigration(TimeSpan timeout, CancellationToken ct = default);  // true = завершено, таймаут/отмена = false
+}
+```
+
+- **Одновременно идёт один прогон.** `Migrate()` ждёт миграционный семафор не дольше `WaitMigrationTimeout` и затем *пропускает* тик (возвращает `-1`), а не ставит его в очередь. `Migrate(dates)` — явный запрос, поэтому он ждёт сколько угодно и ещё учитывает токен вызывающего.
+- **`-1` означает «не завершено»** — истёк дедлайн или пришла отмена, а не «отрицательное число партиций». Сгенерированный DDL идемпотентен, поэтому следующий прогон доберёт остаток.
+- **Уже начатый фоновый прогон** ограничен `RunTimeout` и не прерывается токеном вызывающего: DDL идемпотентен, поэтому довести до конца дешевле, чем начинать заново.
+- `OnMigrated` — **одноразовый** сигнал: после первой завершённой миграции он остаётся сработавшим, то есть отвечает на вопрос «миграция завершалась когда-нибудь», а не «идёт ли она сейчас».
+
+### <a name="api-cleanup"></a>IPartCleanupService
+
+```csharp
+public interface IPartCleanupService
+{
+    Task<int> Clean(CancellationToken ct = default);          // старше DropPartsAfterRetention
+    Task<int> Clean(DateTimeOffset toDate, CancellationToken ct = default);
+}
+```
+
+[`Clean`](#api-cleanup) убирает партиции по `PartCleanupScheduleSettings.CleanupMode`: `Drop` удаляет их, `Archive` отсоединяет и переносит в `ArchiveSchemaName` (PostgreSQL 13+). В обоих случаях **in-memory кэш не сбрасывается** — вызов вне фоновой задачи оставляет устаревший снимок на срок до `PartCacheSettings.CacheTtl`. Если тот же процесс должен сразу увидеть изменение, полагайтесь на фоновую задачу.
+
+### PgPartBy
+
+Стратегия партиционирования с тремя предопределёнными значениями. И имя, и покрываемый диапазон считаются по календарю **UTC**:
+
+| Значение | Формат имени | Пример | Диапазон |
+|----------|-------------|--------|---------|
+| `PgPartBy.Day` | `y{YYYY}m{MM}d{DD}` | `events__y2026m06d26` | StartOfDay → +1 день |
+| `PgPartBy.Month` | `y{YYYY}m{MM}` | `events__y2026m07` | StartOfMonth → +1 месяц |
+| `PgPartBy.Year` | `y{YYYY}` | `events__y2026` | StartOfYear → +1 год |
+
+Дополнительные фабричные методы:
+```csharp
+PgPartBy.FromRange(PartByRange.Day);   // из PartByRange enum (fallback — Day)
+PgPartBy.FromPartName("root");         // из строки имени партиции; null/неизвестное => Part.Root
+```
+
+---
+
+## Соглашения об именовании
+
+Партиции следуют предсказуемым паттернам именования (разделитель по умолчанию `"__"`):
+
+| Компонент | Паттерн | Пример |
+|-----------|---------|--------|
+| Range (день) | `{table}{sep}y{YYYY}m{MM}d{DD}` | `events__y2026m06d26` |
+| Range (месяц) | `{table}{sep}y{YYYY}m{MM}` | `events__y2026m07` |
+| Range (год) | `{table}{sep}y{YYYY}` | `events__y2026` |
+| List (вложенный) | `{table}{sep}{val1}{sep}{val2}` | `orders__RU__Moscow` |
+| List + range-лист | `{table}{sep}{val1}...{sep}y{YYYY}m{MM}d{DD}` | `orders__RU__y2026m06d26` |
+| Кэш-таблица | `{table}{sep}{postfix}` | `events__part$` |
+| Catch-all | `{table}{sep}def$` | `orders__def$` |
+
+**Ограничения и гарантии:**
+
+- Идентификаторы должны укладываться в **63 байта** UTF-8, а не в 63 символа. `Build()` отвергает слишком длинные имена схемы, root-таблицы и кэш-таблицы; слишком длинное имя партиции падает при генерации DDL (значения ключей известны только тогда).
+- Значение ключа не должно содержать разделитель: иначе `["a__b"]` и `["a", "b"]` схлопнутся в одно имя таблицы.
+- Все идентификаторы и литералы цитируются и экранируются, поэтому ключ с `"` или `'` не может закрыть их и дописать SQL.
+- Схемы автоматически создаются через `CREATE SCHEMA IF NOT EXISTS`.
+- Детские партиции используют `PARTITION OF parent FOR VALUES FROM (...) TO (...)` (range) или `FOR VALUES IN (...)` (list). Границы range — числа для `bigint`-ключа и timestamp/date-литералы для соответствующего типа.
+- После создания каждой range-партиции в кэш-таблицу пишется строка (`id`, `root`, `part_values`, `part_by`, `from_date`, `to_date`) через `ON CONFLICT (id) DO NOTHING`.
+
+### Как уложить идентификаторы в 63 байта
+
+Имя партиции — это `root + разделитель + значения + разделитель + range-суффикс`. Сообщение об
+ошибке раскладывает его по частям, показывает, на сколько байт превышен лимит, и перечисляет рычаги:
+
+| Рычаг | Что уменьшает |
+|---|---|
+| `WithPartSeparator("_")` | каждый разделитель во всех именах партиций |
+| короткое имя root-таблицы | все имена партиций и кэш-таблицу |
+| короткие значения ключей (например, числовые tenant id) | вклад значений |
+| `WithPartTablePostfix("meta$")` | **только** имя кэш-таблицы, не имена партиций |
+
+Практика: для list-ключей предпочитайте числовые id длинным строкам, держите имена таблиц
+короткими и не строите глубокую иерархию из длинных значений. Библиотека никогда не обрезает имя
+молча — она падает с разбивкой по байтам.
+
+#### Коллбек на превышение
+
+Если значения сократить нельзя, задайте замену имени через `WithLongPartitionName`. Коллбек
+вызывается **только** когда обычное имя превышает 63 байта — короткие имена не переписываются:
+
+```csharp
+using System.Security.Cryptography;
+using System.Text;
+
+schema.AddTable("orders", /* ... */)
+    .PartByRange(PgPartBy.Day, "created_at")
+    .WithLongPartitionName(ctx =>
+    {
+        string token = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(ctx.IdealName)))[..26].ToLowerInvariant();
+
+        return $"{ctx.RootTableName}__h${token}"
+             + (ctx.RangeSuffix is null ? string.Empty : $"__{ctx.RangeSuffix}");
+    });
+```
+
+- Вызывается и для промежуточных list-уровней, и для `DEFAULT`-партиций (`ctx.IsDefaultPartition`).
+- Должен быть чистой функцией: одинаковый контекст → одинаковое имя на всех хостах и после рестарта.
+- Результат — голое имя не длиннее 63 байт UTF-8; библиотека это проверяет.
+- Уникальность — ответственность коллбека. Обычно хешируют `ctx.IdealName`; учтите, что при
+  длинном root имя с префиксом может не влезть — тогда используйте `p_<hash>`.
+- Имя кэш-таблицы не меняется — для него есть `WithPartTablePostfix`; само имя root заменить нельзя.
+
+---
+
+## Особенности поведения
+
+- **Везде UTC.** Имена партиций, границы диапазонов и окно кэша считаются по календарю UTC, поэтому два хоста в разных часовых поясах создадут одну и ту же партицию для одного и того же момента времени.
+- **Повторы и сериализация.** И чтение, и запись в репозитории идут через стратегию повторов `Sa.Data.PostgreSql`, поэтому транзиентная ошибка БД не доходит до вызывающего. DDL одного источника дополнительно сериализуется, поэтому две партиции не создаются одновременно.
+- **Ошибки фоновых задач.** Подавляется только ожидаемое завершение (отмена / таймаут); реальная ошибка повторяется, логируется и затем **останавливает саму задачу**, а не приложение.
+- **Fill factor.** Применяется только к детям date-range. Если `WithFillFactor` не вызывался, клауза не добавляется и PostgreSQL применяет своё значение по умолчанию (100).
+
+---
+
+## Документация
+
+| Документ | Содержимое |
+|----------|-----------|
+| [Guide](Guide.md) | Подробная настройка, DSL builder'а, `StrOrNum`, диапазоны дат, сгенерированный DDL |
+| [API Reference](ApiReference.md) | Сигнатуры интерфейсов, диаграмма архитектуры, внутренние компоненты |
+
+---
+
+## Архитектура
+
+```
+┌─────────────────────┐
+│  IPartitionManager  │  ← Публичная точка входа
+├─────────────────────┤
+│  IMigrationService  │  ← Пре-создание будущих партиций
+│  IPartCleanupService│  ← Удаление старых партиций
+├─────────────────────┤
+│  IPartRepository    │  ← Выполнение DDL (CREATE/DROP PARTITION)
+│  ISqlBuilder        │  ← Генерация SQL-шаблонов
+│  IPartCache         │  ← In-memory кэш метаданных
+├─────────────────────┤
+│  MigrationJob       │  ← IJob обёртка для Sa.Schedule
+│  PartCleanupJob     │  ← IJob обёртка для Sa.Schedule
+└─────────────────────┘
+```
+
+---
+
+## Зависимости
+
+- `Sa.Data.PostgreSql` — обёртка Npgsql со стратегией повторов
+- `Sa.Schedule` — инфраструктура фоновых задач
+
+---
+
+## Лицензия
+
+MIT

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\Host.Test.Properties.xml" />
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <GarbageCollectionAdaptationMode>1</GarbageCollectionAdaptationMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Libraries\Outbox\Sa.Outbox.PostgreSql\Sa.Outbox.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\Libraries\Outbox\Sa.Outbox.Redis\Sa.Outbox.Redis.csproj" />
+    <ProjectReference Include="..\Fixtures\Sa.Data.PostgreSql.Fixture\Sa.Data.PostgreSql.Fixture.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,8 +1,24 @@
 # Configuration.Web
 
+**English** | [Русский](Readme-ru.md)
+
 ASP.NET Core Minimal API sample demonstrating **Sa.Configuration** — CLI argument parsing, secure secrets management from files/environment variables with `{{placeholder}}` substitution, and dynamic PostgreSQL-backed configuration.
 
 ---
+
+## Contents
+
+- [Quick Start](#quick-start)
+- [What This Sample Demonstrates](#what-this-sample-demonstrates)
+- [Configuration Chain](#configuration-chain)
+  - [Encrypted secrets layer (demo)](#encrypted-secrets-layer-demo)
+  - [Example: secrets.txt](#example-secretstxt)
+  - [Example: appsettings.json with Placeholders](#example-appsettingsjson-with-placeholders)
+- [Key Code](#key-code)
+  - [Program.cs](#programcs)
+  - [Expected Response](#expected-response)
+- [Dependencies](#dependencies)
+- [License](#license)
 
 ## Quick Start
 

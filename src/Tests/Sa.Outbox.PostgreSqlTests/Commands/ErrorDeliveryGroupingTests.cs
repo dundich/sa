@@ -1,4 +1,4 @@
-﻿using Sa.Outbox;
+using Sa.Outbox;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Commands;
 
@@ -310,6 +310,7 @@ public class ErrorDeliveryGroupingTests
         public string PayloadId { get; } = PayloadId;
         public OutboxPartInfo PartInfo { get; } = PartInfo;
         public OutboxTaskDeliveryInfo DeliveryInfo { get; } = DeliveryInfo;
+        public OutboxRentToken RentToken { get; } = OutboxRentToken.None;
         public DeliveryStatus DeliveryResult { get; } = DeliveryResult;
         public Exception? Exception { get; } = Exception;
         public TimeSpan PostponeDelay { get; } = PostponeDelay;

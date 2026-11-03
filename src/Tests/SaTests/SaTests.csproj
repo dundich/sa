@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="../Host.Test.Properties.xml" />
+  <Import Project="..\Host.Test.Properties.xml" />
 
   <PropertyGroup>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Sa\Sa.csproj" />
+    <ProjectReference Include="..\..\Libraries\Sa\Sa.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,639 @@
+# Sa.HybridFileStorage
+
+**English** | [Русский](Readme-ru.md)
+
+Hybrid file storage abstraction with automatic provider failover. Unifies multiple storage backends (FileSystem, S3, PostgreSQL) under a single resilient API — if one provider becomes unavailable, the system switches to another.
+
+---
+
+## Table of Contents
+
+- [Virtual Folders (Baskets) Concept](#virtual-folders-baskets-concept)
+- [Supported Storage Providers](#supported-storage-providers)
+- [Key Features](#key-features)
+- [File ID Format](#file-id-format)
+- [Quick Start](#quick-start)
+  - [Without DI](#without-di)
+  - [With DI (Generic Host)](#with-di-generic-host)
+- [CRUD Examples](#crud-examples)
+  - [Upload](#upload)
+  - [Download](#download)
+  - [Delete](#delete)
+  - [Get Metadata](#get-metadata)
+- [Cross-Basket Copying](#cross-basket-copying)
+- [Batch Operations](#batch-operations)
+- [Interceptors](#interceptors)
+- [Read-Only Mode](#read-only-mode)
+- [Settings Reference](#settings-reference)
+- [Domain Types](#domain-types)
+- [Exceptions](#exceptions)
+
+---
+
+## Virtual Folders (Baskets) Concept
+
+**Sa.HybridFileStorage** operates on the idea of **virtual folders** — called **baskets**. A basket is a logical, string-named scope that sits above physical storage backends. From your application's perspective, you work with simple folder names like `"drafts"`, `"documents"`, or `"archive"`. Behind each basket name lies a storage provider (or a list of providers) that organise data differently.
+
+### How baskets map to storage
+
+Each basket is backed by one or more `IFileStorage` providers. The same basket name can be served by different physical systems, and you can combine multiple providers for redundancy or tiered storage:
+
+| Basket name | Physical backend | Organisation | Example File ID |
+|-------------|-------------------|--------------|-----------------|
+| `drafts` | **FileSystem** (`fs://`) | Plain directory tree on disk | `fs://drafts/42/notes.txt` |
+| `documents` | **PostgreSQL** (`pg://`) | Relational table with date partitioning | `pg://documents/42/1751347200/contract.pdf` |
+| `archive` | **S3 / MinIO** (`s3://`) | Cloud bucket with flat namespace | `s3://archive/42/old-report.zip` |
+
+Behind every basket may hide **a single storage or a list of stores** — the hybrid layer manages failover transparently. You never need to know which physical system holds your file; you only reference it by its File ID.
+
+### Configuring baskets to backends
+
+Each provider binds to exactly one basket, set through its own options. Providers that register
+themselves with an `Add...` method — filesystem, in-memory — are picked up by the container
+automatically:
+
+```csharp
+// Basket "drafts" → local filesystem. Registers its own IFileStorage under the name
+// "drafts"; the root and the file I/O live on a temp folder registered under the same name.
+builder.Services.AddSaFileSystemFileStorage("drafts", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "drafts"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\drafts"))));
+
+// Basket "archive" → S3 cloud storage: the bucket client is a named registration,
+// resolve it by that name.
+builder.Services.AddSaS3BucketClient("archive", o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://minio:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "company-archive";
+})));
+
+builder.Services.AddSaHybridFileStorage(cfg => cfg
+    // Basket "documents" → PostgreSQL with auto-partitioning.
+    // Dependencies (IPgDataSource, IPartitionManager, RecyclableMemoryStreamManager)
+    // are resolved from DI during registration.
+    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(
+        sp.GetRequiredService<IPgDataSource>(),
+        sp.GetRequiredService<IPartitionManager>(),
+        sp.GetRequiredService<RecyclableMemoryStreamManager>(),
+        new PostgresFileStorageOptions
+        {
+            Basket = "documents",
+            TableName = "files"
+        })))
+
+    // Basket "archive" → S3 cloud storage
+    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(
+        sp.GetRequiredKeyedService<IS3BucketClient>("archive"),
+        new S3FileStorageOptions
+        {
+            Endpoint = "http://minio:9000",
+            Bucket = "company-archive",
+            Basket = "archive"
+        }))));
+```
+
+Multiple `ConfigureStorage` calls accumulate: each call registers additional storages into the container, so several baskets can be wired in a single `AddSaHybridFileStorage` chain.
+
+Once configured, all CRUD operations use basket names — not provider specifics:
+
+```csharp
+// Upload to the "drafts" virtual folder — goes to the filesystem automatically
+var result = await storage.UploadAsync("drafts", input, stream, ct);
+// File ID: fs://drafts/42/my-notes.txt
+
+// Download from "documents" — routed to PostgreSQL transparently
+await storage.DownloadAsync(result.FileId, processStream, ct);
+
+// Copy from "drafts" to "archive" — crosses FS → S3 boundary seamlessly
+await storage.CopyToBasketAsync(result.FileId, "archive", ct);
+```
+
+---
+
+## Supported Storage Providers
+
+| Provider | Package | Registration | Use Case |
+|----------|---------|--------------|----------|
+| **In-Memory** | `Sa.HybridFileStorage` | `AddSaInMemoryFileStorage()` | Testing, ephemeral scenarios |
+| **File System** | `Sa.HybridFileStorage.FileSystem` | `AddSaFileSystemFileStorage(...)` | Local development, on-premise deployments |
+| **S3 Compatible** | `Sa.HybridFileStorage.S3` | `AddSaS3FileStorage(...)` | Cloud storage (AWS S3, MinIO, etc.) |
+| **PostgreSQL** | `Sa.HybridFileStorage.Postgres` | `AddSaPostgreSqlFileStorage(...)` | Database-embedded files, transactional consistency, partitioning |
+
+> Each provider's `Add...` method registers an `IFileStorage`, and the hybrid container picks every
+> registered `IFileStorage` up automatically. The provider classes themselves are internal — construct
+> them through their `Add...` method, not with `new`.
+
+---
+
+## Key Features
+
+- ✅ **Unified API** — Single `IHybridFileStorage` interface for all storage providers
+- ✅ **Basket-Tenant isolation** — Multi-tenant support with scoped storage containers
+- ✅ **Failover** — Automatic provider switching when one backend fails
+- ✅ **Streaming support** — Memory-efficient file transfers via `Stream`
+- ✅ **Native AOT ready** — Full compatibility with .NET 10 Native AOT
+- ✅ **Batch operations** — Bulk file processing with configurable parallelism
+- ✅ **Interceptors** — Upload/download/delete lifecycle hooks for cross-cutting concerns
+- ✅ **Read-only mode** — Protect storage from accidental modifications
+
+---
+
+## File ID Format
+
+All files are identified using a unified URI-like format:
+
+```
+{storageType}://{basket}/{tenantId}/{path}
+```
+
+Each storage provider adds its own path depth:
+
+| Provider | File ID Example | Path Structure |
+|----------|----------------|----------------|
+| **In-Memory** | `mem://share/42/document.pdf` | `{basket}/{tenantId}/{fileName}` |
+| **File System** | `fs://documents/100/report.xlsx` | `{basket}/{tenantId}/{fileName}` |
+| **S3** | `s3://uploads/7/invoice.csv` | `{basket}/{tenantId}/{fileName}` |
+| **PostgreSQL** | `pg://files/12/1751347200/photo.jpg` | `{basket}/{tenantId}/{unixTimestamp}/{fileName}` |
+
+> **Note:** PostgreSQL includes a Unix timestamp in the path because it partitions by date. Other providers omit the timestamp.
+
+### Parsing File IDs
+
+Use the static `FileIdParser` utility:
+
+```csharp
+if (FileIdParser.TryParse("pg://files/42/1751347200/report.pdf", out var basket, out var tenantId, out var timestamp, out var fileName))
+{
+    Console.WriteLine($"Basket={basket}, Tenant={tenantId}, TS={timestamp}, Name={fileName}");
+    // Basket=files, Tenant=42, TS=1751347200, Name=report.pdf
+}
+```
+
+---
+
+## Quick Start
+
+### Without DI
+
+```csharp
+using Sa.HybridFileStorage;
+using Sa.HybridFileStorage.Domain;
+
+// 1. Create an in-memory storage provider
+using var memory = new InMemoryFileStorage(new InMemoryFileStorageOptions("share"));
+
+// 2. Build the hybrid container
+var container = new HybridFileStorageContainer([memory]);
+var storage = new HybridFileStorage(container, InterceptorContainer.Empty);
+
+// 3. Upload a file
+var stream = "Hello, HybridFileStorage!".ToUtf8Stream();
+var result = await storage.UploadAsync(
+    basket: "share",
+    input: new UploadFileInput { FileName = "hello.txt", TenantId = 42 },
+    fileStream: stream,
+    cancellationToken: ct);
+
+Console.WriteLine(result.FileId);  // mem://share/42/hello.txt
+
+// 4. Download and process
+bool wasFound = await storage.DownloadAsync(result.FileId, async (stream, token) =>
+{
+    using var reader = new StreamReader(stream, Encoding.UTF8);
+    var content = await reader.ReadToEndAsync(token);
+    Console.WriteLine(content);  // Hello, HybridFileStorage!
+}, ct);
+
+// 5. Delete
+bool deleted = await storage.DeleteAsync(result.FileId, ct);
+```
+
+### With DI (Generic Host)
+
+```csharp
+using Microsoft.Extensions.Hosting;
+using Sa.Data.S3;
+using Sa.HybridFileStorage;
+using Sa.HybridFileStorage.FileSystem;
+using Sa.HybridFileStorage.S3;
+
+var builder = Host.CreateApplicationBuilder(args);
+
+// Providers that register themselves first — the hybrid container picks up every
+// registered IFileStorage automatically, so no ConfigureStorage call is needed for them.
+builder.Services.AddSaInMemoryFileStorage();
+builder.Services.AddSaFileSystemFileStorage("files", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\files"))));
+
+// The S3 bucket client is a named registration — one per name, keyed resolve.
+builder.Services.AddSaS3BucketClient("uploads", o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "mybucket";
+})));
+
+// Then wire up the container
+builder.Services.AddSaHybridFileStorage(cfg => cfg
+    // S3 provider — registered by hand here to show the pattern
+    .ConfigureStorage((sp, c) => c.AddStorage(
+        new S3FileStorage(
+            sp.GetRequiredKeyedService<IS3BucketClient>("uploads"),
+            new S3FileStorageOptions
+            {
+                Endpoint = "http://localhost:9000",
+                AccessKey = "ROOTUSER",
+                SecretKey = "ChangeMe123",
+                Bucket = "mybucket",
+                Basket = "uploads"
+            })))
+
+    // Enable built-in logging interceptors
+    .AddLogging());
+
+var host = builder.Build();
+var storage = host.Services.GetRequiredService<IHybridFileStorage>();
+
+// Use it anywhere — injected into your services
+```
+
+#### Minimal DI registration
+
+For quick setups, each provider has its own extension method:
+
+```csharp
+// In-Memory only
+builder.Services.AddSaInMemoryFileStorage();
+
+// File System only
+builder.Services.AddSaFileSystemFileStorage("files", b => b
+    .Options(ob => ob.Configure(x => x.Basket = "documents"))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\data\files"))));
+
+// S3 only
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
+{
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "mybucket";
+    x.Basket = "uploads";
+})));
+
+// Then register the hybrid layer
+builder.Services.AddSaHybridFileStorage(cfg => cfg.AddLogging());
+```
+
+---
+
+## CRUD Examples
+
+### Upload
+
+Upload accepts a `basket` name (scope/container), metadata, and a `Stream`. The hybrid layer finds a writable provider matching the basket and uploads the file.
+
+```csharp
+// Upload from a Stream
+using var stream = File.OpenRead(@"C:\temp\document.pdf");
+var result = await storage.UploadAsync(
+    basket: "documents",
+    input: new UploadFileInput { FileName = "document.pdf", TenantId = 42 },
+    fileStream: stream,
+    cancellationToken: ct);
+
+Console.WriteLine($"Uploaded: {result.FileId}");
+// Output: fs://documents/42/document.pdf
+```
+
+Copy a local file directly:
+
+```csharp
+var result = await storage.CopyFromFileAsync(
+    filePath: @"C:\temp\image.png",
+    basket: "images",
+    input: new UploadFileInput { FileName = "avatar.png", TenantId = 7 },
+    ct: ct);
+```
+
+### Download
+
+Download delegates the file stream to a callback `Func<Stream, CancellationToken, Task>`. This avoids loading the entire file into memory.
+
+```csharp
+// Process stream inline
+bool found = await storage.DownloadAsync(result.FileId, async (stream, token) =>
+{
+    using var reader = new StreamReader(stream, Encoding.UTF8);
+    string content = await reader.ReadToEndAsync(token);
+    Console.WriteLine(content);
+}, ct);
+
+// Copy to another stream
+using var destination = new FileStream(@"C:\output\copy.pdf", FileMode.Create);
+await storage.DownloadAsync(result.FileId, async (source, token) =>
+    await source.CopyToAsync(destination, 81920, token),
+    ct);
+```
+
+### Delete
+
+```csharp
+bool deleted = await storage.DeleteAsync(result.FileId, ct);
+if (deleted)
+    Console.WriteLine("File removed.");
+else
+    Console.WriteLine("File not found.");
+```
+
+### Get Metadata
+
+```csharp
+var metadata = await storage.GetMetadataAsync(result.FileId, ct);
+if (metadata != null)
+{
+    Console.WriteLine($"Basket: {metadata.Basket}");
+    Console.WriteLine($"Tenant: {metadata.TenantId}");
+    Console.WriteLine($"Name:   {metadata.FileName}");
+    Console.WriteLine($"Type:   {metadata.StorageType}");
+}
+```
+
+---
+
+## Cross-Basket Copying
+
+Move or duplicate files between baskets (even across different providers):
+
+```csharp
+// Copy within same basket
+var copied = await storage.CopyToBasketAsync(
+    fileId: "fs://documents/42/report.pdf",
+    basket: "archive",
+    ct: ct);
+
+// Customise upload metadata during copy
+var renamed = await storage.CopyToBasketAsync(
+    fileId: "fs://documents/42/report.pdf",
+    basket: "backup",
+    configure: meta => new UploadFileInput
+    {
+        TenantId = meta.TenantId,
+        FileName = $"renamed-{meta.FileName}"  // change the name
+    },
+    ct: ct);
+```
+
+---
+
+## Batch Operations
+
+High-throughput parallel file operations with progress reporting and error handling:
+
+```csharp
+// Batch copy with parallelism
+var batchResult = await storage.CopyToScopeBatchAsync(
+    fileIds:
+    [
+        "fs://documents/1/a.pdf",
+        "fs://documents/2/b.pdf",
+        "s3://uploads/3/c.pdf",
+    ],
+    basket: "archive",
+    options: new BatchOptions
+    {
+        MaxDegreeOfParallelism = 8,
+        ContinueOnError = true,
+        OperationTimeout = TimeSpan.FromSeconds(30),
+        Progress = new Progress<BatchOperationProgress>(p =>
+        {
+            Console.WriteLine($"{p.Completed}/{p.Total} — OK:{p.SuccessCount} Fail:{p.FailureCount}");
+        })
+    },
+    ct: ct);
+
+foreach (var ok in batchResult.Succeeded)
+    Console.WriteLine($"Copied: {ok.FileId}");
+
+foreach (var err in batchResult.Failed)
+    Console.WriteLine($"Failed #{err.Index}: {err.FileId} — {err.Exception.Message}");
+
+// Or throw on any failure
+batchResult.ThrowIfHasErrors();  // throws BatchOperationException<StorageResult>
+```
+
+### BatchResult&lt;T&gt;
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `Succeeded` | `IReadOnlyList<T>` | Successful results |
+| `Failed` | `IReadOnlyList<BatchError>` | Errors with file ID and exception |
+| `Total` | `int` | Total items processed |
+| `HasErrors` | `bool` | Whether any operation failed |
+| `ThrowIfHasErrors()` | `void` | Throws `BatchOperationException<T>` if failures occurred |
+
+### BatchOptions
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `MaxDegreeOfParallelism` | Concurrent operations | `4` |
+| `ContinueOnError` | Keep going after individual failures | `true` |
+| `OperationTimeout` | Per-operation timeout (`0` = infinite) | `0` |
+| `Progress` | `IProgress<BatchOperationProgress>` reporter | `null` |
+
+---
+
+## Interceptors
+
+Lifecycle hooks for upload/download/delete operations. Implement one of the three interfaces:
+
+```csharp
+public interface IUploadInterceptor
+{
+    // Return false to reject the upload
+    ValueTask<bool> CanUploadAsync(IFileStorage storage, UploadFileInput input, Stream fileStream, CancellationToken ct);
+    ValueTask AfterUploadAsync(IFileStorage storage, StorageResult result, CancellationToken ct);
+    ValueTask OnUploadErrorAsync(IFileStorage storage, Exception exception, CancellationToken ct);
+}
+
+public interface IDownloadInterceptor { /* CanDownloadAsync / AfterDownloadAsync / OnDownloadErrorAsync */ }
+public interface IDeleteInterceptor  { /* CanDeleteAsync / AfterDeleteAsync / OnDeleteErrorAsync */ }
+```
+
+Example — reject uploads of specific filenames:
+
+```csharp
+public class DeniedExtensionInterceptor : IUploadInterceptor
+{
+    private static readonly HashSet<string> DeniedExtensions = ["exe", "bat", "cmd"];
+
+    public ValueTask<bool> CanUploadAsync(IFileStorage storage, UploadFileInput input, Stream fileStream, CancellationToken ct)
+    {
+        var ext = Path.GetExtension(input.FileName)?.TrimStart('.').ToLowerInvariant();
+        return ValueTask.FromResult(!DeniedExtensions.Contains(ext));
+    }
+
+    public ValueTask AfterUploadAsync(IFileStorage storage, StorageResult result, CancellationToken ct)
+        => ValueTask.CompletedTask;
+
+    public ValueTask OnUploadErrorAsync(IFileStorage storage, Exception exception, CancellationToken ct)
+        => ValueTask.CompletedTask;
+}
+```
+
+Register interceptors through the fluent builder:
+
+```csharp
+builder.Services.AddSaHybridFileStorage(cfg => cfg
+    .ConfigureInterceptors((sp, container) =>
+    {
+        container.AddUploadInterceptor(new DeniedExtensionInterceptor());
+        container.AddDownloadInterceptor(new LoggingDownloadInterceptor());
+    }));
+```
+
+Built-in logging interceptors are available via `.AddLogging()`.
+
+---
+
+## Read-Only Mode
+
+Set `IsReadOnly = true` on any provider to prevent writes. Attempted writes throw `HybridFileStorageWritableException`:
+
+```csharp
+builder.Services.AddSaFileSystemFileStorage("readonly", b => b
+    .Options(ob => ob.Configure(x =>
+    {
+        x.IsReadOnly = true; // uploads/deletes will fail
+    }))
+    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+        folder.RootPath = @"C:\readonly\data"))));
+```
+
+---
+
+## Settings Reference
+
+### FileSystemStorageOptions
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `Basket` | Scope/container name | `"share"` |
+| `StorageType` | Scheme prefix in File ID | `"fs"` |
+| `IsReadOnly` | Prevent writes | `false` |
+
+The storage root and the file-I/O policy are configured on the keyed temp folder through the
+mandatory `TempFolder(...)` channel (`RootPath`, `MaxAge`, `TouchDebounce`, ...). The registration
+is named-only: `AddSaFileSystemFileStorage(name, b => b…TempFolder(…))`. See
+[`Sa.HybridFileStorage.FileSystem/Readme.md`](../Sa.HybridFileStorage.FileSystem/Readme.md)
+for pre/post-initialisation, configuration binding, and migration from `BasePath`.
+
+### S3FileStorageOptions
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `Endpoint` | S3 endpoint URL | *(required)* |
+| `AccessKey` | S3 access key | *(required)* |
+| `SecretKey` | S3 secret key | *(required)* |
+| `Bucket` | Bucket name | *(required)* |
+| `Basket` | Scope/container name | `"share"` |
+| `Region` | Region for SigV4 signing | `"eu-central-1"` |
+| `StorageType` | Scheme prefix in File ID | `"s3"` |
+| `IsReadOnly` | Prevent writes | `false` |
+| `TotalRequestTimeout` | Per-request timeout | `180 sec` |
+| `ConnectionPoolLifetime` | Connection pool lifetime | `15 min` |
+| `HandlerLifetime` | HttpClient handler lifetime | `∞` (infinite) |
+
+Configured through the standard options pipeline — see
+[`Sa.HybridFileStorage.S3/Readme.md`](../Sa.HybridFileStorage.S3/Readme.md)
+for pre/post-initialisation, configuration binding and validation.
+
+### PostgresFileStorageOptions
+
+Flat options (no nested `PartOptions`/`CleanupOptions`/`StorageOptions`):
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `SchemaName` | PostgreSQL schema (auto-detected from search_path if not set) | `"public"` |
+| `TableName` | Table for file data | `"files"` |
+| `StorageType` | Scheme prefix in File ID | `"pg"` |
+| `Basket` | Scope/container name | `"share"` |
+| `PgPartBy` | Partitioning granularity | `PgPartBy.Day` |
+| `MigrationScheduleForwardDays` | Days ahead to pre-create partitions | `2` |
+| `ExpireDays` | Auto-cleanup threshold (days) | `365 * 3` |
+| `IsReadOnly` | Prevent writes | `false` |
+
+### InMemoryFileStorageOptions
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `Basket` | Scope/container name | `"share"` |
+| `MaxSizeBytes` | Total byte limit (`0` = unlimited) | `1 GB` |
+| `IsReadOnly` | Prevent writes | `false` |
+
+---
+
+## Domain Types
+
+### StorageResult
+
+Returned by upload operations. Contains the canonical File ID and a publicly accessible URL.
+
+```csharp
+public sealed record StorageResult(
+    string FileId,          // e.g. "fs://documents/42/report.pdf"
+    string AbsoluteUrl,     // e.g. "C:\data\files\documents\42\report.pdf"
+    string StorageType,     // e.g. "fs", "s3", "pg", "mem"
+    DateTimeOffset UploadedAt);
+```
+
+### UploadFileInput
+
+Input metadata for uploads.
+
+```csharp
+public sealed record UploadFileInput
+{
+    public int TenantId { get; init; }              // defaults to 0
+    public string FileName { get; init; } = "";     // required at validation
+    public static UploadFileInput Empty { get; }    // pre-created empty instance
+}
+```
+
+### FileMetadata
+
+Read-only metadata retrieved via `GetMetadataAsync`.
+
+```csharp
+public sealed class FileMetadata
+{
+    public required string Basket { get; init; }
+    public required string FileName { get; init; }
+    public int TenantId { get; init; }
+    public required string StorageType { get; init; }
+}
+```
+
+---
+
+## Exceptions
+
+| Exception | When thrown |
+|-----------|------------|
+| `HybridFileStorageNoAvailableException` | No storage provider found for the requested basket, or all providers failed |
+| `HybridFileStorageWritableException` | Write attempted on read-only storage |
+| `HybridFileStorageAggregateException` | Multiple provider errors aggregated during failover |
+| `BatchOperationException<T>` | Batch operation had failures and `ContinueOnError = false` |
+
+---
+
+
+## License
+
+MIT

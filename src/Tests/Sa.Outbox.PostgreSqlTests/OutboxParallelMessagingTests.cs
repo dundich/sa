@@ -103,7 +103,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
                              .WithMaxBatchSize(1024);
                         })
                     )
-                    .WithPublishSettings((_, b) => b.WithMaxBatchSize(1024))
+                    .WithPublishSettings((_, settings) => settings.WithMaxBatchSize(1024))
                 )
                 .AddSaOutboxUsingPostgreSql(cfg =>
                 {

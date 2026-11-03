@@ -1,0 +1,223 @@
+using Sa.Classes;
+using Sa.Outbox.Partitional;
+
+namespace Sa.Outbox.Delivery;
+
+/// <summary>
+/// Processes outbox messages in batches until all pending messages are delivered or cancellation is requested.
+/// Implements a continuous polling pattern to ensure reliable message delivery.
+/// </summary>
+internal sealed class DeliveryProcessor(
+    IDeliveryTenant processor,
+    ITenantProvider tenantProvider) : IDeliveryProcessor
+{
+    /// <summary>
+    /// Delay when consumer group is paused — avoids busy-waiting on repeated polls.
+    /// </summary>
+    private static readonly TimeSpan PausedPollDelay = TimeSpan.FromSeconds(5);
+
+    public async Task<long> ProcessMessages<TMessage>(
+        OutboxConsumerSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (settings.Paused)
+        {
+            // Consumer group is paused — do not poll.
+            await Task.Delay(PausedPollDelay, cancellationToken).ConfigureAwait(false);
+            return 0;
+        }
+
+        int batchSize = settings.MaxBatchSize;
+        if (batchSize == 0) return 0;
+
+        int[] tenantIds = await tenantProvider
+            .GetTenantIds(settings.ProviderKey, cancellationToken)
+            .ConfigureAwait(false);
+        if (tenantIds.Length == 0) return 0;
+
+        long totalProcessed = 0;
+        int iterations = 0;
+
+        bool continueProcessing;
+        do
+        {
+            // Re-checked every iteration, but deliberately against the *same* immutable snapshot.
+            // `settings` was captured once by DeliveryJob<TMessage>.Execute, so a runtime Pause()
+            // or Resume() cannot be observed here — by design.
+            //
+            // Why not re-read IOutboxConsumerManager per iteration: interrupting a drain in flight
+            // is more dangerous than letting it finish. A partially drained batch means rented tasks,
+            // an in-flight lock renewal and uncommitted per-message statuses, so aborting mid-cycle
+            // trades a bounded wait for an unbounded recovery. The wait is bounded by
+            // MaxProcessingIterations and by PerTenantTimeout, and Pause() takes effect on the next
+            // job execution.
+            //
+            // Do not "fix" this by injecting IOutboxConsumerManager and polling it here.
+            if (settings.Paused)
+            {
+                await Task.Delay(PausedPollDelay, cancellationToken).ConfigureAwait(false);
+                return totalProcessed;
+            }
+
+            if (iterations > 0 && settings.IterationDelay > TimeSpan.Zero)
+            {
+                await Task.Delay(settings.IterationDelay, cancellationToken).ConfigureAwait(false);
+            }
+
+            int processed = await ProcessForEachTenant<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false);
+
+            totalProcessed += processed;
+            iterations++;
+
+            continueProcessing = ShouldContinueProcessing(
+                processed,
+                iterations,
+                settings,
+                cancellationToken);
+        }
+        while (continueProcessing);
+
+        return totalProcessed;
+    }
+
+    private static bool ShouldContinueProcessing(
+        int processedCount,
+        int iterations,
+        OutboxConsumerSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+            return false;
+
+        // Driven by the number of messages handled, not successes: a batch where every message
+        // failed is still work in flight and the backlog may not be drained yet.
+        if (processedCount == 0)
+            return false;
+
+        if (settings.MaxProcessingIterations >= 0 && iterations >= settings.MaxProcessingIterations)
+            return false;
+
+        return true;
+    }
+
+    private async Task<int> ProcessForEachTenant<TMessage>(
+        int[] tenantIds,
+        OutboxConsumerSettings settings,
+        CancellationToken cancellationToken)
+    {
+        return (settings.PerTenantMaxDegreeOfParallelism == 1)
+            ? await ProcessTenantsSequential<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false)
+            : await ProcessTenantsParallel<TMessage>(tenantIds, settings, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<int> ProcessTenantsSequential<TMessage>(
+        int[] tenantIds,
+        OutboxConsumerSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var total = 0;
+        foreach (int tenantId in tenantIds)
+        {
+            // A stop that landed between tenants ends the pass here: without this check the loop
+            // walked every remaining tenant, each one doing its own round trips against an
+            // already-cancelled token.
+            cancellationToken.ThrowIfCancellationRequested();
+
+            total += await ProcessTenantWithTimeout<TMessage>(tenantId, settings, cancellationToken).ConfigureAwait(false);
+        }
+
+        return total;
+    }
+
+    private async Task<int> ProcessTenantsParallel<TMessage>(
+        int[] tenantIds,
+        OutboxConsumerSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = settings.PerTenantMaxDegreeOfParallelism == -1
+                ? Environment.ProcessorCount
+                : settings.PerTenantMaxDegreeOfParallelism,
+            CancellationToken = cancellationToken
+        };
+
+        int processed = 0;
+
+        try
+        {
+            await Parallel.ForEachAsync(
+                tenantIds,
+                parallelOptions,
+                async (tenantId, ct) =>
+                {
+                    int tenantProcessed = await ProcessTenantWithTimeout<TMessage>(tenantId, settings, ct).ConfigureAwait(false);
+                    Interlocked.Add(ref processed, tenantProcessed);
+                }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // ignore
+        }
+
+        return processed;
+    }
+
+    /// <summary>
+    /// Applies <see cref="OutboxConsumerSettings.PerTenantTimeout"/> to a single tenant pass and
+    /// swallows the resulting cancellation, so one unresponsive tenant cannot fail the whole cycle.
+    /// Only the tenant-local timeout is absorbed: a cancellation of the cycle's own token is
+    /// rethrown, because a stop is not a tenant that failed.
+    /// Deliberately distinct from <see cref="IDeliveryTenant.ProcessInTenant{TMessage}"/>, which does
+    /// the actual work — the two used to share a name, which made the call chain ambiguous to read.
+    /// </summary>
+    private async Task<int> ProcessTenantWithTimeout<TMessage>(
+        int tenantId,
+        OutboxConsumerSettings settings,
+        CancellationToken cancellationToken)
+    {
+        // No timeout is the default, and a linked source per tenant per iteration was pure
+        // overhead in that case (two objects plus a registration on the caller's token).
+        CancellationTokenSource? tenantCts = null;
+
+        if (settings.PerTenantTimeout > TimeSpan.Zero)
+        {
+            tenantCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            tenantCts.CancelAfter(settings.PerTenantTimeout);
+        }
+
+        try
+        {
+            return await processor.ProcessInTenant<TMessage>(
+                tenantId, settings, tenantCts?.Token ?? cancellationToken).ConfigureAwait(false);
+        }
+        // The cycle's own token is cancelled: this is a shutdown, not the per-tenant timeout below.
+        // Swallowing it made `ProcessMessages` return normally while the remaining tenants were still
+        // being walked; re-thrown with the caller's token so the scheduler recognises the stop.
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(ex.Message, ex, cancellationToken);
+        }
+        // Only a tenant-local timeout (its linked token fired, the caller's did not) is absorbed:
+        // one unresponsive tenant must not fail the whole cycle.
+        catch (OperationCanceledException)
+        {
+            // ignore
+            return 0;
+        }
+        catch (LockRenewalException)
+        {
+            // A lost lock is local to this tenant, and so is everything it can cause: the next
+            // pass simply re-acquires the messages, and the losing owner's batch is closed by
+            // ReturnDelivery like any other. Letting it out would abort the tenant loop and take
+            // the whole cycle down with it — for a condition the per-tenant pass is already
+            // designed to absorb. Counted as 0: the batch was released, but the count we lost is
+            // the one ProcessInTenant never got to return.
+            return 0;
+        }
+        finally
+        {
+            tenantCts?.Dispose();
+        }
+    }
+}
