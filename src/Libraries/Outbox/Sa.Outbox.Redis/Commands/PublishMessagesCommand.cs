@@ -21,6 +21,11 @@ internal sealed class PublishMessagesCommand(
     {
         if (batch.IsEmpty) return 0;
 
+        // Before the first XADD: StackExchange.Redis cannot cancel a command once it is queued,
+        // so the only honest place to honour the token is here. Past this line the batch is
+        // appended even if the token is cancelled during the round trip.
+        cancellationToken.ThrowIfCancellationRequested();
+
         int tenantId = batch.PartInfo.TenantId;
         string part = batch.PartInfo.Part;
         long createdAt = batch.PartInfo.CreatedAt.ToUnixTimeMilliseconds();

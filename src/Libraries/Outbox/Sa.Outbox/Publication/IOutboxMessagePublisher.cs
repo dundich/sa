@@ -3,6 +3,20 @@
 /// <summary>
 /// Defines a contract for publishing outbox messages.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Cancellation is best effort rather than transactional across the whole call. Nothing is stored
+/// once the token has been observed, but a publish larger than <c>MaxBatchSize</c> is split into
+/// independently committed chunks: a cancellation that lands between them keeps the chunks already
+/// committed, and the exception carries no count. A cancelled publish may therefore still have
+/// stored messages — a caller that retries must make its messages idempotent (the outbox is
+/// at-least-once by design).
+/// </para>
+/// <para>
+/// A provider whose storage commands cannot observe the token (Redis cannot cancel an XADD that is
+/// already in flight) checks it at the seam instead, before the first write of each chunk.
+/// </para>
+/// </remarks>
 public interface IOutboxMessagePublisher
 {
     /// <summary>

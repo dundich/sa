@@ -19,6 +19,11 @@ internal sealed class OutboxMessagePublisher(
     {
         if (messages.Count == 0) return 0;
 
+        // Checked before anything is stored: a provider whose commands cannot observe the token
+        // (StackExchange.Redis has no CancellationToken on its async API) would otherwise append
+        // the whole chunk anyway and report success for a publish the caller had already cancelled.
+        cancellationToken.ThrowIfCancellationRequested();
+
         EnsureContextSupported(context);
 
         return await Send(messages, tenantId, context, cancellationToken);
@@ -30,6 +35,9 @@ internal sealed class OutboxMessagePublisher(
         object? context,
         CancellationToken cancellationToken = default)
     {
+        // Same reason as Publish: Send's per-chunk check does not exist on this path.
+        cancellationToken.ThrowIfCancellationRequested();
+
         EnsureContextSupported(context);
 
         OutboxMessageMetadata typeInfo = metadataProvider.GetMetadata<TMessage>();
