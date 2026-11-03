@@ -17,7 +17,8 @@
 
 | Что нужно | Куда смотреть |
 |---|---|
-| Правила процесса (spec → plan → tasks → implement → verify) | [`development/sdd-workflow.md`](development/sdd-workflow.md) |
+| Правила процесса (grill → spec → plan → tasks → implement → verify) | [`development/sdd-workflow.md`](development/sdd-workflow.md) |
+| Как прогнать идею через интервью до спеки | [`development/sdd-workflow.md`](development/sdd-workflow.md#0-grill) |
 | Текущие инварианты и baseline | [`../specs/000-project-baseline/spec.md`](../specs/000-project-baseline/spec.md) |
 | Фактическое дерево, зависимости, path-dependent конфигурация | [`repository/project-structure.md`](repository/project-structure.md) |
 | Результаты build/test/package на baseline | [`../specs/000-project-baseline/baseline.md`](../specs/000-project-baseline/baseline.md) |
@@ -55,8 +56,11 @@ docs/
 - [`specs/`](../specs) — спецификации и acceptance criteria (`specs/000-project-baseline/` — текущий baseline).
 - [`templates/`](../templates) — шаблоны feature spec, implementation plan и task breakdown.
 - [`checklists/`](../checklists) — DoR/DoD и миграционный чек-лист.
+- [`GLOSSARY.md`](../GLOSSARY.md) — словарь предметной области: канонические термины и запрещённые синонимы. Создаётся при первом разрешённом термине; единственный источник терминов (не дублируется здесь).
 
 ## Термины
 
-SDD здесь означает Spec-Driven Development: спецификация поведения и критерии приёмки предшествуют
-плану реализации и коду.
+Единственный источник терминов — [`GLOSSARY.md`](../GLOSSARY.md) в корне репозитория.
+
+Отдельно: SDD здесь означает Spec-Driven Development — спецификация поведения и критерии приёмки
+предшествуют плану реализации и коду.

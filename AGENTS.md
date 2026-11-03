@@ -83,6 +83,11 @@ On SDK 10.0.112 a full `dotnet test --solution Sa.slnx` used to end with `Test r
 
 Dependency graph (who references whom): `Sa.Utils.WorkQueue` → `Sa.Schedule` → `Sa.Outbox` → `Sa.Outbox.PostgreSql`; `Sa.Partitional.PostgreSql` → `Sa.Schedule` + `Sa.Data.PostgreSql`; `Sa.HybridFileStorage.S3` → `Sa.Data.S3` + base.
 
+## Skills
+- Project skills live in `.opencode/skills/<name>/SKILL.md` and are **git-ignored** (`.opencode/**`), like `.github/skills/` and `.qwen/skills/`. They are local tooling, not part of the shipped repo; the process they support is documented in `docs/development/sdd-workflow.md`.
+- `grilling`, `grill-me`, `grill-with-docs`, `domain-modeling` are vendored from <https://github.com/mattpocock/skills> (MIT, pinned in `.opencode/skills/_upstream.md`). `grill-me` / `grill-with-docs` are explicit-invocation only (`permission.skill.* = "ask"` in `opencode.jsonc`).
+- `/grill-me` interviews about an idea and writes nothing; `/grill-with-docs` does the same and records terms in `GLOSSARY.md` + ADRs in `docs/decisions/`. Both are step 0 of the SDD lifecycle, before a spec is written. `grill-with-docs` needs Build mode — it writes files.
+
 ## Tests
 - **xUnit v3** on Microsoft.Testing.Platform (test projects are executables). Not classic xUnit — see the `xunit3` skill (`.opencode/skills/xunit3/`) for the v3 API, and `.github/skills/migrate-xunit-to-xunit-v3/` for the migration patterns.
 - Cancellation token comes from **`TestContext.Current.CancellationToken`** (house pattern: a static `TestToken` property on the test class).
