@@ -22,7 +22,7 @@ The whole pipeline is three layers:
 | `Job/DeliveryJobInterceptor.cs` | Sa.Schedule interceptor hooked into every delivery job |
 | `IDeliveryProcessor.cs` / `DeliveryProcessor.cs` | The greedy loop over tenants; owns iteration and batch bookkeeping |
 | `IDeliveryTenant.cs` / `DeliveryTenant.cs` | One tenant pass: build filter → size the batch → rent → deliver → return |
-| `IDeliveryCourier.cs` / `DeliveryCourier.cs` | Invokes the consumer, converts exceptions to `Warn`, applies the post-handle policy |
+| `IDeliveryCourier.cs` / `DeliveryCourier.cs` | Invokes the consumer, converts exceptions to `Warn` (a cancellation of the cycle is rethrown), applies the post-handle policy |
 | `IDeliveryLifetimeInvoker.cs` / `DeliveryLifetimeInvoker.cs` | Resolves `IConsumer<TMessage>` — one cached singleton instance, or a fresh DI scope per batch |
 | `IDeliveryBatcher.cs` / `DeliveryBatcher.cs` | Default batch-size calculator (passthrough stub returning `MaxBatchSize`) |
 | `DeliveryStatusCode.cs` | The status scale plus the `IsPending` / `IsSuccess` / `IsWarning` / `IsError` classifiers |
@@ -35,7 +35,7 @@ The whole pipeline is three layers:
 | `IOutboxConsumerManager.cs` / `OutboxConsumerManager.cs` | Thread-safe runtime registry: register / apply / pause / resume / subscribe |
 | `IDeliverySnapshot.cs` / `DeliverySnapshot.cs` | Lazily materialised view of jobs, message parts and consumer settings (used by the outbox load step) |
 | `IDeliveryBackoffStrategy.cs` / `ExponentialDeliveryBackoffStrategy.cs` | Default backoff with jitter: `min(maxDelay, baseDelay * 2^(attempt-1)) * jitter` |
-| `IEmptyQueueWaitStrategy.cs` / `FixedIntervalWaitStrategy.cs` / `ExponentialIdleWaitStrategy.cs` | Wait between polls of an empty queue: fixed (default) or exponential with jitter |
+| `IEmptyQueueWaitStrategy.cs` / `FixedIntervalWaitStrategy.cs` / `ExponentialIdleWaitStrategy.cs` | Wait between polls of an empty queue: fixed or exponential with jitter (the DI default) |
 | `OutboxIdleState.cs` | Per-group consecutive-empty counter feeding the adaptive schedule |
 | `AdaptiveIdleTiming.cs` | `IJobTiming` reading `OutboxIdleState.CurrentInterval` for the next occurrence |
 | `OutboxIdleStateRegistry.cs` | Registry of `OutboxIdleState` per consumer group (interface + default impl) |
@@ -50,7 +50,7 @@ The whole pipeline is three layers:
 1. **`DeliveryJob<TMessage>.Execute`** resolves `OutboxConsumerSettings` from `IOutboxConsumerManager` by job name and calls `IDeliveryProcessor.ProcessMessages`. A missing registration is a hard error, not a silent no-op. After the run it reports the handled count to the group's `OutboxIdleState`, which the adaptive timing reads on the next iteration (see *Empty-queue back-off* below).
 2. **`DeliveryProcessor.ProcessMessages`** runs the greedy loop. Each iteration: optionally delay `IterationDelay`, process every tenant, then ask `ShouldContinueProcessing`. When the group is `Paused` the loop waits 5 s and returns instead of polling.
 3. **`DeliveryTenant.ProcessInTenant`** builds the filter, asks `IDeliveryBatcher` for a size, rents a `MemoryPool` buffer, calls `RentDelivery` (which flips rows to `Processing` under `FOR UPDATE SKIP LOCKED`), starts a `LockRenewer` on `LockRenewal`, delivers, then calls `ReturnDelivery`.
-4. **`DeliveryCourier.Deliver`** calls the consumer, converts a thrown exception into `Warn` + backoff, then runs `PostHandle` — see below.
+4. **`DeliveryCourier.Deliver`** calls the consumer, converts a thrown exception into `Warn` + backoff — unless the cycle itself was cancelled, which is rethrown (see *Cancellation*) — then runs `PostHandle` — see below.
 
 Tenants are processed sequentially when `PerTenantMaxDegreeOfParallelism == 1` (the default) and via `Parallel.ForEachAsync` otherwise; `-1` means "one per CPU". Each tenant pass gets its own linked `CancellationTokenSource` armed with `PerTenantTimeout`.
 
@@ -78,7 +78,7 @@ Everything ≥ 500 is terminal. So is the whole 2xx range: once a consumer has a
 |---|---|---|
 | Consumer never touched the message | `Ok` (200) | `PostHandle` — implicit success |
 | Consumer called `Ok` / `Created` / `Accepted` / `Ok203` / `NoContent` / `Aborted` | 200–299 | consumer |
-| Consumer threw an exception | `Warn` (400) + backoff | `HandleError` |
+| Consumer threw an exception | `Warn` (400) + backoff | `HandleError` — **not** a cancellation of the cycle, which is rethrown (see *Cancellation*) |
 | Consumer called `Warn(ex, message, postpone)` | 400 + its own delay | consumer |
 | `Attempt + 1 > MaxDeliveryAttempts` while the status is `Warn` | `MaximumAttemptsError` (508) | `PostHandle` |
 | Consumer called `Error` / `Error501`…`Error507` | 500–507 | consumer |
@@ -109,11 +109,78 @@ A tenant pass returns a plain `int` — the number of messages the pass handled.
 
 The split is deliberate: a batch where every message failed still has `Processed > 0`, so the greedy loop keeps draining the backlog instead of mistaking a fully-failed batch for an empty queue.
 
+## Cancellation
+
+Cancellation is a **stop, not an outcome**. `IDeliveryProcessor.ProcessMessages` throws
+`OperationCanceledException` carrying the caller's token — a cancelled cycle is never reported as an
+empty one — and the tenant pass stops **without writing any status**.
+
+### Where a stop is told apart from a failure
+
+Two filters, both deliberate:
+
+1. **`DeliveryCourier.Deliver`** rethrows `OperationCanceledException` when the cycle's own token is
+   cancelled, *before* `HandleError` can turn it into `Warn`. Without that filter a host shutdown was
+   converted into `Warn(backoff)` for every untouched message — burning a delivery attempt per
+   message and, at `MaxDeliveryAttempts`, dead-lettering a batch that was never attempted.
+2. **`DeliveryProcessor.ProcessTenantWithTimeout`** absorbs an `OperationCanceledException` **only
+   when the cycle's own token is not cancelled** — that is the linked `PerTenantTimeout` source — and
+   rethrows otherwise. The sequential tenant loop also checks the token between tenants, so a stop
+   never opens another tenant's rent.
+
+Both rethrow with the caller's token (`new OperationCanceledException(ex.Message, ex, cancellationToken)`):
+`Sa.Schedule` recognises a stop by `ex.CancellationToken == cancellationToken` and ends the run
+silently, while a consumer-internal linked token would read as a job failure and trip the error policy.
+
+A cancellation raised by the consumer **itself** (its own timeout, its own linked source) while the
+cycle is alive is a real failure of that attempt and keeps the old behaviour: `Warn` + backoff.
+
+### What happens to the batch
+
+`ReleaseMessagesAsync` is never reached, so nothing is written and nothing is acknowledged. The messages
+stay rented and are re-delivered by a later pass — **cancellation delays work, it does not drop it**.
+
+| | Message | Attempt counter | Retried after |
+|---|---|---|---|
+| PostgreSQL | stays `Processing` with the cancelled pass's `task_transact_id` | **not spent** — `delivery_attempt` is incremented only by `SqlFinishDelivery` | `task_lock_expires_on < now - BatchingWindow`, i.e. roughly `LockDuration + BatchingWindow` (13 s by default) |
+| Redis | stays in the group's pending entries list (PEL) | **spent** — Redis counts a delivery when the entry is handed to a consumer (`XREADGROUP`/`XAUTOCLAIM`), and that is the only counter the provider has | `PendingClaimIdle` (10 min by default), via `XAUTOCLAIM` |
+
+The Redis asymmetry is worth planning for: a host restarted in the middle of long batches spends one
+attempt per batch, so cancellations alone can reach `MaxDeliveryAttempts` (Redis-side, default 5) and
+send the message to the poison handler. Raise it, or lower `PendingClaimIdle`, if restarts are
+frequent. PostgreSQL is immune: a cancelled pass costs latency, never attempts.
+
+Messages that already have a persisted status (`Warn`, `Postpone`, `Retry`) are not affected by a
+cancellation at all — lease and attempt counter live in the row, and the next pass picks them up on
+their own schedule.
+
+The same applies to `PerTenantTimeout`: its linked source fires, the pass is abandoned, statuses are
+not written, and the batch is re-rented on a later poll with exactly the attempt accounting above.
+
+### Lease renewal vs. release
+
+`LockRenewer` fails only when the extension *throws*, so the pipeline also inspects the returned
+count: `DeliveryTenant` treats `renewed == 0` as a lost lease and raises `LockRenewalException`
+(absorbed per tenant, as before). One case is excluded on purpose: a renewal that lands **after** the
+pass has finished consuming. By then the rows are no longer `Processing` and the provider legitimately
+renews nothing — `RenewalState` is flipped before `ReturnDelivery`, otherwise the renewer's last tick
+races the release and aborts a batch that had already been delivered.
+
+### The one visible side effect
+
+A pass cancelled before `ReturnDelivery` commits leaves its batch to be re-delivered, so a message
+that had already been handed to the external system once is handed over again. That is the ordinary
+at-least-once window (crash, shutdown, stolen lease), not a new one: nothing is lost, and the consumer
+has to be idempotent.
+
+The two provider halves are pinned by tests: `DeliveryCancellationRetryTests` (PostgreSQL — no loss,
+attempt untouched) and `OutboxRedisCancelledRentTests` (Redis — no loss, attempt spent).
+
 ## Empty-queue back-off
 
 The delivery job is timer-driven by `Sa.Schedule`. On every tick it drains the backlog greedily; when nothing is found the wait until the following tick is otherwise a fixed `Interval`. `IEmptyQueueWaitStrategy` lets a consumer group back off while its queue stays empty, instead of polling the database at the base rate forever.
 
-- **`FixedIntervalWaitStrategy`** (default) always returns `Interval` — the pre-existing behavior.
+- **`FixedIntervalWaitStrategy`** — the explicit opt-out: always returns `Interval`, the pre-existing behavior. Register it explicitly with `WithIdleWaitStrategy<FixedIntervalWaitStrategy>()`; the DI default is the exponential strategy below.
 - **`ExponentialIdleWaitStrategy`** (the DI default) grows the wait per consecutive empty poll: after `n` empty polls it returns `min(IdleMaxInterval, Interval * multiplier^(n-1))`, jittered downwards and clamped to `[Interval, IdleMaxInterval]`.
 
 Adaptive back-off is **off by default**: `IdleMaxInterval` defaults to `TimeSpan.Zero`, and both strategies return `Interval` unchanged in that case. Enable it per group with `WithIdleBackoff(maxInterval)` (or disable explicitly with `WithFixedInterval()`); `maxInterval` must be `>= Interval`. Swap the algorithm globally through DI or `IOutboxBuilder.WithIdleWaitStrategy<T>()` (or `WithIdleWaitStrategy(instance)`).
