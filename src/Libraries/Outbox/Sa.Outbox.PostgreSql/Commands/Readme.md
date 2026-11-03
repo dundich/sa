@@ -1,8 +1,17 @@
 # Commands
 
+**English** | [Русский](Readme-ru.md)
+
+## Contents
+
+- [Overview](#overview)
+- [SqlCacheSplitter](#sqlcachesplitter)
+  - [Why it exists](#why-it-exists)
+  - [How callers use it](#how-callers-use-it)
+
 ## Overview
 
-This folder contains the data-access commands that translate high-level outbox operations into concrete PostgreSQL statements. Each command owns its own `SqlCacheSplitter` to handle batching transparently.
+This folder contains the data-access commands that translate high-level outbox operations into concrete PostgreSQL statements. The two batched commands — `FinishDeliveryCommand` and `ErrorDeliveryCommand` — each own a `SqlCacheSplitter`, which splits a batch into statements that fit PostgreSQL's parameter limit.
 
 | File | Responsibility |
 |---|---|

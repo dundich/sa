@@ -1,10 +1,35 @@
 # Sa — .NET 10 Infrastructure Libraries
 
+**English** | [Русский](README-ru.md)
+
 Reusable infrastructure libraries for distributed .NET 10 systems — **Native AOT compatible**, **nullable enabled**, built on modern .NET primitives.
 
 > ⚠️ **Stability.** All packages are still on major-version `0` (`0.x.y`), so public APIs may change in a breaking way between releases without notice — use at your own risk.
 
 ---
+
+## Contents
+
+- [Libraries](#libraries)
+  - [Sa.Configuration — CLI Arguments & Secrets](#saconfiguration--cli-arguments--secrets)
+  - [Sa.Configuration.PostgreSql — Dynamic DB Configuration](#saconfigurationpostgresql--dynamic-db-configuration)
+  - [Sa.Data.S3 — S3 Data Client](#sadatas3--s3-data-client)
+  - [Sa.Data.TempFolder — Temporary Folder Manager](#sadatatempfolder--temporary-folder-manager)
+  - [Sa.Outbox — Transactional Outbox Core](#saoutbox--transactional-outbox-core)
+  - [Sa.Outbox.PostgreSql — PostgreSQL Provider](#saoutboxpostgresql--postgresql-provider)
+  - [Sa.Outbox.Redis — Redis Provider (in development)](#saoutboxredis--redis-provider-in-development)
+  - [Sa.Partitional.PostgreSql — Declarative Partitioning](#sapartitionalpostgresql--declarative-partitioning)
+  - [Sa.Schedule — Scheduled Task Executor](#saschedule--scheduled-task-executor)
+  - [Sa.HybridFileStorage — Multi-Provider File Storage](#sahybridfilestorage--multi-provider-file-storage)
+  - [Sa.Media — Async WAV Reader](#samedia--async-wav-reader)
+  - [Sa.Media.FFmpeg — FFmpeg .NET Wrapper](#samediaffmpeg--ffmpeg-net-wrapper)
+  - [Sa.Utils.WorkQueue — Async Queue with Concurrency Limiting](#sautilsworkqueue--async-queue-with-concurrency-limiting)
+- [Samples](#samples)
+- [Tests](#tests)
+- [Building](#building)
+- [Contributing, specs and decisions](#contributing-specs-and-decisions)
+- [Architecture](#architecture)
+- [License](#license)
 
 ## Libraries
 

@@ -1,8 +1,51 @@
 # Sa.Partitional.PostgreSql
 
+**English** | [Русский](Readme-ru.md)
+
 Declarative PostgreSQL table partitioning library for .NET 10 — supports **range** (day / month / year) and **list** partitioning with automated migration, cleanup scheduling, and in-memory caching.
 
 ---
+
+## Contents
+
+- [Properties](#properties)
+  - [Partition management](#partition-management)
+  - [Fluent Builder](#fluent-builder)
+  - [Default partition](#default-partition)
+  - [Cleanup modes](#cleanup-modes)
+  - [Named modules](#named-modules)
+  - [Settings](#settings)
+  - [General](#general)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+  - [Minimal example — one table, one level](#minimal-example--one-table-one-level)
+  - [Two levels — list + range (multi-tenant layout)](#two-levels--list--range-multi-tenant-layout)
+  - [Three levels — geography → client → day](#three-levels--geography--client--day)
+  - [Multiple modules — isolated configs in one container](#multiple-modules--isolated-configs-in-one-container)
+  - [Adopting an existing plain table](#adopting-an-existing-plain-table)
+- [Configuration — the Options Pipeline](#configuration--the-options-pipeline)
+- [Settings in Code — Full Reference](#settings-in-code--full-reference)
+  - [PartCacheSettings — Partition Metadata Cache](#partcachesettings--partition-metadata-cache)
+  - [MigrationScheduleSettings — Auto-Migration (Pre-Creation)](#migrationschedulesettings--auto-migration-pre-creation)
+  - [PartCleanupScheduleSettings — Auto-Cleanup](#partcleanupschedulesettings--auto-cleanup)
+- [Supported Strategies](#supported-strategies)
+  - [Range key types](#range-key-types)
+- [Fluent Builder API](#fluent-builder-api)
+  - [Schema + Table Declaration](#schema--table-declaration)
+  - [ITableBuilder — methods in action](#itablebuilder--methods-in-action)
+- [Key Types](#key-types)
+  - [IPartitionManager](#ipartitionmanager)
+  - [IMigrationService](#imigrationservice)
+  - [IPartCleanupService](#ipartcleanupservice)
+  - [PgPartBy](#pgpartby)
+  - [StrOrNum](#strornum)
+- [Naming Conventions](#naming-conventions)
+  - [Keeping identifiers under 63 bytes](#keeping-identifiers-under-63-bytes)
+- [Behaviour Notes](#behaviour-notes)
+- [Documentation](#documentation)
+- [Architecture](#architecture)
+- [Dependencies](#dependencies)
+- [License](#license)
 
 ## Properties
 
@@ -40,7 +83,7 @@ The library gathers everything needed for partitioning into three setting types,
 
 ### Settings
 
-- Bind to [`configuration`](#configuration-the-options-pipeline) or [`code`](#settings-in-code-full-reference) through one pipeline (`Microsoft.Extensions.Options`), one named instance per module.
+- Bind to [`configuration`](#configuration--the-options-pipeline) or [`code`](#settings-in-code--full-reference) through one pipeline (`Microsoft.Extensions.Options`), one named instance per module.
 - All three setting types: [`PartCacheSettings`](#partcache), [`MigrationScheduleSettings`](#migration), [`PartCleanupScheduleSettings`](#cleanup).
 
 ### General

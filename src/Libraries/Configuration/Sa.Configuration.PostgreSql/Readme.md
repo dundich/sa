@@ -1,8 +1,26 @@
 # Sa.Configuration.PostgreSql
 
+**English** | [Русский](Readme-ru.md)
+
 A dynamic configuration source for .NET that loads settings from PostgreSQL. Changes in the database are applied to the running application without a restart — just call `Reload()` on `IConfigurationRoot`.
 
 ---
+
+## Contents
+
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Key separators](#key-separators)
+- [Key aliases](#key-aliases)
+- [Parameterized queries](#parameterized-queries)
+- [Reusing the application connection pool](#reusing-the-application-connection-pool)
+- [Live configuration updates](#live-configuration-updates)
+- [Options](#options)
+- [Load behavior](#load-behavior)
+  - [Layers](#layers)
+- [Table schema](#table-schema)
+- [Dependencies](#dependencies)
+- [License](#license)
 
 ## Features
 

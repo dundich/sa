@@ -1,5 +1,30 @@
 # Delivery
 
+**English** | [Русский](Readme-ru.md)
+
+## Contents
+
+- [Overview](#overview)
+- [File structure](#file-structure)
+- [The delivery pipeline](#the-delivery-pipeline)
+- [Status acceptance policy](#status-acceptance-policy)
+  - [1. Which statuses are eligible for delivery](#1-which-statuses-are-eligible-for-delivery)
+  - [2. Who sets what](#2-who-sets-what)
+  - [3. The `PostHandle` rules](#3-the-posthandle-rules)
+  - [4. Consequences worth remembering](#4-consequences-worth-remembering)
+  - [5. What is reported outward](#5-what-is-reported-outward)
+- [Cancellation](#cancellation)
+  - [Where a stop is told apart from a failure](#where-a-stop-is-told-apart-from-a-failure)
+  - [What happens to the batch](#what-happens-to-the-batch)
+  - [Lease renewal vs. release](#lease-renewal-vs-release)
+  - [The one visible side effect](#the-one-visible-side-effect)
+- [Empty-queue back-off](#empty-queue-back-off)
+  - [Configuring the wait policy](#configuring-the-wait-policy)
+- [Consumer settings](#consumer-settings)
+  - [Lock invariants](#lock-invariants)
+- [Runtime control](#runtime-control)
+- [DI registration](#di-registration)
+
 ## Overview
 
 This folder contains the entire outbox **delivery** (consume) side: from the hosted job that wakes a consumer group up, down to the per-message status bookkeeping and the retry/DLQ decisions. It is storage-agnostic — the SQL lives in `Sa.Outbox.PostgreSql`, and this folder only talks to `IOutboxDeliveryManager` / `IOutboxContextFactory`.
@@ -251,12 +276,12 @@ services.AddSaOutbox(builder => builder
 | `ConsumerGroupId` | — | `WithConsumerGroupId` | Required; also the DI key for the consumer |
 | `AsSingleton` | `true` | `AsSingleton` | `true` = one consumer instance for the whole cluster, cached by group id; `false` = a new DI scope per batch |
 | `Interval` | 1 min | `WithInterval` | Job periodicity |
-| `InitialDelay` | 10 s | `WithInitialDelay` / `StartImmediately` | `AddDeliveryJob` defaults to zero |
+| `InitialDelay` | 10 s | `WithInitialDelay` / `StartImmediately` | Delay before the first run after startup |
 | `ConcurrencyLimit` | 1 | `WithConcurrencyLimit` | Group-level schedule concurrency |
-| `MaxConcurrency` | 48 | `WithMaxConcurrency` | `AddDeliveryJob` overrides this to 1 |
+| `MaxConcurrency` | 48 | `WithMaxConcurrency` | Upper bound of the group's scheduled concurrency |
 | `RetryCountOnError` | 0 | `WithRetryCountOnError` / `WithNoRetries` / `WithInfiniteRetries` | Retries of the **job**, not of the message |
 | `MaxBatchSize` | 128 | `WithMaxBatchSize` | Upper bound for `IDeliveryBatcher` |
-| `MaxProcessingIterations` | 10 | `WithMaxProcessingIterations` / `WithSingleIteration` / `WithUnlimitedIterations` | `-1` = greedy until the queue drains; `AddDeliveryJob` defaults to `-1` |
+| `MaxProcessingIterations` | 10 | `WithMaxProcessingIterations` / `WithSingleIteration` / `WithUnlimitedIterations` | `-1` = greedy until the queue drains |
 | `IterationDelay` | zero | `WithIterationDelay` | With zero and `-1` the loop becomes a hot drain loop |
 | `LockDuration` | 10 s | `WithLockDuration` / `WithNoLockDuration` | Must be `> 0` |
 | `LockRenewal` | 3 s | `WithLockRenewal` | Must satisfy `0 < LockRenewal < LockDuration` |
@@ -268,7 +293,13 @@ services.AddSaOutbox(builder => builder
 | `Paused` | `false` | `Paused` / `Resumed` | Checked on every loop iteration |
 | `IdleMaxInterval` | zero (disabled) | `WithIdleBackoff(max)` / `WithFixedInterval` | Upper bound of the empty-queue poll back-off; must be `>= Interval` when set |
 
-Note that `AddDeliveryJob` pre-seeds the builder with `StartImmediately()`, `ConcurrencyLimit(1)`, `MaxConcurrency(1)`, `MaxProcessingIterations(-1)` and `PerTenantTimeout(Zero)` **before** invoking your `configure` callback, so those defaults win over `OutboxDefaults`.
+`AddDeliveryJob` seeds the builder with the **registration identity** only — `ConsumerGroupId`,
+`ProviderKey` and `AsSingleton` (the difference between `AddDelivery` and `AddDeliveryScoped`) —
+before invoking your `configure` callback. Every other value comes from the layers described in
+[`Sa.Outbox.PostgreSql/Configuration/Readme.md`](../../Sa.Outbox.PostgreSql/Configuration/Readme.md#pgoutboxdeliveryoptions):
+`OutboxDefaults` → the provider's polling defaults (e.g. `PgPollingSettings`) → the group's
+configuration section → the callback. With no such layer configured, the table above is the real
+effective value.
 
 ### Lock invariants
 

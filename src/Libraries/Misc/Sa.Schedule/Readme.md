@@ -1,8 +1,38 @@
 # Sa.Schedule
 
+**English** | [Русский](Readme-ru.md)
+
 A .NET task scheduler — periodic and one-shot jobs, dynamic concurrency control, error recovery strategies, interceptors, and graceful shutdown.
 
 ---
+
+## Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Multiple Schedules (Keyed)](#multiple-schedules-keyed)
+  - [Rules](#rules)
+- [Defining Jobs](#defining-jobs)
+  - [Lambda Jobs](#lambda-jobs)
+- [Job Configuration (Builder API)](#job-configuration-builder-api)
+  - [Jobs without a timing](#jobs-without-a-timing)
+- [Configuration via appsettings.json](#configuration-via-appsettingsjson)
+  - [Per-job options](#per-job-options)
+  - [Matching a job to its section](#matching-a-job-to-its-section)
+  - [Precedence and validation](#precedence-and-validation)
+- [Cron Scheduling](#cron-scheduling)
+- [Concurrency Model](#concurrency-model)
+- [Error Handling](#error-handling)
+  - [Error Handling Actions](#error-handling-actions)
+  - [Global Error Handler](#global-error-handler)
+  - [Failures outside a run](#failures-outside-a-run)
+  - [JobException](#jobexception)
+- [Interceptors](#interceptors)
+- [Runtime Management](#runtime-management)
+  - [IScheduler](#ischeduler)
+  - [IJobScheduler](#ijobscheduler)
+- [Best Practices](#best-practices)
+- [License](#license)
 
 ## Features
 

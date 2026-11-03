@@ -1,8 +1,40 @@
 # Sa.Media.FFmpeg
 
+**English** | [Русский](Readme-ru.md)
+
 Cross-platform .NET wrapper for FFmpeg (Windows x64, Linux x64) with **bundled fully static binaries** — works out of the box, no system-wide FFmpeg and no codec libraries required. Simplifies audio processing: metadata extraction, format conversion, channel split/join, and DI integration.
 
 ---
+
+## Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+  - [Default instances (no setup required)](#default-instances-no-setup-required)
+  - [Channel split (stereo → mono files)](#channel-split-stereo--mono-files)
+  - [Channel join (mono → stereo)](#channel-join-mono--stereo)
+  - [Streaming conversion (no intermediate files)](#streaming-conversion-no-intermediate-files)
+  - [Raw streaming conversion](#raw-streaming-conversion)
+  - [Stream-based metadata extraction](#stream-based-metadata-extraction)
+- [With DI](#with-di)
+  - [Pre- and post-initialisation](#pre--and-post-initialisation)
+  - [Configuration section binding](#configuration-section-binding)
+  - [One registration per collection](#one-registration-per-collection)
+- [Supported Conversions](#supported-conversions)
+- [Settings](#settings)
+  - [FFMpegOptions](#ffmpegoptions)
+- [Public API Reference](#public-api-reference)
+  - [IFFMpegExecutor](#iffmpegexecutor)
+  - [IFFProbeExecutor](#iffprobeexecutor)
+  - [IPcmS16LeChannelManipulator](#ipcms16lechannelmanipulator)
+  - [IFFRawExecutor](#iffrawexecutor)
+- [Domain Types](#domain-types)
+  - [MediaMetadata](#mediametadata)
+  - [ProcessExecutionResult](#processexecutionresult)
+- [Exceptions](#exceptions)
+- [Bundled Binaries](#bundled-binaries)
+  - [Static payload](#static-payload)
+- [License](#license)
 
 ## Features
 

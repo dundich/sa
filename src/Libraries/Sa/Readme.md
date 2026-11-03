@@ -1,8 +1,35 @@
 # Sa — Shared Utilities
 
+**English** | [Русский](Readme-ru.md)
+
 Core utility library for the **Sa** ecosystem. Contains shared classes and extension methods consumed by other packages via `<Compile Include="..." Link="..."/>`. Targets **.NET 10.0**, **Native AOT compatible**.
 
 ---
+
+## Contents
+
+- [Classes (namespace `Sa.Classes`)](#classes-namespace-saclasses)
+  - [LockRenewer](#lockrenewer)
+  - [MurmurHash3](#murmurhash3)
+  - [Retry](#retry)
+  - [ResetLazy\<T\>](#resetlazyt)
+  - [Levenshtein](#levenshtein)
+  - [MimeTypeMap](#mimetypemap)
+  - [ProcessExecutor / IProcessExecutor](#processexecutor--iprocessexecutor)
+- [Extensions (namespace `Sa.Extensions`)](#extensions-namespace-saextensions)
+  - [DateTimeExtensions](#datetimeextensions)
+  - [NumericExtensions](#numericextensions)
+  - [EnumerableExtensions](#enumerableextensions)
+  - [ExceptionExtensions](#exceptionextensions)
+  - [SpanExtensions](#spanextensions)
+  - [StringExtensions](#stringextensions)
+  - [StrToExtensions](#strtoextensions)
+  - [JsonExtensions](#jsonextensions)
+- [Range & Section Types (namespace `Sa.Classes`)](#range--section-types-namespace-saclasses)
+  - [LimSection\<T\>](#limsectiont)
+  - [HalfSection\<T\>](#halfsectiont)
+  - [Section\<T\>](#sectiont)
+- [Architecture Notes](#architecture-notes)
 
 ## Classes (namespace `Sa.Classes`)
 

@@ -39,8 +39,9 @@ public sealed record OutboxConsumerSettings(
     int MaxConcurrency,
 
     /// <summary>
-    /// Number of retry attempts on message processing error.
-    /// -1 means infinite retries.
+    /// Number of job retry attempts on error.
+    /// Must be non-negative; <see cref="OutboxConsumerSettingsBuilder.WithInfiniteRetries"/> sets
+    /// <see cref="int.MaxValue"/>, which is the practical "no limit".
     /// </summary>
     int RetryCountOnError,
 

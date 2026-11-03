@@ -1,5 +1,7 @@
 # Sa.Data.TempFolder
 
+**English** | [Русский](Readme-ru.md)
+
 Temporary directory management: path-guarded subfolders under a root, debounced activity marking of written folders, age-based background cleanup, low-priority volume tracking with an edge-triggered limit event, and optional free-space watching. Native AOT-safe, keyed multi-instance registration.
 
 ---

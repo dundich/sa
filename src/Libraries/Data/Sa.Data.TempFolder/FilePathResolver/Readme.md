@@ -1,5 +1,7 @@
 # FilePathResolver — Sa.Data.TempFolder
 
+**English** | [Русский](Readme-ru.md)
+
 Companion component of the package: the namespace `Sa.Data.TempFolder.FilePathResolver` lives in
 its own folder, made of two files.
 
@@ -7,6 +9,22 @@ its own folder, made of two files.
 |---|---|
 | `FilePathResolver.cs` | `IFilePathResolver` (the contract), `IFileSystemService` (the file-system seam), `DefaultFileSystemService` (the internal disk-backed seam) and the `FilePathResolver` class — the resolver itself. |
 | `Setup.cs` | `Setup.AddFilePathResolver(...)` — the keyed DI registration. |
+
+## Contents
+
+- [Purpose](#purpose)
+- [Components](#components)
+- [The contract — `IFilePathResolver`](#the-contract--ifilepathresolver)
+- [The resolver — `FilePathResolver`](#the-resolver--filepathresolver)
+  - [Caching](#caching)
+  - [Extensions](#extensions)
+  - [Relative results](#relative-results)
+  - [The `Resolved` event](#the-resolved-event)
+  - [Public surface](#public-surface)
+- [The file-system seam — `IFileSystemService`](#the-file-system-seam--ifilesystemservice)
+- [DI registration — `Setup.cs`](#di-registration--setupcs)
+- [Errors](#errors)
+- [Notes](#notes)
 
 ## Purpose
 

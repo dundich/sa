@@ -1,10 +1,39 @@
 # Sa.Outbox
 
+**Русский** | [English](Readme.md)
+
 Базовая инфраструктурная библиотека для реализации паттерна **Transactional Outbox** в распределённых .NET-системах. Гарантирует атомарную запись сообщений вместе с бизнес-операциями в рамках одной транзакции БД, надёжную доставку, повторы, блокировки, многопоточность и поддержку мультитенантности.
 
 Определяет абстракции и базовую логику — конкретная работа с БД (PostgreSQL, SQL Server и т.д.) реализуется в пакетах-провайдерах (`Sa.Outbox.PostgreSql`, `Sa.Outbox.SqlServer` и др.).
 
 ---
+
+## Содержание
+
+- [Быстрый старт](#быстрый-старт)
+  - [1. Установите пакет провайдера](#1-установите-пакет-провайдера)
+  - [2. Настройте DI](#2-настройте-di)
+- [Архитектура](#архитектура)
+  - [Два этапа жизненного цикла](#два-этапа-жизненного-цикла)
+- [Коды статуса доставки](#коды-статуса-доставки)
+- [Конфигурация](#конфигурация)
+  - [Регистрация консьюмеров](#регистрация-консьюмеров)
+  - [Управление настройками во время выполнения](#управление-настройками-во-время-выполнения)
+  - [Настройки потребления](#настройки-потребления)
+  - [Политика ожидания пустой очереди](#политика-ожидания-пустой-очереди)
+  - [Глобальные переопределения DI](#глобальные-переопределения-di)
+  - [Настройки публикации](#настройки-публикации)
+  - [Сериализация](#сериализация)
+  - [Мультитенантность](#мультитенантность)
+  - [Метаданные сообщений](#метаданные-сообщений)
+- [Доступные провайдеры](#доступные-провайдеры)
+  - [Что общего](#что-общего)
+  - [Кратко о различиях](#кратко-о-различиях)
+- [Требования к провайдерам](#требования-к-провайдерам)
+  - [Регистрация и валидация на старте](#регистрация-и-валидация-на-старте)
+  - [Как сохранить payload после вызова](#как-сохранить-payload-после-вызова)
+- [Зависимости](#зависимости)
+- [Лицензия](#лицензия)
 
 ## Быстрый старт
 
@@ -61,6 +90,10 @@ builder.Services
 > `"default"` отклоняется. Consumer-группа, зарегистрированная под скопом без соответствующего
 > провайдера, валит старт хоста с явной ошибкой, а не уходит молча в хранилище default-провайдера.
 
+Внутренности доставки — жадный цикл по арендаторам, политика приёма статусов, отмена и backoff
+пустой очереди — описаны в [`Delivery/Readme-ru.md`](Delivery/Readme-ru.md). Контракт провайдера,
+его регистрация и стартовая валидация — в [`PlugServices/Readme-ru.md`](PlugServices/Readme-ru.md).
+
 ---
 
 ## Коды статуса доставки
@@ -69,6 +102,10 @@ builder.Services
 
 | Код | Статус | Значение |
 |-----|--------|---------|
+| 0 | `Pending` | Сохранено, ещё не доставлено (ставит провайдер) |
+| 100 | `Processing` | Арендовано воркером (внутреннее состояние, консьюмер его не ставит) |
+| 103 | `Postpone(TimeSpan)` | Отложенная обработка |
+| 104 | `Retry(TimeSpan)` | Повторить через указанную задержку, увеличив счётчик попыток |
 | 200 | `Ok()` | Успешно обработано |
 | 201 | `Created()` | Создан ресурс побочного эффекта |
 | 202 | `Accepted()` | Принято для асинхронной обработки |
@@ -76,11 +113,14 @@ builder.Services
 | 204 | `NoContent()` | Обработано, нет данных |
 | 299 | `Aborted()` | Намеренно пропущено |
 | 301 | `MovedPermanently()` | Перемещено в другую очередь |
-| 400 | `Warn()` | Временная ошибка → повтор |
-| 500–507 | `ErrorXXX()` | Постоянная ошибка |
-| 508 | `ErrorMaxAttempts()` | Исчерпан макс. число попыток |
-| 103 | `Postpone()` | Отложенная обработка |
-| 104 | `Retry()` | Повторить сейчас |
+| 400 | `Warn(ex)` | Временная ошибка → повтор |
+| 500 | `Error(ex)` | Постоянная ошибка |
+| 501–507 | `Error501(ex)` … `Error507(ex)` | Постоянная ошибка |
+| 508 | `ErrorMaxAttempts()` | Исчерпан макс. число попыток (ставит пайплайн, а не консьюмер) |
+
+`Pending` и `Processing` — состояния со стороны хранилища (`DeliveryStatusCode.Pending` /
+`.Processing`): провайдер пишет их при публикации и аренде, и ни для одного из них нет операции в
+`IOutboxContextOperations<T>`.
 
 ---
 
@@ -108,6 +148,22 @@ builder.Services.AddSaOutbox(builder => builder
 ```
 
 > **Self-bootstrapping:** `DeliveryJob` автоматически регистрирует настройки в `IOutboxConsumerManager` при первом выполнении. Отдельный сервис инициализации не нужен — каждое задание читает живые снимки из менеджера, включая runtime-изменения через `Apply()`.
+
+Настройки группы можно брать и из `IConfiguration`, а не из кода: у `AddDelivery` /
+`AddDeliveryScoped` есть необязательный `configurationKey`, а ядро по соглашению применяет секцию
+`Outbox:DeliveryGroups:{group}` — префикс меняется (или отключается) через
+`WithDeliveryConfigurationSection(...)`:
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryConfigurationSection("Outbox:DeliveryGroups") // по умолчанию; null отключает соглашение
+    .WithDeliveries(d => d.AddDeliveryScoped<OrderConsumer, OrderPlaced>("orders"))
+);
+```
+
+Само соглашение реализовано в ядре, а биндинг секции — в пакете-провайдере: правила для PostgreSQL
+(nullable-свойства, приоритеты, что намеренно исключено) — в
+[`Configuration/Readme-ru.md`](../Sa.Outbox.PostgreSql/Configuration/Readme-ru.md#pgoutboxdeliveryoptions).
 
 ### Управление настройками во время выполнения
 
@@ -138,6 +194,11 @@ manager.Unregister("orders");
 var allGroups = manager.GetAllConsumerGroupIds();
 ```
 
+У каждого члена есть и перегрузка с `OutboxGroupKey(providerKey, groupId)`: при нескольких
+провайдерах один и тот же id группы может существовать под разными ключами, поэтому строковые
+перегрузки адресуют провайдера по умолчанию и бросают ошибку неоднозначности, если id не уникален.
+Строковые ключи и их перегрузки сохранены для однопровайдерных приложений.
+
 ### Настройки потребления
 
 `OutboxConsumerSettings` — единый immutable record. Все параметры задаются через `OutboxConsumerSettingsBuilder`:
@@ -160,7 +221,7 @@ var allGroups = manager.GetAllConsumerGroupIds();
 | `BatchingWindow` | 3 сек | Окно агрегации сообщений |
 | `PerTenantTimeout` | 0 | Таймаут на обработку одного арендатора |
 | `PerTenantMaxDegreeOfParallelism` | 1 | Параллелизм по арендаторам (1 = последовательно, -1 = все ядра) |
-| `RetryCountOnError` | 0 | Повторы при ошибке (-1 = бесконечно) |
+| `RetryCountOnError` | 0 | Повторы job (не сообщения) при ошибке; `WithInfiniteRetries()` ставит `int.MaxValue`, отрицательные значения отклоняются |
 | `Paused` | false | Флаг паузы |
 | `IdleMaxInterval` | 0 (выключено) | Верхняя граница адаптивного backoff-а пустой очереди; при установке должен быть `>= Interval` |
 
@@ -192,7 +253,7 @@ builder.Services.AddSaOutbox(builder => builder
 );
 ```
 
-Пример собственной реализации `IEmptyQueueWaitStrategy` — в `Delivery/Readme-ru.md` → *Настройка политики ожидания*.
+Пример собственной реализации `IEmptyQueueWaitStrategy` — в [`Delivery/Readme-ru.md`](Delivery/Readme-ru.md) → *Настройка политики ожидания*.
 
 ---
 
@@ -211,7 +272,7 @@ builder.Services.AddSaOutbox(builder => builder
 
 ### Настройки публикации
 
-`WithPublishSettings` настраивает `OutboxPublishSettings` (сейчас — `MaxBatchSize`) для одного
+`WithPublishSettings` настраивает `OutboxPublishSettings` (сейчас — `MaxBatchSize`, по умолчанию 256) для одного
 скоупа outbox:
 
 ```csharp
@@ -284,17 +345,20 @@ builder.Services.AddSaOutboxUsingPostgreSql(cfg => cfg
 
 ```csharp
 // Режим 2: автодетект арендаторов из сообщений в рантайме
-.WithTenants((_, ts) => ts
-    .WithAutoDetect()                                // Автодетект из сообщений
-    .WithTenantDetector<TenantDetector>()            // Кастомный детектор
-    .WithTenantParallelProcessing(3)                 // Параллельная обработка по арендаторам
-)
+.WithTenants((_, ts) => ts.WithAutoDetect())
 ```
+
+Сам детектор — забота провайдера: пакет-провайдер поставляет свой (PostgreSQL читает колонку
+арендатора из таблицы сообщений), а собственный подключается на уровне провайдера —
+`AddOutboxProvider(..., p => p.WithTenantDetector<MyDetector>())`, см.
+[`PlugServices/Readme-ru.md`](PlugServices/Readme-ru.md). Параллелизм по арендаторам — это настройка
+консьюмер-группы, а не источника арендаторов: `WithPerTenantMaxDegreeOfParallelism(3)` (или
+`WithTenantMaxParallelism()` — один воркер на ядро) у `OutboxConsumerSettingsBuilder`.
 
 > **Примечание:** `WithTenantIds`, `WithTenantSource` и `WithTenantProvider` все
 > помечают источник арендаторов как авторитетный, отключая автодетект внутри
 > (эквивалент добавления `.WithNoAutoDetect()`). Любой из них можно сочетать с
-> `WithTenantParallelProcessing`, но никогда — с цепочкой автодетекта выше. Как только
+> параллелизмом по арендаторам на уровне консьюмера, но никогда — с цепочкой автодетекта выше. Как только
 > любой из них вызван, ветка автодетекта через plug-сервис пропускается и
 > переданный список/источник/провайдер используется без изменений.
 >
@@ -353,17 +417,17 @@ options.AddMetadata<MyMessage>();
 
 | Аспект | `Sa.Outbox.PostgreSql` | `Sa.Outbox.Redis` |
 |---|---|---|
-| Хранилище | таблицы `msg$`, `task$`, `__log$`, `__error$`, `__offset$` | streams `stream:{tenant}:{part}:{type}` + PEL + set `tenants` |
-| Захват | `SELECT … FOR UPDATE SKIP LOCKED` по `task$` с `lock_expires_on` | `XAUTOCLAIM` по idle-времени (`PendingClaimIdle`) |
-| Часы повтора | `lock_expires_on` / `BatchingWindow` | только idle-время в PEL |
-| Задержка `Postpone`/`Retry` | учитывается (`lock_expires_on = now + delay`) | **игнорируется**; повтор после `PendingClaimIdle` |
+| Хранилище | таблицы `outbox__msg$`, `outbox` (очередь задач), `outbox__log$`, `outbox__error$`, `outbox__type$`, `outbox__offset$` (имена выводятся из базового, по умолчанию `outbox`) | streams `stream:{tenant}:{part}:{type}` + PEL + set `tenants` |
+| Захват | `SELECT … FOR UPDATE SKIP LOCKED` по очереди задач с `task_lock_expires_on` | `XAUTOCLAIM` по idle-времени (`PendingClaimIdle`) |
+| Часы повтора | `task_lock_expires_on` / `BatchingWindow` | только idle-время в PEL |
+| Задержка `Postpone`/`Retry` | учитывается (`task_lock_expires_on = now + delay`) | **игнорируется**; повтор после `PendingClaimIdle` |
 | Лимит попыток провайдера | только consumer-level (`MaxDeliveryAttempts` в courier); задача, застрявшая в `Processing`, может быть арендована повторно | счётчик доставок `XPENDING`, ограничен `RedisOutboxConsumeSettings.MaxDeliveryAttempts` |
-| Сохранение статусов | каждый статус пишется в `task$`/`__log$` | только `XACK` / оставить pending / poison |
+| Сохранение статусов | каждый статус пишется в очередь задач (`outbox`) / `outbox__log$` | только `XACK` / оставить pending / poison |
 | Политика «яда» | дедуплицированный `__error$` + опциональный `IPgOutboxPoisonHandler` (`Default` оставляет `__error$`, `Handled` пропускает) | `IRedisOutboxPoisonHandler` (по умолчанию drop + `XACK`); DLQ нет |
 | Retention | очистка и миграция партиций (`CleanupSettings`) | встроенный `XTRIM MINID` по безопасной границе, по умолчанию выключен |
 | Транзакция публикации | может входить в `PgTransaction` вызывающего | контекста публикации нет (`NotSupportedException`) |
 | Схема/миграции | миграции фоновыми job-ами | схемы нет; ключи появляются при первой публикации |
-| Журнал доставок | `__log$` | нет; запись stream живёт до retention |
+| Журнал доставок | `outbox__log$` | нет; запись stream живёт до retention |
 | Старт группы | `__offset$` на `(group, tenant)` | курсор группы (`RedisOutboxConsumeSettings.StartFrom` только при создании) |
 | Кластер / HA | репликация/HA PostgreSQL | команды в один ключ, безопасно для Redis Cluster |
 | Когда выбирать | транзакционная согласованность и аудит | высокий throughput, append-only лог, простая эксплуатация |

@@ -1,5 +1,41 @@
 # PlugServices: the provider plug point
 
+**English** | [Русский](Readme-ru.md)
+
+## Contents
+
+- [Why](#why)
+- [Scope](#scope)
+- [Public API](#public-api)
+  - [Capabilities](#capabilities)
+  - [Descriptor](#descriptor)
+  - [Registration](#registration)
+  - [Registry](#registry)
+- [Validation rules](#validation-rules)
+- [Execution flow](#execution-flow)
+- [Compatibility](#compatibility)
+- [Follow-ups](#follow-ups)
+- [Tests](#tests)
+- [Why](#why-1)
+- [Breaking changes](#breaking-changes)
+- [Publishing](#publishing)
+- [Delivery and the rent token](#delivery-and-the-rent-token)
+- [Provider migration](#provider-migration)
+- [Versioning](#versioning)
+- [Tests](#tests-1)
+- [Goal](#goal)
+- [Decisions](#decisions)
+- [API](#api)
+- [What is keyed](#what-is-keyed)
+- [Delivery routing](#delivery-routing)
+- [Slices](#slices)
+- [Invariants](#invariants)
+- [Tests](#tests-2)
+- [Status](#status)
+- [Per-provider health (slice 3, part 1)](#per-provider-health-slice-3-part-1)
+- [Provider warm-up (init/lifecycle)](#provider-warm-up-initlifecycle)
+- [Disabling a provider](#disabling-a-provider)
+
 ## Why
 
 `Sa.Outbox` does not know where messages live. The whole storage is described by three contracts:
@@ -25,8 +61,9 @@ In:
 
 Out (separate stages):
 
-- health checks and `InitializeAsync` (option B);
-- several providers in one container via keyed registrations (option C);
+- health checks and `InitializeAsync` (option B) — since implemented, see *Follow-ups*;
+- several providers in one container via keyed registrations (option C) — since implemented, see
+  *Follow-ups*;
 - changing the contracts (`InsertBulk`, `Memory<IOutboxContextOperations<T>>`, `IOutboxContextFactory`) — a separate major only.
 
 ## Public API
@@ -64,8 +101,16 @@ public sealed record OutboxProviderDescriptor(
 ### Registration
 
 ```csharp
+// default provider key ("outbox")
 public static IServiceCollection AddOutboxProvider(
     this IServiceCollection services,
+    OutboxProviderDescriptor descriptor,
+    Action<OutboxProviderBuilder> configure);
+
+// explicit provider key — several providers in one container
+public static IServiceCollection AddOutboxProvider(
+    this IServiceCollection services,
+    string providerKey,
     OutboxProviderDescriptor descriptor,
     Action<OutboxProviderBuilder> configure);
 
@@ -147,9 +192,11 @@ Trigger points:
 ## Compatibility
 
 - Public contracts are unchanged; existing applications behave exactly as before.
-- One provider per container (as before), but now it is enforced instead of "last one wins".
+- One provider per **provider key** (the key is the outbox scope key), and that is now enforced
+  instead of "last one wins". Because the core ships keyed support, one container may host several
+  providers under different keys; see the *Follow-ups* section.
 - `Sa.Outbox.PlugServices.IOutboxPlugin` (commented out) is **removed**: the descriptor and the registry replace its role, while the services stay in DI.
-- Keyed multi-provider support and health are follow-up stages; the descriptor is shaped so `Name` can become a `ServiceKey` without breaking the API.
+- Keyed multi-provider support and health were follow-up stages and are implemented (see *Follow-ups*); the descriptor was shaped so `Name` could become a `ServiceKey` without breaking the API.
 
 ## Follow-ups
 
@@ -294,10 +341,14 @@ schedule, migrations/cleanup, tenant set and consumer groups.
    sharing the metadata.
 5. **A group is bound to a provider through its `configureOutbox`**, so it cannot be attached to a
    foreign storage by accident.
-6. **Configuration sections are `Outbox:{providerKey}:…`**; default-key paths keep their previous
-   shape (`Outbox:DeliveryGroups:{group}`).
-7. **Consumer group ids are unique in the container** (validated). That is the slice-1 contract: it
-   avoids keyed `IConsumer<T>` and composite keys in the manager. Composite keys are slice 3.
+6. **Consumer-group sections are application-wide** — `Outbox:DeliveryGroups:{group}` by default,
+   changed or disabled by `IOutboxBuilder.WithDeliveryConfigurationSection`; the prefix is not
+   derived from the provider key. Provider-level settings sections (polling via
+   `WithPollingFromConfiguration`, Redis options via `WithConfiguration`) are passed explicitly per
+   registration, so each provider can point at its own path.
+7. **Consumer group ids may repeat across providers** since slice 3: the settings registry, idle
+   states, the delivery job and the consumer cache are addressed by `OutboxGroupKey(providerKey,
+   groupId)`, and the string overloads throw an ambiguity error while the id is not unique.
 
 ## API
 
@@ -398,7 +449,8 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
   commits nothing, so no settings, no connection/`ValidateOnStart`, no groups and no schedule reach
   the container. `Enabled` defaults to `true`, so existing applications are unchanged.
 - **PG migration guard:** `PgMultiProviderGuard` fails the start when two PG providers point at the
-  same tables (double delivery); the 0.17 → 0.18 migration section lives in the PG readme.
+  same tables (double delivery); the 0.17 → 0.18 migration section lives in the
+  [PG readme](../../Sa.Outbox.PostgreSql/Readme.md#migrating-017--018-existing-deployments).
 
 - **Tenants are per provider**: `WithTenants` inside a provider's `configureOutbox` registers a
   keyed `TenantSettings`; the default provider's settings act as the shared fallback. Auto-detection

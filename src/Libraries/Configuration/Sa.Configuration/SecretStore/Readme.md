@@ -1,6 +1,21 @@
 # Secrets Class
 
+**English** | [Русский](Readme-ru.md)
+
 The `Secrets` class provides a unified way to manage and retrieve sensitive information, such as API keys, database passwords, and other configuration settings, from various sources. It is designed to facilitate secure access to secrets in your application, allowing you to easily populate placeholders in strings with the corresponding secret values.
+
+## Contents
+
+- [Features](#features)
+- [Configuration Loading Order](#configuration-loading-order)
+  - [Example](#example)
+- [Encrypted Secrets](#encrypted-secrets)
+  - [File Format](#file-format)
+  - [Configuration](#configuration)
+  - [Creating and Checking Files](#creating-and-checking-files)
+  - [Failure Behaviour](#failure-behaviour)
+  - [Security Notes](#security-notes)
+- [Conclusion](#conclusion)
 
 ## Features
 

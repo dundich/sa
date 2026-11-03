@@ -1,8 +1,30 @@
 # Sa.Data.PostgreSql
 
+**Русский** | [English](Readme.md)
+
 Лёгкая обёртка над Npgsql для типичных операций с PostgreSQL — без ORM overhead, с поддержкой DI, AOT и минимальными аллокациями.
 
 ---
+
+## Содержание
+
+- [Быстрый старт](#быстрый-старт)
+- [Регистрация (DI)](#регистрация-di)
+  - [Через DI](#через-di)
+  - [Из секции конфигурации](#из-секции-конфигурации)
+  - [Переиспользование существующего NpgsqlDataSource](#переиспользование-существующего-npgsqldatasource)
+  - [Несколько баз данных (keyed)](#несколько-баз-данных-keyed)
+  - [Валидация](#валидация)
+- [ExecuteNonQuery](#executenonquery)
+- [ExecuteScalar / ExecuteScalarTyped](#executescalar--executescalartyped)
+- [ExecuteReader](#executereader)
+- [ExecuteReaderList](#executereaderlist)
+- [ExecuteReaderFirst](#executereaderfirst)
+- [BeginBinaryImport](#beginbinaryimport)
+- [PgRetryStrategy](#pgretrystrategy)
+- [DbCommandExtensions + INamePrefixProvider](#dbcommandextensions--inameprefixprovider)
+- [Сравнение методов](#сравнение-методов)
+- [Лицензия](#лицензия)
 
 ## Быстрый старт
 

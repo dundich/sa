@@ -1,10 +1,39 @@
 # Sa.Outbox
 
+**English** | [Русский](Readme-ru.md)
+
 Base infrastructure library for implementing the **Transactional Outbox** pattern in distributed .NET systems. Guarantees atomic message recording alongside business operations within a single database transaction, with reliable delivery, retries, locking, multi-threading, and multi-tenancy support.
 
 Defines abstractions and core logic — concrete database work (PostgreSQL, SQL Server, etc.) is implemented by provider packages (`Sa.Outbox.PostgreSql`, `Sa.Outbox.SqlServer`, etc.).
 
 ---
+
+## Contents
+
+- [Quick Start](#quick-start)
+  - [1. Install a provider package](#1-install-a-provider-package)
+  - [2. Configure DI](#2-configure-di)
+- [Architecture](#architecture)
+  - [Two lifecycle stages](#two-lifecycle-stages)
+- [Delivery Status Codes](#delivery-status-codes)
+- [Configuration](#configuration)
+  - [Consumer Registration](#consumer-registration)
+  - [Runtime Settings Management](#runtime-settings-management)
+  - [Consumption Settings](#consumption-settings)
+  - [Empty-Queue Wait Policy](#empty-queue-wait-policy)
+  - [Global DI Overrides](#global-di-overrides)
+  - [Publish Settings](#publish-settings)
+  - [Serialization](#serialization)
+  - [Multi-Tenancy](#multi-tenancy)
+  - [Message Metadata](#message-metadata)
+- [Available Providers](#available-providers)
+  - [What both providers share](#what-both-providers-share)
+  - [Differences at a glance](#differences-at-a-glance)
+- [Provider Requirements](#provider-requirements)
+  - [Registration and startup validation](#registration-and-startup-validation)
+  - [Keeping the payload after the call](#keeping-the-payload-after-the-call)
+- [Dependencies](#dependencies)
+- [License](#license)
 
 ## Quick Start
 
@@ -61,6 +90,11 @@ builder.Services
 > consumer group registered under a scope with no matching provider fails the host start with an
 > explicit error instead of silently falling back to the default provider's storage.
 
+Delivery internals — the greedy per-tenant loop, the status acceptance policy, cancellation and the
+empty-queue back-off — live in [`Delivery/Readme.md`](Delivery/Readme.md). The provider contract,
+registration and startup validation are described in
+[`PlugServices/Readme.md`](PlugServices/Readme.md).
+
 ---
 
 ## Delivery Status Codes
@@ -69,6 +103,10 @@ Full set of HTTP-like status codes:
 
 | Code | Status | Meaning |
 |------|--------|---------|
+| 0 | `Pending` | Stored, not yet delivered (set by the provider) |
+| 100 | `Processing` | Rented by a worker (internal state, never set by a consumer) |
+| 103 | `Postpone(TimeSpan)` | Deferred processing |
+| 104 | `Retry(TimeSpan)` | Retry after the given delay, incrementing the attempt counter |
 | 200 | `Ok()` | Successfully processed |
 | 201 | `Created()` | Side-effect resource created |
 | 202 | `Accepted()` | Accepted for async processing |
@@ -76,11 +114,14 @@ Full set of HTTP-like status codes:
 | 204 | `NoContent()` | Processed, no data |
 | 299 | `Aborted()` | Intentionally skipped |
 | 301 | `MovedPermanently()` | Moved to another queue |
-| 400 | `Warn()` | Transient error → retry |
-| 500–507 | `ErrorXXX()` | Permanent error |
-| 508 | `ErrorMaxAttempts()` | Max attempts exhausted |
-| 103 | `Postpone()` | Deferred processing |
-| 104 | `Retry()` | Retry now |
+| 400 | `Warn(ex)` | Transient error → retry |
+| 500 | `Error(ex)` | Permanent error |
+| 501–507 | `Error501(ex)` … `Error507(ex)` | Permanent error |
+| 508 | `ErrorMaxAttempts()` | Max attempts exhausted (set by the pipeline, not by a consumer) |
+
+`Pending` and `Processing` are the storage-side states (`DeliveryStatusCode.Pending` / `.Processing`):
+the provider writes them on publish and rent, and neither has an operation on
+`IOutboxContextOperations<T>`.
 
 ---
 
@@ -107,6 +148,22 @@ builder.Services.AddSaOutbox(builder => builder
 ```
 
 > **Self-bootstrapping:** `DeliveryJob` automatically registers settings into `IOutboxConsumerManager` on first execution. No separate bootstrap service needed — each job reads live snapshots from the manager, including runtime changes via `Apply()`.
+
+A group's settings can also come from `IConfiguration` instead of code: `AddDelivery` /
+`AddDeliveryScoped` take an optional `configurationKey`, and the core applies the
+`Outbox:DeliveryGroups:{group}` section by convention — the prefix is changed (or disabled) with
+`WithDeliveryConfigurationSection(...)`:
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithDeliveryConfigurationSection("Outbox:DeliveryGroups") // default; null disables the convention
+    .WithDeliveries(d => d.AddDeliveryScoped<OrderConsumer, OrderPlaced>("orders"))
+);
+```
+
+The convention is implemented by the core, the section itself is bound by the provider package —
+see [`Configuration/Readme.md`](../Sa.Outbox.PostgreSql/Configuration/Readme.md#pgoutboxdeliveryoptions)
+for the PostgreSQL binding rules (nullable properties, precedence, what is deliberately excluded).
 
 ### Runtime Settings Management
 
@@ -137,6 +194,11 @@ manager.Unregister("orders");
 var allGroups = manager.GetAllConsumerGroupIds();
 ```
 
+Every member also has an `OutboxGroupKey(providerKey, groupId)` overload: with several providers the
+same group id may exist under different keys, so the string overloads target the default provider and
+throw an ambiguity error when the id is not unique. String keys and their overloads are preserved for
+single-provider applications.
+
 ### Consumption Settings
 
 `OutboxConsumerSettings` is a single immutable record. All parameters are set through `OutboxConsumerSettingsBuilder`:
@@ -159,7 +221,7 @@ var allGroups = manager.GetAllConsumerGroupIds();
 | `BatchingWindow` | 3 sec | Message aggregation window |
 | `PerTenantTimeout` | 0 | Timeout per tenant processing |
 | `PerTenantMaxDegreeOfParallelism` | 1 | Tenant parallelism (1 = sequential, -1 = all cores) |
-| `RetryCountOnError` | 0 | Retries on error (-1 = infinite) |
+| `RetryCountOnError` | 0 | Retries of the job (not of the message) on error; `WithInfiniteRetries()` sets `int.MaxValue`, negative values are rejected |
 | `Paused` | false | Pause flag |
 | `IdleMaxInterval` | 0 (disabled) | Upper bound of the adaptive empty-queue poll back-off; must be `>= Interval` when set |
 
@@ -191,7 +253,8 @@ builder.Services.AddSaOutbox(builder => builder
 );
 ```
 
-See `Delivery/Readme.md` → *Configuring the wait policy* for a custom `IEmptyQueueWaitStrategy` implementation.
+See [`Delivery/Readme.md`](Delivery/Readme.md) → *Configuring the wait policy* for a custom
+`IEmptyQueueWaitStrategy` implementation.
 
 ---
 
@@ -210,7 +273,7 @@ Both are optional: `IDeliveryBatcher` defaults to `DeliveryBatcher` (passthrough
 
 ### Publish Settings
 
-`WithPublishSettings` customizes `OutboxPublishSettings` (currently `MaxBatchSize`) for one outbox
+`WithPublishSettings` customizes `OutboxPublishSettings` (currently `MaxBatchSize`, default 256) for one outbox
 scope:
 
 ```csharp
@@ -283,18 +346,21 @@ exclusive, so pick a single chain per registration.
 
 ```csharp
 // Mode 2: auto-detect tenants from messages at runtime
-.WithTenants((_, ts) => ts
-    .WithAutoDetect()                                // auto-detect from messages
-    .WithTenantDetector<TenantDetector>()            // custom detector
-    .WithTenantParallelProcessing(3)                 // parallel processing per tenant
-)
+.WithTenants((_, ts) => ts.WithAutoDetect())
 ```
+
+The detector itself is a provider concern: the provider package ships one (PostgreSQL reads the
+tenant column of the message table) and a custom implementation is plugged at the provider level —
+`AddOutboxProvider(..., p => p.WithTenantDetector<MyDetector>())`, see
+[`PlugServices/Readme.md`](PlugServices/Readme.md). Per-tenant parallelism is a consumer-group
+setting, not a tenant-source setting: `WithPerTenantMaxDegreeOfParallelism(3)` (or
+`WithTenantMaxParallelism()` for one worker per CPU) on `OutboxConsumerSettingsBuilder`.
 
 > **Note:** `WithTenantIds`, `WithTenantSource`, and `WithTenantProvider` all mark the
 > tenant source as authoritative by disabling auto-detection internally
 > (equivalent to appending `.WithNoAutoDetect()`). Any of them can be combined with
-> `WithTenantParallelProcessing`, but never with the auto-detect chain above. Once any of
-> them is called, the plug-service auto-detect branch is skipped and the supplied
+> the consumer-level per-tenant parallelism above, but never with the auto-detect chain.
+> Once any of them is called, the plug-service auto-detect branch is skipped and the supplied
 > list/source/provider is used verbatim.
 >
 > The two modes are mutually exclusive and enforced at configuration time: calling
@@ -351,17 +417,17 @@ declarations work on top of either package. Only storage and delivery mechanics 
 
 | Aspect | `Sa.Outbox.PostgreSql` | `Sa.Outbox.Redis` |
 |---|---|---|
-| Storage | tables `msg$`, `task$`, `__log$`, `__error$`, `__offset$` | streams `stream:{tenant}:{part}:{type}` + PEL + `tenants` set |
-| Claiming | `SELECT … FOR UPDATE SKIP LOCKED` on `task$` with `lock_expires_on` | `XAUTOCLAIM` by idle time (`PendingClaimIdle`) |
-| Retry clock | `lock_expires_on` / `BatchingWindow` | PEL idle time only |
+| Storage | tables `outbox__msg$`, `outbox` (task queue), `outbox__log$`, `outbox__error$`, `outbox__type$`, `outbox__offset$` (names derive from the base name, default `outbox`) | streams `stream:{tenant}:{part}:{type}` + PEL + `tenants` set |
+| Claiming | `SELECT … FOR UPDATE SKIP LOCKED` on the task queue with `task_lock_expires_on` | `XAUTOCLAIM` by idle time (`PendingClaimIdle`) |
+| Retry clock | `task_lock_expires_on` / `BatchingWindow` | PEL idle time only |
 | `Postpone`/`Retry` delay | honored (`lock_expires_on = now + delay`) | **ignored**; retried after `PendingClaimIdle` |
 | Provider-level attempt limit | consumer-level only (`MaxDeliveryAttempts` in the courier); a task stuck in `Processing` can be re-rented | `XPENDING` delivery count, capped by `RedisOutboxConsumeSettings.MaxDeliveryAttempts` |
-| Status persistence | every status is written to `task$`/`__log$` | only `XACK` / leave pending / poison |
+| Status persistence | every status is written to the task queue (`outbox`) / `outbox__log$` | only `XACK` / leave pending / poison |
 | Poison policy | de-duplicated `__error$` + optional `IPgOutboxPoisonHandler` (`Default` keeps `__error$`, `Handled` skips it) | `IRedisOutboxPoisonHandler` (default drops with `XACK`); no DLQ |
 | Retention | partition-based cleanup and migration (`CleanupSettings`) | inline `XTRIM MINID` with a safe floor, off by default |
 | Publish transaction | can join the caller's `PgTransaction` | no publish context (`NotSupportedException`) |
 | Schema/migration | migrations run as background jobs | none; keys appear on first publish |
-| Delivery log | `__log$` | none; the stream entry remains until retention trims it |
+| Delivery log | `outbox__log$` | none; the stream entry remains until retention trims it |
 | Group start | `__offset$` per `(group, tenant)` | group cursor (`RedisOutboxConsumeSettings.StartFrom` only when created) |
 | Cluster / HA | PostgreSQL replication/HA | single-key commands, safe on Redis Cluster |
 | Best fit | transactional consistency and audit | high-throughput append-only log, simple operations |

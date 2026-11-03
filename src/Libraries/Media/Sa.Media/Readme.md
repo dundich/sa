@@ -1,8 +1,33 @@
 # Sa.Media
 
+**English** | [Русский](Readme-ru.md)
+
 Async, memory-efficient WAV file reader for .NET 10+. Designed for Native AOT compatibility with zero allocations on hot paths. Includes a stereo cross-feed suppression pipeline (`Sa.Media.Echo`) for separating closely miked sources.
 
 ---
+
+## Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+  - [Read header](#read-header)
+  - [Read raw samples per channel](#read-raw-samples-per-channel)
+  - [Read normalized double samples \[-1.0 … 1.0\]](#read-normalized-double-samples--10--10)
+  - [Read normalized float samples (DSP path)](#read-normalized-float-samples-dsp-path)
+  - [Streamable batches (ideal for audio pipelines)](#streamable-batches-ideal-for-audio-pipelines)
+  - [Trim by time range](#trim-by-time-range)
+  - [Convert to different format](#convert-to-different-format)
+- [Cross-feed suppression (`Sa.Media.Echo`)](#cross-feed-suppression-samediaecho)
+- [Supported Formats](#supported-formats)
+- [Public API Reference](#public-api-reference)
+  - [Core types](#core-types)
+  - [Echo types (`Sa.Media.Echo`)](#echo-types-samediaecho)
+  - [Key methods on `CrossFeedSeparator`](#key-methods-on-crossfeedseparator)
+  - [Key methods on `AsyncWavReader`](#key-methods-on-asyncwavreader)
+  - [`TimeRange` factories](#timerange-factories)
+- [Performance Notes](#performance-notes)
+- [Project Layout](#project-layout)
+- [License](#license)
 
 ## Features
 

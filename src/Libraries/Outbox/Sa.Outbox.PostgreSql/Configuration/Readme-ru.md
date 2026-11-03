@@ -1,5 +1,7 @@
 # Конфигурация
 
+**Русский** | [English](Readme.md)
+
 ## Содержание
 
 - [Обзор](#обзор)
@@ -148,7 +150,7 @@ configure?.Invoke(configuration);     // ③ делегат пользовате
 
 ### `WithDataSource`
 
-Принимает опциональный callback `Action<IDataSourceBuilder>` и делегирует его в `AddSaPostgreSqlDataSource(...)` из `Sa.Data.PostgreSql` — секция приходит через `FromConfiguration(...)`, конвейер опций — через `Options(...)`; полный конвейер (нормализация, валидация, `ValidateOnStart()`) описан в её Readme. Единственная опция — `ConnectionString`; пулинг и прочие опции Npgsql настраиваются внутри самой строки (например, `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` дополнительно управляет авто-наследованием схемы outbox-таблиц (шаг ①); пустая строка переиспользует `NpgsqlDataSource`, зарегистрированный в DI, вместо открытия второго pool'а.
+Принимает опциональный callback `Action<IDataSourceBuilder>` и делегирует его в `AddSaPostgreSqlDataSource(...)` из `Sa.Data.PostgreSql` — секция приходит через `FromConfiguration(...)`, конвейер опций — через `Options(...)`; полный конвейер (нормализация, валидация, `ValidateOnStart()`) описан в её [readme](../../../Data/Sa.Data.PostgreSql/Readme-ru.md). Единственная опция — `ConnectionString`; пулинг и прочие опции Npgsql настраиваются внутри самой строки (например, `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` дополнительно управляет авто-наследованием схемы outbox-таблиц (шаг ①); пустая строка переиспользует `NpgsqlDataSource`, зарегистрированный в DI, вместо открытия второго pool'а.
 
 ### `WithPolling` и пресеты
 
@@ -524,7 +526,7 @@ OutboxDefaults  →  PgPollingSettings (только при WithPolling*)  →  
 | `InitialDelay` | `TimeSpan?` | Задержка перед первым запуском после старта |
 | `ConcurrencyLimit` | `int?` | Предел конкурентности расписания группы |
 | `MaxConcurrency` | `int?` | Макс. одновременно работающих job'ов в группе |
-| `RetryCountOnError` | `int?` | Повторы job'а при ошибке (`-1` = бесконечно) |
+| `RetryCountOnError` | `int?` | Повторы job'а при ошибке (`WithInfiniteRetries()` = `int.MaxValue`; отрицательные значения отклоняются) |
 | `MaxBatchSize` | `int?` | Верхняя граница арендуемого батча |
 | `MaxProcessingIterations` | `int?` | Итераций за цикл (`-1` = до опустошения) |
 | `IterationDelay` | `TimeSpan?` | Задержка между итерациями в цикле |
@@ -815,4 +817,4 @@ services.AddSaOutboxUsingPostgreSql(cfg => cfg
 
 ---
 
-Полный quick start — см. Readme пакета: `src/Sa.Outbox.PostgreSql/Readme.md`.
+Полный quick start — см. readme пакета: [`../Readme-ru.md`](../Readme-ru.md).

@@ -1,8 +1,22 @@
 # Sa.Data.S3
 
+**English** | [Русский](Readme-ru.md)
+
 Wrapper over `HttpClient` for S3-compatible storage systems (Minio, AWS S3, DigitalOcean Spaces, etc.) with a **fully self-implemented AWS Signature Version 4** — no dependencies on AWS SDK or Minio SDK.
 
 ---
+
+## Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+  - [Without DI](#without-di)
+  - [With DI](#with-di)
+- [Configuration in appsettings](#configuration-in-appsettings)
+- [Named clients](#named-clients)
+- [Settings](#settings)
+- [Motivation](#motivation)
+- [License](#license)
 
 ## Features
 

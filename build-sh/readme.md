@@ -2,6 +2,16 @@
 
 Alternative to PowerShell `build/` — these scripts work on Linux/macOS.
 
+## Contents
+
+- [Usage](#usage)
+- [Test container images](#test-container-images)
+  - [S3 server image](#s3-server-image)
+  - [When Docker Hub is unreachable or slow](#when-docker-hub-is-unreachable-or-slow)
+- [Secrets tooling](#secrets-tooling)
+- [Notes](#notes)
+- [Test resource limits](#test-resource-limits)
+
 ## Usage
 
 ```bash

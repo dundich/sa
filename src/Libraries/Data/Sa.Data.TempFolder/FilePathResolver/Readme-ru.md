@@ -1,5 +1,7 @@
 # FilePathResolver — Sa.Data.TempFolder
 
+**Русский** | [English](Readme.md)
+
 Компонент-спутник пакета: пространство имён `Sa.Data.TempFolder.FilePathResolver` живёт в своей
 папке и состоит из двух файлов.
 
@@ -7,6 +9,22 @@
 |---|---|
 | `FilePathResolver.cs` | `IFilePathResolver` (контракт), `IFileSystemService` (шов к файловой системе), `DefaultFileSystemService` (внутренняя дисковая реализация шва) и класс `FilePathResolver` — сам резолвер. |
 | `Setup.cs` | `Setup.AddFilePathResolver(...)` — регистрация в DI по ключу. |
+
+## Содержание
+
+- [Назначение](#назначение)
+- [Компоненты](#компоненты)
+- [Контракт — `IFilePathResolver`](#контракт--ifilepathresolver)
+- [Резолвер — `FilePathResolver`](#резолвер--filepathresolver)
+  - [Кэш](#кэш)
+  - [Расширения](#расширения)
+  - [Относительный результат](#относительный-результат)
+  - [Событие `Resolved`](#событие-resolved)
+  - [Публичный контур](#публичный-контур)
+- [Шов к файловой системе — `IFileSystemService`](#шов-к-файловой-системе--ifilesystemservice)
+- [Регистрация в DI — `Setup.cs`](#регистрация-в-di--setupcs)
+- [Ошибки](#ошибки)
+- [Примечания](#примечания)
 
 ## Назначение
 

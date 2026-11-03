@@ -1,5 +1,7 @@
 # Sa.HybridFileStorage.Postgres
 
+**English** | [Русский](Readme-ru.md)
+
 PostgreSQL-backed file storage provider for `Sa.HybridFileStorage`. Stores files as `BYTEA` in a partitioned database table with automatic partition management, scheduled migration, and background cleanup.
 
 ---
@@ -10,7 +12,6 @@ PostgreSQL-backed file storage provider for `Sa.HybridFileStorage`. Stores files
 - [File ID Format](#file-id-format)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-  - [Several keyed storages](#several-keyed-storages)
   - [Reusing an NpgsqlDataSource](#reusing-an-npgsqldatasource)
   - [Without a Generic Host](#without-a-generic-host)
 - [CRUD Examples](#crud-examples)

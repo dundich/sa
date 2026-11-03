@@ -1,5 +1,18 @@
 # SqlBuilder
 
+**English** | [Русский](Readme-ru.md)
+
+## Contents
+
+- [Overview](#overview)
+- [File structure](#file-structure)
+- [Templates](#templates)
+  - [Static templates (read-only, constant strings)](#static-templates-read-only-constant-strings)
+  - [Dynamic templates (generated per-call)](#dynamic-templates-generated-per-call)
+- [Parameter naming convention](#parameter-naming-convention)
+- [DI registration](#di-registration)
+- [Design notes](#design-notes)
+
 ## Overview
 
 This folder holds the types responsible for generating and parameterising all SQL statements used by the PostgreSQL-backed outbox subsystem. Unlike the `Commands` folder (which translates high-level operations into concrete `NpgsqlCommand` calls), `SqlBuilder` owns the **SQL templates themselves** and the plumbing that makes them work at scale.
@@ -8,9 +21,9 @@ This folder holds the types responsible for generating and parameterising all SQ
 
 | File | Responsibility |
 |---|---|
-| `SqlOutboxBuilder.cs` | Core class holding every SQL template string plus helper methods for dynamic value-list generation (error inserts, delivery inserts). Uses pooled `StringBuilder` for memory efficiency. |
+| `SqlOutboxBuilder.cs` | Core class holding every SQL template string plus helper methods for dynamic value-list generation (error inserts, delivery inserts); sizes its `StringBuilder` from the row count. |
 | `SqlParam.cs` | Static class with named constants for every SQL parameter placeholder (e.g. `@tnt`, `@gr`, `@frm`). Ensures consistency across all queries. |
-| `Setup.cs` | DI extension method (`AddOutboxSqlBuilder`) that registers `ObjectPool<StringBuilder>` and `SqlOutboxBuilder`. |
+| `Setup.cs` | DI extension method (`AddOutboxSqlBuilder`) that registers a keyed `SqlOutboxBuilder` per provider key. |
 
 ## Templates
 
@@ -40,7 +53,7 @@ All templates are built at construction time using column/table names resolved f
 | `SqlError(int count)` | Generates multi-row error insert statements parametrised by count |
 | `SqlFinishDelivery(int count)` | Completes a delivery batch: inserts log rows, then updates the corresponding task records |
 
-Both dynamic methods use `ObjectPool<StringBuilder>` to avoid heap allocations during high-throughput batching.
+Both dynamic methods allocate a right-sized `StringBuilder` (no pool: renting and returning one measured more expensive than `new` for these shapes).
 
 ## Parameter naming convention
 
@@ -68,17 +81,17 @@ Every parameter follows a short mnemonic alias stored in `SqlParam`:
 
 ## DI registration
 
-`Setup.AddOutboxSqlBuilder` wires three things into the service collection:
+`Setup.AddOutboxSqlBuilder` registers one thing per provider key:
 
-1. `ObjectPoolProvider` → `DefaultObjectPoolProvider`
-2. Pooled `ObjectPool<StringBuilder>` (initial capacity 1024) — reused during dynamic SQL generation to reduce GC pressure
-3. Singleton `SqlOutboxBuilder`
+- a keyed singleton `SqlOutboxBuilder`, built from that key's `PgOutboxTableSettings` (the key is the
+  outbox scope key, so two providers keep their own table names and templates).
 
-It also delegates to `AddPgOutboxSettings` to register table/column configuration.
+There is no `ObjectPool` registration: dynamic builders size a plain `StringBuilder` from the row
+count (`count * 48` / `count * 96`), which measured cheaper than pool rent/return for these shapes.
 
 ## Design notes
 
-- **Pooled StringBuilder** — Dynamic multi-row value lists (errors, deliveries) use `ObjectPool<StringBuilder>` to avoid allocations during high-throughput batching.
+- **Right-sized StringBuilder** — Dynamic multi-row value lists (errors, deliveries) allocate a `StringBuilder` sized from the row count instead of renting one from a pool.
 - **Advisory locking** — Offset writes are serialised via `pg_advisory_xact_lock` to prevent race conditions without heavy table-level locks.
 - **Cursor on `msg_seq`, not on the v7 id (C2)** — `msg_id` is minted by application clocks, so a skewed or backdated clock can make a new message sort *below* an already-advanced cursor; `msg_id > @offset` would skip it forever. `msg_seq` (BIGSERIAL) is assigned by the database at COPY time, so "newer row" and "larger seq" are the same thing by construction and the cursor can never pass a not-yet-inserted row. The legacy UUID `group_offset` stays in the offset table for rolling upgrades and is dropped by a later contract version.
 - **SKIP LOCKED** — Task selection uses PostgreSQL's `FOR UPDATE SKIP LOCKED` to allow multiple consumers to safely compete for work.

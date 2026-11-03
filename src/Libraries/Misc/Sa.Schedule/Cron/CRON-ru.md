@@ -1,5 +1,7 @@
 # Cron Timing в Sa.Schedule
 
+**Русский** | [English](CRON.md)
+
 `Sa.Schedule` поддерживает вычисление следующего срабатывания по cron-выражениям через `CronTiming`.
 
 ## Общие сведения

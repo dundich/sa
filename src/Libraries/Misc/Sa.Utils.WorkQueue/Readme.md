@@ -1,8 +1,31 @@
 # Sa.Utils.WorkQueue
 
+**English** | [Русский](Readme-ru.md)
+
 High-performance async task queue for .NET with bounded capacity, dynamic concurrency scaling, and a type-safe API.
 
 ---
+
+## Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+  - [1️⃣ Implement your task processor](#1-implement-your-task-processor)
+  - [2️⃣ Register with DI](#2-register-with-di)
+  - [3️⃣ Use via injection](#3-use-via-injection)
+- [Configuration](#configuration)
+  - [Creating options](#creating-options)
+- [Configuration from appsettings (Microsoft.Extensions.Options)](#configuration-from-appsettings-microsoftextensionsoptions)
+- [Concurrency & Scaling](#concurrency--scaling)
+- [Pool Observability](#pool-observability)
+- [Reader Cancellation Order](#reader-cancellation-order)
+- [Reader Cancel Modes](#reader-cancel-modes)
+- [Enqueue Strategies](#enqueue-strategies)
+  - [Producer cancellation](#producer-cancellation)
+- [Error Strategies](#error-strategies)
+- [Status Lifecycle](#status-lifecycle)
+- [API — `ISaWorkQueue<TInput>`](#api--isaworkqueuetinput)
+- [⚠️ Important Notes](#-important-notes)
 
 ## Features
 
@@ -52,7 +75,7 @@ builder.Services.AddSaWorkQueue<OrderInput>(
 ```
 
 The serializable half (capacity, concurrency, strategies, timeouts) can live in
-`appsettings` — see [Configuration from appsettings](#configuration-from-appsettings-microsoftextentsoptions).
+`appsettings` — see [Configuration from appsettings](#configuration-from-appsettings-microsoftextensionsoptions).
 The callback may also need services from the container — use the builder's `Configure`
 escape hatch:
 

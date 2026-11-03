@@ -1,5 +1,30 @@
 # Delivery
 
+**Русский** | [English](Readme.md)
+
+## Содержание
+
+- [Обзор](#обзор)
+- [Структура файлов](#структура-файлов)
+- [Конвейер доставки](#конвейер-доставки)
+- [Политика приёма по статусам](#политика-приёма-по-статусам)
+  - [1. Какие статусы вообще берутся в обработку](#1-какие-статусы-вообще-берутся-в-обработку)
+  - [2. Кто и что ставит](#2-кто-и-что-ставит)
+  - [3. Правила `PostHandle`](#3-правила-posthandle)
+  - [4. Что стоит помнить](#4-что-стоит-помнить)
+  - [5. Что сообщается наружу](#5-что-сообщается-наружу)
+- [Отмена](#отмена)
+  - [Где остановка отличается от сбоя](#где-остановка-отличается-от-сбоя)
+  - [Что происходит с батчем](#что-происходит-с-батчем)
+  - [Продление аренды и запись результата](#продление-аренды-и-запись-результата)
+  - [Единственный видимый побочный эффект](#единственный-видимый-побочный-эффект)
+- [Backoff пустой очереди](#backoff-пустой-очереди)
+  - [Настройка политики ожидания](#настройка-политики-ожидания)
+- [Настройки потребителя](#настройки-потребителя)
+  - [Инварианты блокировки](#инварианты-блокировки)
+- [Управление во время выполнения](#управление-во-время-выполнения)
+- [DI-развёртывание](#di-развёртывание)
+
 ## Обзор
 
 В этой папке находится вся **сторона доставки** (потребления) исключающего почтового ящика: от фоновой задачи, которая будит группу потребителей, до пообъектного учёта статусов и решений о ретраях и DLQ. Папка не зависит от хранилища — SQL живёт в `Sa.Outbox.PostgreSql`, а здесь работа идёт только через `IOutboxDeliveryManager` / `IOutboxContextFactory`.
@@ -255,12 +280,12 @@ services.AddSaOutbox(builder => builder
 | `ConsumerGroupId` | — | `WithConsumerGroupId` | Обязателен; также служит ключом DI для потребителя |
 | `AsSingleton` | `true` | `AsSingleton` | `true` — один экземпляр на весь кластер, кешируется по id группы; `false` — новый DI-scope на батч |
 | `Interval` | 1 мин | `WithInterval` | Периодичность задачи |
-| `InitialDelay` | 10 с | `WithInitialDelay` / `StartImmediately` | `AddDeliveryJob` ставит ноль |
+| `InitialDelay` | 10 с | `WithInitialDelay` / `StartImmediately` | Задержка перед первым запуском после старта |
 | `ConcurrencyLimit` | 1 | `WithConcurrencyLimit` | Параллелизм расписания на уровне группы |
-| `MaxConcurrency` | 48 | `WithMaxConcurrency` | `AddDeliveryJob` переопределяет в 1 |
+| `MaxConcurrency` | 48 | `WithMaxConcurrency` | Потолок запланированного параллелизма группы |
 | `RetryCountOnError` | 0 | `WithRetryCountOnError` / `WithNoRetries` / `WithInfiniteRetries` | Повторы **задачи**, а не сообщения |
 | `MaxBatchSize` | 128 | `WithMaxBatchSize` | Верхняя граница для `IDeliveryBatcher` |
-| `MaxProcessingIterations` | 10 | `WithMaxProcessingIterations` / `WithSingleIteration` / `WithUnlimitedIterations` | `-1` — жадно, пока очередь не опустеет; `AddDeliveryJob` ставит `-1` |
+| `MaxProcessingIterations` | 10 | `WithMaxProcessingIterations` / `WithSingleIteration` / `WithUnlimitedIterations` | `-1` — жадно, пока очередь не опустеет |
 | `IterationDelay` | ноль | `WithIterationDelay` | Вместе с нулём и `-1` цикл превращается в горячий слив |
 | `LockDuration` | 10 с | `WithLockDuration` / `WithNoLockDuration` | Должен быть `> 0` |
 | `LockRenewal` | 3 с | `WithLockRenewal` | Должно выполняться `0 < LockRenewal < LockDuration` |
@@ -272,7 +297,7 @@ services.AddSaOutbox(builder => builder
 | `Paused` | `false` | `Paused` / `Resumed` | Проверяется на каждой итерации цикла |
 | `IdleMaxInterval` | ноль (выключено) | `WithIdleBackoff(max)` / `WithFixedInterval` | Верхняя граница backoff-а пустой очереди; при установке должен быть `>= Interval` |
 
-Обратите внимание: `AddDeliveryJob` заранее заполняет билдер значениями `StartImmediately()`, `ConcurrencyLimit(1)`, `MaxConcurrency(1)`, `MaxProcessingIterations(-1)` и `PerTenantTimeout(Zero)` **до** вызова вашего `configure`, поэтому эти значения выигрывают у `OutboxDefaults`.
+`AddDeliveryJob` заполняет билдер только **идентичностью регистрации** — `ConsumerGroupId`, `ProviderKey` и `AsSingleton` (разница между `AddDelivery` и `AddDeliveryScoped`) — до вызова вашего `configure`. Все остальные значения приходят из слоёв, описанных в [`Sa.Outbox.PostgreSql/Configuration/Readme-ru.md`](../../Sa.Outbox.PostgreSql/Configuration/Readme-ru.md#pgoutboxdeliveryoptions): `OutboxDefaults` → polling-умолчания провайдера (например, `PgPollingSettings`) → секция конфигурации группы → callback. Если ни один из этих слоёв не настроен, реальным значением остаётся таблица выше.
 
 ### Инварианты блокировки
 

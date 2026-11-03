@@ -1,5 +1,7 @@
 # Configuration
 
+**English** | [Русский](Readme-ru.md)
+
 ## Contents
 
 - [Overview](#overview)
@@ -149,7 +151,7 @@ Takes an optional `Action<IServiceProvider, PgOutboxSettings>`. When the delegat
 
 ### `WithDataSource`
 
-Takes an optional `Action<IDataSourceBuilder>` callback and delegates it to `AddSaPostgreSqlDataSource(...)` from `Sa.Data.PostgreSql` — the section comes via `FromConfiguration(...)`, the options pipeline via `Options(...)`; see its Readme for the full pipeline (normalisation, validation, `ValidateOnStart()`). The only option is `ConnectionString`; pooling and other Npgsql options are configured inside the string itself (e.g. `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` additionally drives the automatic schema inheritance of the outbox tables (step ①); an empty string reuses an `NpgsqlDataSource` registered in DI instead of opening a second pool.
+Takes an optional `Action<IDataSourceBuilder>` callback and delegates it to `AddSaPostgreSqlDataSource(...)` from `Sa.Data.PostgreSql` — the section comes via `FromConfiguration(...)`, the options pipeline via `Options(...)`; its [readme](../../../Data/Sa.Data.PostgreSql/Readme.md) covers the full pipeline (normalisation, validation, `ValidateOnStart()`). The only option is `ConnectionString`; pooling and other Npgsql options are configured inside the string itself (e.g. `Minimum Pool Size`, `Maximum Pool Size`, `Search Path`, `Timeout`). `Search Path` additionally drives the automatic schema inheritance of the outbox tables (step ①); an empty string reuses an `NpgsqlDataSource` registered in DI instead of opening a second pool.
 
 ### `WithPolling` and the presets
 
@@ -533,7 +535,7 @@ All 16 `OutboxConsumerSettings` scalars are bindable and **nullable** — `null`
 | `InitialDelay` | `TimeSpan?` | Delay before the first run after startup |
 | `ConcurrencyLimit` | `int?` | Group-level schedule concurrency limit |
 | `MaxConcurrency` | `int?` | Max simultaneously running jobs within the group |
-| `RetryCountOnError` | `int?` | Job retries on error (`-1` = infinite) |
+| `RetryCountOnError` | `int?` | Job retries on error (`WithInfiniteRetries()` = `int.MaxValue`; negative values are rejected) |
 | `MaxBatchSize` | `int?` | Upper bound for the rented batch size |
 | `MaxProcessingIterations` | `int?` | Iterations per cycle (`-1` = drain until empty) |
 | `IterationDelay` | `TimeSpan?` | Delay between processing iterations within a cycle |
@@ -824,4 +826,4 @@ services.AddSaOutboxUsingPostgreSql(cfg => cfg
 
 ---
 
-Full quick start — see the package Readme: `src/Sa.Outbox.PostgreSql/Readme.md`.
+Full quick start — see the package readme: [`../Readme.md`](../Readme.md).

@@ -1,5 +1,7 @@
 # Sa.Configuration
 
+**English** | [Русский](Readme-ru.md)
+
 A .NET package that does two things:
 
 1. **Substitutes secrets into configuration** — instead of hardcoding passwords and keys, you write `{{sa_pg_password}}` in the config, and the package fills in the real value from a file, an environment variable, or a command-line argument.
@@ -9,14 +11,43 @@ It plugs into the standard `Microsoft.Extensions.Configuration` pipeline, so it 
 
 ---
 
+## Contents
+
+- [What it can do](#what-it-can-do)
+- [Quick start](#quick-start)
+  - [1. Wire up the package in `Program.cs`](#1-wire-up-the-package-in-programcs)
+  - [2. Create a secrets file `secrets.txt`](#2-create-a-secrets-file-secretstxt)
+  - [3. Write placeholders in `appsettings.json`](#3-write-placeholders-in-appsettingsjson)
+  - [4. Read the configuration as usual](#4-read-the-configuration-as-usual)
+- [Where secrets come from (priority order)](#where-secrets-come-from-priority-order)
+- [Encrypted secrets](#encrypted-secrets)
+  - [Example encrypted file](#example-encrypted-file)
+  - [Encodings](#encodings)
+- [Optional placeholders](#optional-placeholders)
+- [Key aliases](#key-aliases)
+  - [The problem](#the-problem)
+  - [How to set it](#how-to-set-it)
+  - [Several registrations (multisetup)](#several-registrations-multisetup)
+  - [The alias must be the last word](#the-alias-must-be-the-last-word)
+  - [Custom transforms](#custom-transforms)
+  - [What happens after that](#what-happens-after-that)
+  - [Where the value is looked up](#where-the-value-is-looked-up)
+  - [Who overrides whom](#who-overrides-whom)
+  - [Details](#details)
+  - [Cheat sheet](#cheat-sheet)
+- [Using together with Sa.Configuration.PostgreSql](#using-together-with-saconfigurationpostgresql)
+- [Command-line arguments](#command-line-arguments)
+- [Working with secrets directly](#working-with-secrets-directly)
+- [License](#license)
+
 ## What it can do
 
 - **Automatic secret substitution** — `{{key}}` placeholders are replaced with real values. See [Quick start](#quick-start).
 - **Value cleanup** — values are trimmed at the edges and stripped of surrounding quotes (`'`, `"`, `` ` ``). Details in [Encodings](#encodings).
-- **Cycle protection** — nested placeholders are expanded up to 3 levels deep. If a cycle forms, you get a clear `InvalidOperationException`. Details in [Secrets](#secrets).
+- **Cycle protection** — nested placeholders are expanded up to 3 levels deep. If a cycle forms, you get a clear `InvalidOperationException`. Details in [Secrets](SecretStore/Readme.md).
 - **Optional placeholders** — `{{?key}}` instead of `{{key}}`: if the secret is missing, the string becomes `null` instead of failing with an error.
-- **Multiple stores at once** — [`Secrets`](#secrets) can combine any number of stores (`ISecretStore`). The one added last wins. Stores can be added at runtime, including from multiple threads.
-- **Argument parsing** — [`Arguments`](#arguments) understands `--key value`, `--key=value`, `-flag`. Negative numbers are treated as values, not flags. Quotes are stripped. `__` in a parameter name is read as the `:` separator.
+- **Multiple stores at once** — [`Secrets`](SecretStore/Readme.md) can combine any number of stores (`ISecretStore`). The one added last wins. Stores can be added at runtime, including from multiple threads.
+- **Argument parsing** — [`Arguments`](CommandLine/Readme.md) understands `--key value`, `--key=value`, `-flag`. Negative numbers are treated as values, not flags. Quotes are stripped. `__` in a parameter name is read as the `:` separator.
 - **Environments** — automatically picks up `secrets.{Environment}.txt` for Development/Staging/Production.
 - **Key aliases** — [Key aliases](#key-aliases): you can link a "flat" setting name (say, `auth_base_url` from the PHP world) to a nested C# path (`sa:scope:api:auth:base_url`). Works across all sources at once.
 - **Encryption** — encrypted `secrets*.pub` files (AES-256-GCM) can be committed to the repo. Encryption keys are plain or `base64:`. Clients, environments, `.env`, and Unicode are supported. See [Encrypted secrets](#encrypted-secrets).

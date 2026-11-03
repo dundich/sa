@@ -1,6 +1,28 @@
 # Arguments — Command-Line Parsing
 
+**English** | [Русский](Readme-ru.md)
+
 Parse and consume command-line arguments in .NET apps with a simple dictionary-like API. Supports `--flag=value`, `--flag value`, short options (`-x`), and typed getters.
+
+## Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+  - [Minimal Console App](#minimal-console-app)
+- [Key Separators](#key-separators)
+- [Supported Formats](#supported-formats)
+- [API Reference](#api-reference)
+  - [Constructor](#constructor)
+  - [Static Factory](#static-factory)
+  - [Indexer](#indexer)
+  - [Contains](#contains)
+  - [Typed Getters](#typed-getters)
+  - [Raw Parameters](#raw-parameters)
+- [Integration with Microsoft.Extensions.Configuration](#integration-with-microsoftextensionsconfiguration)
+- [Running the Application](#running-the-application)
+  - [From terminal](#from-terminal)
+  - [From Visual Studio / VS Code](#from-visual-studio--vs-code)
+- [Edge Cases](#edge-cases)
 
 ## Features
 

@@ -1,5 +1,16 @@
 # Type Resolve — Sa.Outbox.PostgreSql
 
+**English** | [Русский](Readme-ru.md)
+
+## Contents
+
+- [Purpose](#purpose)
+- [Components](#components)
+- [How it works](#how-it-works)
+- [Why MurmurHash3?](#why-murmurhash3)
+- [Thread safety](#thread-safety)
+- [DI Registration](#di-registration)
+
 ## Purpose
 
 The **Type Resolve** module provides a lightweight, cache-aware mechanism for mapping between fully qualified type names and compact integer codes (`long`) within the outbox system.
@@ -13,7 +24,7 @@ In the outbox architecture, every message type (e.g., `"OrderCreated"`, `"EmailS
 | `IOutboxTypeCache` | Read-only cache layer over the `__type$` table. Loads all type mappings into memory on demand. |
 | `OutboxTypeCache` | Concrete implementation. Holds bidirectional dictionaries (`long → string` and `string → long`) refreshed lazily via `ResetLazy`. |
 | `IOutboxTypeResolver` | Higher-level resolver that coordinates cache hits, DB inserts, and hash computation. |
-| `OutboxTypeResolver` | Orchestrates: check cache → compute MurmurHash3 fallback → insert into DB → refresh cache. Thread-safe via `Interlocked`. |
+| `OutboxTypeResolver` | Orchestrates: check cache → compute MurmurHash3 fallback → insert into DB → refresh cache. Thread-safe via a `SemaphoreSlim` on the cold path. |
 | `Setup.AddOutboxTypeResolver()` | DI extension that registers both services as singletons. Called automatically during `Sa.Outbox.PostgreSql.Setup`. |
 
 ## How it works
@@ -21,7 +32,10 @@ In the outbox architecture, every message type (e.g., `"OrderCreated"`, `"EmailS
 1. **Lookup by name** (`GetHashCode(typeName)`):
    - Check in-memory cache → if found, return code.
    - If not found, compute `MurmurHash3` of the type name → use as code.
-   - Insert `(code, typeName)` into `__type$` table (once per process, guarded by `Interlocked.CompareExchange`).
+   - Insert `(code, typeName)` into `__type$` table under a `SemaphoreSlim` (double-checked after the
+     lock, so concurrent callers insert at most once).
+   - Verify the stored name for that code; if the hash already belongs to another type name, throw
+     `InvalidOperationException` instead of handing out a colliding code.
    - Reset cache so subsequent lookups hit memory.
    - Return code.
 
@@ -40,14 +54,19 @@ Using a deterministic hash as the type code ensures:
 
 ## Thread safety
 
-- `_triggered` flag uses `Interlocked.CompareExchange` to ensure only one thread performs the DB insert + cache reset per missed lookup.
-- Cache resets are lazy-loaded via `ResetLazy<Task<Storage>>`, preventing thundering herd on concurrent reads.
+- The cold path is serialised by a `SemaphoreSlim` (not lock-free), so only one thread performs the DB
+  insert + cache reset per missed lookup; the lock is taken only after the in-memory snapshot misses.
+- Cache resets are lazy-loaded via `ResetLazy<Task<Storage>>`, preventing a thundering herd on
+  concurrent reads.
 
 ## DI Registration
 
 ```csharp
-services.AddOutboxTypeResolver(); // registered internally
-// Resolves to:
-// IOutboxTypeCache     → OutboxTypeCache     (singleton)
-// IOutboxTypeResolver  → OutboxTypeResolver  (singleton)
+// registered internally, once per provider key (the outbox scope key)
+services.AddOutboxTypeResolver(providerKey);
+
+// Resolves to, keyed by the same provider key:
+// IOutboxTypeCache     → OutboxTypeCache     (keyed singleton)
+// IOutboxTypeResolver  → OutboxTypeResolver  (keyed singleton)
+sp.GetRequiredKeyedService<IOutboxTypeResolver>(providerKey);
 ```

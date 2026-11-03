@@ -1,5 +1,7 @@
 # Samples Quick Start
 
+**English** | [Русский](README-ru.md)
+
 Collection of runnable samples demonstrating each library in the **Sa** suite.  
 All samples target **.NET 10.0**, use **Native AOT**, and follow the same DI + Generic Host pattern.
 

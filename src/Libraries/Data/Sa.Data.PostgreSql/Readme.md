@@ -1,8 +1,31 @@
 # Sa.Data.PostgreSql
 
+**English** | [Русский](Readme-ru.md)
+
 Lightweight Npgsql wrapper for common PostgreSQL operations — no ORM overhead, with DI, Native AOT support, and minimal allocations.
 
 ---
+
+## Contents
+
+- [Quick Start](#quick-start)
+- [Registration (DI)](#registration-di)
+  - [With DI](#with-di)
+  - [From a configuration section](#from-a-configuration-section)
+  - [Reusing an existing NpgsqlDataSource](#reusing-an-existing-npgsqldatasource)
+  - [Multiple databases (keyed)](#multiple-databases-keyed)
+  - [Validation](#validation)
+- [ExecuteNonQuery](#executenonquery)
+- [ExecuteScalar / ExecuteScalarTyped](#executescalar--executescalartyped)
+- [ExecuteReader](#executereader)
+- [ExecuteReaderList](#executereaderlist)
+- [ExecuteReaderFirst](#executereaderfirst)
+- [BeginBinaryImport](#beginbinaryimport)
+- [PgRetryStrategy](#pgretrystrategy)
+- [PgTransaction (IPgDataSource.BeginTransaction)](#pgtransaction-ipgdatasourcebegintransaction)
+- [DbCommandExtensions + INamePrefixProvider](#dbcommandextensions--inameprefixprovider)
+- [Method Comparison](#method-comparison)
+- [License](#license)
 
 ## Quick Start
 

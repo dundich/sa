@@ -1,6 +1,13 @@
-#  Example with Sa.Media.FFmpeg
+# FFMpeg.Console
 
-Program.cs
+**English** | [Русский](Readme-ru.md)
+
+Minimal console app demonstrating **Sa.Media.FFmpeg** — a wrapper over FFmpeg with bundled binaries
+for Windows x64 and Linux, supporting audio conversion, codec checks, and metadata extraction.
+
+---
+
+## Program.cs
 
 ```csharp
 var ffmpeg = Sa.Media.FFmpeg.IFFMpegExecutor.Default;

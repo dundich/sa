@@ -1,5 +1,7 @@
 # Sa.HybridFileStorage.S3
 
+**Русский** | [English](Readme.md)
+
 Провайдер S3-совместимого облачного хранилища для `Sa.HybridFileStorage`. Использует `Sa.Data.S3` клиент с автосозданием бакета, автоопределением MIME-типов и SigV4 подписью.
 
 ---

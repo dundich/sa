@@ -1,5 +1,7 @@
 # Sa.HybridFileStorage
 
+**English** | [Русский](Readme-ru.md)
+
 Hybrid file storage abstraction with automatic provider failover. Unifies multiple storage backends (FileSystem, S3, PostgreSQL) under a single resilient API — if one provider becomes unavailable, the system switches to another.
 
 ---

@@ -1,4 +1,6 @@
-﻿# Sa.Outbox.PostgreSql
+# Sa.Outbox.PostgreSql
+
+**Русский** | [English](Readme.md)
 
 AOT-библиотека для реализации паттерна **Transactional Outbox** с использованием PostgreSQL в .NET приложениях.
 Обеспечивает гарантированную доставку сообщений с поддержкой мультитенантности, конкурентной обработки и расширенным управлением консьюмерами.
@@ -21,6 +23,10 @@ AOT-библиотека для реализации паттерна **Transact
 - [Лицензия](#лицензия)
 
 Подробная конфигурация (таблицы, миграции, очистка, `PgPollingSettings`) — в [`Configuration/Readme-ru.md`](Configuration/Readme-ru.md).
+
+У внутренностей провайдера свои readme: [`Commands/Readme-ru.md`](Commands/Readme-ru.md) (команды
+доступа к данным и батчинг), [`SqlBuilder/Readme-ru.md`](SqlBuilder/Readme-ru.md) (SQL-шаблоны),
+[`TypeResolve/Readme-ru.md`](TypeResolve/Readme-ru.md) (кэш тип ↔ хеш).
 
 ### На что это похоже
 
@@ -62,6 +68,7 @@ using Sa.Outbox;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
+using Sa.Outbox.Serialization;
 
 IHost host = Host.CreateDefaultBuilder()
     .ConfigureServices(services => services
@@ -89,9 +96,9 @@ IHost host = Host.CreateDefaultBuilder()
             .WithOutboxSettings((_, settings) =>
             {
                 settings.TableSettings.WithSchema("outbox");
-                settings.CleanupSettings.WithDropPartsAfterRetention(TimeSpan.FromDays(30));
+                settings.CleanupSettings.WithRetentionPeriod(TimeSpan.FromDays(30));
             })
-            .WithMessageSerializer(OutboxMessageSerializer.Instance)
+            .WithMessageSerializer(JsonOutboxMessageSerializer.Instance) // дефолт ядра; замените своим
         )
     )
 .Build();
@@ -262,12 +269,17 @@ Data source, зарегистрированный под тем же ключо�
     .WithTenants((_, ts) => ts
         .WithTenantIds(1, 2, 3)                         // Фиксированный список
         // .WithAutoDetect()                             // Автоопределение из сообщений
-        // .WithTenantDetector<MyDetector>()             // Кастомный детектор
-        // .WithTenantParallelProcessing(4)              // Макс воркеров на тенант
+        // .WithTenantSource(myTenantSource)             // Свой ITenantSource
+        // .WithTenantProvider(ct => ...)                // Func<CancellationToken, ValueTask<int[]>>
     )
     // ...
 )
 ```
+
+Детектор для `WithAutoDetect()` поставляет пакет-провайдер; чтобы заменить его, зарегистрируйте свой
+на уровне провайдера (`AddOutboxProvider(..., p => p.WithTenantDetector<MyDetector>())`). Параллелизм
+по тенантам — настройка консьюмер-группы: `WithPerTenantMaxDegreeOfParallelism(4)` у её
+`OutboxConsumerSettingsBuilder` (см. ниже).
 
 ### 2. Регистрация консьюмеров
 
@@ -342,7 +354,7 @@ OutboxDefaults  →  секция конфигурации  →  callback config
 | `WithNoBatchingWindow()` | — | Взять всё доступное сейчас |
 | `WithConcurrencyLimit(n)` | 1 | Одновременных задач |
 | `WithMaxConcurrency(n)` | 48 | Макс. параллельных процессоров |
-| `WithRetryCountOnError(n)` | 0 | Повторы при ошибке (-1 = бесконечно) |
+| `WithRetryCountOnError(n)` | 0 | Повторы job'а при ошибке; `WithInfiniteRetries()` ставит `int.MaxValue`, отрицательные значения отклоняются |
 | `WithNoRetries()` | — | Отключить повторы |
 | `WithInfiniteRetries()` | — | Бесконечные повторы |
 | `WithMaxProcessingIterations(n)` | 10 | Итераций за цикл (-1 = безлимитно) |
@@ -365,10 +377,10 @@ OutboxDefaults  →  секция конфигурации  →  callback config
 services.AddSaOutboxUsingPostgreSql(cfg => cfg
     .WithDataSource(...)
     .WithPollingBudget(TimeSpan.FromMinutes(1)));   // простаивающая группа: ~48 с худший случай
-// или: .WithPollingProfile(PgPollingProfile.Quiet | Balanced | Responsive)
+// или один из: .WithPollingProfile(PgPollingProfile.Quiet / Balanced / Responsive)
 ```
 
-`WithPollingBudget` делит бюджет как `BatchingWindow (3 с) + reserve (max(5 с, 20%)) + IdleMaxInterval` и ставит `MaxProcessingIterations = -1`, чтобы всплеск дренировался в том же цикле. Таблицы значений — в `Configuration/Readme-ru.md` → `PgPollingSettings`. Без вызова этих методов не регистрируется ничего.
+`WithPollingBudget` делит бюджет как `BatchingWindow (3 с) + reserve (max(5 с, 20%)) + IdleMaxInterval` и ставит `MaxProcessingIterations = -1`, чтобы всплеск дренировался в том же цикле. Таблицы значений — в [`Configuration/Readme-ru.md` → `PgPollingSettings`](Configuration/Readme-ru.md#pgpollingsettings). Без вызова этих методов не регистрируется ничего.
 
 #### Runtime-управление настройками
 
@@ -533,12 +545,9 @@ consumer-ом в `Error(...)`.
         settings.TableSettings.TaskQueue.FillFactor = 65;      // чтение+запись
 
         // ── Кастомные имена полей ─────────────────────────
-        settings.TableSettings.TaskQueue.Fields =
-        {
-            TaskId = "id",
-            TenantId = "client_id",
-            ConsumerGroup = "grp"
-        };
+        settings.TableSettings.TaskQueue.Fields.TaskId = "id";
+        settings.TableSettings.TaskQueue.Fields.TenantId = "client_id";
+        settings.TableSettings.TaskQueue.Fields.ConsumerGroup = "grp";
 
         // ── Индивидуальные имена таблиц ───────────────────
         settings.TableSettings.UseBaseTableName("events");
@@ -557,7 +566,7 @@ consumer-ом в `Error(...)`.
         settings.CleanupSettings.ExecutionInterval = TimeSpan.FromHours(4);
 
         // ── Минимальное смещение (без повторной обработки) ─
-        // settings.ConsumeSettings.WithMinOffset<OrderConsumer>(DateTimeOffset.Now);
+        // settings.ConsumeSettings.WithMinOffset("cg_order_consumer", DateTimeOffset.Now);
     })
 )
 ```
@@ -595,7 +604,7 @@ bool ok = await migrationService.WaitMigration(TimeSpan.FromSeconds(30), ct);
 // Или проверить состояние
 if (!migrationService.OnMigrated.IsCancellationRequested)
 {
-    // DeliveryJob заблокирован во время активной миграции
+    // Ни одна миграция ещё не завершилась: задания доставки придержаны до первой из них
 }
 ```
 
@@ -735,8 +744,8 @@ Publish(messages)
 | **Лок публикации** | `pg_advisory_xact_lock` на `(tenant, part)` вокруг COPY — делает порядок `msg_seq` равным порядку коммитов, чтобы курсор `max(msg_seq)` не перескочил ещё коммитящуюся строку |
 | **Индекс курсора** | `(msg_seq)` на `__msg$` — превращает чтение курсора в index range scan вместо Seq Scan всего окна lookback (замерено 56.8 ms → 0.166 ms на 7 × 40k строк) |
 | **Дневные партиции** | Pruning оставляет опрос на нескольких листьях, а retention — это `DROP PARTITION` (индексы уходят вместе с листом), а не `DELETE` |
-| **murmurHash3** | Компактная идентификация типов, кэшированная в `__type$` |
-| **SqlCacheSplitter** | Дробит крупные многострочные INSERT/UPDATE на чанки до общей `DefaultMaxLen` (1024) |
+| **murmurHash3** | Компактная идентификация типов, кэшированная в `__type$` — см. [`TypeResolve/Readme-ru.md`](TypeResolve/Readme-ru.md) |
+| **SqlCacheSplitter** | Дробит крупные многострочные INSERT/UPDATE на чанки до общей `DefaultMaxLen` (1024) — см. [`SqlBuilder/Readme-ru.md`](SqlBuilder/Readme-ru.md) и [`Commands/Readme-ru.md`](Commands/Readme-ru.md) |
 
 ---
 

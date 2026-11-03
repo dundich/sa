@@ -1,8 +1,35 @@
 # Sa — Общие утилиты
 
+**Русский** | [English](Readme.md)
+
 Базовая библиотека утилит экосистемы **Sa**. Содержит общие классы и методы расширения, которые другие пакеты потребляют через `<Compile Include="..." Link="..."/>`. Целевая платформа — **.NET 10.0**, совместима с **Native AOT**.
 
 ---
+
+## Содержание
+
+- [Классы (пространство имён `Sa.Classes`)](#классы-пространство-имён-saclasses)
+  - [LockRenewer](#lockrenewer)
+  - [MurmurHash3](#murmurhash3)
+  - [Retry](#retry)
+  - [ResetLazy\<T\>](#resetlazyt)
+  - [Levenshtein](#levenshtein)
+  - [MimeTypeMap](#mimetypemap)
+  - [ProcessExecutor / IProcessExecutor](#processexecutor--iprocessexecutor)
+- [Расширения (пространство имён `Sa.Extensions`)](#расширения-пространство-имён-saextensions)
+  - [DateTimeExtensions](#datetimeextensions)
+  - [NumericExtensions](#numericextensions)
+  - [EnumerableExtensions](#enumerableextensions)
+  - [ExceptionExtensions](#exceptionextensions)
+  - [SpanExtensions](#spanextensions)
+  - [StringExtensions](#stringextensions)
+  - [StrToExtensions](#strtoextensions)
+  - [JsonExtensions](#jsonextensions)
+- [Типы диапазонов и секций (пространство имён `Sa.Classes`)](#типы-диапазонов-и-секций-пространство-имён-saclasses)
+  - [LimSection\<T\>](#limsectiont)
+  - [HalfSection\<T\>](#halfsectiont)
+  - [Section\<T\>](#sectiont)
+- [Замечания по архитектуре](#замечания-по-архитектуре)
 
 ## Классы (пространство имён `Sa.Classes`)
 

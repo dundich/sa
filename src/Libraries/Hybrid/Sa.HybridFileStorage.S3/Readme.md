@@ -1,5 +1,7 @@
 # Sa.HybridFileStorage.S3
 
+**English** | [Русский](Readme-ru.md)
+
 S3-compatible cloud storage provider for `Sa.HybridFileStorage`. Wraps Minio/AWS S3 with automatic bucket creation, MIME type detection, and streaming file I/O.
 
 ---

@@ -1,5 +1,7 @@
 # Sa.Outbox.Redis
 
+**English** | [Русский](Readme-ru.md)
+
 A minimal Redis Streams implementation of the Outbox provider for `Sa.Outbox`. Same publish and
 delivery contract as `Sa.Outbox.PostgreSql`, but the log, the consumer cursors and the retry state
 live in Redis. There is no provider-side bookkeeping outside the stream: an entry that is not
@@ -8,6 +10,25 @@ Redis's delivery counter — is the retry state.
 
 No Lua: every operation is one or a few ordinary Redis commands, pipelined where they do not depend
 on each other. Every command touches a single key, so the provider works on a Redis Cluster as is.
+
+## Contents
+
+- [Keys](#keys)
+- [Quick start](#quick-start)
+- [Connection](#connection)
+- [Turning the provider off](#turning-the-provider-off)
+- [Registering the same key twice](#registering-the-same-key-twice)
+- [Publish: the algorithm](#publish-the-algorithm)
+- [Delivery: the algorithm](#delivery-the-algorithm)
+  - [Rent: one poll](#rent-one-poll)
+  - [Finish: appending the outcome](#finish-appending-the-outcome)
+  - [Extend: keeping a batch alive](#extend-keeping-a-batch-alive)
+- [Settings](#settings)
+  - [Retention](#retention)
+  - [Poison messages](#poison-messages)
+- [Several providers in one container](#several-providers-in-one-container)
+- [Migrating 0.1 → 0.2](#migrating-01--02)
+- [Limitations](#limitations)
 
 ## Keys
 
@@ -353,7 +374,7 @@ var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
   commands are keyed, and the default key keeps its unkeyed aliases (`IDatabase`,
   `RedisOutboxSettings`, the publisher).
 - **0.18 contracts**: `IOutboxBulkWriter` has one batch method, `OutboxDeliveryMessage<T>` is a flat
-  record with a `RentToken` (see `Sa.Outbox/PlugServices/Readme.md`).
+  record with a `RentToken` (see [`Sa.Outbox/PlugServices/Readme.md`](../Sa.Outbox/PlugServices/Readme.md)).
 
 
 ## Limitations

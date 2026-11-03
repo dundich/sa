@@ -1,5 +1,7 @@
 # Sa.Outbox.PostgreSql
 
+**English** | [Русский](Readme-ru.md)
+
 An AOT-compatible library for implementing the **Transactional Outbox** pattern using PostgreSQL in .NET applications. Provides guaranteed message delivery with support for multi-tenancy, concurrent processing, partitioning, and advanced consumer management.
 
 ## Contents
@@ -20,6 +22,10 @@ An AOT-compatible library for implementing the **Transactional Outbox** pattern 
 - [License](#license)
 
 Detailed configuration (tables, migrations, cleanup, `PgPollingSettings`) lives in [`Configuration/Readme.md`](Configuration/Readme.md).
+
+The provider's internals each have their own readme: [`Commands/Readme.md`](Commands/Readme.md) (data-access
+commands and batching), [`SqlBuilder/Readme.md`](SqlBuilder/Readme.md) (the SQL templates),
+[`TypeResolve/Readme.md`](TypeResolve/Readme.md) (the type ↔ hash cache).
 
 ### What it actually looks like
 
@@ -61,6 +67,7 @@ using Sa.Outbox;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.Publication;
+using Sa.Outbox.Serialization;
 
 IHost host = Host.CreateDefaultBuilder()
     .ConfigureServices(services => services
@@ -88,9 +95,9 @@ IHost host = Host.CreateDefaultBuilder()
             .WithOutboxSettings((_, settings) =>
             {
                 settings.TableSettings.WithSchema("outbox");
-                settings.CleanupSettings.WithDropPartsAfterRetention(TimeSpan.FromDays(30));
+                settings.CleanupSettings.WithRetentionPeriod(TimeSpan.FromDays(30));
             })
-            .WithMessageSerializer(OutboxMessageSerializer.Instance)
+            .WithMessageSerializer(JsonOutboxMessageSerializer.Instance) // the core default; replace with yours
         )
     )
 .Build();
@@ -244,12 +251,17 @@ Where inside `AddSaOutbox`:
     .WithTenants((_, ts) => ts
         .WithTenantIds(1, 2, 3)                         // Fixed list
         // .WithAutoDetect()                             // Discover from messages at runtime
-        // .WithTenantDetector<MyDetector>()             // Custom IOutboxTenantDetector
-        // .WithTenantParallelProcessing(4)              // Max parallel workers per tenant
+        // .WithTenantSource(myTenantSource)             // Custom ITenantSource
+        // .WithTenantProvider(ct => ...)                // Func<CancellationToken, ValueTask<int[]>>
     )
     // ...
 )
 ```
+
+The detector behind `WithAutoDetect()` is supplied by the provider package; to replace it, register
+your own at the provider level (`AddOutboxProvider(..., p => p.WithTenantDetector<MyDetector>())`).
+Per-tenant parallelism is a consumer-group setting: `WithPerTenantMaxDegreeOfParallelism(4)` on the
+group's `OutboxConsumerSettingsBuilder` (see below).
 
 ### 2. Consumer Registration
 
@@ -318,7 +330,7 @@ The section just has to be part of the `IConfiguration` registered in DI (e.g. a
 | `StartImmediately()` | — | Start without waiting for the first interval |
 | `WithConcurrencyLimit(n)` | 1 | Concurrent jobs in the group |
 | `WithMaxConcurrency(n)` | 48 | Max simultaneously running jobs within the group (high — for cloud deployments with connection pooling; override for local/small deployments) |
-| `WithRetryCountOnError(n)` | 0 | Job retries on error (`-1` = infinite) |
+| `WithRetryCountOnError(n)` | 0 | Job retries on error; `WithInfiniteRetries()` sets `int.MaxValue`, negative values are rejected |
 | `WithNoRetries()` | — | Disable retries |
 | `WithInfiniteRetries()` | — | Infinite retries |
 | `WithMaxBatchSize(n)` | 128 | Max messages per batch |
@@ -351,10 +363,10 @@ Instead of repeating `Interval` / `IdleMaxInterval` / `InitialDelay` on each `Ad
 services.AddSaOutboxUsingPostgreSql(cfg => cfg
     .WithDataSource(...)
     .WithPollingBudget(TimeSpan.FromMinutes(1)));   // idle group: ~48 s worst case
-// or: .WithPollingProfile(PgPollingProfile.Quiet | Balanced | Responsive)
+// or one of: .WithPollingProfile(PgPollingProfile.Quiet / Balanced / Responsive)
 ```
 
-`WithPollingBudget` splits the budget as `BatchingWindow (3 s) + reserve (max(5 s, 20%)) + IdleMaxInterval` and sets `MaxProcessingIterations = -1` so a burst is drained in the same cycle. See `Configuration/Readme.md` → `PgPollingSettings` for the value tables. Nothing is registered unless one of these methods is called.
+`WithPollingBudget` splits the budget as `BatchingWindow (3 s) + reserve (max(5 s, 20%)) + IdleMaxInterval` and sets `MaxProcessingIterations = -1` so a burst is drained in the same cycle. See [`Configuration/Readme.md` → `PgPollingSettings`](Configuration/Readme.md#pgpollingsettings) for the value tables. Nothing is registered unless one of these methods is called.
 
 ### Runtime settings management
 
@@ -517,12 +529,9 @@ Where inside `AddSaOutboxUsingPostgreSql`:
         settings.TableSettings.TaskQueue.FillFactor = 65;      // read-write, needs free space
 
         // ── Custom field names ─────────────────────────────
-        settings.TableSettings.TaskQueue.Fields =
-        {
-            TaskId = "id",
-            TenantId = "client_id",
-            ConsumerGroup = "grp"
-        };
+        settings.TableSettings.TaskQueue.Fields.TaskId = "id";
+        settings.TableSettings.TaskQueue.Fields.TenantId = "client_id";
+        settings.TableSettings.TaskQueue.Fields.ConsumerGroup = "grp";
 
         // ── Individual table names ─────────────────────────
         settings.TableSettings.UseBaseTableName("events");
@@ -541,7 +550,7 @@ Where inside `AddSaOutboxUsingPostgreSql`:
         settings.CleanupSettings.ExecutionInterval = TimeSpan.FromHours(4);
 
         // ── Min offset (prevent reprocessing) ──────────────
-        settings.ConsumeSettings.WithMinOffset<OrderConsumer>(DateTimeOffset.Now);
+        settings.ConsumeSettings.WithMinOffset("cg_order_consumer", DateTimeOffset.Now);
     })
 )
 ```
@@ -579,7 +588,7 @@ bool ok = await migrationService.WaitMigration(TimeSpan.FromSeconds(30), ct);
 // Or check current state
 if (!migrationService.OnMigrated.IsCancellationRequested)
 {
-    // DeliveryJob is blocked during active migration
+    // No migration has completed yet: delivery jobs are held back until the first one does
 }
 ```
 
@@ -719,8 +728,8 @@ the status is written; see [Poison Handler](#5-poison-handler-permanent-failures
 | **Publish lock** | `pg_advisory_xact_lock` per `(tenant, part)` around the COPY — makes `msg_seq` order equal commit order, so the `max(msg_seq)` cursor cannot pass a row that is still committing |
 | **Cursor index** | `(msg_seq)` on `__msg$` — turns the loader's cursor read into an index range scan instead of a Seq Scan of the whole lookback window (measured 56.8 ms → 0.166 ms on 7 × 40k rows) |
 | **Daily partitions** | Pruning keeps one poll on a few leaves, and retention is a `DROP PARTITION` (indexes leave with the leaf) instead of a `DELETE` |
-| **murmurHash3** | Compact type identification cached in `__type$` |
-| **SqlCacheSplitter** | Splits large multi-row INSERT/UPDATE statements into chunks up to the shared `DefaultMaxLen` (1024) |
+| **murmurHash3** | Compact type identification cached in `__type$` — see [`TypeResolve/Readme.md`](TypeResolve/Readme.md) |
+| **SqlCacheSplitter** | Splits large multi-row INSERT/UPDATE statements into chunks up to the shared `DefaultMaxLen` (1024) — see [`SqlBuilder/Readme.md`](SqlBuilder/Readme.md) and [`Commands/Readme.md`](Commands/Readme.md) |
 
 ---
 
