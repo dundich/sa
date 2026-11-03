@@ -12,11 +12,20 @@ two things at once:
 
 It is deliberately **not** a production provider — see [Limitations](#limitations). For the pipeline
 it plugs into, see [`../Delivery/Readme.md`](../Delivery/Readme.md); for the contracts themselves,
+<<<<<<< HEAD
 [`../PlugServices/Readme.md`](../PlugServices/Readme.md).
+=======
+[`../PlugServices/Readme.md`](../PlugServices/Readme.md). To build your own provider from this
+example, follow [`../PlugServices/ProviderGuide.md`](../PlugServices/ProviderGuide.md).
+>>>>>>> sdd
 
 ## Contents
 
 - [Quick start](#quick-start)
+<<<<<<< HEAD
+=======
+- [Step-by-step registration](#step-by-step-registration)
+>>>>>>> sdd
 - [File map](#file-map)
 - [Behaviour](#behaviour)
 - [Cancellation and retries](#cancellation-and-retries)
@@ -36,6 +45,144 @@ services.AddSaOutboxUsingInMemory(
 `configureOutbox` also registers the core. A disabled provider (`Enabled = false`) registers nothing:
 no store, no contracts, no schedule.
 
+<<<<<<< HEAD
+=======
+## Step-by-step registration
+
+A runnable end-to-end version of these steps is
+[`src/Samples/InMemoryOutbox.ConsoleApp`](../../../../Samples/InMemoryOutbox.ConsoleApp) — it publishes
+before the host starts, then waits for the consumer to acknowledge everything.
+
+### 1. Nothing to install
+
+The provider ships inside the `Sa.Outbox` package (namespace `Sa.Outbox.InMemory`), so a project that
+already references `Sa.Outbox` needs no extra package, connection string or configuration section.
+
+### 2. Register the provider
+
+One call registers the provider *and* the core:
+
+```csharp
+builder.Services.AddSaOutboxUsingInMemory(
+    configure: settings => settings.Capacity = 1_000,        // 0 = unlimited (the default)
+    configureOutbox: outbox => outbox
+        .WithTenants((_, tenants) => tenants.WithTenantIds(1, 2)));
+```
+
+If the core is registered elsewhere, use the provider-only overload and give both calls the same
+scope key:
+
+```csharp
+builder.Services
+    .AddSaOutboxUsingInMemory(scopeKey: MyScope)
+    .AddSaOutbox(ConfigureOutbox, MyScope);
+```
+
+`settings.Enabled = false` makes the call a no-op — no store, no contracts, no schedule — which is
+the switch to use when the provider is optional per environment.
+
+> `Sa.Outbox` defaults to `JsonOutboxMessageSerializer` (reflection-based JSON, not AOT-safe). In a
+> Native AOT application add `.WithMessageSerializer(...)` with a source-generated context, exactly as
+> the sample does.
+
+### 3. Write a consumer
+
+```csharp
+public sealed class OrderConsumer(ILogger<OrderConsumer> logger) : IConsumer<OrderPlaced>
+{
+    public ValueTask Consume(
+        OutboxConsumerSettings settings,
+        OutboxMessageFilter filter,
+        ReadOnlyMemory<IOutboxContextOperations<OrderPlaced>> messages,
+        CancellationToken cancellationToken)
+    {
+        foreach (IOutboxContextOperations<OrderPlaced> message in messages.Span)
+        {
+            logger.LogInformation("Order {PayloadId}, tenant {Tenant}", message.PayloadId, filter.TenantId);
+
+            message.Ok();   // omit this and a Pending message is still treated as delivered
+        }
+
+        return ValueTask.CompletedTask;
+    }
+}
+```
+
+### 4. Register the consumer group
+
+```csharp
+.WithDeliveries(deliveries => deliveries.AddDelivery<OrderConsumer, OrderPlaced>(
+    "orders",                                   // group id → the DI key and the job name
+    (_, consumer) => consumer
+        .WithInterval(TimeSpan.FromMilliseconds(200))
+        .WithNoBatchingWindow()
+        .StartImmediately()))
+```
+
+`AddDelivery` keeps **one** consumer instance for the process; `AddDeliveryScoped` creates a fresh DI
+scope per batch, which is what a consumer with a `DbContext` or a per-request dependency needs. Each
+group becomes its own job in the outbox's `Sa.Schedule`.
+
+### 5. Declare tenants and metadata
+
+```csharp
+.WithTenants((_, tenants) => tenants.WithTenantIds(1, 2))
+.WithMetadata((_, metadata) => metadata.AddMetadata<OrderPlaced>("orders", order => order.Id))
+```
+
+Tenants are auto-detected by default: `InMemoryOutboxTenantDetector` reports the tenants that still
+hold deliverable messages, so `WithTenantIds` is only needed to pin the list. `AddMetadata` sets the
+part name (default `"root"`) and the payload id (default: `IOutboxPublishable.GetPayloadId()`).
+
+### 6. Publish
+
+```csharp
+app.MapPost("/orders", async (OrderPlaced order, IOutboxMessagePublisher publisher, CancellationToken ct) =>
+{
+    await publisher.Publish([order], tenantId: 1, ct);
+    return Results.Accepted();
+});
+```
+
+`Publish` returns how many messages were stored and never talks to the network. Overloads that take
+`Func<TMessage, int>` group the collection by tenant themselves.
+
+### 7. Start the host
+
+```csharp
+await host.StartAsync();
+// … the delivery job drains the store on its own schedule …
+await host.StopAsync();
+```
+
+Publishing works before `StartAsync` (the store is just a dictionary); **delivery does not** — the
+schedule is an `IHostedService`, and it is what makes the consumer run.
+
+### 8. Verify the wiring
+
+There is no health probe and no delivery log, so a missing registration looks like "nothing happens".
+Check the registry instead of guessing:
+
+```csharp
+IOutboxConsumerManager manager = app.Services.GetRequiredService<IOutboxConsumerManager>();
+OutboxConsumerSettings? settings = manager.Get("orders");   // null → the group was not registered
+```
+
+For behaviour, log inside the consumer (step 3) or assert on a signal as the sample does.
+
+### 9. Swap in a real provider
+
+Replace the registration call and keep everything else — consumers, tenants, metadata and publish
+calls are provider-agnostic:
+
+```csharp
+builder.Services.AddSaOutboxUsingPostgreSql(pg => pg
+    .WithDataSource(ds => ds.Options(o => o.Configure(c => c.ConnectionString = connectionString))));
+```
+
+Pending messages do **not** migrate between providers: drain the in-memory one before switching.
+
+>>>>>>> sdd
 ## File map
 
 | File | Responsibility |

@@ -40,7 +40,7 @@ public class DeliveryCancellationRetryTests(DeliveryCancellationRetryTests.Fixtu
 
     public class Fixture : OutboxPostgreSqlFixture<IDeliveryProcessor>
     {
-        public OutboxConsumerSettings Settings { get; private set; } = default!;
+        public OutboxConsumerSettings ConsumerSettings { get; private set; } = default!;
 
         public Fixture() : base()
         {
@@ -56,7 +56,7 @@ public class DeliveryCancellationRetryTests(DeliveryCancellationRetryTests.Fixtu
                             .WithLockRenewal(TimeSpan.FromMilliseconds(10))
                             .WithNoBatchingWindow();
 
-                        Settings = settings.Build();
+                        ConsumerSettings = settings.Build();
                     })));
         }
 
@@ -82,7 +82,7 @@ public class DeliveryCancellationRetryTests(DeliveryCancellationRetryTests.Fixtu
         CancelOnceConsumer.Cts = cts;
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => fixture.Processor.ProcessMessages<TestMessage>(fixture.Settings, cts.Token));
+            () => fixture.Processor.ProcessMessages<TestMessage>(fixture.ConsumerSettings, cts.Token));
 
         // Nothing was acknowledged — not even as a failure — so the row is still owned by the pass
         // that stopped and its attempt counter has not moved.
@@ -94,7 +94,7 @@ public class DeliveryCancellationRetryTests(DeliveryCancellationRetryTests.Fixtu
         // second boundary has to pass before the next poll may take the row back.
         await Task.Delay(1500, ct);
 
-        long processed = await fixture.Processor.ProcessMessages<TestMessage>(fixture.Settings, ct);
+        long processed = await fixture.Processor.ProcessMessages<TestMessage>(fixture.ConsumerSettings, ct);
 
         Assert.Equal(1, processed);
 

@@ -6,7 +6,7 @@
   `Sa.slnx` change, no `build-sh/tasks.sh` change (`Sa.Outbox` is already in `PROJECTS`).
 - The provider implements only the three plug-point contracts. Batching, the delivery loop, status
   interpretation, back-off, default serialization and startup validation stay core-owned.
-- Version bump: `Sa.Outbox` 0.18.0 → 0.19.0 (new public API surface).
+- Version: no bump — the feature ships in the unified 0.18.0 release.
 - Tests go into the existing Docker-free `Sa.Outbox.Tests` (`InternalsVisibleTo` already present).
 - One new sample project, one ADR, doc edits.
 
@@ -15,7 +15,7 @@
 | Path/project | Change | Reason | Risk |
 |---|---|---|---|
 | `src/Libraries/Outbox/Sa.Outbox/InMemory/*.cs` (new) | store + 3 contract impls + settings + setup | the feature | medium |
-| `src/Libraries/Outbox/Sa.Outbox/Sa.Outbox.csproj` | `0.18.0` → `0.19.0` | new public API | low |
+| `src/Libraries/Outbox/Sa.Outbox/Sa.Outbox.csproj` | stays `0.18.0` (unified release) | — | low |
 | `src/Libraries/Outbox/Sa.Outbox/Readme.md`, `Readme-ru.md` | provider table, differences matrix, requirements | discoverability | low |
 | `src/Libraries/Outbox/Sa.Outbox/PlugServices/Readme.md` | amend "does not know where messages live" | consistency | low |
 | `README.md`, `README-ru.md` | provider list | consistency | low |
@@ -91,7 +91,7 @@ the readme's limitations section.
 
 ## Compatibility and migration
 
-- No existing public type changes; additive API only. `Sa.Outbox` 0.18.0 → 0.19.0.
+- No existing public type changes; additive API only. `Sa.Outbox` stays at 0.18.0.
 - Nothing to migrate: the provider has no external storage, so switching to it starts from an empty outbox.
 - No AOT impact: no reflection, no dynamic code; serialization stays behind `IOutboxMessageSerializer`.
 
@@ -107,7 +107,7 @@ the readme's limitations section.
   - restart: a second provider instance sees an empty store.
 - **Sample**: `InMemoryOutbox.ConsoleApp` publishes, consumes and prints; run manually as the smoke check.
 - **AOT/trimming/analyzers**: `dotnet build src/Sa.slnx -c Release` must stay 0 warnings / 0 errors.
-- **Packaging/API**: `Sa.Outbox` packages as 0.19.0; no other package changes.
+- **Packaging/API**: `Sa.Outbox` packages as 0.18.0; no other package changes.
 
 ## Rollout and observability
 
@@ -127,7 +127,7 @@ the readme's limitations section.
 ## Rollback
 
 Delete `InMemory/`, the test folder and the sample; revert the version bump and doc edits. No data migration, no
-published API removed (0.19.0 can be superseded by 0.19.1 if needed).
+published API removed (0.18.0 can be superseded by 0.18.1 if needed).
 
 ## Decisions required
 

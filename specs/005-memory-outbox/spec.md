@@ -128,7 +128,7 @@ longer extend or finish it.
 ## Non-functional requirements
 
 - **Compatibility**: `net10.0`; no change to existing public types; no new package references; package ID and
-  TFM unchanged; `Sa.Outbox` version 0.18.0 → 0.19.0 (minor).
+  TFM unchanged; `Sa.Outbox` version 0.18.0 (unified release, no bump).
 - **Performance**: publish/rent must be O(1) per message on the index and O(k) for k rented messages; no
   per-call full scans of the whole store. Not a benchmarked component.
 - **Reliability**: at-least-once inside one process; a lost lease re-rents the message; concurrent publish and
@@ -168,7 +168,7 @@ longer extend or finish it.
   and no fixture; the suite stays green.
 - **AC-11** `InMemoryOutbox.ConsoleApp` runs to completion with no external service and prints the delivered
   message flow.
-- **AC-12** Build is 0 warnings / 0 errors, `Sa.Outbox` packages as 0.19.0, and no other package changes.
+- **AC-12** Build is 0 warnings / 0 errors, `Sa.Outbox` packages as 0.18.0, and no other package changes.
 
 ## Open questions
 
@@ -195,5 +195,5 @@ None. Resolved during the design interview:
 - 2026-11-03: Initial spec after a design interview; decisions recorded above.
 - 2026-11-03: Implemented T2–T12: provider, tests (15 facts, Docker-free), sample, docs, ADR-0003.
   `Sa.Outbox.Tests` 214/214 green, full solution build green, sample runs end-to-end.
-- 2026-11-03: T13 verified — PG 275/275, Redis 52/52, `Sa.Outbox` packages as 0.19.0, no other
+- 2026-11-03: T13 verified — PG 275/275, Redis 52/52, `Sa.Outbox` packages as 0.18.0, no other
   version changed.

@@ -12,11 +12,20 @@
 
 Это намеренно **не** production-провайдер — см. [Ограничения](#ограничения). Про конвейер, в который
 он встраивается, — [`../Delivery/Readme-ru.md`](../Delivery/Readme-ru.md); про сами контракты —
+<<<<<<< HEAD
 [`../PlugServices/Readme-ru.md`](../PlugServices/Readme-ru.md).
+=======
+[`../PlugServices/Readme-ru.md`](../PlugServices/Readme-ru.md). Чтобы сделать свой провайдер по этому
+примеру, см. [`../PlugServices/ProviderGuide-ru.md`](../PlugServices/ProviderGuide-ru.md).
+>>>>>>> sdd
 
 ## Содержание
 
 - [Быстрый старт](#быстрый-старт)
+<<<<<<< HEAD
+=======
+- [Пошаговая регистрация](#пошаговая-регистрация)
+>>>>>>> sdd
 - [Карта файлов](#карта-файлов)
 - [Поведение](#поведение)
 - [Отмена и ретраи](#отмена-и-ретраи)
@@ -36,6 +45,146 @@ services.AddSaOutboxUsingInMemory(
 `configureOutbox` регистрирует ещё и ядро. Отключённый провайдер (`Enabled = false`) не регистрирует
 ничего: ни стора, ни контрактов, ни расписания.
 
+<<<<<<< HEAD
+=======
+## Пошаговая регистрация
+
+Рабочая сквозная версия этих шагов —
+[`src/Samples/InMemoryOutbox.ConsoleApp`](../../../../Samples/InMemoryOutbox.ConsoleApp): она публикует
+сообщения до старта хоста, а затем ждёт, пока потребитель подтвердит все.
+
+### 1. Ставить нечего
+
+Провайдер входит в пакет `Sa.Outbox` (namespace `Sa.Outbox.InMemory`), поэтому проекту, который уже
+ссылается на `Sa.Outbox`, не нужны ни отдельный пакет, ни строка подключения, ни секция конфигурации.
+
+### 2. Зарегистрировать провайдер
+
+Один вызов регистрирует и провайдер, и ядро:
+
+```csharp
+builder.Services.AddSaOutboxUsingInMemory(
+    configure: settings => settings.Capacity = 1_000,        // 0 = без лимита (по умолчанию)
+    configureOutbox: outbox => outbox
+        .WithTenants((_, tenants) => tenants.WithTenantIds(1, 2)));
+```
+
+Если ядро регистрируется в другом месте, используйте перегрузку только для провайдера и передайте
+один и тот же scope key в оба вызова:
+
+```csharp
+builder.Services
+    .AddSaOutboxUsingInMemory(scopeKey: MyScope)
+    .AddSaOutbox(ConfigureOutbox, MyScope);
+```
+
+`settings.Enabled = false` превращает вызов в no-op — ни стора, ни контрактов, ни расписания; это
+переключатель для случая, когда провайдер нужен не во всех окружениях.
+
+> По умолчанию `Sa.Outbox` использует `JsonOutboxMessageSerializer` (reflection-JSON, не AOT-safe).
+> В Native AOT приложении добавьте `.WithMessageSerializer(...)` с source-generated контекстом —
+> ровно как в sample.
+
+### 3. Написать потребителя
+
+```csharp
+public sealed class OrderConsumer(ILogger<OrderConsumer> logger) : IConsumer<OrderPlaced>
+{
+    public ValueTask Consume(
+        OutboxConsumerSettings settings,
+        OutboxMessageFilter filter,
+        ReadOnlyMemory<IOutboxContextOperations<OrderPlaced>> messages,
+        CancellationToken cancellationToken)
+    {
+        foreach (IOutboxContextOperations<OrderPlaced> message in messages.Span)
+        {
+            logger.LogInformation("Заказ {PayloadId}, тенант {Tenant}", message.PayloadId, filter.TenantId);
+
+            message.Ok();   // без этого сообщение в Pending всё равно считается доставленным
+        }
+
+        return ValueTask.CompletedTask;
+    }
+}
+```
+
+### 4. Зарегистрировать группу потребителей
+
+```csharp
+.WithDeliveries(deliveries => deliveries.AddDelivery<OrderConsumer, OrderPlaced>(
+    "orders",                                   // id группы → DI-ключ и имя job-а
+    (_, consumer) => consumer
+        .WithInterval(TimeSpan.FromMilliseconds(200))
+        .WithNoBatchingWindow()
+        .StartImmediately()))
+```
+
+`AddDelivery` держит **один** экземпляр потребителя на процесс; `AddDeliveryScoped` создаёт свежий
+DI-scope на каждый батч — это нужно потребителю с `DbContext` или зависимостью уровня запроса.
+Каждая группа становится отдельным job-ом в собственном `Sa.Schedule` outbox-а.
+
+### 5. Объявить тенантов и метаданные
+
+```csharp
+.WithTenants((_, tenants) => tenants.WithTenantIds(1, 2))
+.WithMetadata((_, metadata) => metadata.AddMetadata<OrderPlaced>("orders", order => order.Id))
+```
+
+По умолчанию тенанты определяются автоматически: `InMemoryOutboxTenantDetector` отдаёт тенантов, у
+которых ещё есть доставляемые сообщения, поэтому `WithTenantIds` нужен только чтобы зафиксировать
+список. `AddMetadata` задаёт имя части (по умолчанию `"root"`) и payload id (по умолчанию —
+`IOutboxPublishable.GetPayloadId()`).
+
+### 6. Публиковать
+
+```csharp
+app.MapPost("/orders", async (OrderPlaced order, IOutboxMessagePublisher publisher, CancellationToken ct) =>
+{
+    await publisher.Publish([order], tenantId: 1, ct);
+    return Results.Accepted();
+});
+```
+
+`Publish` возвращает, сколько сообщений сохранено, и в сеть не ходит. Перегрузки с
+`Func<TMessage, int>` сами группируют коллекцию по тенантам.
+
+### 7. Запустить хост
+
+```csharp
+await host.StartAsync();
+// … job доставки разбирает стор по своему расписанию …
+await host.StopAsync();
+```
+
+Публиковать можно и до `StartAsync` (стор — это просто словарь), а вот **доставка не начнётся**:
+расписание является `IHostedService`, именно оно и запускает потребителей.
+
+### 8. Проверить, что регистрация сложилась
+
+Health-проверки и журнала доставок нет, поэтому забытая регистрация выглядит как «ничего не
+происходит». Смотрите в реестр, а не гадайте:
+
+```csharp
+IOutboxConsumerManager manager = app.Services.GetRequiredService<IOutboxConsumerManager>();
+OutboxConsumerSettings? settings = manager.Get("orders");   // null → группа не зарегистрирована
+```
+
+Поведение наблюдайте логом внутри потребителя (шаг 3) или сигналом, как это делает sample.
+
+### 9. Переключиться на реальный провайдер
+
+Замените только вызов регистрации — потребители, тенанты, метаданные и вызовы `Publish` не зависят
+от провайдера:
+
+```csharp
+builder.Services.AddSaOutboxUsingPostgreSql(pg => pg
+    .WithDataSource(ds => ds.Options(o => o.Configure(c => c.ConnectionString = connectionString))));
+```
+
+Pending-сообщения между провайдерами **не** переносятся: перед переключением in-memory стор нужно
+опустошить (drain).
+
+>>>>>>> sdd
 ## Карта файлов
 
 | Файл | Ответственность |
