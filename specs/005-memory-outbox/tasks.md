@@ -32,10 +32,10 @@
   - Files: `src/Libraries/Outbox/Sa.Outbox/InMemory/Setup.cs`.
   - Verification: AC-1; host start succeeds with a consumer group and fails as expected with a wrong scope key.
 
-- [x] **T7** — Bump `Sa.Outbox` to 0.19.0.
+- [x] **T7** — Keep `Sa.Outbox` at 0.18.0 (the release version is unified across packages).
   - Depends on: T6.
   - Files: `src/Libraries/Outbox/Sa.Outbox/Sa.Outbox.csproj`.
-  - Verification: `dotnet build` produces `Sa.Outbox.0.19.0.nupkg`.
+  - Verification: `dotnet build` produces `Sa.Outbox.0.18.0.nupkg`.
 
 - [x] **T8** — Registration and publish tests (no container).
   - Depends on: T6.
@@ -69,7 +69,7 @@
   - Files: whole solution.
   - Verification: `dotnet build src/Sa.slnx -c Release` → 0 errors (1 pre-existing CS0108 warning in
     `Sa.Outbox.PostgreSqlTests`, unrelated); `Sa.Outbox.Tests` 214/214, `Sa.Outbox.PostgreSqlTests`
-    275/275, `Sa.Outbox.RedisTests` 52/52 green; `Sa.Outbox.0.19.0.nupkg` produced, every other
+    275/275, `Sa.Outbox.RedisTests` 52/52 green; `Sa.Outbox.0.18.0.nupkg` produced, every other
     package version unchanged; sample runs end-to-end without infrastructure.
 
 ## Completion checks
