@@ -40,6 +40,11 @@
 
 `Sa.Outbox` does not know where messages live. The whole storage is described by three contracts:
 
+> One deliberate exception: `Sa.Outbox` ships an in-memory provider (`Sa.Outbox.InMemory`) as a
+> reference implementation and a dev/test substitute. It implements the same three contracts and
+> registers through the same `AddOutboxProvider`, so it is an example of the plug point, not a
+> bypass of it — see ADR-0003.
+
 | Contract | Core consumer | When |
 |---|---|---|
 | `IOutboxBulkWriter` | `OutboxMessagePublisher` | on every publish |

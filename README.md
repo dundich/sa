@@ -62,7 +62,7 @@ A Minio-compatible S3 client for data operations.
 
 Provider-agnostic core of the **Transactional Outbox** pattern: publication and consumer contracts, tenant/metadata registration, batching, retry policy and delivery status handling. Storage and delivery mechanics come from a provider package.
 
-Providers: [Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql) — ✅ production-ready, [Sa.Outbox.Redis](src/Libraries/Outbox/Sa.Outbox.Redis) — 🔧 in development.
+Providers: [Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql) — ✅ production-ready, [Sa.Outbox.Redis](src/Libraries/Outbox/Sa.Outbox.Redis) — 🔧 in development, in-memory — 🧪 built into `Sa.Outbox` as a reference/dev-test provider.
 
 ---
 
@@ -125,6 +125,7 @@ Located in `src/Samples/`:
 | [Configuration.Web](src/Samples/Configuration.Web) | CLI args + secrets in ASP.NET |
 | [FFMpeg.Console](src/Samples/FFMpeg.Console) | FFmpeg metadata extraction |
 | [HybridFileStorage.Console](src/Samples/HybridFileStorage.Console) | Multi-provider file storage |
+| [InMemoryOutbox.ConsoleApp](src/Samples/InMemoryOutbox.ConsoleApp) | Outbox with no infrastructure (in-memory provider) |
 | [Partitional.ConsoleApp](src/Samples/Partitional.ConsoleApp) | Declarative partitioning |
 | [PgOutbox.ConsoleApp](src/Samples/PgOutbox.ConsoleApp) | Outbox pattern demo |
 | [Schedule.Console](src/Samples/Schedule.Console) | Scheduled task executor |

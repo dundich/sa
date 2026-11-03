@@ -60,6 +60,8 @@ Minio-compatible S3-клиент для операций с данными.
 
 Реализация **Transactional Outbox** на PostgreSQL. Сообщения фиксируются в outbox-таблице вместе с бизнес-операциями в одной транзакции, затем доставляются с повторами и отслеживанием статуса. Потребление — конкурентное (`SKIP LOCKED`), координация оффсетов — advisory-замками. Применение — на вашем страхе и риске.
 
+In-memory провайдер (`AddSaOutboxUsingInMemory`) входит в пакет `Sa.Outbox`: это reference-реализация точки подключения и замена хранилища для dev/test — без базы, Docker и конфигурации, без долговечности и межпроцессной доставки.
+
 ---
 
 ### [Sa.Partitional.PostgreSql](src/Libraries/Misc/Sa.Partitional.PostgreSql) — Декларативное партиционирование
@@ -109,6 +111,7 @@ Minio-compatible S3-клиент для операций с данными.
 | [Configuration.Web](src/Samples/Configuration.Web) | CLI-аргументы + секреты в ASP.NET |
 | [FFMpeg.Console](src/Samples/FFMpeg.Console) | Извлечение метаданных FFmpeg |
 | [HybridFileStorage.Console](src/Samples/HybridFileStorage.Console) | Мульти- провайдерное хранилище |
+| [InMemoryOutbox.ConsoleApp](src/Samples/InMemoryOutbox.ConsoleApp) | Outbox без инфраструктуры (in-memory провайдер) |
 | [Partitional.ConsoleApp](src/Samples/Partitional.ConsoleApp) | Декларативное партиционирование |
 | [PgOutbox.ConsoleApp](src/Samples/PgOutbox.ConsoleApp) | Паттерн Outbox |
 | [Schedule.Console](src/Samples/Schedule.Console) | Планировщик задач |
