@@ -209,6 +209,29 @@ builder.Services.AddSaOutbox(builder => builder
 
 ---
 
+### Настройки публикации
+
+`WithPublishSettings` настраивает `OutboxPublishSettings` (сейчас — `MaxBatchSize`) для одного
+скоупа outbox:
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithPublishSettings((_, settings) => settings.WithMaxBatchSize(1024)),
+    scopeKey: "billing");
+```
+
+Запись неизменяемая, поэтому делегат получает текущий экземпляр и возвращает следующий. Таков
+контракт: `Action<OutboxPublishSettings>` мог изменить только копию, которую никто не читал, из-за
+чего каждый вызов был тихим no-op. **Миграция:** вызов в форме `Action` перепишите как
+`(_, settings) => settings.WithMaxBatchSize(n)`; лямбда с телом должна возвращать настройки.
+
+Делегат ключуется скоупом outbox, поэтому у каждого провайдера свои настройки публикации; default
+провайдер дополнительно отдаёт их без ключа. Несколько вызовов для одного скоупа складываются в
+порядке регистрации — каждый получает результат предыдущего, — а повторный `AddSaOutbox` для того же
+скоупа заменяет ранее записанные колбэки, а не применяет их дважды.
+
+---
+
 ### Сериализация
 
 `IOutboxMessageSerializer` живёт в ядре (`Sa.Outbox.Serialization`) и является **единой**

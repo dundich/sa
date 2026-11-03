@@ -86,8 +86,9 @@ check fail and names those groups — skip `AddSaOutbox` too, or use the one-cal
 
 A repeated `AddSaOutboxUsingRedis(..., scopeKey)` for one key is tolerated: the provider contracts,
 the startup validator, the layout guard, the consumer-group registrations and the schedule
-deduplicate. The **first** connection registration owns the `IDatabase`; repeated identical settings
-are harmless, so register the connection once.
+deduplicate. The outbox-settings callbacks of the last registration replace the ones recorded before,
+so they run once — not once per registration. The **first** connection registration owns the
+`IDatabase`, so register the connection once.
 
 ## Publish: the algorithm
 

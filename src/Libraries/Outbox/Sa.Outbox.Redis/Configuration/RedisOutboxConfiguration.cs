@@ -408,6 +408,11 @@ internal sealed class RedisOutboxConfiguration(
         if (_configSectionPath is not null)
             state.ConfigSectionPath = _configSectionPath;
 
+        // A repeated registration for the same key replaces the callbacks it recorded earlier
+        // instead of stacking a second copy: the configurator applies every action of the key, so
+        // appending made a re-registered callback run once per registration.
+        services.RemoveAllKeyed<Action<IServiceProvider, RedisOutboxSettings>>(providerKey);
+
         foreach (Action<IServiceProvider, RedisOutboxSettings> configureAction in _settingsActions)
             services.AddKeyedSingleton<Action<IServiceProvider, RedisOutboxSettings>>(providerKey, configureAction);
 

@@ -16,7 +16,9 @@ public interface IOutboxBuilder
     /// <see cref="OutboxPublishSettings"/> is immutable, so the delegate receives the current
     /// instance and returns the updated one (<c>(_, settings) =&gt; settings.WithMaxBatchSize(1024)</c>).
     /// It runs once, when the settings are first resolved, and is keyed by the outbox scope: two
-    /// providers in one container keep their own publish settings.
+    /// providers in one container keep their own publish settings. Several calls for one scope
+    /// compose in registration order; a repeated <c>AddSaOutbox</c> for the same scope replaces the
+    /// delegates the previous registration recorded instead of stacking a second copy.
     /// </remarks>
     /// <param name="configure">Receives the current settings and returns the updated ones.</param>
     /// <returns>The same <see cref="IOutboxBuilder"/> instance for chaining.</returns>

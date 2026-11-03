@@ -79,6 +79,33 @@ public class RedisSerializerAndRegistrationTests
     }
 
     [Fact]
+    public void SameKeyRegisteredTwice_AppliesTheSettingsCallbacksOnce()
+    {
+        var services = new ServiceCollection();
+        int calls = 0;
+
+        services.AddSaOutboxUsingRedis(Settings, scopeKey: "dup-settings");
+        services.AddSaOutboxUsingRedis(Settings, scopeKey: "dup-settings");
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        RedisOutboxSettings settings = provider.GetRequiredKeyedService<RedisOutboxSettings>("dup-settings");
+
+        // A repeated registration replaces the callbacks it recorded earlier; it must not make the
+        // same callback run once per registration.
+        Assert.Equal("sa:outbox:dup", settings.KeySettings.Prefix);
+        Assert.Equal(1, calls);
+
+        void Settings(IRedisOutboxConfiguration cfg) => cfg
+            .WithConnectionString("localhost:6379")
+            .WithOutboxSettings((_, s) =>
+            {
+                calls++;
+                s.KeySettings.Prefix = "sa:outbox:dup";
+            });
+    }
+
+    [Fact]
     public void OptionsAction_PinsAnExactPrefixOnANonDefaultKey()
     {
         var services = new ServiceCollection();

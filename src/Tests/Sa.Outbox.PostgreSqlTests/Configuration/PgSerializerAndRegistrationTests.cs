@@ -81,4 +81,23 @@ public class PgSerializerAndRegistrationTests
             => pg.WithDataSource(ds => ds.Options(options => options.Configure(
                 o => o.ConnectionString = "Host=localhost;Database=outbox")));
     }
+
+    [Fact]
+    public void SameKeyRegisteredTwice_RecordsTheSettingsCallbacksOnce()
+    {
+        var services = new ServiceCollection();
+
+        services.AddSaOutboxUsingPostgreSql(Settings, scopeKey: "dup-settings");
+        services.AddSaOutboxUsingPostgreSql(Settings, scopeKey: "dup-settings");
+
+        // The settings factory applies every action of the key, so a repeated registration replaces
+        // the callbacks it recorded earlier instead of making them run once per registration.
+        Assert.Single(
+            services,
+            d => d.ServiceType == typeof(Action<IServiceProvider, PgOutboxSettings>)
+                && Equals(d.ServiceKey, "dup-settings"));
+
+        static void Settings(IPgOutboxConfiguration pg)
+            => pg.WithOutboxSettings((_, settings) => settings.TableSettings.DatabaseSchemaName = "dup");
+    }
 }

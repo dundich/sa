@@ -25,6 +25,30 @@ public class OutboxPublishSettingsTests
     }
 
     [Fact]
+    public void RepeatedRegistration_AppliesTheCallbacksOnce()
+    {
+        var services = new ServiceCollection();
+        int calls = 0;
+
+        services.AddSaOutbox(Configure, scopeKey: "dup");
+        services.AddSaOutbox(Configure, scopeKey: "dup");
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        Assert.Equal(8, provider.GetRequiredKeyedService<OutboxPublishSettings>("dup").MaxBatchSize);
+
+        // The factory applies every callback of the scope, so a repeated AddSaOutbox for the same
+        // scope replaces the previous registration's callbacks instead of running them twice.
+        Assert.Equal(1, calls);
+
+        void Configure(IOutboxBuilder builder) => builder.WithPublishSettings((_, settings) =>
+        {
+            calls++;
+            return settings.WithMaxBatchSize(8);
+        });
+    }
+
+    [Fact]
     public void PublishSettings_ArePerProviderKey()
     {
         var services = new ServiceCollection();

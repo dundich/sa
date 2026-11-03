@@ -208,6 +208,29 @@ Both are optional: `IDeliveryBatcher` defaults to `DeliveryBatcher` (passthrough
 
 ---
 
+### Publish Settings
+
+`WithPublishSettings` customizes `OutboxPublishSettings` (currently `MaxBatchSize`) for one outbox
+scope:
+
+```csharp
+builder.Services.AddSaOutbox(builder => builder
+    .WithPublishSettings((_, settings) => settings.WithMaxBatchSize(1024)),
+    scopeKey: "billing");
+```
+
+The record is immutable, so the delegate receives the current instance and returns the next one. That
+is the contract: an `Action<OutboxPublishSettings>` could only mutate a copy nobody used, which made
+every call a silent no-op. **Migration:** rewrite an `Action`-shaped call as
+`(_, settings) => settings.WithMaxBatchSize(n)`; a statement-body lambda must return the settings.
+
+The delegate is keyed by the outbox scope, so each provider keeps its own publish settings; the
+default provider also exposes them unkeyed. Several calls for one scope compose in registration
+order — each receives the previous result — while a repeated `AddSaOutbox` for the same scope
+replaces the callbacks it recorded before instead of applying them twice.
+
+---
+
 ### Serialization
 
 `IOutboxMessageSerializer` lives in the core (`Sa.Outbox.Serialization`) and is the **single**

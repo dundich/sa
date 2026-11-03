@@ -225,8 +225,15 @@ use the one-call form.
 
 A repeated `AddSaOutboxUsingPostgreSql(..., scopeKey)` for one key is tolerated: the provider
 contracts, the startup validator, the migration guard, the consumer-group registrations and the
-schedule deduplicate. The **first** data-source registration owns the connection — a second call's
-data-source callback is ignored instead of throwing, so register the connection once.
+schedule deduplicate. The outbox-settings and polling callbacks of the last registration replace the
+ones recorded before, so they run once — not once per registration. The **first** data-source
+registration owns the connection — a second *outbox* call's data-source callback is ignored instead
+of throwing, so register the connection once.
+
+A data source another module registered under the same key is shared, not duplicated: a bare
+`WithDataSource()` borrows it. `WithDataSource(configure)` is an explicit connection intent and is
+applied to that key; if the other module already configured it, `AddSaPostgreSqlDataSource` reports
+the duplicate instead of the outbox silently keeping the other connection.
 
 ### 1. Tenant Configuration
 

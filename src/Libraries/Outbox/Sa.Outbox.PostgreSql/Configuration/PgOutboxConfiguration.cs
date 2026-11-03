@@ -182,6 +182,11 @@ internal sealed class PgOutboxConfiguration(
 
         if (_settingsRequested)
         {
+            // A repeated registration for the same key replaces the callbacks it recorded earlier
+            // instead of stacking a second copy: the settings factory applies every action of the
+            // key, so appending made a re-registered callback run once per registration.
+            services.RemoveAllKeyed<Action<IServiceProvider, PgOutboxSettings>>(providerKey);
+
             foreach (Action<IServiceProvider, PgOutboxSettings> action in _settingsActions)
                 services.AddKeyedSingleton<Action<IServiceProvider, PgOutboxSettings>>(providerKey, action);
 
@@ -190,22 +195,16 @@ internal sealed class PgOutboxConfiguration(
 
         if (_pollingRequested)
         {
+            services.RemoveAllKeyed<Action<IServiceProvider, PgPollingSettings>>(providerKey);
+
             foreach (Action<IServiceProvider, PgPollingSettings> action in _pollingActions)
                 services.AddKeyedSingleton<Action<IServiceProvider, PgPollingSettings>>(providerKey, action);
 
             RegisterPollingSettings();
         }
 
-        if (_dataSourceRequested && !IsDataSourceRegistered())
-        {
-            // A keyed provider gets its own keyed data source (pool + connection). The default key
-            // keeps the classic unkeyed registration, so an application that already registered an
-            // NpgsqlDataSource (or configured the unkeyed data source) keeps borrowing it.
-            if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
-                services.AddSaPostgreSqlDataSource(_dataSourceConfigure);
-            else
-                services.AddSaPostgreSqlDataSource(providerKey, _dataSourceConfigure);
-        }
+        if (_dataSourceRequested)
+            RegisterDataSource();
 
         RegisterSerializer();
 
@@ -230,22 +229,56 @@ internal sealed class PgOutboxConfiguration(
     }
 
     /// <summary>
-    /// Whether this provider key already owns a data source. A repeated registration of the same
-    /// key is tolerated: the first registration owns the connection, and passing the key to
-    /// <c>AddSaPostgreSqlDataSource</c> a second time would be rejected as a duplicate
-    /// configuration.
+    /// Registers the provider's data source unless the key already has one.
     /// </summary>
-    private bool IsDataSourceRegistered()
+    /// <remarks>
+    /// <para>
+    /// A repeated registration of the same outbox key is tolerated and must not re-register the data
+    /// source: the first registration owns the connection, and passing the key to
+    /// <c>AddSaPostgreSqlDataSource</c> a second time would be rejected as a duplicate
+    /// configuration. <see cref="PgOutboxDataSourceMarker"/> records what this provider owns.
+    /// </para>
+    /// <para>
+    /// A data source another module registered under the same key is a different case. A bare
+    /// <c>WithDataSource()</c> only asks for a data source to exist, so that one is borrowed — the
+    /// shared key is the point. A <c>WithDataSource(configure)</c> call is an explicit connection
+    /// intent: it is applied to the key, and if that module already configured it,
+    /// <c>AddSaPostgreSqlDataSource</c> fails with its own "already configured" message instead of
+    /// silently dropping this connection string.
+    /// </para>
+    /// </remarks>
+    private void RegisterDataSource()
     {
         // The default provider registers the unnamed ("") data source, a keyed one uses its scope.
         string dataSourceKey = string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal)
             ? string.Empty
             : providerKey;
 
-        return services.Any(d => d.ServiceType == typeof(IPgDataSource)
+        if (IsOutboxDataSourceRegistered(dataSourceKey)) return;
+
+        if (_dataSourceConfigure is null && HasDataSource(dataSourceKey)) return;
+
+        // A keyed provider gets its own keyed data source (pool + connection). The default key
+        // keeps the classic unkeyed registration, so an application that already registered an
+        // NpgsqlDataSource (or configured the unkeyed data source) keeps borrowing it.
+        if (string.Equals(providerKey, OutboxScope.DefaultKey, StringComparison.Ordinal))
+            services.AddSaPostgreSqlDataSource(_dataSourceConfigure);
+        else
+            services.AddSaPostgreSqlDataSource(providerKey, _dataSourceConfigure);
+
+        services.TryAddKeyedSingleton(dataSourceKey, new PgOutboxDataSourceMarker());
+    }
+
+    /// <summary>Whether an earlier outbox registration for this key already registered its data source.</summary>
+    private bool IsOutboxDataSourceRegistered(string dataSourceKey)
+        => services.Any(d => d.ServiceType == typeof(PgOutboxDataSourceMarker)
+            && Equals(d.ServiceKey, dataSourceKey));
+
+    /// <summary>Whether any keyed data source exists for the key, outbox-owned or not.</summary>
+    private bool HasDataSource(string dataSourceKey)
+        => services.Any(d => d.ServiceType == typeof(IPgDataSource)
             && d.IsKeyedService
             && Equals(d.ServiceKey, dataSourceKey));
-    }
 
     /// <summary>
     /// Registers the serializer per provider. The provider's commands resolve it keyed, so two
@@ -394,4 +427,14 @@ internal sealed class PgOutboxConfiguration(
                 sp => sp.GetRequiredKeyedService<PgPollingSettings>(providerKey));
         }
     }
+}
+
+/// <summary>
+/// Records that the outbox provider registered the PostgreSQL data source for a key. The key is
+/// carried as the marker's <see cref="ServiceDescriptor.ServiceKey"/>, so a marker for one scope
+/// does not hide another scope's own data source. Used to tell "this provider already owns the
+/// connection" apart from "another module registered one for the same key".
+/// </summary>
+internal sealed class PgOutboxDataSourceMarker
+{
 }

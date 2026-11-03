@@ -23,6 +23,14 @@ internal static class Setup
                 scopeKey,
                 configure);
         }
+        else
+        {
+            // No delegate means the start of a registration (OutboxBuilder.Create). A repeated
+            // AddSaOutbox for the same scope replaces the callbacks the previous registration
+            // recorded instead of stacking a second copy; the settings factory applies every entry.
+            services.RemoveAllKeyed<Func<IServiceProvider, OutboxPublishSettings, OutboxPublishSettings>>(
+                scopeKey);
+        }
 
         services.TryAddKeyedSingleton<OutboxPublishSettings>(scopeKey, (sp, _) =>
         {
