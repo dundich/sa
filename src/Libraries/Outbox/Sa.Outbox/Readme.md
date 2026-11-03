@@ -392,6 +392,7 @@ so the payload id is resolved through a typed delegate. An unregistered struct t
 |----------|---------|--------|
 | PostgreSQL | [`Sa.Outbox.PostgreSql`](../Sa.Outbox.PostgreSql) | ✅ production-ready |
 | Redis | [`Sa.Outbox.Redis`](../Sa.Outbox.Redis) | 🔧 in development |
+| In-memory | built into `Sa.Outbox` | 🧪 reference / dev-test only |
 
 The core is provider-agnostic: the same `AddSaOutbox`, tenant/metadata registrations and consumer
 declarations work on top of either package. Only storage and delivery mechanics differ.
@@ -434,6 +435,19 @@ declarations work on top of either package. Only storage and delivery mechanics 
 
 > The providers are intentionally **not** interchangeable at the storage level: switching packages
 > does not migrate pending messages. Drain the old provider before switching.
+
+### In-memory provider (`Sa.Outbox.InMemory`)
+
+A reference implementation of the plug point and a development/test substitute: messages live in a
+process-local dictionary, so there is no infrastructure to run and no configuration to bind. Register
+it with `AddSaOutboxUsingInMemory(...)`.
+
+The provider has its own readme — behaviour, cancellation and retry semantics, and the limitations
+that keep it out of production: [`InMemory/Readme.md`](InMemory/Readme.md).
+
+> The in-memory provider is **not** a production provider. It exists so the pipeline can be exercised
+> without a database and so a provider author has a few-hundred-line example instead of a
+> several-thousand-line one.
 
 ---
 
