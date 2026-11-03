@@ -136,6 +136,13 @@ ORDER BY ut.{settings.TaskQueue.Fields.TaskId}
 """;
 
 
+    // NB: no `task_lock_expires_on > now` guard here, deliberately — ownership of a rented batch
+    // is `task_transact_id` (+ status Processing), not the clock. The old guard was a false
+    // negative generator: the column stores unix *seconds*, so any LockDuration below a second
+    // truncates to "now" and the UPDATE matched nothing — every renewal of a sub-second lease
+    // silently did nothing while the consumer kept working. With the guard gone, `0 rows` from
+    // this statement means exactly one thing: the rows were re-rented by another worker (the
+    // transact id was overwritten), which DeliveryTenant reports as a lost lock.
     public readonly string SqlExtendDelivery =
 $"""
 UPDATE {settings.GetQualifiedTaskTableName()}
@@ -147,7 +154,6 @@ WHERE
   AND {settings.TaskQueue.Fields.DeliveryStatusCode}={(int)DeliveryStatusCode.Processing}
   AND {settings.TaskQueue.Fields.TaskTransactId}={SqlParam.TransactId}
   AND {settings.TaskQueue.Fields.MsgPayloadType}={SqlParam.TypeId}
-  AND {settings.TaskQueue.Fields.TaskLockExpiresOn}>{SqlParam.NowDate}
 ;
 """;
 

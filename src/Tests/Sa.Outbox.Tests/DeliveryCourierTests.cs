@@ -507,8 +507,12 @@ public class DeliveryCourierTests
 
     #region Cancellation
 
+    /// <summary>
+    /// A stop that lands inside the consumer is a shutdown, not a failed attempt: the batch must be
+    /// propagated untouched, so the next run re-rents it without a burned delivery attempt.
+    /// </summary>
     [Fact]
-    public async Task Deliver_ProcessorCancelled_TreatedAsRegularError()
+    public async Task Deliver_CallerCancelled_PropagatesInsteadOfMarkingWarn()
     {
         var ctx = new FakeOutboxContext<TestMessage>(payloadId: "cancelled");
         var messages = ToMessages(ctx);
@@ -517,6 +521,30 @@ public class DeliveryCourierTests
         cts.Cancel();
 
         var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromCanceled(cts.Token));
+        var courier = new DeliveryCourier(processor, new FakeDeliveryBackoffStrategy(_ => TimeSpan.FromSeconds(1)));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await courier.Deliver(CreateSettings(), CreateFilter(), messages, cts.Token));
+
+        Assert.Equal(DeliveryStatusCode.Pending, ctx.DeliveryResult.Code);
+        Assert.Null(ctx.Exception);
+    }
+
+    /// <summary>
+    /// The counter-test: a cancellation raised by the consumer *itself* (its own timeout, its own
+    /// linked source) while the cycle is alive is a real failure of the attempt and keeps the old
+    /// behaviour — Warn with backoff.
+    /// </summary>
+    [Fact]
+    public async Task Deliver_ConsumerInternalCancellation_TreatedAsRegularError()
+    {
+        var ctx = new FakeOutboxContext<TestMessage>(payloadId: "consumer-timeout");
+        var messages = ToMessages(ctx);
+
+        using var consumerCts = new CancellationTokenSource();
+        consumerCts.Cancel();
+
+        var processor = new FakeDeliveryLifetimeInvoker(_ => Task.FromCanceled(consumerCts.Token));
 
         var backoffStrategy = new FakeDeliveryBackoffStrategy(_ => TimeSpan.FromSeconds(1));
         var courier = new DeliveryCourier(processor, backoffStrategy);
@@ -525,10 +553,11 @@ public class DeliveryCourierTests
             CreateSettings(),
             CreateFilter(),
             messages,
-            cts.Token);
+            CancellationToken.None);
 
         Assert.Equal(1, result);
         Assert.Equal(DeliveryStatusCode.Warn, ctx.DeliveryResult.Code);
+        Assert.NotNull(ctx.Exception);
     }
 
     #endregion

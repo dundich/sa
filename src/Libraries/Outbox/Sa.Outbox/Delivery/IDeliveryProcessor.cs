@@ -14,5 +14,10 @@ public interface IDeliveryProcessor
     /// whether the consumer succeeded it, left it for a retry, or dead-lettered it. The loop itself
     /// keeps iterating while messages are being rented.
     /// </returns>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. A stop is not a delivery outcome and is
+    /// never reported as an empty cycle, so a caller can tell "nothing to do" from "we were told to
+    /// stop". The exception carries this token, which is what the scheduler keys its silent stop on.
+    /// </exception>
     Task<long> ProcessMessages<TMessage>(OutboxConsumerSettings settings, CancellationToken cancellationToken);
 }

@@ -44,9 +44,17 @@ internal sealed class DeliveryTenant(
 
         if (messages.IsEmpty) return 0;
 
-        await using IAsyncDisposable locker = RenewerLocker(deliveryMan, settings, filter, cancellationToken);
+        var renewal = new RenewalState();
+
+        await using IAsyncDisposable locker = RenewerLocker(deliveryMan, settings, filter, renewal, cancellationToken);
 
         var delivered = await deliveryCourier.Deliver(settings, filter, messages, cancellationToken);
+
+        // Statuses are written next, and they are what the lock was guarding. From here on a
+        // renewal may legitimately renew nothing — the rows leave Processing as soon as the first
+        // status lands — so a zero must not be read as a lost lock. Without this the renewer's last
+        // tick races ReturnDelivery and aborts a pass that had already delivered its whole batch.
+        renewal.MarkCompleting();
 
         await ReleaseMessagesAsync(deliveryMan, messages, filter, cancellationToken);
 
@@ -126,22 +134,50 @@ internal sealed class DeliveryTenant(
         IOutboxDeliveryManager deliveryMan,
         OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
+        RenewalState renewal,
         CancellationToken cancellationToken)
             => LockRenewer.KeepLocked(
                 settings.LockRenewal
-                , t =>
+                , async t =>
                 {
                     var nowDate = GetUtcNow();
-                    return deliveryMan.ExtendDelivery(
+                    int renewed = await deliveryMan.ExtendDelivery(
                         settings.LockDuration
-                        , filter with
-                        {
-                            ToDate = nowDate,
-                            NowDate = nowDate
-                        }
-                        , t);
+                        , filter with { NowDate = nowDate }
+                        , t).ConfigureAwait(false);
+
+                    // Zero renewed rows is the provider's way of saying the lease is no longer
+                    // ours: the batch was re-rented, or task_transact_id was overwritten. This is
+                    // the only signal there is — the renewer itself fails on a *throwing* delegate
+                    // only — so ignoring it let the consumer keep working (and later acknowledging)
+                    // under a lock somebody else already owned. Reported as a lost lock, which the
+                    // per-tenant pass already absorbs, instead of as a delivery failure.
+                    //
+                    // Except during the release itself: once the pass has finished consuming, the
+                    // rows stop being Processing and a renewal legitimately matches nothing.
+                    if (renewed == 0 && !t.IsCancellationRequested && !renewal.IsCompleting)
+                    {
+                        throw new LockRenewalException(
+                            $"Lock renewal matched none of the messages of consumer group "
+                            + $"'{filter.ConsumerGroupId}' (tenant {filter.TenantId}, transaction "
+                            + $"'{filter.TransactId}'): the batch was re-rented by another worker.");
+                    }
                 }
                 , cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Whether this pass has finished consuming and is writing the delivery statuses. Set before
+    /// <c>ReturnDelivery</c>: the rows are terminal from then on, so a renewal that matches nothing
+    /// is the expected outcome rather than a stolen lease.
+    /// </summary>
+    private sealed class RenewalState
+    {
+        private volatile bool _completing;
+
+        public bool IsCompleting => _completing;
+
+        public void MarkCompleting() => _completing = true;
+    }
 
     private static IMemoryOwner<IOutboxContextOperations<TMessage>> RentMemory<TMessage>(int size)
         => new ClearingMemoryOwner<IOutboxContextOperations<TMessage>>(

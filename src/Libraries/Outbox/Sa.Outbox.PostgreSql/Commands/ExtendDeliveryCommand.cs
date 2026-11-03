@@ -19,7 +19,6 @@ internal sealed class ExtendDeliveryCommand(
             .AddParamTenantId(filter.TenantId)
             .AddParamConsumerGroupId(filter.ConsumerGroupId)
             .AddParamFromDate(filter.FromDate)
-            .AddParamNowDate(filter.NowDate)
             .AddParamTransactId(filter.TransactId)
             .AddParamLockExpiresOn(lockExpiresOn)
             .AddParamTypeId(typeCode)

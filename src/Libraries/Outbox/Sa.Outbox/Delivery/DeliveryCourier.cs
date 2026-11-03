@@ -28,6 +28,19 @@ internal sealed class DeliveryCourier(
         {
             await processor.ConsumeInScope(settings, filter, messages, cancellationToken).ConfigureAwait(false);
         }
+        // Shutdown is not a delivery outcome. `IsCritical()` (below) does not cover
+        // OperationCanceledException, so without this filter a stop landing inside `Consume` was
+        // turned into Warn(backoff) on every untouched message — burning a delivery attempt (and,
+        // at the limit, dead-lettering a batch that was never actually attempted) purely because
+        // the host was stopping. A consumer's *own* timeout is a different thing and still falls
+        // through to the generic handler: that one is a real failure of the attempt.
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            // Re-thrown with the cycle's own token on purpose: Sa.Schedule recognises a stop by
+            // `ex.CancellationToken == cancellationToken` and silently ends the run, while a
+            // consumer-internal linked token would read as a job failure and trip the error policy.
+            throw new OperationCanceledException(ex.Message, ex, cancellationToken);
+        }
         catch (Exception ex) when (!ex.IsCritical()) // Handle non-critical exceptions
         {
             HandleError(ex, messages.Span);

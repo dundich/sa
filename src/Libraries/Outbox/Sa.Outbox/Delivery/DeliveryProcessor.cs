@@ -118,6 +118,11 @@ internal sealed class DeliveryProcessor(
         var total = 0;
         foreach (int tenantId in tenantIds)
         {
+            // A stop that landed between tenants ends the pass here: without this check the loop
+            // walked every remaining tenant, each one doing its own round trips against an
+            // already-cancelled token.
+            cancellationToken.ThrowIfCancellationRequested();
+
             total += await ProcessTenantWithTimeout<TMessage>(tenantId, settings, cancellationToken).ConfigureAwait(false);
         }
 
@@ -161,6 +166,8 @@ internal sealed class DeliveryProcessor(
     /// <summary>
     /// Applies <see cref="OutboxConsumerSettings.PerTenantTimeout"/> to a single tenant pass and
     /// swallows the resulting cancellation, so one unresponsive tenant cannot fail the whole cycle.
+    /// Only the tenant-local timeout is absorbed: a cancellation of the cycle's own token is
+    /// rethrown, because a stop is not a tenant that failed.
     /// Deliberately distinct from <see cref="IDeliveryTenant.ProcessInTenant{TMessage}"/>, which does
     /// the actual work — the two used to share a name, which made the call chain ambiguous to read.
     /// </summary>
@@ -184,6 +191,15 @@ internal sealed class DeliveryProcessor(
             return await processor.ProcessInTenant<TMessage>(
                 tenantId, settings, tenantCts?.Token ?? cancellationToken).ConfigureAwait(false);
         }
+        // The cycle's own token is cancelled: this is a shutdown, not the per-tenant timeout below.
+        // Swallowing it made `ProcessMessages` return normally while the remaining tenants were still
+        // being walked; re-thrown with the caller's token so the scheduler recognises the stop.
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(ex.Message, ex, cancellationToken);
+        }
+        // Only a tenant-local timeout (its linked token fired, the caller's did not) is absorbed:
+        // one unresponsive tenant must not fail the whole cycle.
         catch (OperationCanceledException)
         {
             // ignore

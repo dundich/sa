@@ -1,3 +1,4 @@
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using System.Text;
@@ -40,6 +41,27 @@ public class SqlOutboxBuilderTests
         => string.Join('\n', sql
             .Split('\n')
             .Select(line => line.Contains("--", StringComparison.Ordinal) ? line[..line.IndexOf("--", StringComparison.Ordinal)] : line));
+
+    [Fact]
+    public void SqlExtendDelivery_DoesNotGateRenewalOnTheExpiryClock()
+    {
+        // Ownership of a rented batch is `task_transact_id` (+ Processing), not the lock timestamp.
+        // The removed `task_lock_expires_on > now` guard looked like a safety net but was a false
+        // negative generator: the column keeps unix *seconds*, so a sub-second LockDuration
+        // truncates to "now" and every renewal matched nothing — the lease quietly expired under a
+        // consumer that believed it still owned the batch. With the guard gone, 0 rows means one
+        // thing only: another worker re-rented the batch.
+        var settings = new PgOutboxTableSettings();
+        var sql = ExecutableSql(Create().SqlExtendDelivery);
+
+        Assert.DoesNotContain(SqlParam.NowDate, sql, StringComparison.Ordinal);
+        Assert.Contains(settings.TaskQueue.Fields.TaskTransactId, sql, StringComparison.Ordinal);
+        Assert.Contains(SqlParam.TransactId, sql, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{settings.TaskQueue.Fields.DeliveryStatusCode}={(int)DeliveryStatusCode.Processing}",
+            sql,
+            StringComparison.Ordinal);
+    }
 
     [Fact]
     public void SqlSelectTenant_UsesDistinct_NotAWindowFunction()

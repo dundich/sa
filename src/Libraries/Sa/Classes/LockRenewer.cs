@@ -246,4 +246,9 @@ internal sealed class LockRenewerHandle : IDisposable, IAsyncDisposable
 /// <summary>
 /// Продление блокировки оборвалось ошибкой: блокировка истекла, её может забрать другой владелец.
 /// </summary>
-internal sealed class LockRenewalException(string message, Exception inner) : Exception(message, inner);
+/// <param name="message">Описание потери блокировки.</param>
+/// <param name="inner">
+/// Причина, если продление упало с исключением. <see langword="null"/>, когда провайдер просто
+/// вернул «ничего не продлено» — это не сбой вызова, а факт: аренда уже не наша.
+/// </param>
+internal sealed class LockRenewalException(string message, Exception? inner = null) : Exception(message, inner);
