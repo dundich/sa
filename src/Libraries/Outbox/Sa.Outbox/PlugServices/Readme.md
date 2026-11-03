@@ -457,7 +457,7 @@ Provider services are lazy, so "the host started" does not mean "the storage is 
 ```csharp
 public interface IOutboxProviderInitializer
 {
-    ValueTask InitializeAsync(CancellationToken cancellationToken = default);
+    ValueTask InitializeAsync();
 }
 ```
 
@@ -467,7 +467,8 @@ public interface IOutboxProviderInitializer
 - `DeliveryJob` awaits the gate before `ProcessMessages`; a warm-up failure goes through the job's
   usual error policy (`IfErrorRetry`/`ThenCloseApplication`) instead of surfacing on a random tick.
 - The wait observes the caller's `CancellationToken` (shutdown does not wait for a connection); the
-  warm-up itself runs on the provider's own timeouts.
+  hook itself takes no token, because the warm-up is shared by every group of the provider and must
+  not be cancelled by one caller's token. The provider's own command timeouts bound it.
 - Registration order of the provider and the core does not matter — the gate is lazy, not a hosted
   service.
 - Implementations: PG runs `SELECT 1` on its data source; Redis runs `PING`. A provider without an

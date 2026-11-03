@@ -17,6 +17,12 @@ namespace Sa.Outbox.PlugServices;
 /// the next tick retries it. A provider without a warm-up is valid: its first command already
 /// performs the lazy connection.
 /// </para>
+/// <para>
+/// The hook takes no token on purpose. The result is shared by every consumer group of the
+/// provider, so a single caller's cancellation must not cancel it; the wait around it is what
+/// observes the caller's token. Bound the warm-up with the provider's own connection/command
+/// timeouts instead.
+/// </para>
 /// </remarks>
 public interface IOutboxProviderInitializer
 {
@@ -24,7 +30,6 @@ public interface IOutboxProviderInitializer
     /// Prepares the provider for delivery: checks connectivity (<c>SELECT 1</c>, <c>PING</c>) and
     /// completes any warm-up the provider needs. Must be idempotent.
     /// </summary>
-    /// <param name="cancellationToken">A token to cancel the warm-up.</param>
     /// <returns>A task that completes when the provider is ready.</returns>
-    ValueTask InitializeAsync(CancellationToken cancellationToken = default);
+    ValueTask InitializeAsync();
 }

@@ -9,6 +9,6 @@ namespace Sa.Outbox.Redis.Services.Plug;
 /// </summary>
 internal sealed class RedisOutboxInitializer(IDatabase database) : IOutboxProviderInitializer
 {
-    public async ValueTask InitializeAsync(CancellationToken cancellationToken = default)
+    public async ValueTask InitializeAsync()
         => await database.PingAsync().ConfigureAwait(false);
 }

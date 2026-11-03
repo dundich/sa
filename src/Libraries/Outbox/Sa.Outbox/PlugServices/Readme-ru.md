@@ -466,7 +466,7 @@ app.MapGet("/health/outbox", async (IOutboxHealth health, CancellationToken ct) 
 ```csharp
 public interface IOutboxProviderInitializer
 {
-    ValueTask InitializeAsync(CancellationToken cancellationToken = default);
+    ValueTask InitializeAsync();
 }
 ```
 
@@ -475,8 +475,9 @@ public interface IOutboxProviderInitializer
   повторяет прогрев.
 - `DeliveryJob` ждёт гейт перед `ProcessMessages`; ошибка прогрева уходит в обычную политику ошибок
   job'а (`IfErrorRetry`/`ThenCloseApplication`), а не всплывает на случайном тике.
-- Ожидание наблюдает `CancellationToken` вызывающего (shutdown не ждёт коннект), сам прогрев живёт
-  на таймаутах провайдера.
+- Ожидание наблюдает `CancellationToken` вызывающего (shutdown не ждёт коннект); сам хук токена не
+  принимает, потому что прогрев общий для всех групп провайдера и не должен отменяться отменой
+  одного вызывающего. Ограничивают его таймауты команд провайдера.
 - Порядок регистрации провайдера и ядра не важен — гейт ленивый, а не hosted-service.
 - Реализации: PG — `SELECT 1` на своём data source; Redis — `PING`. Провайдер без инициализатора
   валиден (первая команда и так открывает соединение).

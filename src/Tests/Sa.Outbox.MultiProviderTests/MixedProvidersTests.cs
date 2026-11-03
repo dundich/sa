@@ -165,8 +165,10 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
     {
         IServiceProvider sp = fixture.ServiceProvider;
 
-        await sp.GetRequiredKeyedService<IOutboxProviderInitializer>(PgKey).InitializeAsync(TestToken);
-        await sp.GetRequiredKeyedService<IOutboxProviderInitializer>(RedisKey).InitializeAsync(TestToken);
+        // The hook takes no token: the warm-up is shared, and its wait is what observes a caller's
+        // cancellation.
+        await sp.GetRequiredKeyedService<IOutboxProviderInitializer>(PgKey).InitializeAsync();
+        await sp.GetRequiredKeyedService<IOutboxProviderInitializer>(RedisKey).InitializeAsync();
     }
 
     [Fact]

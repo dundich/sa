@@ -9,10 +9,12 @@ namespace Sa.Outbox.PostgreSql.Services.Plug;
 /// </summary>
 internal sealed class PgOutboxInitializer(IPgDataSource dataSource) : IOutboxProviderInitializer
 {
-    public async ValueTask InitializeAsync(CancellationToken cancellationToken = default)
+    public async ValueTask InitializeAsync()
     {
+        // The warm-up is shared by every consumer group, so it is not tied to one caller's token;
+        // the data source's own command timeout bounds it.
         int result = await dataSource
-            .ExecuteScalarTyped<int>("SELECT 1", initCommand: null, cancellationToken)
+            .ExecuteScalarTyped<int>("SELECT 1", initCommand: null, CancellationToken.None)
             .ConfigureAwait(false);
 
         if (result != 1)

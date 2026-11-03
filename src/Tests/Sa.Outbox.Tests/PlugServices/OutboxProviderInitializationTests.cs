@@ -126,7 +126,7 @@ public class OutboxProviderInitializationTests
 
         public void Release() => _gate.TrySetResult();
 
-        public async ValueTask InitializeAsync(CancellationToken cancellationToken = default)
+        public async ValueTask InitializeAsync()
         {
             Interlocked.Increment(ref _calls);
             await _gate.Task.ConfigureAwait(false);
@@ -139,7 +139,7 @@ public class OutboxProviderInitializationTests
 
         public int Calls => Volatile.Read(ref _calls);
 
-        public ValueTask InitializeAsync(CancellationToken cancellationToken = default)
+        public ValueTask InitializeAsync()
         {
             int call = Interlocked.Increment(ref _calls);
 
