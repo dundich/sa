@@ -461,6 +461,11 @@ A provider must implement three key interfaces:
 | `IOutboxDeliveryManager` | Locking and message dispatch |
 | `IOutboxTenantDetector` | Tenant ID source (optional; `ITenantSource` is the base contract) |
 
+Step-by-step guide with code, using the in-memory provider as the worked example:
+**[`PlugServices/ProviderGuide.md`](PlugServices/ProviderGuide.md)** — the four-file shape, the
+`RentDelivery`/`ReturnDelivery`/`ExtendDelivery` rules, registration, the contract checklist and how
+to test a provider.
+
 ### Registration and startup validation
 
 A provider package registers the three contracts through one call, which also declares its identity

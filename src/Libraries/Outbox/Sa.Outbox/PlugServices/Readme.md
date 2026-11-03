@@ -2,6 +2,9 @@
 
 **English** | [Русский](Readme-ru.md)
 
+> Writing a provider? The step-by-step guide with code, using the in-memory provider as the worked
+> example, is [`ProviderGuide.md`](ProviderGuide.md). This file describes the contracts themselves.
+
 ## Contents
 
 - [Why](#why)
