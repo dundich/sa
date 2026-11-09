@@ -161,8 +161,8 @@ public sealed class HybridRegistrationTests
     public void AddSaInMemoryFileStorage_Accepts_AnEmptyBasket()
     {
         // An empty basket is a supported configuration: it makes the file ID two segments deep
-        // (scheme://tenant/file) and several tests rely on it. Validating the basket here would
-        // break them, so it is deliberately left to the caller.
+        // (scheme://tenant/file) and several tests rely on it, so it is allowed through explicitly.
+        // A non-empty basket is validated against the shared rules (see the test below).
         var services = new ServiceCollection();
         services.AddSaHybridFileStorage(b =>
             b.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions(string.Empty)));
@@ -171,6 +171,36 @@ public sealed class HybridRegistrationTests
 
         var storage = provider.GetServices<IFileStorage>().Single();
         Assert.Equal(string.Empty, storage.Basket);
+    }
+
+    [Fact]
+    public void AddSaInMemoryFileStorage_Rejects_A_null_basket()
+    {
+        // A null basket is not "no basket": it would fail inside Path.Combine on the first upload.
+        // An empty string is the supported way to declare a basket-less storage.
+        var services = new ServiceCollection();
+        services.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions(Basket: null!));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<System.ComponentModel.DataAnnotations.ValidationException>(
+            () => provider.GetServices<IFileStorage>().Single());
+
+        Assert.Contains("null", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AddSaInMemoryFileStorage_Rejects_AMalformedBasket()
+    {
+        // The same rules every other provider applies: a path separator in a non-empty basket
+        // would split the file ID into an extra segment (or escape the storage root).
+        var services = new ServiceCollection();
+        services.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("share/nested"));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Throws<System.ComponentModel.DataAnnotations.ValidationException>(
+            () => provider.GetServices<IFileStorage>().Single());
     }
 
     // ---------- TimeProvider ----------

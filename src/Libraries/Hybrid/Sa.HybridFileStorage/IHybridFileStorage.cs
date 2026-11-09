@@ -53,7 +53,9 @@ public interface IHybridFileStorage
     /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>
     /// <returns>
     /// <c>true</c> if a storage deleted the file; <c>false</c> when no candidate had it — the
-    /// same probing and error rules as <see cref="DownloadAsync"/> apply.
+    /// same probing and error rules as <see cref="DownloadAsync"/> apply. A delete is a write:
+    /// when every storage recognizing the ID is read-only, <see cref="HybridFileStorageWritableException"/>
+    /// is thrown instead.
     /// </returns>
     Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken = default);
 

@@ -119,7 +119,16 @@ internal static class HybridStorageRegistrar
     {
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IFileStorage>(sp =>
-            new InMemoryFileStorage(options(sp), sp.GetRequiredService<TimeProvider>()));
+        {
+            InMemoryFileStorageOptions instance = options(sp);
+
+            // The explicit-instance channels feed this factory a ready-made object, bypassing the
+            // options pipeline; validating here keeps them subject to the same basket rules.
+            // (The pipeline channel has already validated through InMemoryFileStorageOptionsValidator.)
+            instance.Validate();
+
+            return new InMemoryFileStorage(instance, sp.GetRequiredService<TimeProvider>());
+        });
     }
 
     /// <summary>
@@ -164,6 +173,12 @@ internal static class HybridStorageRegistrar
         string optionsName = NextOptionsName(storageBuilder.ConfigSectionPath);
         OptionsBuilder<InMemoryFileStorageOptions> builder =
             services.AddOptions<InMemoryFileStorageOptions>(optionsName);
+
+        // Same rules as the other providers: a malformed non-empty basket fails at host start (or
+        // at the first named read) rather than inside the first upload.
+        builder.ValidateOnStart();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<InMemoryFileStorageOptions>, InMemoryFileStorageOptionsValidator>());
 
         // Fixed slot: the section binds after the callback has recorded it, before its
         // Options(...) actions replay — wherever those calls sit in the callback.

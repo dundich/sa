@@ -3,7 +3,8 @@ using System.Globalization;
 namespace Sa.HybridFileStorage;
 
 /// <summary>
-/// Utility for parsing and constructing file IDs in the format <c>"storageType://basket/tenantId/timestamp/filename"</c>.
+/// Utility for parsing and constructing file IDs in the format
+/// <c>"storageType://basket/tenantId/[timestamp/]filename"</c>.
 /// </summary>
 public static class FileIdParser
 {
@@ -21,8 +22,34 @@ public static class FileIdParser
     /// <param name="timestamp">When this method returns, contains the Unix timestamp (seconds), or zero if parsing failed.</param>
     /// <param name="fileName">When this method returns, contains the file name, or empty string if parsing failed.</param>
     /// <returns><c>true</c> if the file ID was parsed successfully; otherwise, <c>false</c>.</returns>
+    /// <remarks>
+    /// This overload guesses the layout: a numeric second segment is read as the PostgreSQL
+    /// timestamp, so <c>fs://share/1/2024/report.pdf</c> (a directory named <c>2024</c>) is taken
+    /// as the timestamp format. A caller that knows the provider's layout should use
+    /// <see cref="TryParse(string, FileIdFormat, out string, out int, out long, out string)"/>.
+    /// </remarks>
     public static bool TryParse(
         string fileId,
+        out string basket,
+        out int tenantId,
+        out long timestamp,
+        out string fileName)
+        => TryParse(fileId, FileIdFormat.Auto, out basket, out tenantId, out timestamp, out fileName);
+
+    /// <summary>
+    /// Tries to parse a file ID with the layout of a specific provider, so a numeric path segment
+    /// is never mistaken for the PostgreSQL timestamp.
+    /// </summary>
+    /// <param name="fileId">The file ID string to parse.</param>
+    /// <param name="format">The layout to parse: the heuristic, or the timestamp / no-timestamp shape.</param>
+    /// <param name="basket">When this method returns, contains the basket (scope) name, or empty string if parsing failed.</param>
+    /// <param name="tenantId">When this method returns, contains the tenant identifier, or zero if parsing failed.</param>
+    /// <param name="timestamp">When this method returns, contains the Unix timestamp (seconds), or zero when the layout has none or parsing failed.</param>
+    /// <param name="fileName">When this method returns, contains the file name, or empty string if parsing failed.</param>
+    /// <returns><c>true</c> if the file ID matched <paramref name="format"/> and was parsed; otherwise, <c>false</c>.</returns>
+    public static bool TryParse(
+        string fileId,
+        FileIdFormat format,
         out string basket,
         out int tenantId,
         out long timestamp,
@@ -46,8 +73,7 @@ public static class FileIdParser
         basket = afterSpan[..scopeEnd].ToString();
         afterSpan = afterSpan[(scopeEnd + 1)..];
 
-        // For Postgres: "tenantId/timestamp/filename"
-        // For S3/FileSystem/InMemory: "tenantId/filename" (no timestamp)
+        // "tenantId/timestamp/filename" (Postgres) or "tenantId/filename" (S3/FileSystem/InMemory)
         int firstSlash = afterSpan.IndexOf('/');
         if (firstSlash == -1) return false;
 
@@ -57,17 +83,41 @@ public static class FileIdParser
 
         var afterFirst = afterSpan[(firstSlash + 1)..];
 
-        // Check if second part is a timestamp (Postgres) or filename (others)
-        int secondSlash = afterFirst.IndexOf('/');
-        if (secondSlash != -1 && long.TryParse(afterFirst[..secondSlash], NumberStyles.None, CultureInfo.InvariantCulture, out timestamp))
+        switch (format)
         {
-            // Postgres format: tenantId/timestamp/filename
-            fileName = afterFirst[(secondSlash + 1)..].ToString();
-        }
-        else
-        {
-            // Simple format: tenantId/filename
-            fileName = afterFirst.ToString();
+            case FileIdFormat.WithTimestamp:
+            {
+                int secondSlash = afterFirst.IndexOf('/');
+                if (secondSlash == -1) return false;
+
+                if (!long.TryParse(afterFirst[..secondSlash], NumberStyles.None, CultureInfo.InvariantCulture, out timestamp))
+                    return false;
+
+                fileName = afterFirst[(secondSlash + 1)..].ToString();
+                break;
+            }
+
+            case FileIdFormat.WithoutTimestamp:
+                fileName = afterFirst.ToString();
+                break;
+
+            default:
+            {
+                // Check if second part is a timestamp (Postgres) or filename (others)
+                int secondSlash = afterFirst.IndexOf('/');
+                if (secondSlash != -1 && long.TryParse(afterFirst[..secondSlash], NumberStyles.None, CultureInfo.InvariantCulture, out timestamp))
+                {
+                    // Postgres format: tenantId/timestamp/filename
+                    fileName = afterFirst[(secondSlash + 1)..].ToString();
+                }
+                else
+                {
+                    // Simple format: tenantId/filename
+                    fileName = afterFirst.ToString();
+                }
+
+                break;
+            }
         }
 
         return !string.IsNullOrEmpty(fileName);

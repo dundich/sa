@@ -91,7 +91,7 @@ public static class HybridFileStorageExtensions
             ThrowFileAlreadyInTargetScope();
         }
 
-        StorageResult result = default!;
+        StorageResult? result = null;
         bool downloaded = await storage.DownloadAsync(
             fileId,
             async (sourceStream, downloadCt) =>
@@ -109,6 +109,13 @@ public static class HybridFileStorageExtensions
         if (!downloaded)
         {
             ThrowSourceFileNotFound(fileId);
+        }
+
+        // A provider that reports success without ever streaming is broken, but the answer is a
+        // contract violation at that point — not a null result from a non-nullable method.
+        if (result is null)
+        {
+            ThrowStorageDidNotStream(fileId);
         }
 
         return result;
@@ -178,26 +185,26 @@ public static class HybridFileStorageExtensions
             }
             catch (Exception ex)
             {
-                // Lock only for adding to failed list and incrementing counter
-                int failedIdx;
-                int completedCount;
+                // Capture every value used for the report inside the lock: reading the shared
+                // lists (or indexing them) outside it races with the concurrent appends of the
+                // other items, and a List<T> resize makes that read formally unsafe.
+                BatchOperationProgress snapshot;
                 lock (lockObj)
                 {
-                    failed.Add(new BatchError(fileId, ex, index));
+                    var error = new BatchError(fileId, ex, index);
+                    failed.Add(error);
                     completed++;
-                    failedIdx = failed.Count - 1;
-                    completedCount = completed;
+                    snapshot = new BatchOperationProgress(
+                        fileList.Count,
+                        completed,
+                        succeeded.Count,
+                        failed.Count,
+                        error.FileId,
+                        error.Exception);
                 }
 
                 // Progress.Report outside lock to avoid blocking other threads during user callback
-                var reportedError = failed[failedIdx];
-                progress?.Report(new BatchOperationProgress(
-                    fileList.Count,
-                    completedCount,
-                    succeeded.Count,
-                    failed.Count,
-                    reportedError.FileId,
-                    reportedError.Exception));
+                progress?.Report(snapshot);
 
                 return null;
             }
@@ -260,6 +267,11 @@ public static class HybridFileStorageExtensions
     [DoesNotReturn]
     static void ThrowFileAlreadyInTargetScope() =>
         throw new InvalidOperationException("File already in target scope");
+
+    [DoesNotReturn]
+    static void ThrowStorageDidNotStream(string fileId) =>
+        throw new InvalidOperationException(
+            $"The storage reported success for '{fileId}' without streaming the file.");
 
     [DoesNotReturn]
     static void ThrowSourceFileNotFound(string fileId) =>

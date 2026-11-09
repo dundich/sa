@@ -11,13 +11,11 @@ internal sealed class HybridFileStorage(
 
     public IEnumerable<IFileStorage> Storages => container.Storages;
 
-    private void EnsureWritable(string basket)
+    private static void EnsureWritable(IReadOnlyList<IFileStorage> chain)
     {
         // The chain, not the raw registry: a type excluded by the basket's order does not
         // participate, so a basket whose chain is empty has no available storage at all —
         // even when excluded storages are registered for it.
-        var chain = container.GetBasket(basket);
-
         if (chain.Count == 0)
         {
             throw new HybridFileStorageNoAvailableException();
@@ -43,10 +41,12 @@ internal sealed class HybridFileStorage(
 
         ArgumentNullException.ThrowIfNull(basket);
 
-        EnsureWritable(basket);
+        // One snapshot for the writability check and for the operation itself.
+        IReadOnlyList<IFileStorage> chain = container.GetBasket(basket);
+        EnsureWritable(chain);
 
         return await ExecuteStorageOperationAsync(
-            container.GetBasket(basket).Where(c => !c.IsReadOnly),
+            chain.Where(static c => !c.IsReadOnly),
             async (storage, ct) => await interceptors.ExecuteBeforeUploadAsync(storage, input, fileStream, ct).ConfigureAwait(false),
             async (storage, ct) => await storage.UploadAsync(input, fileStream, ct).ConfigureAwait(false),
             async (storage, result, ct) => await interceptors.ExecuteAfterUploadAsync(storage, result, ct).ConfigureAwait(false),
@@ -85,8 +85,20 @@ internal sealed class HybridFileStorage(
     {
         ArgumentNullException.ThrowIfNull(fileId);
 
+        // Materialised once: the writability check and the operation must see the same chain.
+        IReadOnlyList<IFileStorage> candidates = [.. ReadCandidates(fileId)];
+
+        // A delete is a write. When every storage that recognizes the ID is read-only, the request
+        // is the same mistake an upload against read-only storages is, and it gets the same
+        // exception — "no storage available" would blame a missing registration instead.
+        // (Zero candidates keeps the historical HybridFileStorageNoAvailableException below.)
+        if (candidates.Count > 0 && candidates.All(static c => c.IsReadOnly))
+        {
+            throw new HybridFileStorageWritableException();
+        }
+
         return await ExecuteStorageOperationAsync(
-            ReadCandidates(fileId).Where(c => !c.IsReadOnly),
+            candidates.Where(static c => !c.IsReadOnly),
             async (storage, ct) => await interceptors.ExecuteBeforeDeleteAsync(storage, fileId, ct).ConfigureAwait(false),
             async (storage, ct) => await storage.DeleteAsync(fileId, ct).ConfigureAwait(false),
             async (storage, result, ct) => await interceptors.ExecuteAfterDeleteAsync(storage, fileId, result, ct).ConfigureAwait(false),
@@ -128,6 +140,8 @@ internal sealed class HybridFileStorage(
     /// </summary>
     private IEnumerable<IFileStorage> ReadCandidates(string fileId)
     {
+        // Only the basket is read here, and it is the first path segment in both layouts, so the
+        // heuristic ("a numeric second segment is a timestamp") cannot mislead this call.
         string? basket = FileIdParser.TryParse(fileId, out var parsedBasket, out _, out _, out _)
             ? parsedBasket
             : null;
@@ -148,7 +162,9 @@ internal sealed class HybridFileStorage(
     /// as is, without an exception. An exception is failover fuel: the next storage is tried
     /// whatever its type, and the error is handed to <paramref name="onError"/>; if no storage
     /// produced an answer at all, the collected errors are thrown as
-    /// <see cref="HybridFileStorageAggregateException"/>. No candidates and no errors reach
+    /// <see cref="HybridFileStorageAggregateException"/>. Caller cancellation is the one exception
+    /// that is not fuel: it is rethrown as-is, because the remaining storages would only repeat it.
+    /// No candidates and no errors reach
     /// <paramref name="onUnavailable"/>: the operations throw
     /// <see cref="HybridFileStorageNoAvailableException"/>, the lookup returns its not-found value.
     /// </remarks>
@@ -190,6 +206,13 @@ internal sealed class HybridFileStorage(
 
                 missedType ??= storage.StorageType;
                 notFound = result;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // A cancelled caller is not a provider error. Failing over would only repeat the
+                // cancellation against every remaining storage and wrap it in an aggregate
+                // exception, which no `catch (OperationCanceledException)` at the call site sees.
+                throw;
             }
             catch (Exception e)
             {

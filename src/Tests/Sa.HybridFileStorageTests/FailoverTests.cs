@@ -329,6 +329,77 @@ public sealed class FailoverTests : IAsyncLifetime
         Assert.Equal(second.StorageType, result.StorageType);
         Assert.Equal(1, second.UploadCount);
     }
+
+    [Fact]
+    public async Task HybridFileStorage_CancelledToken_PropagatesTheCancellation()
+    {
+        // Arrange — one writable storage; the token is cancelled before the call.
+        var services = new ServiceCollection()
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("share"))
+            .AddSaHybridFileStorage();
+
+        using var provider = services.BuildServiceProvider();
+        var storage = provider.GetRequiredService<IHybridFileStorage>();
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act & Assert — cancellation is not failover fuel: it must surface as the caller's
+        // OperationCanceledException, not as HybridFileStorageAggregateException wrapping it
+        // (the aggregate is invisible to `catch (OperationCanceledException)`).
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            storage.UploadAsync(
+                "share",
+                new UploadFileInput { FileName = "cancelled.txt", TenantId = 1 },
+                new MemoryStream([1, 2, 3]),
+                cts.Token));
+    }
+
+    [Fact]
+    public async Task HybridFileStorage_DeleteAsync_AllCandidatesReadOnly_ThrowsWritableException()
+    {
+        // Arrange — the only storage that recognizes the ID is read-only. A delete is a write,
+        // so this is the same mistake an upload against a read-only chain is — not a missing
+        // registration.
+        var services = new ServiceCollection()
+            .AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) =>
+                c.AddStorage(new InMemoryFileStorage(
+                    new InMemoryFileStorageOptions("share", IsReadOnly: true)))));
+
+        using var provider = services.BuildServiceProvider();
+        var storage = provider.GetRequiredService<IHybridFileStorage>();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<HybridFileStorageWritableException>(() =>
+            storage.DeleteAsync("mem://share/1/x.txt", _cts.Token));
+    }
+
+    [Fact]
+    public async Task HybridFileStorage_DeleteAsync_ReadOnlyAndWritableChain_UsesTheWritableStorage()
+    {
+        // Arrange — the read-only storage comes first and recognizes the same file IDs; the
+        // writable one must still receive the delete (the writability check must not reject a
+        // chain that has a writable candidate).
+        var readOnly = new FakeFileStorage("share", "mem", isReadOnly: true);
+        var writable = new InMemoryFileStorage(new InMemoryFileStorageOptions("share"));
+
+        var services = new ServiceCollection()
+            .AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) => c.AddStorage(readOnly).AddStorage(writable)));
+
+        using var provider = services.BuildServiceProvider();
+        var storage = provider.GetRequiredService<IHybridFileStorage>();
+
+        var input = new UploadFileInput { FileName = "deletable.txt", TenantId = 1 };
+        using var stream = FixtureHelper.GetByteStream();
+        var result = await storage.UploadAsync("share", input, stream, _cts.Token);
+
+        // Act
+        var deleted = await storage.DeleteAsync(result.FileId, _cts.Token);
+
+        // Assert
+        Assert.True(deleted);
+        Assert.Null(await writable.GetMetadataAsync(result.FileId, _cts.Token));
+    }
 }
 
 // Helper extension for reading all bytes

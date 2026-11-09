@@ -194,7 +194,7 @@ internal sealed class FileSystemStorage(
         if (!CanProcess(fileId))
             return Task.FromResult<FileMetadata?>(null);
 
-        if (!FileIdParser.TryParse(fileId, out _, out var tenantId, out _, out var fileName))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithoutTimestamp, out _, out var tenantId, out _, out var fileName))
             return Task.FromResult<FileMetadata?>(null);
 
         var metadata = new FileMetadata

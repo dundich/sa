@@ -227,7 +227,7 @@ internal sealed class PostgresFileStorage(
             return false;
 
 
-        if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithTimestamp, out _, out int tenantId, out long timestamp, out _))
         {
             return false;
         }
@@ -266,7 +266,7 @@ internal sealed class PostgresFileStorage(
         if (!CanProcess(fileId))
             return false;
 
-        if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithTimestamp, out _, out int tenantId, out long timestamp, out _))
         {
             return false;
         }
@@ -324,7 +324,7 @@ internal sealed class PostgresFileStorage(
         if (!CanProcess(fileId))
             return null;
 
-        if (!FileIdParser.TryParse(fileId, out _, out var tenantId, out var timestamp, out _))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithTimestamp, out _, out var tenantId, out var timestamp, out _))
             return null;
 
         // A well-formed file ID is not a file — the row is. Parsing alone reported metadata for a
