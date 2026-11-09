@@ -191,6 +191,20 @@ public class ExponentialDeliveryBackoffStrategyTests
     }
 
     [Fact]
+    public void Constructor_NegativeBaseDelay_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new ExponentialDeliveryBackoffStrategy(baseDelay: TimeSpan.FromSeconds(-1)));
+    }
+
+    [Fact]
+    public void Constructor_NegativeMaxDelay_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new ExponentialDeliveryBackoffStrategy(maxDelay: TimeSpan.FromSeconds(-1)));
+    }
+
+    [Fact]
     public void Shared_Instance_ProducesValidBackoffs()
     {
         for (int i = 1; i <= 10; i++)

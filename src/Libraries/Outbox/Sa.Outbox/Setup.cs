@@ -39,6 +39,17 @@ public static class Setup
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IHostedService, OutboxProviderValidationHostedService>());
 
+        if (build != null)
+        {
+            // A repeated AddSaOutbox for the same scope replaces the publish-settings callbacks the
+            // previous registration recorded instead of stacking a second copy. The removal lives
+            // here, not in AddMessagePublisher, so a provider's internal AddSaOutbox(null) (the
+            // split-form AddSaOutbox(...).AddSaOutboxUsingPostgreSql(...) registration) cannot wipe
+            // settings the application already configured.
+            services.RemoveAllKeyed<Func<IServiceProvider, OutboxPublishSettings, OutboxPublishSettings>>(
+                scopeKey);
+        }
+
         OutboxBuilder builder = OutboxBuilder.Create(services, scopeKey);
         build?.Invoke(builder);
 

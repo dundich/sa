@@ -31,6 +31,30 @@ public class OutboxConsumerManagerTests
     private static IOutboxConsumerManager CreateManager()
         => new OutboxConsumerManager();
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-2)]
+    [InlineData(int.MinValue)]
+    public void TryRegister_InvalidTenantParallelism_Throws(int degree)
+    {
+        var manager = CreateManager();
+        var settings = CreateSettings() with { PerTenantMaxDegreeOfParallelism = degree };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => manager.TryRegister("invalid-parallelism", settings));
+
+        Assert.Contains("PerTenantMaxDegreeOfParallelism", exception.Message);
+    }
+
+    [Fact]
+    public void TryRegister_MinusOneTenantParallelism_IsValid()
+    {
+        var manager = CreateManager();
+        var settings = CreateSettings() with { PerTenantMaxDegreeOfParallelism = -1 };
+
+        Assert.True(manager.TryRegister("all-processors", settings));
+    }
+
     #region Pause / Resume
 
     [Fact]

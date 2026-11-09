@@ -171,9 +171,12 @@ public sealed record OutboxConsumerSettings(
         CheckIntGeMinus1(nameof(MaxProcessingIterations), MaxProcessingIterations);
 
         // Cross-field validations
-        if (PerTenantMaxDegreeOfParallelism == 0)
+        // Valid values are -1 (all processors) or a positive degree; both 0 and values below -1
+        // would throw from ParallelOptions.MaxDegreeOfParallelism during delivery.
+        if (PerTenantMaxDegreeOfParallelism == 0 || PerTenantMaxDegreeOfParallelism < -1)
             errors.Add(
-                "PerTenantMaxDegreeOfParallelism cannot be 0. Use 1 for sequential or > 1 for parallel.");
+                $"PerTenantMaxDegreeOfParallelism cannot be {PerTenantMaxDegreeOfParallelism}. " +
+                "Use -1 for all processors, 1 for sequential, or > 1 for parallel.");
 
         if (string.IsNullOrWhiteSpace(ProviderKey))
             errors.Add("ProviderKey cannot be null or empty.");

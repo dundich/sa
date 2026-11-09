@@ -23,14 +23,10 @@ internal static class Setup
                 scopeKey,
                 configure);
         }
-        else
-        {
-            // No delegate means the start of a registration (OutboxBuilder.Create). A repeated
-            // AddSaOutbox for the same scope replaces the callbacks the previous registration
-            // recorded instead of stacking a second copy; the settings factory applies every entry.
-            services.RemoveAllKeyed<Func<IServiceProvider, OutboxPublishSettings, OutboxPublishSettings>>(
-                scopeKey);
-        }
+        // No removal here: AddMessagePublisher is also called by a provider's internal
+        // AddSaOutbox(null), which must not discard callbacks recorded by an earlier user
+        // registration. The "repeated AddSaOutbox replaces callbacks" rule is enforced by
+        // Sa.Outbox.Setup.AddSaOutbox, which knows whether a user builder was supplied.
 
         services.TryAddKeyedSingleton<OutboxPublishSettings>(scopeKey, (sp, _) =>
         {

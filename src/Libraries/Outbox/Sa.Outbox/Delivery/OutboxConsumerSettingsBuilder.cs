@@ -317,7 +317,12 @@ public sealed class OutboxConsumerSettingsBuilder
     /// </summary>
     public OutboxConsumerSettingsBuilder WithPerTenantMaxDegreeOfParallelism(int degree)
     {
-        if (degree == 0) throw new ArgumentException("PerTenantMaxDegreeOfParallelism cannot be 0.", nameof(degree));
+        if (degree == 0 || degree < -1)
+            throw new ArgumentOutOfRangeException(
+                nameof(degree),
+                degree,
+                "PerTenantMaxDegreeOfParallelism must be -1 (all processors) or greater than 0.");
+
         _perTenantMaxDegreeOfParallelism = degree;
         return this;
     }

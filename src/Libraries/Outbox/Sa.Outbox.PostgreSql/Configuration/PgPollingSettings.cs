@@ -197,8 +197,11 @@ public sealed class PgPollingSettings
     /// <returns>The same instance for chaining.</returns>
     public PgPollingSettings WithPerTenantParallelism(int degree)
     {
-        if (degree == 0)
-            throw new ArgumentOutOfRangeException(nameof(degree), degree, "PerTenantMaxDegreeOfParallelism cannot be 0.");
+        if (degree == 0 || degree < -1)
+            throw new ArgumentOutOfRangeException(
+                nameof(degree),
+                degree,
+                "PerTenantMaxDegreeOfParallelism must be -1 (all processors) or greater than 0.");
 
         PerTenantMaxDegreeOfParallelism = degree;
         Enabled = true;
@@ -242,8 +245,9 @@ public sealed class PgPollingSettings
         if (BatchingWindow is { } batchingWindow && batchingWindow < TimeSpan.Zero)
             throw new InvalidOperationException($"PgPollingSettings.BatchingWindow must be >= TimeSpan.Zero, got {batchingWindow}.");
 
-        if (PerTenantMaxDegreeOfParallelism == 0)
-            throw new InvalidOperationException("PgPollingSettings.PerTenantMaxDegreeOfParallelism cannot be 0.");
+        if (PerTenantMaxDegreeOfParallelism is { } degree && (degree == 0 || degree < -1))
+            throw new InvalidOperationException(
+                $"PgPollingSettings.PerTenantMaxDegreeOfParallelism must be -1 or greater than 0, got {degree}.");
     }
 
     /// <summary>

@@ -71,4 +71,33 @@ public class OutboxPublishSettingsTests
             new OutboxPublishSettings().MaxBatchSize,
             provider.GetRequiredKeyedService<OutboxPublishSettings>("defaults").MaxBatchSize);
     }
+
+    [Fact]
+    public void PublishSettings_Survive_AProviderStyleRegistration()
+    {
+        // The split-form provider registration calls AddSaOutbox with a null builder internally
+        // (AddSaOutboxUsingPostgreSql(configure) → AddSaOutbox(null)). That must not discard the
+        // settings the application registered before it.
+        var services = new ServiceCollection();
+
+        services.AddSaOutbox(
+            builder => builder.WithPublishSettings((_, settings) => settings.WithMaxBatchSize(1024)));
+
+        services.AddSaOutbox(scopeKey: OutboxScope.DefaultKey);
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        Assert.Equal(1024, provider.GetRequiredService<OutboxPublishSettings>().MaxBatchSize);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void WithMaxBatchSize_NonPositive_Throws(int batchSize)
+    {
+        var settings = new OutboxPublishSettings();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => settings.WithMaxBatchSize(batchSize));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new OutboxPublishSettings(batchSize));
+    }
 }

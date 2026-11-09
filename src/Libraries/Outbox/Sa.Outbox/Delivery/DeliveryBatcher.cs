@@ -3,8 +3,9 @@ namespace Sa.Outbox.Delivery;
 /// <summary>
 /// Default batch size calculator — a passthrough stub.
 ///
-/// This implementation ignores the filter and always returns the requested
-/// <paramref name="maxBatchSize"/> clamped to [0, maxBatchSize].
+/// This implementation ignores the filter and returns <paramref name="maxBatchSize"/> unchanged;
+/// the <c>[0, maxBatchSize]</c> clamp is applied by the caller (<c>DeliveryTenant</c>), so a
+/// custom implementation may also return an out-of-range value and have it clamped.
 ///
 /// It exists solely as a built-in default so the DI container always has an
 /// <see cref="IDeliveryBatcher"/> registered. For production workloads where
