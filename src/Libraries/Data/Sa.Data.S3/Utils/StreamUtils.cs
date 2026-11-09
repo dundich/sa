@@ -29,8 +29,10 @@ internal static class StreamUtils
     {
         try
         {
-            var length = stream.Length;
-            return length == 0 ? null : length;
+            // Zero is a real length, not "unknown": an empty stream is uploaded with a plain PUT of
+            // content-length 0, exactly like an empty byte[]. Mapping 0 to null used to route it to
+            // the multipart branch, which cannot complete a zero-part upload and returned false.
+            return stream.Length;
         }
         catch (NotSupportedException)
         {

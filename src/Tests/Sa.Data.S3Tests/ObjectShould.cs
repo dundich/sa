@@ -411,6 +411,94 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     }
 
     [Fact]
+    public async Task MissingFileHasNoLengthOrContentType()
+    {
+        // Регрессия: GetFile освобождал ответ на 404, после чего Length/ContentType бросали
+        // ObjectDisposedException, потому что оба читают response.Content.
+        using var file = await Client.GetFile(GetRandomFileName(), CancellationToken);
+
+        Assert.False(file.Exists);
+        Assert.Null(file.Length);
+        Assert.Null(file.ContentType);
+        Assert.Equal(HttpStatusCode.NotFound, file.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadEmptyStream()
+    {
+        // Пустой поток — обычный PUT нулевой длины. Раньше он уходил в multipart, не мог завершить
+        // нулевую загрузку и возвращал false.
+        var fileName = GetRandomFileName();
+        using var data = GetEmptyByteStream();
+
+        Assert.True(await Client.UploadFile(fileName, StreamContentType, data, CancellationToken));
+
+        using var file = await Client.GetFile(fileName, CancellationToken);
+        Assert.True(file.Exists);
+        Assert.Equal(0, file.Length);
+
+        await DeleteTestFile(fileName);
+    }
+
+    [Fact]
+    public async Task ListFolderPrefix()
+    {
+        // «/» в префиксе обязан кодироваться как %2F и в URL, и в каноническом query: иначе подпись
+        // не сходится у любого листинга по «папке».
+        var folder = GetRandomFileNameWithoutExtension();
+        var fileName = $"{folder}/nested/{GetRandomFileName()}";
+
+        Assert.True(await Client.UploadFile(fileName, StreamContentType, GetByteArray(128), CancellationToken));
+
+        var listed = new List<string>();
+        await foreach (var key in Client.List($"{folder}/", CancellationToken))
+        {
+            listed.Add(key);
+        }
+
+        Assert.Equal([fileName], listed);
+
+        await DeleteTestFile(fileName);
+    }
+
+    [Fact]
+    public async Task ListKeyWithXmlSpecialCharacters()
+    {
+        // Ключ с «&» приходит из S3 экранированным (&amp;). Если вернуть его не раскодировав,
+        // ключ перестаёт совпадать с сохранённым объектом.
+        var folder = GetRandomFileNameWithoutExtension();
+        var fileName = $"{folder}/a&b<c>d\"e'f.txt";
+
+        Assert.True(await Client.UploadFile(fileName, StreamContentType, GetByteArray(16), CancellationToken));
+
+        var listed = new List<string>();
+        await foreach (var key in Client.List($"{folder}/", CancellationToken))
+        {
+            listed.Add(key);
+        }
+
+        Assert.Equal([fileName], listed);
+
+        await DeleteTestFile(fileName);
+    }
+
+    [Fact]
+    public async Task AddPartBeyondInitialCapacity()
+    {
+        // 17-я часть перерастает стартовый массив из 16 элементов.
+        using var uploader = await Client.UploadFile(GetRandomFileName(), StreamContentType, CancellationToken);
+
+        for (var i = 0; i < 17; i++)
+        {
+            Assert.True(await uploader.AddPart([(byte)i], CancellationToken));
+        }
+
+        Assert.Equal(17, uploader.Written);
+
+        await uploader.Abort(CancellationToken);
+    }
+
+    [Fact]
     public async Task NotThrowIfGetNotExistsFile()
     {
         var fileName = GetRandomFileName();
@@ -486,6 +574,37 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         });
     }
 
+    [Fact]
+    public async Task DisposeAsyncAbortsUnfinishedUpload()
+    {
+        var fileName = GetRandomFileName();
+
+        var uploader = await Client.UploadFile(fileName, StreamContentType, CancellationToken);
+        Assert.True(await uploader.AddPart([1, 2, 3], CancellationToken));
+
+        // Асинхронное освобождение прерывает загрузку: на сервере не остаются неполные части.
+        await uploader.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => uploader.Abort(CancellationToken));
+    }
+
+    [Fact]
+    public async Task DisposeAsyncAfterCompleteDoesNotAbort()
+    {
+        var fileName = GetRandomFileName();
+        var data = GetByteArray(64);
+
+        await using (var uploader = await Client.UploadFile(fileName, StreamContentType, CancellationToken))
+        {
+            Assert.True(await uploader.AddPart(data, CancellationToken));
+            Assert.True(await uploader.Complete(CancellationToken));
+        }
+
+        Assert.True(await Client.IsFileExists(fileName, CancellationToken));
+
+        await DeleteTestFile(fileName);
+    }
+
     [Theory]
     [InlineData("some/foo/audio.wav", 1024)]
     [InlineData("another/path/test.mp3", 2048)]
@@ -501,6 +620,41 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         Assert.True(exists, "The object should exist in the S3 bucket");
 
         await DeleteTestFile(nestedFileName);
+    }
+
+    [Fact]
+    public async Task UsesTheInjectedArrayPool()
+    {
+        // IArrayPool — публичный интерфейс, поэтому его реализация из конструктора должна
+        // использоваться на всём пути (буферы загрузки и подписи), а не только существовать.
+        var pool = new CountingArrayPool();
+        var fileName = GetRandomFileName();
+
+        using var client = new S3BucketClient(
+            new HttpClient(),
+            fixture.CreateSettings(fixture.Settings.BucketName),
+            arrayPool: pool);
+
+        using var data = GetByteStream(1024);
+
+        Assert.True(await client.UploadFile(fileName, StreamContentType, data, CancellationToken));
+        Assert.True(pool.Rents > 0);
+
+        await client.DeleteFile(fileName, CancellationToken);
+    }
+
+    private sealed class CountingArrayPool : IArrayPool
+    {
+        public int Rents { get; private set; }
+
+        public T[] Rent<T>(int minimumLength)
+        {
+            Rents++;
+            return System.Buffers.ArrayPool<T>.Shared.Rent(minimumLength);
+        }
+
+        public void Return<T>(T[] array, bool clear = false)
+            => System.Buffers.ArrayPool<T>.Shared.Return(array, clear);
     }
 
     private async Task<string> CreateTestFile(

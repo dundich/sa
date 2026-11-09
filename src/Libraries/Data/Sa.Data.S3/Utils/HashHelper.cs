@@ -23,6 +23,21 @@ internal static class HashHelper
         return Sha256ToHex(data);
     }
 
+    /// <summary>
+    /// Base64 MD5 of the payload — the <c>Content-MD5</c> header S3 requires on
+    /// <c>POST ?delete</c> (DeleteObjects). SHA-256 is used for the signature next to it; MD5 here
+    /// is not a security choice, it is the wire format the API mandates.
+    /// </summary>
+#pragma warning disable CA5351 // MD5 is mandated by the S3 DeleteObjects request format.
+    public static string GetMd5Base64(ReadOnlySpan<byte> data)
+    {
+        Span<byte> hashBuffer = stackalloc byte[16];
+        return MD5.TryHashData(data, hashBuffer, out _)
+            ? Convert.ToBase64String(hashBuffer)
+            : string.Empty;
+    }
+#pragma warning restore CA5351
+
 
     public static string ToHex(ReadOnlySpan<byte> data)
     {
@@ -47,7 +62,7 @@ internal static class HashHelper
         var byteBuffer = arrayPool.Rent<byte>(count);
 
         var encoded = Encoding.UTF8.GetBytes(value, byteBuffer);
-        Span<byte> hashBuffer = stackalloc byte[64];
+        Span<byte> hashBuffer = stackalloc byte[32];
         var result = SHA256.TryHashData(byteBuffer.AsSpan(0, encoded), hashBuffer, out var written)
             ? ToHex(hashBuffer[..written])
             : string.Empty;

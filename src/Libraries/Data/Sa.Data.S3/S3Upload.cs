@@ -1,19 +1,25 @@
 using Sa.Data.S3.Utils;
 using System.Runtime.CompilerServices;
 
-
 namespace Sa.Data.S3;
 
 /// <summary>
 /// Структура управления Multipart-загрузкой
 /// </summary>
-public sealed class S3Upload : IDisposable
+/// <remarks>
+/// Синхронный <see cref="Dispose"/> освобождает только локальные буферы: прервать загрузку он не
+/// может (это сетевой вызов), поэтому после него на сервере остаются неполные части. Используйте
+/// <see cref="DisposeAsync"/> (или явный <see cref="Abort"/>) — он прерывает незавершённую загрузку,
+/// если она не была завершена.
+/// </remarks>
+public sealed class S3Upload : IDisposable, IAsyncDisposable
 {
-
     private readonly S3BucketClient _client;
     private readonly string _encodedFileName;
 
     private byte[]? _byteBuffer;
+    private bool _aborted;
+    private bool _completed;
     private bool _disposed;
     private int _partCount;
     private readonly IArrayPool _arrayPool;
@@ -28,7 +34,9 @@ public sealed class S3Upload : IDisposable
         _client = client;
         _encodedFileName = encodedFileName;
 
-        _arrayPool = DefaultArrayPool.Instance;
+        // Пул берётся у клиента: IArrayPool — публичный интерфейс, и подменённый пул должен
+        // работать на всём пути загрузки, а не только в S3BucketClient.
+        _arrayPool = client.ArrayPool;
         _parts = _arrayPool.Rent<string>(16);
     }
 
@@ -73,6 +81,7 @@ public sealed class S3Upload : IDisposable
             Errors.Disposed();
         }
 
+        _aborted = true;
         return _client.MultipartAbort(_encodedFileName, UploadId, ct);
     }
 
@@ -85,7 +94,7 @@ public sealed class S3Upload : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<bool> AddPart(byte[] data, CancellationToken ct)
     {
-        return AddPart(data, data.Length, ct);
+        return AddPart(data, 0, data.Length, ct);
     }
 
     /// <summary>
@@ -95,7 +104,16 @@ public sealed class S3Upload : IDisposable
     /// <param name="length">Количество данных, которые нужно взять из блока</param>
     /// <param name="ct">Токен отмены</param>
     /// <returns>Возвращает результат загрузки</returns>
-    public async Task<bool> AddPart(byte[] data, int length, CancellationToken ct)
+    public Task<bool> AddPart(byte[] data, int length, CancellationToken ct)
+    {
+        return AddPart(data, 0, length, ct);
+    }
+
+    /// <summary>
+    /// Загружает часть, начиная с <paramref name="offset"/>. Отдельный срез нужен, чтобы
+    /// <see cref="AddParts(byte[], CancellationToken)"/> не копировал данные в промежуточный буфер.
+    /// </summary>
+    internal async Task<bool> AddPart(byte[] data, int offset, int length, CancellationToken ct)
     {
         if (_disposed)
         {
@@ -103,7 +121,7 @@ public sealed class S3Upload : IDisposable
         }
 
         var partId = await _client.MultipartPutPart(
-            _encodedFileName, UploadId, _partCount + 1, data, length, ct).ConfigureAwait(false);
+            _encodedFileName, UploadId, _partCount + 1, data, offset, length, ct).ConfigureAwait(false);
 
         if (string.IsNullOrEmpty(partId))
         {
@@ -112,7 +130,9 @@ public sealed class S3Upload : IDisposable
 
         if (_parts.Length == _partCount)
         {
-            CollectionUtils.Resize(ref _parts, _arrayPool, _partCount * 2);
+            // clear: true — старый массив уходит в общий пул, и ссылки на ETag не должны в нём
+            // оставаться.
+            CollectionUtils.Resize(ref _parts, _arrayPool, _partCount * 2, clear: true);
         }
 
         _parts[_partCount++] = partId;
@@ -155,18 +175,18 @@ public sealed class S3Upload : IDisposable
     /// <param name="data">Блок данных</param>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает результат загрузки</returns>
+    /// <remarks>
+    /// Блоки — срезы <paramref name="data"/>, без копирования в промежуточный буфер: исходный
+    /// массив не должен меняться до завершения вызова.
+    /// </remarks>
     public async Task<bool> AddParts(byte[] data, CancellationToken ct)
     {
-        _byteBuffer ??= _arrayPool.Rent<byte>(S3BucketClient.DefaultPartSize);
-
-        var bufferLength = _byteBuffer.Length;
         var offset = 0;
         while (offset < data.Length)
         {
-            var partSize = Math.Min(bufferLength, data.Length - offset);
-            Array.Copy(data, offset, _byteBuffer, 0, partSize);
+            var partSize = Math.Min(S3BucketClient.DefaultPartSize, data.Length - offset);
 
-            if (!await AddPart(_byteBuffer, partSize, ct).ConfigureAwait(false))
+            if (!await AddPart(data, offset, partSize, ct).ConfigureAwait(false))
             {
                 return false;
             }
@@ -182,16 +202,23 @@ public sealed class S3Upload : IDisposable
     /// </summary>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает результат завершения загрузки</returns>
-    public Task<bool> Complete(CancellationToken ct)
+    public async Task<bool> Complete(CancellationToken ct)
     {
         if (_disposed)
         {
             Errors.Disposed();
         }
 
-        return _partCount == 0
-            ? Task.FromResult(false)
-            : _client.MultipartComplete(_encodedFileName, UploadId, _parts, _partCount, ct);
+        if (_partCount == 0)
+        {
+            return false;
+        }
+
+        _completed = await _client
+            .MultipartComplete(_encodedFileName, UploadId, _parts, _partCount, ct)
+            .ConfigureAwait(false);
+
+        return _completed;
     }
 
     public void Dispose()
@@ -202,7 +229,7 @@ public sealed class S3Upload : IDisposable
         }
 
         Array.Clear(_parts, 0, _partCount);
-        _arrayPool.Return(_parts);
+        _arrayPool.Return(_parts, clear: true);
         _parts = null!;
 
         if (_byteBuffer is not null)
@@ -212,5 +239,26 @@ public sealed class S3Upload : IDisposable
         }
 
         _disposed = true;
+    }
+
+    /// <summary>
+    /// Освобождает ресурсы и прерывает незавершённую загрузку, чтобы на сервере не оставались
+    /// неполные части.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (!_disposed && !_completed && !_aborted)
+        {
+            try
+            {
+                await Abort(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Освобождение не должно бросать: сервер мог быть уже недоступен.
+            }
+        }
+
+        Dispose();
     }
 }

@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration.Binder.SourceGeneration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
@@ -9,16 +8,6 @@ namespace Sa.Data.S3;
 
 public static class Setup
 {
-    /// <summary>
-    /// Имя конвейера устойчивости, под которым <c>AddStandardResilienceHandler()</c> регистрирует
-    /// свои опции. Запоминается при регистрации, потому что <c>TotalRequestTimeout</c> задаётся
-    /// собственным <see cref="IConfigureOptions{TOptions}"/>, которому нужно точное имя, а выводить
-    /// это имя угадыванием («имя клиента + суффикс») — значит заложить невидимую связь с чужим
-    /// соглашением об именовании. При нескольких регистрациях отражает последнюю (внутренние
-    /// конфигураторы каждого клиента захватывают имя своего клиента локально).
-    /// </summary>
-    internal static string? ResiliencePipelineName { get; private set; }
-
     /// <summary>
     /// Регистрирует именованного клиента S3 через стандартный конвейер настроек — один вызов,
     /// один клиент под своим именем.
@@ -105,7 +94,8 @@ public static class Setup
         string clientName,
         Action<IS3BucketClientBuilder>? configure)
     {
-        services.AddSingleton(new S3BucketClientRegistration(clientName));
+        var registration = new S3BucketClientRegistration(clientName);
+        services.AddSingleton(registration);
 
         var optsBuilder = services.AddOptions<S3BucketClientSetupOptions>(clientName);
 
@@ -148,7 +138,8 @@ public static class Setup
 
         services.AddSaS3BucketClientCore(
             clientName,
-            sp => sp.GetRequiredService<IOptionsMonitor<S3BucketClientSetupOptions>>().Get(clientName));
+            sp => sp.GetRequiredService<IOptionsMonitor<S3BucketClientSetupOptions>>().Get(clientName),
+            registration);
     }
 
     /// <summary>
@@ -186,6 +177,12 @@ public static class Setup
     /// могут приходить из конвейера <c>Microsoft.Extensions.Options</c> — на момент регистрации их
     /// значения ещё не материализованы и прочитать их нельзя.
     /// </param>
+    /// <param name="registration">
+    /// Маркер этой регистрации (может быть <c>null</c> для внешних вызовов, например из
+    /// <c>Sa.HybridFileStorage.S3</c>). В него записывается имя конвейера устойчивости: имя
+    /// вычисляет <c>AddStandardResilienceHandler</c>, и выводить его заново как «имя клиента +
+    /// суффикс» значило бы заложить связь с чужим соглашением об именовании.
+    /// </param>
     /// <returns>Та же коллекция <see cref="IServiceCollection"/> с добавленными сервисами.</returns>
     /// <remarks>
     /// Единственная точка, где собирается HTTP-обвязка: и <see cref="AddSaS3BucketClient"/>, и
@@ -199,7 +196,8 @@ public static class Setup
     internal static IServiceCollection AddSaS3BucketClientCore(
         this IServiceCollection services,
         string clientName,
-        Func<IServiceProvider, S3BucketClientSetupOptions> settingsFactory)
+        Func<IServiceProvider, S3BucketClientSetupOptions> settingsFactory,
+        S3BucketClientRegistration? registration = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(clientName);
@@ -234,7 +232,7 @@ public static class Setup
         // свой, так что два клиента не пересекаются по настройкам.
         var resilienceBuilder = builder.AddStandardResilienceHandler();
         string pipelineName = resilienceBuilder.PipelineName;
-        ResiliencePipelineName = pipelineName;
+        registration?.ResiliencePipelineName = pipelineName;
 
         services.AddSingleton<IConfigureOptions<HttpStandardResilienceOptions>>(
             sp => new ConfigureNamedOptions<HttpStandardResilienceOptions>(
@@ -272,6 +270,16 @@ internal sealed class S3BucketClientRegistration(string clientName)
     /// <summary>Ключ (имя) этого клиента: всегда непустое.</summary>
     public string ClientName { get; } =
         string.IsNullOrWhiteSpace(clientName) ? throw new ArgumentException("Client name cannot be empty.", nameof(clientName)) : clientName;
+
+    /// <summary>
+    /// Имя конвейера устойчивости, который <c>AddStandardResilienceHandler</c> создал для этого
+    /// клиента. Заполняется при регистрации HTTP-обвязки; <c>null</c>, пока она не выполнена.
+    /// </summary>
+    /// <remarks>
+    /// Раньше имя хранилось в статическом поле <c>Setup.ResiliencePipelineName</c> — при нескольких
+    /// клиентах оно отражало последнюю регистрацию. Здесь оно принадлежит своей регистрации.
+    /// </remarks>
+    internal string? ResiliencePipelineName { get; set; }
 }
 
 /// <summary>

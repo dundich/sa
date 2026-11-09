@@ -24,8 +24,8 @@ Wrapper over `HttpClient` for S3-compatible storage systems (Minio, AWS S3, Digi
 - **Low memory footprint** — roughly 150× lower than the Minio SDK and 17× lower than the AWS SDK, at speed comparable to AWS.
 - **[Named clients](#named-clients)** — `AddSaS3BucketClient("name", ...)`: its own named `HttpClient` (connection pool, resilience, handler lifetime), its own settings and its own `IS3BucketClient` per name; resolve with `GetRequiredKeyedService<IS3BucketClient>("name")`.
 - **[Configuration in appsettings](#configuration-in-appsettings)** — an `S3` section bound via `FromConfiguration`, with `Configure` / `PostConfigure` / `Validate` on top; a bad configuration fails the host at start-up rather than mid-request.
-- **Files** — upload (including multipart uploads via `S3Upload`), streamed reads, listing by prefix with `List`, presigned links via `BuildFileUrl` / `GetFileUrl`, `IsFileExists`, `DeleteFile`.
-- **Buckets** — `CreateBucket`, `DeleteBucket`, `IsBucketExists`.
+- **Files** — upload (including multipart uploads via `S3Upload`, whose `DisposeAsync` aborts an unfinished upload), streamed reads, listing by prefix with `List` (follows `NextContinuationToken`, so a bucket with more than 1000 objects is listed completely), presigned links via `BuildFileUrl(fileName, expiration)` / `GetFileUrl`, `IsFileExists`, `DeleteFile`. A missing object is not an error: `GetFile` returns a wrapper with `Exists == false` and `null` `Length`/`ContentType`.
+- **Buckets** — `CreateBucket`, `DeleteBucket` (with an optional force mode that empties the bucket in batches of 1000), `IsBucketExists`.
 - **Transport under control** — per-request timeout, connection-pool and handler lifetime, HTTP/2 — all in `S3BucketClientSetupOptions`.
 - **`Sa.HybridFileStorage.S3` integration** — the `AddSaS3FileStorage` provider registers each folder's client with the same named registration.
 
@@ -54,7 +54,7 @@ await client.UploadFile("docs/hello.txt", "text/plain", "hello"u8.ToArray(), ct)
 using Stream stream = await client.GetFileStream("docs/hello.txt", ct);
 ```
 
-The options pipeline kicks in only with the DI registration; without it the transport is configured on the `HttpClient` itself (timeout, connection pool) and HTTP/2 via `S3BucketSettings.UseHttp2`.
+The options pipeline kicks in only with the DI registration; without it the transport is configured on the `HttpClient` itself (timeout, connection pool) and HTTP/2 via `S3BucketSettings.UseHttp2`. The constructor still validates the settings with the same `Validate()` the pipeline calls, so a missing bucket or a malformed endpoint fails immediately instead of mid-request.
 
 ### With DI
 
@@ -142,7 +142,7 @@ services.AddSaS3BucketClient("archive", o => o.Options(ob => ob.Configure(x =>
 
 Two clients never share credentials, timeouts or a connection pool. The HTTP wiring underneath is shared code exposed internally as `AddSaS3BucketClientCore(services, clientName, settingsFactory)`.
 
-Resolving the client — keyed by the registration name; there are no unkeyed aliases, so an unkeyed `GetRequiredService<IS3BucketClient>()` returns `null`:
+Resolving the client — keyed by the registration name; there are no unkeyed aliases, so `GetService<IS3BucketClient>()` returns `null` and `GetRequiredService<IS3BucketClient>()` throws:
 
 ```csharp
 IS3BucketClient ordersClient = serviceProvider.GetRequiredKeyedService<IS3BucketClient>("orders");
@@ -170,7 +170,7 @@ The S3 provider of `Sa.HybridFileStorage.S3` (`AddSaS3FileStorage`, call it once
 | `ConnectionPoolLifetime` | Connection pool lifetime | `15 min` |
 | `HandlerLifetime` | HttpClient handler lifetime | `∞` (infinite) |
 
-`TotalRequestTimeout`, `ConnectionPoolLifetime` and `HandlerLifetime` belong to the named `HttpClient` of the DI registration; when creating a client by hand, the timeout is set on the `HttpClient` itself.
+`TotalRequestTimeout`, `ConnectionPoolLifetime` and `HandlerLifetime` belong to the named `HttpClient` of the DI registration; when creating a client by hand, the timeout is set on the `HttpClient` itself. `HandlerLifetime` applies to clients obtained from `IHttpClientFactory` directly: the keyed `IS3BucketClient` is a singleton holding one `HttpClient`, so for its connections the effective knob is `ConnectionPoolLifetime`.
 
 ---
 

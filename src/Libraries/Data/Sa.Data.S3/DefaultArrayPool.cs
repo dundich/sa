@@ -2,29 +2,21 @@ using System.Buffers;
 
 namespace Sa.Data.S3;
 
+/// <summary>
+/// Пул по умолчанию: общий <see cref="ArrayPool{T}"/>.
+/// </summary>
 internal sealed class DefaultArrayPool
 {
-    class ArrayPool : IArrayPool
+    private sealed class ArrayPool : IArrayPool
     {
         public T[] Rent<T>(int minimumLength) => ArrayPool<T>.Shared.Rent(minimumLength);
         public void Return<T>(T[] array, bool clear = false) => ArrayPool<T>.Shared.Return(array, clear);
     }
 
+    // Не Lazy-с-подменой: своя реализация подключается через конструктор S3BucketClient, а не
+    // глобальной настройкой. Старый SetDefault менял статическое поле после создания экземпляра —
+    // это гонка и неявный глобальный стейт, который ни один потребитель не вызывал.
+    private static readonly IArrayPool s_instance = new ArrayPool();
 
-    private static Lazy<IArrayPool> s_instance = new(new ArrayPool());
-
-    public static IArrayPool Instance => s_instance.Value;
-
-
-    public static bool SetDefault(IArrayPool arrayPool)
-    {
-        ArgumentNullException.ThrowIfNull(arrayPool);
-
-        if (!s_instance.IsValueCreated)
-        {
-            s_instance = new Lazy<IArrayPool>(arrayPool);
-            return true;
-        }
-        return false;
-    }
+    public static IArrayPool Instance => s_instance;
 }

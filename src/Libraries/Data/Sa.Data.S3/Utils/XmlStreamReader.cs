@@ -1,86 +1,71 @@
+using System.Runtime.CompilerServices;
+using System.Xml;
+
 namespace Sa.Data.S3.Utils;
 
+/// <summary>
+/// Streaming reader for the small S3 XML documents (list results, multipart start).
+/// </summary>
+/// <remarks>
+/// A real <see cref="XmlReader"/> instead of the previous byte-by-byte scanner: the scanner wrote
+/// into a fixed 256-char stack buffer, so a single object key longer than that threw
+/// <see cref="IndexOutOfRangeException"/>, and it returned XML entities raw
+/// (<c>a&amp;amp;b</c> for <c>a&amp;b</c>), which made the listed key differ from the stored one.
+/// <see cref="XmlReader"/> decodes entities, never truncates and reads in chunks.
+/// </remarks>
 internal static class XmlStreamReader
 {
-    public static string ReadString(Stream stream, ReadOnlySpan<char> elementName, int valueBufferLength = 256)
+    /// <summary>
+    /// Creates an asynchronous, DTD-free reader over <paramref name="stream"/>. The stream stays
+    /// owned by the caller: disposing the reader must not close the response stream.
+    /// </summary>
+    public static XmlReader CreateReader(Stream stream) => XmlReader.Create(stream, new XmlReaderSettings
     {
-        Span<char> buffer = stackalloc char[valueBufferLength];
+        Async = true,
+        DtdProcessing = DtdProcessing.Prohibit,
+        XmlResolver = null,
+        IgnoreComments = true,
+        IgnoreProcessingInstructions = true,
+        IgnoreWhitespace = true,
+        CloseInput = false,
+    });
 
-        var written = ReadTo(stream, elementName, ref buffer);
-        return written is -1
-            ? string.Empty
-            : buffer[..written].ToString();
-    }
-
-#pragma warning disable S3776
-    private static int ReadTo(Stream stream, ReadOnlySpan<char> elementName, ref Span<char> valueBuffer)
-#pragma warning restore S3776
+    /// <summary>
+    /// Yields the text of every element with the given local name, in document order.
+    /// </summary>
+    public static async IAsyncEnumerable<string> ReadValuesAsync(
+        Stream stream,
+        string elementName,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var expectedIndex = 0;
-        var propertyLength = elementName.Length;
-        var sectionStarted = false;
+        using var reader = CreateReader(stream);
 
-        while (true)
+        while (await reader.ReadAsync().ConfigureAwait(false))
         {
-            var nextByte = stream.ReadByte();
-            if (nextByte is -1)
+            ct.ThrowIfCancellationRequested();
+
+            if (reader.NodeType is XmlNodeType.Element
+                && string.Equals(reader.LocalName, elementName, StringComparison.Ordinal))
             {
-                break;
-            }
-
-            var nextChar = (char)nextByte;
-            if (sectionStarted)
-            {
-                if (nextChar == elementName[expectedIndex])
-                {
-                    if (++expectedIndex == propertyLength)
-                    {
-                        if ((char)stream.ReadByte() is '>')
-                        {
-                            return ReadValue(stream, ref valueBuffer);
-                        }
-
-                        expectedIndex = 0;
-                        sectionStarted = false;
-                    }
-                }
-                else
-                {
-                    sectionStarted = false;
-                }
-
-                continue;
-            }
-
-            if (nextChar is '<')
-            {
-                sectionStarted = true;
+                yield return await reader.ReadElementContentAsStringAsync().ConfigureAwait(false);
             }
         }
-
-        return -1;
     }
 
-    private static int ReadValue(Stream stream, ref Span<char> valueBuffer)
+    /// <summary>
+    /// Returns the text of the first element with the given local name, or an empty string when the
+    /// document has no such element.
+    /// </summary>
+    public static async Task<string> ReadStringAsync(
+        Stream stream,
+        string elementName,
+        CancellationToken ct = default)
     {
-        var index = 0;
-        while (true)
+        await foreach (var value in ReadValuesAsync(stream, elementName, ct).ConfigureAwait(false))
         {
-            var nextByte = stream.ReadByte();
-            if (nextByte is -1)
-            {
-                break;
-            }
-
-            var nextChar = (char)nextByte;
-            if (nextChar is '<')
-            {
-                return index;
-            }
-
-            valueBuffer[index++] = nextChar;
+            return value;
         }
 
-        return -1;
+        return string.Empty;
     }
 }

@@ -24,8 +24,8 @@
 - **Экономия памяти** — примерно в 150 раз ниже, чем у Minio SDK, и в 17 раз ниже, чем у AWS SDK, при сопоставимой со скоростью AWS.
 - **[Именованные клиенты](#именованные-клиенты)** — `AddSaS3BucketClient("имя", ...)`: свой именованный `HttpClient` (пул соединений, resilience, время жизни handler'а), свои настройки и свой `IS3BucketClient` на каждое имя; резолв — `GetRequiredKeyedService<IS3BucketClient>("имя")`.
 - **[Конфигурирование в appsettings](#конфигурирование-в-appsettings)** — секция `S3` через `FromConfiguration`, поверх — `Configure` / `PostConfigure` / `Validate`; неверная конфигурация роняет хост на старте, а не посреди первого запроса.
-- **Файлы** — upload (включая multipart-загрузку через `S3Upload`), чтение потоком, перечисление по префиксу `List`, подписанные (presigned) ссылки `BuildFileUrl` / `GetFileUrl`, `IsFileExists`, `DeleteFile`.
-- **Бакеты** — `CreateBucket`, `DeleteBucket`, `IsBucketExists`.
+- **Файлы** — upload (включая multipart-загрузку через `S3Upload`, чей `DisposeAsync` прерывает незавершённую загрузку), чтение потоком, перечисление по префиксу `List` (идёт по `NextContinuationToken`, поэтому бакет с более чем 1000 объектов перечисляется полностью), подписанные (presigned) ссылки `BuildFileUrl(fileName, expiration)` / `GetFileUrl`, `IsFileExists`, `DeleteFile`. Отсутствующий объект — не ошибка: `GetFile` возвращает обёртку с `Exists == false` и `null` в `Length`/`ContentType`.
+- **Бакеты** — `CreateBucket`, `DeleteBucket` (с необязательным force-режимом, очищающим бакет пачками по 1000), `IsBucketExists`.
 - **Транспорт под контролем** — таймаут запроса, время жизни пула соединений и handler'а, HTTP/2 — в `S3BucketClientSetupOptions`.
 - **Интеграция с `Sa.HybridFileStorage.S3`** — провайдер `AddSaS3FileStorage` регистрирует клиента каждой папки той же именованной регистрацией.
 
@@ -54,7 +54,7 @@ await client.UploadFile("docs/hello.txt", "text/plain", "hello"u8.ToArray(), ct)
 using Stream stream = await client.GetFileStream("docs/hello.txt", ct);
 ```
 
-Конвейер опций подключается только с DI-регистрацией; без неё транспорт задаётся на самом `HttpClient` (таймаут, пул соединений), а HTTP/2 — `S3BucketSettings.UseHttp2`.
+Конвейер опций подключается только с DI-регистрацией; без неё транспорт задаётся на самом `HttpClient` (таймаут, пул соединений), а HTTP/2 — `S3BucketSettings.UseHttp2`. Настройки при этом всё равно проверяются в конструкторе тем же `Validate()`, что и в конвейере: отсутствующий бакет или кривой эндпоинт падают сразу, а не посреди запроса.
 
 ### С DI
 
@@ -142,7 +142,7 @@ services.AddSaS3BucketClient("archive", o => o.Options(ob => ob.Configure(x =>
 
 Два клиента никогда не делят учётные данные, таймауты и пул соединений. Общая HTTP-обвязка под ними — внутренний `AddSaS3BucketClientCore(services, clientName, settingsFactory)`.
 
-Резолв клиента — по имени регистрации; unkeyed-псевдонимов нет, поэтому `GetRequiredService<IS3BucketClient>()` без ключа возвращает `null`:
+Резолв клиента — по имени регистрации; unkeyed-псевдонимов нет, поэтому `GetService<IS3BucketClient>()` без ключа возвращает `null`, а `GetRequiredService<IS3BucketClient>()` бросает исключение:
 
 ```csharp
 IS3BucketClient ordersClient = serviceProvider.GetRequiredKeyedService<IS3BucketClient>("orders");
@@ -170,7 +170,7 @@ S3-провайдер `Sa.HybridFileStorage.S3` (`AddSaS3FileStorage` — по �
 | `ConnectionPoolLifetime` | время жизни пула соединений | `15 мин` |
 | `HandlerLifetime` | время жизни handler'а HttpClient | `∞` (бесконечность) |
 
-`TotalRequestTimeout`, `ConnectionPoolLifetime` и `HandlerLifetime` относятся к именованному `HttpClient` DI-регистрации; при ручном создании клиента таймаут задаётся на самом `HttpClient`.
+`TotalRequestTimeout`, `ConnectionPoolLifetime` и `HandlerLifetime` относятся к именованному `HttpClient` DI-регистрации; при ручном создании клиента таймаут задаётся на самом `HttpClient`. `HandlerLifetime` действует для клиентов, полученных из `IHttpClientFactory` напрямую: keyed `IS3BucketClient` — синглтон с одним `HttpClient`, поэтому для его соединений работает `ConnectionPoolLifetime`.
 
 ---
 

@@ -8,6 +8,15 @@ namespace Sa.Data.S3;
 /// <summary>
 /// Обёртка над <see cref="HttpResponseMessage"/>, позволяющая удобно работать с загруженным файлом
 /// </summary>
+/// <remarks>
+/// Владеет ответом сервера: <see cref="Dispose"/> освобождает его, а <see cref="GetStream"/> передаёт
+/// владение потоку <see cref="S3Stream"/> (тот освобождает ответ вместе с собой). Достаточно
+/// освободить что-то одно.
+/// <para>
+/// Отсутствующий файл — не ошибка: <see cref="Exists"/> вернёт <c>false</c>, а
+/// <see cref="ContentType"/>/<see cref="Length"/> — <c>null</c>.
+/// </para>
+/// </remarks>
 [DebuggerDisplay("{ToString()}")]
 public sealed class S3File : IDisposable
 {
@@ -21,11 +30,14 @@ public sealed class S3File : IDisposable
     /// <summary>
     /// Тип файла в MIME
     /// </summary>
-    /// <remarks>Берётся из заголовка "Content-Type" из <see cref="HttpResponseMessage" /></remarks>
+    /// <remarks>
+    /// Берётся из заголовка "Content-Type" из <see cref="HttpResponseMessage" />; для
+    /// отсутствующего файла — <c>null</c> (иначе вернулся бы тип тела ошибки).
+    /// </remarks>
     public string? ContentType
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _response.Content.Headers.ContentType?.MediaType;
+        get => Exists ? _response.Content.Headers.ContentType?.MediaType : null;
     }
 
     /// <summary>
@@ -40,11 +52,14 @@ public sealed class S3File : IDisposable
     /// <summary>
     /// Размер файла
     /// </summary>
-    /// <remarks>Берётся из заголовка "Content-Length" из <see cref="HttpResponseMessage" /></remarks>
+    /// <remarks>
+    /// Берётся из заголовка "Content-Length" из <see cref="HttpResponseMessage" />; для
+    /// отсутствующего файла — <c>null</c> (иначе вернулась бы длина XML-описания ошибки).
+    /// </remarks>
     public long? Length
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _response.Content.Headers.ContentLength;
+        get => Exists ? _response.Content.Headers.ContentLength : null;
     }
 
     /// <summary>

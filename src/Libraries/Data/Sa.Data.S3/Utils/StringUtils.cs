@@ -35,6 +35,32 @@ internal static class StringUtils
                ?? new StringBuilder(4096);
     }
 
+    /// <summary>
+    /// Appends <paramref name="value"/> with XML special characters escaped. S3 returns ETags and
+    /// object keys verbatim, and both go into request bodies (CompleteMultipartUpload,
+    /// DeleteObjects) — an unescaped <c>&amp;</c> or <c>&lt;</c> would produce invalid XML.
+    /// </summary>
+    public static void AppendXmlEscaped(StringBuilder builder, string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return;
+        }
+
+        foreach (var ch in value)
+        {
+            switch (ch)
+            {
+                case '&': builder.Append("&amp;"); break;
+                case '<': builder.Append("&lt;"); break;
+                case '>': builder.Append("&gt;"); break;
+                case '"': builder.Append("&quot;"); break;
+                case '\'': builder.Append("&apos;"); break;
+                default: builder.Append(ch); break;
+            }
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Format(ref Span<char> buffer, DateTimeOffset dateTime, string format)
     {

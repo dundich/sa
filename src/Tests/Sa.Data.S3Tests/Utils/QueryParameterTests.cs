@@ -78,4 +78,37 @@ public class QueryParameterTests
 
         builder.Dispose();
     }
+
+    [Fact]
+    public void SlashInValueIsPercentEncoded()
+    {
+        // SigV4 кодирует «/» в query как %2F: иначе листинг по «папке» даёт SignatureDoesNotMatch.
+        var builder = new ValueStringBuilder(stackalloc char[512]);
+        UrlUtils.AppendCanonicalQueryParameters(ref builder, "?prefix=folder/sub");
+        Assert.Equal("prefix=folder%2Fsub", builder.ToString());
+
+        builder.Dispose();
+    }
+
+    [Fact]
+    public void ParametersAreSorted()
+    {
+        var builder = new ValueStringBuilder(stackalloc char[512]);
+        UrlUtils.AppendCanonicalQueryParameters(ref builder, "?b=2&a=1&c=3");
+        Assert.Equal("a=1&b=2&c=3", builder.ToString());
+
+        builder.Dispose();
+    }
+
+    [Fact]
+    public void UploadIdReservedCharactersRoundTrip()
+    {
+        // Upload id у AWS — base64: «+», «/», «=». Они обязаны пережить разбор и кодирование
+        // без изменений.
+        var builder = new ValueStringBuilder(stackalloc char[512]);
+        UrlUtils.AppendCanonicalQueryParameters(ref builder, "?partNumber=1&uploadId=ab%2Bcd%2Fef%3D");
+        Assert.Equal("partNumber=1&uploadId=ab%2Bcd%2Fef%3D", builder.ToString());
+
+        builder.Dispose();
+    }
 }

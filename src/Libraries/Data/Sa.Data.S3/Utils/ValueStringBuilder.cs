@@ -158,16 +158,23 @@ internal ref struct ValueStringBuilder(Span<char> initialBuffer)
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly void Dispose()
+    public void Dispose()
     {
+        // Null the field before returning: Flush() disposes and is often called from a `using`
+        // scope, so a second (implicit) Dispose must be a no-op instead of returning the same
+        // array to the pool twice — that would hand one buffer to two concurrent renters.
         var toReturn = _array;
+        _array = null;
+        _buffer = default;
+        _length = 0;
+
         if (toReturn is not null)
         {
             _arrayPool.Return(toReturn);
         }
     }
 
-    public readonly string Flush()
+    public string Flush()
     {
         var result = _length == 0
             ? string.Empty

@@ -5,9 +5,11 @@ using System.Text;
 
 namespace Sa.Data.S3.Utils;
 
-internal sealed class Signature(string region, string service, string secretKey)
+internal sealed class Signature(string region, string service, string secretKey, IArrayPool arrayPool)
 {
-    private readonly static IArrayPool s_arrayPool = DefaultArrayPool.Instance;
+    // Пул берётся у клиента, чтобы подменённый IArrayPool действовал на всём пути, а не только на
+    // буферах загрузки.
+    private readonly IArrayPool _arrayPool = arrayPool;
 
     public const string Iso8601DateTime = "yyyyMMddTHHmmssZ";
     public const string Iso8601Date = "yyyyMMdd";
@@ -65,42 +67,50 @@ internal sealed class Signature(string region, string service, string secretKey)
         string[] signedHeaders)
     {
         var sortedHeaders = Interlocked.Exchange(ref _headerSort, null) ?? [];
-        foreach (var requestHeader in request.Headers)
-        {
-            var header = NormalizeHeader(requestHeader.Key);
-            if (signedHeaders.Contains(header))
-            {
-                sortedHeaders.Add(header, string.Join(' ', requestHeader.Value).Trim());
-            }
-        }
 
-        var content = request.Content;
-        if (content != null)
+        try
         {
-            foreach (var contentHeader in content.Headers)
+            foreach (var requestHeader in request.Headers)
             {
-                var header = NormalizeHeader(contentHeader.Key);
+                var header = NormalizeHeader(requestHeader.Key);
                 if (signedHeaders.Contains(header))
                 {
-                    sortedHeaders.Add(header, string.Join(' ', contentHeader.Value).Trim());
+                    sortedHeaders.Add(header, string.Join(' ', requestHeader.Value).Trim());
                 }
             }
-        }
 
-        foreach (var (header, value) in sortedHeaders)
+            var content = request.Content;
+            if (content != null)
+            {
+                foreach (var contentHeader in content.Headers)
+                {
+                    var header = NormalizeHeader(contentHeader.Key);
+                    if (signedHeaders.Contains(header))
+                    {
+                        sortedHeaders.Add(header, string.Join(' ', contentHeader.Value).Trim());
+                    }
+                }
+            }
+
+            foreach (var (header, value) in sortedHeaders)
+            {
+                builder.Append(header);
+                builder.Append(':');
+                builder.Append(value);
+                builder.Append('\n');
+            }
+        }
+        finally
         {
-            builder.Append(header);
-            builder.Append(':');
-            builder.Append(value);
-            builder.Append('\n');
+            // Return the instance even when building the canonical headers threw, otherwise a
+            // failed request permanently costs the process its one reusable dictionary.
+            sortedHeaders.Clear();
+            Interlocked.Exchange(ref _headerSort, sortedHeaders);
         }
-
-        sortedHeaders.Clear();
-        Interlocked.Exchange(ref _headerSort, sortedHeaders);
     }
 
 
-    private static void AppendCanonicalRequestHash(
+    private void AppendCanonicalRequestHash(
         scoped ref ValueStringBuilder builder,
         HttpRequestMessage request,
         string[] signedHeaders,
@@ -146,7 +156,7 @@ internal sealed class Signature(string region, string service, string secretKey)
         canonical.Dispose();
     }
 
-    private static void AppendCanonicalRequestHash(scoped ref ValueStringBuilder builder, string url)
+    private void AppendCanonicalRequestHash(scoped ref ValueStringBuilder builder, string url)
     {
         var uri = new Uri(url);
 
@@ -174,11 +184,11 @@ internal sealed class Signature(string region, string service, string secretKey)
         canonical.Dispose();
     }
 
-    private static void AppendSha256ToHex(ref ValueStringBuilder builder, scoped ReadOnlySpan<char> value)
+    private void AppendSha256ToHex(ref ValueStringBuilder builder, scoped ReadOnlySpan<char> value)
     {
         var count = Encoding.UTF8.GetByteCount(value);
 
-        var byteBuffer = s_arrayPool.Rent<byte>(count);
+        var byteBuffer = _arrayPool.Rent<byte>(count);
 
         var encoded = Encoding.UTF8.GetBytes(value, byteBuffer);
 
@@ -193,7 +203,7 @@ internal sealed class Signature(string region, string service, string secretKey)
             }
         }
 
-        s_arrayPool.Return(byteBuffer);
+        _arrayPool.Return(byteBuffer);
     }
 
 
@@ -210,21 +220,23 @@ internal sealed class Signature(string region, string service, string secretKey)
             builder.Append(char.ToLower(ch, culture));
         }
 
-        return string.Intern(builder.Flush());
+        // Not string.Intern: the names here are only the signed ones, but interning strings that
+        // come from the request keeps them alive for the process lifetime for no measurable gain.
+        return builder.Flush();
     }
 
-    private static int Sign(ref Span<byte> buffer, ReadOnlySpan<byte> key, scoped ReadOnlySpan<char> content)
+    private int Sign(ref Span<byte> buffer, ReadOnlySpan<byte> key, scoped ReadOnlySpan<char> content)
     {
         var count = Encoding.UTF8.GetByteCount(content);
 
-        var byteBuffer = s_arrayPool.Rent<byte>(count);
+        var byteBuffer = _arrayPool.Rent<byte>(count);
 
         var encoded = Encoding.UTF8.GetBytes(content, byteBuffer);
         var result = HMACSHA256.TryHashData(key, byteBuffer.AsSpan(0, encoded), buffer, out var written)
             ? written
             : -1;
 
-        s_arrayPool.Return(byteBuffer);
+        _arrayPool.Return(byteBuffer);
 
         return result;
     }
