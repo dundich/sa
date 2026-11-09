@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Sa.Configuration.SecretStore;
 using Sa.Configuration.SecretStore.Stores;
 

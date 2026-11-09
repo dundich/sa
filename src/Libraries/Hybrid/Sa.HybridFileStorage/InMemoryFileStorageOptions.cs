@@ -1,4 +1,4 @@
-﻿namespace Sa.HybridFileStorage;
+namespace Sa.HybridFileStorage;
 
 /// <summary>
 /// Configuration options for the in-memory file storage provider.

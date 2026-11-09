@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Push the packages produced by ./do-package.sh into the repository-local feed (src/nupkgs).
-# That is the same folder src/nuget.config maps for `Sa.*`, so no machine-level NuGet source
+# That is the same folder the root nuget.config maps for `Sa.*`, so no machine-level NuGet source
 # has to be registered.
 #
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

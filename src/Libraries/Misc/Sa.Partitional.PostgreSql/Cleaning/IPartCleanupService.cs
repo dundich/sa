@@ -1,4 +1,4 @@
-﻿namespace Sa.Partitional.PostgreSql;
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// Represents a service interface for cleaning up Outbox message parts.

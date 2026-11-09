@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Extensions;
 using Sa.Partitional.PostgreSql.Classes;
 using System.Globalization;

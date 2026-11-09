@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.SecretStore.Stores;
+namespace Sa.Configuration.SecretStore.Stores;
 
 public sealed class EnvironmentVariableSecretStore : ISecretStore
 {

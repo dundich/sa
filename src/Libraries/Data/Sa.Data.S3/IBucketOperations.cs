@@ -1,4 +1,4 @@
-﻿
+
 namespace Sa.Data.S3;
 
 public interface IBucketOperations

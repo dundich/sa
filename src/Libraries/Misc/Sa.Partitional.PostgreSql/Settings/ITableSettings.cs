@@ -1,4 +1,4 @@
-﻿namespace Sa.Partitional.PostgreSql;
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// Immutable configuration of a single partitioned PostgreSQL table.

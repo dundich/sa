@@ -1,4 +1,4 @@
-﻿using Sa.Media;
+using Sa.Media;
 using System.IO.Pipelines;
 
 

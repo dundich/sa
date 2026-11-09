@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule;
+namespace Sa.Schedule;
 
 /// <summary>
 /// This scheduler that manages multiple job schedulers.

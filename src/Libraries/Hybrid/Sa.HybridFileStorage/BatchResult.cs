@@ -1,4 +1,4 @@
-﻿namespace Sa.HybridFileStorage;
+namespace Sa.HybridFileStorage;
 
 /// <summary>
 /// Результат пакетной операции с детализацией по каждому элементу.

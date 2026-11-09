@@ -1,4 +1,4 @@
-﻿namespace Sa.Utils.WorkQueue;
+namespace Sa.Utils.WorkQueue;
 
 /// <summary>
 /// Asynchronous task queue with limited parallelism, built on <see cref="System.Threading.Channels.Channel{T}"/>.

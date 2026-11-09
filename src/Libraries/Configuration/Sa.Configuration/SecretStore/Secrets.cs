@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Microsoft.Extensions.Hosting;
 using Sa.Configuration.SecretStore.Engine;
 using Sa.Configuration.SecretStore.Stores;

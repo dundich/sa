@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule.Cron;
+namespace Sa.Schedule.Cron;
 
 /// <summary>
 /// Implements cron-based scheduling using 5-field cron expressions

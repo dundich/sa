@@ -1,4 +1,4 @@
-﻿using Sa.Schedule;
+using Sa.Schedule;
 
 namespace Sa.Outbox.Delivery.Job;
 

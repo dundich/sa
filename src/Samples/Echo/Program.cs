@@ -1,4 +1,4 @@
-﻿using Sa.Media.Echo;
+using Sa.Media.Echo;
 
 // Путь можно передать аргументом; иначе берём тестовую запись из репозитория.
 string wavPath = args.Length > 0

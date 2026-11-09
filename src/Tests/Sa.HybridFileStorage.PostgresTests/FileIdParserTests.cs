@@ -1,4 +1,4 @@
-﻿using Sa.HybridFileStorage;
+using Sa.HybridFileStorage;
 
 namespace Sa.HybridFileStorage.PostgresTests;
 

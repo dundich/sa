@@ -1,15 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\..\Host.Test.Properties.xml" />
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-  </PropertyGroup>
+  <!--
+    Shared Testcontainers helpers. Configuration comes from
+    Tests/Fixtures/Directory.Build.props: a plain library, not an MTP test module.
+  -->
 
-  <PropertyGroup>
-    <IsTestProject>false</IsTestProject>
-    <!-- Фикстура подключается к тестам как библиотека, но тестовым модулем не является:
-         иначе прогон решения запускает её, не находит тестов и завершает весь прогон
-         exit code 8 (MTP: "no tests discovered"). -->
-    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
-  </PropertyGroup>
 </Project>

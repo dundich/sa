@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule;
+namespace Sa.Schedule;
 
 /// <summary>
 /// Specifies the actions to be taken when an error occurs.

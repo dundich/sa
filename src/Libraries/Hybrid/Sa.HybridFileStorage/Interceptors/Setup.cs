@@ -1,4 +1,4 @@
-﻿namespace Sa.HybridFileStorage.Interceptors;
+namespace Sa.HybridFileStorage.Interceptors;
 
 internal static class Setup
 {

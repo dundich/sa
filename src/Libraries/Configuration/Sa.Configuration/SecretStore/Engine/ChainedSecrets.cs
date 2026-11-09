@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.SecretStore.Engine;
+namespace Sa.Configuration.SecretStore.Engine;
 
 internal sealed class ChainedSecrets : ISecretService, ISecretStore
 {

@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSql.IdGen;
+namespace Sa.Outbox.PostgreSql.IdGen;
 
 internal sealed class OutboxIdGenerator : IOutboxIdGenerator
 {

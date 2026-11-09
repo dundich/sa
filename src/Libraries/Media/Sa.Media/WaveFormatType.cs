@@ -1,4 +1,4 @@
-﻿namespace Sa.Media;
+namespace Sa.Media;
 
 /// <summary>
 /// Представляет формат аудио в WAV-файле.

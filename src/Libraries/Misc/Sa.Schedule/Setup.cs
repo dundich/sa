@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration.Binder.SourceGeneration;
+using Microsoft.Extensions.Configuration.Binder.SourceGeneration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;

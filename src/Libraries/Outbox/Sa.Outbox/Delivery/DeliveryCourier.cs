@@ -1,4 +1,4 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 using System.Runtime.CompilerServices;
 
 namespace Sa.Outbox.Delivery;

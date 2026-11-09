@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using System.Collections.Concurrent;
 using System.Data;
 

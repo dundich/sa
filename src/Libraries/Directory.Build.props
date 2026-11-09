@@ -1,0 +1,45 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Version>0.18.0</Version>
+
+    <!--
+      Libraries are consumed by Native AOT applications, so annotate them for AOT and
+      trimming instead of setting PublishAot (a publishing property that belongs to the
+      application, not to a class library).
+
+      EnableConfigurationBindingGenerator is set explicitly: previously it was switched on
+      implicitly by PublishAot=true, and the code relies on source-generated binding in
+      BindConfiguration / IConfigurationSection.Bind calls.
+    -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+
+    <!-- Source Link / symbol package (snupkg + SourceLink is the supported combination). -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <PackageReadmeFile>NuGet.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReleaseNotes>See https://github.com/dundich/Sa/releases</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Paths are resolved from this props file (src/Libraries/), not from the importing project. -->
+    <None Include="$(MSBuildThisFileDirectory)../../NuGet.md" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)../../icon.png" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

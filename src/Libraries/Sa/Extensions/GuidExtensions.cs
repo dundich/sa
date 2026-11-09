@@ -1,4 +1,4 @@
-﻿namespace Sa.Extensions;
+namespace Sa.Extensions;
 
 internal static class GuidExtensions
 {

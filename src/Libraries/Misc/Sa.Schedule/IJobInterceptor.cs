@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule;
+namespace Sa.Schedule;
 
 /// <summary>
 /// Defines an interface for job interceptors, allowing for custom logic to be executed before or after a job is handled.

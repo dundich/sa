@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-	<Import Project="../../../Common.NuGet.Properties.xml" />
-
 	<PropertyGroup>
-		<Version>0.18.0</Version>
 		<Description>Simple Outbox for Pg (publishing and using messages)</Description>
 	</PropertyGroup>
 
@@ -28,8 +25,9 @@
 		<PackageReference Include="Microsoft.Extensions.Options" />
 		<!--
 		  PgOutboxDeliveryOptions/Provider читает секцию конфигурации группы (IConfiguration +
-		  instance IConfigurationSection.Bind). Source-generated binder включается SDK
-		  автоматически при PublishAot=true, поэтому Bind не тянет reflection.
+		  instance IConfigurationSection.Bind). Source-generated binder включается через
+		  EnableConfigurationBindingGenerator=true (src/Libraries/Directory.Build.props),
+		  поэтому Bind не тянет reflection.
 		-->
 		<PackageReference Include="Microsoft.Extensions.Configuration" />
 	</ItemGroup>

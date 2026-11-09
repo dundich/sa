@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-	<Import Project="../../../Common.NuGet.Properties.xml" />
-
 	<PropertyGroup>
-		<Version>0.18.0</Version>
 		<Description>Simple Outbox for Redis Streams (publishing and using messages)</Description>
 	</PropertyGroup>
 

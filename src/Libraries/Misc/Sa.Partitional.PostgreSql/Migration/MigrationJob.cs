@@ -1,4 +1,4 @@
-﻿using Sa.Partitional.PostgreSql.Cache;
+using Sa.Partitional.PostgreSql.Cache;
 using Sa.Schedule;
 
 namespace Sa.Partitional.PostgreSql.Migration;

@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Delivery;
+namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Delivers a batch of messages with error handling and retry mechanisms.

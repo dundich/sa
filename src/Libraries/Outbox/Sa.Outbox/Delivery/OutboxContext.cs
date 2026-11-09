@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Exceptions;
+using Sa.Outbox.Exceptions;
 using System.Diagnostics;
 
 

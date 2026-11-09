@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Partitional;
+namespace Sa.Outbox.Partitional;
 
 /// <summary>
 /// Represents the settings for partitioning in the Outbox processing system.

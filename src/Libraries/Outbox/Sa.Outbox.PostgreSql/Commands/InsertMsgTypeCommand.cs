@@ -1,4 +1,4 @@
-﻿using Sa.Data.PostgreSql;
+using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Commands;

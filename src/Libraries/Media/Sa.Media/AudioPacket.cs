@@ -1,4 +1,4 @@
-﻿namespace Sa.Media;
+namespace Sa.Media;
 
 /// <summary>
 /// Сырые или сконвертированные сэмплы

@@ -1,4 +1,4 @@
-﻿using Sa.Schedule;
+using Sa.Schedule;
 using Sa.Schedule.Engine;
 using Sa.Schedule.Settings;
 

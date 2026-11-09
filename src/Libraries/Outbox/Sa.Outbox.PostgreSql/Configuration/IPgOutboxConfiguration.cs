@@ -1,4 +1,4 @@
-﻿using Sa.Data.PostgreSql;
+using Sa.Data.PostgreSql;
 using Sa.Outbox.PostgreSql.Poison;
 using Sa.Outbox.Serialization;
 using System.Diagnostics.CodeAnalysis;

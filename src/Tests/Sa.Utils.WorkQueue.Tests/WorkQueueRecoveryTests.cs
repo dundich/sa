@@ -1,4 +1,4 @@
-﻿namespace Sa.Utils.WorkQueue.Tests;
+namespace Sa.Utils.WorkQueue.Tests;
 
 public class SaWorkQueueRecoveryTests
 {

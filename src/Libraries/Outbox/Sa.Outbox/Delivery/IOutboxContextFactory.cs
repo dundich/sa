@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Delivery;
+namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Creates <see cref="IOutboxContextOperations{TMessage}"/> instances for delivering outbox messages.

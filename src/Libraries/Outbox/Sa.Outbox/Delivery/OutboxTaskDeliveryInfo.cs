@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Delivery;
+namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Represents information about the delivery of an Outbox message.

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Sa.Extensions;
 
 namespace Sa.Partitional.PostgreSql.Migration;

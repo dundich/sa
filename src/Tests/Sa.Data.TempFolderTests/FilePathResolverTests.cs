@@ -1,4 +1,4 @@
-﻿using Sa.Data.TempFolder.FilePathResolver;
+using Sa.Data.TempFolder.FilePathResolver;
 using System.Collections.Concurrent;
 
 namespace Sa.Data.TempFolderTests;

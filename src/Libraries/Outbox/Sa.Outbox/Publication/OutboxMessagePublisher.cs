@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Metadata;
+using Sa.Outbox.Metadata;
 using Sa.Outbox.PlugServices;
 using System.Buffers;
 

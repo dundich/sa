@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using Sa.Partitional.PostgreSql;
 using Sa.Partitional.PostgreSql.Classes;

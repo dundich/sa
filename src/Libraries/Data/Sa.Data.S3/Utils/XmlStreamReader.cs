@@ -1,4 +1,4 @@
-﻿namespace Sa.Data.S3.Utils;
+namespace Sa.Data.S3.Utils;
 
 internal static class XmlStreamReader
 {

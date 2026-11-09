@@ -1,4 +1,4 @@
-﻿using Sa.Media;
+using Sa.Media;
 
 namespace Sa.MediaTests;
 

@@ -1,4 +1,4 @@
-﻿namespace Sa.Utils.WorkQueue;
+namespace Sa.Utils.WorkQueue;
 
 
 /// <summary>

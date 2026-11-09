@@ -1,4 +1,4 @@
-﻿namespace Sa.HybridFileStorage.Domain;
+namespace Sa.HybridFileStorage.Domain;
 
 /// <summary>
 /// Represents input metadata for a file upload operation.

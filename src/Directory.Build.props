@@ -1,6 +1,42 @@
 <Project>
 
   <!--
+    Repository-wide MSBuild defaults.
+
+    MSBuild automatically imports the nearest Directory.Build.props for every project
+    under src/. Nested folders (Libraries, Tests, Samples, Benchmarks) add their own
+    Directory.Build.props that explicitly import this file via
+    $([MSBuild]::GetPathOfFileAbove(...)), because MSBuild stops at the first match.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+
+    <!-- Only src/Libraries/Directory.Build.props flips this to true. -->
+    <IsPackable>false</IsPackable>
+
+    <Product>Sa</Product>
+    <Company>dundich</Company>
+    <Authors>dundich</Authors>
+    <Copyright>Copyright © 2026 dundich</Copyright>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/dundich/Sa</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/dundich/Sa</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+    <!--
+      Deterministic source paths are only needed for CI builds. Enabling this locally
+      makes debugging harder (source paths are mapped to the repository root).
+    -->
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Centralised build output: src/artifacts/{bin,obj,package}/... -->
+    <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+  </PropertyGroup>
+
+  <!--
     WSL / Linux build shim.
 
     NuGet derives the Visual Studio "fallback package folders" from the

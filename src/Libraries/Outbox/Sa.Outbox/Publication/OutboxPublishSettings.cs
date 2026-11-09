@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Publication;
+namespace Sa.Outbox.Publication;
 
 /// <summary>
 /// Immutable settings for publishing messages from the Outbox.

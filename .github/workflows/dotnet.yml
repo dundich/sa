@@ -38,8 +38,9 @@ jobs:
 
     # Full suite — Docker is available on ubuntu-latest for the Testcontainers fixtures.
     # The exit code is the run's verdict: fixture projects under src/Tests/Fixtures are
-    # excluded from test-module discovery (IsTestingPlatformApplication=false in their
-    # .csproj), so no empty module can end the run with MTP exit code 8 (see AGENTS.md).
+    # excluded from test-module discovery (IsTestingPlatformApplication=false in
+    # src/Tests/Fixtures/Directory.Build.props), so no empty module can end the run with
+    # MTP exit code 8 (see AGENTS.md).
     - name: Test (full suite)
       if: runner.os == 'Linux'
       shell: bash

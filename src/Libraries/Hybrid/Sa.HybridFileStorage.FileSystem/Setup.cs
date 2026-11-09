@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.TempFolder;
 using Sa.HybridFileStorage.Domain;
 

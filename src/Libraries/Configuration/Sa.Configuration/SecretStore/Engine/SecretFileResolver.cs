@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.SecretStore.Engine;
+namespace Sa.Configuration.SecretStore.Engine;
 
 /// <summary>
 /// Resolves secret file paths against the current working directory first and

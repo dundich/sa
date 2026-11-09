@@ -1,4 +1,4 @@
-﻿using Sa.Fixture;
+using Sa.Fixture;
 using Sa.HybridFileStorage;
 using Sa.HybridFileStorage.Domain;
 

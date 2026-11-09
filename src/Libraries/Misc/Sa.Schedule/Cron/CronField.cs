@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule.Cron;
+namespace Sa.Schedule.Cron;
 
 /// <summary>
 /// The parsed content of a single cron field: its plain numeric values plus the

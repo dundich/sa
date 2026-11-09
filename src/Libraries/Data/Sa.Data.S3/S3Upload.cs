@@ -1,4 +1,4 @@
-﻿using Sa.Data.S3.Utils;
+using Sa.Data.S3.Utils;
 using System.Runtime.CompilerServices;
 
 

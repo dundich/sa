@@ -1,10 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-    <Import Project="..\Host.Test.Properties.xml" />
-
-    <PropertyGroup>
-        <IsTestProject>true</IsTestProject>
-    </PropertyGroup>
+<Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
       <ProjectReference Include="..\..\Libraries\Misc\Sa.Utils.WorkQueue\Sa.Utils.WorkQueue.csproj" />

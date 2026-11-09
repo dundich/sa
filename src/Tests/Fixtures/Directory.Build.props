@@ -1,0 +1,21 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!--
+      Fixtures are referenced by test projects as plain libraries. They must not be
+      discovered as test modules: otherwise a solution-wide run starts them, finds no
+      tests, and ends the whole run with MTP exit code 8 ("no tests discovered").
+    -->
+    <!--
+      Keep OutputType=Exe inherited from src/Tests/Directory.Build.props: xunit.v3 4.x
+      rejects a non-executable project that references the metapackage, even when it is
+      not a test module.
+    -->
+    <IsTestProject>false</IsTestProject>
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

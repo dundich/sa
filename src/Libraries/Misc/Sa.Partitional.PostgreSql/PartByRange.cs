@@ -1,4 +1,4 @@
-﻿namespace Sa.Partitional.PostgreSql;
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// Enumerates the possible partitional ranges for a PostgreSQL database.

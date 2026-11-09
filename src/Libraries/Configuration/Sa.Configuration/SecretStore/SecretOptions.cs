@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.SecretStore;
+namespace Sa.Configuration.SecretStore;
 
 /// <summary>
 /// Immutable options for <see cref="Secrets.CreateDefault(SecretOptions?)"/>.

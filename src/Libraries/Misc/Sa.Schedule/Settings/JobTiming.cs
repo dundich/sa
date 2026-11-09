@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule.Settings;
+namespace Sa.Schedule.Settings;
 
 internal sealed class JobTiming(
     Func<DateTimeOffset, DateTimeOffset?> nextTime, string name) : IJobTiming

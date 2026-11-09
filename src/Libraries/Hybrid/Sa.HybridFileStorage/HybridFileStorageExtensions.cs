@@ -1,4 +1,4 @@
-﻿using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.Domain;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.HybridFileStorage;

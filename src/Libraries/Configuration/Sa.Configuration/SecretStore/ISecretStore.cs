@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.SecretStore;
+namespace Sa.Configuration.SecretStore;
 
 /// <summary>
 /// Provides access to secret values by key.

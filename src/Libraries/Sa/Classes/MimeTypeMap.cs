@@ -1,4 +1,4 @@
-﻿namespace Sa.Classes;
+namespace Sa.Classes;
 
 /// <summary>
 /// Class MimeTypeMap.

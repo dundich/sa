@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox;
+namespace Sa.Outbox;
 
 /// <summary>
 /// Marks a message type as publishable through the Outbox pattern.

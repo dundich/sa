@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.SecretStore;
+namespace Sa.Configuration.SecretStore;
 
 /// <summary>
 /// Options for the encrypted secrets layer.

@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Outbox.PostgreSql.Services;
 
 namespace Sa.Outbox.PostgreSql.TypeResolve;

@@ -1,4 +1,4 @@
-﻿using Sa.HybridFileStorage.Interceptors;
+using Sa.HybridFileStorage.Interceptors;
 
 namespace Sa.HybridFileStorage;
 

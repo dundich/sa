@@ -1,4 +1,4 @@
-﻿using Sa.Schedule.Engine;
+using Sa.Schedule.Engine;
 
 namespace Sa.Schedule;
 

@@ -1,4 +1,4 @@
-﻿namespace Sa.Media.FFmpeg.Services;
+namespace Sa.Media.FFmpeg.Services;
 
 /// <summary>
 /// Represents the result of a process execution, including exit code and output streams.

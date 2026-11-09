@@ -1,4 +1,4 @@
-﻿using Sa.Fixture;
+using Sa.Fixture;
 using Sa.Partitional.PostgreSql;
 
 namespace Sa.Partitional.PostgreSqlTests.Configuration;

@@ -1,4 +1,4 @@
-﻿namespace Sa.HybridFileStorage;
+namespace Sa.HybridFileStorage;
 
 /// <summary>
 /// Represents metadata for a file stored in the hybrid file storage system.

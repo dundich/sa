@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Metadata;
+namespace Sa.Outbox.Metadata;
 
 /// <summary>
 /// Builds metadata registrations for outbox message types, including part names and payload ID resolvers.

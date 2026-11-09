@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Delivery;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.Partitional;
 using Sa.Outbox.Publication;

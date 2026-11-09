@@ -1,4 +1,4 @@
-﻿using Sa.Utils.WorkQueue;
+using Sa.Utils.WorkQueue;
 
 Console.WriteLine("=== Sa.WorkQueue sample ===");
 

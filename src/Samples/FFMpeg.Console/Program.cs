@@ -1,4 +1,4 @@
-﻿
+
 Console.WriteLine("Hello, [Sa.Media.FFmpeg]!");
 var ffmpeg = Sa.Media.FFmpeg.IFFMpegExecutor.Default;
 

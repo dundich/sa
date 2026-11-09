@@ -1,4 +1,4 @@
-﻿using System.Collections.Frozen;
+using System.Collections.Frozen;
 using System.Text;
 
 namespace Sa.Data.S3.Utils;

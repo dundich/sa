@@ -1,4 +1,4 @@
-﻿namespace Sa.Media.Echo;
+namespace Sa.Media.Echo;
 
 internal static class AudioConstants
 {

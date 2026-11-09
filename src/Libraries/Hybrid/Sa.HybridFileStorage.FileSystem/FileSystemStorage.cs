@@ -1,4 +1,4 @@
-﻿using Sa.Data.TempFolder;
+using Sa.Data.TempFolder;
 using Sa.HybridFileStorage.Domain;
 using System.Runtime.CompilerServices;
 

@@ -1,4 +1,4 @@
-﻿namespace Sa.Media.Echo;
+namespace Sa.Media.Echo;
 
 
 internal readonly record struct InversionCoefficients(float CLL, float CLR, float CRL, float CRR);

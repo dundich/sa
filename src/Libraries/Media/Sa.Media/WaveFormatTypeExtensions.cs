@@ -1,4 +1,4 @@
-﻿namespace Sa.Media;
+namespace Sa.Media;
 
 public static class WaveFormatTypeExtensions
 {

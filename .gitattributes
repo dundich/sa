@@ -1,9 +1,49 @@
-# Normalize all text files to LF line endings (working tree and index).
-# Binaries are auto-detected by text=auto and left untouched.
+# Line endings and text/binary classification.
+#
+# Every text file is stored and checked out with LF, and is UTF-8 **without** a BOM
+# (`.editorconfig` pins `charset = utf-8`, `end_of_line = lf`). Do not commit CRLF or a
+# UTF-8 BOM: the BOM breaks shell shebangs and is noise in `.csproj`/`.props` diffs.
 * text=auto eol=lf
 
-# Media/test data are binary; never apply CRLF conversion to them
-*.zip binary
-*.mp3 binary
-*.wav binary
-*.ogg binary
+# Source, project and config files: always text, always LF.
+*.cs             text eol=lf
+*.csx            text eol=lf
+*.csproj         text eol=lf
+*.props          text eol=lf
+*.targets        text eol=lf
+*.sln            text eol=lf
+*.slnx           text eol=lf
+*.sh             text eol=lf
+*.ps1            text eol=lf
+*.psm1           text eol=lf
+*.cmd            text eol=lf
+*.bat            text eol=lf
+*.json           text eol=lf
+*.jsonc          text eol=lf
+*.yml            text eol=lf
+*.yaml           text eol=lf
+*.md             text eol=lf
+*.xml            text eol=lf
+*.config         text eol=lf
+.editorconfig    text eol=lf
+.gitignore       text eol=lf
+.gitattributes   text eol=lf
+.dockerignore    text eol=lf
+
+# Media/test data and build outputs are binary; never apply line-ending conversion.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.zip    binary
+*.gz     binary
+*.tar    binary
+*.nupkg  binary
+*.snupkg binary
+*.dll    binary
+*.exe    binary
+*.pdb    binary
+*.mp3    binary
+*.wav    binary
+*.ogg    binary

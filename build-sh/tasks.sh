@@ -41,6 +41,7 @@ PROJECTS=(
 
   "Sa.Outbox"
   "Sa.Outbox.PostgreSql"
+  "Sa.Outbox.Redis"
 
   "Sa.HybridFileStorage"
   "Sa.HybridFileStorage.FileSystem"
@@ -54,11 +55,13 @@ PROJECTS=(
 # Kept in sync by hand with the fixture defaults:
 #   src/Tests/Fixtures/Sa.Data.PostgreSql.Fixture/PostgreSqlFixtureSettings.cs  -> postgres
 #   src/Tests/Fixtures/Sa.Data.S3.Fixture/S3FixtureSettings.cs                  -> seaweedfs
+#   src/Tests/Sa.Outbox.RedisTests/OutboxRedisFixture.cs                        -> redis
 # The Ryuk image is pinned by the Testcontainers package itself (the version in
 # src/Directory.Packages.props decides it); bump this line when that version changes.
 DOCKER_TEST_IMAGES=(
   "postgres:15"
   "chrislusf/seaweedfs:4.50"
+  "redis:7.4-alpine"
   "testcontainers/ryuk:0.14.0"
 )
 
@@ -121,9 +124,9 @@ build() {
 test_run() {
   _step "Running tests"
 
-  # `dotnet test` picks the MTP runner from src/global.json, which is only discovered when the cwd
-  # is src/ (or below). Everything below therefore runs from $SRC_DIR; from anywhere else it fails
-  # with "VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK".
+  # `dotnet test` picks the MTP runner from global.json at the repository root, which is
+  # discovered from any cwd (dotnet walks up from the current directory). Everything below
+  # still runs from $SRC_DIR for path consistency with the rest of the helper script.
   #
   # --max-parallel-test-modules caps how many test assemblies run at once. Without it every
   # assembly starts simultaneously, and since most of them boot a Testcontainers PostgreSQL that is
@@ -141,7 +144,7 @@ test_run() {
   # Restoring only when there is no package cache keeps NuGet off the critical path — a restore can
   # stall behind a proxy. If a new package version lands in src/Directory.Packages.props the build
   # fails with a NuGet "run a restore" error; run ./build-sh/do-build.sh.
-  if [[ ! -d "$ROOT/src/.packages" ]]; then
+  if [[ ! -d "$ROOT/.packages" ]]; then
     nu_restore
   fi
 

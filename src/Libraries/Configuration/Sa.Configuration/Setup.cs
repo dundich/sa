@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Sa.Configuration.CommandLine;
 using Sa.Configuration.PostProcessing;
 using Sa.Configuration.SecretStore;

@@ -1,14 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-	<Import Project="..\..\..\Common.NuGet.Properties.xml" />
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<Version>0.18.0</Version>
 		<Description>For managing table partitioning in PostgreSQL</Description>
 	</PropertyGroup>
 
 	<PropertyGroup>
-		<NoWarn>1701;1702;CS8602;</NoWarn>
+		<NoWarn>CS8602;</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -21,8 +18,9 @@
 		  Публичные сигнатуры IPartConfiguration.AddDataSource / AddPartCache / ... ссылаются на
 		  OptionsBuilder&lt;T&gt;, настройки обслуживаются стандартным конвейером Options:
 		  AddOptions/Configure/PostConfigure/IValidateOptions/ValidateOnStart и BindConfiguration.
-		  Источник конфигурации (source-generated binder) включается .NET SDK автоматически при
-		  PublishAot=true, поэтому BindConfiguration не тянет reflection и собирается под Native AOT.
+		  Источник конфигурации (source-generated binder) включается через
+		  EnableConfigurationBindingGenerator=true (src/Libraries/Directory.Build.props),
+		  поэтому BindConfiguration не тянет reflection и собирается под Native AOT.
 		-->
 		<PackageReference Include="Microsoft.Extensions.Options" />
 		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />

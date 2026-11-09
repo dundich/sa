@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSqlTests;
+namespace Sa.Outbox.PostgreSqlTests;
 
 
 internal sealed class TestMessage

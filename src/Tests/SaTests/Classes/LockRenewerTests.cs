@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using System.Diagnostics;
 
 namespace SaTests.Classes;

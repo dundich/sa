@@ -1,4 +1,4 @@
-﻿using Sa.Data.PostgreSql.Fixture;
+using Sa.Data.PostgreSql.Fixture;
 using Sa.HybridFileStorage.Domain;
 using Sa.HybridFileStorage.Postgres;
 

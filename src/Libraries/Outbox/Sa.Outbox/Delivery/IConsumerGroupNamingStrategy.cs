@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Delivery;
+namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Determines the consumer group name used by Kafka-style or PostgreSQL-based consumer groups

@@ -17,7 +17,7 @@ Reusable infrastructure libraries for distributed .NET 10 systems — **Native A
   - [Sa.Data.TempFolder — Temporary Folder Manager](#sadatatempfolder--temporary-folder-manager)
   - [Sa.Outbox — Transactional Outbox Core](#saoutbox--transactional-outbox-core)
   - [Sa.Outbox.PostgreSql — PostgreSQL Provider](#saoutboxpostgresql--postgresql-provider)
-  - [Sa.Outbox.Redis — Redis Provider (in development)](#saoutboxredis--redis-provider-in-development)
+  - [Sa.Outbox.Redis — Redis Provider](#saoutboxredis--redis-provider)
   - [Sa.Partitional.PostgreSql — Declarative Partitioning](#sapartitionalpostgresql--declarative-partitioning)
   - [Sa.Schedule — Scheduled Task Executor](#saschedule--scheduled-task-executor)
   - [Sa.HybridFileStorage — Multi-Provider File Storage](#sahybridfilestorage--multi-provider-file-storage)
@@ -27,7 +27,7 @@ Reusable infrastructure libraries for distributed .NET 10 systems — **Native A
 - [Samples](#samples)
 - [Tests](#tests)
 - [Building](#building)
-- [Contributing, specs and decisions](#contributing-specs-and-decisions)
+- [Contributing](#contributing)
 - [Architecture](#architecture)
 - [License](#license)
 
@@ -62,7 +62,7 @@ A Minio-compatible S3 client for data operations.
 
 Provider-agnostic core of the **Transactional Outbox** pattern: publication and consumer contracts, tenant/metadata registration, batching, retry policy and delivery status handling. Storage and delivery mechanics come from a provider package.
 
-Providers: [Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql) — ✅ production-ready, [Sa.Outbox.Redis](src/Libraries/Outbox/Sa.Outbox.Redis) — 🔧 in development, in-memory — 🧪 built into `Sa.Outbox` as a reference/dev-test provider.
+Providers: [Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql) — ✅ production-ready, [Sa.Outbox.Redis](src/Libraries/Outbox/Sa.Outbox.Redis) — 🧪 packaged, API may still change, in-memory — 🧪 built into `Sa.Outbox` as a reference/dev-test provider.
 
 ---
 
@@ -72,7 +72,7 @@ A PostgreSQL implementation of the **Transactional Outbox** pattern. Messages ar
 
 ---
 
-### [Sa.Outbox.Redis](src/Libraries/Outbox/Sa.Outbox.Redis) — Redis Provider (in development)
+### [Sa.Outbox.Redis](src/Libraries/Outbox/Sa.Outbox.Redis) — Redis Provider
 
 A Redis Streams implementation of the same outbox contract: the log, consumer cursors and retry state live in streams and the consumer group's pending entries list (PEL), with no Lua and single-key commands only, so it works on Redis Cluster as is.
 
@@ -155,21 +155,17 @@ Located in `src/Tests/`: 17 test projects using **xunit v3** and **Testcontainer
 Direct dotnet commands:
 
 ```powershell
-dotnet restore src/Sa.slnx -c Release
-dotnet build src/Sa.slnx -c Release -v n
-dotnet test src/Sa.slnx -v n
+dotnet restore src/Sa.slnx
+dotnet build src/Sa.slnx -c Release
+dotnet test --solution src/Sa.slnx -c Release --no-build --no-restore
 ```
 
 ---
 
-## Contributing, specs and decisions
+## Contributing
 
-This repository is **spec-first**: requirements and acceptance criteria live in [`specs/`](specs)
-(see [`specs/000-project-baseline`](specs/000-project-baseline)), work templates in
-[`templates/`](templates), review gates in [`checklists/`](checklists), and ADRs in
-[`docs/decisions/`](docs/decisions). The process itself is described in
-[`docs/README.md`](docs/README.md) and [`docs/development/sdd-workflow.md`](docs/development/sdd-workflow.md);
-[`AGENTS.md`](AGENTS.md) holds the build/test/packaging constraints.
+[`AGENTS.md`](AGENTS.md) holds the build, test and packaging constraints; the domain glossary is
+[`GLOSSARY.md`](GLOSSARY.md).
 
 ---
 

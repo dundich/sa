@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Publication;
+namespace Sa.Outbox.Publication;
 
 /// <summary>
 /// Defines a contract for publishing outbox messages.

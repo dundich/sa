@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.SecretStore.Engine;
+namespace Sa.Configuration.SecretStore.Engine;
 
 /// <summary>
 /// Parses the <c>key=value</c> format shared by plaintext and decrypted secret files.

@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Exceptions;
+namespace Sa.Outbox.Exceptions;
 
 public class OutboxException : Exception
 {

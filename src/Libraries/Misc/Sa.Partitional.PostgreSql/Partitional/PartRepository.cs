@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;

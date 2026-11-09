@@ -25,7 +25,7 @@
 - [Примеры](#примеры)
 - [Тесты](#тесты)
 - [Сборка](#сборка)
-- [Участие, спецификации и решения](#участие-спецификации-и-решения)
+- [Участие](#участие)
 - [Архитектура](#архитектура)
 - [Лицензия](#лицензия)
 
@@ -143,22 +143,17 @@ In-memory провайдер (`AddSaOutboxUsingInMemory`) входит в пак
 Прямые команды dotnet:
 
 ```bash
-dotnet restore src/Sa.slnx -c Release
+dotnet restore src/Sa.slnx
 dotnet build src/Sa.slnx -c Release
+dotnet test --solution src/Sa.slnx -c Release --no-build --no-restore
 ```
-
-Запускать `dotnet test` изнутри `src/`.
 
 ---
 
-## Участие, спецификации и решения
+## Участие
 
-Репозиторий развивается **spec-first**: требования и критерии приёмки — в [`specs/`](specs)
-(см. [`specs/000-project-baseline`](specs/000-project-baseline)), шаблоны рабочих документов — в
-[`templates/`](templates), гейты review — в [`checklists/`](checklists), ADR — в
-[`docs/decisions/`](docs/decisions). Сам процесс описан в [`docs/README.md`](docs/README.md) и
-[`docs/development/sdd-workflow.md`](docs/development/sdd-workflow.md); ограничения сборки/тестов/упаковки — в
-[`AGENTS.md`](AGENTS.md).
+Ограничения сборки, тестов и упаковки — в [`AGENTS.md`](AGENTS.md); словарь предметной области —
+[`GLOSSARY.md`](GLOSSARY.md).
 
 ---
 

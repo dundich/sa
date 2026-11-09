@@ -1,4 +1,4 @@
-﻿namespace Sa.Media.FFmpeg.Services;
+namespace Sa.Media.FFmpeg.Services;
 
 static class FFOutputParser
 {

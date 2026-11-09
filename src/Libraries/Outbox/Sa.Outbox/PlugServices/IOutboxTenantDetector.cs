@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Partitional;
+using Sa.Outbox.Partitional;
 
 namespace Sa.Outbox.PlugServices;
 

@@ -1,5 +1,9 @@
 root = true
 
+# Repository-wide text conventions:
+#   - LF line endings, final newline at EOF
+#   - UTF-8 without a BOM (`charset = utf-8`; `utf-8-bom` would add one)
+# Both are mirrored in .gitattributes so the index and the working tree agree.
 [*]
 end_of_line = lf
 insert_final_newline = true

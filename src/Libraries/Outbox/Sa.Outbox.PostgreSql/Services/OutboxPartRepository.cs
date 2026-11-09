@@ -1,4 +1,4 @@
-﻿using Sa.Extensions;
+using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Partitional.PostgreSql;
 using System.Globalization;

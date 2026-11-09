@@ -1,4 +1,4 @@
-﻿namespace Sa.HybridFileStorage.Interceptors;
+namespace Sa.HybridFileStorage.Interceptors;
 
 /// <summary>
 /// Provides a container for registering interceptor implementations that hook into upload, download, and delete operations.

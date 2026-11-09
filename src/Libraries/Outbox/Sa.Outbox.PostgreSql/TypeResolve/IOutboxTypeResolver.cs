@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSql.TypeResolve;
+namespace Sa.Outbox.PostgreSql.TypeResolve;
 
 internal interface IOutboxTypeResolver
 {

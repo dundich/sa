@@ -1,4 +1,4 @@
-﻿namespace Sa.Utils.WorkQueue;
+namespace Sa.Utils.WorkQueue;
 
 using Microsoft.Extensions.Logging;
 using System.Threading.Channels;

@@ -1,4 +1,4 @@
-﻿using Sa.Data.PostgreSql.Fixture;
+using Sa.Data.PostgreSql.Fixture;
 using Sa.Outbox.PostgreSql;
 
 namespace Sa.Outbox.PostgreSqlTests;

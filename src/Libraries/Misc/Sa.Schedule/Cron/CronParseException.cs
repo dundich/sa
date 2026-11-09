@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule.Cron;
+namespace Sa.Schedule.Cron;
 
 /// <summary>
 /// Thrown when a cron expression cannot be parsed.

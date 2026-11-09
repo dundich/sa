@@ -1,4 +1,4 @@
-﻿namespace Sa.Schedule.Engine;
+namespace Sa.Schedule.Engine;
 
 /// <summary>
 /// Why a job slot's loop ended.

@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.PostgreSql;
+namespace Sa.Configuration.PostgreSql;
 
 using Npgsql;
 

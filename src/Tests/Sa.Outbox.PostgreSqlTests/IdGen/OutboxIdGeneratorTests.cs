@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.PostgreSql.IdGen;
+using Sa.Outbox.PostgreSql.IdGen;
 
 namespace Sa.Outbox.PostgreSqlTests.IdGen;
 

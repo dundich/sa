@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.Publication;
+namespace Sa.Outbox.Publication;
 
 /// <summary>
 /// Extension methods for fluent configuration of <see cref="OutboxPublishSettings"/>.

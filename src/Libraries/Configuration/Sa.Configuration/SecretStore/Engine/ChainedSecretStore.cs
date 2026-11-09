@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.SecretStore.Engine;
+namespace Sa.Configuration.SecretStore.Engine;
 
 /// <summary>
 /// A chain of secret stores with LIFO priority: the store passed/added last has the highest priority.

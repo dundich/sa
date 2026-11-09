@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Sa.Data.PostgreSql;
 
 namespace Sa.Configuration.PostgreSql;

@@ -1,4 +1,4 @@
-﻿namespace Sa.Media.FFmpeg.Services;
+namespace Sa.Media.FFmpeg.Services;
 
 internal sealed class PcmS16LeChannelManipulator(
     IFFMpegExecutor? ffmpeg = null,

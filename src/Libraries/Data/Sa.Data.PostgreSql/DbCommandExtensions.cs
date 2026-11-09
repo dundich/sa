@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 

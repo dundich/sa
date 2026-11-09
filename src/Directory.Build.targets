@@ -1,0 +1,11 @@
+<Project>
+
+  <!--
+    Repository-wide build targets.
+
+    Directory.Build.targets is imported after the project body, so this is the right place
+    for targets and for item metadata that must win over project-level definitions. It is
+    currently an extension point; keep shared logic here rather than in individual projects.
+  -->
+
+</Project>

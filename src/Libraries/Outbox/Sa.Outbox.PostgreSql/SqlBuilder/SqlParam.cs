@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSql.SqlBuilder;
+namespace Sa.Outbox.PostgreSql.SqlBuilder;
 
 /// <summary>
 /// Named constants for every SQL parameter placeholder used across the SqlBuilder templates.

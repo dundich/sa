@@ -1,4 +1,4 @@
-﻿namespace Sa.Media.FFmpeg;
+namespace Sa.Media.FFmpeg;
 
 /// <param name="Size">
 /// Размер файла в байтах. Именно <see cref="long"/>: <see cref="int"/> переполнялся на файлах

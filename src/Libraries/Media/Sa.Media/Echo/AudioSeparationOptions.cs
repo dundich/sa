@@ -1,4 +1,4 @@
-﻿using static Sa.Media.Echo.CrossFeedSeparator;
+using static Sa.Media.Echo.CrossFeedSeparator;
 
 namespace Sa.Media.Echo;
 

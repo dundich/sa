@@ -1,4 +1,4 @@
-﻿namespace Sa.Configuration.CommandLine;
+namespace Sa.Configuration.CommandLine;
 
 using Microsoft.Extensions.Configuration;
 using Sa.Classes;

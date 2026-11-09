@@ -1,9 +1,24 @@
-﻿<Solution>
+<?xml version="1.0" encoding="utf-8"?>
+<Solution>
+  <!--
+    Solution file format: SLNX (default for `dotnet new sln` since .NET 10).
+    Solution folders are virtual: they do not need to match the folder tree on disk,
+    but keeping them aligned makes the solution easier to navigate.
+  -->
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Release" />
+    <Platform Name="Any CPU" />
+  </Configurations>
+
+  <!-- Benchmarks -->
   <Folder Name="/Benchmarks/">
     <Project Path="Benchmarks/Sa.Outbox.Benchmarks/Sa.Outbox.Benchmarks.csproj" />
     <Project Path="Benchmarks/Sa.Utils.WorkQueue.Benchmarks/Sa.Utils.WorkQueue.Benchmarks.csproj" />
   </Folder>
-  <Folder Name="/Libraries/">
+
+  <!-- Libraries: shared-source base (not packed) and domain groups -->
+  <Folder Name="/Libraries/Base/">
     <Project Path="Libraries/Sa/Sa.csproj" />
   </Folder>
   <Folder Name="/Libraries/Configuration/">
@@ -35,9 +50,11 @@
     <Project Path="Libraries/Outbox/Sa.Outbox.PostgreSql/Sa.Outbox.PostgreSql.csproj" />
     <Project Path="Libraries/Outbox/Sa.Outbox.Redis/Sa.Outbox.Redis.csproj" />
   </Folder>
+
+  <!-- Samples -->
   <Folder Name="/Samples/">
     <File Path="Samples/docker-compose.yml" />
-    <Project Path="Samples/Configuration.Web/Configuration.Web.csproj" Id="ae8f9f99-5b9b-4009-8aed-7ff837fb3ef2" />
+    <Project Path="Samples/Configuration.Web/Configuration.Web.csproj" />
     <Project Path="Samples/Echo/Echo.csproj" />
     <Project Path="Samples/FFMpeg.Console/FFMpeg.Console.csproj" />
     <Project Path="Samples/HybridFileStorage.Console/HybridFileStorage.Console.csproj" />
@@ -48,17 +65,10 @@
     <Project Path="Samples/Schedule.Console/Schedule.Console.csproj" />
     <Project Path="Samples/WorkQueue.Console/WorkQueue.Console.csproj" />
   </Folder>
-  <Folder Name="/Solution Items/">
-    <File Path=".editorconfig" />
-    <File Path="Common.NuGet.Properties.xml" />
-    <File Path="Common.Properties.xml" />
-    <File Path="Directory.Packages.props" />
-    <File Path="global.json" />
-    <File Path="nuget.config" />
-    <File Path="Tests/Host.Test.Properties.xml" />
-  </Folder>
+
+  <!-- Tests and test fixtures -->
   <Folder Name="/Tests/">
-    <File Path="Tests/Host.Test.Properties.xml" />
+    <File Path="Tests/xunit.runner.json" />
     <Project Path="Tests/Sa.Configuration.PostgreSqlTests/Sa.Configuration.PostgreSqlTests.csproj" />
     <Project Path="Tests/Sa.ConfigurationTests/Sa.ConfigurationTests.csproj" />
     <Project Path="Tests/Sa.Data.PostgreSqlTests/Sa.Data.PostgreSqlTests.csproj" />
@@ -83,5 +93,16 @@
     <Project Path="Tests/Fixtures/Sa.Data.PostgreSql.Fixture/Sa.Data.PostgreSql.Fixture.csproj" />
     <Project Path="Tests/Fixtures/Sa.Data.S3.Fixture/Sa.Data.S3.Fixture.csproj" />
     <Project Path="Tests/Fixtures/Sa.Fixture/Sa.Fixture.csproj" />
+  </Folder>
+
+  <!-- Solution-level build configuration and metadata files -->
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="../.gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
+    <File Path="../global.json" />
+    <File Path="../nuget.config" />
   </Folder>
 </Solution>

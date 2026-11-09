@@ -24,7 +24,7 @@ Alternative to PowerShell `build/` — these scripts work on Linux/macOS.
 # Create NuGet packages
 ./do-package.sh
 
-# Push packages into the repository-local feed (src/nupkgs, the one src/nuget.config maps)
+# Push packages into the repository-local feed (src/nupkgs, the one nuget.config maps)
 ./do-push-local.sh
 
 # Push packages to nuget.org (API key from the environment, never echoed)
@@ -38,7 +38,7 @@ sudo ./do-fix-max-path-linux.sh
 ./do-secrets.sh decrypt secrets.lsr.dev.pub
 ./do-secrets.sh check
 
-# Container images the integration suites need (PostgreSQL, SeaweedFS, Ryuk)
+# Container images the integration suites need (PostgreSQL, SeaweedFS, Redis, Ryuk)
 ./do-docker-images.sh status
 ./do-docker-images.sh pull
 ./do-docker-images.sh save ./docker-images     # then copy the folder to the offline machine
@@ -56,12 +56,13 @@ Every integration test class starts its own container, but the image is pulled *
 reused from the local daemon — after that the suites need no registry at all. So a machine without
 registry access (or behind a tunnel slow enough to make pulls impractical) can still run them.
 
-- `./do-docker-images.sh pull` — pull the three images into the local daemon.
+- `./do-docker-images.sh pull` — pull the four images into the local daemon.
 - `./do-docker-images.sh save` / `load` — offline transfer: save on a connected machine, copy the
   `*.tar` files, load on the isolated one.
 - The image list lives in `tasks.sh` (`DOCKER_TEST_IMAGES`) and mirrors the fixture defaults in
-  `src/Tests/Fixtures/Sa.Data.PostgreSql.Fixture/PostgreSqlFixtureSettings.cs` and
-  `src/Tests/Fixtures/Sa.Data.S3.Fixture/S3FixtureSettings.cs`. Update both when bumping a tag.
+  `src/Tests/Fixtures/Sa.Data.PostgreSql.Fixture/PostgreSqlFixtureSettings.cs`,
+  `src/Tests/Fixtures/Sa.Data.S3.Fixture/S3FixtureSettings.cs` and
+  `src/Tests/Sa.Outbox.RedisTests/OutboxRedisFixture.cs`. Update them when bumping a tag.
 
 ### S3 server image
 
@@ -115,7 +116,7 @@ affected; everything else keeps using the tunnel. `off` removes the routes.
 - `dotnet test` runs from the `src/` directory (required by .NET 10 MTP runner).
 - Projects to package are defined in `tasks.sh` — same list as the PowerShell version.
 - `./do-push-local.sh` pushes to `src/nupkgs` directly, so no machine-level NuGet source is needed;
-  that folder is already the `Sa.*` source in `src/nuget.config`. A folder feed stores only
+  that folder is already the `Sa.*` source in the root `nuget.config`. A folder feed stores only
   `.nupkg` — `.snupkg` symbols need a symbol server, and NuGet warns that `--skip-duplicate` is not
   supported for this feed type.
 - `./do-push-prod.sh` requires `NUGET_API_KEY` and exits before pushing anything when it is unset.
@@ -133,7 +134,7 @@ Testcontainers PostgreSQL and the default is to start all of them at once:
   (`maxParallelThreads: 2`), which limits how many test classes run at once inside one assembly.
 
 `test_run()` also builds with `--no-restore` and runs the tests with `--no-build --no-restore`,
-restoring only when `src/.packages` is missing. That keeps NuGet off the critical path — a restore
+restoring only when `.packages` at the repo root is missing. That keeps NuGet off the critical path — a restore
 can stall behind a proxy. If a new package version lands in `src/Directory.Packages.props` the build
 fails with a NuGet "run a restore" error; run `./do-build.sh` once.
 

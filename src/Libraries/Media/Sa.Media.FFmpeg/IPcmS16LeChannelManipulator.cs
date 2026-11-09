@@ -1,4 +1,4 @@
-﻿namespace Sa.Media.FFmpeg;
+namespace Sa.Media.FFmpeg;
 
 /// <summary>
 /// Interface for splitting stereo PCM S16 LE audio into individual mono channel files.

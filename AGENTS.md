@@ -10,6 +10,9 @@ A monorepo of independent **Native AOT** .NET libraries (`Sa.*`) for distributed
 - Requires **.NET 10 SDK** (local: 10.0.x). Everything targets `net10.0` — a .NET 9 SDK cannot build it.
 - **Central Package Management**: all versions live in `src/Directory.Packages.props`. In a `.csproj`, add `<PackageReference Include="X" />` with **no `<Version/>`**.
 
+## Source file conventions
+- Text files are UTF-8 **without a BOM** and use **LF** line endings. `.editorconfig` (`charset = utf-8`, `end_of_line = lf`) and `.gitattributes` (`* text=auto eol=lf` plus per-extension rules) enforce this — do not commit CRLF or a BOM (a BOM breaks shell shebangs).
+
 ## Commands
 
 
@@ -18,23 +21,25 @@ A monorepo of independent **Native AOT** .NET libraries (`Sa.*`) for distributed
 |------|---------|
 | Build solution | `dotnet build src/Sa.slnx -c Release`  ·  or `./build-sh/do-build.sh` (clean+restore+build) |
 | Run **one** test project | `dotnet run --project src/Tests/<Name>`  |
-| Run **all** tests | `dotnet test --max-parallel-test-modules 2 --solution Sa.slnx --no-build --no-restore` **run from inside `src/`**  ·  or `./build-sh/do-test.sh` (builds first, then caps parallelism) |
-| CI-style test run (skip local-infra) | `dotnet test --solution Sa.slnx --filter "Category!=Local"` |
+| Run **all** tests | `dotnet test --max-parallel-test-modules 2 --solution src/Sa.slnx --no-build --no-restore` (any cwd)  ·  or `./build-sh/do-test.sh` (builds first, then caps parallelism) |
+| CI-style test run (skip local-infra) | `dotnet test --solution src/Sa.slnx --filter "Category!=Local"` |
 
 Build/test helpers live in **`build-sh/`** (POSIX bash, `tasks.sh` holds the shared functions). Entry points: `do-build.sh`, `do-test.sh`, `do-package.sh`, `do-push-local.sh`, `do-push-prod.sh`, `do-fix-max-path-linux.sh`.
 
 
-### ⚠️ `dotnet test` only works from inside `src/`
-`src/global.json` sets `"test": { "runner": "Microsoft.Testing.Platform" }`. This file is only discovered when the current directory is `src/` or below. **Running `dotnet test <project>` from the repo root fails** with:
+### `global.json` lives at the repository root
+`global.json` sets `"test": { "runner": "Microsoft.Testing.Platform" }`. It used to live in `src/`, which meant `dotnet test` only picked up the MTP driver when the current directory was `src/` or below; a run from the repo root failed with:
 
 ```
 error: Testing with VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK and later...
 ```
 
-- From `src/`: `dotnet test Tests/<Name>` ✅
-- From `src/`, single project with detail output (CI Windows leg): `dotnet test --project Tests/<Name> -c Release --no-build --no-restore -v n` ✅ — `-v` rejects a bare directory, so the target must be explicit; see *Test load is capped on purpose* below
-- From repo root: `dotnet run --project src/Tests/<Name>` ✅ (MTP exe; works from any cwd)
-- `./build-sh/do-test.sh` `cd`s into `src/` before `dotnet test`, so it works from any cwd.
+It now sits at the repository root, so it is discovered from any directory inside the repo. `dotnet` walks up from the current directory, so both shapes work:
+
+- From repo root: `dotnet test --project src/Tests/<Name> -c Release --no-build --no-restore` ✅
+- From `src/`: `dotnet test --project Tests/<Name> -c Release --no-build --no-restore` ✅
+- `dotnet run --project src/Tests/<Name>` ✅ (MTP exe; works from any cwd)
+- `./build-sh/do-test.sh` still `cd`s into `src/` before `dotnet test`; that is harmless.
 
 MTP CLI args go after `--`: simple filters `-class "FQN"`, `-method "FQN.Type.Method"`, `-namespace "name"`, `-displayName "name"`, `-trait "name=value"` (append `-` to exclude, e.g. `-class-`; wildcard `*` at start/end of the value OK). Repeating one filter type = OR, mixing different types = AND; you cannot mix simple and query filtering. Query filter: `-filter "/assembly/namespace/class/method[trait=value]"` (xunit query filter language). `-list <option>` lists tests/assembly info; `--help` shows the full list. Non-zero exit code on failure.
 
@@ -45,7 +50,7 @@ Two independent caps, one per level:
 
 | Level | Mechanism | Where |
 |---|---|---|
-| Within an assembly | xUnit `maxParallelThreads: 2` — caps concurrently running test *collections* (one collection per class) | `src/Tests/xunit.runner.json`, copied to every test output by `src/Tests/Host.Test.Properties.xml` |
+| Within an assembly | xUnit `maxParallelThreads: 2` — caps concurrently running test *collections* (one collection per class) | `src/Tests/xunit.runner.json`, copied to every test output by `src/Tests/Directory.Build.props` |
 | Across assemblies | `dotnet test --max-parallel-test-modules 2` | `build-sh/tasks.sh` → `test_run()`; override per machine with `SA_TEST_PARALLELISM=6 ./build-sh/do-test.sh` |
 
 Raise both on CI / beefier machines. `--max-parallel-test-modules` is only honoured while `dotnet test` stays on the MTP driver, and several ordinary-looking things quietly knock the invocation off that path — most of them die with `MSBUILD : error MSB1001: Unknown switch` once the switch is no longer consumed in leading position:
@@ -66,14 +71,21 @@ Raise both on CI / beefier machines. `--max-parallel-test-modules` is only honou
 - **No `--filter`.** It becomes the MSBuild property `VSTestTestCaseFilter`, with the same effect. That is why `test_ci()` passes `--filter` and no module cap. `testconfig.json` (`commandLineOptions`) is not an escape hatch here — the SDK's MTP build rejects `--config-file`.
 - **`MSBUILDDISABLENODEREUSE=1` when a build ran earlier in the same session.** A warm MSBuild worker node swallows the switch even when the command line is correct — the symptom is identical `MSB1001` on an invocation that worked moments before. `test_run()` sets it.
 
-`test_run()` therefore splits the work explicitly: `dotnet build --no-restore`, then `MSBUILDDISABLENODEREUSE=1 dotnet test --no-build --no-restore --max-parallel-test-modules N`. It restores first only when `src/.packages` is missing, so a warm checkout never touches the network. If a new package version lands in `src/Directory.Packages.props`, the build fails with a NuGet "run a restore" error — run `./build-sh/do-build.sh`. The CI workflow already uses the same restore-then-`--no-restore`-build split.
+`test_run()` therefore splits the work explicitly: `dotnet build --no-restore`, then `MSBUILDDISABLENODEREUSE=1 dotnet test --no-build --no-restore --max-parallel-test-modules N`. It restores first only when `.packages` (repository root) is missing, so a warm checkout never touches the network. If a new package version lands in `src/Directory.Packages.props`, the build fails with a NuGet "run a restore" error — run `./build-sh/do-build.sh`. The CI workflow already uses the same restore-then-`--no-restore`-build split.
 
 ### ⚠️ Exit code 8 = "a module discovered no tests" — and why the fixtures must stay out of discovery
-On SDK 10.0.112 a full `dotnet test --solution Sa.slnx` used to end with `Test run summary: Failed!`, `error: 3`, exit code 8 (MTP: "the session discovered no tests") although **every** real test assembly reported `passed` and the summary's `failed:` was 0. Cause: the three fixture projects under `src/Tests/Fixtures/` (`Sa.Fixture`, `Sa.Data.PostgreSql.Fixture`, `Sa.Data.S3.Fixture`) were discovered as test modules and each reported `Zero tests ran`. Fixed by `<IsTestingPlatformApplication>false</IsTestingPlatformApplication>` in those three `.csproj`s — they are referenced *by* test projects, they are not test modules themselves. Do not drop that property, and do not "fix" the symptom with `TESTINGPLATFORM_EXITCODE_IGNORE=8` in CI: that would also swallow an empty *real* test assembly, i.e. a whole suite silently not running. If exit 8 ever reappears, look for a project that has no tests but is still being discovered. (The .NET 11 SDK no longer fails the whole run for a single empty module.)
+On SDK 10.0.112 a full `dotnet test --solution Sa.slnx` used to end with `Test run summary: Failed!`, `error: 3`, exit code 8 (MTP: "the session discovered no tests") although **every** real test assembly reported `passed` and the summary's `failed:` was 0. Cause: the three fixture projects under `src/Tests/Fixtures/` (`Sa.Fixture`, `Sa.Data.PostgreSql.Fixture`, `Sa.Data.S3.Fixture`) were discovered as test modules and each reported `Zero tests ran`. Fixed by `<IsTestingPlatformApplication>false</IsTestingPlatformApplication>` (and `<IsTestProject>false</IsTestProject>`) in `src/Tests/Fixtures/Directory.Build.props` — fixtures are referenced *by* test projects, they are not test modules themselves. Do not drop that property, and do not "fix" the symptom with `TESTINGPLATFORM_EXITCODE_IGNORE=8` in CI: that would also swallow an empty *real* test assembly, i.e. a whole suite silently not running. If exit 8 ever reappears, look for a project that has no tests but is still being discovered. (The .NET 11 SDK no longer fails the whole run for a single empty module.)
 
 ## MSBuild structure
-- Every library imports `src/Common.NuGet.Properties.xml` → `src/Common.Properties.xml`, which sets: `net10.0`, `PublishAot=true`, `IsAotCompatible=true`, `Nullable`, analyzers, SourceLink, `GeneratePackageOnBuild=true`, and shared refs (Logging.Abstractions, DI, SourceLink). Set `<Version>` + `<Description>` in each lib's own `.csproj`.
-- Every test project imports `src/Tests/Host.Test.Properties.xml` (Exe output, MTP, `xunit.v3`, global `using Xunit`).
+- Settings live in a `Directory.Build.props` hierarchy; projects do **not** import shared `.props` files manually:
+  - `src/Directory.Build.props` — universal: `net10.0`, `ImplicitUsings`, `Nullable`, analyzers, repo metadata, `ArtifactsPath=src/artifacts`, `IsPackable=false`, CI-only `ContinuousIntegrationBuild`.
+  - `src/Libraries/Directory.Build.props` — libraries: `IsPackable=true`, shared `<Version>`, `IsAotCompatible=true` (not `PublishAot`), `EnableConfigurationBindingGenerator=true`, SourceLink + snupkg, packed `NuGet.md`/`icon.png`, shared refs (Logging.Abstractions, DI, SourceLink). Set only `<Description>` (and an optional per-project `<Version>`) in a library `.csproj`.
+  - `src/Tests/Directory.Build.props` — test host: `OutputType=Exe`, `IsTestProject=true`, `xunit.v3`, MTP, `xunit.runner.json` copy, global `using Xunit`.
+  - `src/Tests/Fixtures/Directory.Build.props` — `IsTestProject=false` + `IsTestingPlatformApplication=false` for fixture projects.
+  - `src/Samples/Directory.Build.props` / `src/Benchmarks/Directory.Build.props` — executable, non-packable, not test modules.
+- Nested `Directory.Build.props` files must import the parent explicitly via `$([MSBuild]::GetPathOfFileAbove(...))` — MSBuild only auto-imports the nearest one.
+- Central Package Management: `src/Directory.Packages.props` holds shared versions (`MicrosoftExtensionsVersion` property for the family), `src/Tests/Directory.Packages.props` imports it and adds test-only packages. `CentralPackageVersionOverrideEnabled=false` — do not use `VersionOverride`; add/change the version centrally.
+- `GeneratePackageOnBuild` is **off**: `dotnet build` never produces `.nupkg`. Packaging happens only through `./build-sh/do-package.sh` → `dotnet pack`.
 
 ### ⚠️ Shared source is *linked*, not referenced
 `src/Libraries/Sa/Classes/*.cs` and `src/Libraries/Sa/Extensions/*.cs` are pulled into many packages via `<Compile Include="..\..\Sa\...cs" Link="..." />` (`..\Sa\...` from the four root projects) — see Sa.Outbox, Sa.Outbox.PostgreSql, Sa.Partitional.PostgreSql, Sa.Schedule, Sa.Data.PostgreSql, Sa.HybridFileStorage.S3. Consequences:
@@ -84,14 +96,14 @@ On SDK 10.0.112 a full `dotnet test --solution Sa.slnx` used to end with `Test r
 Dependency graph (who references whom): `Sa.Utils.WorkQueue` → `Sa.Schedule` → `Sa.Outbox` → `Sa.Outbox.PostgreSql`; `Sa.Partitional.PostgreSql` → `Sa.Schedule` + `Sa.Data.PostgreSql`; `Sa.HybridFileStorage.S3` → `Sa.Data.S3` + base.
 
 ## Skills
-- Project skills live in `.opencode/skills/<name>/SKILL.md` and are **git-ignored** (`.opencode/**`), like `.github/skills/` and `.qwen/skills/`. They are local tooling, not part of the shipped repo; the process they support is documented in `docs/development/sdd-workflow.md`.
+- Project skills live in `.opencode/skills/<name>/SKILL.md` and are **git-ignored** (`.opencode/**`), like `.github/skills/` and `.qwen/skills/`. They are local tooling, not part of the shipped repo.
 - `grilling`, `grill-me`, `grill-with-docs`, `domain-modeling` are vendored from <https://github.com/mattpocock/skills> (MIT, pinned in `.opencode/skills/_upstream.md`). `grill-me` / `grill-with-docs` are explicit-invocation only (`permission.skill.* = "ask"` in `opencode.jsonc`).
-- `/grill-me` interviews about an idea and writes nothing; `/grill-with-docs` does the same and records terms in `GLOSSARY.md` + ADRs in `docs/decisions/`. Both are step 0 of the SDD lifecycle, before a spec is written. `grill-with-docs` needs Build mode — it writes files.
+- `/grill-me` interviews about an idea and writes nothing; `/grill-with-docs` does the same and records terms in `GLOSSARY.md`. The repository keeps no `docs/`, `specs/` or ADR folder — decisions live in commit messages and the glossary. `grill-with-docs` needs Build mode — it writes files.
 
 ## Tests
 - **xUnit v3** on Microsoft.Testing.Platform (test projects are executables). Not classic xUnit — see the `xunit3` skill (`.opencode/skills/xunit3/`) for the v3 API, and `.github/skills/migrate-xunit-to-xunit-v3/` for the migration patterns.
 - Cancellation token comes from **`TestContext.Current.CancellationToken`** (house pattern: a static `TestToken` property on the test class).
-- Integration tests use **Testcontainers** (PostgreSQL + SeaweedFS) via fixtures in `src/Tests/Fixtures/` — **Docker must be running** for those suites. One container per test class, so concurrency is deliberately throttled — see *Test load is capped on purpose* above.
+- Integration tests use **Testcontainers** (PostgreSQL + SeaweedFS + Redis) via fixtures in `src/Tests/` — **Docker must be running** for those suites. One container per test class, so concurrency is deliberately throttled — see *Test load is capped on purpose* above.
 - Images are pulled **once** and then reused from the local daemon; after that the suites need no registry. `./build-sh/do-docker-images.sh {status|pull|save|load}` warms a machine up, and `save`/`load` moves the tars to one without registry access.
 - The S3 server image is **SeaweedFS** (`chrislusf/seaweedfs`), **not** MinIO: `minio/minio` no longer answers anonymous pulls on Docker Hub, and `quay.io/minio/minio` rejects them too. The fixture runs `mini` (master+volume+filer+S3 in one process) on port 8333 with `-s3.autoCreateBucket=false`, so a missing bucket fails like it did on MinIO — see `S3Fixture.CreateBuilder`.
 - If a VPN tunnel owns the default route, pulls crawl. `sudo ./build-sh/do-docker-bypass.sh {on|off|status}` routes the registry and its CDN around the tunnel; see `build-sh/readme.md`.
@@ -99,5 +111,5 @@ Dependency graph (who references whom): `Sa.Utils.WorkQueue` → `Sa.Schedule` �
 - Each lib declares `<InternalsVisibleTo Include="<Name>.Tests" />`, so tests can touch `internal` members.
 
 ## NuGet / packaging quirks
-- `src/nuget.config` sets the global package cache to **`src/.packages`** (not the default `~/.nuget/packages`) and maps `Sa.*` to a local feed `./nupkgs` (nuget.org for everything else).
+- `nuget.config` at the repository root sets the global package cache to **`.packages`** (not the default `~/.nuget/packages`) and maps `Sa.*` to a local feed `./src/nupkgs` (nuget.org for everything else). Because it sits at the root, restore resolves the same config from any cwd.
 

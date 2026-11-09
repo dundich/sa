@@ -1,4 +1,4 @@
-﻿namespace Sa.Media;
+namespace Sa.Media;
 
 /// <summary>
 /// Нормализованные double-сэмплы

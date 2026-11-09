@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using Sa.Outbox.PostgreSql.Services;
 
 namespace Sa.Outbox.PostgreSql.Configuration;

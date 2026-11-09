@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using System.Net.Sockets;
 
 namespace Sa.Partitional.PostgreSql;

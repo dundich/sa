@@ -1,4 +1,4 @@
-﻿using Sa.Partitional.PostgreSql;
+using Sa.Partitional.PostgreSql;
 using Sa.Schedule;
 
 namespace Sa.Outbox.PostgreSql.Interceptors;

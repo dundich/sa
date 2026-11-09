@@ -1,4 +1,4 @@
-﻿using Sa.Partitional.PostgreSql.Classes;
+using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql;
 
 namespace Sa.Partitional.PostgreSqlTests.Classes;

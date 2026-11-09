@@ -1,4 +1,4 @@
-﻿using Sa.Configuration.SecretStore.Stores;
+using Sa.Configuration.SecretStore.Stores;
 
 namespace Sa.ConfigurationTests;
 

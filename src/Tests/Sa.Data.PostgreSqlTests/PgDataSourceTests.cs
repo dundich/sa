@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Data.PostgreSql.Fixture;

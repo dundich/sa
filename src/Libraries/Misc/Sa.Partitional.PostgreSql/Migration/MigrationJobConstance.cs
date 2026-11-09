@@ -1,4 +1,4 @@
-﻿namespace Sa.Partitional.PostgreSql.Migration;
+namespace Sa.Partitional.PostgreSql.Migration;
 
 /// <summary>
 /// Constants used by the migration background job (identifier and default name).

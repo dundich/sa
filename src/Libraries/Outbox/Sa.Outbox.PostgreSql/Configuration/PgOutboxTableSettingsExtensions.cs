@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSql.Configuration;
+namespace Sa.Outbox.PostgreSql.Configuration;
 
 public static class PgOutboxTableSettingsExtensions
 {

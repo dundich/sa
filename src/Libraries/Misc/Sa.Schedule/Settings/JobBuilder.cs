@@ -1,4 +1,4 @@
-﻿using Sa.Schedule.Cron;
+using Sa.Schedule.Cron;
 
 namespace Sa.Schedule.Settings;
 

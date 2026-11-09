@@ -1,4 +1,4 @@
-﻿using Sa.Media.Echo;
+using Sa.Media.Echo;
 
 namespace Sa.MediaTests.Echo;
 

@@ -1,4 +1,4 @@
-﻿using Sa.Fixture;
+using Sa.Fixture;
 using Sa.Schedule;
 
 namespace Sa.ScheduleTests;

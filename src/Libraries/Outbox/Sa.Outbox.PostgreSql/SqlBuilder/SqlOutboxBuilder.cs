@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Delivery;
+using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Configuration;
 using System.Text;
 

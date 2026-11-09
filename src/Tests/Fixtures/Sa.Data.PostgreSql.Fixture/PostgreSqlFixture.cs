@@ -1,4 +1,4 @@
-﻿using Sa.Fixture;
+using Sa.Fixture;
 using Testcontainers.PostgreSql;
 
 namespace Sa.Data.PostgreSql.Fixture;

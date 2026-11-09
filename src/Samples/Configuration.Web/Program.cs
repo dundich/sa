@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using Sa.Configuration;
 using Sa.Configuration.PostgreSql;
 using Sa.Data.PostgreSql;

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sa.Fixture;
 using Sa.HybridFileStorage;
 using Sa.HybridFileStorage.Domain;

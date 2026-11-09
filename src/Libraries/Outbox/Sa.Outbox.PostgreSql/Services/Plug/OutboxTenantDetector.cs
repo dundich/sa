@@ -1,4 +1,4 @@
-﻿using Sa.Data.PostgreSql;
+using Sa.Data.PostgreSql;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 

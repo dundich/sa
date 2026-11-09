@@ -1,4 +1,4 @@
-﻿using Sa.Configuration.SecretStore.Engine;
+using Sa.Configuration.SecretStore.Engine;
 
 namespace Sa.Configuration.SecretStore.Stores;
 

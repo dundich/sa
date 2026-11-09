@@ -1,4 +1,4 @@
-﻿using Sa.Media.FFmpeg.Services;
+using Sa.Media.FFmpeg.Services;
 
 namespace Sa.Media.FFmpeg;
 

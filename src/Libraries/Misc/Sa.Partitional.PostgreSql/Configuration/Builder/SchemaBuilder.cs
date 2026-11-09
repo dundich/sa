@@ -1,4 +1,4 @@
-﻿namespace Sa.Partitional.PostgreSql.Configuration.Builder;
+namespace Sa.Partitional.PostgreSql.Configuration.Builder;
 
 internal sealed class SchemaBuilder(string schemaName) : ISchemaBuilder
 {

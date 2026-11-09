@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using Sa.Outbox.PlugServices;
 
 namespace Sa.Outbox.PostgreSql.Commands;

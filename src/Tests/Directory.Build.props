@@ -1,0 +1,43 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!-- xUnit v3 test projects are executables; the MTP driver is selected via src/global.json. -->
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>1591;1701;1702;IDE1006;S3776</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Shared xUnit runner config. xUnit treats every test class as its own collection and runs
+    collections in parallel; in this repo most of those classes spin up a Testcontainers
+    PostgreSQL (or SeaweedFS) instance in their fixture, so an unbounded default starts a dozen
+    database containers at once and exhausts RAM on a normal dev machine.
+    `maxParallelThreads` caps how many collections execute at the same time, which caps the number
+    of live containers per test assembly. Raise it (or delete the file) on beefier machines / CI.
+  -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)xunit.runner.json"
+          Link="xunit.runner.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <!-- IOptions<T> / IOptionsMonitor<T> / OptionsValidationException in provider registration tests. -->
+    <PackageReference Include="Microsoft.Extensions.Options" />
+
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.Delivery.Job;
+using Sa.Outbox.Delivery.Job;
 using Sa.Outbox.Metadata;
 using Sa.Schedule;
 

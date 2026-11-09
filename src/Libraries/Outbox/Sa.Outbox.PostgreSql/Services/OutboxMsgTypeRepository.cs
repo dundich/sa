@@ -1,4 +1,4 @@
-﻿using Sa.Outbox.PostgreSql.Commands;
+using Sa.Outbox.PostgreSql.Commands;
 
 namespace Sa.Outbox.PostgreSql.Services;
 

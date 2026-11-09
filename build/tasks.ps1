@@ -1,4 +1,4 @@
-﻿
+
 $root = [System.IO.Path]::GetFullPath("$PSScriptRoot\..")
 
 $sln_file = "$root\src\Sa.slnx"
@@ -32,6 +32,7 @@ $projects = @(
 
 	"Sa.Outbox",
 	"Sa.Outbox.PostgreSql",
+	"Sa.Outbox.Redis",
 
 	"Sa.HybridFileStorage",
 	"Sa.HybridFileStorage.FileSystem",
@@ -100,7 +101,7 @@ function Test() {
 	# Restore only when there is no package cache yet, so a warm checkout never touches the network.
 	# If a new package version shows up in Directory.Packages.props the build below fails with a
 	# NuGet "run a restore" error — that is the signal to run .\build\do_build.ps1.
-	if (-not (Test-Path "$root\src\.packages")) {
+	if (-not (Test-Path "$root\.packages")) {
 		NuRestore
 	}
 

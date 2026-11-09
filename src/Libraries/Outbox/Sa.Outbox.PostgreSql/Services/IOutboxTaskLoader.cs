@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSql.Services;
+namespace Sa.Outbox.PostgreSql.Services;
 
 
 public sealed record LoadGroupResult(int CopiedRows, long NewOffset)

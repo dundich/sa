@@ -1,4 +1,4 @@
-﻿using Sa.Classes;
+using Sa.Classes;
 using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
 using System.Runtime.CompilerServices;

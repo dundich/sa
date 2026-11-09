@@ -1,4 +1,4 @@
-﻿namespace Sa.Outbox.PostgreSql.Serialization;
+namespace Sa.Outbox.PostgreSql.Serialization;
 
 /// <summary>
 /// Compatibility alias for <see cref="Sa.Outbox.Serialization.IOutboxMessageSerializer"/>, kept so

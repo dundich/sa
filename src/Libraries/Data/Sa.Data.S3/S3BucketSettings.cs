@@ -1,4 +1,4 @@
-﻿namespace Sa.Data.S3;
+namespace Sa.Data.S3;
 
 /// <summary>
 /// Represents the settings required to configure an S3 bucket connection.
