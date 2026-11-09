@@ -72,19 +72,15 @@ public sealed class DatabaseConfigurationExtensionsTests(DatabaseConfigurationEx
         // Arrange
         var builder = new ConfigurationBuilder();
 
-        var options = new PostgreSqlConfigurationOptions(
-            fixture.ConnectionString,
-            "SELECT key, value FROM configuration");
+        var options = new PostgreSqlConfigurationOptions("SELECT key, value FROM configuration");
 
         // Act
-        builder.AddSaPostgreSqlConfiguration(options);
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 
-        var optionsEx = new PostgreSqlConfigurationOptions(
-                fixture.ConnectionString,
-                "SELECT key, value FROM configuration_ex where client_id = @client_id",
+        var optionsEx = new PostgreSqlConfigurationOptions("SELECT key, value FROM configuration_ex where client_id = @client_id",
                 new NpgsqlParameter("client_id", 1));
 
-        builder.AddSaPostgreSqlConfiguration(optionsEx);
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, optionsEx);
 
 
         var configuration = builder.Build();

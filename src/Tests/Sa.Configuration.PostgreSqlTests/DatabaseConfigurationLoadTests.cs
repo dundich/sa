@@ -201,13 +201,13 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     }
 
     [Fact]
-    public void Dispose_ReleasesOwnedDataSource_ExactlyOnce()
+    public void Dispose_IsIdempotent_AndNeverClosesABorrowedDataSource()
     {
-        // Arrange
+        // Ownership moved to the source: only the ConnectionString strategy lets the source create
+        // (and therefore dispose) a pool. A source handed in by the caller is never closed.
         var dataSource = DataSource(failuresBeforeSuccess: 0);
 
-        var provider = new DatabaseConfigurationProvider(
-            Options(SelectSql), dataSource, ownsDataSource: true);
+        var provider = Provider(Options(SelectSql), dataSource, ownsSource: true);
         provider.Load();
 
         // Act
@@ -215,7 +215,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         provider.Dispose();
 
         // Assert
-        Assert.Equal(1, dataSource.DisposeCount);
+        Assert.Equal(0, dataSource.DisposeCount);
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         // Arrange
         var dataSource = DataSource(failuresBeforeSuccess: 0);
 
-        var provider = new DatabaseConfigurationProvider(Options(SelectSql), dataSource);
+        var provider = Provider(Options(SelectSql), dataSource);
         provider.Load();
 
         // Act
@@ -235,22 +235,21 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     }
 
     [Fact]
-    public void ConfigurationRoot_Disposes_OwnedDataSource()
+    public void ConfigurationRoot_DisposesTheProvider_WithoutClosingABorrowedDataSource()
     {
-        // Arrange — a source that builds an *owning* provider, so the pool has to be released
-        // by whoever disposes the configuration root.
+        // Arrange — a source that builds an *owning* provider. Ownership of a passed-in data source
+        // stays with the caller, so disposing the root must reach the provider without closing it.
         var dataSource = DataSource(failuresBeforeSuccess: 0);
         var builder = new ConfigurationBuilder();
         builder.Add(new FixedProviderSource(
-            new DatabaseConfigurationProvider(Options(SelectSql), dataSource, ownsDataSource: true)));
+            Provider(Options(SelectSql), dataSource, ownsSource: true)));
 
         // Act — IConfigurationRoot itself is not IDisposable; the concrete ConfigurationRoot is.
         var root = builder.Build();
-        Assert.Equal(0, dataSource.DisposeCount);
         ((IDisposable)root).Dispose();
 
-        // Assert — ConfigurationRoot must reach the provider's IDisposable.
-        Assert.Equal(1, dataSource.DisposeCount);
+        // Assert
+        Assert.Equal(0, dataSource.DisposeCount);
     }
 
     #endregion
@@ -263,7 +262,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     {
         // Arrange
         using var dataSource = DataSource(failuresBeforeSuccess: 0);
-        var provider = new DatabaseConfigurationProvider(Options(SelectSql), dataSource);
+        var provider = Provider(Options(SelectSql), dataSource);
 
         var fired = 0;
         using var registration = provider.GetReloadToken()
@@ -287,7 +286,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         await cts.CancelAsync();
 
         using var dataSource = DataSource(failuresBeforeSuccess: 0);
-        var provider = new DatabaseConfigurationProvider(Options(SelectSql), dataSource);
+        var provider = Provider(Options(SelectSql), dataSource);
 
         // Act — cancellation must stay observable as cancellation, not as a wrapped load failure.
         var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -319,11 +318,17 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     }
 
     [Fact]
-    public void AddSaPostgreSqlConfiguration_Throws_OnBlankConnectionString()
+    public void AddSaPostgreSqlConfiguration_Throws_OnNullConnection()
     {
         var builder = new ConfigurationBuilder();
-        Assert.Throws<ArgumentException>(
-            () => builder.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions("  ", SelectSql)));
+        Assert.Throws<ArgumentNullException>(
+            () => builder.AddSaPostgreSqlConfiguration((PgConfigurationConnection)null!, Options(SelectSql)));
+    }
+
+    [Fact]
+    public void ConnectionString_Throws_OnBlankValue()
+    {
+        Assert.Throws<ArgumentException>(() => PgConfigurationConnection.ConnectionString("  "));
     }
 
     [Fact]
@@ -332,7 +337,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         var builder = new ConfigurationBuilder();
         Assert.Throws<ArgumentException>(
             () => builder.AddSaPostgreSqlConfiguration(
-                new PostgreSqlConfigurationOptions(fixture.ConnectionString, " ")));
+                fixture.ConnectionString, new PostgreSqlConfigurationOptions(" ")));
     }
 
     [Fact]
@@ -341,7 +346,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         var builder = new ConfigurationBuilder();
         Assert.Throws<ArgumentOutOfRangeException>(
             () => builder.AddSaPostgreSqlConfiguration(
-                new PostgreSqlConfigurationOptions(fixture.ConnectionString, SelectSql) { MaxAttempts = -1 }));
+                fixture.ConnectionString, new PostgreSqlConfigurationOptions(SelectSql) { MaxAttempts = -1 }));
     }
 
     [Fact]
@@ -349,40 +354,55 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     {
         var builder = new ConfigurationBuilder();
         Assert.Throws<ArgumentNullException>(
-            () => builder.AddSaPostgreSqlConfiguration(
-                new PostgreSqlConfigurationOptions(fixture.ConnectionString, SelectSql), null!));
+            () => builder.AddSaPostgreSqlConfiguration((IPgDataSource)null!, Options(SelectSql)));
     }
 
     [Fact]
-    public void AddSaPostgreSqlConfiguration_AllowsBlankConnectionString_WithSharedDataSource()
+    public void AddSaPostgreSqlConfiguration_Throws_OnClientAndClientColumnTogether()
     {
-        // The data source carries the connection, so the connection string is irrelevant here.
+        var builder = new ConfigurationBuilder();
+        Assert.Throws<ArgumentException>(
+            () => builder.AddSaPostgreSqlConfiguration(
+                fixture.ConnectionString,
+                new PostgreSqlConfigurationOptions(SelectSql) { Client = "acme", ClientColumn = "client_id" }));
+    }
+
+    [Fact]
+    public void AddSaPostgreSqlConfiguration_UsesSharedDataSource_WithoutAnyConnectionString()
+    {
         using var dataSource = DataSource(failuresBeforeSuccess: 0);
 
         var builder = new ConfigurationBuilder();
-        builder.AddSaPostgreSqlConfiguration(
-            new PostgreSqlConfigurationOptions(string.Empty, SingleRowSql), dataSource);
+        builder.AddSaPostgreSqlConfiguration(dataSource, Options(SingleRowSql));
 
         Assert.Equal("normal_value", builder.Build()["NormalKey"]);
     }
 
     [Fact]
-    public void ToString_RedactsSecrets()
+    public void ToString_RedactsParameters()
     {
-        // Neither parameter values nor the connection string's password may reach a log line
-        // through an interpolated options object.
+        // Parameter values routinely carry secrets, so they may never reach a log line.
         var options = new PostgreSqlConfigurationOptions(
-            "Host=db;Database=app;Password=conn-secret",
             SelectSql,
             new NpgsqlParameter("pwd", "param-secret"));
 
         var text = options.ToString();
 
         Assert.DoesNotContain("param-secret", text);
+        Assert.Contains("1 item(s)", text);
+        Assert.Contains(nameof(PostgreSqlConfigurationOptions), text);
+    }
+
+    [Fact]
+    public void Connection_ToString_RedactsThePassword()
+    {
+        var connection = PgConfigurationConnection.ConnectionString(
+            "Host=db;Database=app;Password=conn-secret");
+
+        var text = connection.ToString();
+
         Assert.DoesNotContain("conn-secret", text);
         Assert.Contains("***", text);
-        Assert.Contains("Host=db", text);
-        Assert.Contains(nameof(PostgreSqlConfigurationOptions), text);
     }
 
     #endregion
@@ -504,11 +524,15 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     #endregion
 
 
+    private static DatabaseConfigurationProvider Provider(
+        PostgreSqlConfigurationOptions options, IPgDataSource dataSource, bool ownsSource = false)
+        => new(new DatabaseConfigurationSource(options, dataSource), options, ownsSource);
+
     private FaultInjectingDataSource DataSource(int failuresBeforeSuccess, FailureKind failure = FailureKind.Transient)
         => new(IPgDataSource.Create(fixture.ConnectionString), failuresBeforeSuccess, failure);
 
     private PostgreSqlConfigurationOptions Options(string selectSql, int maxAttempts = 3)
-        => new(fixture.ConnectionString, selectSql)
+        => new(selectSql)
         {
             // Keep the suite fast: the first retry is always immediate.
             MaxAttempts = maxAttempts,

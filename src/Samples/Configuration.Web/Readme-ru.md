@@ -88,61 +88,96 @@ sa_secret= "ТОП СЕКРЕТ!"
 ```csharp
 var builder = WebApplication.CreateSlimBuilder(args);
 
-// Шаг 1: Подключаем секреты + CLI аргументы + переменные окружения
-builder.Configuration.AddSaConfiguration();
+// Статический слой: хост уже добавил appsettings/env/args. Sa добавляет pass секретов и
+// клиентский оверлей.
+builder.Configuration.AddSaConfiguration(sa =>
+{
+    sa.UseSecrets();
+    sa.UseClients();
+});
 
 const string PG_KEY = "sa:pg:connection";
 string connectionString = builder.Configuration[PG_KEY]
     ?? throw new ArgumentException(PG_KEY);
 
-// Шаг 2: Создаём источник данных PostgreSQL
 using var ds = IPgDataSource.Create(connectionString);
 
-// Шаг 3: Создаём таблицу настроек (если не существует)
+// Одна таблица для всего: client_id NULL — базовые значения, непустой client_id — переопределения
+// этого клиента.
 ds.ExecuteScalar("""
     CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
+        client_id TEXT,
+        key       TEXT NOT NULL,
+        value     TEXT NOT NULL
     );
-    INSERT INTO settings (key, value)
-    VALUES ('theme', 'dark'), ('language', 'en'), ('notifications', 'enabled')
-    ON CONFLICT (key) DO NOTHING;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS settings_client_key
+        ON settings ((COALESCE(client_id, '')), key);
+
+    INSERT INTO settings (client_id, key, value) VALUES
+        (NULL,   'theme',         'dark'),
+        (NULL,   'language',      'en'),
+        (NULL,   'notifications', 'enabled'),
+        ('acme', 'theme',         'light'),
+        ('acme', 'notifications', 'disabled'),
+        ('beta', 'language',      'de')
+    ON CONFLICT DO NOTHING;
 """, null).Wait();
 
-// Шаг 4: Добавляем PostgreSQL как источник динамической конфигурации
-// Приложение уже держит свой источник данных, поэтому передаём его, вместо того чтобы
-// заставлять источник конфигурации открывать второй пул. Владение остаётся здесь —
-// провайдер никогда не освобождает `ds`, и подключение несёт источник данных,
-// поэтому строка подключения игнорируется.
+// Динамический слой: пул приложения, поэтому второй пул не открывается, а явная стратегия
+// делает значения доступными сразу.
 builder.Configuration.AddSaPostgreSqlConfiguration(
+    PgConfigurationConnection.DataSource(ds),
     new PostgreSqlConfigurationOptions(
-        ConnectionString: string.Empty,
-        // Называем колонки явно: провайдер берёт первые две как (key, value), поэтому
-        // порядок колонок — часть контракта, а `select *` делал бы его неявным.
-        SelectSql: "select key, value from settings"),
-    ds);
+        // Порядок колонок — часть контракта: client, key, value.
+        SelectSql: "SELECT client_id, key, value FROM settings")
+    {
+        ClientColumn = "client_id",
+    });
 
-// Шаг 5: Регистрируем эндпоинты
+// Runtime: обновление по требованию (фонового таймера по умолчанию нет) и keyed IConfiguration
+// на каждого клиента.
+builder.Services.AddSaConfigurationRuntime(builder.Configuration, runtime =>
+{
+    runtime.KeyedClientConfigurations = true;
+});
+
 var app = builder.Build();
 
-var todosApi = app.MapGroup("/settings");
+var settingsApi = app.MapGroup("/settings");
 
-// Строка подключения содержит пароль, поэтому отдавать её клиенту как есть нельзя.
-// Маскируем для показа; всё остальное на этом эндпоинте выводится дословно.
-static string MaskPassword(string? connectionString) => connectionString is null
-    ? string.Empty
-    : new NpgsqlConnectionStringBuilder(connectionString) { Password = "***" }.ConnectionString;
-
-todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
+// Базовые значения + клиенты, объявленные в переопределениях.
+settingsApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
     new (Key: PG_KEY, Value: MaskPassword(configuration[PG_KEY])),
     new (Key: "theme", Value: configuration["theme"]),
     new (Key: "language", Value: configuration["language"]),
     new (Key: "notifications", Value: configuration["notifications"]),
-    new (Key: "secret", Value: configuration["secret"])
-}).WithName("GetSettings");
+    new (Key: "secret", Value: configuration["secret"]),
+    new (Key: "clients", Value: string.Join(", ", configuration.GetClientNames()))
+});
+
+// Один клиент: его переопределения поверх базовых значений. Неизвестный клиент читает базу.
+settingsApi.MapGet("/{client}", (string client, IConfiguration configuration) =>
+{
+    IConfiguration view = configuration.ForClient(client);
+    return new Settings[] {
+        new (Key: "theme", Value: view["theme"]),
+        new (Key: "language", Value: view["language"]),
+        new (Key: "notifications", Value: view["notifications"]),
+    };
+});
+
+// Обновляем только динамический слой: файлы на диске не перечитываются.
+settingsApi.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
+{
+    await reloader.ReloadDynamicAsync();
+    return Results.Ok();
+});
 ```
 
-### Ожидаемый Ответ
+### Ожидаемые ответы
+
+`GET /settings` — базовые значения и найденные клиенты:
 
 ```json
 [
@@ -150,14 +185,26 @@ todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
   { "key": "theme",             "value": "dark" },
   { "key": "language",          "value": "en" },
   { "key": "notifications",     "value": "enabled" },
-  { "key": "secret",            "value": "ТОП СЕКРЕТ!" }
+  { "key": "secret",            "value": "ENCRYPTED DEMO SECRET" },
+  { "key": "clients",           "value": "acme, beta" }
 ]
 ```
 
-Обратите внимание, что пароль замаскирован: `NpgsqlConnectionStringBuilder` нормализует
-имена параметров при разборе и сборке строки, поэтому в выводе будет `Username=…` и
-`Search Path=…`, а не написание `User ID=…` и `SearchPath=…` из `secrets.txt`. Это
-пересобранная строка подключения, а не исходная.
+`GET /settings/acme` — оверлей (меняется только то, что перекрывает acme):
+
+```json
+[
+  { "key": "theme",             "value": "light" },
+  { "key": "language",          "value": "en" },
+  { "key": "notifications",     "value": "disabled" }
+]
+```
+
+`GET /settings/beta` — `"language": "de"`, остальное из базы.
+
+Пароль маскируется: `NpgsqlConnectionStringBuilder` нормализует ключевые слова, поэтому в выводе
+`Username=…` / `Search Path=…`, а не `User ID=…` / `SearchPath=…` из `secrets.txt`. Это
+перерисовка строки подключения, а не исходная строка.
 
 ---
 

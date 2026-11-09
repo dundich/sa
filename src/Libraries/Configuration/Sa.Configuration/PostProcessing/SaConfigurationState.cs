@@ -37,6 +37,12 @@ internal sealed class SaConfigurationState
     /// <summary>Custom transforms, applied after the built-in ones in registration order.</summary>
     public List<ISaConfigurationTransform> Transforms { get; } = [];
 
+    /// <summary>
+    /// Section that holds per-client overrides. When set, the key aliases apply inside every
+    /// client prefix as well. <see langword="null"/> keeps aliases global only.
+    /// </summary>
+    public string? ClientsSectionPath { get; set; }
+
     /// <summary>The single command-line source this configuration owns, if any.</summary>
     public ArgumentsConfigurationSource? CommandLineSource { get; set; }
 
@@ -61,6 +67,19 @@ internal sealed class SaConfigurationState
         SaConfigurationState created = new();
         builder.Properties[PropertyKey] = created;
         return created;
+    }
+
+    /// <summary>
+    /// Returns the state stored on <paramref name="builder"/>, or <see langword="null"/> when the
+    /// post-processing pipeline was never registered.
+    /// </summary>
+    public static SaConfigurationState? Find(IConfigurationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        return builder.Properties.TryGetValue(PropertyKey, out object? value)
+            ? value as SaConfigurationState
+            : null;
     }
 
     /// <summary>
@@ -136,7 +155,7 @@ internal sealed class SaConfigurationState
             transforms.Add(new SecretSubstitutionTransform(GetSecrets));
 
         if (Aliases.Count > 0)
-            transforms.Add(new KeyAliasTransform(Aliases, CanonicalValueWins));
+            transforms.Add(new KeyAliasTransform(Aliases, CanonicalValueWins, ClientsSectionPath));
 
         transforms.AddRange(Transforms);
         return transforms;

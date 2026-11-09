@@ -38,9 +38,10 @@ Open `http://localhost:5245/settings` in your browser to see all configuration v
 ## What This Sample Demonstrates
 
 1. **Secrets Management** — `{{sa_secret}}` placeholders in `appsettings.json` are resolved from a chain of stores: CLI arguments → environment variables → `.env` → encrypted files → plaintext files. This sample commits an AES-256-GCM-encrypted `secrets.lsr.Development.pub`.
-2. **Dynamic Configuration from PostgreSQL** — Application settings (`theme`, `language`, `notifications`) are stored in a DB table and reflected in-app without restart.
-3. **CLI Argument Parsing** — The `Arguments` class is wired through `AddSaConfiguration()` for command-line secret overrides.
-4. **Zero ORM** — No EF Core or migrations. Just raw Npgsql with `CREATE TABLE IF NOT EXISTS`.
+2. **Dynamic Configuration from PostgreSQL** — Application settings live in a DB table and are reflected in-app without a restart; `POST /settings/reload` refreshes only that layer.
+3. **Per-client overrides** — the same table carries `client_id`; `GET /settings/{client}` lays `acme`'s or `beta`'s rows over the shared ones, and no background service is registered.
+4. **CLI Argument Parsing** — The `Arguments` class is wired through `AddSaConfiguration()` for command-line secret overrides.
+5. **Zero ORM** — No EF Core or migrations. Just raw Npgsql with `CREATE TABLE IF NOT EXISTS`.
 
 ---
 
@@ -115,60 +116,95 @@ sa_secret= "TOP SECRET!"
 ```csharp
 var builder = WebApplication.CreateSlimBuilder(args);
 
-// Step 1: Wire up secrets + CLI args + env vars
-builder.Configuration.AddSaConfiguration();
+// Static layer: the host already added appsettings/env/args. Sa adds the secret pass and the
+// per-client overlay.
+builder.Configuration.AddSaConfiguration(sa =>
+{
+    sa.UseSecrets();
+    sa.UseClients();
+});
 
 const string PG_KEY = "sa:pg:connection";
 string connectionString = builder.Configuration[PG_KEY]
     ?? throw new ArgumentException(PG_KEY);
 
-// Step 2: Create PostgreSQL data source
 using var ds = IPgDataSource.Create(connectionString);
 
-// Step 3: Create settings table (if not exists)
+// One table for everything: client_id NULL holds the base values, a non-null client_id holds that
+// client's overrides.
 ds.ExecuteScalar("""
     CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
+        client_id TEXT,
+        key       TEXT NOT NULL,
+        value     TEXT NOT NULL
     );
-    INSERT INTO settings (key, value)
-    VALUES ('theme', 'dark'), ('language', 'en'), ('notifications', 'enabled')
-    ON CONFLICT (key) DO NOTHING;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS settings_client_key
+        ON settings ((COALESCE(client_id, '')), key);
+
+    INSERT INTO settings (client_id, key, value) VALUES
+        (NULL,   'theme',         'dark'),
+        (NULL,   'language',      'en'),
+        (NULL,   'notifications', 'enabled'),
+        ('acme', 'theme',         'light'),
+        ('acme', 'notifications', 'disabled'),
+        ('beta', 'language',      'de')
+    ON CONFLICT DO NOTHING;
 """, null).Wait();
 
-// Step 4: Add PostgreSQL as dynamic config source
-// The application already holds a data source, so hand it over instead of letting the
-// configuration source open a second pool. Ownership stays here — `ds` is never disposed
-// by the provider, and it carries the connection, so the connection string is ignored.
+// Dynamic layer: the application's own pool, so no second connection pool is opened, and the
+// explicit strategy means the values are available immediately.
 builder.Configuration.AddSaPostgreSqlConfiguration(
+    PgConfigurationConnection.DataSource(ds),
     new PostgreSqlConfigurationOptions(
-        ConnectionString: string.Empty,
-        // Name the columns: the provider takes the first two as (key, value), so the column
-        // order is part of the contract and `select *` would make it an implicit one.
-        SelectSql: "select key, value from settings"),
-    ds);
+        // Column order is part of the contract: client, key, value.
+        SelectSql: "SELECT client_id, key, value FROM settings")
+    {
+        ClientColumn = "client_id",
+    });
 
-// Step 5: Register endpoints
+// Runtime: reload on demand (no background timer by default) and a keyed IConfiguration per client.
+builder.Services.AddSaConfigurationRuntime(builder.Configuration, runtime =>
+{
+    runtime.KeyedClientConfigurations = true;
+});
+
 var app = builder.Build();
 
-var todosApi = app.MapGroup("/settings");
+var settingsApi = app.MapGroup("/settings");
 
-// A connection string carries the password, so never hand one to a client as-is.
-// Mask it for display; everything else on this endpoint is shown verbatim.
-static string MaskPassword(string? connectionString) => connectionString is null
-    ? string.Empty
-    : new NpgsqlConnectionStringBuilder(connectionString) { Password = "***" }.ConnectionString;
-
-todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
+// Base values + the clients declared by the overrides.
+settingsApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
     new (Key: PG_KEY, Value: MaskPassword(configuration[PG_KEY])),
     new (Key: "theme", Value: configuration["theme"]),
     new (Key: "language", Value: configuration["language"]),
     new (Key: "notifications", Value: configuration["notifications"]),
-    new (Key: "secret", Value: configuration["secret"])
-}).WithName("GetSettings");
+    new (Key: "secret", Value: configuration["secret"]),
+    new (Key: "clients", Value: string.Join(", ", configuration.GetClientNames()))
+});
+
+// One client: its overrides laid over the base values. An unknown client reads the base.
+settingsApi.MapGet("/{client}", (string client, IConfiguration configuration) =>
+{
+    IConfiguration view = configuration.ForClient(client);
+    return new Settings[] {
+        new (Key: "theme", Value: view["theme"]),
+        new (Key: "language", Value: view["language"]),
+        new (Key: "notifications", Value: view["notifications"]),
+    };
+});
+
+// Refresh the dynamic layer only: files on disk are not re-read.
+settingsApi.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
+{
+    await reloader.ReloadDynamicAsync();
+    return Results.Ok();
+});
 ```
 
-### Expected Response
+### Expected responses
+
+`GET /settings` — base values and the discovered clients:
 
 ```json
 [
@@ -176,9 +212,22 @@ todosApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
   { "key": "theme",             "value": "dark" },
   { "key": "language",          "value": "en" },
   { "key": "notifications",     "value": "enabled" },
-  { "key": "secret",            "value": "ENCRYPTED DEMO SECRET" }
+  { "key": "secret",            "value": "ENCRYPTED DEMO SECRET" },
+  { "key": "clients",           "value": "acme, beta" }
 ]
 ```
+
+`GET /settings/acme` — the overlay (only the values acme overrides change):
+
+```json
+[
+  { "key": "theme",             "value": "light" },
+  { "key": "language",          "value": "en" },
+  { "key": "notifications",     "value": "disabled" }
+]
+```
+
+`GET /settings/beta` — `"language": "de"`, everything else from the base.
 
 Note the password is masked: `NpgsqlConnectionStringBuilder` normalises the keywords it
 round-trips, so the output reads `Username=…` / `Search Path=…` rather than the
@@ -191,8 +240,8 @@ connection string, not the raw one.
 
 | Package | Purpose |
 |---------|---------|
-| `Sa.Configuration` | Secrets management, CLI argument parsing |
-| `Sa.Configuration.PostgreSql` | Dynamic config from PostgreSQL |
+| `Sa.Configuration` | Layer builder, secrets management, per-client overlay, dynamic reload |
+| `Sa.Configuration.PostgreSql` | Dynamic config from PostgreSQL, including per-client rows |
 | `Sa.Data.PostgreSql` | Npgsql client wrapper |
 | `Npgsql` | `NpgsqlConnectionStringBuilder` for masking the password; arrives transitively, but the sample uses it directly |
 | `Microsoft.AspNetCore.OpenApi` | OpenAPI support (dev only) |

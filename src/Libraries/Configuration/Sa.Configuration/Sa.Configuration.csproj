@@ -6,6 +6,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
   </ItemGroup>
 
@@ -15,6 +17,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Sa.ConfigurationTests" />
+    <InternalsVisibleTo Include="Sa.Configuration.PostgreSql" />
   </ItemGroup>
 
   <ItemGroup>

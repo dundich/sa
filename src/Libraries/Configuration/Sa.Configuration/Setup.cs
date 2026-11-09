@@ -39,8 +39,19 @@ public static class Setup
 
         if (state.CommandLineSource is null)
         {
-            state.CommandLineSource = new ArgumentsConfigurationSource { Args = state.Args };
-            builder.Add(state.CommandLineSource);
+            // A builder that already carries the argument source (UseStandardSources, or a second
+            // registration) keeps a single instance instead of stacking a second provider.
+            state.CommandLineSource = builder.Sources.OfType<ArgumentsConfigurationSource>().FirstOrDefault();
+
+            if (state.CommandLineSource is null)
+            {
+                state.CommandLineSource = new ArgumentsConfigurationSource { Args = state.Args };
+                builder.Add(state.CommandLineSource);
+            }
+            else if (state.Args is not null)
+            {
+                state.CommandLineSource.Args = state.Args;
+            }
         }
         else if (state.Args is not null)
         {
