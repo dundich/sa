@@ -55,7 +55,7 @@ The library gathers everything needed for partitioning into three setting types,
 
 - **Auto-migration** — a background job pre-creates future partitions so INSERT does not stall on CREATE. [`MigrationScheduleSettings`](#migration), [`IMigrationService`](#api-migration)
 - **Guard against gaps.** A *gap* is an INSERT into a partition that does not yet exist — either the insert fails, or (with [`WithDefaultPartition()`](#fluent-builder-api)) it lands in the catch-all. Migration creates partitions ahead of time — for several days/months forward (`ForwardDays`) — so traffic never falls into a void. [`MigrationScheduleSettings`](#migration)
-- **Auto-cleanup** — moves old partitions out of circulation: [`Drop`](#cleanup-mode-drop) (delete) or [`Archive`](#cleanup-mode-archive) (move into an archive schema). [`PartCleanupScheduleSettings`](#cleanup), [`IPartCleanupService`](#api-cleanup)
+- **Auto-cleanup** — moves old partitions out of circulation: [`Drop`](#cleanup-mode-drop) (delete) or [`Archive`](#cleanup-mode-archive) (move into an archive schema), with an opt-in prune of empty list branches. [`PartCleanupScheduleSettings`](#cleanup), [`IPartCleanupService`](#api-cleanup)
 - **In-memory cache** of partition metadata — a lookup never hits the database. [`PartCacheSettings`](#partcache)
 - **Programmatic control** — [`IPartitionManager`](#api-manager): `Migrate`, `EnsureParts`, manual window control.
 - **Adoption of an existing table** — [`AdoptTable`](#adopting-an-existing-plain-table) converts a plain table with data once and continues managing its partitions.
@@ -129,7 +129,7 @@ builder.Services.AddSaPartitional((sp, builder) =>
     opts.DropPartsAfterRetention = TimeSpan.FromDays(7)));
 ```
 
-After startup the library checks which partitions are missing and creates them (today + the next 3 days). The background job repeats every ~4 hours.
+After startup the library checks which partitions are missing and creates them — `ForwardDays` calendar days starting with today, so `ForwardDays = 3` here means today, tomorrow and the day after. The background job repeats every ~4 hours.
 
 ### Two levels — list + range (multi-tenant layout)
 
@@ -355,7 +355,7 @@ Background job that pre-creates future partitions so inserts are not blocked wai
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| [`ForwardDays`](#migration) | `2 days` | How many days ahead to pre-create partitions on each tick. Set to `3` to be safe that tomorrow's traffic finds no missing partition. |
+| [`ForwardDays`](#migration) | `2 days` | How many calendar days to pre-create on each tick, starting with today. Set to `3` to be safe that tomorrow's traffic finds no missing partition. Must be between 1 and 3660 (a typo there would ask for tens of thousands of tables). |
 | [`AsBackgroundJob`](#migration) | `false` | Run as a hosted service (`true`) or only manually via [`IMigrationService`](#api-migration)? |
 | [`MigrationJobName`](#migration) | `"Migration job"` | Job name in logs and the scheduler. When multiple modules exist, qualify it: `"Migration job [outbox]"`. |
 | [`ExecutionInterval`](#migration) | `~4h ± jitter` | Interval between migration ticks. Jitter up to 59 minutes prevents thundering-herd when several instances restart simultaneously. |
@@ -383,6 +383,8 @@ Background job that retires old partitions.
 | [`DropPartsAfterRetention`](#cleanup) | `30 days` | Age threshold after which a partition is retired. For event sourcing often 90–365 days; for outbox messages — 7–30 days. |
 | [`CleanupMode`](#cleanup) | `Drop` | What to do with an expired partition: [`Drop`](#cleanup-mode-drop) — delete entirely, [`Archive`](#cleanup-mode-archive) — move into an archive schema. |
 | [`ArchiveSchemaName`](#cleanup) | `"archive"` | Schema where partitions are moved when `CleanupMode = Archive`. Ignored in `Drop` mode. Tables keep their name — name collisions within the same schema cause errors. |
+| [`ArchiveCollisionMode`](#cleanup) | `Fail` | What to do when the archive schema already holds that name: [`Fail`](#cleanup-mode-archive) leaves the live partition attached and logs the clash, `RenameExisting` moves the older archived copy to `{name}{sep}prev$N` and archives the new one under the canonical name. |
+| [`PruneEmptyListParts`](#cleanup) | `false` | Also drop list-level partitions whose whole subtree holds no rows (and whose value is not declared by the migration). |
 | [`AsBackgroundJob`](#cleanup) | `false` | Run as hosted service or only manually via [`IPartCleanupService`](#api-cleanup)? |
 | [`ExecutionInterval`](#cleanup) | `~4h ± jitter` | Interval between cleanup ticks. |
 | [`InitialDelay`](#cleanup) | `1 min` | Delay before the first run after application start. Allows migration and initial data population to complete. |
@@ -404,7 +406,13 @@ Standard behaviour — physically removes the partition via `DROP TABLE`. Data i
 
 #### <a name="cleanup-mode-archive"></a>CleanupMode = Archive
 
-Moves the partition to another schema (`ALTER TABLE ... SET SCHEMA "archive"`). The table is preserved but stops participating in queries against the main schema. Requires the archive schema to exist (the library does not create it automatically).
+Moves the partition to another schema (`ALTER TABLE ... SET SCHEMA "archive"`). The table is preserved but stops participating in queries against the main schema. The archive schema is created automatically (`CREATE SCHEMA IF NOT EXISTS`); a database role without `CREATE` on the database has to create it in advance.
+
+Tables keep their name, so an archived copy and a later partition of the same window collide: if data is written into a window that was already archived, the leaf is re-created in the live schema (and becomes visible to cleanup again), and the second archive pass finds the name taken. With the default `ArchiveCollisionMode = Fail` the pass logs `EventId 410` and leaves the live partition attached instead of detaching it and failing on the name — rename or drop the stale archived copy by hand. With `ArchiveCollisionMode = RenameExisting` the library moves the older archived copy (and its indexes) to `{name}{separator}prev$1`, then `$2`, …, and archives the new partition under the canonical name, so a query against `archive."{name}"` always sees the most recent data (`EventId 411` records the rename).
+
+#### Empty list partitions
+
+Cleanup retires **range leaves** only; a tenant (or any other list value) that stopped being used keeps its intermediate `{table}{separator}{value}` partition and its `def$` child forever. `PruneEmptyListParts = true` additionally drops such a list-level partition when nothing in its subtree holds a row **and** its value is not declared by the table's migration support (so the next migration tick does not re-create it). It is off by default: dropping a structural partition that a writer may target is a decision for the application.
 
 ---
 
@@ -458,7 +466,7 @@ services.AddSaPartitional((sp, builder) =>
             "region varchar(10) NOT NULL",
             "created_at bigint NOT NULL")
             .PartByList("region")
-            .AddMigration("EU", "US", "APAC");
+            .AddMigration(["EU"], ["US"], ["APAC"]);   // three branches, one value each
     });
 });
 ```
@@ -511,7 +519,7 @@ schema.AddTable("events",
     .WithDefaultPartition()
 
     // ── Storage tuning ───────────────────────────────────────
-    // fillfactor for generated range leaves only (clamped 10..100).
+    // fillfactor for generated range leaves only (10..100; anything else throws).
     // Root table and list partitions are emitted without it.
     .WithFillFactor(80)
 
@@ -524,14 +532,18 @@ schema.AddTable("events",
     .AddConstraintPkSql(() => "pk_events_created_at_tenant_id")
 
     // ── Migration values ─────────────────────────────────────
-    // Static inline list values (single nesting level).
-    // WARNING: AddMigration("a", "b") binds to params → two
-    // independent values, NOT a parent-child pair. Nesting requires
-    // an explicit array: AddMigration("a", new StrOrNum[] { "b" }).
-    .AddMigration("active", "archived")
+    // One array = one branch: exactly one value per PartByList
+    // column, outermost level first.
+    .AddMigration(["EU", "high"], ["EU", "low"])
 
-    // Hierarchical migration: parent + children nested under it.
-    .AddMigration("EU", new StrOrNum[] { "DE", "FR" })
+    // Two-level shorthand: parent + its children.
+    .AddMigrationChildren("US", "high", "low")   // ["US","high"], ["US","low"]
+
+    // Or draw the tree — same result, any depth.
+    .AddMigrationTree(t => t
+        .Node("APAC", apac => apac
+            .Branch("high")
+            .Branch("low")))
 
     // Custom provider implementing IPartTableMigrationSupport.
     .AddMigration(myCustomProvider)
@@ -544,11 +556,45 @@ schema.AddTable("events",
     .Build();
 ```
 
-> **Overload trap.** `AddMigration("a", "b")` binds to the `params` overload and declares **two independent values**, not a parent-child pair. Nesting has to be spelled out with an array:
+> **Branches are explicit.** One `StrOrNum[]` argument is **one** branch — exactly one value per
+> `PartByList` column. Several branches are separate arguments; the two-level shorthand has its own
+> name; a deep hierarchy can be drawn as a tree:
 > ```csharp
-> .AddMigration("a", "b")                          // two separate partitions
-> .AddMigration("a", new StrOrNum[] { "b" })      // "b" nested under "a"
+> .AddMigration(["EU", "high"], ["EU", "low"])      // two two-level branches
+> .AddMigration(["EU"], ["US"])                     // two one-level branches
+> .AddMigrationChildren("EU", "high", "low")        // EU → {high, low}
+> .AddMigrationTree(t => t                          // the same, drawn as the partition tree
+>     .Node("EU", eu => eu
+>         .Branch("high")
+>         .Branch("low")))
 > ```
+> A branch whose length does not match the list levels (or any value on a range-only table) fails at
+> `Build()`, with the branch and the expected count in the message.
+
+How each call maps onto the partition tree, for a table declared as
+`.PartByList("country", "city").PartByRange(PgPartBy.Day)`:
+
+| Call | Branches declared | Partition tables produced |
+|---|---|---|
+| `.AddMigration(["RU", "Moscow"])` | `["RU","Moscow"]` | `orders__RU__Moscow__y2026m11d09` |
+| `.AddMigration(["RU","Moscow"], ["RU","Kazan"])` | two | `orders__RU__Moscow__y…`, `orders__RU__Kazan__y…` |
+| `.AddMigrationChildren("RU", "Moscow", "Kazan")` | two (same as above) | `orders__RU__Moscow__y…`, `orders__RU__Kazan__y…` |
+| `.AddMigrationTree(t => t.Node("RU", ru => ru.Branch("Moscow").Branch("Kazan")))` | two (same as above) | `orders__RU__Moscow__y…`, `orders__RU__Kazan__y…` |
+
+```
+orders                              PartByList("country", "city"), PartByRange(Day)
+└── orders__RU                      ← "RU"            (only the parent)
+    ├── orders__RU__Moscow          ← ["RU","Moscow"] (one branch)
+    │   └── orders__RU__Moscow__y2026m11d09   ← the range leaf of one date
+    └── orders__RU__Kazan           ← ["RU","Kazan"]  (the second branch)
+        └── orders__RU__Kazan__y2026m11d09
+```
+
+`AddMigrationChildren` is exactly that subtree: the first argument names the parent level, every
+following argument adds one child branch. A **one-level** list therefore takes one value per branch —
+`.AddMigration(["acme"])` for one tenant, `.AddMigration(["acme"], ["globex"])` for two. A
+**three-level** list needs full branches (`.AddMigration(["EU","DE","Berlin"])`) or
+`AddMigrationTree` with a nested `Node`; `AddMigrationChildren` covers two levels only.
 
 ---
 
@@ -670,7 +716,7 @@ Partitions follow predictable naming patterns (separator defaults to `"__"`):
 - All identifiers and literals are quoted and escaped, so a key holding `"` or `'` cannot terminate them and append SQL.
 - Schemas are auto-created via `CREATE SCHEMA IF NOT EXISTS`.
 - Child partitions use `PARTITION OF parent FOR VALUES FROM (...) TO (...)` (range) or `FOR VALUES IN (...)` (list). Range bounds are integers for a `bigint` key and quoted timestamps/dates for a timestamp/date key.
-- After each range partition is created, a row is written into the cache table (`id`, `root`, `part_values`, `part_by`, `from_date`, `to_date`) with `ON CONFLICT (id) DO NOTHING`.
+- After each range partition is created, a row is written into the cache table (`id`, `root`, `part_values`, `part_by`, `from_date`, `to_date`). The insert is an upsert (`ON CONFLICT (id) DO UPDATE`), so a partition re-created on a date whose earlier incarnation was archived becomes visible to the cache and to cleanup again (`archived` is reset to `FALSE`).
 
 ### Keeping identifiers under 63 bytes
 
@@ -722,9 +768,9 @@ schema.AddTable("orders", /* ... */)
 ## Behaviour Notes
 
 - **UTC everywhere.** Partition names, range boundaries and cache windows are computed from the UTC calendar, so two hosts in different time zones create the same partition for the same instant.
-- **Cache consistency.** Background jobs drop the whole snapshot after every run (unconditionally — a partial run could have created partitions too). A manual `Migrate(dates)` or `Clean(...)` call does not; `EnsureParts` invalidates the entry of its own table.
-- **Retries and serialization.** Both the read and write path of the repository go through the retry strategy of `Sa.Data.PostgreSql`, so a transient database failure does not reach the caller. DDL against one data source is additionally serialized, so two partitions are never created concurrently.
-- **Job error handling.** Only the expected stop (cancellation / timeout) is suppressed; a real failure is retried, logged, and then aborts *that* job — not the application.
+- **Cache consistency.** Background jobs drop the whole snapshot after every run (unconditionally — a partial run could have created partitions too). A manual `Migrate(dates)` or `Clean(...)` call does not; `EnsureParts` invalidates the entry of its own table and remembers the partitions it ensured for `CacheTtl`, so a backdated write outside the snapshot window does not re-run the (idempotent) DDL on every call. The jobs' flush drops that memory as well.
+- **Retries and serialization.** Both the read and write path of the repository go through the retry strategy of `Sa.Data.PostgreSql`, so a transient database failure does not reach the caller. DDL is additionally serialized **per module** (one `IPartRepository` per module): inside a module two partitions are never created concurrently, while two modules that share one data source are not serialized against each other — their partition names never overlap, so the only shared object is the `CREATE SCHEMA IF NOT EXISTS` / cache DDL, which is idempotent. The adoption pass is the exception: it runs inside its own transaction under a PostgreSQL advisory lock and does **not** go through the retry strategy, a transient failure there fails that migration run.
+- **Job error handling.** Only the expected stop (cancellation / timeout) is suppressed. A real failure of one table is logged (migration `EventId 104`, cleanup `EventId 207`) and the run continues with the remaining tables, so one broken table does not starve the others; the run as a whole then fails, is retried, and aborts *that* job — not the application.
 - **Fill factor.** Applied to date-range children only. When `WithFillFactor` was never called the clause is omitted and PostgreSQL applies its own default (100).
 - **Logging.** Services log through `ILogger<T>` using structured `[LoggerMessage]` events; a failed or unfinished migration is logged and reported as `-1` instead of throwing out of a scheduler tick.
 

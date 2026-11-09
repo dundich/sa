@@ -70,10 +70,10 @@ builder.Services.AddSaPartitional((sp, builder) =>
                 "city text NOT NULL")
             .WithPartSeparator("_")
             .PartByList("country", "city")
-            // one array per branch: country + its cities
-            .AddMigration("RU", new StrOrNum[] { "Moscow", "Samara" })
-            .AddMigration("USA", new StrOrNum[] { "Alabama", "New York" })
-            .AddMigration("FR", new StrOrNum[] { "Paris", "Lyon" });
+            // one branch per country: parent + its cities
+            .AddMigrationChildren("RU", "Moscow", "Samara")
+            .AddMigrationChildren("USA", "Alabama", "New York")
+            .AddMigrationChildren("FR", "Paris", "Lyon");
     });
 })
 .AddPartMigrationSchedule(b => b.Configure((_, opts) =>
@@ -153,6 +153,13 @@ generated primary key also stay on the backup, so they have to be re-created for
 with `AddPostSql`). The rename takes `ACCESS EXCLUSIVE`, and every row is rewritten — plan a
 maintenance window.
 
+> **Why not `ATTACH PARTITION` instead of copying?** Attaching the existing table would avoid the row
+> rewrite, but it only works when the source table declares a primary key that *includes* the
+> partition key, holds data of a single partition window, and does not conflict with the root's own
+> constraint. A real table spans many periods, so it would have to be split anyway — and a plain
+> `PRIMARY KEY (id)` has to be dropped and rebuilt to add the partition key. The copy is therefore the
+> general answer; if the table is empty the copy is free anyway.
+
 Repeated runs are no-ops: the partitioned root plus the library's cache table mark the table as
 managed, and the regular methods keep working.
 
@@ -192,7 +199,7 @@ module, the unnamed instance for the keyless one. A keyed module therefore binds
 
 Validation runs at host start (`ValidateOnStart()`) and on the first read, so an invalid section or
 `Configure` value fails fast with an `OptionsValidationException`. The built-in checks are
-`ForwardDays >= 1`, positive `ExecutionInterval` / `CacheTtl` / `RunTimeout`, non-negative
+`ForwardDays >= 1` and `<= 3660`, positive `ExecutionInterval` / `CacheTtl` / `RunTimeout`, non-negative
 `WaitMigrationTimeout` / `CachedFromDate` / `DropPartsAfterRetention` / `InitialDelay`, and a
 non-blank `MigrationJobName` when it is set.
 
@@ -203,7 +210,7 @@ simply leaves the class defaults and the code settings in place.
 
 | Property | Default | Description |
 |---|---|---|
-| `ForwardDays` | `2` | How many days ahead to pre-create partitions on each run |
+| `ForwardDays` | `2` | How many calendar days to pre-create on each run, starting with today (1..3660) |
 | `AsBackgroundJob` | `false` | Run as a hosted background service |
 | `ExecutionInterval` | `4h + jitter` | Interval between runs (adds 1–59 min random jitter) |
 | `WaitMigrationTimeout` | `3s` | Max wait for the migration lock; a tick that misses it is skipped and returns `-1` |
@@ -220,6 +227,10 @@ request, so it waits for the lock as long as it takes and does honour the caller
 | Property | Default | Description |
 |---|---|---|
 | `DropPartsAfterRetention` | `30 days` | Partitions older than this are dropped |
+| `CleanupMode` | `Drop` | `Drop` deletes the expired partition, `Archive` moves it into `ArchiveSchemaName` |
+| `ArchiveSchemaName` | `archive` | Archive target; the schema is created when missing |
+| `ArchiveCollisionMode` | `Fail` | What to do when the archive already holds that name: `Fail` logs and leaves the part attached, `RenameExisting` moves the older copy (and its indexes) to `{name}{sep}prev$N` |
+| `PruneEmptyListParts` | `false` | Also drop list-level partitions whose whole subtree is empty and whose value the migration does not declare |
 | `AsBackgroundJob` | `false` | Run as a hosted background service |
 | `ExecutionInterval` | `4h + jitter` | Interval between cleanup runs |
 | `InitialDelay` | `1 min` | Delay before first execution |
@@ -258,7 +269,7 @@ schema.AddTable("orders",
     .TimestampAs("shipped_at")
 
     // 3. Tuning knobs
-    .WithFillFactor(85)                    // WITH (fillfactor = 85) on the range leaves; clamped to 10..100
+    .WithFillFactor(85)                    // WITH (fillfactor = 85) on the range leaves; 10..100, else ArgumentOutOfRangeException
     .WithPartSeparator("_")                // separator in partition names (default: __)
     .WithPartTablePostfix("__part")        // postfix of the CACHE table name (default: part$)
     .WithDefaultPartition()                // optional DEFAULT catch-all at every level (rows whose key was never migrated)
@@ -267,14 +278,14 @@ schema.AddTable("orders",
     .AddPostSql(() => "INCLUDE (extra_column)")
     .AddConstraintPkSql(() => "pk_orders") // NAME of the PK constraint (default: pk_orders)
 
-    // 5. Declare partition migrations
-    .AddMigration(new StrOrNum[] { "US", "EU", "APAC" })  // static values
-    .AddMigration(myMigrationProvider)                      // IPartTableMigrationSupport
-    .AddMigration(async ct =>                              // lazy async resolver
-    {
-        var rows = await QueryDb(ct);
-        return rows.Select(r => new StrOrNum[] { r.Key }).ToArray();
-    })
+    // 5. Declare list-partition values (a table with PartByList only)
+    // .AddMigration(["EU"], ["US"])                       // one branch per list value
+    // .AddMigration(["EU", "high"], ["EU", "low"])        // one value per PartByList column
+    // .AddMigrationChildren("EU", "high", "low")          // two-level shorthand: parent + children
+    // .AddMigrationTree(t => t.Node("EU", eu => eu        // the same, drawn as a tree (any depth)
+    //     .Branch("high").Branch("low")))
+    // .AddMigration(myMigrationProvider)                  // IPartTableMigrationSupport
+    // .AddMigration(async ct => { /* query DB, return StrOrNum[][] */ })
 
     // 6. Finalise
     .Build();
@@ -282,20 +293,32 @@ schema.AddTable("orders",
 
 ### Migration Variants
 
-Four ways to declare which partitions to create:
+Ways to declare which partitions to create:
 
 | Variant | Signature | When to use |
 |---|---|---|
-| **Static** | `.AddMigration(params StrOrNum[] partValues)` | Fixed set known at compile time |
-| **Parent+Children** | `.AddMigration(StrOrNum parent, StrOrNum[] childs)` | Hierarchical list partitions |
+| **One branch** | `.AddMigration(StrOrNum[] branch)` | A single branch: one value per `PartByList` column |
+| **Several branches** | `.AddMigration(params StrOrNum[][] branches)` | A fixed set known at compile time |
+| **Parent+Children** | `.AddMigrationChildren(StrOrNum parent, params StrOrNum[] children)` | Two-level lists: one branch per child |
+| **Tree** | `.AddMigrationTree(Action<IMigrationTreeBuilder> tree)` | Deep hierarchies, drawn as the partition tree |
 | **Dynamic** | `.AddMigration(Func<CancellationToken, Task<StrOrNum[][]>> getPartValues)` | Values come from another table / API |
 | **Interface** | `.AddMigration(IPartTableMigrationSupport support)` | Reusable migration provider class |
 
-> **The overload trap.** `AddMigration("RU", "Moscow", "Samara")` binds to the `params` overload and declares three
-> *independent* values — for a two-level `PartByList` that is not what you want. A branch has to be spelled out
-> with an array, so the `parent + childs` overload (or an explicit `new StrOrNum[] { ... }`) is used for nesting.
-> A branch whose value count does not match the `PartByList` column count is emitted as a partial hierarchy: the
-> levels that are covered are created, the leaves are not.
+> **Branches are explicit.** One array argument is exactly one branch — one value per `PartByList`
+> column, outermost first. Two levels can also be written as a named parent + children —
+> `AddMigrationChildren("RU", "Moscow", "Samara")` for the branches `["RU","Moscow"]` and
+> `["RU","Samara"]` — and any depth as a tree:
+> ```csharp
+> .AddMigrationTree(t => t
+>     .Node("EU", eu => eu
+>         .Node("DE", de => de
+>             .Branch("Berlin")
+>             .Branch("Munich")))
+>     .Branch("FR", "Paris"));
+> ```
+> A one-level list is `.AddMigration(["tenant"])`. A branch whose value count does not match the
+> `PartByList` column count — or any value on a range-only table — is rejected by `Build()`, with the
+> branch and the expected count in the message, so a mis-declaration never reaches a background job.
 
 ---
 
@@ -433,7 +456,7 @@ schema.AddTable("events",
     "tenant_id text NOT NULL",
     "created_at bigint NOT NULL")
     .PartByList("tenant_id")
-    .AddMigration("analytics", "api", "web");
+    .AddMigration(["analytics"], ["api"], ["web"]);
 ```
 
 For the value `analytics` and the date `2026-06-26` the library emits (verbatim, generated comments included):
@@ -454,6 +477,18 @@ CREATE TABLE IF NOT EXISTS "public"."events" (
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."events__part$" (
+  id TEXT PRIMARY KEY,
+  root TEXT NOT NULL,
+  part_values TEXT NOT NULL,
+  part_by TEXT NOT NULL,
+  from_date bigint NOT NULL,
+  to_date bigint NOT NULL,
+  archived boolean NOT NULL DEFAULT FALSE
+)
+;
+
+ALTER TABLE IF EXISTS "public"."events__part$" ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT FALSE;
 
 -- NESTED PARTITION
 
@@ -474,29 +509,26 @@ FOR VALUES FROM (1782432000) TO (1782518400)
 
 -- cache
 
-CREATE TABLE IF NOT EXISTS "public"."events__part$" (
-  id TEXT PRIMARY KEY,
-  root TEXT NOT NULL,
-  part_values TEXT NOT NULL,
-  part_by TEXT NOT NULL,
-  from_date bigint NOT NULL,
-  to_date bigint NOT NULL,
-  archived boolean NOT NULL DEFAULT FALSE
-)
-;
-
-ALTER TABLE IF EXISTS "public"."events__part$" ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT FALSE;
-
 INSERT INTO "public"."events__part$" (id,root,part_values,part_by,from_date,to_date)
 VALUES ('"public"."events__analytics__y2026m06d26"','public.events','s:analytics','Day',1782432000,1782518400)
-ON CONFLICT (id) DO NOTHING
+ON CONFLICT (id) DO UPDATE SET
+  root = EXCLUDED.root,
+  part_values = EXCLUDED.part_values,
+  part_by = EXCLUDED.part_by,
+  from_date = EXCLUDED.from_date,
+  to_date = EXCLUDED.to_date,
+  archived = FALSE
 ;
 ```
 
 Worth reading off that output:
 
-- `CREATE SCHEMA IF NOT EXISTS` and the root `CREATE TABLE IF NOT EXISTS` are re-emitted for every value and every
-  date, so a migration is idempotent and a re-run costs nothing;
+- the schema, the root `CREATE TABLE IF NOT EXISTS` and the cache table are emitted **once per table** (`CREATE
+  SCHEMA IF NOT EXISTS`, the root, the cache table and the `ALTER TABLE … ADD COLUMN` upgrade); the following
+  batches of the same table carry only the list levels and the range leaf, so a migration over many dates and
+  list values does not re-lock the shared cache table;
+- every statement is idempotent (`IF NOT EXISTS`, `ON CONFLICT … DO UPDATE`), so a re-run costs nothing and an
+  interrupted run is finished by the next one;
 - the primary key is composed by the library from the id column, the list columns and the range column;
 - range boundaries are Unix seconds, and the cache row records them, so the cleanup job can find the leaves by
   date without inspecting the catalog;
@@ -510,10 +542,12 @@ Worth reading off that output:
 The migration and cleanup jobs suppress only the **expected** stop — `OperationCanceledException` and
 `TimeoutException`, i.e. the host shutting down or a deadline elapsing. Any other failure is retried, logged
 through the standard `ILogger` pipeline and then aborts **that job** (`ThenAbortJob`); the scheduler default would
-close the whole application, which is not a sane reaction to a failing `DROP`.
+close the whole application, which is not a sane reaction to a failing `DROP`. A migration isolates the failure
+**per table**: it is logged (`EventId 104`), the remaining tables still get their partitions in the same run, and
+the run then fails with the first exception — so one broken table cannot starve the rest.
 
 Services log with structured `[LoggerMessage]` events, so they can be filtered by `EventId` — `601`–`605` for the
-migration, `101` / `102` / `202`–`501` for the repository.
+migration, `101`–`104` / `202`–`411` / `501`–`502` for the repository, `207` for the cleanup pass.
 
 Settings are served by the standard options pipeline: the configuration section binds first, then the
 code `Configure` delegates apply in registration order, then any `Options(...)` actions. So code
