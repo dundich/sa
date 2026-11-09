@@ -5,15 +5,15 @@ internal sealed class ChainedSecrets : ISecretService, ISecretStore
     private readonly ChainedSecretStore _store;
     private readonly SecretService _service;
 
-    public ChainedSecrets(ISecretStore[] stores)
+    public ChainedSecrets(ISecretStore[] stores, SecretResolutionOptions? resolution = null)
     {
         _store = new ChainedSecretStore(stores);
-        _service = new SecretService(_store);
+        _service = new SecretService(_store, resolution);
     }
 
     public void AddStore(ISecretStore store) => _store.Add(store);
 
-    public string? GetSecret(string key) => _store.GetSecret(key);
+    public string? GetSecret(string key) => _service.GetSecret(key);
 
     public string? PopulateSecrets(string? inputString, bool returnNullIfSecretNotFound = false)
         => _service.PopulateSecrets(inputString, returnNullIfSecretNotFound);

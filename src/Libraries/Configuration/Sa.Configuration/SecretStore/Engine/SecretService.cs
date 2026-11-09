@@ -3,13 +3,18 @@ using System.Text.RegularExpressions;
 
 namespace Sa.Configuration.SecretStore.Engine;
 
-internal sealed partial class SecretService(ISecretStore secretStore) : ISecretService
+internal sealed partial class SecretService(
+    ISecretStore secretStore,
+    SecretResolutionOptions? resolution = null) : ISecretService
 {
     private static readonly Regex s_placeholder = PlaceholderRegex();
 
+    private readonly SecretResolutionOptions _resolution = resolution ?? new();
+
     private const int MaxLoopCount = 3;
 
-    public string? GetSecret(string key) => secretStore.GetSecret(key);
+    public string? GetSecret(string key)
+        => secretStore.GetSecret(key) ?? _resolution.Resolver?.Invoke(key);
 
     public string? PopulateSecrets(string? inputString, bool returnNullIfSecretNotFound = false)
     {
@@ -43,10 +48,12 @@ internal sealed partial class SecretService(ISecretStore secretStore) : ISecretS
             bool isOptional = returnNullIfSecretNotFound || match.Groups[1].Success;
             string secretName = match.Groups[2].Value;
 
-            string? resolvedSecretValue = secretStore.GetSecret(secretName);
+            string? resolvedSecretValue = GetSecret(secretName);
 
             if (resolvedSecretValue == null)
             {
+                _resolution.OnUnresolvedSecret?.Invoke(new SecretMiss(secretName, isOptional));
+
                 if (isOptional)
                 {
                     return null;

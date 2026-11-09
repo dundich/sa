@@ -9,7 +9,7 @@ namespace Sa.Configuration.SecretStore;
 /// <summary>
 /// The Secrets class simplifies the management of sensitive information in your application
 /// </summary>
-public sealed class Secrets(params ISecretStore[] stores) : ISecretService
+public sealed class Secrets : ISecretService
 {
     public const string DefaultFileName = "secrets.txt";
     public const string EncryptedFileName = "secrets.pub";
@@ -18,7 +18,22 @@ public sealed class Secrets(params ISecretStore[] stores) : ISecretService
     private const string DecryptionKeyFileVariable = "SA_SECRETS_DECRYPTION_KEY_FILE";
     private const string ClientVariable = "SA_SECRETS_DECRYPTION_CLIENT";
 
-    private readonly ChainedSecrets _chain = new(stores);
+    private readonly ChainedSecrets _chain;
+
+    public Secrets(params ISecretStore[] stores)
+        : this(null, stores)
+    {
+    }
+
+    /// <summary>
+    /// Creates a service over an explicit store chain with dynamic resolution and diagnostics.
+    /// </summary>
+    /// <param name="resolution">
+    /// Resolver and miss callback; <see langword="null"/> means no dynamic resolution.
+    /// </param>
+    /// <param name="stores">Stores in LIFO priority — the last one wins.</param>
+    public Secrets(SecretResolutionOptions? resolution, params ISecretStore[] stores)
+        => _chain = new ChainedSecrets(stores, resolution);
 
     public string? PopulateSecrets(string? inputString, bool returnNullIfSecretNotFound = false)
         => _chain.PopulateSecrets(inputString, returnNullIfSecretNotFound);
@@ -73,7 +88,7 @@ public sealed class Secrets(params ISecretStore[] stores) : ISecretService
         chain.Add(new EnvironmentVariableSecretStore());
         chain.Add(new CommandLineArgsSecretStore(args));
 
-        return new([.. chain]);
+        return new(options.Resolution, [.. chain]);
     }
 
     public Secrets AddStore(ISecretStore store)

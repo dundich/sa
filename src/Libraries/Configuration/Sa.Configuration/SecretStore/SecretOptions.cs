@@ -36,6 +36,12 @@ public sealed record SecretOptions
     /// </summary>
     public KeyAliasOptions KeyAliases { get; init; } = new();
 
+    /// <summary>
+    /// Dynamic resolution and diagnostics for lookups that no store could satisfy — see
+    /// <see cref="SecretResolutionOptions"/>.
+    /// </summary>
+    public SecretResolutionOptions Resolution { get; init; } = new();
+
     public SecretOptions()
     {
         FileName = Secrets.DefaultFileName;
