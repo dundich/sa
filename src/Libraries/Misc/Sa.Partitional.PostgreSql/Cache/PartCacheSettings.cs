@@ -22,8 +22,11 @@ public sealed class PartCacheSettings
     /// This is a lower bound, not the whole window: the snapshot is always widened to at least one
     /// full partition period of the table (a day, a month, a year), because a monthly or yearly
     /// partition that is being written to right now started at the beginning of its period. Raise the
-    /// value when the application writes rows backdated by more than one day — a partition older than
+    /// value when the application writes rows backdated by more than one day: a partition older than
     /// the window is not in the snapshot, so it looks missing and its (idempotent) DDL is re-run.
+    /// <c>EnsureParts</c> additionally remembers the partitions it ensured for <c>CacheTtl</c>, so a
+    /// backdated write whose partition already exists does not re-run that DDL on every call; a
+    /// background run that flushes the cache drops that memory too.
     /// </remarks>
     public TimeSpan CachedFromDate { get; set; } = TimeSpan.FromDays(1);
 

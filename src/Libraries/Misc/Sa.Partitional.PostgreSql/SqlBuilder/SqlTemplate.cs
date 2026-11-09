@@ -15,7 +15,35 @@ internal static class SqlTemplate
     /// partition value the UTF-8 byte count exceeds <c>string.Length</c>, so the limit has to be
     /// checked against the encoded form.
     /// </summary>
-    private const int MaxIdentifierBytes = 63;
+    internal const int MaxIdentifierBytes = 63;
+
+    /// <summary>
+    /// Truncates <paramref name="value"/> to at most <paramref name="maxBytes"/> UTF-8 bytes on a rune
+    /// boundary.
+    /// </summary>
+    /// <remarks>
+    /// Used for names the library derives itself (the adoption backup and the archived-copy
+    /// replacements), where a clash is resolved by appending a suffix afterwards. A user-declared
+    /// name is never truncated: it either fits or fails with the byte breakdown.
+    /// </remarks>
+    internal static string TrimIdentifier(string value, int maxBytes = MaxIdentifierBytes)
+    {
+        if (Encoding.UTF8.GetByteCount(value) <= maxBytes) return value;
+
+        StringBuilder builder = new();
+        int bytes = 0;
+
+        foreach (Rune rune in value.EnumerateRunes())
+        {
+            int runeBytes = rune.Utf8SequenceLength;
+            if (bytes + runeBytes > maxBytes) break;
+
+            builder.Append(rune.ToString());
+            bytes += runeBytes;
+        }
+
+        return builder.ToString();
+    }
 
     /// <summary>
     /// Escapes <paramref name="value"/> for use as a single-quoted SQL string literal.
@@ -451,10 +479,18 @@ FOR VALUES FROM ({settings.RangeBoundSql(range.Start)}) TO ({settings.RangeBound
 
 -- cache
 
-{settings.CreateCacheSql()}
 INSERT INTO {settings.GetCacheByRangeTableName()} (id,root,part_values,part_by,from_date,to_date)
 VALUES ({QuoteLiteral(timeRangeTablename)},{QuoteLiteral(settings.FullName)},{QuoteLiteral(partValues)},{QuoteLiteral(settings.PartBy.Name)},{range.Start.ToUnixTimeSeconds()},{range.End.ToUnixTimeSeconds()})
-ON CONFLICT (id) DO NOTHING
+ON CONFLICT (id) DO UPDATE SET
+  root = EXCLUDED.root,
+  part_values = EXCLUDED.part_values,
+  part_by = EXCLUDED.part_by,
+  from_date = EXCLUDED.from_date,
+  to_date = EXCLUDED.to_date,
+  -- A partition that is created again belongs to the live schema again. Archiving only ever sets
+  -- archived = TRUE, so without this reset a re-created leaf (a backdated write after retention
+  -- moved the old data away) would stay invisible to the cache and to cleanup forever.
+  archived = FALSE
 ;
 
 """;
@@ -464,9 +500,10 @@ ON CONFLICT (id) DO NOTHING
     /// Creates the partition cache table and upgrades an existing one (<c>archived</c> column).
     /// </summary>
     /// <remarks>
-    /// The range-leaf DDL creates the cache table inline. The adoption path needs it separately: the
-    /// cache table is also the marker that tells a later start "this table is already managed", and
-    /// an adopted table may have no rows at all, so no leaf DDL would ever run.
+    /// Emitted once per table, together with the root DDL (the first migration batch and every
+    /// <c>EnsureParts</c> call). The adoption path also needs it separately: the cache table is the
+    /// marker that tells a later start "this table is already managed", and an adopted table may
+    /// have no rows at all, so no leaf DDL would ever run.
     /// </remarks>
     public static string CreateCacheSql(this ITableSettings settings)
     {
@@ -523,6 +560,14 @@ DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id={QuoteLiteral(qualifi
     }
 
     /// <summary>
+    /// Removes the metadata row of a partition that exists in neither its source nor the archive
+    /// schema. Dropping an already-vanished table is the caller's decision; this only clears the
+    /// stale row so an archiving pass does not warn about the same ghost partition on every tick.
+    /// </summary>
+    public static string DeletePartCacheRowSql(this ITableSettings settings, string qualifiedTableName)
+        => $"DELETE FROM {settings.GetCacheByRangeTableName()} WHERE id={QuoteLiteral(qualifiedTableName)};\n";
+
+    /// <summary>
     /// Ensures the archive schema and the <c>archived</c> column of the cache table exist. Idempotent,
     /// so it runs on every archive pass: a cache table created before archiving was introduced is
     /// upgraded in place, and a fresh one already carries the column.
@@ -560,6 +605,84 @@ SELECT
   );
 """;
     }
+
+    /// <summary>
+    /// <c>true</c> when a relation with that qualified name exists.
+    /// </summary>
+    /// <remarks>Used to find a free name for an archived copy; <c>to_regclass</c> does not throw on a
+    /// missing relation, unlike a plain select.</remarks>
+    internal static string TableExistsSql(string qualifiedName)
+        => $"SELECT to_regclass({QuoteLiteral(qualifiedName)}) IS NOT NULL;\n";
+
+    /// <summary>
+    /// Renames a table inside its schema, so the name it occupies can be reused.
+    /// </summary>
+    /// <remarks>
+    /// The archive pass uses it to move an older archived copy of a window out of the canonical name
+    /// (<see cref="ArchiveCollisionMode.RenameExisting"/>). Indexes and constraints follow the table.
+    /// </remarks>
+    internal static string RenameTableSql(string qualifiedName, string newBareName)
+        => $"ALTER TABLE {RequoteStoredQualifiedName(qualifiedName)} RENAME TO {QuoteIdentifier(newBareName)};\n";
+
+    /// <summary>
+    /// Every list-level partition of the root — the children that are themselves partitioned, with
+    /// their nesting depth.
+    /// </summary>
+    /// <remarks>
+    /// Range leaves are <c>relkind = 'r'</c>, optional <c>DEFAULT</c> partitions are leaves as well, so
+    /// the result is exactly the intermediate list levels (a two-level table yields the
+    /// <c>{root}{sep}{v1}</c> partitions; a three-level one adds <c>{root}{sep}{v1}{sep}{v2}</c>).
+    /// Ordered deepest first, so a branch is emptied from the leaves upwards.
+    /// </remarks>
+    internal static string ListListPartitionsSql() => """
+WITH RECURSIVE tree AS (
+  SELECT i.inhrelid AS oid, 1 AS depth
+  FROM pg_inherits i
+  WHERE i.inhparent = to_regclass(@root)
+  UNION ALL
+  SELECT i.inhrelid, tree.depth + 1
+  FROM tree
+  JOIN pg_inherits i ON i.inhparent = tree.oid
+)
+SELECT n.nspname, c.relname, t.depth
+FROM tree t
+JOIN pg_class c ON c.oid = t.oid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind = 'p'
+ORDER BY t.depth DESC, c.relname;
+""";
+
+    /// <summary>
+    /// <c>ALTER INDEX</c> renaming an index inside its schema.
+    /// </summary>
+    /// <remarks>
+    /// <c>ALTER TABLE … RENAME TO</c> renames the table only: its indexes keep their names and stay in
+    /// the schema, so they would still occupy the canonical names when the new copy arrives.
+    /// </remarks>
+    internal static string RenameIndexSql(string qualifiedName, string newBareName)
+        => $"ALTER INDEX {RequoteStoredQualifiedName(qualifiedName)} RENAME TO {QuoteIdentifier(newBareName)};\n";
+
+    /// <summary>
+    /// Names of the indexes of a table (all of them: primary key, unique and plain).
+    /// </summary>
+    internal static string ListTableIndexesSql() => """
+SELECT c.relname
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+WHERE i.indrelid = to_regclass(@table);
+""";
+
+    /// <summary>
+    /// <c>true</c> when the (quoted, qualified) relation holds at least one row.
+    /// </summary>
+    internal static string TableHasRowsSql(string qualifiedName)
+        => $"SELECT EXISTS (SELECT 1 FROM {qualifiedName});\n";
+
+    /// <summary>
+    /// <c>DROP TABLE</c> of a library-generated, already quoted and qualified relation name.
+    /// </summary>
+    internal static string DropTableSql(string qualifiedName)
+        => $"DROP TABLE {qualifiedName};\n";
 
     /// <summary>
     /// Detaches a partition from its parent using <c>CONCURRENTLY</c> (reduced locking). Must be
@@ -793,7 +916,7 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
     }
 
     static string GetPartitionalSql(this ITableSettings settings, int partIndex)
-        => partIndex >= 0 && partIndex < settings.PartByListFieldNames.Length
+        => partIndex >= 0 && partIndex < settings.PartByListFieldNames.Count
             ? $"PARTITION BY LIST ({QuoteIdentifier(settings.PartByListFieldNames[partIndex])})"
             : $"PARTITION BY RANGE ({QuoteIdentifier(settings.PartByRangeFieldName)})"
             ;
@@ -831,7 +954,12 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
         return [.. result];
     }
 
-    private static string StrOrNumsToFmtString(StrOrNum[] input)
+    /// <summary>
+    /// Joins list values into the escaped <c>s:</c>/<c>n:</c> form stored in the cache table's
+    /// <c>part_values</c> column. Also used as an injective identity of a value set (the protocol
+    /// escapes its own separator).
+    /// </summary>
+    internal static string StrOrNumsToFmtString(StrOrNum[] input)
         => string.Join(NumOrStrSplitter, input.Select(c => c.ToFmtString()));
 
 }

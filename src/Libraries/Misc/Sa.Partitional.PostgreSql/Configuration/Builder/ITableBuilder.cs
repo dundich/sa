@@ -206,25 +206,78 @@ public interface ITableBuilder
     ITableBuilder AddMigration(Func<CancellationToken, Task<StrOrNum[][]>> getPartValues);
 
     /// <summary>
-    /// Declares static list-partition values to create eagerly at startup.
+    /// Declares <b>one</b> list-partition branch: one value per <c>PartByList</c> column, outermost
+    /// level first.
     /// </summary>
-    /// <param name="partValues">One or more partition values (strings or numbers) forming a single
-    /// nesting level. Pass one argument per <c>PartByList</c> column, or none for a range-only table.</param>
+    /// <param name="branch">The values of one branch, in <c>PartByList</c> order.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
-    ITableBuilder AddMigration(params StrOrNum[] partValues);
+    /// <remarks>For a table without list columns this is a configuration error (validated by
+    /// <see cref="Build"/>).</remarks>
+    ITableBuilder AddMigration(StrOrNum[] branch);
 
     /// <summary>
-    /// Declares a parent-child hierarchy of list-partition values.
+    /// Declares several list-partition branches.
     /// </summary>
-    /// <remarks><c>AddMigration("a", "b")</c> binds to the <c>params</c> overload above and declares two
-    /// independent values, not a parent-child pair. Nesting has to be spelled out with an explicit
-    /// array: <c>AddMigration("a", ["b"])</c>.</remarks>
-    /// <param name="parent">The parent partition value.</param>
-    /// <param name="childs">Child partition values nested under the parent.</param>
+    /// <param name="branches">One array per branch, each with one value per <c>PartByList</c> column.</param>
     /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
-    ITableBuilder AddMigration(StrOrNum parent, StrOrNum[] childs)
+    ITableBuilder AddMigration(params StrOrNum[][] branches);
+
+    /// <summary>
+    /// Shorthand for a two-level list: declares one branch per child, each prefixed with
+    /// <paramref name="parent"/>.
+    /// </summary>
+    /// <remarks>
+    /// <c>AddMigrationChildren("RU", "Moscow", "Samara")</c> declares the two branches
+    /// <c>["RU","Moscow"]</c> and <c>["RU","Samara"]</c>. A one-level list uses
+    /// <c>AddMigration(["tenant"])</c>; a deeper hierarchy uses full branches or
+    /// <see cref="AddMigrationTree"/>.
+    /// </remarks>
+    /// <param name="parent">The value of the outermost list level.</param>
+    /// <param name="children">The values of the next level, one branch per value (at least one).</param>
+    /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="children"/> is empty.</exception>
+    ITableBuilder AddMigrationChildren(StrOrNum parent, params StrOrNum[] children)
     {
-        foreach (StrOrNum child in childs) AddMigration(parent, child);
+        ArgumentNullException.ThrowIfNull(children);
+
+        if (children.Length == 0)
+        {
+            throw new ArgumentException(
+                "AddMigrationChildren needs at least one child value. For a one-level list use "
+                + "AddMigration([parent]).",
+                nameof(children));
+        }
+
+        foreach (StrOrNum child in children) AddMigration([parent, child]);
+
         return this;
+    }
+
+    /// <summary>
+    /// Describes the branches as a tree that mirrors the partition tree, for any nesting depth.
+    /// </summary>
+    /// <remarks>
+    /// <code>
+    /// .AddMigrationTree(t => t
+    ///     .Node("RU", ru => ru
+    ///         .Branch("Moscow")
+    ///         .Branch("Kazan"))
+    ///     .Node("US", us => us
+    ///         .Branch("New York")));
+    /// </code>
+    /// Every <see cref="IMigrationTreeBuilder.Branch"/> completes one branch from the root, so a
+    /// branch can never have the wrong number of values by accident. A statically declared branch is
+    /// still validated by <see cref="Build"/> against the table's list levels.
+    /// </remarks>
+    /// <param name="tree">The tree description.</param>
+    /// <returns>The same <see cref="ITableBuilder"/> for chaining.</returns>
+    ITableBuilder AddMigrationTree(Action<IMigrationTreeBuilder> tree)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        MigrationTreeBuilder builder = new();
+        tree(builder);
+
+        return AddMigration([.. builder.Branches]);
     }
 }

@@ -42,7 +42,7 @@ public class AdoptTableConfigurationTests
 
         ITableSettings settings = builder.Build().Single();
 
-        Assert.Equal(3, settings.Fields.Length);
+        Assert.Equal(3, settings.Fields.Count);
         Assert.Equal(TableRootMode.Adopt, settings.RootMode);
     }
 
@@ -121,6 +121,27 @@ public class AdoptTableConfigurationTests
         InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
         Assert.Contains("inline PRIMARY KEY", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same table declared once quoted and once unquoted is one table. Before the
+    /// normalisation the two spellings produced two builders with an identical <c>FullName</c>, and
+    /// the SQL builder failed on the duplicate dictionary key with an error naming neither.
+    /// </summary>
+    [Fact]
+    public void QuotedAndUnquotedTableNames_ResolveToOneBuilder()
+    {
+        SchemaBuilder builder = new("public");
+
+        ITableBuilder quoted = builder.CreateTable("\"orders\"");
+        ITableBuilder plain = builder.CreateTable("orders");
+
+        Assert.Same(quoted, plain);
+
+        quoted.AddFields(Id, "created_at bigint NOT NULL");
+
+        ITableSettings settings = Assert.Single(builder.Build());
+        Assert.Equal("public.orders", settings.FullName);
     }
 
     [Fact]

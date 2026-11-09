@@ -237,6 +237,8 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
         ValidatePartitionColumns(partByListFieldNames);
 
+        ValidateMigrationBranches(partByListFieldNames);
+
         RangeKeyType rangeKeyType = ResolveRangeKeyType(timestampField);
 
         if (!SqlFieldName.HasColumn(_fields, timestampField) && rangeKeyType != RangeKeyType.UnixSeconds)
@@ -313,7 +315,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
             FullName: $@"{schemaName}.{databaseTableName}",
 
             IdFieldName: idFieldName,
-            Fields: [.. _fields],
+            Fields: Array.AsReadOnly([.. _fields]),
 
             PartBy: _partBy ?? Default.DefaultPartBy,
             Migration: new PartTableMigrationSupport(_migrationPartValues, _getPartValues, _migrationSupport),
@@ -321,8 +323,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
             PartByRangeFieldName: timestampField,
             RangeKeyType: rangeKeyType,
             LongPartitionName: _longPartitionName,
-            PartByListFieldNames: partByListFieldNames,
-            PartitionByFieldName: partByListFieldNames.Length == 0 ? timestampField : partByListFieldNames[0],
+            PartByListFieldNames: Array.AsReadOnly(partByListFieldNames),
 
             RootMode: _rootMode,
             ConversionBackup: _conversionBackup,
@@ -449,15 +450,27 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         return idFieldName;
     }
 
-    public ITableBuilder AddMigration(params StrOrNum[] partValues)
+    public ITableBuilder AddMigration(StrOrNum[] branch)
     {
-        _migrationPartValues.Add(partValues);
+        ArgumentNullException.ThrowIfNull(branch);
+
+        // Copied on purpose: the settings are an immutable snapshot taken at Build(), so a caller
+        // that reuses and mutates its array afterwards must not rewrite what the migration runs.
+        _migrationPartValues.Add([.. branch]);
         return this;
     }
 
-    public ITableBuilder AddMigration(Func<CancellationToken, Task<StrOrNum[][]>> getPartValues)
+    public ITableBuilder AddMigration(params StrOrNum[][] branches)
     {
-        _getPartValues = getPartValues;
+        ArgumentNullException.ThrowIfNull(branches);
+
+        foreach (StrOrNum[] branch in branches)
+        {
+            ArgumentNullException.ThrowIfNull(branch, nameof(branches));
+
+            _migrationPartValues.Add([.. branch]);
+        }
+
         return this;
     }
 
@@ -466,6 +479,46 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         _migrationSupport = migrationSupport;
         return this;
     }
+
+    public ITableBuilder AddMigration(Func<CancellationToken, Task<StrOrNum[][]>> getPartValues)
+    {
+        ArgumentNullException.ThrowIfNull(getPartValues);
+
+        _getPartValues = getPartValues;
+        return this;
+    }
+
+    /// <summary>
+    /// Rejects a declared branch whose value count does not match the list levels of the table.
+    /// </summary>
+    /// <remarks>
+    /// The same check runs in <see cref="SqlTableBuilder.CreateSql"/> for values that only arrive at
+    /// run time, but a statically declared branch is known here - while the offending declaration is
+    /// still identifiable, instead of failing from a background job on the first tick. A range-only
+    /// table has zero list levels, so declaring values for it fails for the same reason.
+    /// </remarks>
+    private void ValidateMigrationBranches(string[] partByListFieldNames)
+    {
+        foreach (StrOrNum[] branch in _migrationPartValues)
+        {
+            if (branch.Length == partByListFieldNames.Length) continue;
+
+            string values = string.Join(", ", branch.Select(value => value.ToString()));
+
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' declares the migration branch [{values}] with "
+                + $"{branch.Length} value(s), but it has {partByListFieldNames.Length} list partition "
+                + $"field(s){DescribeListFields(partByListFieldNames)}. Pass exactly one value per "
+                + "PartByList column: AddMigration([\"v1\", \"v2\"]) for one branch, "
+                + "AddMigration([\"v1\", \"v2\"], [\"v1\", \"v3\"]) for several, or "
+                + "AddMigration(\"v1\", \"v2\", \"v3\") for a two-level parent with children.");
+        }
+    }
+
+    private static string DescribeListFields(string[] partByListFieldNames)
+        => partByListFieldNames.Length == 0
+            ? " (the table is range-partitioned only, so it takes no migration values)"
+            : $" ({string.Join(", ", partByListFieldNames)})";
 
     internal class PartTableMigrationSupport(
         IReadOnlyCollection<StrOrNum[]>? partValues,

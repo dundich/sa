@@ -7,13 +7,13 @@ namespace Sa.Partitional.PostgreSql;
 /// </summary>
 /// <param name="Id">Fully qualified partition identifier, including schema (e.g. <c>"public"."outbox__y2026m06d26"</c>).</param>
 /// <param name="RootTableName">The name of the parent/root table from which this partition is derived.</param>
-/// <param name="PartValues">Partition key values — may be strings (for list) or numbers (for range dates).</param>
+/// <param name="PartValues">Partition key values — may be strings (for list) or numbers (for range dates). Read-only: this is metadata read back from the cache.</param>
 /// <param name="PartBy">The <see cref="PgPartBy"/> strategy that governs how this partition was created.</param>
 /// <param name="FromDate">The effective start date of the partition.</param>
 public sealed record PartByRangeInfo(
     string Id,
     string RootTableName,
-    StrOrNum[] PartValues,
+    IReadOnlyList<StrOrNum> PartValues,
     PgPartBy PartBy,
     DateTimeOffset FromDate);
 
@@ -30,7 +30,10 @@ public interface IPartRepository
     /// <param name="date">The reference date used to compute the partition boundary.</param>
     /// <param name="partValues">Partition key values.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>The number of rows affected (typically 1 on successful CREATE).</returns>
+    /// <returns>
+    /// The result of the underlying multi-statement command: it is <c>0</c> for pure DDL on most
+    /// servers (PostgreSQL reports no row count for <c>CREATE TABLE</c>), not <c>1</c>.
+    /// </returns>
     Task<int> CreatePart(
         string tableName,
         DateTimeOffset date,
@@ -101,7 +104,7 @@ public interface IPartRepository
     /// <paramref name="toDate"/>: each one is detached from its parent and moved — under the same name —
     /// into <paramref name="archiveSchemaName"/>, and its metadata row is marked as archived instead of
     /// being deleted. Already archived rows are not returned by the underlying query, so a repeated run
-    /// is a no-op.
+    /// is a no-op. Equivalent to <see cref="ArchiveCollisionMode.Fail"/> for a name clash.
     /// </summary>
     /// <remarks>
     /// Requires PostgreSQL 13+ (<c>DETACH PARTITION CONCURRENTLY</c> is 12+, but moving a partition to
@@ -118,4 +121,36 @@ public interface IPartRepository
         DateTimeOffset toDate,
         string archiveSchemaName,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Same as the other overload, but chooses what happens when the archive schema already holds a
+    /// table with the partition's name (<see cref="ArchiveCollisionMode"/>).
+    /// </summary>
+    /// <param name="tableName">The root table name.</param>
+    /// <param name="toDate">Upper-bound date — partitions up to and including this date will be archived.</param>
+    /// <param name="archiveSchemaName">The schema the detached partitions are moved into.</param>
+    /// <param name="collisionMode">What to do when the target name is already taken.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>The number of partitions archived.</returns>
+    Task<int> ArchivePartsToDate(
+        string tableName,
+        DateTimeOffset toDate,
+        string archiveSchemaName,
+        ArchiveCollisionMode collisionMode,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Drops list-level partitions of <paramref name="tableName"/> whose whole subtree is empty.
+    /// </summary>
+    /// <remarks>
+    /// Cleanup only retires range leaves; without this, a list value that stopped being used keeps its
+    /// intermediate partition and its <c>DEFAULT</c> child forever. A partition is dropped only when
+    /// nothing in its subtree holds a row and its value path is not a prefix of a value the table's
+    /// migration support reports (a declared branch is never pruned, so migration does not fight the
+    /// cleanup). Opt-in via <see cref="PartCleanupScheduleSettings.PruneEmptyListParts"/>.
+    /// </remarks>
+    /// <param name="tableName">The root table name.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>The number of list-level partitions dropped.</returns>
+    Task<int> PruneEmptyListParts(string tableName, CancellationToken cancellationToken = default);
 }

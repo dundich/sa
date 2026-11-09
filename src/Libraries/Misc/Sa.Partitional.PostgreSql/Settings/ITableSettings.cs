@@ -44,14 +44,16 @@ public interface ITableSettings
 
     /// <summary>
     /// Gets all column definitions declared for this table (primary key + custom fields).
+    /// Read-only: the settings are an immutable snapshot, and the DDL is generated from exactly
+    /// these strings.
     /// </summary>
-    string[] Fields { get; }
+    IReadOnlyList<string> Fields { get; }
 
     /// <summary>
     /// Gets the column names used for list partitioning, outermost level first. Empty when the table
     /// has no list levels (a range-only table).
     /// </summary>
-    string[] PartByListFieldNames { get; }
+    IReadOnlyList<string> PartByListFieldNames { get; }
 
     /// <summary>
     /// Gets the column name used for range partitioning. The column is a <c>bigint</c> holding Unix
@@ -81,7 +83,11 @@ public interface ITableSettings
 
     /// <summary>
     /// Gets the migration support that supplies list-partition values at runtime.
-    /// Null when the table uses range partitioning or has no dynamic migration.
+    /// The built-in <see cref="ITableBuilder.Build"/> result never returns <c>null</c>: a table with
+    /// no declared values simply answers an empty series, and a list-partitioned table with no values
+    /// is then skipped by the migration (it has no leaf to create). A hand-written
+    /// <see cref="ITableSettings"/> may still return <c>null</c>, which the migration also treats as
+    /// "no values for this table".
     /// </summary>
     IPartTableMigrationSupport Migration { get; }
 

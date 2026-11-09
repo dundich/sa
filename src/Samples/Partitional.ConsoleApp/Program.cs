@@ -32,9 +32,9 @@ hostBuilder.Services
             // Partition by 'country' and 'city' (if PartByRange is not specified, defaults to daily)
             .PartByList("country", "city")
             // Migration of partitions for each tenant by city
-            .AddMigration("RU", ["Moscow", "Samara"])
-            .AddMigration("USA", ["Alabama", "New York"])
-            .AddMigration("FR", ["Paris", "Lyon", "Bordeaux"]);
+            .AddMigrationChildren("RU", "Moscow", "Samara")
+            .AddMigrationChildren("USA", "Alabama", "New York")
+            .AddMigrationChildren("FR", "Paris", "Lyon", "Bordeaux");
         });
 
 

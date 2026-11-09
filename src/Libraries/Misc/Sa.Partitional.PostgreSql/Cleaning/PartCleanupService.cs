@@ -1,27 +1,63 @@
+using Microsoft.Extensions.Logging;
+using System.Runtime.ExceptionServices;
+
 namespace Sa.Partitional.PostgreSql.Cleaning;
 
-internal sealed class PartCleanupService(
+internal sealed partial class PartCleanupService(
     IPartRepository repository
     , PartCleanupScheduleSettings settings
     , ISqlBuilder sqlBuilder
+    , ILogger<PartCleanupService> logger
     , TimeProvider? timeProvider = null) : IPartCleanupService
 {
     public async Task<int> Clean(DateTimeOffset toDate, CancellationToken cancellationToken)
     {
-        int cnt = 0;
         bool archive = settings.CleanupMode == PartCleanupMode.Archive;
+
+        int count = 0;
+        Exception? firstError = null;
 
         foreach (ISqlTableBuilder table in sqlBuilder.Tables)
         {
             string tableName = table.FullName;
 
-            cnt += archive
-                ? await repository.ArchivePartsToDate(
-                    tableName, toDate, settings.ArchiveSchemaName, cancellationToken).ConfigureAwait(false)
-                : await repository.DropPartsToDate(tableName, toDate, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                count += archive
+                    ? await repository.ArchivePartsToDate(
+                        tableName,
+                        toDate,
+                        settings.ArchiveSchemaName,
+                        settings.ArchiveCollisionMode,
+                        cancellationToken).ConfigureAwait(false)
+                    : await repository.DropPartsToDate(tableName, toDate, cancellationToken).ConfigureAwait(false);
+
+                if (settings.PruneEmptyListParts && table.Settings.PartByListFieldNames.Count > 0)
+                {
+                    count += await repository.PruneEmptyListParts(tableName, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // The expected stop: the host is shutting down or a deadline elapsed. Retiring
+                // partitions is idempotent, so the next run continues where this one stopped.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // One broken table must not starve the rest of the module (same rule as the
+                // migration). The run as a whole still fails, so the job's error handling sees it.
+                LogTableCleanupFailed(ex, tableName);
+                firstError ??= ex;
+            }
         }
 
-        return cnt;
+        if (firstError is not null)
+        {
+            ExceptionDispatchInfo.Capture(firstError).Throw();
+        }
+
+        return count;
     }
 
     public Task<int> Clean(CancellationToken cancellationToken)
@@ -30,4 +66,10 @@ internal sealed class PartCleanupService(
         DateTimeOffset toDate = tp.GetUtcNow().Add(-settings.DropPartsAfterRetention);
         return Clean(toDate, cancellationToken);
     }
+
+    [LoggerMessage(
+        EventId = 207,
+        Level = LogLevel.Error,
+        Message = "Cleanup of table {TableName} failed. The remaining tables of this run are still processed, then the run fails.")]
+    partial void LogTableCleanupFailed(Exception exception, string tableName);
 }

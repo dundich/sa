@@ -28,7 +28,7 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
                     )
                     .PartByList("country", "city")
                     .PartByRange(PgPartBy.Day)
-                    .AddMigration("RU", "Moscow")
+                    .AddMigrationChildren("RU", "Moscow")
                     .WithDefaultPartition();
 
                     // No list columns: the root is range-partitioned, so the default catches dates

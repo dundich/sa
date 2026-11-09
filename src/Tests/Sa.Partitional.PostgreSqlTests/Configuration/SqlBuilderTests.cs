@@ -193,7 +193,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
         ISqlTableBuilder? builder = sqlbuilder["test_5"];
 
         Assert.NotNull(builder);
-        Assert.Equal(7, builder.Settings.PartByListFieldNames.Length);
+        Assert.Equal(7, builder.Settings.PartByListFieldNames.Count);
 
         var now = DateTimeOffset.Now;
         string sql = builder.CreateSql(now, 7, "s0", "s1", "s2", "s3", "s4", "s5");

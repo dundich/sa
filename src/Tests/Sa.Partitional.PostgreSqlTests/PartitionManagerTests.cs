@@ -23,9 +23,9 @@ public class PartitionManagerTests(PartitionManagerTests.Fixture fixture)
                     )
                     .WithPartSeparator("_")
                     .PartByList("tenant_id", "gender")
-                    .AddMigration(1, ["male", "female"])
-                    .AddMigration(2, "male")
-                    .AddMigration(2, "female")
+                    .AddMigrationChildren(1, "male", "female")
+                    .AddMigrationChildren(2, "male")
+                    .AddMigrationChildren(2, "female")
                     .PartByRange(PgPartBy.Day, "created_at")
                     ;
 

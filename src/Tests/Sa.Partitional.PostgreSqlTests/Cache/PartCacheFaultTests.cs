@@ -69,6 +69,50 @@ public class PartCacheFaultTests
     }
 
     [Fact]
+    public async Task EnsureCache_BackdatedDate_DoesNotRerunTheDdlWithinTheTtl()
+    {
+        FakePartRepository repository = new();
+
+        // The snapshot window never reaches the backdated date, so `InCache` can only answer "absent".
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo>()));
+
+        PartCache cache = CreateCache(repository);
+        DateTimeOffset backdated = FixedNow.AddDays(-30);
+
+        await cache.EnsureCache(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+        Assert.Equal(1, repository.CreatePartCalls);
+
+        // Before the fix each of these drove a full DDL pass (and a snapshot flush) again.
+        await cache.EnsureCache(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+        await cache.EnsureCache(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, repository.CreatePartCalls);
+        Assert.Equal(1, repository.GetPartsFromDateCalls);
+    }
+
+    [Fact]
+    public async Task EnsureCache_AfterTheJobsFlushTheCache_ReChecksTheBackdatedPartition()
+    {
+        FakePartRepository repository = new();
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo>()));
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo>()));
+
+        PartCache cache = CreateCache(repository);
+        DateTimeOffset backdated = FixedNow.AddDays(-30);
+
+        await cache.EnsureCache(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+        Assert.Equal(1, repository.CreatePartCalls);
+
+        // A migration or cleanup run calls this after changing partitions behind the cache's back;
+        // the "already ensured" memory must not survive it.
+        await cache.RemoveCache();
+
+        await cache.EnsureCache(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, repository.CreatePartCalls);
+    }
+
+    [Fact]
     public async Task InCache_UndefinedTable_ReturnsFalse_AndStaysCached()
     {
         FakePartRepository repository = new();
@@ -319,6 +363,12 @@ internal sealed class FakePartRepository : IPartRepository
 
     public Task<int> ArchivePartsToDate(string tableName, DateTimeOffset toDate, string archiveSchemaName, CancellationToken cancellationToken = default)
         => Task.FromResult(0);
+
+    public Task<int> ArchivePartsToDate(string tableName, DateTimeOffset toDate, string archiveSchemaName, ArchiveCollisionMode collisionMode, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    public Task<int> PruneEmptyListParts(string tableName, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
 }
 
 internal sealed class FakeSqlBuilder : ISqlBuilder
@@ -329,7 +379,7 @@ internal sealed class FakeSqlBuilder : ISqlBuilder
 
     public IReadOnlyCollection<ISqlTableBuilder> Tables { get; } = Array.Empty<ISqlTableBuilder>();
 
-    public IAsyncEnumerable<string> MigrateSql(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve)
+    public IAsyncEnumerable<MigrateBatch> MigrateSql(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve)
         => throw new NotImplementedException();
 
     public string SelectPartsFromDateSql(string tableName)
@@ -352,6 +402,8 @@ internal sealed class FakeSqlTableBuilder : ISqlTableBuilder
     public string SelectPartsToDate => string.Empty;
 
     public string CreateSql(DateTimeOffset date, params StrOrNum[] partValues) => string.Empty;
+
+    public string CreatePartSql(DateTimeOffset date, StrOrNum[] partValues) => string.Empty;
 
     public string CreateRootSql() => string.Empty;
 

@@ -29,9 +29,9 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture)
                     // Партиционирование по country и city (если не задан PartByRange то по дням)
                     .PartByList("country", "city")
                     // Миграция партиций каждого тенанта по city
-                    .AddMigration("RU", ["Moscow", "Samara"])
-                    .AddMigration("USA", ["Alabama", "New York"])
-                    .AddMigration("FR", ["Paris", "Lyon", "Bordeaux"]);
+                    .AddMigrationChildren("RU", "Moscow", "Samara")
+                    .AddMigrationChildren("USA", "Alabama", "New York")
+                    .AddMigrationChildren("FR", "Paris", "Lyon", "Bordeaux");
 
                 });
             }

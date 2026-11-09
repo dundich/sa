@@ -13,6 +13,13 @@ namespace Sa.Partitional.PostgreSql;
 public sealed class MigrationScheduleSettings
 {
     /// <summary>
+    /// Upper bound of <see cref="ForwardDays"/>: ten years of daily partitions. It exists to turn a
+    /// typo (<c>36500</c> instead of <c>365</c>) into a validation error instead of a migration tick
+    /// that asks PostgreSQL for tens of thousands of tables.
+    /// </summary>
+    internal const int MaxForwardDays = 3660;
+
+    /// <summary>
     /// Gets or sets how many days into the future to pre-create partitions on each run.
     /// Default is 2 days.
     /// </summary>
@@ -78,6 +85,14 @@ public sealed class MigrationScheduleSettings
         {
             throw new ValidationException(
                 $"MigrationScheduleSettings:ForwardDays must be at least 1, but was '{ForwardDays}'.");
+        }
+
+        if (ForwardDays > MaxForwardDays)
+        {
+            throw new ValidationException(
+                $"MigrationScheduleSettings:ForwardDays must not exceed {MaxForwardDays} (ten years of "
+                + $"daily partitions), but was '{ForwardDays}'. Every tick pre-creates that many "
+                + "partitions per table and per list value, so a typo here is an accidental mass-DDL.");
         }
 
         if (ExecutionInterval <= TimeSpan.Zero)

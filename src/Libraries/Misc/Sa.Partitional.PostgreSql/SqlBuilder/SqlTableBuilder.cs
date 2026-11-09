@@ -16,6 +16,12 @@ internal sealed class SqlTableBuilder(ITableSettings settings) : ISqlTableBuilde
 
 
     public string CreateSql(DateTimeOffset date, params StrOrNum[] partValues)
+        => Compose(date, partValues, includeRoot: true);
+
+    public string CreatePartSql(DateTimeOffset date, StrOrNum[] partValues)
+        => Compose(date, partValues, includeRoot: false);
+
+    private string Compose(DateTimeOffset date, StrOrNum[] partValues, bool includeRoot)
     {
         ArgumentNullException.ThrowIfNull(partValues);
 
@@ -24,10 +30,10 @@ internal sealed class SqlTableBuilder(ITableSettings settings) : ISqlTableBuilde
         // "-- incomplete number of parts" comment: the result was a partition tree whose deepest
         // level had no range leaf, so every INSERT for that date then failed with "no partition of
         // relation ... found for row" - although the call that produced the DDL reported success.
-        if (settings.PartByListFieldNames.Length != partValues.Length)
+        if (settings.PartByListFieldNames.Count != partValues.Length)
         {
             throw new ArgumentException(
-                $"Table '{settings.FullName}' has {settings.PartByListFieldNames.Length} list partition "
+                $"Table '{settings.FullName}' has {settings.PartByListFieldNames.Count} list partition "
                 + $"field(s){Describe(settings.PartByListFieldNames)}, so exactly that many partition "
                 + $"values are required, but {partValues.Length} were given.",
                 nameof(partValues));
@@ -41,7 +47,11 @@ internal sealed class SqlTableBuilder(ITableSettings settings) : ISqlTableBuilde
         // table the library does not own (or, worse, create an empty root when the real one is
         // missing). The root DDL is therefore reserved for Create mode and for the conversion itself
         // (see CreateRootSql).
-        string rootSql = settings.RootMode == TableRootMode.Adopt ? string.Empty : rootBuilder.CreateSql();
+        //
+        // The cache table is part of the root block on purpose: it is one table per root, so a
+        // migration that walks hundreds of list values must not re-run its DDL (and the
+        // ALTER TABLE ... ADD COLUMN upgrade that takes ACCESS EXCLUSIVE on it) per partition.
+        string rootSql = includeRoot ? RootSql() : string.Empty;
 
         return
 $"""
@@ -56,8 +66,12 @@ $"""
 
     public string CreateCacheSql() => settings.CreateCacheSql();
 
-    private static string Describe(string[] fieldNames)
-        => fieldNames.Length == 0 ? " (the table is range-partitioned only)" : $" ({string.Join(", ", fieldNames)})";
+    private string RootSql()
+        => (settings.RootMode == TableRootMode.Adopt ? string.Empty : rootBuilder.CreateSql())
+           + settings.CreateCacheSql();
+
+    private static string Describe(IReadOnlyList<string> fieldNames)
+        => fieldNames.Count == 0 ? " (the table is range-partitioned only)" : $" ({string.Join(", ", fieldNames)})";
 
     public override string ToString() => $"{FullName} {Settings.PartByListFieldNames}";
 

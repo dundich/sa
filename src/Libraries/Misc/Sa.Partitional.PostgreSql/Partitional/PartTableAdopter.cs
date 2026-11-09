@@ -53,8 +53,6 @@ internal sealed partial class PartTableAdopter(
     /// </remarks>
     private const int MaxPartitionsPerConversion = 1000;
 
-    private const int MaxIdentifierBytes = 63;
-
     /// <summary>Tables already converted by this process, keyed by full name.</summary>
     private readonly ConcurrentDictionary<string, bool> _adopted = new(StringComparer.Ordinal);
 
@@ -230,7 +228,7 @@ internal sealed partial class PartTableAdopter(
         // An empty table has no range to cover; the cache table created above is the adoption marker.
         if (min is null || max is null) return 0;
 
-        List<StrOrNum[]> partValues = settings.PartByListFieldNames.Length == 0
+        List<StrOrNum[]> partValues = settings.PartByListFieldNames.Count == 0
             ? [[]]
             : await ReadListValues(tx, settings, qualifiedBackup, cancellationToken).ConfigureAwait(false);
 
@@ -249,7 +247,8 @@ internal sealed partial class PartTableAdopter(
         {
             foreach (DateTimeOffset date in dates)
             {
-                string sql = builder.CreateSql(date, values);
+                // Root and cache table were created above; per-partition batches must not repeat them.
+                string sql = builder.CreatePartSql(date, values);
                 await Execute(tx, sql, [], cancellationToken).ConfigureAwait(false);
                 created++;
             }
@@ -267,15 +266,16 @@ internal sealed partial class PartTableAdopter(
 
         while (cursor < end)
         {
-            dates.Add(cursor);
-
-            if (dates.Count > MaxPartitionsPerConversion)
+            // Checked before the add, so the limit is the number of partitions actually created.
+            if (dates.Count >= MaxPartitionsPerConversion)
             {
                 throw new InvalidOperationException(
                     $"Table '{settings.FullName}' holds data covering more than {MaxPartitionsPerConversion} "
                     + "partitions. Check that the range partition column holds Unix seconds, not "
                     + "milliseconds, or reduce the data set before adopting the table.");
             }
+
+            dates.Add(cursor);
 
             cursor = settings.PartBy.GetRange(cursor).End;
         }
@@ -498,7 +498,7 @@ SELECT COALESCE((SELECT relkind::text FROM pg_class WHERE oid = to_regclass(@tab
             $"SELECT DISTINCT {columns} FROM {qualifiedBackup};",
             reader =>
             {
-                StrOrNum[] values = new StrOrNum[settings.PartByListFieldNames.Length];
+                StrOrNum[] values = new StrOrNum[settings.PartByListFieldNames.Count];
 
                 for (int i = 0; i < values.Length; i++)
                 {
@@ -510,7 +510,7 @@ SELECT COALESCE((SELECT relkind::text FROM pg_class WHERE oid = to_regclass(@tab
             [], cancellationToken).ConfigureAwait(false);
 
         return rows
-            .GroupBy(row => string.Join("|", row.Select(value => value.ToFmtString())), StringComparer.Ordinal)
+            .GroupBy(row => row, StrOrNumArrayComparer.Instance)
             .Select(group => group.First())
             .ToList();
     }
@@ -615,7 +615,7 @@ WHERE d.refobjid = to_regclass(@table)
         CancellationToken cancellationToken)
     {
         string baseName = $"{settings.DatabaseTableName}{settings.SqlPartSeparator}backup$";
-        string candidate = TrimIdentifier(baseName);
+        string candidate = SqlTemplate.TrimIdentifier(baseName);
 
         for (int i = 1; ; i++)
         {
@@ -627,7 +627,8 @@ WHERE d.refobjid = to_regclass(@table)
             if (!exists) return candidate;
 
             string suffix = $"_{i.ToString(CultureInfo.InvariantCulture)}";
-            candidate = TrimIdentifier(baseName, MaxIdentifierBytes - Encoding.UTF8.GetByteCount(suffix)) + suffix;
+            candidate = SqlTemplate.TrimIdentifier(
+                baseName, SqlTemplate.MaxIdentifierBytes - Encoding.UTF8.GetByteCount(suffix)) + suffix;
         }
     }
 
@@ -635,25 +636,6 @@ WHERE d.refobjid = to_regclass(@table)
         => SqlTemplate.QualifiedName(
             settings.DatabaseSchemaName,
             $"{settings.DatabaseTableName}{settings.SqlPartSeparator}{settings.PartTablePostfix}");
-
-    private static string TrimIdentifier(string value, int maxBytes = MaxIdentifierBytes)
-    {
-        if (Encoding.UTF8.GetByteCount(value) <= maxBytes) return value;
-
-        StringBuilder builder = new();
-        int bytes = 0;
-
-        foreach (Rune rune in value.EnumerateRunes())
-        {
-            int runeBytes = rune.Utf8SequenceLength;
-            if (bytes + runeBytes > maxBytes) break;
-
-            builder.Append(rune.ToString());
-            bytes += runeBytes;
-        }
-
-        return builder.ToString();
-    }
 
     /// <summary>
     /// Reports whether a PostgreSQL column type can serve as the configured range key.

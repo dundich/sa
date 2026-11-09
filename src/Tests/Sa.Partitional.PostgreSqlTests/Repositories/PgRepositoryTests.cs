@@ -96,6 +96,11 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
         Assert.NotNull(item);
         Assert.Equal(timeExpected, item.FromDate);
         Assert.Equal("public.test_10", item.RootTableName);
+
+        // The metadata is a read-only snapshot: the values cannot be rewritten (and re-used) by a
+        // caller through the type's backing array.
+        Assert.False(item.PartValues is StrOrNum[]);
+        Assert.Equal("[1, some1, some2]", $"[{string.Join(", ", item.PartValues)}]");
     }
 
     [Fact()]

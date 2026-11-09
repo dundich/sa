@@ -22,8 +22,8 @@ public class PartCleanupServiceTests(PartCleanupServiceTests.Fixture fixture) : 
                         "payload_id TEXT NOT NULL"
                     )
                     .PartByList("tenant_id", "city")
-                    .AddMigration(1, ["New York", "London"])
-                    .AddMigration(2, ["Moscow", "Kazan", "Yekaterinburg"])
+                    .AddMigrationChildren(1, "New York", "London")
+                    .AddMigrationChildren(2, "Moscow", "Kazan", "Yekaterinburg")
                     ;
 
                 });

@@ -33,8 +33,8 @@ public class KeyedPartitionAsJobTests(KeyedPartitionAsJobTests.Fixture fixture)
                         "city TEXT NOT NULL")
                     .WithPartSeparator("_")
                     .PartByList("country", "city")
-                    .AddMigration("RU", ["Moscow", "Samara"])
-                    .AddMigration("USA", ["Alabama", "New York"]));
+                    .AddMigrationChildren("RU", "Moscow", "Samara")
+                    .AddMigrationChildren("USA", "Alabama", "New York"));
             }, asBackgroundJob: true);
         }
     }

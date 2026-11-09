@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sa.Partitional.PostgreSql.Cache;
 using Sa.Partitional.PostgreSql.Configuration;
@@ -40,6 +41,7 @@ internal static class Setup
                 sp.GetRequiredKeyedService<IPartRepository>(key),
                 sp.GetRequiredKeyedService<PartCleanupScheduleSettings>(key),
                 sp.GetRequiredKeyedService<ISqlBuilder>(key),
+                sp.GetRequiredService<ILogger<PartCleanupService>>(),
                 sp.GetService<TimeProvider>()));
         }
 

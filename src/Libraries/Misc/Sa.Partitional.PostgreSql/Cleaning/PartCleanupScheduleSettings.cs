@@ -44,6 +44,19 @@ public sealed class PartCleanupScheduleSettings
     public string ArchiveSchemaName { get; set; } = "archive";
 
     /// <summary>
+    /// Gets or sets what happens when the archive schema already holds a table with the expired
+    /// partition's name. Default is <see cref="ArchiveCollisionMode.Fail"/>.
+    /// </summary>
+    /// <remarks>
+    /// The clash is reachable when a window is archived, written to again (the leaf is re-created in
+    /// the live schema) and expires a second time. <see cref="ArchiveCollisionMode.Fail"/> leaves the
+    /// live partition attached and logs the clash; <see cref="ArchiveCollisionMode.RenameExisting"/>
+    /// renames the older archived copy to <c>{name}{separator}prev$N</c> and archives the live one
+    /// under the canonical name. Ignored in <see cref="PartCleanupMode.Drop"/> mode.
+    /// </remarks>
+    public ArchiveCollisionMode ArchiveCollisionMode { get; set; } = ArchiveCollisionMode.Fail;
+
+    /// <summary>
     /// Gets or sets the interval at which the cleanup job will be executed.
     /// Default is set to every 4 hours, with a random additional delay of up to 59 minutes.
     /// </summary>
@@ -56,6 +69,25 @@ public sealed class PartCleanupScheduleSettings
     /// Default is set to 1 minute.
     /// </summary>
     public TimeSpan InitialDelay { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Gets or sets whether the cleanup also drops list-level partitions whose whole subtree is
+    /// empty. Default is <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Cleanup itself only retires <b>range leaves</b> (the rows of the cache table). A tenant (or any
+    /// other list value) that stopped being used therefore keeps its intermediate
+    /// <c>{table}{sep}{value}</c> partition — and its <c>def$</c> child — forever.
+    /// </para>
+    /// <para>
+    /// When enabled, a list-level partition is dropped only if (a) nothing in its subtree holds a row
+    /// and (b) its value path is not a prefix of a value the table's migration support reports (so a
+    /// declared branch is never dropped and re-created on every tick). An unknown value that still
+    /// receives rows is never pruned, because its subtree is not empty.
+    /// </para>
+    /// </remarks>
+    public bool PruneEmptyListParts { get; set; } = false;
 
     /// <summary>
     /// Validates the current settings and throws a <see cref="ValidationException"/> for the first

@@ -41,41 +41,94 @@ internal sealed class SqlBuilder : ISqlBuilder
 
     public IReadOnlyCollection<ISqlTableBuilder> Tables => builders.Values;
 
-    public async IAsyncEnumerable<string> MigrateSql(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve)
+    public async IAsyncEnumerable<MigrateBatch> MigrateSql(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve)
     {
         foreach (string table in builders.Keys)
         {
             SqlTableBuilder builder = builders[table];
 
-            StrOrNum[][] parValues = await resolve(table).ConfigureAwait(false);
+            // Table by table, so a failure of one table's migration (a resolution failure, a
+            // partition name over the identifier limit, a rejected value count) is reported as a
+            // batch of its own instead of unwinding the whole run before the other tables start.
+            await using IAsyncEnumerator<MigrateBatch> batches =
+                TableBatches(builder, dates, resolve).GetAsyncEnumerator();
 
-            if (parValues.Length == 0 && builder.Settings.PartByListFieldNames.Length > 0)
+            while (true)
             {
-                // A list-partitioned table needs one value per list level; with none resolved there is
-                // no leaf to create. This used to emit the root and the list levels only, producing a
-                // tree whose deepest level had no range leaf - every later INSERT then failed with
-                // "no partition of relation ... found for row". Nothing to do is the honest answer.
-                continue;
-            }
+                MigrateBatch? next = null;
+                Exception? error = null;
 
-            if (parValues.Length > 0)
-            {
-                foreach (StrOrNum[] parts in parValues)
+                try
                 {
-                    foreach (DateTimeOffset date in dates)
-                    {
-                        string sql = builder.CreateSql(date, parts);
-                        yield return sql;
-                    }
+                    if (!await batches.MoveNextAsync().ConfigureAwait(false)) break;
+
+                    next = batches.Current;
                 }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    error = ex;
+                }
+
+                if (error is not null)
+                {
+                    yield return new MigrateBatch(builder.FullName, null, error);
+                    break;
+                }
+
+                yield return next.GetValueOrDefault();
             }
-            else
+        }
+    }
+
+    /// <summary>
+    /// The statement batches of one table, in execution order.
+    /// </summary>
+    /// <remarks>
+    /// The first batch carries the schema/root/cache-table DDL, the rest are leaf-only. Re-emitting
+    /// the cache table's <c>ALTER TABLE … ADD COLUMN</c> per date and per list value took an
+    /// <c>ACCESS EXCLUSIVE</c> lock on it hundreds of times per tick for a table with many values.
+    /// </remarks>
+    private static async IAsyncEnumerable<MigrateBatch> TableBatches(
+        SqlTableBuilder builder,
+        DateTimeOffset[] dates,
+        Func<string, Task<StrOrNum[][]>> resolve)
+    {
+        StrOrNum[][] parValues = await resolve(builder.FullName).ConfigureAwait(false);
+
+        if (parValues.Length == 0 && builder.Settings.PartByListFieldNames.Count > 0)
+        {
+            // A list-partitioned table needs one value per list level; with none resolved there is
+            // no leaf to create. This used to emit the root and the list levels only, producing a
+            // tree whose deepest level had no range leaf - every later INSERT then failed with
+            // "no partition of relation ... found for row". Nothing to do is the honest answer.
+            yield break;
+        }
+
+        bool rootEmitted = false;
+
+        string Next(DateTimeOffset date, StrOrNum[] parts)
+        {
+            if (rootEmitted) return builder.CreatePartSql(date, parts);
+
+            rootEmitted = true;
+            return builder.CreateSql(date, parts);
+        }
+
+        if (parValues.Length > 0)
+        {
+            foreach (StrOrNum[] parts in parValues)
             {
                 foreach (DateTimeOffset date in dates)
                 {
-                    string sql = builder.CreateSql(date);
-                    yield return sql;
+                    yield return new MigrateBatch(builder.FullName, Next(date, parts), null);
                 }
+            }
+        }
+        else
+        {
+            foreach (DateTimeOffset date in dates)
+            {
+                yield return new MigrateBatch(builder.FullName, Next(date, []), null);
             }
         }
     }
