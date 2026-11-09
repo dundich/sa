@@ -44,7 +44,55 @@ jobs:
     - name: Test (full suite)
       if: runner.os == 'Linux'
       shell: bash
-      run: ./build-sh/do-test.sh
+      run: |
+        set -o pipefail
+        # Keep the runner's output for the failure report below. `pipefail` preserves the
+        # step's verdict: without it the exit code would be `tee`'s, always 0.
+        ./build-sh/do-test.sh 2>&1 | tee "$RUNNER_TEMP/test-full.log"
+
+    # A failing `dotnet test` on the MTP driver only yields "Process completed with exit code 1"
+    # in the run summary, and the full log is not reachable without repository admin access.
+    # Re-emit the failing tests as workflow error annotations so the check-run API and the
+    # GitHub UI both show which test failed and why.
+    - name: Report failing tests
+      if: failure() && runner.os == 'Linux'
+      shell: bash
+      run: |
+        log="$RUNNER_TEMP/test-full.log"
+        if [ ! -f "$log" ]; then
+          echo "::error::Test log missing: $log"
+          exit 0
+        fi
+
+        {
+          # MTP prints `failed <Fully.Qualified.Name> [duration]` for every failing test
+          # (optionally indented), while the summary line reads `failed: N` — the space after
+          # the word plus the bracketed duration tells them apart.
+          grep -E '(^|[[:space:]])failed .*\[[0-9]' "$log" | head -20
+          echo
+          # Details of the first failure: error message and stack trace.
+          awk '/[[:space:]]failed .*\[[0-9]/{shown++} shown==1{print} shown==2{exit}' "$log" | head -40
+        } > "$RUNNER_TEMP/failures.txt"
+
+        if [ ! -s "$RUNNER_TEMP/failures.txt" ]; then
+          # Not a test failure (exit code 8, a crashed module, ...): the tail says why.
+          echo "no 'failed' lines found; tail of the test log" > "$RUNNER_TEMP/failures.txt"
+          tail -60 "$log" >> "$RUNNER_TEMP/failures.txt"
+        fi
+
+        while IFS= read -r line; do
+          line="${line//'%'/'%25'}"
+          line="${line//$'\r'/}"
+          echo "::error::$line"
+        done < "$RUNNER_TEMP/failures.txt"
+
+    - name: Upload test log
+      if: always() && runner.os == 'Linux'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ubuntu-test-log
+        path: ${{ runner.temp }}/test-full.log
+        if-no-files-found: ignore
 
     # windows-latest has no Docker, so the Testcontainers suites cannot run there: this leg
     # covers Sa.Media.FFmpegTests only. The single-project shape keeps `dotnet test` on the
