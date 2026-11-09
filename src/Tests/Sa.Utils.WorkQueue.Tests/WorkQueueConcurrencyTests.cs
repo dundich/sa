@@ -607,4 +607,66 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         Assert.True(work.TotalProcessed > 0);
     }
 
+    /// <summary>
+    /// Two callers raising the limit at the same moment must not both create the same slot.
+    /// </summary>
+    /// <remarks>
+    /// The limit change used to decide the delta under <c>_readersSync</c> and register the
+    /// new readers after releasing it, so both callers read the same "readers I have" count
+    /// and both spawned replacements. The overshoot is bad on its own — it exceeds
+    /// <see cref="ISaWorkQueue{TInput}.MaxConcurrency"/>, which is documented as a ceiling —
+    /// but with <c>MaxConcurrency = 1</c> it also puts a second reader on a channel created
+    /// with <c>SingleReader = true</c>, which is a promise to <c>System.Threading.Channels</c>
+    /// rather than a hint.
+    /// <para>
+    /// The race window is between the unlock and the registration, so the test repeats it
+    /// and observes the consequence rather than the internals: both items are queued and
+    /// both are gated, so a second reader shows up as two concurrent executions.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ConcurrentLimitRaises_CannotExceedMaxConcurrency()
+    {
+        for (var iteration = 0; iteration < 50; iteration++)
+        {
+            var work = new TrackingWork((_, _) => Task.CompletedTask);
+
+            await using var queue = new SaWorkQueue<BlockingTaskModel>(
+                new SaWorkQueueOptions<BlockingTaskModel>(
+                    Processor: work,
+                    ConcurrencyLimit: 0,
+                    MaxConcurrency: 1,
+                    QueueCapacity: 4,
+                    StatusChanged: work.HandleChanges));
+
+            // Both fit in the buffer, so no producer parks: the pool is paused, not full.
+            var first = new BlockingTaskModel(Id: "first");
+            var second = new BlockingTaskModel(Id: "second");
+            await queue.Enqueue(first, TestToken);
+            await queue.Enqueue(second, TestToken);
+
+            using var barrier = new Barrier(2);
+            var raisers = new[]
+            {
+                Task.Run(() => { barrier.SignalAndWait(); queue.ConcurrencyLimit = 1; }, TestToken),
+                Task.Run(() => { barrier.SignalAndWait(); queue.ConcurrencyLimit = 1; }, TestToken),
+            };
+
+            await Task.WhenAll(raisers);
+
+            // Let a second reader — if one was spawned — pick up the second item.
+            await Task.Delay(20, TestToken);
+
+            var observed = work.MaxParallelObserved;
+
+            // Released before asserting: a wedged item would otherwise hold up the dispose.
+            first.Unlock();
+            second.Unlock();
+
+            Assert.True(observed <= 1,
+                $"iteration {iteration}: {observed} readers ran at once with MaxConcurrency = 1");
+            Assert.Equal(1, queue.ConcurrencyLimit);
+        }
+    }
+
 }

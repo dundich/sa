@@ -152,7 +152,7 @@ public sealed record SaWorkQueueOptions<TInput>(
     public static SaWorkQueueOptions<TInput> Create(Func<TInput, CancellationToken, Task> process)
     {
         ArgumentNullException.ThrowIfNull(process);
-        return new(new DelegatingWork(process));
+        return new(new DelegatingWork<TInput>(process));
     }
 
     /// <summary>Creates options from an <see cref="ISaWork{TInput}"/> processor.</summary>
@@ -160,13 +160,6 @@ public sealed record SaWorkQueueOptions<TInput>(
     {
         ArgumentNullException.ThrowIfNull(processor);
         return new(processor);
-    }
-
-    // Helper adapter from delegate to ISaWork
-    private sealed class DelegatingWork(Func<TInput, CancellationToken, Task> process) : ISaWork<TInput>
-    {
-        public Task Execute(TInput input, CancellationToken cancellationToken)
-            => process(input, cancellationToken);
     }
 }
 

@@ -186,7 +186,7 @@ public sealed partial class SaWorkQueue<TInput>
             return;
         }
 
-        ShutdownDepth.Value++;
+        _shutdownDepth.Value++;
 
         try
         {
@@ -218,7 +218,7 @@ public sealed partial class SaWorkQueue<TInput>
         }
         finally
         {
-            ShutdownDepth.Value--;
+            _shutdownDepth.Value--;
             _shutdownCompleted.TrySetResult();
         }
     }
@@ -238,7 +238,7 @@ public sealed partial class SaWorkQueue<TInput>
             return;
         }
 
-        ShutdownDepth.Value++;
+        _shutdownDepth.Value++;
 
         try
         {
@@ -268,7 +268,7 @@ public sealed partial class SaWorkQueue<TInput>
         }
         finally
         {
-            ShutdownDepth.Value--;
+            _shutdownDepth.Value--;
             _shutdownCompleted.TrySetResult();
         }
     }
@@ -407,7 +407,7 @@ public sealed partial class SaWorkQueue<TInput>
         if (Interlocked.CompareExchange(ref _disposeStarted, 1, 0) != 0)
         {
             // A call made from inside the shutdown the winner is running would wait on
-            // itself; see ShutdownDepth.
+            // itself; see _shutdownDepth.
             if (!IsShuttingDownHere)
             {
                 _disposeCompleted.Task.Wait();

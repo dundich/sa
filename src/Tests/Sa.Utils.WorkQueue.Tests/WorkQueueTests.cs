@@ -383,4 +383,62 @@ public class WorkQueueTests
         await Assert.ThrowsAsync<InvalidOperationException>(()
             => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());
     }
+
+    /// <summary>
+    /// A shutdown started from another queue's shutdown flow waits for its own shutdown to
+    /// finish: the re-entrancy guard belongs to one queue, not to the flow that happens to
+    /// be running.
+    /// </summary>
+    /// <remarks>
+    /// The guard exists so a status callback invoked by the drain does not wait on the
+    /// shutdown that invoked it. While it was a <em>static</em> async-local it keyed on the
+    /// execution context instead, so any queue shut down from inside that flow skipped the
+    /// wait — and "shutdown completed" stopped meaning the same thing to every caller, which
+    /// is the entire point of <c>_shutdownCompleted</c>.
+    /// </remarks>
+    [Fact]
+    public async Task ShutdownAsync_OfAnotherQueue_FromInsideAShutdownFlow_StillWaits()
+    {
+        var wedged = new WedgedProcessor();
+
+        await using var other = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(wedged)
+                .WithConcurrencyLimit(1)
+                .WithMaxConcurrency(1)
+                .WithQueueCapacity(1));
+
+        await other.Enqueue(1, TestToken);
+        await wedged.Entered.WaitAsync(TestToken);
+
+        // This shutdown is owned by the test thread and cannot finish until the wedged item
+        // returns; the nested call must wait for it rather than report success early.
+        var otherShutdown = other.ShutdownAsync();
+
+        Task? nested = null;
+
+        await using var first = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+                .WithConcurrencyLimit(0)
+                .WithStatusCallback((_, _, _) => nested = other.ShutdownAsync()));
+
+        // A buffered item makes the shutdown report through the status callback, i.e. run
+        // the nested call from inside a shutdown body — the situation the guard keys on.
+        first.TryEnqueue(1);
+        await first.ShutdownAsync();
+
+        try
+        {
+            Assert.NotNull(nested);
+            Assert.False(
+                nested!.IsCompleted,
+                "the nested ShutdownAsync returned before the other queue's shutdown finished");
+        }
+        finally
+        {
+            wedged.Release();
+        }
+
+        await otherShutdown;
+        await nested!;
+    }
 }

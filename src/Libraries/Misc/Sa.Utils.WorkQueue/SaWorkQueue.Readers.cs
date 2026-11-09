@@ -58,22 +58,25 @@ public sealed partial class SaWorkQueue<TInput>
     /// status callback, so starting loops under the lock meant running user code
     /// under <c>_readersSync</c>: a handler that waits on anything touching the pool
     /// deadlocked against the very thread that resized it.
+    /// <para>
+    /// The registration step is deliberately shared with <c>SetConcurrencyLimit</c>
+    /// rather than repeated there: the slots must be taken in the same critical section
+    /// that decided to take them, or two concurrent callers each see the slots the other
+    /// has not taken yet and both act on them.
+    /// </para>
     /// </remarks>
     private void StartReaders(int count)
     {
         if (count <= 0) return;
 
-        var registered = new Reader[count];
+        Reader[]? registered = null;
         var added = 0;
 
         try
         {
             lock (_readersSync)
             {
-                for (; added < count; added++)
-                {
-                    registered[added] = RegisterReaderUnderLock();
-                }
+                registered = RegisterReadersUnderLock(count, out added);
             }
         }
         finally
@@ -83,10 +86,51 @@ public sealed partial class SaWorkQueue<TInput>
             // checks the token before reading anything. And a reader that is registered but
             // never launched never completes its published task, so anything waiting for the
             // pool to wind down would wait out the whole shutdown timeout on it.
-            for (var i = 0; i < added; i++)
+            if (registered is not null)
             {
-                LaunchReader(registered[i]);
+                LaunchRegistered(registered, added);
             }
+        }
+    }
+
+    /// <summary>
+    /// Creates <paramref name="count"/> readers and registers them, without starting their
+    /// loops. Must be called under <c>_readersSync</c>.
+    /// </summary>
+    /// <param name="count">How many readers to register.</param>
+    /// <param name="added">
+    /// How many were actually registered. Lower than <paramref name="count"/> only when
+    /// registration threw partway, in which case the caller launches what exists.
+    /// </param>
+    /// <remarks>
+    /// One lock hold for the whole batch, so the slots it takes are visible to the next
+    /// caller before that caller computes its own delta. The per-reader reasoning — why a
+    /// reader must be registered before its loop is launched, and what
+    /// <see cref="Reader.Completion"/> publishes in the meantime — lives on
+    /// <see cref="RegisterReaderUnderLock"/>.
+    /// </remarks>
+    private Reader[] RegisterReadersUnderLock(int count, out int added)
+    {
+        var registered = new Reader[count];
+        added = 0;
+
+        for (; added < count; added++)
+        {
+            registered[added] = RegisterReaderUnderLock();
+        }
+
+        return registered;
+    }
+
+    /// <summary>
+    /// Starts the loops of already-registered readers. Never called under
+    /// <c>_readersSync</c>; see <see cref="StartReaders"/> for why.
+    /// </summary>
+    private void LaunchRegistered(Reader[] registered, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            LaunchReader(registered[i]);
         }
     }
 
@@ -436,10 +480,15 @@ public sealed partial class SaWorkQueue<TInput>
     private void RemoveReader(Reader reader)
     {
         bool lostSlot;
+        bool lostLastReader;
 
         lock (_readersSync)
         {
             _readers.Remove(reader);
+
+            // The one place a reader leaves the registry. A force-cancel that snapshotted
+            // this reader earlier checks the flag instead of scanning the list.
+            reader.Removed = true;
 
             // An unplanned death — a processor fault under StopReader, or a crash
             // in the loop — really does cost the pool a slot, so the limit drops
@@ -459,6 +508,11 @@ public sealed partial class SaWorkQueue<TInput>
             {
                 _concurrency--;
             }
+
+            // The pool now has nobody to take the buffered items, and the limit says so
+            // too. A waiter parked in WaitForIdleAsync has to learn about it: see
+            // WakeStalledIdleWaiter.
+            lostLastReader = lostSlot && LiveReaderCount == 0;
         }
 
         reader.Release();
@@ -466,6 +520,11 @@ public sealed partial class SaWorkQueue<TInput>
         if (lostSlot && IsEnabled)
         {
             SaWorkQueueLogMessages.LogReaderLost(_logger, _concurrency);
+        }
+
+        if (lostLastReader)
+        {
+            WakeStalledIdleWaiter();
         }
     }
 
@@ -506,8 +565,9 @@ public sealed partial class SaWorkQueue<TInput>
                 // typically — and RemoveReader already gave its slot back. Releasing it
                 // again here would decrement a limit the caller may have re-armed since
                 // the snapshot was taken, which is exactly what the slot accounting is
-                // built to prevent.
-                if (!_readers.Contains(reader)) continue;
+                // built to prevent. The flag is what RemoveReader sets under this same
+                // lock, so the answer is a field read rather than a scan of the registry.
+                if (reader.Removed) continue;
 
                 if (!reader.IsLive) continue;
                 if (reader.Loop.IsCancellationRequested) continue; // shutdown got here first
@@ -547,6 +607,16 @@ public sealed partial class SaWorkQueue<TInput>
             }
         }
 
+        // Every live reader the pool had is now on its way out, so nothing can take the
+        // buffered items. A waiter already parked in WaitForIdleAsync would otherwise stay
+        // there until the count reached zero, which no finishing item can do. Signalling is
+        // harmless when a concurrent limit raise re-arms the pool meanwhile: the waiter
+        // re-reads PoolState, sees Active, and parks again on a fresh signal.
+        if (cancelled > 0)
+        {
+            WakeStalledIdleWaiter();
+        }
+
         return tasks;
     }
 
@@ -567,6 +637,14 @@ public sealed partial class SaWorkQueue<TInput>
     /// proceed on a queue that will never drain. The branch is chosen from
     /// <see cref="PoolState"/>, so the reason reported to the caller, the reason
     /// written to the log, and the state a caller polls are one answer.
+    /// </para>
+    /// <para>
+    /// The check is not made only at entry. A wait that is already parked is released when
+    /// the pool stops being able to make progress — a pause, a force-cancel, the last live
+    /// reader dying (<c>WakeStalledIdleWaiter</c>) — so the same answer is given to a caller
+    /// that arrived late and to one that was already waiting when the pool went away.
+    /// Without that signal nothing would ever wake it: the pending count only falls when an
+    /// item finishes, and no item is going to finish.
     /// </para>
     /// <para>
     /// A return that is not "already idle" is a genuine surprise, so it is logged as a

@@ -142,6 +142,18 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         public ReaderStop Stop { get; set; }
 
         /// <summary>
+        /// Set by <see cref="RemoveReader"/> when this reader leaves the registry, under the
+        /// same <c>_readersSync</c> that guards the list.
+        /// </summary>
+        /// <remarks>
+        /// A force-cancel works from a snapshot taken before this flag is set, and must not
+        /// release the slot a second time for a reader that died in the meantime. Asking the
+        /// registry with <c>Contains</c> answered the same question, but made the check a
+        /// linear scan per reader — O(n²) with the pool's lock held on every step.
+        /// </remarks>
+        public bool Removed { get; set; }
+
+        /// <summary>
         /// Completed by the loop's <c>finally</c> when it ends. Exists from
         /// construction, so <see cref="Task"/> is never <see langword="null"/> and no
         /// observer has to ask whether a reader is the one that has not started yet.
@@ -272,17 +284,24 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     private readonly TaskCompletionSource _shutdownCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>
-    /// Non-zero while the current logical flow is inside a shutdown body. A re-entrant call —
-    /// a status callback invoked by the drain asking to shut the queue down again — must not
-    /// wait for the completion that the flow it interrupts is going to signal: it would wait
-    /// on itself, and no timeout covers that wait. Async-local rather than thread-static
-    /// because a shutdown body crosses <c>await</c>s, and the callback that makes the
-    /// re-entrant call runs on whichever thread continues it.
+    /// Non-zero while the current logical flow is inside a shutdown body of <em>this</em>
+    /// queue. A re-entrant call — a status callback invoked by the drain asking to shut the
+    /// queue down again — must not wait for the completion that the flow it interrupts is
+    /// going to signal: it would wait on itself, and no timeout covers that wait. Async-local
+    /// rather than thread-static because a shutdown body crosses <c>await</c>s, and the
+    /// callback that makes the re-entrant call runs on whichever thread continues it.
     /// </summary>
-    private static readonly AsyncLocal<int> ShutdownDepth = new();
+    /// <remarks>
+    /// Deliberately an instance field, not <c>static</c>. The guard belongs to one queue: a
+    /// static one is shared by everything flowing through the same <c>ExecutionContext</c>, so
+    /// code running inside queue A's shutdown that shuts down queue B would skip B's
+    /// <c>_shutdownCompleted</c> wait and return while B was still draining — the exact
+    /// difference the completion exists to remove.
+    /// </remarks>
+    private readonly AsyncLocal<int> _shutdownDepth = new();
 
     /// <summary>Whether the current logical flow is already running a shutdown of this queue.</summary>
-    private static bool IsShuttingDownHere => ShutdownDepth.Value > 0;
+    private bool IsShuttingDownHere => _shutdownDepth.Value > 0;
 
     public SaWorkQueue(SaWorkQueueOptions<TInput> options, ILogger<SaWorkQueue<TInput>>? logger = null)
     {
@@ -461,60 +480,83 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     /// a non-negative value already clamped to <see cref="_maxConcurrency"/>.
     /// </summary>
     /// <remarks>
-    /// The limit change, the reader bookkeeping and the cancel decisions are one
-    /// atomic step. A reader that dies in the middle of it must not be able to
-    /// consume the slot that was just created for it, which is why the whole
-    /// adjustment happens under a single hold of <c>_readersSync</c>.
+    /// The limit change, the reader bookkeeping, the cancel decisions and the registration
+    /// of the readers being added are one atomic step. A reader that dies in the middle of
+    /// it must not be able to consume the slot that was just created for it, and two callers
+    /// raising the limit at the same moment must not both decide to create the same slot:
+    /// the new readers are registered under the same hold of <c>_readersSync</c> that reads
+    /// <see cref="LiveReaderCount"/>, so the second caller sees the slots the first one
+    /// already took and computes a delta of zero. Deciding inside the lock and registering
+    /// outside it left the exact window in which both computed the same delta.
     /// <para>
-    /// Spawning is the one thing that leaves the lock. The decisions stay inside it
-    /// — <see cref="LiveReaderCount"/> is read there, so two concurrent limit changes
-    /// cannot both decide to create the same slot — but the loops themselves start
-    /// through <see cref="StartReaders"/> afterwards. They are launched rather than
-    /// started, so a reader registered by an earlier caller counts towards the limit
-    /// for the whole window.
+    /// Launching is the one thing that leaves the lock. The loops start through
+    /// <see cref="LaunchRegistered"/> after it is released, so a reader that finds work
+    /// waiting — and therefore runs a caller-supplied status callback on this very thread —
+    /// never does so with the pool's lock held.
     /// </para>
     /// </remarks>
     private void SetConcurrencyLimit(int newLimit)
     {
-        var toStart = 0;
+        Reader[]? toStart = null;
+        var started = 0;
 
-        lock (_readersSync)
+        try
         {
-            // A stopped queue keeps the limit it was stopped at, and this assignment
-            // changes nothing. Writing it anyway would let a caller read back a value
-            // the pool does not have: assign 4 after shutdown, read 4, and believe
-            // four readers are coming. None are. A caller that only writes and reads
-            // has no way to notice, and IsEnabled is not something a shared
-            // configuration path checks before resizing a pool it may not own.
-            //
-            // Silently, rather than by throwing: the assignment is a statement of
-            // intent, not an operation on a resource the caller believes it holds.
-            // IsEnabled is the answer to "is there a pool to resize" — a caller that
-            // needs one to ask.
-            if (!IsEnabled) return;
-
-            // Assigning the limit is also the eager release of the slots the readers
-            // cancelled below are about to give up — the reason their own teardown
-            // must not decrement again.
-            _concurrency = newLimit;
-            _paused = newLimit == 0;
-
-            // Delta against the readers that actually hold a slot, not against the
-            // configured limit: a reader that has been cancelled but has not
-            // finished yet is on its way out, and must not trigger a replacement.
-            var delta = newLimit - LiveReaderCount;
-
-            if (delta > 0)
+            lock (_readersSync)
             {
-                toStart = delta;
+                // A stopped queue keeps the limit it was stopped at, and this assignment
+                // changes nothing. Writing it anyway would let a caller read back a value
+                // the pool does not have: assign 4 after shutdown, read 4, and believe
+                // four readers are coming. None are. A caller that only writes and reads
+                // has no way to notice, and IsEnabled is not something a shared
+                // configuration path checks before resizing a pool it may not own.
+                //
+                // Silently, rather than by throwing: the assignment is a statement of
+                // intent, not an operation on a resource the caller believes it holds.
+                // IsEnabled is the answer to "is there a pool to resize" — a caller that
+                // needs one to ask.
+                if (!IsEnabled) return;
+
+                // Assigning the limit is also the eager release of the slots the readers
+                // cancelled below are about to give up — the reason their own teardown
+                // must not decrement again.
+                _concurrency = newLimit;
+                _paused = newLimit == 0;
+
+                // Delta against the readers that actually hold a slot, not against the
+                // configured limit: a reader that has been cancelled but has not
+                // finished yet is on its way out, and must not trigger a replacement.
+                var delta = newLimit - LiveReaderCount;
+
+                if (delta > 0)
+                {
+                    toStart = RegisterReadersUnderLock(delta, out started);
+                }
+                else if (delta < 0)
+                {
+                    CancelReadersUnderLock(-delta);
+                }
             }
-            else if (delta < 0)
+        }
+        finally
+        {
+            // Launched even when registration threw partway: a reader that is already in
+            // the registry but never launched would hold a slot forever and never complete
+            // its published task, stalling every shutdown wait on it.
+            if (toStart is not null)
             {
-                CancelReadersUnderLock(-delta);
+                LaunchRegistered(toStart, started);
             }
         }
 
-        StartReaders(toStart);
+        // A pause is the one way the pool stops being able to make progress without any
+        // item finishing. The items already accepted stay counted, so a waiter parked in
+        // WaitForIdleAsync would never be released by the count alone: wake it to re-read
+        // PoolState, which is the answer it exists to give.
+        if (_paused)
+        {
+            WakeStalledIdleWaiter();
+        }
     }
 
     /// <summary>
@@ -613,6 +655,40 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         {
             lock (_pendingSync) return _taskCount;
         }
+    }
+
+    /// <summary>
+    /// Releases a waiter parked in <see cref="WaitForIdleAsync"/> without claiming the
+    /// queue reached idle, so it wakes up and re-reads <see cref="PoolState"/>.
+    /// </summary>
+    /// <remarks>
+    /// Called when the pool stops being able to make progress — a pause, a force-cancel,
+    /// the last live reader dying — while items are still accepted. The idle signal alone
+    /// can never release that waiter: it fires only when the count falls to zero, and
+    /// nothing is going to finish the remaining items. Without this the wait parks forever
+    /// on a queue that <see cref="PoolState"/> is already reporting as <see cref="SaWorkPoolState.Paused"/>
+    /// or <see cref="SaWorkPoolState.NoReaders"/>, which is exactly the state the wait is
+    /// documented to return on.
+    /// <para>
+    /// The signal is replaced as well as completed. A waiter that wakes and finds the pool
+    /// re-armed by a concurrent limit raise must park on a fresh signal; handing it the
+    /// completed one would turn the loop into a spin until the count happened to drop.
+    /// </para>
+    /// </remarks>
+    private void WakeStalledIdleWaiter()
+    {
+        TaskCompletionSource? previous = null;
+
+        lock (_pendingSync)
+        {
+            if (_taskCount > 0)
+            {
+                previous = _idleTcs;
+                _idleTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+        }
+
+        previous?.TrySetResult();
     }
 
     /// <summary>

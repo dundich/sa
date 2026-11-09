@@ -79,7 +79,7 @@ internal sealed class WorkQueueBuilder<TInput> : IWorkQueueBuilder<TInput>
     public IWorkQueueBuilder<TInput> WithProcess(Func<TInput, CancellationToken, Task> process)
     {
         ArgumentNullException.ThrowIfNull(process);
-        _processorFactory = _ => new DelegatingWork(process);
+        _processorFactory = _ => new DelegatingWork<TInput>(process);
         return this;
     }
 
@@ -222,12 +222,5 @@ internal sealed class WorkQueueBuilder<TInput> : IWorkQueueBuilder<TInput>
         target.ReaderCancelMode = _codeSettings.ReaderCancelMode;
         target.ReaderCancellationOrder = _codeSettings.ReaderCancellationOrder;
         target.ShutdownTimeout = _codeSettings.ShutdownTimeout;
-    }
-
-    /// <summary>Adapter from a processing delegate to <see cref="ISaWork{TInput}"/> — the same shape <see cref="SaWorkQueueOptions{TInput}.Create(Func{TInput, CancellationToken, Task})"/> builds.</summary>
-    private sealed class DelegatingWork(Func<TInput, CancellationToken, Task> process) : ISaWork<TInput>
-    {
-        public Task Execute(TInput input, CancellationToken cancellationToken)
-            => process(input, cancellationToken);
     }
 }

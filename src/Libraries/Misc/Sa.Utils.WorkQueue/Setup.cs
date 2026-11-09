@@ -293,6 +293,13 @@ public static class Setup
     /// <see cref="ISaWorkQueue{TInput}.MaxConcurrency"/> is left at the processor count, so the queue
     /// cannot scale above it at runtime. Use the options directly (and <c>WithMaxConcurrency</c>)
     /// when a higher ceiling is needed.
+    /// <para>
+    /// <b>The type argument must be supplied explicitly:</b>
+    /// <c>Setup.CreateSimple&lt;OrderInput&gt;(async (order, ct) =&gt; ...)</c>. C# never infers
+    /// generic arguments from the parameter types of a lambda, and <typeparamref name="TInput"/>
+    /// appears nowhere else in the signature — unlike the <see cref="ISaWork{TInput}"/> overload,
+    /// which is an extension method and infers it from the receiver.
+    /// </para>
     /// </remarks>
     public static ISaWorkQueue<TInput> CreateSimple<TInput>(
         Func<TInput, CancellationToken, Task> process,

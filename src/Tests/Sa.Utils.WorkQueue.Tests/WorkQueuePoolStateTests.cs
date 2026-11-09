@@ -310,6 +310,89 @@ public sealed class WorkQueuePoolStateTests
             "a wait that gave up on an empty pool must say so");
     }
 
+    /// <summary>
+    /// A wait that is already parked is released when the pool is paused — the answer must
+    /// not depend on whether the caller arrived before or after the pause.
+    /// </summary>
+    /// <remarks>
+    /// The wait loop parks on the idle signal, and that signal only fires when the pending
+    /// count reaches zero. A pause stops the readers without finishing the buffered items,
+    /// so nothing was ever going to wake the caller: it parked on a queue that
+    /// <see cref="ISaWorkQueue{TInput}.PoolState"/> was already describing as
+    /// <see cref="SaWorkPoolState.Paused"/>, which is one of the two states the wait is
+    /// documented to return on.
+    /// </remarks>
+    [Fact]
+    public async Task WaitForIdle_ParkedThenPaused_ReturnsWithThePauseAsTheReason()
+    {
+        var processor = new GateProcessor();
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(1)
+                .WithQueueCapacity(8));
+
+        // One item in flight (held by the gate), two more in the buffer.
+        await queue.Enqueue(1, TestToken);
+        await processor.Entered.WaitAsync(TestToken);
+        await queue.Enqueue(2, TestToken);
+        await queue.Enqueue(3, TestToken);
+
+        var waiting = queue.WaitForIdleAsync(cancellationToken: TestToken);
+
+        // Give the wait a chance to park: a pause before that point would be seen at entry
+        // and would make the test pass without exercising the wake-up.
+        await Task.Delay(100, TestToken);
+
+        queue.ConcurrencyLimit = 0;
+
+        await waiting.WaitAsync(TimeSpan.FromSeconds(10), TestToken);
+
+        // The buffer was not dropped by the pause, so the honest answer is "not idle" —
+        // the wait returned because no pool is left to drain it, not because it is empty.
+        Assert.Equal(SaWorkPoolState.Paused, queue.PoolState);
+        Assert.False(queue.IsIdle());
+    }
+
+    /// <summary>
+    /// The same release on the other documented path: a force-cancel whose bounded wait
+    /// expires keeps the buffer, so the wait must give up rather than park on it.
+    /// </summary>
+    [Fact]
+    public async Task WaitForIdle_ParkedThenForceCancelTimesOut_IsReleasedWithTheBufferKept()
+    {
+        var processor = new WedgedProcessor();
+
+        using var queue = new SaWorkQueue<int>(
+            SaWorkQueueOptions<int>.Create(processor)
+                .WithConcurrencyLimit(1)
+                .WithQueueCapacity(8));
+
+        await queue.Enqueue(1, TestToken);
+        await processor.Entered.WaitAsync(TestToken);
+        await queue.Enqueue(2, TestToken);
+
+        var waiting = queue.WaitForIdleAsync(cancellationToken: TestToken);
+        await Task.Delay(100, TestToken);
+
+        try
+        {
+            // The wedged item ignores the token, so the wait expires and — unlike the
+            // synchronous variant — the buffer is kept rather than reported as dropped.
+            await Assert.ThrowsAsync<TimeoutException>(
+                () => queue.ForceCancelReadersAsync(TimeSpan.FromMilliseconds(50), TestToken));
+
+            await waiting.WaitAsync(TimeSpan.FromSeconds(10), TestToken);
+        }
+        finally
+        {
+            processor.Release();
+        }
+
+        Assert.Equal(SaWorkPoolState.NoReaders, queue.PoolState);
+        Assert.False(queue.IsIdle());
+    }
+
     /// <summary>Polls a condition the code under test reaches on its own thread.</summary>
     static async Task WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken)
     {

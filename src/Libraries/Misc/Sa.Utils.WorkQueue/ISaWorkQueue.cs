@@ -59,7 +59,9 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <remarks>
     /// While the limit is <c>0</c> and items are still queued, <see cref="WaitForIdleAsync"/>
     /// skips the wait and returns immediately: with no readers the queue can never
-    /// drain on its own. Raise the limit above <c>0</c> (or shut the queue down) to make progress.
+    /// drain on its own. That applies to a wait that is already parked as well — a pause
+    /// releases it, so it is not the entry-time state that decides. Raise the limit above
+    /// <c>0</c> (or shut the queue down) to make progress.
     /// When the queue is created with <see cref="SaReaderCancelMode.Soft"/>, a removed reader
     /// finishes its current item before exiting (<see cref="SaWorkStatus.Completed"/>); in the
     /// default <see cref="SaReaderCancelMode.Hard"/> mode the in-flight item is interrupted
@@ -215,13 +217,13 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// Returns immediately if the queue is already idle, or if it cannot reach idle on its own
     /// (see <paramref name="failIfNoProgress"/>).
     /// </summary>
-    /// <param name="cancellationToken">Token to cancel the wait. The wait can be resumed by calling again.</param>
     /// <param name="failIfNoProgress">
     /// When <see langword="true" />, pending work that no reader can ever reach throws
     /// <see cref="InvalidOperationException"/> instead of returning. Leave it <see langword="false" />
     /// to read that state as "not idle, and never will be" — the honest answer to "is it idle?",
     /// and usually what a caller wants.
     /// </param>
+    /// <param name="cancellationToken">Token to cancel the wait. The wait can be resumed by calling again.</param>
     /// <remarks>
     /// Two states cannot drain on their own. They share one flag because they mean the same
     /// thing to a caller waiting here:
@@ -236,7 +238,8 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// </list>
     /// Both are read from <see cref="PoolState"/>, so the state, the warning and the exception
     /// below cannot name different causes. An already-idle queue returns immediately regardless
-    /// of the flag.
+    /// of the flag, and so does a wait that is already parked when the pool reaches one of
+    /// those states — the wait is released rather than left waiting for work nothing can finish.
     /// <para>
     /// Neither branch applies to a <em>stopped</em> queue, even one that was paused when it
     /// stopped. A shutdown drains what is left, and that drain needs no reader, so the wait

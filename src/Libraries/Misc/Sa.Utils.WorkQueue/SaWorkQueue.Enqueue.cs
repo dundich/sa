@@ -1,7 +1,5 @@
 namespace Sa.Utils.WorkQueue;
 
-using System.Threading.Channels;
-
 /// <summary>
 /// The producing half of the queue: turning a caller's item into a channel write
 /// and deciding what a refusal means.
@@ -144,7 +142,13 @@ public sealed partial class SaWorkQueue<TInput>
             // it — so translate it instead of letting a channel exception escape.
             // The cause travels along, because "ChannelClosedException" on its own
             // says nothing about why the queue stopped.
-            if (ex is ChannelClosedException or IOException or InvalidOperationException)
+            //
+            // ChannelClosedException derives from InvalidOperationException, so the
+            // second arm already covers it; IOException is kept because a channel
+            // implementation may surface a transport failure that way. Both are
+            // translated rather than rethrown, because the only channel here is the
+            // queue's own, and its only IO-shaped failure is a completed writer.
+            if (ex is IOException or InvalidOperationException)
             {
                 ThrowHelper.QueueStopped(ex);
             }
