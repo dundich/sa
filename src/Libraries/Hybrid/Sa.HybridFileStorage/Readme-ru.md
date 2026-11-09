@@ -13,8 +13,7 @@
 - [Ключевые возможности](#ключевые-возможности)
 - [Формат File ID](#формат-file-id)
 - [Быстрый старт](#быстрый-старт)
-  - [Без DI](#без-di)
-  - [С DI (Generic Host)](#с-di-generic-host)
+  - [Регистрация (Generic Host)](#регистрация-generic-host)
 - [Примеры CRUD](#примеры-crud)
   - [Загрузка](#загрузка)
   - [Скачивание](#скачивание)
@@ -49,53 +48,44 @@
 ### Настройка маппинга корзин на бэкенды
 
 Каждый провайдер привязан ровно к одной корзине, которая задаётся в его собственных опциях.
-Провайдеры, регистрирующие себя методом `Add...` (файловая система, in-memory), подхватываются
-контейнером автоматически:
+Каждый провайдер регистрирует себя собственным методом `Add...` и подхватывается контейнером
+автоматически:
 
 ```csharp
-// Корзина "черновик" → файловая система. Регистрирует собственный IFileStorage под
-// именем "черновик"; корень и ввод-вывод живут на temp-folder с тем же именем.
+// Корзина "черновик" → файловая система. Регистрирует собственный IFileStorage; корень и
+// ввод-вывод живут на temp-folder с тем же именем.
 builder.Services.AddSaFileSystemFileStorage("черновик", b => b
     .Options(ob => ob.Configure(x => x.Basket = "черновик"))
     .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
         folder.RootPath = @"C:\data\черновик"))));
 
-// Корзина "архив" → S3 облачное хранилище: bucket-клиент — именованная регистрация
-// под техническим ключом "archive", резолв по нему же.
-builder.Services.AddSaS3BucketClient("archive", o => o.Options(ob => ob.Configure(x =>
+// Корзина "документы" → PostgreSQL с авто-партиционированием. Общий data source берётся из
+// AddNpgsqlDataSource(...), если хранилище не пришпилило собственный. Один ключ на хранилище,
+// и каждое keyed-хранилище владеет своей таблицей (со своими расписаниями миграции и очистки).
+builder.Services.AddSaPostgreSqlFileStorage("документы", b => b
+    .Options(ob => ob.Configure(x =>
+    {
+        x.Basket = "документы";
+        x.TableName = "documents_files";
+    })));
+
+// Корзина "архив" → S3 облачное хранилище. Вызов регистрирует и собственный bucket-клиент.
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
 {
     x.Endpoint = "http://minio:9000";
     x.AccessKey = "ROOTUSER";
     x.SecretKey = "ChangeMe123";
     x.Bucket = "company-archive";
+    x.Basket = "архив";
 })));
 
-builder.Services.AddSaHybridFileStorage(cfg => cfg
-    // Корзина "документы" → PostgreSQL с авто-партиционированием.
-    // Зависимости (IPgDataSource, IPartitionManager, RecyclableMemoryStreamManager)
-    // резолвятся из DI в момент регистрации.
-    .ConfigureStorage((sp, c) => c.AddStorage(new PostgresFileStorage(
-        sp.GetRequiredService<IPgDataSource>(),
-        sp.GetRequiredService<IPartitionManager>(),
-        sp.GetRequiredService<RecyclableMemoryStreamManager>(),
-        new PostgresFileStorageOptions
-        {
-            Basket = "документы",
-            TableName = "files"
-        })))
-
-    // Корзина "архив" → S3 облачное хранилище
-    .ConfigureStorage((sp, c) => c.AddStorage(new S3FileStorage(
-        sp.GetRequiredKeyedService<IS3BucketClient>("archive"),
-        new S3FileStorageOptions
-        {
-            Endpoint = "http://minio:9000",
-            Bucket = "company-archive",
-            Basket = "архив"
-        }))));
+// Собираем гибридный контейнер один раз: он подхватывает все IFileStorage выше.
+builder.Services.AddSaHybridFileStorage(cfg => cfg.AddLogging());
 ```
 
-Несколько вызовов `ConfigureStorage` накапливаются: каждый вызов регистрирует дополнительные storage в контейнере, поэтому в одной цепочке `AddSaHybridFileStorage` можно повесить несколько корзин.
+Каждый вызов `Add...` регистрирует одно хранилище, а контейнер собирает их все, поэтому до
+единственного `AddSaHybridFileStorage` можно повесить несколько корзин (и несколько хранилищ
+в одной корзине). `ConfigureStorage` нужен только для собственной реализации `IFileStorage`.
 
 После настройки все CRUD-операции работают с именами корзин, а не спецификой провайдеров:
 
@@ -108,7 +98,7 @@ var result = await storage.UploadAsync("черновик", input, stream, ct);
 await storage.DownloadAsync(result.FileId, processStream, ct);
 
 // Копирование из "черновик" в "архив" — беспрепятственно пересекает границу FS → S3
-await storage.CopyToBasketAsync(result.FileId, "архив", ct);
+await storage.CopyToBasketAsync(result.FileId, "архив", ct: ct);
 ```
 
 ---
@@ -170,27 +160,64 @@ if (FileIdParser.TryParse("pg://files/42/1751347200/report.pdf", out var basket,
     Console.WriteLine($"Basket={basket}, Tenant={tenantId}, TS={timestamp}, Name={fileName}");
     // Basket=files, Tenant=42, TS=1751347200, Name=report.pdf
 }
+
+// Без формата раскладка угадывается: числовой второй сегмент читается как timestamp Postgres.
+// Указывайте раскладку провайдера — иначе путь с числовым каталогом
+// (`fs://documents/100/2024/report.pdf`) потеряет каталог в `fileName`.
+if (FileIdParser.TryParse(
+    "fs://documents/100/2024/report.pdf",
+    FileIdFormat.WithoutTimestamp,
+    out _, out var tenantId, out _, out var fullName))
+{
+    Console.WriteLine($"Tenant={tenantId}, Name={fullName}");   // Tenant=100, Name=2024/report.pdf
+}
 ```
 
 ---
 
 ## Быстрый старт
 
-### Без DI
+### Регистрация (Generic Host)
+
+Публичного конструктора «без DI» нет: гибридное хранилище создаёт
+`AddSaHybridFileStorage`, и в цепочку failover попадает каждый `IFileStorage`,
+зарегистрированный до этого вызова, — в порядке регистрации.
 
 ```csharp
+using Microsoft.Extensions.Hosting;
 using Sa.HybridFileStorage;
 using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.FileSystem;
+using Sa.HybridFileStorage.S3;
+using System.Text;
 
-// 1. Создаём провайдер in-memory
-using var memory = new InMemoryFileStorage(new InMemoryFileStorageOptions("share"));
+var builder = Host.CreateApplicationBuilder(args);
 
-// 2. Собираем гибридный контейнер
-var container = new HybridFileStorageContainer([memory]);
-var storage = new HybridFileStorage(container, InterceptorContainer.Empty);
+// 1. Провайдеры регистрируют себя сами. Каждый вызов добавляет IFileStorage — а для файловой
+//    системы ещё и собственный keyed temp folder. Несколько провайдеров (и корзин) уживаются.
+builder.Services
+    .AddSaInMemoryFileStorage()
+    .AddSaFileSystemFileStorage("files", b => b
+        .Options(ob => ob.Configure(x => x.Basket = "documents"))
+        .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
+            folder.RootPath = @"C:\data\files"))))
+    .AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
+    {
+        x.Endpoint = "http://localhost:9000";
+        x.AccessKey = "ROOTUSER";
+        x.SecretKey = "ChangeMe123";
+        x.Bucket = "mybucket";
+        x.Basket = "uploads";
+    })));
 
-// 3. Загружаем файл
-var stream = "Hello, HybridFileStorage!".ToUtf8Stream();
+// 2. Собираем гибридный контейнер (один вызов; второй бросает). Логирующие перехватчики опциональны.
+builder.Services.AddSaHybridFileStorage(cfg => cfg.AddLogging());
+
+var host = builder.Build();
+var storage = host.Services.GetRequiredService<IHybridFileStorage>();
+
+// 3. Загрузка — уходит в первое записываемое хранилище корзины ("share" → in-memory).
+using var stream = new MemoryStream("Hello, HybridFileStorage!"u8.ToArray());
 var result = await storage.UploadAsync(
     basket: "share",
     input: new UploadFileInput { FileName = "hello.txt", TenantId = 42 },
@@ -199,69 +226,20 @@ var result = await storage.UploadAsync(
 
 Console.WriteLine(result.FileId);  // mem://share/42/hello.txt
 
-// 4. Скачиваем и обрабатываем
-bool wasFound = await storage.DownloadAsync(result.FileId, async (stream, token) =>
+// 4. Скачивание — поток отдаётся вашему колбэку, гибридный слой его не буферизует.
+bool wasFound = await storage.DownloadAsync(result.FileId, async (fileStream, token) =>
 {
-    using var reader = new StreamReader(stream, Encoding.UTF8);
-    var content = await reader.ReadToEndAsync(token);
-    Console.WriteLine(content);  // Hello, HybridFileStorage!
+    using var reader = new StreamReader(fileStream, Encoding.UTF8);
+    Console.WriteLine(await reader.ReadToEndAsync(token));   // Hello, HybridFileStorage!
 }, ct);
 
-// 5. Удаляем
+// 5. Удаление — это запись, поэтому read-only провайдеры пропускаются.
 bool deleted = await storage.DeleteAsync(result.FileId, ct);
 ```
 
-### С DI (Generic Host)
-
-```csharp
-using Microsoft.Extensions.Hosting;
-using Sa.Data.S3;
-using Sa.HybridFileStorage;
-using Sa.HybridFileStorage.FileSystem;
-using Sa.HybridFileStorage.S3;
-
-var builder = Host.CreateApplicationBuilder(args);
-
-// Провайдеры, регистрирующие себя сами, — гибридный контейнер подхватывает любой
-// зарегистрированный IFileStorage автоматически, вызов ConfigureStorage для них не нужен.
-builder.Services.AddSaInMemoryFileStorage();
-builder.Services.AddSaFileSystemFileStorage("files", b => b
-    .Options(ob => ob.Configure(x => x.Basket = "documents"))
-    .TempFolder(tb => tb.Options(ob => ob.Configure(folder =>
-        folder.RootPath = @"C:\data\files"))));
-
-// Bucket-клиент S3 — именованная регистрация: по одному имени на клиент, резолв по ключу.
-builder.Services.AddSaS3BucketClient("uploads", o => o.Options(ob => ob.Configure(x =>
-{
-    x.Endpoint = "http://localhost:9000";
-    x.AccessKey = "ROOTUSER";
-    x.SecretKey = "ChangeMe123";
-    x.Bucket = "mybucket";
-})));
-
-// Затем собираем контейнер
-builder.Services.AddSaHybridFileStorage(cfg => cfg
-    // S3 провайдер — здесь показан ручной вариант
-    .ConfigureStorage((sp, c) => c.AddStorage(
-        new S3FileStorage(
-            sp.GetRequiredKeyedService<IS3BucketClient>("uploads"),
-            new S3FileStorageOptions
-            {
-                Endpoint = "http://localhost:9000",
-                AccessKey = "ROOTUSER",
-                SecretKey = "ChangeMe123",
-                Bucket = "mybucket",
-                Basket = "uploads"
-            })))
-
-    // Включаем встроенные логгирующие перехватчики
-    .AddLogging());
-
-var host = builder.Build();
-var storage = host.Services.GetRequiredService<IHybridFileStorage>();
-
-// Используйте везде — внедряется через DI в ваши сервисы
-```
+`IHybridFileStorage` — синглтон: внедряйте его в свои сервисы, а не резолвьте внутри
+обработчиков. Регистрация живёт в одном месте: гибридный слой не аддитивен, повторный вызов
+`AddSaHybridFileStorage` бросает исключение.
 
 #### Минимальная регистрация DI
 
@@ -413,7 +391,7 @@ var batchResult = await storage.CopyToScopeBatchAsync(
         OperationTimeout = TimeSpan.FromSeconds(30),
         Progress = new Progress<BatchOperationProgress>(p =>
         {
-            Console.WriteLine($"{p.Completed}/{p.Total} — OK:{p.SuccessCount} Fail:{p.FailureCount}");
+            Console.WriteLine($"{p.Completed}/{p.Total} — OK:{p.Succeeded} Fail:{p.Failed}");
         })
     },
     ct: ct);
@@ -626,10 +604,10 @@ public sealed class FileMetadata
 
 | Исключение | Когда выбрасывается |
 |------------|-------------------|
-| `HybridFileStorageNoAvailableException` | Не найден провайдер для запрошенной корзины, либо все провайдеры завершились ошибкой |
-| `HybridFileStorageWritableException` | Попытка записи в хранилище «только чтение» |
-| `HybridFileStorageAggregateException` | Несколько ошибок провайдеров агрегированы при failover |
-| `BatchOperationException<T>` | Пакетная операция имела ошибки и `ContinueOnError = false` |
+| `HybridFileStorageNoAvailableException` | Нет доступного хранилища для операции: для корзины не зарегистрирован провайдер, ни одно хранилище не распознало file ID, либо все кандидаты отклонены интерсептором |
+| `HybridFileStorageWritableException` | Попытка записи (upload или delete), когда все хранилища-кандидаты — «только чтение» |
+| `HybridFileStorageAggregateException` | Ошибки провайдеров собраны при failover, и ни одно хранилище не дало ответа |
+| `BatchOperationException<T>` | Выбрасывается `BatchResult.ThrowIfHasErrors()`, если хотя бы один элемент пакета завершился ошибкой |
 
 ---
 

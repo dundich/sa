@@ -12,8 +12,8 @@ S3-compatible cloud storage provider for `Sa.HybridFileStorage`. Wraps Minio/AWS
 - [File ID Format](#file-id-format)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-  - [Without DI](#without-di)
-  - [With DI](#with-di)
+  - [Registration](#registration)
+  - [Options pipeline](#options-pipeline)
 - [CRUD Examples](#crud-examples)
 - [Settings Reference](#settings-reference)
 - [Dependencies](#dependencies)
@@ -56,59 +56,37 @@ This package depends on `Sa.Data.S3` which provides the underlying `IS3BucketCli
 
 ## Quick Start
 
-### Without DI
+### Registration
+
+The storage is created by `AddSaS3FileStorage` — there is no public constructor. Each call
+registers one storage with its own named options instance and its own keyed bucket client:
 
 ```csharp
-using Sa.HybridFileStorage.S3;
+using Microsoft.Extensions.Hosting;
 using Sa.HybridFileStorage.Domain;
-using Sa.Data.S3;
+using Sa.HybridFileStorage.S3;
 
-// Configure S3 client
-var setup = new S3BucketClientSetupOptions
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
 {
-    Endpoint = "http://localhost:9000",
-    AccessKey = "ROOTUSER",
-    SecretKey = "ChangeMe123",
-    Bucket = "mybucket",
-    Region = "us-east-1"
-};
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "mybucket";
+    x.Basket = "uploads";
+    x.Region = "us-east-1";
+})));
 
-var client = new S3BucketClient(setup);
+var host = builder.Build();
 
-var options = new S3FileStorageOptions
-{
-    Endpoint = "http://localhost:9000",
-    AccessKey = "ROOTUSER",
-    SecretKey = "ChangeMe123",
-    Bucket = "mybucket",
-    Basket = "uploads",
-    Region = "us-east-1"
-};
-
-using var storage = new S3FileStorage(client, options);
-
-// Upload
-using var stream = File.OpenRead(@"C:\temp\document.pdf");
-var result = await storage.UploadAsync(
-    new UploadFileInput { FileName = "document.pdf", TenantId = 42 },
-    stream, ct);
-
-Console.WriteLine(result.FileId);     // s3://uploads/42/document.pdf
-Console.WriteLine(result.AbsoluteUrl); // http://localhost:9000/mybucket/uploads/42/document.pdf
-
-// Download
-bool found = await storage.DownloadAsync(result.FileId, async (fs, token) =>
-{
-    using var reader = new StreamReader(fs, Encoding.UTF8);
-    var content = await reader.ReadToEndAsync(token);
-    Console.WriteLine(content);
-}, ct);
-
-// Delete
-bool deleted = await storage.DeleteAsync(result.FileId, ct);
+// Every call adds one IFileStorage; this resolves the storage registered above. When several S3
+// storages live in one container, use GetServices<IFileStorage>() or let the hybrid container
+// order them into the failover chain.
+var storage = host.Services.GetRequiredService<IFileStorage>();
 ```
 
-### With DI
+### Options pipeline
 
 `AddSaS3FileStorage` takes the standard options callback, so configuration goes through
 `Configure` / `PostConfigure` / `Validate` like any other options type:

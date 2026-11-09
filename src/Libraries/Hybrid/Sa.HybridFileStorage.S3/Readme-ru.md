@@ -12,8 +12,8 @@
 - [Формат File ID](#формат-file-id)
 - [Установка](#установка)
 - [Быстрый старт](#быстрый-старт)
-  - [Без DI](#без-di)
-  - [С DI](#с-di)
+  - [Регистрация](#регистрация)
+  - [Конвейер опций](#конвейер-опций)
 - [Примеры CRUD](#примеры-crud)
 - [Справочник настроек](#справочник-настроек)
 - [Зависимости](#зависимости)
@@ -59,44 +59,37 @@ dotnet add package Sa.HybridFileStorage.S3
 
 ## Быстрый старт
 
-### Без DI
+### Регистрация
+
+Хранилище создаёт `AddSaS3FileStorage` — публичного конструктора нет. Каждый вызов регистрирует
+одно хранилище со своим именованным экземпляром опций и своим keyed bucket-клиентом:
 
 ```csharp
-using Sa.HybridFileStorage.S3;
+using Microsoft.Extensions.Hosting;
 using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.S3;
 
-var options = new S3FileStorageOptions
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddSaS3FileStorage(o => o.Options(ob => ob.Configure(x =>
 {
-    Endpoint = "http://localhost:9000",
-    AccessKey = "ROOTUSER",
-    SecretKey = "ChangeMe123",
-    Bucket = "mybucket",
-    Basket = "uploads"
-};
+    x.Endpoint = "http://localhost:9000";
+    x.AccessKey = "ROOTUSER";
+    x.SecretKey = "ChangeMe123";
+    x.Bucket = "mybucket";
+    x.Basket = "uploads";
+    x.Region = "us-east-1";
+})));
 
-// Требуется предварительно зарегистрированный IS3BucketClient
-var client = new S3BucketClient(new S3BucketClientSetupOptions
-{
-    Endpoint = options.Endpoint,
-    AccessKey = options.AccessKey,
-    SecretKey = options.SecretKey,
-    Region = options.Region,
-    Bucket = options.Bucket
-});
+var host = builder.Build();
 
-using var storage = new S3FileStorage(client, options);
-
-// Загрузка
-using var stream = File.OpenRead(@"C:\temp\document.pdf");
-var result = await storage.UploadAsync(
-    new UploadFileInput { FileName = "document.pdf", TenantId = 42 },
-    stream, ct);
-
-Console.WriteLine(result.FileId);  // s3://uploads/42/document.pdf
-Console.WriteLine(result.AbsoluteUrl);  // http://localhost:9000/mybucket/uploads/42/document.pdf
+// Каждый вызов добавляет один IFileStorage; этот резолв возвращает зарегистрированный.
+// Если S3-хранилищ несколько, берите GetServices<IFileStorage>() или отдайте упорядочивание
+// гибридному контейнеру.
+var storage = host.Services.GetRequiredService<IFileStorage>();
 ```
 
-### С DI
+### Конвейер опций
 
 `AddSaS3FileStorage` принимает стандартный колбэк опций, поэтому конфигурация идёт через
 `Configure` / `PostConfigure` / `Validate` как у любого другого типа опций:
