@@ -111,7 +111,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <summary>
     /// Создаёт ссылку на файл без подписи (только путь) — годится лишь для публично читаемого
     /// бакета; для приватного используйте <see cref="BuildFileUrl(string, TimeSpan)"/> или
-    /// <see cref="GetFileUrl"/>.
+    /// <see cref="GetFileUrlAsync"/>.
     /// </summary>
     public string BuildFileUrl(string fileName) => UrlUtils.BuildFileUrl(_bucket, fileName);
 
@@ -151,17 +151,17 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// </summary>
     /// <param name="fileName">The name of the file to delete.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
-    public async Task DeleteFile(string fileName, CancellationToken ct)
+    public async Task DeleteFileAsync(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Delete, fileName))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         if (response.StatusCode is not HttpStatusCode.NoContent)
         {
-            await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+            await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
         }
 
         response.Dispose();
@@ -174,12 +174,12 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="fileName">Название файла</param>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает объектное представление файла на сервере</returns>
-    public async Task<S3File> GetFile(string fileName, CancellationToken ct)
+    public async Task<S3File> GetFileAsync(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Get, fileName))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         // Not found is not an error: S3File wraps the response and reports Exists == false. The
@@ -190,7 +190,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
             return new S3File(response);
         }
 
-        await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+        await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
         return null!; // Errors.UnexpectedResult всегда бросает
     }
 
@@ -200,12 +200,12 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="fileName">The name of the file to read.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns>The file contents, or <see cref="Stream.Null"/> when the file does not exist.</returns>
-    public async Task<Stream> GetFileStream(string fileName, CancellationToken ct)
+    public async Task<Stream> GetFileStreamAsync(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Get, fileName))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         switch (response.StatusCode)
@@ -219,7 +219,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
                 response.Dispose();
                 return Stream.Null;
             default:
-                await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+                await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
                 return Stream.Null;
         }
     }
@@ -231,9 +231,9 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="expiration">Время жизни ссылки</param>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает подписанную ссылку на файл</returns>
-    public async Task<string?> GetFileUrl(string fileName, TimeSpan expiration, CancellationToken ct)
+    public async Task<string?> GetFileUrlAsync(string fileName, TimeSpan expiration, CancellationToken ct)
     {
-        return await IsFileExists(fileName, ct).ConfigureAwait(false)
+        return await IsFileExistsAsync(fileName, ct).ConfigureAwait(false)
             ? BuildFileUrl(fileName, expiration)
             : null;
     }
@@ -244,12 +244,12 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="fileName">The name of the file to check.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns><see langword="true"/> when the file exists.</returns>
-    public async Task<bool> IsFileExists(string fileName, CancellationToken ct)
+    public async Task<bool> IsFileExistsAsync(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Head, fileName))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         switch (response.StatusCode)
@@ -261,7 +261,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
                 response.Dispose();
                 return false;
             default:
-                await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+                await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
                 return false;
         }
     }
@@ -272,7 +272,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// </summary>
     /// <remarks>
     /// ListObjectsV2 отдаёт не больше 1000 ключей за ответ, поэтому без цикла по токену всё, что
-    /// сверх первой страницы, молча пропадало — и <see cref="DeleteBucket(bool, CancellationToken)"/>
+    /// сверх первой страницы, молча пропадало — и <see cref="DeleteBucketAsync(bool, CancellationToken)"/>
     /// не мог очистить большой бакет.
     /// </remarks>
     public async IAsyncEnumerable<string> List(
@@ -288,12 +288,12 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
             HttpResponseMessage response;
             using (var request = new HttpRequestMessage(HttpMethod.Get, url))
             {
-                response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+                response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
             }
 
             if (response.StatusCode is not HttpStatusCode.OK)
             {
-                await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+                await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
                 yield break;
             }
 
@@ -347,7 +347,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="contentType">Тип загружаемого файла</param>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает объект управления загрузкой</returns>
-    public async Task<S3Upload> UploadFile(string fileName, string contentType, CancellationToken ct)
+    public async Task<S3Upload> UploadFileAsync(string fileName, string contentType, CancellationToken ct)
     {
         return await MultipartStart(fileName, contentType, ct).ConfigureAwait(false);
     }
@@ -361,7 +361,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="ct">Токен отмены операции</param>
     /// <remarks>Если файл превышает 5 МБ, то будет применена Multipart-загрузка</remarks>
     /// <returns>Возвращает результат загрузки файла</returns>
-    public Task<bool> UploadFile(string fileName, string contentType, Stream data, CancellationToken ct)
+    public Task<bool> UploadFileAsync(string fileName, string contentType, Stream data, CancellationToken ct)
     {
         var length = data.TryGetLength();
 
@@ -382,7 +382,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="ct">Токен отмены операции</param>
     /// <remarks>Если файл превышает 5 МБ, то будет применена Multipart-загрузка</remarks>
     /// <returns>Возвращает результат загрузки файла</returns>
-    public Task<bool> UploadFile(string fileName, string contentType, byte[] data, CancellationToken ct)
+    public Task<bool> UploadFileAsync(string fileName, string contentType, byte[] data, CancellationToken ct)
     {
         var length = data.Length;
 
@@ -405,7 +405,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
         {
             // ReadTo читает до заполнения буфера: один ReadAsync имеет право вернуть меньше
             // запрошенного, и прежняя версия загружала молча усечённый объект.
-            var dataSize = await data.ReadTo(buffer, ct).ConfigureAwait(false);
+            var dataSize = await data.ReadToAsync(buffer, ct).ConfigureAwait(false);
 
             var payloadHash = HashHelper.GetPayloadHash(buffer.AsSpan(0, dataSize));
 
@@ -416,7 +416,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
                 content.Headers.Add("content-type", contentType);
                 request.Content = content;
 
-                response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+                response = await SendAsync(request, payloadHash, ct).ConfigureAwait(false);
             }
 
             if (response.StatusCode == HttpStatusCode.OK)
@@ -425,7 +425,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
                 return true;
             }
 
-            await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+            await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
             return false;
         }
         finally
@@ -450,7 +450,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
             content.Headers.Add("content-type", contentType);
             request.Content = content;
 
-            response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, payloadHash, ct).ConfigureAwait(false);
         }
 
         if (response.StatusCode is HttpStatusCode.OK)
@@ -459,7 +459,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
             return true;
         }
 
-        await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+        await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
         return false;
     }
 

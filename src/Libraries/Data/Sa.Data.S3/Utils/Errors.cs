@@ -32,11 +32,11 @@ internal static class Errors
     /// <see cref="HttpCompletionOption.ResponseHeadersRead"/>. The method always throws — the
     /// <c>return</c> after its call sites exists only for the compiler.
     /// </remarks>
-    public static async Task UnexpectedResult(HttpResponseMessage response, CancellationToken ct = default)
+    public static async Task UnexpectedResultAsync(HttpResponseMessage response, CancellationToken ct = default)
     {
         var status = response.StatusCode;
         var reason = response.ReasonPhrase ?? status.ToString();
-        var body = await ReadErrorBody(response, ct).ConfigureAwait(false);
+        var body = await ReadErrorBodyAsync(response, ct).ConfigureAwait(false);
 
         response.Dispose();
 
@@ -49,7 +49,7 @@ internal static class Errors
         throw new HttpRequestException(message, inner: null, status);
     }
 
-    private static async Task<string> ReadErrorBody(HttpResponseMessage response, CancellationToken ct)
+    private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response, CancellationToken ct)
     {
         const int maxBytes = 2048;
 

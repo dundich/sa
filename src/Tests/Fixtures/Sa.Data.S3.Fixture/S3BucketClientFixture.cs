@@ -16,7 +16,7 @@ public class S3BucketClientFixture : S3Fixture<IS3BucketClient>
     public async override ValueTask InitializeAsync()
     {
         await base.InitializeAsync();
-        await Sub.CreateBucket(CancellationToken.None);
+        await Sub.CreateBucketAsync(CancellationToken.None);
     }
 
     public HttpClient HttpClient { get; } = new HttpClient();

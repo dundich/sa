@@ -35,6 +35,6 @@ public class S3BucketClientFixtureDI : S3Fixture<IS3BucketClient>
     public async override ValueTask InitializeAsync()
     {
         await base.InitializeAsync();
-        await Sub.CreateBucket(CancellationToken.None);
+        await Sub.CreateBucketAsync(CancellationToken.None);
     }
 }

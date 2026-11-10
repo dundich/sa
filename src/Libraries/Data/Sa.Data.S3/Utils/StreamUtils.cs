@@ -4,7 +4,7 @@ namespace Sa.Data.S3.Utils;
 
 internal static class StreamUtils
 {
-    public static async Task<int> ReadTo(this Stream stream, byte[] buffer, CancellationToken cancellation)
+    public static async Task<int> ReadToAsync(this Stream stream, byte[] buffer, CancellationToken cancellation)
     {
         var length = buffer.Length;
         var offset = 0;

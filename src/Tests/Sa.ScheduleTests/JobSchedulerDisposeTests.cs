@@ -33,7 +33,7 @@ public sealed class JobSchedulerDisposeTests
         public static void Begin() => Interlocked.Exchange(ref _begun, 1);
 
         // Set only when the iteration touched its DI scope successfully.
-        public static void Complete() => Interlocked.Exchange(ref _finished, 1);
+        public static void CompleteAsync() => Interlocked.Exchange(ref _finished, 1);
     }
 
     sealed class ProbeService
@@ -58,7 +58,7 @@ public sealed class JobSchedulerDisposeTests
 
             _ = context.ServiceProvider.GetRequiredService<ProbeService>();
 
-            Probe.Complete();
+            Probe.CompleteAsync();
         }
     }
 

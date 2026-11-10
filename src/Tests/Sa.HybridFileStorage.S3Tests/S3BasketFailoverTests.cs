@@ -77,9 +77,9 @@ public sealed class S3BasketFailoverTests(S3TwoBucketsFixture fixture) : IClassF
     private async Task EnsureBucketAsync(string bucket)
     {
         using var client = new S3BucketClient(new HttpClient(), fixture.CreateSettings(bucket));
-        if (!await client.IsBucketExists(CancellationToken))
+        if (!await client.IsBucketExistsAsync(CancellationToken))
         {
-            await client.CreateBucket(CancellationToken);
+            await client.CreateBucketAsync(CancellationToken);
         }
     }
 
@@ -87,7 +87,7 @@ public sealed class S3BasketFailoverTests(S3TwoBucketsFixture fixture) : IClassF
     {
         using var client = new S3BucketClient(new HttpClient(), fixture.CreateSettings(bucket));
         using var data = FixtureHelper.GetByteStream(1024);
-        var uploaded = await client.UploadFile(filePath, FixtureHelper.StreamContentType, data, CancellationToken);
+        var uploaded = await client.UploadFileAsync(filePath, FixtureHelper.StreamContentType, data, CancellationToken);
         Assert.True(uploaded);
     }
 
@@ -95,6 +95,6 @@ public sealed class S3BasketFailoverTests(S3TwoBucketsFixture fixture) : IClassF
     {
         using var client = new S3BucketClient(new HttpClient(), fixture.CreateSettings(bucket));
         var filePath = fileId[(fileId.IndexOf("://", StringComparison.Ordinal) + 3)..];
-        return await client.IsFileExists(filePath, CancellationToken);
+        return await client.IsFileExistsAsync(filePath, CancellationToken);
     }
 }

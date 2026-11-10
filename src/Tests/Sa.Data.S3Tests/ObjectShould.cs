@@ -22,12 +22,12 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         var fileName = GetRandomFileName();
         var data = GetByteArray(50 * 1024 * 1024);
 
-        using var uploader = await Client.UploadFile(fileName, StreamContentType, CancellationToken);
+        using var uploader = await Client.UploadFileAsync(fileName, StreamContentType, CancellationToken);
 
-        var addResult = await uploader.AddPart(data, CancellationToken);
+        var addResult = await uploader.AddPartAsync(data, CancellationToken);
         Assert.True(addResult);
 
-        var abortResult = await uploader.Abort(CancellationToken);
+        var abortResult = await uploader.AbortAsync(CancellationToken);
         Assert.True(abortResult);
     }
 
@@ -45,13 +45,13 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
             tasks[i] = Task.Run(
                 async () =>
                 {
-                    await Client.UploadFile(fileName, StreamContentType, fileData, CancellationToken);
-                    if (!await Client.IsFileExists(fileName, CancellationToken))
+                    await Client.UploadFileAsync(fileName, StreamContentType, fileData, CancellationToken);
+                    if (!await Client.IsFileExistsAsync(fileName, CancellationToken))
                     {
                         return false;
                     }
 
-                    await Client.DeleteFile(fileName, CancellationToken);
+                    await Client.DeleteFileAsync(fileName, CancellationToken);
                     return true;
                 },
                 CancellationToken);
@@ -81,7 +81,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     public async Task BeExists()
     {
         var fileName = await CreateTestFile();
-        var fileExistsResult = await Client.IsFileExists(fileName, CancellationToken);
+        var fileExistsResult = await Client.IsFileExistsAsync(fileName, CancellationToken);
         Assert.True(fileExistsResult);
         await DeleteTestFile(fileName);
     }
@@ -89,15 +89,15 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     [Fact]
     public async Task BeNotExists()
     {
-        var fileExistsResult = await Client.IsFileExists(GetRandomFileName(), CancellationToken);
+        var fileExistsResult = await Client.IsFileExistsAsync(GetRandomFileName(), CancellationToken);
         Assert.False(fileExistsResult);
     }
 
     [Fact]
-    public async Task DeleteFile()
+    public async Task DeleteFileAsync()
     {
         var fileName = await CreateTestFile();
-        await Client.DeleteFile(fileName, CancellationToken);
+        await Client.DeleteFileAsync(fileName, CancellationToken);
         Assert.True(true);
     }
 
@@ -105,9 +105,9 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     public async Task DisposeFileStream()
     {
         var fileName = await CreateTestFile();
-        using var fileGetResult = await Client.GetFile(fileName, CancellationToken);
+        using var fileGetResult = await Client.GetFileAsync(fileName, CancellationToken);
 
-        var fileStream = await fileGetResult.GetStream(CancellationToken);
+        var fileStream = await fileGetResult.GetStreamAsync(CancellationToken);
         await fileStream.DisposeAsync();
 
         await DeleteTestFile(fileName);
@@ -119,7 +119,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     public async Task DisposeStorageFile()
     {
         var fileName = await CreateTestFile();
-        using var fileGetResult = await Client.GetFile(fileName, CancellationToken);
+        using var fileGetResult = await Client.GetFileAsync(fileName, CancellationToken);
 
         fileGetResult.Dispose();
 
@@ -128,11 +128,11 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     }
 
     [Fact]
-    public async Task GetFileStream()
+    public async Task GetFileStreamAsync()
     {
         var fileName = await CreateTestFile();
 
-        var fileStream = await Client.GetFileStream(fileName, CancellationToken);
+        var fileStream = await Client.GetFileStreamAsync(fileName, CancellationToken);
 
         using var bufferStream = GetEmptyByteStream();
         await fileStream.CopyToAsync(bufferStream, CancellationToken);
@@ -144,11 +144,11 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     }
 
     [Fact]
-    public async Task GetFileUrl()
+    public async Task GetFileUrlAsync()
     {
         var fileName = await CreateTestFile();
 
-        var url = await Client.GetFileUrl(fileName, TimeSpan.FromSeconds(600), CancellationToken);
+        var url = await Client.GetFileUrlAsync(fileName, TimeSpan.FromSeconds(600), CancellationToken);
 
         Assert.NotNull(url);
 
@@ -164,7 +164,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = await CreateTestFile($"при(ве)+т_как23дела{Guid.NewGuid()}.pdf");
 
-        var url = await Client.GetFileUrl(fileName, TimeSpan.FromSeconds(600), CancellationToken);
+        var url = await Client.GetFileUrlAsync(fileName, TimeSpan.FromSeconds(600), CancellationToken);
 
         using var response = await fixture.HttpClient.GetAsync(url, CancellationToken);
 
@@ -178,18 +178,18 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = GetRandomFileName();
 
-        using var uploader = await Client.UploadFile(fileName, StreamContentType, CancellationToken);
+        using var uploader = await Client.UploadFileAsync(fileName, StreamContentType, CancellationToken);
 
         Assert.Equal(fileName, uploader.FileName);
         Assert.NotEmpty(uploader.UploadId);
         Assert.Equal(0, uploader.Written);
 
         var partData = new byte[] { 1, 2, 3 };
-        await uploader.AddPart(partData, CancellationToken);
+        await uploader.AddPartAsync(partData, CancellationToken);
 
         Assert.Equal(partData.Length, uploader.Written);
 
-        await uploader.Abort(CancellationToken);
+        await uploader.AbortAsync(CancellationToken);
         Assert.True(true);
     }
 
@@ -200,7 +200,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         const string contentType = "video/mp4";
 
         var fileName = await CreateTestFile(contentType: contentType);
-        using var fileGetResult = await Client.GetFile(fileName, CancellationToken);
+        using var fileGetResult = await Client.GetFileAsync(fileName, CancellationToken);
 
         Assert.True((bool)fileGetResult);
         Assert.Equal(contentType, fileGetResult.ContentType);
@@ -218,9 +218,9 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         const int length = 1 * 1024 * 1024;
         var fileName = await CreateTestFile(size: length);
-        using var fileGetResult = await Client.GetFile(fileName, CancellationToken);
+        using var fileGetResult = await Client.GetFileAsync(fileName, CancellationToken);
 
-        var fileStream = await fileGetResult.GetStream(CancellationToken);
+        var fileStream = await fileGetResult.GetStreamAsync(CancellationToken);
 
         Assert.True(fileStream.CanRead);
         Assert.False(fileStream.CanSeek);
@@ -274,7 +274,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = GetRandomFileName();
         var data = GetByteArray(15000);
-        var filePutResult = await Client.UploadFile(fileName, StreamContentType, data, CancellationToken);
+        var filePutResult = await Client.UploadFileAsync(fileName, StreamContentType, data, CancellationToken);
 
         Assert.True(filePutResult);
 
@@ -287,7 +287,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = GetRandomFileName();
         var data = GetByteArray(50 * 1024 * 1024);
-        var filePutResult = await Client.UploadFile(fileName, StreamContentType, data, CancellationToken);
+        var filePutResult = await Client.UploadFileAsync(fileName, StreamContentType, data, CancellationToken);
 
         Assert.True(filePutResult);
 
@@ -300,7 +300,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = GetRandomFileName();
         var data = GetByteStream(15000);
-        var filePutResult = await Client.UploadFile(fileName, StreamContentType, data, CancellationToken);
+        var filePutResult = await Client.UploadFileAsync(fileName, StreamContentType, data, CancellationToken);
 
         Assert.True(filePutResult);
 
@@ -313,7 +313,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = GetRandomFileName();
         var data = GetByteStream(50 * 1024 * 1024);
-        var filePutResult = await Client.UploadFile(fileName, StreamContentType, data, CancellationToken);
+        var filePutResult = await Client.UploadFileAsync(fileName, StreamContentType, data, CancellationToken);
 
         Assert.True(filePutResult);
 
@@ -327,8 +327,8 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         var fileName = await CreateTestFile();
 
         var buffer = new byte[1024];
-        var file = await Client.GetFile(fileName, CancellationToken);
-        var fileStream = await file.GetStream(CancellationToken);
+        var file = await Client.GetFileAsync(fileName, CancellationToken);
+        var fileStream = await file.GetStreamAsync(CancellationToken);
 
 
         var read = await fileStream.ReadAsync(buffer.AsMemory(), CancellationToken);
@@ -352,7 +352,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = GetRandomFileName();
         using var data = GetByteStream(12 * 1024 * 1024); // 12 Mb
-        var filePutResult = await Client.UploadFile(fileName, StreamContentType, data, CancellationToken);
+        var filePutResult = await Client.UploadFileAsync(fileName, StreamContentType, data, CancellationToken);
 
         Assert.True(filePutResult);
 
@@ -365,7 +365,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = $"при(ве)+т_как23дела{Guid.NewGuid()}.pdf";
         using var data = GetByteStream();
-        var uploadResult = await Client.UploadFile(fileName, StreamContentType, data, CancellationToken);
+        var uploadResult = await Client.UploadFileAsync(fileName, StreamContentType, data, CancellationToken);
 
         await DeleteTestFile(fileName);
 
@@ -377,7 +377,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = await CreateTestFile();
 
-        await Client.UploadFile(fileName, StreamContentType, GetByteStream(), CancellationToken);
+        await Client.UploadFileAsync(fileName, StreamContentType, GetByteStream(), CancellationToken);
 
         Assert.True(true);
 
@@ -388,7 +388,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     public async Task NotThrowIfFileExistsWithNotExistsBucket()
     {
         using var client = GetNotExistsBucketClient();
-        await client.IsFileExists(GetRandomFileName(), CancellationToken);
+        await client.IsFileExistsAsync(GetRandomFileName(), CancellationToken);
         Assert.True(true);
     }
 
@@ -396,7 +396,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     public async Task NotThrowIfFileGetUrlWithNotExistsBucket()
     {
         using var client = GetNotExistsBucketClient();
-        var result = await client.GetFileUrl(GetRandomFileName(), TimeSpan.FromSeconds(100), CancellationToken);
+        var result = await client.GetFileUrlAsync(GetRandomFileName(), TimeSpan.FromSeconds(100), CancellationToken);
         Assert.Null(result);
     }
 
@@ -405,7 +405,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         using var client = GetNotExistsBucketClient();
 
-        var result = await client.GetFile(GetRandomFileName(), CancellationToken);
+        var result = await client.GetFileAsync(GetRandomFileName(), CancellationToken);
         Assert.NotNull(result);
         Assert.False(result.Exists);
     }
@@ -415,7 +415,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         // Регрессия: GetFile освобождал ответ на 404, после чего Length/ContentType бросали
         // ObjectDisposedException, потому что оба читают response.Content.
-        using var file = await Client.GetFile(GetRandomFileName(), CancellationToken);
+        using var file = await Client.GetFileAsync(GetRandomFileName(), CancellationToken);
 
         Assert.False(file.Exists);
         Assert.Null(file.Length);
@@ -431,9 +431,9 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         var fileName = GetRandomFileName();
         using var data = GetEmptyByteStream();
 
-        Assert.True(await Client.UploadFile(fileName, StreamContentType, data, CancellationToken));
+        Assert.True(await Client.UploadFileAsync(fileName, StreamContentType, data, CancellationToken));
 
-        using var file = await Client.GetFile(fileName, CancellationToken);
+        using var file = await Client.GetFileAsync(fileName, CancellationToken);
         Assert.True(file.Exists);
         Assert.Equal(0, file.Length);
 
@@ -448,7 +448,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         var folder = GetRandomFileNameWithoutExtension();
         var fileName = $"{folder}/nested/{GetRandomFileName()}";
 
-        Assert.True(await Client.UploadFile(fileName, StreamContentType, GetByteArray(128), CancellationToken));
+        Assert.True(await Client.UploadFileAsync(fileName, StreamContentType, GetByteArray(128), CancellationToken));
 
         var listed = new List<string>();
         await foreach (var key in Client.List($"{folder}/", CancellationToken))
@@ -469,7 +469,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         var folder = GetRandomFileNameWithoutExtension();
         var fileName = $"{folder}/a&b<c>d\"e'f.txt";
 
-        Assert.True(await Client.UploadFile(fileName, StreamContentType, GetByteArray(16), CancellationToken));
+        Assert.True(await Client.UploadFileAsync(fileName, StreamContentType, GetByteArray(16), CancellationToken));
 
         var listed = new List<string>();
         await foreach (var key in Client.List($"{folder}/", CancellationToken))
@@ -486,30 +486,30 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     public async Task AddPartBeyondInitialCapacity()
     {
         // 17-я часть перерастает стартовый массив из 16 элементов.
-        using var uploader = await Client.UploadFile(GetRandomFileName(), StreamContentType, CancellationToken);
+        using var uploader = await Client.UploadFileAsync(GetRandomFileName(), StreamContentType, CancellationToken);
 
         for (var i = 0; i < 17; i++)
         {
-            Assert.True(await uploader.AddPart([(byte)i], CancellationToken));
+            Assert.True(await uploader.AddPartAsync([(byte)i], CancellationToken));
         }
 
         Assert.Equal(17, uploader.Written);
 
-        await uploader.Abort(CancellationToken);
+        await uploader.AbortAsync(CancellationToken);
     }
 
     [Fact]
     public async Task NotThrowIfGetNotExistsFile()
     {
         var fileName = GetRandomFileName();
-        await Client.GetFile(fileName, CancellationToken);
+        await Client.GetFileAsync(fileName, CancellationToken);
         Assert.True(true);
     }
 
     [Fact]
     public async Task NotThrowIfDeleteFileNotExists()
     {
-        await Client.DeleteFile(GetRandomFileName(), CancellationToken);
+        await Client.DeleteFileAsync(GetRandomFileName(), CancellationToken);
         Assert.True(true);
     }
 
@@ -517,7 +517,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     public async Task NotThrowIfGetFileStreamNotFound()
     {
         var fileName = GetRandomFileName();
-        await Client.GetFileStream(fileName, CancellationToken);
+        await Client.GetFileStreamAsync(fileName, CancellationToken);
         Assert.True(true);
     }
 
@@ -533,19 +533,19 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         // Проверка, что при попытке удалить файл выбрасывается HttpRequestException
         await Assert.ThrowsAsync<HttpRequestException>(async () =>
         {
-            await client.DeleteFile(fileName, CancellationToken);
+            await client.DeleteFileAsync(fileName, CancellationToken);
         });
 
         // Проверка, что при попытке загрузить файл из потока выбрасывается HttpRequestException
         await Assert.ThrowsAsync<HttpRequestException>(async () =>
         {
-            await client.UploadFile(fileName, StreamContentType, fileStream, CancellationToken);
+            await client.UploadFileAsync(fileName, StreamContentType, fileStream, CancellationToken);
         });
 
         // Проверка, что при попытке загрузить файл из массива байтов выбрасывается HttpRequestException
         await Assert.ThrowsAsync<HttpRequestException>(async () =>
         {
-            await client.UploadFile(fileName, StreamContentType, fileArray, CancellationToken);
+            await client.UploadFileAsync(fileName, StreamContentType, fileArray, CancellationToken);
         });
     }
 
@@ -554,23 +554,23 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = GetRandomFileName();
 
-        var uploader = await Client.UploadFile(fileName, StreamContentType, CancellationToken);
+        var uploader = await Client.UploadFileAsync(fileName, StreamContentType, CancellationToken);
         uploader.Dispose();
 
 
         await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
         {
-            await uploader.Abort(CancellationToken);
+            await uploader.AbortAsync(CancellationToken);
         });
 
         await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
         {
-            await uploader.AddPart([], 0, CancellationToken);
+            await uploader.AddPartAsync([], 0, CancellationToken);
         });
 
         await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
         {
-            await uploader.Complete(CancellationToken);
+            await uploader.CompleteAsync(CancellationToken);
         });
     }
 
@@ -579,13 +579,13 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var fileName = GetRandomFileName();
 
-        var uploader = await Client.UploadFile(fileName, StreamContentType, CancellationToken);
-        Assert.True(await uploader.AddPart([1, 2, 3], CancellationToken));
+        var uploader = await Client.UploadFileAsync(fileName, StreamContentType, CancellationToken);
+        Assert.True(await uploader.AddPartAsync([1, 2, 3], CancellationToken));
 
         // Асинхронное освобождение прерывает загрузку: на сервере не остаются неполные части.
         await uploader.DisposeAsync();
 
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => uploader.Abort(CancellationToken));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => uploader.AbortAsync(CancellationToken));
     }
 
     [Fact]
@@ -594,13 +594,13 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         var fileName = GetRandomFileName();
         var data = GetByteArray(64);
 
-        await using (var uploader = await Client.UploadFile(fileName, StreamContentType, CancellationToken))
+        await using (var uploader = await Client.UploadFileAsync(fileName, StreamContentType, CancellationToken))
         {
-            Assert.True(await uploader.AddPart(data, CancellationToken));
-            Assert.True(await uploader.Complete(CancellationToken));
+            Assert.True(await uploader.AddPartAsync(data, CancellationToken));
+            Assert.True(await uploader.CompleteAsync(CancellationToken));
         }
 
-        Assert.True(await Client.IsFileExists(fileName, CancellationToken));
+        Assert.True(await Client.IsFileExistsAsync(fileName, CancellationToken));
 
         await DeleteTestFile(fileName);
     }
@@ -612,11 +612,11 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         var data = GetByteArray(dataSize);
         // Act
-        var result = await Client.UploadFile(nestedFileName, StreamContentType, data, CancellationToken);
+        var result = await Client.UploadFileAsync(nestedFileName, StreamContentType, data, CancellationToken);
         Assert.True(result);
 
         // Assert
-        var exists = await Client.IsFileExists(nestedFileName, CancellationToken);
+        var exists = await Client.IsFileExistsAsync(nestedFileName, CancellationToken);
         Assert.True(exists, "The object should exist in the S3 bucket");
 
         await DeleteTestFile(nestedFileName);
@@ -637,10 +637,10 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
 
         using var data = GetByteStream(1024);
 
-        Assert.True(await client.UploadFile(fileName, StreamContentType, data, CancellationToken));
+        Assert.True(await client.UploadFileAsync(fileName, StreamContentType, data, CancellationToken));
         Assert.True(pool.Rents > 0);
 
-        await client.DeleteFile(fileName, CancellationToken);
+        await client.DeleteFileAsync(fileName, CancellationToken);
     }
 
     private sealed class CountingArrayPool : IArrayPool
@@ -665,7 +665,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         fileName ??= GetRandomFileName();
         using var data = GetByteStream(size ?? 1 * 1024 * 1024); // 1 Mb
 
-        var uploadResult = await Client.UploadFile(fileName, contentType, data, CancellationToken);
+        var uploadResult = await Client.UploadFileAsync(fileName, contentType, data, CancellationToken);
 
         Assert.True(uploadResult);
 
@@ -674,10 +674,10 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
 
     private async Task EnsureFileSame(string fileName, byte[] expectedBytes)
     {
-        using var getFileResult = await Client.GetFile(fileName, CancellationToken);
+        using var getFileResult = await Client.GetFileAsync(fileName, CancellationToken);
 
         using var memoryStream = GetEmptyByteStream(getFileResult.Length);
-        var stream = await getFileResult.GetStream(CancellationToken);
+        var stream = await getFileResult.GetStreamAsync(CancellationToken);
         await stream.CopyToAsync(memoryStream, CancellationToken);
 
         Assert.Equal([.. expectedBytes], memoryStream.ToArray());
@@ -687,17 +687,17 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
     {
         expectedBytes.Seek(0, SeekOrigin.Begin);
 
-        using var getFileResult = await Client.GetFile(fileName, CancellationToken);
+        using var getFileResult = await Client.GetFileAsync(fileName, CancellationToken);
 
         using var memoryStream = GetEmptyByteStream(getFileResult.Length);
-        var stream = await getFileResult.GetStream(CancellationToken);
+        var stream = await getFileResult.GetStreamAsync(CancellationToken);
         await stream.CopyToAsync(memoryStream, CancellationToken);
 
 
         Assert.Equal(expectedBytes.ToArray(), memoryStream.ToArray());
     }
 
-    private Task DeleteTestFile(string fileName) => Client.DeleteFile(fileName, CancellationToken);
+    private Task DeleteTestFile(string fileName) => Client.DeleteFileAsync(fileName, CancellationToken);
 
 
     public static byte[] GetByteArray(int size = FixtureHelper.DefaultByteArraySize) => FixtureHelper.GetByteArray(size);

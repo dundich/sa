@@ -9,7 +9,7 @@ namespace Sa.Data.S3;
 /// <remarks>
 /// Синхронный <see cref="Dispose"/> освобождает только локальные буферы: прервать загрузку он не
 /// может (это сетевой вызов), поэтому после него на сервере остаются неполные части. Используйте
-/// <see cref="DisposeAsync"/> (или явный <see cref="Abort"/>) — он прерывает незавершённую загрузку,
+/// <see cref="DisposeAsync"/> (или явный <see cref="AbortAsync"/>) — он прерывает незавершённую загрузку,
 /// если она не была завершена.
 /// </remarks>
 public sealed class S3Upload : IDisposable, IAsyncDisposable
@@ -74,7 +74,7 @@ public sealed class S3Upload : IDisposable, IAsyncDisposable
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает результат отмены загрузки</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<bool> Abort(CancellationToken ct)
+    public Task<bool> AbortAsync(CancellationToken ct)
     {
         if (_disposed)
         {
@@ -92,9 +92,9 @@ public sealed class S3Upload : IDisposable, IAsyncDisposable
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает результат загрузки</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<bool> AddPart(byte[] data, CancellationToken ct)
+    public Task<bool> AddPartAsync(byte[] data, CancellationToken ct)
     {
-        return AddPart(data, 0, data.Length, ct);
+        return AddPartAsync(data, 0, data.Length, ct);
     }
 
     /// <summary>
@@ -104,16 +104,16 @@ public sealed class S3Upload : IDisposable, IAsyncDisposable
     /// <param name="length">Количество данных, которые нужно взять из блока</param>
     /// <param name="ct">Токен отмены</param>
     /// <returns>Возвращает результат загрузки</returns>
-    public Task<bool> AddPart(byte[] data, int length, CancellationToken ct)
+    public Task<bool> AddPartAsync(byte[] data, int length, CancellationToken ct)
     {
-        return AddPart(data, 0, length, ct);
+        return AddPartAsync(data, 0, length, ct);
     }
 
     /// <summary>
     /// Загружает часть, начиная с <paramref name="offset"/>. Отдельный срез нужен, чтобы
-    /// <see cref="AddParts(byte[], CancellationToken)"/> не копировал данные в промежуточный буфер.
+    /// <see cref="AddPartsAsync(byte[], CancellationToken)"/> не копировал данные в промежуточный буфер.
     /// </summary>
-    internal async Task<bool> AddPart(byte[] data, int offset, int length, CancellationToken ct)
+    internal async Task<bool> AddPartAsync(byte[] data, int offset, int length, CancellationToken ct)
     {
         if (_disposed)
         {
@@ -148,19 +148,19 @@ public sealed class S3Upload : IDisposable, IAsyncDisposable
     /// <param name="data">Блок данных</param>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает результат загрузки</returns>
-    public async Task<bool> AddParts(Stream data, CancellationToken ct)
+    public async Task<bool> AddPartsAsync(Stream data, CancellationToken ct)
     {
         _byteBuffer ??= _arrayPool.Rent<byte>(S3BucketClient.DefaultPartSize);
 
         while (true)
         {
-            var written = await data.ReadTo(_byteBuffer, ct).ConfigureAwait(false);
+            var written = await data.ReadToAsync(_byteBuffer, ct).ConfigureAwait(false);
             if (written is 0)
             {
                 break;
             }
 
-            if (!await AddPart(_byteBuffer, written, ct).ConfigureAwait(false))
+            if (!await AddPartAsync(_byteBuffer, written, ct).ConfigureAwait(false))
             {
                 return false;
             }
@@ -179,14 +179,14 @@ public sealed class S3Upload : IDisposable, IAsyncDisposable
     /// Блоки — срезы <paramref name="data"/>, без копирования в промежуточный буфер: исходный
     /// массив не должен меняться до завершения вызова.
     /// </remarks>
-    public async Task<bool> AddParts(byte[] data, CancellationToken ct)
+    public async Task<bool> AddPartsAsync(byte[] data, CancellationToken ct)
     {
         var offset = 0;
         while (offset < data.Length)
         {
             var partSize = Math.Min(S3BucketClient.DefaultPartSize, data.Length - offset);
 
-            if (!await AddPart(data, offset, partSize, ct).ConfigureAwait(false))
+            if (!await AddPartAsync(data, offset, partSize, ct).ConfigureAwait(false))
             {
                 return false;
             }
@@ -202,7 +202,7 @@ public sealed class S3Upload : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает результат завершения загрузки</returns>
-    public async Task<bool> Complete(CancellationToken ct)
+    public async Task<bool> CompleteAsync(CancellationToken ct)
     {
         if (_disposed)
         {
@@ -252,7 +252,7 @@ public sealed class S3Upload : IDisposable, IAsyncDisposable
         {
             try
             {
-                await Abort(CancellationToken.None).ConfigureAwait(false);
+                await AbortAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch
             {

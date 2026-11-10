@@ -9,7 +9,7 @@ namespace Sa.Data.S3;
 /// Обёртка над <see cref="HttpResponseMessage"/>, позволяющая удобно работать с загруженным файлом
 /// </summary>
 /// <remarks>
-/// Владеет ответом сервера: <see cref="Dispose"/> освобождает его, а <see cref="GetStream"/> передаёт
+/// Владеет ответом сервера: <see cref="Dispose"/> освобождает его, а <see cref="GetStreamAsync"/> передаёт
 /// владение потоку <see cref="S3Stream"/> (тот освобождает ответ вместе с собой). Достаточно
 /// освободить что-то одно.
 /// <para>
@@ -89,7 +89,7 @@ public sealed class S3File : IDisposable
     /// </summary>
     /// <returns>Stream of data</returns>
     /// <remarks>Когда Stream будет закрыт, <see cref="HttpResponseMessage" /> будет уничтожен</remarks>
-    public async Task<Stream> GetStream(CancellationToken ct)
+    public async Task<Stream> GetStreamAsync(CancellationToken ct)
     {
         if (!_response.IsSuccessStatusCode)
         {

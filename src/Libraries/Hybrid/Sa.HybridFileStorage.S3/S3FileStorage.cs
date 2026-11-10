@@ -55,7 +55,7 @@ internal sealed class S3FileStorage(
             return false;
 
         var filePath = GetFilePath(fileId);
-        await client.DeleteFile(filePath, cancellationToken).ConfigureAwait(false);
+        await client.DeleteFileAsync(filePath, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -69,7 +69,7 @@ internal sealed class S3FileStorage(
             return false;
 
         var filePath = GetFilePath(fileId);
-        using var stream = await client.GetFileStream(filePath, cancellationToken).ConfigureAwait(false);
+        using var stream = await client.GetFileStreamAsync(filePath, cancellationToken).ConfigureAwait(false);
         if (stream is null || stream == Stream.Null) return false;
 
         await loadStream(stream, cancellationToken).ConfigureAwait(false);
@@ -93,7 +93,7 @@ internal sealed class S3FileStorage(
         var extension = Path.GetExtension(filePath);
         var contentType = MimeTypeMap.GetMimeType(extension);
 
-        await client.UploadFile(filePath, contentType, fileStream, cancellationToken).ConfigureAwait(false);
+        await client.UploadFileAsync(filePath, contentType, fileStream, cancellationToken).ConfigureAwait(false);
 
         var fileId = string.Concat(_schemePrefix, filePath);
 
@@ -121,9 +121,9 @@ internal sealed class S3FileStorage(
                 return;
             }
 
-            if (!await client.IsBucketExists(cancellationToken).ConfigureAwait(false))
+            if (!await client.IsBucketExistsAsync(cancellationToken).ConfigureAwait(false))
             {
-                await client.CreateBucket(cancellationToken).ConfigureAwait(false);
+                await client.CreateBucketAsync(cancellationToken).ConfigureAwait(false);
             }
 
             _bucketEnsured = true;

@@ -15,12 +15,12 @@ public sealed partial class S3BucketClient : IBucketOperations
     /// <summary>Creates the bucket if it does not exist.</summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns><see langword="true"/> when the bucket exists after the call.</returns>
-    public async Task<bool> CreateBucket(CancellationToken ct)
+    public async Task<bool> CreateBucketAsync(CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Put))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         switch (response.StatusCode)
@@ -32,7 +32,7 @@ public sealed partial class S3BucketClient : IBucketOperations
                 response.Dispose();
                 return false;
             default:
-                await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+                await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
                 return false;
         }
     }
@@ -40,9 +40,9 @@ public sealed partial class S3BucketClient : IBucketOperations
     /// <summary>Deletes the bucket without forcing a recursive delete.</summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns><see langword="true"/> when the bucket is gone.</returns>
-    public async Task<bool> DeleteBucket(CancellationToken ct)
+    public async Task<bool> DeleteBucketAsync(CancellationToken ct)
     {
-        return await DeleteBucket(forceDelete: false, ct).ConfigureAwait(false);
+        return await DeleteBucketAsync(forceDelete: false, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -50,24 +50,24 @@ public sealed partial class S3BucketClient : IBucketOperations
     /// </summary>
     /// <param name="forceDelete">Если true, предварительно удалит все объекты в бакете</param>
     /// <param name="ct">Токен отмены операции</param>
-    public async Task<bool> DeleteBucket(bool forceDelete, CancellationToken ct)
+    public async Task<bool> DeleteBucketAsync(bool forceDelete, CancellationToken ct)
     {
         if (forceDelete)
         {
             // Тот же контракт, что и у обычного удаления: отсутствующий бакет — это false, а не
             // 404 из листинга (раньше force-путь бросал HttpRequestException).
-            if (!await IsBucketExists(ct).ConfigureAwait(false))
+            if (!await IsBucketExistsAsync(ct).ConfigureAwait(false))
             {
                 return false;
             }
 
-            await DeleteAllObjects(ct).ConfigureAwait(false);
+            await DeleteAllObjectsAsync(ct).ConfigureAwait(false);
         }
 
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Delete))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         switch (response.StatusCode)
@@ -79,7 +79,7 @@ public sealed partial class S3BucketClient : IBucketOperations
                 response.Dispose();
                 return false;
             default:
-                await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+                await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
                 return false;
         }
     }
@@ -92,7 +92,7 @@ public sealed partial class S3BucketClient : IBucketOperations
     /// заново каждую итерацию и обрывается после первой пачки, поэтому память ограничена размером
     /// пачки, а продолжение страниц не зависит от того, что часть ключей уже удалена.
     /// </remarks>
-    private async Task DeleteAllObjects(CancellationToken ct)
+    private async Task DeleteAllObjectsAsync(CancellationToken ct)
     {
         var batch = new List<string>(MaxKeysPerDeleteRequest);
 
@@ -115,11 +115,11 @@ public sealed partial class S3BucketClient : IBucketOperations
                 return;
             }
 
-            await DeleteObjects(batch, ct).ConfigureAwait(false);
+            await DeleteObjectsAsync(batch, ct).ConfigureAwait(false);
         }
     }
 
-    private async Task DeleteObjects(List<string> keys, CancellationToken ct)
+    private async Task DeleteObjectsAsync(List<string> keys, CancellationToken ct)
     {
         var data = BuildDeleteObjectsBody(keys);
         var payload = Encoding.UTF8.GetBytes(data);
@@ -136,12 +136,12 @@ public sealed partial class S3BucketClient : IBucketOperations
             content.Headers.Add("content-md5", HashHelper.GetMd5Base64(payload));
             request.Content = content;
 
-            response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, payloadHash, ct).ConfigureAwait(false);
         }
 
         if (response.StatusCode is not HttpStatusCode.OK)
         {
-            await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+            await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
             return;
         }
 
@@ -195,12 +195,12 @@ public sealed partial class S3BucketClient : IBucketOperations
     /// <summary>Checks whether the bucket exists.</summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns><see langword="true"/> when the bucket exists.</returns>
-    public async Task<bool> IsBucketExists(CancellationToken ct)
+    public async Task<bool> IsBucketExistsAsync(CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Head))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         switch (response.StatusCode)
@@ -212,7 +212,7 @@ public sealed partial class S3BucketClient : IBucketOperations
                 response.Dispose();
                 return false;
             default:
-                await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+                await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
                 return false;
         }
     }

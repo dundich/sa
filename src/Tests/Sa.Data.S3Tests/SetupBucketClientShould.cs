@@ -16,12 +16,12 @@ public class SetupBucketClientShould(S3BucketClientFixtureDI fixture) : IClassFi
     {
         var fileName = ObjectShould.GetRandomFileName();
         using var data = ObjectShould.GetByteStream(1500);
-        var filePutResult = await Client.UploadFile(fileName, ObjectShould.StreamContentType, data, CancellationToken);
+        var filePutResult = await Client.UploadFileAsync(fileName, ObjectShould.StreamContentType, data, CancellationToken);
 
         Assert.True(filePutResult);
 
         await EnsureFileSame(fileName, data);
-        await Client.DeleteFile(fileName, CancellationToken);
+        await Client.DeleteFileAsync(fileName, CancellationToken);
     }
 
 
@@ -29,10 +29,10 @@ public class SetupBucketClientShould(S3BucketClientFixtureDI fixture) : IClassFi
     {
         expectedBytes.Seek(0, SeekOrigin.Begin);
 
-        using var getFileResult = await Client.GetFile(fileName, CancellationToken);
+        using var getFileResult = await Client.GetFileAsync(fileName, CancellationToken);
 
         using var memoryStream = FixtureHelper.GetEmptyByteStream(getFileResult.Length);
-        var stream = await getFileResult.GetStream(CancellationToken);
+        var stream = await getFileResult.GetStreamAsync(CancellationToken);
         await stream.CopyToAsync(memoryStream, CancellationToken);
 
 

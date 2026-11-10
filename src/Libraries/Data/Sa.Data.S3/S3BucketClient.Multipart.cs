@@ -16,7 +16,7 @@ public partial class S3BucketClient
         {
             try
             {
-                response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+                response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
             }
             catch
             {
@@ -78,7 +78,7 @@ public partial class S3BucketClient
         {
             using var content = new StringContent(data, Encoding.UTF8);
             request.Content = content;
-            response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, payloadHash, ct).ConfigureAwait(false);
         }
 
         var result = response is { IsSuccessStatusCode: true, StatusCode: HttpStatusCode.OK };
@@ -107,7 +107,7 @@ public partial class S3BucketClient
             using var content = new ByteArrayContent(partData, offset, partSize);
             request.Content = content;
 
-            response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, payloadHash, ct).ConfigureAwait(false);
         }
 
         var result = response is { IsSuccessStatusCode: true, StatusCode: HttpStatusCode.OK }
@@ -126,14 +126,14 @@ public partial class S3BucketClient
     {
         // DisposeAsync прерывает незавершённую загрузку: забытый Abort иначе оставлял бы на сервере
         // оплачиваемые неполные части.
-        await using var upload = await UploadFile(fileName, contentType, ct).ConfigureAwait(false);
+        await using var upload = await UploadFileAsync(fileName, contentType, ct).ConfigureAwait(false);
 
-        if (await upload.AddParts(data, ct).ConfigureAwait(false) && await upload.Complete(ct).ConfigureAwait(false))
+        if (await upload.AddPartsAsync(data, ct).ConfigureAwait(false) && await upload.CompleteAsync(ct).ConfigureAwait(false))
         {
             return true;
         }
 
-        await upload.Abort(ct).ConfigureAwait(false);
+        await upload.AbortAsync(ct).ConfigureAwait(false);
         return false;
     }
 
@@ -143,14 +143,14 @@ public partial class S3BucketClient
         byte[] data,
         CancellationToken ct)
     {
-        await using var upload = await UploadFile(fileName, contentType, ct).ConfigureAwait(false);
+        await using var upload = await UploadFileAsync(fileName, contentType, ct).ConfigureAwait(false);
 
-        if (await upload.AddParts(data, ct).ConfigureAwait(false) && await upload.Complete(ct).ConfigureAwait(false))
+        if (await upload.AddPartsAsync(data, ct).ConfigureAwait(false) && await upload.CompleteAsync(ct).ConfigureAwait(false))
         {
             return true;
         }
 
-        await upload.Abort(ct).ConfigureAwait(false);
+        await upload.AbortAsync(ct).ConfigureAwait(false);
         return false;
     }
 
@@ -165,7 +165,7 @@ public partial class S3BucketClient
             content.Headers.Add("content-type", contentType);
             request.Content = content;
 
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         if (response.StatusCode is HttpStatusCode.OK)
@@ -183,7 +183,7 @@ public partial class S3BucketClient
             return new S3Upload(this, fileName, encodedFileName, uploadId);
         }
 
-        await Errors.UnexpectedResult(response, ct).ConfigureAwait(false);
+        await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
 
         return null!; // Errors.UnexpectedResult всегда бросает
     }

@@ -58,7 +58,7 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(stream);
         if (!stream.CanRead) throw new ArgumentException("Stream must be readable", nameof(stream));
 
-        // StreamPipeReaderOptions.LeaveOpen по умолчанию false: Complete() закрыл бы поток
+        // StreamPipeReaderOptions.LeaveOpen по умолчанию false: CompleteAsync() закрыл бы поток
         // вызывающего. Ридер владеет только своим PipeReader, но не чужим Stream.
         options ??= new StreamPipeReaderOptions(leaveOpen: true);
 

@@ -78,7 +78,7 @@ public sealed class S3FileStorageBucketEnsureTests
 
         public Uri Endpoint => new("http://localhost:9000");
 
-        public async Task<bool> IsBucketExists(CancellationToken ct)
+        public async Task<bool> IsBucketExistsAsync(CancellationToken ct)
         {
             int call = Interlocked.Increment(ref _bucketChecks);
 
@@ -95,40 +95,40 @@ public sealed class S3FileStorageBucketEnsureTests
             return _bucketCreated;
         }
 
-        public Task<bool> CreateBucket(CancellationToken ct)
+        public Task<bool> CreateBucketAsync(CancellationToken ct)
         {
             _bucketCreated = true;
             return Task.FromResult(true);
         }
 
-        public Task<bool> UploadFile(string fileName, string contentType, Stream data, CancellationToken ct)
+        public Task<bool> UploadFileAsync(string fileName, string contentType, Stream data, CancellationToken ct)
             => Task.FromResult(true);
 
         public string BuildFileUrl(string fileName) => $"http://localhost:9000/mybucket/{fileName}";
 
-        public Task<bool> DeleteBucket(CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> DeleteBucketAsync(CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<bool> DeleteBucket(bool forceDelete, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> DeleteBucketAsync(bool forceDelete, CancellationToken ct) => throw new NotSupportedException();
 
         public string BuildFileUrl(string fileName, TimeSpan expiration) => throw new NotSupportedException();
 
-        public Task DeleteFile(string fileName, CancellationToken ct) => throw new NotSupportedException();
+        public Task DeleteFileAsync(string fileName, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<S3File> GetFile(string fileName, CancellationToken ct) => throw new NotSupportedException();
+        public Task<S3File> GetFileAsync(string fileName, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<Stream> GetFileStream(string fileName, CancellationToken ct) => throw new NotSupportedException();
+        public Task<Stream> GetFileStreamAsync(string fileName, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<string?> GetFileUrl(string fileName, TimeSpan expiration, CancellationToken ct)
+        public Task<string?> GetFileUrlAsync(string fileName, TimeSpan expiration, CancellationToken ct)
             => throw new NotSupportedException();
 
-        public Task<bool> IsFileExists(string fileName, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> IsFileExistsAsync(string fileName, CancellationToken ct) => throw new NotSupportedException();
 
         public IAsyncEnumerable<string> List(string? prefix, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<bool> UploadFile(string fileName, string contentType, byte[] data, CancellationToken ct)
+        public Task<bool> UploadFileAsync(string fileName, string contentType, byte[] data, CancellationToken ct)
             => throw new NotSupportedException();
 
-        public Task<S3Upload> UploadFile(string fileName, string contentType, CancellationToken ct)
+        public Task<S3Upload> UploadFileAsync(string fileName, string contentType, CancellationToken ct)
             => throw new NotSupportedException();
     }
 }
