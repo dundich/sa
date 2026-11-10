@@ -163,7 +163,7 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
     }
 
     private async Task<long> CountMessages(string schema, string payloadId)
-        => await fixture.DataSource.ExecuteScalarTyped<long>(
+        => await fixture.DataSource.ExecuteScalarTypedAsync<long>(
             $"SELECT count(*) FROM {schema}.outbox__msg$ WHERE msg_payload_id = '{payloadId}'",
             initCommand: null,
             TestToken);

@@ -50,7 +50,7 @@ public sealed class PostgresFileStorageCustomNamesTests(PostgresFileStorageCusto
         Assert.True(Sub.CanProcess(upload.FileId));
 
         // The row must be in the table that was registered, under the name that was configured.
-        long count = await fixture.DataSource.ExecuteScalar<long>(
+        long count = await fixture.DataSource.ExecuteScalarAsync<long>(
             "SELECT COUNT(*) FROM public.custom_files WHERE id = @id",
             cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
         Assert.Equal(1, count);
@@ -80,13 +80,13 @@ public sealed class PostgresFileStorageCustomNamesTests(PostgresFileStorageCusto
 
         var upload = await Sub.UploadAsync(input, content, fixture.CancellationToken);
 
-        long size = await fixture.DataSource.ExecuteScalar<long>(
+        long size = await fixture.DataSource.ExecuteScalarAsync<long>(
             "SELECT size FROM public.custom_files WHERE id = @id",
             cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
 
         Assert.Equal(payload.Length, size);
 
-        string? dataType = await fixture.DataSource.ExecuteScalar<string>(
+        string? dataType = await fixture.DataSource.ExecuteScalarAsync<string>(
             """
             SELECT data_type FROM information_schema.columns
             WHERE table_schema = 'public' AND table_name = 'custom_files' AND column_name = 'size'

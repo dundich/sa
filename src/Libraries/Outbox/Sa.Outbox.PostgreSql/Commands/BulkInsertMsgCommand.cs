@@ -103,7 +103,7 @@ internal sealed class BulkInsertMsgCommand(
         Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write,
         CancellationToken cancellationToken)
     {
-        await using NpgsqlConnection connection = await dataSource.OpenDbConnection(cancellationToken)
+        await using NpgsqlConnection connection = await dataSource.OpenDbConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
 
         await using NpgsqlTransaction transaction = await connection

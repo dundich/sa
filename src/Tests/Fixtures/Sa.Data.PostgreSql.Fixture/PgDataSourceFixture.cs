@@ -26,7 +26,7 @@ public class PgDataSourceFixture<TSub> : PostgreSqlFixture<TSub, PostgreSqlFixtu
 
     public async Task CheckTable(string tablename)
     {
-        await DataSource.ExecuteNonQuery($"SELECT '{tablename}'::regclass;");
+        await DataSource.ExecuteNonQueryAsync($"SELECT '{tablename}'::regclass;");
     }
 }
 

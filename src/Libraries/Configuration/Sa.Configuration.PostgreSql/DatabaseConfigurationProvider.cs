@@ -207,7 +207,7 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, ISaAs
         int clientOrdinal = -1;
 
         return await dataSource
-            .ExecuteReader(
+            .ExecuteReaderAsync(
                 _options.SelectSql,
                 (reader, index) =>
                 {

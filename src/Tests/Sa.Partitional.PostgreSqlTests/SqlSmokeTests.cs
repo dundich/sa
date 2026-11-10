@@ -60,14 +60,14 @@ public class SqlSmokeTests(SqlSmokeTests.Fixture fixture) : IClassFixture<SqlSmo
 
     /// <summary>Number of partitions attached to the given root (quoted, schema-qualified).</summary>
     private Task<long> Children(string quotedRoot, CancellationToken ct)
-        => fixture.DataSource.ExecuteScalarTyped<long>(
+        => fixture.DataSource.ExecuteScalarTypedAsync<long>(
             "SELECT count(*) FROM pg_inherits WHERE inhparent = to_regclass(@root)",
             [new NpgsqlParameter<string>("root", quotedRoot)],
             ct);
 
     /// <summary>Whether a (quoted, schema-qualified) relation exists.</summary>
     private Task<bool> Exists(string quotedName, CancellationToken ct)
-        => fixture.DataSource.ExecuteScalarTyped<bool>(
+        => fixture.DataSource.ExecuteScalarTypedAsync<bool>(
             "SELECT to_regclass(@name) IS NOT NULL",
             [new NpgsqlParameter<string>("name", quotedName)],
             ct);

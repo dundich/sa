@@ -32,7 +32,7 @@ internal sealed partial class FinishDeliveryCommand(
 
             startIndex += length;
 
-            total += await dataSource.ExecuteNonQuery(
+            total += await dataSource.ExecuteNonQueryAsync(
                 sql,
                 cmd => FillCommandParameters(cmd, slice.Span, errors, filter),
                 cancellationToken);

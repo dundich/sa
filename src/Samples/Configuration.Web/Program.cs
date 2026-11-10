@@ -26,7 +26,7 @@ using var ds = IPgDataSource.Create(connectionString);
 // One table for everything: client_id NULL holds the base values, a non-null client_id holds that
 // client's overrides. One query returns all of it, so a client added to the table is visible after a
 // reload without a restart.
-ds.ExecuteScalar("""
+ds.ExecuteScalarAsync("""
     CREATE TABLE IF NOT EXISTS settings (
         client_id TEXT,
         key       TEXT NOT NULL,

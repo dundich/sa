@@ -9,7 +9,7 @@ internal sealed class InsertMsgTypeCommand(
 {
     public Task<int> Execute(long id, string typeName, CancellationToken cancellationToken)
     {
-        return dataSource.ExecuteNonQuery(template.SqlInsertType
+        return dataSource.ExecuteNonQueryAsync(template.SqlInsertType
             , cmd => cmd
                 .AddParamTypeId(id)
                 .AddParamTypeName(typeName)

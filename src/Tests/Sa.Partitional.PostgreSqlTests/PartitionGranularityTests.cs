@@ -84,7 +84,7 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
 
     /// <summary>Rows of <paramref name="table"/> that belong to the given partition key.</summary>
     private Task<long> Rows(string table, string part, CancellationToken ct)
-        => fixture.DataSource.ExecuteScalarTyped<long>(
+        => fixture.DataSource.ExecuteScalarTypedAsync<long>(
             $"SELECT count(*) FROM \"public\".\"{table}\" WHERE tenant_id = 1 AND part = @part",
             [new NpgsqlParameter<string>("part", part)],
             ct);
@@ -103,7 +103,7 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
             ORDER BY c.relname
             """;
 
-        List<string> names = await fixture.DataSource.ExecuteReaderList(
+        List<string> names = await fixture.DataSource.ExecuteReaderListAsync(
             sql,
             static r => r.GetString(0),
             [new NpgsqlParameter<string>("prefix", $"{table}__")],
@@ -128,7 +128,7 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
     private Task InsertRow(string table, string part, int id, DateTimeOffset createdAt, CancellationToken ct)
         // Inserted into the ROOT: PostgreSQL routes the row to the matching leaf itself, so a missing
         // partition fails the statement instead of silently landing nowhere.
-        => fixture.DataSource.ExecuteNonQuery(
+        => fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO \"public\".\"{table}\" (id, tenant_id, part, created_at) VALUES (@id, 1, @part, @at)",
             [
                 new NpgsqlParameter<int>("id", id),
@@ -245,7 +245,7 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
         // The leaf kept its name, moved to the archive schema, and the row is still readable there.
         string archivedLeaf = $"{ArchiveSchema}.\"{table}__1__arch__{SuffixFor(granularity, OlderDay)}\"";
 
-        long survived = await fixture.DataSource.ExecuteScalarTyped<long>(
+        long survived = await fixture.DataSource.ExecuteScalarTypedAsync<long>(
             $"SELECT count(*) FROM {archivedLeaf}", cancellationToken: ct);
 
         Assert.Equal(1L, survived);

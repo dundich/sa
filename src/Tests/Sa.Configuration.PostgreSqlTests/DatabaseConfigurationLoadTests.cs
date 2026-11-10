@@ -572,7 +572,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
             forceFailure = true;
         }
 
-        public async Task<int> ExecuteReader(
+        public async Task<int> ExecuteReaderAsync(
             string sql,
             Action<NpgsqlDataReader, int> read,
             Action<NpgsqlCommand>? initCommand,
@@ -583,7 +583,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
             if (forceFailure || Attempts <= failuresBeforeSuccess)
                 throw failure == FailureKind.Transient ? ConnectionFailure() : UndefinedTableFailure();
 
-            return await inner.ExecuteReader(sql, read, initCommand, cancellationToken).ConfigureAwait(false);
+            return await inner.ExecuteReaderAsync(sql, read, initCommand, cancellationToken).ConfigureAwait(false);
         }
 
         public void Dispose() => DisposeCount++;
@@ -593,60 +593,60 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
 
         public string GetConnectionString() => inner.GetConnectionString();
 
-        public ValueTask<NpgsqlConnection> OpenDbConnection(CancellationToken cancellationToken)
-            => inner.OpenDbConnection(cancellationToken);
+        public ValueTask<NpgsqlConnection> OpenDbConnectionAsync(CancellationToken cancellationToken)
+            => inner.OpenDbConnectionAsync(cancellationToken);
 
-        public Task<int> ExecuteNonQuery(
+        public Task<int> ExecuteNonQueryAsync(
             string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
-            => inner.ExecuteNonQuery(sql, initCommand, cancellationToken);
+            => inner.ExecuteNonQueryAsync(sql, initCommand, cancellationToken);
 
-        public Task<object?> ExecuteScalar(
+        public Task<object?> ExecuteScalarAsync(
             string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalar(sql, initCommand, cancellationToken);
+            => inner.ExecuteScalarAsync(sql, initCommand, cancellationToken);
 
-        public ValueTask<ulong> BeginBinaryImport(
+        public ValueTask<ulong> BeginBinaryImportAsync(
             string sql,
             Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write,
             CancellationToken cancellationToken = default)
-            => inner.BeginBinaryImport(sql, write, cancellationToken);
+            => inner.BeginBinaryImportAsync(sql, write, cancellationToken);
 
-        public ValueTask<PgTransaction> BeginTransaction(CancellationToken cancellationToken = default)
-            => inner.BeginTransaction(cancellationToken);
+        public ValueTask<PgTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
+            => inner.BeginTransactionAsync(cancellationToken);
 
-        public Task<int> ExecuteNonQuery(
+        public Task<int> ExecuteNonQueryAsync(
             string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
-            => inner.ExecuteNonQuery(sql, parameters, cancellationToken);
+            => inner.ExecuteNonQueryAsync(sql, parameters, cancellationToken);
 
-        public Task<int> ExecuteNonQuery(string sql, CancellationToken cancellationToken = default)
-            => inner.ExecuteNonQuery(sql, cancellationToken);
+        public Task<int> ExecuteNonQueryAsync(string sql, CancellationToken cancellationToken = default)
+            => inner.ExecuteNonQueryAsync(sql, cancellationToken);
 
-        public Task<object?> ExecuteScalar(string sql, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalar(sql, cancellationToken);
+        public Task<object?> ExecuteScalarAsync(string sql, CancellationToken cancellationToken = default)
+            => inner.ExecuteScalarAsync(sql, cancellationToken);
 
-        public Task<T> ExecuteScalar<T>(
+        public Task<T> ExecuteScalarAsync<T>(
             string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalar<T>(sql, initCommand, cancellationToken);
+            => inner.ExecuteScalarAsync<T>(sql, initCommand, cancellationToken);
 
-        public Task<T> ExecuteScalarTyped<T>(
+        public Task<T> ExecuteScalarTypedAsync<T>(
             string sql, Action<NpgsqlCommand>? initCommand = null, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalarTyped<T>(sql, initCommand, cancellationToken);
+            => inner.ExecuteScalarTypedAsync<T>(sql, initCommand, cancellationToken);
 
-        public Task<T> ExecuteScalarTyped<T>(
+        public Task<T> ExecuteScalarTypedAsync<T>(
             string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalarTyped<T>(sql, parameters, cancellationToken);
+            => inner.ExecuteScalarTypedAsync<T>(sql, parameters, cancellationToken);
 
         // The reader conveniences route through this double's own core ExecuteReader so the fault
         // injection above still observes the call.
-        public Task<int> ExecuteReader(
+        public Task<int> ExecuteReaderAsync(
             string sql, Action<NpgsqlDataReader, int> read, CancellationToken cancellationToken = default)
-            => ExecuteReader(sql, read, initCommand: null, cancellationToken);
+            => ExecuteReaderAsync(sql, read, initCommand: null, cancellationToken);
 
-        public Task<int> ExecuteReader(
+        public Task<int> ExecuteReaderAsync(
             string sql,
             Action<NpgsqlDataReader, int> read,
             IReadOnlyCollection<NpgsqlParameter> parameters,
             CancellationToken cancellationToken = default)
-            => ExecuteReader(
+            => ExecuteReaderAsync(
                 sql,
                 read,
                 cmd =>
@@ -655,31 +655,31 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
                 },
                 cancellationToken);
 
-        public async Task<List<T>> ExecuteReaderList<T>(
+        public async Task<List<T>> ExecuteReaderListAsync<T>(
             string sql, Func<NpgsqlDataReader, T> read, CancellationToken cancellationToken = default)
         {
             List<T> list = [];
-            await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), cancellationToken).ConfigureAwait(false);
+            await ExecuteReaderAsync(sql, (reader, _) => list.Add(read(reader)), cancellationToken).ConfigureAwait(false);
             return list;
         }
 
-        public async Task<List<T>> ExecuteReaderList<T>(
+        public async Task<List<T>> ExecuteReaderListAsync<T>(
             string sql,
             Func<NpgsqlDataReader, T> read,
             IReadOnlyCollection<NpgsqlParameter> parameters,
             CancellationToken cancellationToken = default)
         {
             List<T> list = [];
-            await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), parameters, cancellationToken).ConfigureAwait(false);
+            await ExecuteReaderAsync(sql, (reader, _) => list.Add(read(reader)), parameters, cancellationToken).ConfigureAwait(false);
             return list;
         }
 
-        public Task<T> ExecuteReaderFirst<T>(string sql, CancellationToken cancellationToken = default)
-            => inner.ExecuteReaderFirst<T>(sql, cancellationToken);
+        public Task<T> ExecuteReaderFirstAsync<T>(string sql, CancellationToken cancellationToken = default)
+            => inner.ExecuteReaderFirstAsync<T>(sql, cancellationToken);
 
-        public Task<T> ExecuteReaderFirst<T>(
+        public Task<T> ExecuteReaderFirstAsync<T>(
             string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
-            => inner.ExecuteReaderFirst<T>(sql, parameters, cancellationToken);
+            => inner.ExecuteReaderFirstAsync<T>(sql, parameters, cancellationToken);
     }
 
     /// <summary>Hands a pre-built provider to the builder, so the test controls ownership.</summary>

@@ -143,11 +143,11 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
         var tableSettings = fixture.TableSettings;
         var fields = tableSettings.Message.Fields;
 
-        var seqBySeq = await fixture.DataSource.ExecuteReaderList<long>(
+        var seqBySeq = await fixture.DataSource.ExecuteReaderListAsync<long>(
             $"SELECT {fields.MsgSeq} FROM {tableSettings.GetQualifiedMsgTableName()} WHERE {fields.TenantId} = {Fixture.TenantId} ORDER BY {fields.MsgSeq}",
             r => r.GetInt64(0), ct);
 
-        var seqById = await fixture.DataSource.ExecuteReaderList<long>(
+        var seqById = await fixture.DataSource.ExecuteReaderListAsync<long>(
             $"SELECT {fields.MsgSeq} FROM {tableSettings.GetQualifiedMsgTableName()} WHERE {fields.TenantId} = {Fixture.TenantId} ORDER BY {fields.MsgId}",
             r => r.GetInt64(0), ct);
 
@@ -157,7 +157,7 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
         // Insertion order != id order — the ordering the msg_seq cursor is built on.
         Assert.NotEqual(seqBySeq, seqById);
 
-        long groupOffset = await fixture.DataSource.ExecuteReaderFirst<long>(
+        long groupOffset = await fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"SELECT {tableSettings.Offset.Fields.GroupOffsetSeq} FROM {tableSettings.GetQualifiedOffsetTableName()} WHERE {tableSettings.Offset.Fields.ConsumerGroup} = '{Fixture.GroupId}'",
             ct);
 
@@ -277,14 +277,14 @@ public class DeliveryMinOffsetFloorTests(DeliveryMinOffsetFloorTests.Fixture fix
         var fields = tableSettings.Message.Fields;
 
         // m1 still exists in the msg table — it is below the floor by design, not lost.
-        long msgCount = await fixture.DataSource.ExecuteReaderFirst<long>(
+        long msgCount = await fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"SELECT COUNT(*) FROM {tableSettings.GetQualifiedMsgTableName()} WHERE {fields.TenantId} = {Fixture.TenantId}",
             ct);
         Assert.Equal(2, msgCount);
 
         // The cursor sits at m2's seq (2), not at 0 and not at m1's seq: the resolved exclusive
         // boundary (1) was consumed and advanced to the floor message itself.
-        long groupOffset = await fixture.DataSource.ExecuteReaderFirst<long>(
+        long groupOffset = await fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"SELECT {tableSettings.Offset.Fields.GroupOffsetSeq} FROM {tableSettings.GetQualifiedOffsetTableName()} WHERE {tableSettings.Offset.Fields.ConsumerGroup} = '{Fixture.GroupId}'",
             ct);
         Assert.Equal(2, groupOffset);

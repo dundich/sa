@@ -81,7 +81,7 @@ public class PartCleanupArchiveTests(PartCleanupArchiveTests.Fixture fixture) : 
         // The leaf keeps its name and date suffix when it moves into the archive schema.
         string suffix = migrated.ToUniversalTime().ToString("yyyyMMdd");
         string sql = $"SELECT to_regclass('archive.\"cleanup_archive__1__New York__y{suffix[0..4]}m{suffix[4..6]}d{suffix[6..8]}\"') IS NOT NULL";
-        object? exists = await fixture.DataSource.ExecuteScalar(sql, CancellationToken.None);
+        object? exists = await fixture.DataSource.ExecuteScalarAsync(sql, CancellationToken.None);
         Assert.True(exists is bool b && b);
     }
 

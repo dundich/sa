@@ -60,7 +60,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
         var sql = $"SELECT count(*) FROM public.\"test_11__{PartPostfix}\";";
         Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
         await fixture.Sub.CreatePart("test_11", DateTimeOffset.Now, ["some", 12], TestContext.Current.CancellationToken);
-        int i = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
+        int i = await fixture.DataSource.ExecuteReaderFirstAsync<int>(sql, TestContext.Current.CancellationToken);
         Assert.True(i > 0);
     }
 
@@ -69,7 +69,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     {
         var sql = $"SELECT count(*) FROM public.\"test_12__{PartPostfix}\";";
         await fixture.Sub.CreatePart("test_12", DateTimeOffset.Now, [], TestContext.Current.CancellationToken);
-        int i = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
+        int i = await fixture.DataSource.ExecuteReaderFirstAsync<int>(sql, TestContext.Current.CancellationToken);
         Assert.True(i > 0);
     }
 
@@ -133,12 +133,12 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
             fixture.Sub.CreatePart("test_10", date, [7, "race1", "race1"], TestContext.Current.CancellationToken),
             fixture.Sub.CreatePart("test_10", date, [7, "race1", "race1"], TestContext.Current.CancellationToken));
 
-        int partitions = await fixture.DataSource.ExecuteReaderFirst<int>(
+        int partitions = await fixture.DataSource.ExecuteReaderFirstAsync<int>(
             "SELECT count(*) FROM pg_class WHERE relname = 'test_10__7__race1__race1__y2025m03d07';",
             TestContext.Current.CancellationToken);
         Assert.Equal(1, partitions);
 
-        int cacheRows = await fixture.DataSource.ExecuteReaderFirst<int>(
+        int cacheRows = await fixture.DataSource.ExecuteReaderFirstAsync<int>(
             $"""SELECT count(*) FROM public."test_10__{PartPostfix}" WHERE id LIKE '%7__race1__race1%';""",
             TestContext.Current.CancellationToken);
         Assert.Equal(1, cacheRows);

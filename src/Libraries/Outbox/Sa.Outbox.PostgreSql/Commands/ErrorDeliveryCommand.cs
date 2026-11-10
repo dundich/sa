@@ -34,7 +34,7 @@ internal sealed class ErrorDeliveryCommand(
 
         foreach ((string sql, int count) in sqlCache.GetSql(len))
         {
-            await dataSource.ExecuteNonQuery(sql,
+            await dataSource.ExecuteNonQueryAsync(sql,
                 cmd => Fill(cmd, errorArray, startIndex, count),
                 cancellationToken);
 

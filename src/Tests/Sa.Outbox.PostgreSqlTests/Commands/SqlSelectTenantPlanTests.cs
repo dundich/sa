@@ -158,7 +158,7 @@ public class SqlSelectTenantPlanTests(SqlSelectTenantPlanTests.Fixture fixture)
         Assert.Equal((ulong)messages.Count, published);
 
         var field = TableSettings.Message.Fields.TenantId;
-        var tenants = await DataSource.ExecuteReaderList(
+        var tenants = await DataSource.ExecuteReaderListAsync(
             $"SELECT DISTINCT {field} FROM {TableSettings.GetQualifiedMsgTableName()}",
             r => r.GetInt32(0),
             ct);
@@ -170,7 +170,7 @@ public class SqlSelectTenantPlanTests(SqlSelectTenantPlanTests.Fixture fixture)
 
     private async Task<List<string>> ExplainAsync(string sql, CancellationToken cancellationToken)
     {
-        var rows = await DataSource.ExecuteReaderList(
+        var rows = await DataSource.ExecuteReaderListAsync(
             $"EXPLAIN (ANALYZE, BUFFERS) {ExecutableSql(sql).TrimEnd(';')}",
             r => r.GetString(0),
             cancellationToken);

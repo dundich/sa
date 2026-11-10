@@ -77,7 +77,7 @@ internal sealed partial class OutboxTaskLoader(
         int batchSize,
         CancellationToken cancellationToken)
     {
-        await using var conn = await pg.OpenDbConnection(cancellationToken);
+        await using var conn = await pg.OpenDbConnectionAsync(cancellationToken);
 
         await using var tx = await conn.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 

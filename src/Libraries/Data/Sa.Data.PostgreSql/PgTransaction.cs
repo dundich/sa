@@ -3,7 +3,7 @@ using Npgsql;
 namespace Sa.Data.PostgreSql;
 
 /// <summary>
-/// A PostgreSQL transaction opened by <see cref="IPgDataSource.BeginTransaction"/>, together with the
+/// A PostgreSQL transaction opened by <see cref="IPgDataSource.BeginTransactionAsync"/>, together with the
 /// connection that owns it. Provides <see cref="CommitAsync(System.Threading.CancellationToken)"/> /
 /// <see cref="RollbackAsync(System.Threading.CancellationToken)"/> and disposes the connection it
 /// borrowed from the pool.

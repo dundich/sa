@@ -65,7 +65,7 @@ public class OutboxPublishCancellationTests(OutboxPublishCancellationTests.Fixtu
 
         CancellationToken testToken = TestContext.Current.CancellationToken;
 
-        await using NpgsqlConnection conn = await fixture.DataSource.OpenDbConnection(testToken);
+        await using NpgsqlConnection conn = await fixture.DataSource.OpenDbConnectionAsync(testToken);
         await using NpgsqlTransaction tx = await conn.BeginTransactionAsync(testToken);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -146,12 +146,12 @@ internal static class PublishCancelMessages
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
 
-        bool exists = await dataSource.ExecuteReaderFirst<bool>(
+        bool exists = await dataSource.ExecuteReaderFirstAsync<bool>(
             $"select to_regclass('{Table}') is not null", ct);
 
         if (!exists) return 0;
 
-        return await dataSource.ExecuteReaderFirst<long>(
+        return await dataSource.ExecuteReaderFirstAsync<long>(
             $"select count(*) from {Table} where {TenantColumn} = {tenantId}", ct);
     }
 }

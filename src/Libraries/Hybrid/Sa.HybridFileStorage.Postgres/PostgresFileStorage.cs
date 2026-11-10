@@ -196,7 +196,7 @@ internal sealed class PostgresFileStorage(
                 ms.Position = 0;
             }
 
-            await dataSource.ExecuteNonQuery(_insertSql,
+            await dataSource.ExecuteNonQueryAsync(_insertSql,
             [
                   new NpgsqlParameter<string>("id", fileId)
                 , new NpgsqlParameter<string>("name", metadata.FileName)
@@ -242,7 +242,7 @@ internal sealed class PostgresFileStorage(
 
         try
         {
-            rowsAffected = await dataSource.ExecuteNonQuery(_deleteSql,
+            rowsAffected = await dataSource.ExecuteNonQueryAsync(_deleteSql,
             [
                 new NpgsqlParameter<int>("tenant_id", tenantId),
                 new NpgsqlParameter<string>("basket", _partName),
@@ -283,7 +283,7 @@ internal sealed class PostgresFileStorage(
         // and a failure inside its callback would be unobservable. A row's bytea can only be
         // streamed while its reader is open, so the whole read has to be awaited in one place.
         await using NpgsqlConnection connection = await dataSource
-            .OpenDbConnection(cancellationToken).ConfigureAwait(false);
+            .OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await using NpgsqlCommand cmd = new(_selectSql, connection);
 
@@ -340,7 +340,7 @@ internal sealed class PostgresFileStorage(
 
         try
         {
-            rows = await dataSource.ExecuteReaderList(_selectMetadataSql,
+            rows = await dataSource.ExecuteReaderListAsync(_selectMetadataSql,
                 reader => new FileMetadata
                 {
                     Basket = _partName,

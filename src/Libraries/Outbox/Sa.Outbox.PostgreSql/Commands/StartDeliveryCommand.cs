@@ -36,7 +36,7 @@ internal sealed class StartDeliveryCommand(
         NpgsqlOutboxReader.MsgReader.Ordinals msgOrdinals = default;
         bool haveOrdinals = false;
 
-        return await dataSource.ExecuteReader(sql.SqlLockAndSelect
+        return await dataSource.ExecuteReaderAsync(sql.SqlLockAndSelect
             , (reader, i) =>
             {
                 if (!haveOrdinals)

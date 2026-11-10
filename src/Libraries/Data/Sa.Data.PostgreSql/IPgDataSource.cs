@@ -39,7 +39,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The opened connection; the caller owns and must dispose it.</returns>
-    ValueTask<NpgsqlConnection> OpenDbConnection(CancellationToken cancellationToken);
+    ValueTask<NpgsqlConnection> OpenDbConnectionAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Opens a new connection and starts a transaction on it, returning a <see cref="PgTransaction"/>
@@ -49,7 +49,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="cancellationToken">A token to monitor for cancellation
     /// requests.</param>
-    ValueTask<PgTransaction> BeginTransaction(CancellationToken cancellationToken = default);
+    ValueTask<PgTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes a non-query statement, letting the caller configure the command first.
@@ -58,7 +58,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="initCommand">An optional callback to configure the command (parameters, timeout, ...).</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of rows affected.</returns>
-    Task<int> ExecuteNonQuery(
+    Task<int> ExecuteNonQueryAsync(
         string sql,
         Action<NpgsqlCommand>? initCommand,
         CancellationToken cancellationToken = default);
@@ -70,7 +70,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="parameters">The parameters to bind.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of rows affected.</returns>
-    Task<int> ExecuteNonQuery(
+    Task<int> ExecuteNonQueryAsync(
         string sql,
         IReadOnlyCollection<NpgsqlParameter> parameters,
         CancellationToken cancellationToken = default);
@@ -81,7 +81,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="sql">The SQL statement to execute.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of rows affected.</returns>
-    Task<int> ExecuteNonQuery(string sql, CancellationToken cancellationToken = default);
+    Task<int> ExecuteNonQueryAsync(string sql, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes a scalar query, letting the caller configure the command first.
@@ -90,13 +90,13 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="initCommand">An optional callback to configure the command (parameters, timeout, ...).</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The first column of the first row, or <c>null</c>.</returns>
-    Task<object?> ExecuteScalar(
+    Task<object?> ExecuteScalarAsync(
         string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes a scalar query with no parameters.
     /// </summary>
-    Task<object?> ExecuteScalar(string sql, CancellationToken cancellationToken = default);
+    Task<object?> ExecuteScalarAsync(string sql, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes a typed scalar query, letting the caller configure the command first.
@@ -106,19 +106,19 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="initCommand">An optional callback to configure the command (parameters, timeout, ...).</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The first column of the first row converted to <typeparamref name="T"/>.</returns>
-    Task<T> ExecuteScalar<T>(
+    Task<T> ExecuteScalarAsync<T>(
         string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes a typed scalar query.
     /// </summary>
-    Task<T> ExecuteScalarTyped<T>(
+    Task<T> ExecuteScalarTypedAsync<T>(
         string sql, Action<NpgsqlCommand>? initCommand = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes a typed scalar query with parameters.
     /// </summary>
-    Task<T> ExecuteScalarTyped<T>(
+    Task<T> ExecuteScalarTypedAsync<T>(
         string sql,
         IReadOnlyCollection<NpgsqlParameter> parameters,
         CancellationToken cancellationToken = default);
@@ -132,7 +132,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="initCommand">An optional callback to configure the command (parameters, timeout, ...).</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of rows read.</returns>
-    Task<int> ExecuteReader(
+    Task<int> ExecuteReaderAsync(
         string sql,
         Action<NpgsqlDataReader, int> read,
         Action<NpgsqlCommand>? initCommand,
@@ -146,7 +146,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="parameters">The parameters to bind.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of rows read.</returns>
-    Task<int> ExecuteReader(
+    Task<int> ExecuteReaderAsync(
         string sql,
         Action<NpgsqlDataReader, int> read,
         IReadOnlyCollection<NpgsqlParameter> parameters,
@@ -159,7 +159,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="read">A callback invoked for every row with the reader and the row index.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of rows read.</returns>
-    Task<int> ExecuteReader(
+    Task<int> ExecuteReaderAsync(
         string sql, Action<NpgsqlDataReader, int> read, CancellationToken cancellationToken = default);
 
     // ExecuteReaderList
@@ -172,7 +172,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="read">A callback that maps the current row to an item.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The materialised rows.</returns>
-    Task<List<T>> ExecuteReaderList<T>(
+    Task<List<T>> ExecuteReaderListAsync<T>(
         string sql, Func<NpgsqlDataReader, T> read, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -184,13 +184,13 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="parameters">The parameters to bind.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The materialised rows.</returns>
-    Task<List<T>> ExecuteReaderList<T>(
+    Task<List<T>> ExecuteReaderListAsync<T>(
         string sql,
         Func<NpgsqlDataReader, T> read,
         IReadOnlyCollection<NpgsqlParameter> parameters,
         CancellationToken cancellationToken = default);
 
-    // ExecuteReaderFirst
+    // ExecuteReaderFirstAsync
 
     /// <summary>
     /// Reads the value of the first column of the <b>first</b> row. Only that row is fetched from
@@ -202,10 +202,10 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// (including <see cref="Nullable{T}"/> of an enum), the common PostgreSQL primitives, and any
     /// <see cref="IConvertible"/> type.
     /// </typeparam>
-    Task<T> ExecuteReaderFirst<T>(string sql, CancellationToken cancellationToken = default);
+    Task<T> ExecuteReaderFirstAsync<T>(string sql, CancellationToken cancellationToken = default);
 
-    /// <inheritdoc cref="ExecuteReaderFirst{T}(string, CancellationToken)"/>
-    Task<T> ExecuteReaderFirst<T>(
+    /// <inheritdoc cref="ExecuteReaderFirstAsync{T}(string, CancellationToken)"/>
+    Task<T> ExecuteReaderFirstAsync<T>(
         string sql,
         IReadOnlyCollection<NpgsqlParameter> parameters,
         CancellationToken cancellationToken = default);
@@ -219,7 +219,7 @@ public interface IPgDataSource : IDisposable, IAsyncDisposable
     /// <param name="write">A callback that writes rows to the importer and returns the number of rows written.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of rows written.</returns>
-    ValueTask<ulong> BeginBinaryImport(
+    ValueTask<ulong> BeginBinaryImportAsync(
         string sql,
         Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write,
         CancellationToken cancellationToken = default);

@@ -132,7 +132,7 @@ internal sealed partial class PartTableAdopter(
     {
         ITableSettings settings = builder.Settings;
 
-        await using PgTransaction tx = await dataSource.BeginTransaction(cancellationToken).ConfigureAwait(false);
+        await using PgTransaction tx = await dataSource.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
         await Execute(tx, "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0));",
             [new NpgsqlParameter<string>("key", settings.FullName)], cancellationToken).ConfigureAwait(false);
@@ -687,7 +687,7 @@ WHERE d.refobjid = to_regclass(@table)
     {
         if (tx is null)
         {
-            return await dataSource.ExecuteReaderList(sql, read, parameters, cancellationToken).ConfigureAwait(false);
+            return await dataSource.ExecuteReaderListAsync(sql, read, parameters, cancellationToken).ConfigureAwait(false);
         }
 
         await using NpgsqlCommand command = tx.Connection.CreateCommand();

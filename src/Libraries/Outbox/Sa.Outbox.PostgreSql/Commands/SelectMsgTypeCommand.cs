@@ -13,7 +13,7 @@ internal sealed class SelectMsgTypeCommand(
         NpgsqlOutboxReader.TypeReader.Ordinals ordinals = default;
         bool haveOrdinals = false;
 
-        return await dataSource.ExecuteReaderList(sql.SqlSelectType,
+        return await dataSource.ExecuteReaderListAsync(sql.SqlSelectType,
             reader =>
             {
                 if (!haveOrdinals)

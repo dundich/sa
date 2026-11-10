@@ -15,7 +15,7 @@ internal sealed class ExtendDeliveryCommand(
         long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
         var lockExpiresOn = filter.NowDate + lockExpiration;
 
-        return await dataSource.ExecuteNonQuery(sql.SqlExtendDelivery, cmd => cmd
+        return await dataSource.ExecuteNonQueryAsync(sql.SqlExtendDelivery, cmd => cmd
             .AddParamTenantId(filter.TenantId)
             .AddParamConsumerGroupId(filter.ConsumerGroupId)
             .AddParamFromDate(filter.FromDate)

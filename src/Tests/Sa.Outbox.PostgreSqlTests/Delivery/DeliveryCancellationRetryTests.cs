@@ -114,10 +114,10 @@ public class DeliveryCancellationRetryTests(DeliveryCancellationRetryTests.Fixtu
 
         CancellationToken ct = TestContext.Current.CancellationToken;
 
-        int attemptValue = await fixture.DataSource.ExecuteReaderFirst<int>(
+        int attemptValue = await fixture.DataSource.ExecuteReaderFirstAsync<int>(
             $"select {attempt} from {table} where {tenant} = {TenantId}", ct);
 
-        int statusValue = await fixture.DataSource.ExecuteReaderFirst<int>(
+        int statusValue = await fixture.DataSource.ExecuteReaderFirstAsync<int>(
             $"select {status} from {table} where {tenant} = {TenantId}", ct);
 
         return (attemptValue, statusValue);

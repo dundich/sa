@@ -44,7 +44,7 @@ internal sealed partial class PartRepository(
         try
         {
             return await PgRetryStrategy.ExecuteWithRetry(
-                async t => await dataSource.ExecuteNonQuery(sql, t).ConfigureAwait(false),
+                async t => await dataSource.ExecuteNonQueryAsync(sql, t).ConfigureAwait(false),
                 cancellationToken: cancellationToken);
         }
         finally
@@ -207,7 +207,7 @@ internal sealed partial class PartRepository(
             {
                 try
                 {
-                    return await dataSource.ExecuteReaderList(
+                    return await dataSource.ExecuteReaderListAsync(
                         sql,
                         ReadPartInfo,
                         [new NpgsqlParameter<long>(parameterName, unixTime)], t).ConfigureAwait(false);
@@ -293,7 +293,7 @@ internal sealed partial class PartRepository(
         List<string[]> declared = [.. declaredValues.Select(branch => branch.Select(value => value.ToString()).ToArray())];
 
         List<ListPartition> parts = await PgRetryStrategy.ExecuteWithRetry(
-            async t => await dataSource.ExecuteReaderList(
+            async t => await dataSource.ExecuteReaderListAsync(
                 SqlTemplate.ListListPartitionsSql(),
                 static reader => new ListPartition(reader.GetString(0), reader.GetString(1), reader.GetInt32(2)),
                 [new NpgsqlParameter<string>("root", qualifiedRoot)],
@@ -369,7 +369,7 @@ internal sealed partial class PartRepository(
     private async Task<bool> TableHasRows(string qualifiedName, CancellationToken cancellationToken)
     {
         List<bool> rows = await PgRetryStrategy.ExecuteWithRetry(
-            async t => await dataSource.ExecuteReaderList(
+            async t => await dataSource.ExecuteReaderListAsync(
                 SqlTemplate.TableHasRowsSql(qualifiedName),
                 static reader => reader.GetBoolean(0),
                 t).ConfigureAwait(false),
@@ -570,7 +570,7 @@ internal sealed partial class PartRepository(
     private async Task<List<string>> ListTableIndexes(string qualifiedName, CancellationToken cancellationToken)
     {
         return await PgRetryStrategy.ExecuteWithRetry(
-            async t => await dataSource.ExecuteReaderList(
+            async t => await dataSource.ExecuteReaderListAsync(
                 SqlTemplate.ListTableIndexesSql(),
                 static reader => reader.GetString(0),
                 [new NpgsqlParameter<string>("table", qualifiedName)],
@@ -605,7 +605,7 @@ internal sealed partial class PartRepository(
     private async Task<bool> TableExists(string qualifiedName, CancellationToken cancellationToken)
     {
         List<bool> rows = await PgRetryStrategy.ExecuteWithRetry(
-            async t => await dataSource.ExecuteReaderList(
+            async t => await dataSource.ExecuteReaderListAsync(
                 SqlTemplate.TableExistsSql(qualifiedName),
                 static reader => reader.GetBoolean(0),
                 t).ConfigureAwait(false),
@@ -632,7 +632,7 @@ internal sealed partial class PartRepository(
         string sql = SqlTemplate.PartStateSql(part.Id, archiveQualifiedName, parentQualified);
 
         List<PartLocation> rows = await PgRetryStrategy.ExecuteWithRetry(
-            async t => await dataSource.ExecuteReaderList(
+            async t => await dataSource.ExecuteReaderListAsync(
                 sql,
                 static reader => new PartLocation(reader.GetBoolean(0), reader.GetBoolean(1), reader.GetBoolean(2)),
                 t).ConfigureAwait(false),

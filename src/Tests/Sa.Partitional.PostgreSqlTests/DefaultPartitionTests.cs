@@ -60,7 +60,7 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
     private static readonly DateTimeOffset NextDay = Day.AddDays(1);
 
     private async Task<long> Count(string table, CancellationToken ct)
-        => await fixture.DataSource.ExecuteScalarTyped<long>($"SELECT count(*) FROM {table};", cancellationToken: ct);
+        => await fixture.DataSource.ExecuteScalarTypedAsync<long>($"SELECT count(*) FROM {table};", cancellationToken: ct);
 
 
     [Fact]
@@ -70,7 +70,7 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
         await Sub.Migrate([Day], ct);
 
         // country = US has no list partition; it belongs to the root catch-all.
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.def_nested (id, country, city, created_at) VALUES (1, 'US', 'NY', {Day.ToUnixTimeSeconds()});", ct);
 
         Assert.Equal(1L, await Count("\"public\".\"def_nested__def$\"", ct));
@@ -84,7 +84,7 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
 
         // Only the current day was migrated; 2000 is outside every range.
         long year2000 = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.def_range (id, created_at) VALUES (1, {year2000});", ct);
 
         Assert.Equal(1L, await Count("\"public\".\"def_range__def$\"", ct));
@@ -97,7 +97,7 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
 
         // Day is migrated, NextDay is not: the row lands in the range-level default of RU/Moscow.
         await Sub.Migrate([Day], ct);
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.def_nested (id, country, city, created_at) VALUES (1, 'RU', 'Moscow', {NextDay.ToUnixTimeSeconds()});", ct);
 
         Assert.Equal(1L, await Count("\"public\".\"def_nested__RU__Moscow__def$\"", ct));
@@ -121,7 +121,7 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
         // sibling test relies on staying absent.
         await Sub.Migrate([Day], ct);
         DateTimeOffset weekLater = Day.AddDays(7);
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.def_always (created_at) VALUES ({weekLater.ToUnixTimeSeconds()});", ct);
 
         Assert.Equal(1L, await Count("\"public\".\"def_always__def$\"", ct));
@@ -132,7 +132,7 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
 
         Assert.Equal(0L, await Count("\"public\".\"def_always__def$\"", ct));
 
-        long leafId = await fixture.DataSource.ExecuteScalarTyped<long>(
+        long leafId = await fixture.DataSource.ExecuteScalarTypedAsync<long>(
             $"SELECT id FROM \"public\".\"def_always__{PgPartBy.Day.Fmt(weekLater)}\";", cancellationToken: ct);
         Assert.NotEqual(0, leafId);
     }

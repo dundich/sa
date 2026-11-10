@@ -192,7 +192,7 @@ public sealed class DeliveryStolenBatchTests(DeliveryStolenBatchTests.Fixture fi
               AND {fields.TaskTransactId} = @trn
             """;
 
-        var affected = await fixture.DataSource.ExecuteNonQuery(sql, cmd =>
+        var affected = await fixture.DataSource.ExecuteNonQueryAsync(sql, cmd =>
         {
             cmd.Parameters.Add(new NpgsqlParameter<int>(SqlParamNames.TenantId, filter.TenantId));
             cmd.Parameters.Add(new NpgsqlParameter<string>(SqlParamNames.ConsumerGroup, filter.ConsumerGroupId));

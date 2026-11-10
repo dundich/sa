@@ -97,7 +97,7 @@ public sealed class PublishPartLockTests(PublishPartLockTests.Fixture fixture)
         })];
 
     async Task<long> ScalarAsync(string sql)
-        => await DataSource.ExecuteReaderFirst<long>(sql, Token);
+        => await DataSource.ExecuteReaderFirstAsync<long>(sql, Token);
 
     [Fact]
     public async Task PublishInAnotherTransaction_WaitsForThePartLock_SoSeqOrderEqualsCommitOrder()
@@ -108,7 +108,7 @@ public sealed class PublishPartLockTests(PublishPartLockTests.Fixture fixture)
 
         // A: publish inside a transaction that stays open — it holds the part lock and its rows are
         // invisible to everyone else until the commit.
-        await using NpgsqlConnection connectionA = await DataSource.OpenDbConnection(Token);
+        await using NpgsqlConnection connectionA = await DataSource.OpenDbConnectionAsync(Token);
         await using NpgsqlTransaction txA = await connectionA.BeginTransactionAsync(Token);
 
         ulong sentA = await Publisher.Publish(Batch("t1a-", 10), TenantId, txA, Token);
@@ -150,7 +150,7 @@ public sealed class PublishPartLockTests(PublishPartLockTests.Fixture fixture)
         await Publisher.Publish(OtherBatch("t2warm-", 1), TenantId, context: null, Token);
 
         // A holds the lock of (tenant 1, part root_1).
-        await using NpgsqlConnection connectionA = await DataSource.OpenDbConnection(Token);
+        await using NpgsqlConnection connectionA = await DataSource.OpenDbConnectionAsync(Token);
         await using NpgsqlTransaction txA = await connectionA.BeginTransactionAsync(Token);
         await Publisher.Publish(Batch("t2a-", 5), TenantId, txA, Token);
 

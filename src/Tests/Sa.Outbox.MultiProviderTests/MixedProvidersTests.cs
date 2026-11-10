@@ -209,7 +209,7 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
             WHERE msg_payload_id = @id
             """;
 
-        return await fixture.DataSource.ExecuteScalarTyped<long>(
+        return await fixture.DataSource.ExecuteScalarTypedAsync<long>(
             sql,
             [new NpgsqlParameter("id", payloadId)],
             TestToken);

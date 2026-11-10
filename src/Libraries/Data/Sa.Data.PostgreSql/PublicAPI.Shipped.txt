@@ -1,52 +1,52 @@
 #nullable enable
-Sa.Data.PostgreSql.DbCommandExtensions
 Sa.Data.PostgreSql.INamePrefixProvider
+Sa.Data.PostgreSql.IDataSourceBuilder
+Sa.Data.PostgreSql.DbCommandExtensions
 Sa.Data.PostgreSql.PgDataSourceOptions
 Sa.Data.PostgreSql.PgDataSourceOptions.PgDataSourceOptions() -> void
 Sa.Data.PostgreSql.PgDataSourceResolver
 Sa.Data.PostgreSql.PgRetryStrategy
-Sa.Data.PostgreSql.Setup
 Sa.Data.PostgreSql.PgTransaction
-Sa.Data.PostgreSql.IDataSourceBuilder
+Sa.Data.PostgreSql.Setup
 Sa.Data.PostgreSql.IPgDataSource
+static Sa.Data.PostgreSql.Setup.AddSaPostgreSqlDataSource(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Data.PostgreSql.IDataSourceBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.Data.PostgreSql.INamePrefixProvider.GetPrefixes() -> string![]!
 Sa.Data.PostgreSql.INamePrefixProvider.MaxIndex.get -> int
-Sa.Data.PostgreSql.IDataSourceBuilder.FromConfiguration(string! configSectionPath) -> Sa.Data.PostgreSql.IDataSourceBuilder!
 Sa.Data.PostgreSql.IDataSourceBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Data.PostgreSql.PgDataSourceOptions!>!>! configureSettings) -> Sa.Data.PostgreSql.IDataSourceBuilder!
-Sa.Data.PostgreSql.IPgDataSource.Create(string! connectionString) -> Sa.Data.PostgreSql.IPgDataSource!
-static Sa.Data.PostgreSql.Setup.AddSaPostgreSqlDataSource(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Data.PostgreSql.IDataSourceBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-Sa.Data.PostgreSql.IPgDataSource.Create(Npgsql.NpgsqlDataSource! dataSource) -> Sa.Data.PostgreSql.IPgDataSource!
-Sa.Data.PostgreSql.IPgDataSource.GetSearchPath() -> string!
-Sa.Data.PostgreSql.IPgDataSource.OpenDbConnection(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Npgsql.NpgsqlConnection!>
-Sa.Data.PostgreSql.IPgDataSource.BeginTransaction(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Sa.Data.PostgreSql.PgTransaction!>
-Sa.Data.PostgreSql.IPgDataSource.ExecuteNonQuery(string! sql, System.Action<Npgsql.NpgsqlCommand!>? initCommand, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteNonQuery(string! sql, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Data.PostgreSql.IPgDataSource.GetConnectionString() -> string!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteNonQuery(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteScalar(string! sql, System.Action<Npgsql.NpgsqlCommand!>? initCommand, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<object?>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteScalar(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<object?>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteScalar<T>(string! sql, System.Action<Npgsql.NpgsqlCommand!>? initCommand, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteScalarTyped<T>(string! sql, System.Action<Npgsql.NpgsqlCommand!>? initCommand = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteReader(string! sql, System.Action<Npgsql.NpgsqlDataReader!, int>! read, System.Action<Npgsql.NpgsqlCommand!>? initCommand, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteScalarTyped<T>(string! sql, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteReader(string! sql, System.Action<Npgsql.NpgsqlDataReader!, int>! read, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteReader(string! sql, System.Action<Npgsql.NpgsqlDataReader!, int>! read, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderList<T>(string! sql, System.Func<Npgsql.NpgsqlDataReader!, T>! read, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<T>!>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderFirst<T>(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderList<T>(string! sql, System.Func<Npgsql.NpgsqlDataReader!, T>! read, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<T>!>!
-Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderFirst<T>(string! sql, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
-Sa.Data.PostgreSql.IPgDataSource.BeginBinaryImport(string! sql, System.Func<Npgsql.NpgsqlBinaryImporter!, System.Threading.CancellationToken, System.Threading.Tasks.Task<ulong>!>! write, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-static Sa.Data.PostgreSql.DbCommandExtensions.AddParameter<TProvider>(this Npgsql.NpgsqlCommand! command, string! prefix, int index, object? value) -> Npgsql.NpgsqlCommand!
 Sa.Data.PostgreSql.PgDataSourceOptions.ConnectionString.get -> string!
+Sa.Data.PostgreSql.IPgDataSource.Create(string! connectionString) -> Sa.Data.PostgreSql.IPgDataSource!
 Sa.Data.PostgreSql.PgDataSourceOptions.ConnectionString.set -> void
+Sa.Data.PostgreSql.IPgDataSource.Create(Npgsql.NpgsqlDataSource! dataSource) -> Sa.Data.PostgreSql.IPgDataSource!
+static Sa.Data.PostgreSql.DbCommandExtensions.AddParameter<TProvider>(this Npgsql.NpgsqlCommand! command, string! prefix, int index, object? value) -> Npgsql.NpgsqlCommand!
+Sa.Data.PostgreSql.IPgDataSource.GetSearchPath() -> string!
+Sa.Data.PostgreSql.IPgDataSource.GetConnectionString() -> string!
+Sa.Data.PostgreSql.IPgDataSource.OpenDbConnectionAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Npgsql.NpgsqlConnection!>
+Sa.Data.PostgreSql.IPgDataSource.BeginTransactionAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Sa.Data.PostgreSql.PgTransaction!>
+Sa.Data.PostgreSql.IPgDataSource.ExecuteNonQueryAsync(string! sql, System.Action<Npgsql.NpgsqlCommand!>? initCommand, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteNonQueryAsync(string! sql, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteNonQueryAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteScalarTypedAsync<T>(string! sql, System.Action<Npgsql.NpgsqlCommand!>? initCommand = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteScalarAsync<T>(string! sql, System.Action<Npgsql.NpgsqlCommand!>? initCommand, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteScalarAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<object?>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteScalarAsync(string! sql, System.Action<Npgsql.NpgsqlCommand!>? initCommand, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<object?>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderAsync(string! sql, System.Action<Npgsql.NpgsqlDataReader!, int>! read, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderAsync(string! sql, System.Action<Npgsql.NpgsqlDataReader!, int>! read, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteScalarTypedAsync<T>(string! sql, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderAsync(string! sql, System.Action<Npgsql.NpgsqlDataReader!, int>! read, System.Action<Npgsql.NpgsqlCommand!>? initCommand, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderListAsync<T>(string! sql, System.Func<Npgsql.NpgsqlDataReader!, T>! read, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<T>!>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderFirstAsync<T>(string! sql, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderFirstAsync<T>(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
+Sa.Data.PostgreSql.IPgDataSource.ExecuteReaderListAsync<T>(string! sql, System.Func<Npgsql.NpgsqlDataReader!, T>! read, System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! parameters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<T>!>!
 virtual Sa.Data.PostgreSql.PgDataSourceOptions.Normalize() -> void
-static Sa.Data.PostgreSql.DbCommandExtensions.AddParam<TProvider, T>(this Npgsql.NpgsqlCommand! command, string! prefix, T? value, int index) -> Npgsql.NpgsqlCommand!
-Sa.Data.PostgreSql.PgTransaction.Connection.get -> Npgsql.NpgsqlConnection!
-Sa.Data.PostgreSql.PgTransaction.Transaction.get -> Npgsql.NpgsqlTransaction!
+Sa.Data.PostgreSql.IPgDataSource.BeginBinaryImportAsync(string! sql, System.Func<Npgsql.NpgsqlBinaryImporter!, System.Threading.CancellationToken, System.Threading.Tasks.Task<ulong>!>! write, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Data.PostgreSql.IDataSourceBuilder.FromConfiguration(string! configSectionPath) -> Sa.Data.PostgreSql.IDataSourceBuilder!
 static Sa.Data.PostgreSql.PgRetryStrategy.ExecuteWithRetry<T>(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<T>>! fun, int retryCount = 3, int medianFirstRetryDelay = 530, System.Func<System.Exception!, int, bool>? next = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<T>
 static Sa.Data.PostgreSql.PgDataSourceResolver.Resolve(System.IServiceProvider! serviceProvider, string? key = null) -> Sa.Data.PostgreSql.IPgDataSource!
-Sa.Data.PostgreSql.PgTransaction.CommitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 static Sa.Data.PostgreSql.PgDataSourceResolver.TryResolve(System.IServiceProvider! serviceProvider, string? key, out Sa.Data.PostgreSql.IPgDataSource? dataSource) -> bool
-Sa.Data.PostgreSql.PgTransaction.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Sa.Data.PostgreSql.PgTransaction.Connection.get -> Npgsql.NpgsqlConnection!
+Sa.Data.PostgreSql.PgTransaction.Transaction.get -> Npgsql.NpgsqlTransaction!
+Sa.Data.PostgreSql.PgTransaction.CommitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+static Sa.Data.PostgreSql.DbCommandExtensions.AddParam<TProvider, T>(this Npgsql.NpgsqlCommand! command, string! prefix, T? value, int index) -> Npgsql.NpgsqlCommand!
 static Sa.Data.PostgreSql.Setup.AddSaPostgreSqlDataSource(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! key, System.Action<Sa.Data.PostgreSql.IDataSourceBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Data.PostgreSql.PgTransaction.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Sa.Data.PostgreSql.PgTransaction.DisposeAsync() -> System.Threading.Tasks.ValueTask

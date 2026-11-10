@@ -59,18 +59,18 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
     private CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private Task<long> Count(string qualified)
-        => fixture.DataSource.ExecuteScalarTyped<long>($"SELECT count(*) FROM {qualified};", cancellationToken: Ct);
+        => fixture.DataSource.ExecuteScalarTypedAsync<long>($"SELECT count(*) FROM {qualified};", cancellationToken: Ct);
 
     private Task<long> ScalarLong(string sql)
-        => fixture.DataSource.ExecuteScalarTyped<long>(sql, cancellationToken: Ct);
+        => fixture.DataSource.ExecuteScalarTypedAsync<long>(sql, cancellationToken: Ct);
 
     private Task<bool> Exists(string qualified)
-        => fixture.DataSource.ExecuteScalarTyped<bool>(
+        => fixture.DataSource.ExecuteScalarTypedAsync<bool>(
             "SELECT to_regclass(@name) IS NOT NULL;",
             [new NpgsqlParameter<string>("name", qualified)], Ct);
 
     private Task<bool> Attached(string qualified)
-        => fixture.DataSource.ExecuteScalarTyped<bool>(
+        => fixture.DataSource.ExecuteScalarTypedAsync<bool>(
             "SELECT EXISTS (SELECT 1 FROM pg_inherits WHERE inhrelid = to_regclass(@t));",
             [new NpgsqlParameter<string>("t", qualified)], Ct);
 
@@ -103,7 +103,7 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
         await Rep.Migrate([Day], Ct);
 
         // Someone drops the partition by hand; the cache row stays behind.
-        await fixture.DataSource.ExecuteNonQuery($"DROP TABLE public.\"repair_ghost__{Suffix}\";", Ct);
+        await fixture.DataSource.ExecuteNonQueryAsync($"DROP TABLE public.\"repair_ghost__{Suffix}\";", Ct);
 
         await Rep.ArchivePartsToDate("repair_ghost", DateTimeOffset.UtcNow.AddDays(30), ArchiveSchema, Ct);
 
@@ -117,7 +117,7 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
         DateTimeOffset cutoff = DateTimeOffset.UtcNow.AddDays(30);
 
         await Rep.Migrate([Day], Ct);
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.repair_rename (id, created_at) VALUES (1, {Day.ToUnixTimeSeconds()});", Ct);
 
         Assert.Equal(1, await Rep.ArchivePartsToDate(
@@ -125,7 +125,7 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
 
         // The window is written to again and expires a second time.
         await Rep.Migrate([Day], Ct);
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.repair_rename (id, created_at) VALUES (2, {Day.ToUnixTimeSeconds()});", Ct);
 
         Assert.True(await Exists($"public.\"repair_rename__{Suffix}\""));
@@ -149,7 +149,7 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
         await Manager.EnsureParts("repair_prune", Day, ["transient"], Ct);
         await Manager.EnsureParts("repair_prune", Day, ["busy"], Ct);
 
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.repair_prune (id, tenant, created_at) VALUES (3, 'busy', {Day.ToUnixTimeSeconds()});", Ct);
 
         Assert.True(await Exists("public.\"repair_prune__kept\""));

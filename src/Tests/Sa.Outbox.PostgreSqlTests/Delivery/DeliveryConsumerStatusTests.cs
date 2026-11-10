@@ -236,7 +236,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
     }
 
     private Task<DeliveryStatusCode> TaskStatusAsync(string payloadId) =>
-        fixture.DataSource.ExecuteReaderFirst<DeliveryStatusCode>(
+        fixture.DataSource.ExecuteReaderFirstAsync<DeliveryStatusCode>(
             $"""
             SELECT {TableSettings.TaskQueue.Fields.DeliveryStatusCode}
             FROM {TaskQueue}
@@ -244,7 +244,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
             """, Token);
 
     private Task<int> TaskAttemptAsync(string payloadId) =>
-        fixture.DataSource.ExecuteReaderFirst<int>(
+        fixture.DataSource.ExecuteReaderFirstAsync<int>(
             $"""
             SELECT {TableSettings.TaskQueue.Fields.DeliveryAttempt}
             FROM {TaskQueue}
@@ -254,7 +254,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
     // COALESCE because the data source has no Nullable<T> reader support, and 0 unambiguously
     // means "no error id" (ids are sequence-generated and start at 1).
     private Task<long> TaskErrorIdAsync(string payloadId) =>
-        fixture.DataSource.ExecuteReaderFirst<long>(
+        fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"""
             SELECT COALESCE({TableSettings.TaskQueue.Fields.ErrorId}, 0)
             FROM {TaskQueue}
@@ -262,7 +262,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
             """, Token);
 
     private Task<long> TaskLockExpiresOnAsync(string payloadId) =>
-        fixture.DataSource.ExecuteReaderFirst<long>(
+        fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"""
             SELECT {TableSettings.TaskQueue.Fields.TaskLockExpiresOn}
             FROM {TaskQueue}
@@ -270,7 +270,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
             """, Token);
 
     private Task<int> DeliveryRowCountAsync(string payloadId) =>
-        fixture.DataSource.ExecuteReaderFirst<int>(
+        fixture.DataSource.ExecuteReaderFirstAsync<int>(
             $"""
             SELECT COUNT({TableSettings.Delivery.Fields.DeliveryId})
             FROM {DeliveryTable}
@@ -286,7 +286,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
         if (!await ErrorTableExistsAsync())
             return 0;
 
-        return await fixture.DataSource.ExecuteReaderFirst<int>(
+        return await fixture.DataSource.ExecuteReaderFirstAsync<int>(
             $"""
             SELECT COUNT({TableSettings.Error.Fields.ErrorId})
             FROM {ErrorTable}
@@ -308,12 +308,12 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
         if (!await ErrorTableExistsAsync())
             return 0;
 
-        return await fixture.DataSource.ExecuteReaderFirst<long>(
+        return await fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"SELECT COUNT({TableSettings.Error.Fields.ErrorId}) FROM {ErrorTable}", Token);
     }
 
     private async Task<bool> ErrorTableExistsAsync()
-        => await fixture.DataSource.ExecuteReaderFirst<long>(
+        => await fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"SELECT COUNT(*) FROM pg_class WHERE relname = '{TableSettings.Error.TableName}'",
             Token) > 0L;
 
@@ -355,7 +355,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
 
         string terminal = string.Join(",", s_terminal.Select(c => ((int)c).ToString()));
 
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"""
             UPDATE {TaskQueue}
             SET {TableSettings.TaskQueue.Fields.DeliveryStatusCode} = {(int)DeliveryStatusCode.Ok}
@@ -364,7 +364,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
     }
 
     private async Task<bool> TaskQueueExistsAsync()
-        => await fixture.DataSource.ExecuteReaderFirst<long>(
+        => await fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"SELECT COUNT(*) FROM pg_class WHERE relname = '{TableSettings.TaskQueue.TableName}'",
             Token) > 0L;
 

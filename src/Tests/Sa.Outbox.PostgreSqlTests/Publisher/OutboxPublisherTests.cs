@@ -31,7 +31,7 @@ public class OutboxPublisherTests(OutboxPublisherTests.Fixture fixture)
         var sql = @$"select count(*) from
             {PgOutboxTableSettings.Defaults.DatabaseTableName}{PgOutboxTableSettings.MessageTable.Suffix}";
 
-        int count = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
+        int count = await fixture.DataSource.ExecuteReaderFirstAsync<int>(sql, TestContext.Current.CancellationToken);
         Assert.Equal(2, count);
     }
 }
