@@ -166,7 +166,7 @@ Health-проверки и журнала доставок нет, поэтом�
 
 ```csharp
 IOutboxConsumerManager manager = app.Services.GetRequiredService<IOutboxConsumerManager>();
-OutboxConsumerSettings? settings = manager.Get("orders");   // null → группа не зарегистрирована
+OutboxConsumerSettings? settings = manager.GetSettings("orders");   // null → группа не зарегистрирована
 ```
 
 Поведение наблюдайте логом внутри потребителя (шаг 3) или сигналом, как это делает sample.

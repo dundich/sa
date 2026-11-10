@@ -1,8 +1,8 @@
+using Sa.Data.S3.Utils;
 using System.Diagnostics;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Xml;
-using Sa.Data.S3.Utils;
 
 namespace Sa.Data.S3;
 
@@ -30,7 +30,14 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
 
     private bool _disposed;
 
+    /// <summary>
+    /// Gets the name of the bucket the client works with.
+    /// </summary>
     public string Bucket { get; }
+
+    /// <summary>
+    /// Gets the S3 endpoint URI.
+    /// </summary>
     public Uri Endpoint { get; }
 
     /// <param name="client">HTTP-клиент. В DI-пути приходит из <c>IHttpClientFactory</c>; при
@@ -139,6 +146,11 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
         return $"{url}&X-Amz-Signature={signature}";
     }
 
+    /// <summary>
+    /// Deletes the given file from the bucket.
+    /// </summary>
+    /// <param name="fileName">The name of the file to delete.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
     public async Task DeleteFile(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
@@ -182,6 +194,12 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
         return null!; // Errors.UnexpectedResult всегда бросает
     }
 
+    /// <summary>
+    /// Opens a stream over the contents of the given file.
+    /// </summary>
+    /// <param name="fileName">The name of the file to read.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <returns>The file contents, or <see cref="Stream.Null"/> when the file does not exist.</returns>
     public async Task<Stream> GetFileStream(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
@@ -220,6 +238,12 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
             : null;
     }
 
+    /// <summary>
+    /// Checks whether the given file exists in the bucket.
+    /// </summary>
+    /// <param name="fileName">The name of the file to check.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <returns><see langword="true"/> when the file exists.</returns>
     public async Task<bool> IsFileExists(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
@@ -406,7 +430,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
         }
         finally
         {
-            _arrayPool.Return(buffer);
+            _arrayPool.ReturnToPool(buffer);
         }
     }
 
@@ -462,6 +486,9 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
         return builder.Flush();
     }
 
+    /// <summary>
+    /// Disposes the underlying HTTP client.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)

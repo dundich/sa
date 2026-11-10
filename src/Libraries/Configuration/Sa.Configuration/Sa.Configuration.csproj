@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>extensions for Configuration</Description>
+    <Description>Configuration extensions: CLI arguments, secret stores, dynamic reload</Description>
+    <PackageTags>configuration secrets cli</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

@@ -19,17 +19,6 @@ public sealed class SetupRegistrationTests
     static SaWorkQueueSettings Settings<TInput>(IServiceProvider provider)
         => provider.GetRequiredService<IOptionsMonitor<SaWorkQueueSettings>>().Get(OptionsName<TInput>());
 
-    static IConfiguration Configuration(params (string Key, string? Value)[] entries)
-    {
-        var data = new Dictionary<string, string?>();
-        foreach (var (key, value) in entries)
-        {
-            data[key] = value;
-        }
-
-        return new ConfigurationBuilder().AddInMemoryCollection(data).Build();
-    }
-
     // ---------- null / повторная регистрация ----------
 
     [Fact]
@@ -77,7 +66,7 @@ public sealed class SetupRegistrationTests
         services.AddSaWorkQueue<int>();
         services.AddSaWorkQueue<int>();
 
-        Assert.Single(services, d => d.ServiceType == typeof(ISaWorkQueue<int>));
+        Assert.Single(services, d => d.ServiceType == typeof(ISaWorkChannel<int>));
         Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<SaWorkQueueSettings>));
     }
 
@@ -89,7 +78,7 @@ public sealed class SetupRegistrationTests
 
         services.AddSaWorkQueue<int>();
 
-        Assert.Single(services, d => d.ServiceType == typeof(ISaWorkQueue<int>));
+        Assert.Single(services, d => d.ServiceType == typeof(ISaWorkChannel<int>));
     }
 
     [Fact]
@@ -115,7 +104,7 @@ public sealed class SetupRegistrationTests
             }));
 
         using var provider = services.BuildServiceProvider();
-        using var queue = provider.GetRequiredService<ISaWorkQueue<int>>();
+        using var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
         Assert.Equal(1, queue.ConcurrencyLimit);
 
@@ -269,7 +258,7 @@ public sealed class SetupRegistrationTests
 
         using var provider3 = services3.BuildServiceProvider();
         var ex = Assert.Throws<OptionsValidationException>(
-            () => provider3.GetRequiredService<ISaWorkQueue<int>>());
+            () => provider3.GetRequiredService<ISaWorkChannel<int>>());
         Assert.Contains("ConcurrencyLimit must not be 3.", ex.Message, StringComparison.Ordinal);
     }
 
@@ -284,7 +273,7 @@ public sealed class SetupRegistrationTests
             .WithStatusCallback((_, _, _) => { }));
 
         using var provider = services.BuildServiceProvider();
-        using var queue = provider.GetRequiredService<ISaWorkQueue<int>>();
+        using var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
         Assert.Equal(32, queue.QueueCapacity);
     }
@@ -298,7 +287,7 @@ public sealed class SetupRegistrationTests
         services.AddSaWorkQueue<int>(b => b.WithProcess((_, _) => Task.CompletedTask));
 
         using var provider = services.BuildServiceProvider();
-        using var queue = provider.GetRequiredService<ISaWorkQueue<int>>();
+        using var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
         Assert.NotNull(queue);
         Assert.Equal(SaEnqueueStrategy.Wait, Settings<int>(provider).EnqueueStrategy);
@@ -349,7 +338,7 @@ public sealed class SetupRegistrationTests
         using var provider = services.BuildServiceProvider();
 
         var ex = Assert.Throws<OptionsValidationException>(
-            () => provider.GetRequiredService<ISaWorkQueue<int>>());
+            () => provider.GetRequiredService<ISaWorkChannel<int>>());
 
         Assert.Contains("QueueCapacity", ex.Message, StringComparison.Ordinal);
     }
@@ -371,7 +360,7 @@ public sealed class SetupRegistrationTests
         using var provider = services.BuildServiceProvider();
 
         var ex = Assert.Throws<OptionsValidationException>(
-            () => provider.GetRequiredService<ISaWorkQueue<int>>());
+            () => provider.GetRequiredService<ISaWorkChannel<int>>());
 
         Assert.Contains("ConcurrencyLimit", ex.Message, StringComparison.Ordinal);
     }
@@ -399,7 +388,7 @@ public sealed class SetupRegistrationTests
         using var provider = services.BuildServiceProvider();
 
         var ex = Assert.Throws<OptionsValidationException>(
-            () => provider.GetRequiredService<ISaWorkQueue<int>>());
+            () => provider.GetRequiredService<ISaWorkChannel<int>>());
 
         Assert.Contains("EnqueueStrategy", ex.Message, StringComparison.Ordinal);
     }
@@ -421,7 +410,7 @@ public sealed class SetupRegistrationTests
         using var provider = services.BuildServiceProvider();
 
         var ex = Assert.Throws<OptionsValidationException>(
-            () => provider.GetRequiredService<ISaWorkQueue<int>>());
+            () => provider.GetRequiredService<ISaWorkChannel<int>>());
 
         Assert.Contains("ShutdownTimeout", ex.Message, StringComparison.Ordinal);
     }
@@ -437,7 +426,7 @@ public sealed class SetupRegistrationTests
         using var provider = services.BuildServiceProvider();
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => provider.GetRequiredService<ISaWorkQueue<int>>());
+            () => provider.GetRequiredService<ISaWorkChannel<int>>());
 
         Assert.Contains("No processor", ex.Message, StringComparison.Ordinal);
         Assert.Contains("UseProcessor", ex.Message, StringComparison.Ordinal);
@@ -459,7 +448,7 @@ public sealed class SetupRegistrationTests
         services.AddSaWorkQueue<int>();
 
         using var provider = services.BuildServiceProvider();
-        using var queue = provider.GetRequiredService<ISaWorkQueue<int>>();
+        using var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
         await queue.Enqueue(42, TestContext.Current.CancellationToken);
         await processed.Task.WaitAsync(TestContext.Current.CancellationToken);
@@ -478,7 +467,7 @@ public sealed class SetupRegistrationTests
             .WithEnqueueStrategy(SaEnqueueStrategy.Throw));
 
         using var provider = services.BuildServiceProvider();
-        using var queue = provider.GetRequiredService<ISaWorkQueue<int>>();
+        using var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
         Assert.Equal(2, queue.ConcurrencyLimit);
         Assert.Equal(64, queue.QueueCapacity);
@@ -504,7 +493,7 @@ public sealed class SetupRegistrationTests
             .FromConfiguration("WorkQueue"));
 
         using var provider = services.BuildServiceProvider();
-        using var queue = provider.GetRequiredService<ISaWorkQueue<int>>();
+        using var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
         Assert.Equal(99, queue.QueueCapacity);
     }
@@ -526,7 +515,7 @@ public sealed class SetupRegistrationTests
             }));
 
         using var provider = services.BuildServiceProvider();
-        using var queue = provider.GetRequiredService<ISaWorkQueue<int>>();
+        using var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
         await queue.Enqueue(1, TestContext.Current.CancellationToken);
         await gate.WaitAsync(TestContext.Current.CancellationToken);

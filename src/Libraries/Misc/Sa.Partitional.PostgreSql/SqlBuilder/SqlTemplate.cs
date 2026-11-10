@@ -1,6 +1,4 @@
-using Sa.Classes;
 using Sa.Extensions;
-using Sa.Partitional.PostgreSql.Classes;
 using System.Globalization;
 using System.Text;
 
@@ -87,9 +85,9 @@ internal static class SqlTemplate
     /// </remarks>
     internal static string QuoteIdentifier(string? name)
         => $"\"{(name ?? string.Empty).Replace("\"", "\"\"", StringComparison.Ordinal)}\"";    /// <summary>
-    /// Renders a partition key value as a SQL literal: strings are quoted and escaped, numbers
-    /// are emitted with the invariant culture.
-    /// </summary>
+                                                                                               /// Renders a partition key value as a SQL literal: strings are quoted and escaped, numbers
+                                                                                               /// are emitted with the invariant culture.
+                                                                                               /// </summary>
     private static string QuoteValue(StrOrNum value)
         => value.Match(s => QuoteLiteral(s), n => n.ToString(CultureInfo.InvariantCulture));
 
@@ -767,7 +765,7 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
     /// The single implementation of partition-name composition: <c>table{sep}v1{sep}v2…{sep}vN</c>,
     /// plus an optional trailing <c>{sep}{suffix}</c> for a range leaf. The values are joined from the
     /// span view (no copy of the caller's array); the per-value strings are collected into one small
-    /// buffer that <see cref="string.Join(string?, string[]?)"/> consumes — the same ToString work
+    /// buffer that <c>string.Join(string?, string[]?)</c> consumes — the same ToString work
     /// <c>string.Join</c> always did, just without the extra <c>StrOrNum[]</c> copies the sliced
     /// overloads used to make.
     /// </summary>
@@ -837,7 +835,7 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
 
     /// <summary>
     /// The shared validation + qualification step for both the array and the span
-    /// <see cref="GetQualifiedTableName"/> entry points. Keeping it in one place means the 63-byte
+    /// <c>GetQualifiedTableName</c> entry points. Keeping it in one place means the 63-byte
     /// UTF-8 check and its exception cannot drift between the two.
     /// </summary>
     static string GetQualifiedTableNameCore(

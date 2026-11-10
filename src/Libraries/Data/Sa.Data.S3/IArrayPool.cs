@@ -22,5 +22,5 @@ public interface IArrayPool
     /// <param name="array">Массив, полученный из этого же пула.</param>
     /// <param name="clear">Очистить массив перед возвратом (для массивов ссылок — обязательно,
     /// иначе пул удерживает их в памяти).</param>
-    void Return<T>(T[] array, bool clear = false);
+    void ReturnToPool<T>(T[] array, bool clear = false);
 }

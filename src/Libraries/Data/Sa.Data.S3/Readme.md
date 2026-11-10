@@ -4,10 +4,17 @@
 
 Wrapper over `HttpClient` for S3-compatible storage systems (Minio, AWS S3, DigitalOcean Spaces, etc.) with a **fully self-implemented AWS Signature Version 4** — no dependencies on AWS SDK or Minio SDK.
 
+## Installation
+
+```bash
+dotnet add package Sa.Data.S3
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [Features](#features)
 - [Quick Start](#quick-start)
   - [Without DI](#without-di)

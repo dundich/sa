@@ -1,4 +1,3 @@
-using Sa.Outbox.Delivery;
 using Sa.Outbox.PlugServices;
 
 namespace Sa.Outbox.Redis.Services.Plug;

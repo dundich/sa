@@ -18,6 +18,7 @@ public interface IHybridFileStorage
     /// <summary>
     /// Uploads a file asynchronously using the provided input and file stream.
     /// </summary>
+    /// <param name="basket">The virtual folder that selects the backend.</param>
     /// <param name="input">Metadata about the file being uploaded.</param>
     /// <param name="fileStream">A stream containing the file data to be uploaded.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation if needed.</param>

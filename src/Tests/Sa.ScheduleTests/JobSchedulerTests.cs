@@ -45,7 +45,7 @@ public class JobSchedulerTests
         await Task.Delay(100, TestContext.Current.CancellationToken);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         sw.Stop();
 
         // Stop must give up after the configured shutdown timeout (300ms),
@@ -74,7 +74,7 @@ public class JobSchedulerTests
         Assert.True(scheduler.IsStarted);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         sw.Stop();
 
         // The runner completes immediately, so Stop must not wait out the
@@ -98,7 +98,7 @@ public class JobSchedulerTests
 
         var tasks = Enumerable.Range(0, 10).Select(_ =>
         Task.Run(async () =>
-            await scheduler.Stop()
+            await scheduler.StopAsync()
         ));
 
         await Task.WhenAll(tasks);
@@ -182,7 +182,7 @@ public class JobSchedulerTests
 
         // Let the reader take the hanging item into flight, then stop past the timeout.
         await Task.Delay(100, TestContext.Current.CancellationToken);
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         Assert.False(scheduler.IsStarted);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -231,7 +231,7 @@ public class JobSchedulerTests
         Assert.True(restarted);
         Assert.True(scheduler.IsStarted);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         Assert.False(scheduler.IsStarted);
     }
 
@@ -282,7 +282,7 @@ public class JobSchedulerTests
         var token = scheduler.StartChangeToken();
         Assert.False(token.HasChanged);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.True(token.HasChanged);
 
@@ -297,7 +297,7 @@ public class JobSchedulerTests
         var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
 
         await scheduler.Start(TestContext.Current.CancellationToken);
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         Assert.False(scheduler.IsStarted);
 
         // Previously this returned the already-cancelled (already-fired) source
@@ -357,7 +357,7 @@ public class JobSchedulerTests
         // nothing can drain the queue while the gate is closed. This also proves
         // the queue really is busy before we build on that below.
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         sw.Stop();
         Assert.True(sw.Elapsed >= TimeSpan.FromMilliseconds(1500),
             $"Stop returned immediately ({sw.ElapsedMilliseconds}ms) — the queue was not busy");
@@ -373,7 +373,7 @@ public class JobSchedulerTests
 
         // Stop lands while Start is still starting. It must not be lost: the
         // in-flight start must see it and cancel itself.
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         runner.Release();
 
@@ -468,7 +468,7 @@ public class JobSchedulerTests
         // The same contract as above, but on the losing side of a startup race: the caller's token
         // can be cancelled after Start() returned and before a reader picked the slot up. The queue
         // then drops the item at its own cancellation gate *without* invoking the processor
-        // (SaWorkQueue.ExecuteItemAsync throws before Execute and reports the item as Aborted), so no
+        // (SaWorkChannel.ExecuteItemAsync throws before Execute and reports the item as Aborted), so no
         // slot ever observes the cancellation. The scheduler has to reflect the stop from the stop
         // token itself; relying on a running slot left IsStarted true over a dead job forever.
         //
@@ -545,13 +545,13 @@ public class JobSchedulerTests
     }
 
 
-    private static Sa.Utils.WorkQueue.ISaWorkQueue<IJobController> ReaderPoolOf(JobScheduler scheduler)
+    private static Sa.Utils.WorkQueue.ISaWorkChannel<IJobController> ReaderPoolOf(JobScheduler scheduler)
     {
         var field = typeof(JobScheduler).GetField(
             "_queue",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
 
-        return (Sa.Utils.WorkQueue.ISaWorkQueue<IJobController>)field.GetValue(scheduler)!;
+        return (Sa.Utils.WorkQueue.ISaWorkChannel<IJobController>)field.GetValue(scheduler)!;
     }
 
 

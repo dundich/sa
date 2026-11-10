@@ -7,7 +7,7 @@ namespace Sa.Outbox.PostgreSql.Services;
 
 internal sealed class OutboxPartRepository(
     IPartitionManager partManager,
-    PgOutboxTableSettings tableSettings): IOutboxPartRepository
+    PgOutboxTableSettings tableSettings) : IOutboxPartRepository
 {
     /// <summary>What the two partition key values of a message-table leaf are, for error messages.</summary>
     private const string MessageKey = "tenant id, message part";

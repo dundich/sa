@@ -1,7 +1,6 @@
-namespace Sa.Media.FFmpeg.Services;
-
-using System;
 using System.Runtime.InteropServices;
+
+namespace Sa.Media.FFmpeg.Services;
 
 static class Constants
 {

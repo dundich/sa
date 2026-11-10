@@ -34,8 +34,8 @@ public sealed class WorkQueueCancellationOrderTests
     public async Task DecreaseAndRestore_OnlyRemovesRequestedReaders_WithoutThrowing(SaReaderCancellationOrder order)
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(4)
                 .WithMaxConcurrency(8)
                 .WithReaderCancellationOrder(order));
@@ -75,8 +75,8 @@ public sealed class WorkQueueCancellationOrderTests
     public async Task DecreaseToOne_ThenRestore_QueueKeepsWorking(SaReaderCancellationOrder order)
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(5)
                 .WithMaxConcurrency(5)
                 .WithReaderCancellationOrder(order));
@@ -109,8 +109,8 @@ public sealed class WorkQueueCancellationOrderTests
         // size was wrong even when no exception was thrown. Verify the
         // effective pool through the reported limit across many random draws.
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(6)
                 .WithMaxConcurrency(6)
                 .WithReaderCancellationOrder(SaReaderCancellationOrder.Random));

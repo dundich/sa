@@ -5,7 +5,7 @@ namespace Sa.Extensions;
 
 internal static class EnumerableExtensions
 {
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string JoinByString<T>(this IEnumerable<T> source, string? joinWith = null)
     {
         if (source == null) return string.Empty;

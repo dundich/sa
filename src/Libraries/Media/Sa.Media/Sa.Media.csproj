@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <Description>Async WAV reader for .NET with stereo cross-feed suppression (Echo)</Description>
+        <PackageTags>audio wav pcm</PackageTags>
     </PropertyGroup>
 
     <PropertyGroup>

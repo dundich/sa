@@ -1,7 +1,5 @@
 namespace Sa.Media.FFmpeg.Services;
 
-using System.Runtime.InteropServices;
-
 internal sealed class FFMpegLocator : IFFMpegLocator
 {
     const string PlatformFolder = "sa/native";
@@ -48,12 +46,14 @@ internal sealed class FFMpegLocator : IFFMpegLocator
             EnsureExecutableIfExists(ffprobePath);
 
         if (!File.Exists(ffprobePath))
+        {
             throw new FileNotFoundException(
                 $"ffprobe was not found next to '{ffmpegExecutablePath}'. " +
                 "FFmpeg metadata/streaming APIs need it: install the full FFmpeg build " +
                 "(not a minimal one without ffprobe) or set FFMpegOptions.ExecutablePath to a " +
                 "directory containing both ffmpeg and ffprobe.",
                 ffprobePath);
+        }
 
         return ffprobePath;
     }
@@ -120,7 +120,7 @@ internal sealed class FFMpegLocator : IFFMpegLocator
 
     /// <summary>
     /// Выставляет бит исполнения без запуска внешнего процесса: <c>chmod</c> может отсутствовать
-    /// в минимальном образе, а <see cref="File.SetUnixFileMode"/> — обычный системный вызов.
+    /// в минимальном образе, а <see cref="File.SetUnixFileMode(string, UnixFileMode)"/> — обычный системный вызов.
     /// </summary>
     internal static void EnsureExecutable(string path)
     {

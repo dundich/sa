@@ -81,7 +81,7 @@ internal static class Setup
                 // snapshot to the full chain (with a live provider), so the job simply reads the
                 // final settings — it does not rebuild or re-register them.
                 var manager = sp.GetRequiredService<IOutboxConsumerManager>();
-                OutboxConsumerSettings settings = manager.Get(groupKey)
+                OutboxConsumerSettings settings = manager.GetSettings(groupKey)
                     ?? throw new InvalidOperationException(
                         $"No OutboxConsumerSettings for consumer group '{groupKey}'.");
 

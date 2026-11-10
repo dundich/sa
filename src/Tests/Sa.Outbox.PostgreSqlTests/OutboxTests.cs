@@ -103,7 +103,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
             await Task.Delay(300, TestContext.Current.CancellationToken);
         }
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.True(SomeMessageConsumer.Counter > 0);
     }

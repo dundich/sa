@@ -123,7 +123,7 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
         // here, so Get returns the final composition.
         var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();
 
-        OutboxConsumerSettings settings = manager.Get(GroupId)
+        OutboxConsumerSettings settings = manager.GetSettings(GroupId)
             ?? throw new InvalidOperationException($"Group '{GroupId}' is not registered.");
 
         // Code (configure) has the final word over the section and the defaults.
@@ -148,7 +148,7 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
     {
         var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();
 
-        OutboxConsumerSettings settings = manager.Get("no_config_key")
+        OutboxConsumerSettings settings = manager.GetSettings("no_config_key")
             ?? throw new InvalidOperationException("Group 'no_config_key' is not registered.");
 
         // The section exists, but under an explicit-key prefix — without a configurationKey the
@@ -166,7 +166,7 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
     {
         var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();
 
-        OutboxConsumerSettings settings = manager.Get("convention_grp")
+        OutboxConsumerSettings settings = manager.GetSettings("convention_grp")
             ?? throw new InvalidOperationException("Group 'convention_grp' is not registered.");
 
         // The Outbox:DeliveryGroups:{group} convention is applied without an explicit key.
@@ -179,7 +179,7 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
     {
         var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();
 
-        OutboxConsumerSettings settings = manager.Get("opted_out")
+        OutboxConsumerSettings settings = manager.GetSettings("opted_out")
             ?? throw new InvalidOperationException("Group 'opted_out' is not registered.");
 
         // An explicit empty configurationKey disables the convention for this group.

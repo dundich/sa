@@ -96,7 +96,7 @@ public sealed class OutboxIdleBackoffTests(OutboxIdleBackoffTests.Fixture fixtur
         Assert.Equal(baseInterval, state.CurrentInterval);
         Assert.Equal(0, state.ConsecutiveEmptyPolls);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     private static async Task WaitForAsync(Func<bool> condition, CancellationToken ct, int maxAttempts = 40)

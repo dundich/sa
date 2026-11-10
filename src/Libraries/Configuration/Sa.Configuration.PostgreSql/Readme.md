@@ -4,10 +4,17 @@
 
 A dynamic configuration source for .NET that loads settings from PostgreSQL. Changes in the database are applied to the running application without a restart — just call `Reload()` on `IConfigurationRoot`.
 
+## Installation
+
+```bash
+dotnet add package Sa.Configuration.PostgreSql
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [Features](#features)
 - [Quick start](#quick-start)
 - [Key separators](#key-separators)

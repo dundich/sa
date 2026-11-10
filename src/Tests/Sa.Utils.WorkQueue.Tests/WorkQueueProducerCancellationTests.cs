@@ -42,7 +42,7 @@ public sealed class WorkQueueProducerCancellationTests
     }
 
     private static SaWorkQueueOptions<int> Detached(ISaWork<int> processor, int concurrency = 1)
-        => SaWorkQueueOptions<int>.Create(processor)
+        => SaWorkQueueOptions.Create<int>(processor)
             .WithProducerCancellation(SaProducerCancellationMode.Detached)
             .WithConcurrencyLimit(concurrency);
 
@@ -53,7 +53,7 @@ public sealed class WorkQueueProducerCancellationTests
         var statuses = new ConcurrentBag<SaWorkStatus>();
 
         using var producerCts = new CancellationTokenSource();
-        using var queue = new SaWorkQueue<int>(
+        using var queue = new SaWorkChannel<int>(
             Detached(processor)
                 .WithQueueCapacity(4)
                 .WithStatusCallback((_, status, _) => statuses.Add(status)));
@@ -77,8 +77,8 @@ public sealed class WorkQueueProducerCancellationTests
         var processed = new ConcurrentBag<int>();
 
         using var producerCts = new CancellationTokenSource();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((int input, CancellationToken _) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((int input, CancellationToken _) =>
                 {
                     processed.Add(input);
                     return Task.CompletedTask;
@@ -102,7 +102,7 @@ public sealed class WorkQueueProducerCancellationTests
         using var producerCts = new CancellationTokenSource();
         await producerCts.CancelAsync();
 
-        using var queue = new SaWorkQueue<int>(Detached(new CompletedProcessor()));
+        using var queue = new SaWorkChannel<int>(Detached(new CompletedProcessor()));
 
         await Assert.ThrowsAsync<OperationCanceledException>(
             async () => await queue.Enqueue(1, producerCts.Token));
@@ -114,7 +114,7 @@ public sealed class WorkQueueProducerCancellationTests
     public async Task Detached_TokenStillCancelsTheWaitForBufferSpace()
     {
         using var producerCts = new CancellationTokenSource();
-        using var queue = new SaWorkQueue<int>(
+        using var queue = new SaWorkChannel<int>(
             Detached(new CompletedProcessor(), concurrency: 0)
                 .WithQueueCapacity(1)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Wait));
@@ -135,7 +135,7 @@ public sealed class WorkQueueProducerCancellationTests
     public async Task Detached_EnqueueMany_StopsWhenTokenIsCancelledMidBatch()
     {
         using var producerCts = new CancellationTokenSource();
-        using var queue = new SaWorkQueue<int>(
+        using var queue = new SaWorkChannel<int>(
             Detached(new CompletedProcessor(), concurrency: 0)
                 .WithQueueCapacity(8));
 
@@ -152,8 +152,8 @@ public sealed class WorkQueueProducerCancellationTests
     public async Task Detached_QueueShutdown_StillCancelsTheItem()
     {
         var statuses = new ConcurrentBag<SaWorkStatus>();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(new InfiniteProcessor())
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(new InfiniteProcessor())
                 .WithProducerCancellation(SaProducerCancellationMode.Detached)
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback((_, status, _) => statuses.Add(status)));
@@ -172,8 +172,8 @@ public sealed class WorkQueueProducerCancellationTests
         var statuses = new ConcurrentBag<SaWorkStatus>();
         using var producerCts = new CancellationTokenSource();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(new InfiniteProcessor())
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(new InfiniteProcessor())
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback((_, status, _) => statuses.Add(status)));
 

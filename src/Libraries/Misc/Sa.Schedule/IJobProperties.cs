@@ -82,7 +82,7 @@ public interface IJobProperties
     int? MaxConcurrency { get; }
 
     /// <summary>
-    /// Gets the maximum time <see cref="IJobScheduler.Stop"/> waits for
+    /// Gets the maximum time <see cref="IJobScheduler.StopAsync"/> waits for
     /// running iterations to finish before giving up.
     /// Null means the default (30 seconds).
     /// </summary>

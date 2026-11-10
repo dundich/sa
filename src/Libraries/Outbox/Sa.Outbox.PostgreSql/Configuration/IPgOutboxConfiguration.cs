@@ -7,7 +7,7 @@ namespace Sa.Outbox.PostgreSql.Configuration;
 
 /// <summary>
 /// Fluent configuration surface for the PostgreSQL-backed Outbox subsystem.
-/// Used inside <see cref="Setup.AddSaOutboxUsingPostgreSql"/> to wire up data source,
+/// Used inside <c>AddSaOutboxUsingPostgreSql</c> to wire up data source,
 /// message serialization, and table/migration/cleanup settings.
 /// </summary>
 public interface IPgOutboxConfiguration

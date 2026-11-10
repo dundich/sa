@@ -20,10 +20,19 @@ namespace Sa.Data.S3;
 /// </remarks>
 public class S3BucketSettings
 {
+    /// <summary>
+    /// Gets or sets the access key used to sign requests.
+    /// </summary>
     public string AccessKey { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Gets or sets the secret key used to sign requests.
+    /// </summary>
     public string SecretKey { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Gets or sets the name of the target bucket.
+    /// </summary>
     public string Bucket { get; set; } = string.Empty;
 
     /// <summary>
@@ -32,10 +41,19 @@ public class S3BucketSettings
     /// </summary>
     public string Endpoint { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Gets or sets the region used when signing requests.
+    /// </summary>
     public string Region { get; set; } = "us-east-1";
 
+    /// <summary>
+    /// Gets or sets the service name used when signing requests.
+    /// </summary>
     public string Service { get; set; } = "s3";
 
+    /// <summary>
+    /// Gets or sets a value indicating whether HTTP/2 should be used for requests.
+    /// </summary>
     public bool UseHttp2 { get; set; }
 
     /// <summary>

@@ -113,7 +113,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         _disposables.Clear();
     }
 
-    private SaWorkQueue<BlockingTaskModel> CreateQueue(
+    private SaWorkChannel<BlockingTaskModel> CreateQueue(
         TrackingWork work,
         int concurrencyLimit,
         int? queueCapacity = null,
@@ -127,7 +127,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             StatusChanged: work.HandleChanges
         );
 
-        var queue = new SaWorkQueue<BlockingTaskModel>(options);
+        var queue = new SaWorkChannel<BlockingTaskModel>(options);
         _disposables.Add(queue);
         return queue;
     }
@@ -614,7 +614,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
     /// The limit change used to decide the delta under <c>_readersSync</c> and register the
     /// new readers after releasing it, so both callers read the same "readers I have" count
     /// and both spawned replacements. The overshoot is bad on its own — it exceeds
-    /// <see cref="ISaWorkQueue{TInput}.MaxConcurrency"/>, which is documented as a ceiling —
+    /// <see cref="ISaWorkChannel{TInput}.MaxConcurrency"/>, which is documented as a ceiling —
     /// but with <c>MaxConcurrency = 1</c> it also puts a second reader on a channel created
     /// with <c>SingleReader = true</c>, which is a promise to <c>System.Threading.Channels</c>
     /// rather than a hint.
@@ -631,7 +631,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var work = new TrackingWork((_, _) => Task.CompletedTask);
 
-            await using var queue = new SaWorkQueue<BlockingTaskModel>(
+            await using var queue = new SaWorkChannel<BlockingTaskModel>(
                 new SaWorkQueueOptions<BlockingTaskModel>(
                     Processor: work,
                     ConcurrencyLimit: 0,

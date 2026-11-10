@@ -15,7 +15,7 @@ internal static class DateTimeExtensions
     /// (…:59.5 became <c>0</c>, the epoch itself). After 1970 the value is non-negative and
     /// flooring is a no-op.
     /// </remarks>
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long ToUnixTimestamp(this DateTime dateTime, bool isInMilliseconds = false)
     {
         var dt = dateTime.Kind == DateTimeKind.Utc ? dateTime : dateTime.ToUniversalTime();
@@ -25,16 +25,16 @@ internal static class DateTimeExtensions
             : (long)Math.Floor(ts.TotalSeconds);
     }
 
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static DateTimeOffset StartOfDay(this DateTimeOffset dateTime) => new(dateTime.Year, dateTime.Month, dateTime.Day, 0, 0, 0, 0, dateTime.Offset);
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static DateTimeOffset EndOfDay(this DateTimeOffset dateTime) => dateTime.StartOfDay().AddDays(1);
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static DateTimeOffset StartOfMonth(this DateTimeOffset dateTime) => new(dateTime.Year, dateTime.Month, 1, 0, 0, 0, 0, dateTime.Offset);
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static DateTimeOffset EndOfMonth(this DateTimeOffset dateTime) => dateTime.StartOfMonth().AddMonths(1);
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static DateTimeOffset StartOfYear(this DateTimeOffset dateTime) => new(dateTime.Year, 1, 1, 0, 0, 0, 0, dateTime.Offset);
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static DateTimeOffset EndOfYear(this DateTimeOffset dateTime) => dateTime.StartOfYear().AddYears(1);
 }

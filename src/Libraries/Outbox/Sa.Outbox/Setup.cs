@@ -7,6 +7,7 @@ using Sa.Outbox.Publication;
 
 namespace Sa.Outbox;
 
+/// <summary>Registers the outbox core and its plumbing services.</summary>
 public static class Setup
 {
     /// <summary>

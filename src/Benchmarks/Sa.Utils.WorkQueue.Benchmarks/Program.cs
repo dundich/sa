@@ -1,8 +1,8 @@
+using Sa.Utils.WorkQueue;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime;
 using System.Runtime.InteropServices;
-using Sa.Utils.WorkQueue;
 
 namespace Sa.Utils.WorkQueue.Benchmarks;
 
@@ -70,7 +70,7 @@ internal static class Program
         using var callerCts = callerToken ? new CancellationTokenSource() : null;
         var token = callerCts?.Token ?? CancellationToken.None;
 
-        var options = SaWorkQueueOptions<T>.Create(processor)
+        var options = SaWorkQueueOptions.Create<T>(processor)
             .WithQueueCapacity(1024)
             .WithMaxConcurrency(concurrency)
             .WithConcurrencyLimit(concurrency)
@@ -86,7 +86,7 @@ internal static class Program
             options = options.WithProducerCancellation(SaProducerCancellationMode.Detached);
         }
 
-        using var queue = new SaWorkQueue<T>(options);
+        using var queue = new SaWorkChannel<T>(options);
 
         // Warm up JIT, reader loops and the channel's slow paths. The result is not
         // measured; only steady state is.
@@ -108,14 +108,14 @@ internal static class Program
         Report(name, (long)opsPerBatch * batches, stopwatch.Elapsed, allocated);
     }
 
-    private static async Task RunBatch<T>(SaWorkQueue<T> queue, T payload, int count, CancellationToken token)
+    private static async Task RunBatch<T>(SaWorkChannel<T> queue, T payload, int count, CancellationToken token)
     {
         for (var i = 0; i < count; i++)
         {
             await queue.Enqueue(payload, token);
         }
 
-        await queue.WaitForIdleAsync();
+        await queue.WaitForIdleAsync(cancellationToken: token);
     }
 
     /// <summary>
@@ -132,13 +132,13 @@ internal static class Program
         int batches,
         int concurrency)
     {
-        var options = SaWorkQueueOptions<T>.Create(processor)
+        var options = SaWorkQueueOptions.Create<T>(processor)
             .WithQueueCapacity(1024)
             .WithMaxConcurrency(concurrency)
             .WithConcurrencyLimit(concurrency)
             .WithShutdownTimeout(TimeSpan.FromSeconds(30));
 
-        using var queue = new SaWorkQueue<T>(options);
+        using var queue = new SaWorkChannel<T>(options);
 
         var producersArray = Enumerable.Range(0, producers)
             .Select(_ => Produce(queue, payload, opsPerProducer))
@@ -168,7 +168,7 @@ internal static class Program
         Report(name, (long)opsPerProducer * producers * batches, stopwatch.Elapsed, allocated);
     }
 
-    private static async Task Produce<T>(SaWorkQueue<T> queue, T payload, int count)
+    private static async Task Produce<T>(SaWorkChannel<T> queue, T payload, int count)
     {
         for (var i = 0; i < count; i++)
         {
@@ -213,9 +213,9 @@ internal static class Program
     /// drop what is inside it. That isolates <c>DrainAndResetIdle</c> from any
     /// processing work.
     /// </summary>
-    private static async Task<SaWorkQueue<int>> CreatePausedQueue(bool observe, int items)
+    private static async Task<SaWorkChannel<int>> CreatePausedQueue(bool observe, int items)
     {
-        var options = SaWorkQueueOptions<int>.Create(static (_, _) => Task.CompletedTask)
+        var options = SaWorkQueueOptions.Create<int>(static (_, _) => Task.CompletedTask)
             .WithConcurrencyLimit(0)
             .WithQueueCapacity(items)
             .WithEnqueueStrategy(SaEnqueueStrategy.Skip);
@@ -225,7 +225,7 @@ internal static class Program
             options = options.WithStatusCallback(static (_, _, _) => { });
         }
 
-        var queue = new SaWorkQueue<int>(options);
+        var queue = new SaWorkChannel<int>(options);
 
         for (var i = 0; i < items; i++)
         {

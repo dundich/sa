@@ -42,8 +42,8 @@ public class MultiProviderGroupUniquenessTests
         using ServiceProvider sp = services.BuildServiceProvider();
         var manager = sp.GetRequiredService<IOutboxConsumerManager>();
 
-        var a = manager.Get(new OutboxGroupKey("provider-a", "shared_group"));
-        var b = manager.Get(new OutboxGroupKey("provider-b", "shared_group"));
+        var a = manager.GetSettings(new OutboxGroupKey("provider-a", "shared_group"));
+        var b = manager.GetSettings(new OutboxGroupKey("provider-b", "shared_group"));
 
         Assert.NotNull(a);
         Assert.NotNull(b);
@@ -51,7 +51,7 @@ public class MultiProviderGroupUniquenessTests
         Assert.Equal("provider-b", b.ProviderKey);
 
         // The legacy string API cannot pick one provider and must not guess.
-        Assert.Throws<InvalidOperationException>(() => manager.Get("shared_group"));
+        Assert.Throws<InvalidOperationException>(() => manager.GetSettings("shared_group"));
     }
 
     [Fact]

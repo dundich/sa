@@ -175,7 +175,7 @@ manager.Apply("orders", s => s with { MaxBatchSize = 64 });
 
 // Пауза / Возобновление
 manager.Pause("orders");
-manager.Resume("orders");
+manager.Unpause("orders");
 
 // Подписка на изменения
 using var sub = manager.Subscribe("orders", updated =>

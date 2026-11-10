@@ -3,6 +3,9 @@ using Sa.Schedule;
 namespace Sa.Outbox.Delivery.Job;
 
 
+/// <summary>
+/// Marks the scheduled job that delivers messages for one consumer group.
+/// </summary>
 public interface IDeliveryJob : IJob;
 
 
@@ -18,7 +21,7 @@ internal sealed class DeliveryJob<TMessage>(
     /// <para>
     /// The settings snapshot is taken once, here, and stays fixed for the whole cycle. Runtime
     /// changes through <see cref="IOutboxConsumerManager.Pause(string)"/> /
-    /// <see cref="IOutboxConsumerManager.Resume(string)"/> are therefore picked up by the
+    /// <see cref="IOutboxConsumerManager.Unpause(string)"/> are therefore picked up by the
     /// <em>next</em> job execution, not the current one. That is intentional — see
     /// <see cref="Sa.Outbox.Delivery.DeliveryProcessor.ProcessMessages{TMessage}"/>.
     /// </para>
@@ -30,7 +33,7 @@ internal sealed class DeliveryJob<TMessage>(
     /// </summary>
     public async Task Execute(IJobContext context, CancellationToken cancellationToken)
     {
-        var settings = settingsManager.Get(groupKey)
+        var settings = settingsManager.GetSettings(groupKey)
             ?? throw new InvalidOperationException($"No OutboxConsumerSettings for consumer group '{groupKey}'.");
 
         // The provider's one-time warm-up (connectivity, pooled connection) runs before the first

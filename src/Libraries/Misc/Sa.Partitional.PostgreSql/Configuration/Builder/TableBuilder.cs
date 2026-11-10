@@ -1,6 +1,5 @@
-using Sa.Partitional.PostgreSql.SqlBuilder;
-using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.Settings;
+using Sa.Partitional.PostgreSql.SqlBuilder;
 using System.Text;
 
 namespace Sa.Partitional.PostgreSql.Configuration.Builder;
@@ -38,13 +37,13 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     private Func<PartitionNameContext, string>? _longPartitionName;
     private TableRootMode _rootMode = TableRootMode.Create;
     private ConversionBackupMode _conversionBackup = ConversionBackupMode.Keep;
-    private string? _separator = null;
-    private string? _postfix = null;
-    private int? _fillFactor = null;
-    private bool _defaultPartition = false;
+    private string? _separator;
+    private string? _postfix;
+    private int? _fillFactor;
+    private bool _defaultPartition;
 
-    private Func<string>? _postSql = null;
-    private Func<string>? _pkSql = null;
+    private Func<string>? _postSql;
+    private Func<string>? _pkSql;
 
     public ITableBuilder AddFields(params string[] sqlFields)
     {

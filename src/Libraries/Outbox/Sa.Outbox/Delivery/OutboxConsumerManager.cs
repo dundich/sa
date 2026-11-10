@@ -1,8 +1,8 @@
-namespace Sa.Outbox.Delivery;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+namespace Sa.Outbox.Delivery;
 /// <summary>
 /// Thread-safe manager for runtime control of outbox consumer group settings.
 /// Uses atomic immutable snapshots — no mutation during active delivery, no race conditions.
@@ -171,7 +171,7 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
     }
 
     /// <inheritdoc/>
-    public OutboxConsumerSettings? Get(string consumerGroupId)
+    public OutboxConsumerSettings? GetSettings(string consumerGroupId)
     {
         EnsureGroupId(consumerGroupId);
 
@@ -185,7 +185,7 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
     }
 
     /// <inheritdoc/>
-    public OutboxConsumerSettings? Get(OutboxGroupKey key)
+    public OutboxConsumerSettings? GetSettings(OutboxGroupKey key)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key.GroupId);
 
@@ -253,14 +253,14 @@ internal sealed partial class OutboxConsumerManager : IOutboxConsumerManager
         => Apply(key, s => s with { Paused = true });
 
     /// <inheritdoc/>
-    public void Resume(string consumerGroupId)
+    public void Unpause(string consumerGroupId)
     {
         EnsureGroupId(consumerGroupId);
-        Resume(ResolveUnique(consumerGroupId));
+        Unpause(ResolveUnique(consumerGroupId));
     }
 
     /// <inheritdoc/>
-    public void Resume(OutboxGroupKey key)
+    public void Unpause(OutboxGroupKey key)
         => Apply(key, s => s with { Paused = false });
 
     /// <inheritdoc/>

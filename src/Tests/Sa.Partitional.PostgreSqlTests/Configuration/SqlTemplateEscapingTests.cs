@@ -80,9 +80,6 @@ public class SqlTemplateEscapingTests(SqlTemplateEscapingTests.Fixture fixture) 
         return builder;
     }
 
-    /// <summary>Length of the range partition name of the <c>esc</c> table around the two list values.</summary>
-    private const int EscRangeNameOverhead = 20;
-
     /// <summary>The range partition name the <c>esc</c> table gets for the given two list values.</summary>
     private static string EscRangeName(string value1, string value2)
         => $"esc__{value1}__{value2}__{DaySuffix}";

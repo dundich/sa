@@ -1,4 +1,4 @@
-using Sa.Classes;
+using Sa;
 using Sa.Extensions;
 
 namespace SaTests.Classes;

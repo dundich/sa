@@ -82,7 +82,7 @@ internal sealed class FileSystemStorage(
         string relativePath = string.Concat(
             Basket,
             "/",
-            metadata.TenantId.ToString(),
+            metadata.TenantId.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "/",
             filename.Replace(Path.DirectorySeparatorChar, '/'));
 

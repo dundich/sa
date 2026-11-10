@@ -1,8 +1,11 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Options;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Schedule;
 
+/// <summary>
+/// Builds a schedule by registering jobs.
+/// </summary>
 public interface IScheduleBuilder
 {
     /// <summary>
@@ -59,7 +62,7 @@ public interface IScheduleBuilder
     /// </param>
     /// <remarks>
     /// Handlers accumulate across calls, including across separate
-    /// <see cref="Setup.AddSaSchedule"/> calls — the error is considered handled
+    /// <c>AddSaSchedule</c> calls — the error is considered handled
     /// as soon as any handler returns <c>true</c>. A <c>null</c> handler throws
     /// <see cref="ArgumentNullException"/>.
     /// </remarks>
@@ -98,7 +101,7 @@ public interface IScheduleBuilder
     /// than replaces — the built-in checks. May be called several times; the actions run
     /// in call order.
     /// <para>
-    /// A <see cref="Setup.AddSaSchedule"/> call whose builder uses this method is a
+    /// A <c>AddSaSchedule</c> call whose builder uses this method is a
     /// *configuring* call: it counts toward the one-configuring-call-per-collection
     /// guard, while job-only calls stay repeatable (that is how libraries contribute
     /// jobs to a shared schedule).

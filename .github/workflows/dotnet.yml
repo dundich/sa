@@ -36,6 +36,12 @@ jobs:
       shell: bash
       run: ./build-sh/do-build.sh
 
+    # Formatting is not enforceable from the compiler (IDE0055 is a workspace-only
+    # analyzer), so the style rules in .editorconfig are checked here.
+    - name: Format check
+      shell: bash
+      run: dotnet format src/Sa.slnx --no-restore --verify-no-changes
+
     # Full suite — Docker is available on ubuntu-latest for the Testcontainers fixtures.
     # The exit code is the run's verdict: fixture projects under src/Tests/Fixtures are
     # excluded from test-module discovery (IsTestingPlatformApplication=false in

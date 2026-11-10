@@ -4,10 +4,17 @@
 
 High-performance async task queue for .NET with bounded capacity, dynamic concurrency scaling, and a type-safe API.
 
+## Installation
+
+```bash
+dotnet add package Sa.Utils.WorkQueue
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [Features](#features)
 - [Quick Start](#quick-start)
   - [1️⃣ Implement your task processor](#1-implement-your-task-processor)
@@ -24,7 +31,7 @@ High-performance async task queue for .NET with bounded capacity, dynamic concur
   - [Producer cancellation](#producer-cancellation)
 - [Error Strategies](#error-strategies)
 - [Status Lifecycle](#status-lifecycle)
-- [API — `ISaWorkQueue<TInput>`](#api--isaworkqueuetinput)
+- [API — `ISaWorkChannel<TInput>`](#api--isaworkqueuetinput)
 - [⚠️ Important Notes](#-important-notes)
 
 ## Features
@@ -91,7 +98,7 @@ b.Configure((sp, opts) =>
 ### 3️⃣ Use via injection
 
 ```csharp
-public class OrderService(ISaWorkQueue<OrderInput> queue)
+public class OrderService(ISaWorkChannel<OrderInput> queue)
 {
     // false only in Skip mode, when the buffer was full and the item was dropped
     public async Task<bool> SubmitAsync(OrderInput order, CancellationToken ct)
@@ -410,7 +417,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 
 ---
 
-## API — `ISaWorkQueue<TInput>`
+## API — `ISaWorkChannel<TInput>`
 
 | Member | Kind | Description |
 |--------|------|-------------|
@@ -449,7 +456,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 9. **`Enqueue` return value**: `ValueTask<bool>` — `false` only in `Skip` mode with a full buffer (the item is dropped and reported as `Skipped` via `StatusChanged`). A stopped/disposed queue always throws; the exception is carried by the `ValueTask` and surfaced by `await`.
 10. **`AvailableCapacity`**: informational only — free slots in the buffer. It does not affect `IsIdle()`.
 11. **Never from inside `Execute`**: do not call `Shutdown`, `ShutdownAsync`, `ForceCancelReaders`, `ForceCancelReadersAsync`, or `Dispose`/`DisposeAsync` from within your `ISaWork<TInput>.Execute` implementation: the calling reader is one of the tasks those methods wait for, so the call blocks for the full `ShutdownTimeout` (30 s by default) before returning. Hand the work off to a background task instead (e.g. `Task.Run`).
-12. **Options validation**: the `SaWorkQueueOptions<TInput>` primary constructor is public, so its arguments bypass the `With*` guards; the `SaWorkQueue<TInput>` constructor re-validates and throws `ArgumentOutOfRangeException` before creating the channel — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, positive `ShutdownTimeout`, and the four strategy enums (`EnqueueStrategy`, `ProducerCancellation`, `ReaderCancelMode`, `ReaderCancellationOrder`) must be *defined* values: an undefined one would otherwise fall through to a default arm and quietly become `Skip`, `Hard` or `Lifo`. The same rules reach configuration earlier through `SaWorkQueueSettingsValidator`, which reports them as an `OptionsValidationException` — at host start (`ValidateOnStart()`) or on the first queue resolve — instead of an `ArgumentOutOfRangeException`. `MaxConcurrency = 0` and `null` both mean "processor count" (the same thing `WithMaxConcurrency(0)` produces); a negative value has no meaning and is rejected. Assigning a negative `ConcurrencyLimit` after construction throws too — a silent clamp to 0 would produce a permanently paused queue that still reports `IsEnabled == true`. Only a *positive* value above `MaxConcurrency` is clamped, not rejected.
+12. **Options validation**: the `SaWorkQueueOptions<TInput>` primary constructor is public, so its arguments bypass the `With*` guards; the `SaWorkChannel<TInput>` constructor re-validates and throws `ArgumentOutOfRangeException` before creating the channel — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, positive `ShutdownTimeout`, and the four strategy enums (`EnqueueStrategy`, `ProducerCancellation`, `ReaderCancelMode`, `ReaderCancellationOrder`) must be *defined* values: an undefined one would otherwise fall through to a default arm and quietly become `Skip`, `Hard` or `Lifo`. The same rules reach configuration earlier through `SaWorkQueueSettingsValidator`, which reports them as an `OptionsValidationException` — at host start (`ValidateOnStart()`) or on the first queue resolve — instead of an `ArgumentOutOfRangeException`. `MaxConcurrency = 0` and `null` both mean "processor count" (the same thing `WithMaxConcurrency(0)` produces); a negative value has no meaning and is rejected. Assigning a negative `ConcurrencyLimit` after construction throws too — a silent clamp to 0 would produce a permanently paused queue that still reports `IsEnabled == true`. Only a *positive* value above `MaxConcurrency` is clamped, not rejected.
 
 ---
 

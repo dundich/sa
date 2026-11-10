@@ -45,7 +45,7 @@ public class WorkQueueDiTests(WorkQueueTestFixture fixture) : IClassFixture<Work
     [Fact]
     public async Task WorkQueue_With_Di()
     {
-        var queue = fixture.ServiceProvider.GetRequiredService<ISaWorkQueue<TestInput>>();
+        var queue = fixture.ServiceProvider.GetRequiredService<ISaWorkChannel<TestInput>>();
         Assert.NotNull(queue);
 
 

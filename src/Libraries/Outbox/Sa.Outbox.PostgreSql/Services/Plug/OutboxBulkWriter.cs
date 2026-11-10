@@ -1,7 +1,6 @@
 using Npgsql;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
-using Sa.Outbox.PostgreSql.Services;
 
 namespace Sa.Outbox.PostgreSql.Services.Plug;
 

@@ -228,6 +228,7 @@ public interface ITempFolder : IDisposable
     /// write, delete or enumeration arriving mid-pass ends the deletion by cancellation at its next
     /// checkpoint, and a folder whose debounced activity marker has not landed yet is
     /// skipped — a just-accessed (written or read) file is never deleted.
+    /// </para>
     /// </remarks>
     /// <param name="cancellationToken">Cancellation token; also surfaces as the pass token that an
     /// arriving write cancels (an interruption by activity does not throw — the partial count is

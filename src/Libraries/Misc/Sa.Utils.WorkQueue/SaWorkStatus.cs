@@ -1,5 +1,6 @@
 namespace Sa.Utils.WorkQueue;
 
+/// <summary>Outcome of one work item.</summary>
 public enum SaWorkStatus
 {
     /// <summary>
@@ -35,7 +36,7 @@ public enum SaWorkStatus
     /// <summary>
     /// The item was not accepted into the buffer because it was full
     /// (the <see cref="SaEnqueueStrategy.Skip"/> strategy, or the non-blocking
-    /// <see cref="ISaWorkQueue{TInput}.TryEnqueue"/> / <see cref="ISaWorkQueue{TInput}.EnqueueMany"/>
+    /// <see cref="ISaWorkChannel{TInput}.TryEnqueue"/> / <see cref="ISaWorkChannel{TInput}.EnqueueMany"/>
     /// while the buffer was full). The item was never processed.
     /// Automatic retry is permissible.
     /// </summary>

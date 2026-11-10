@@ -67,7 +67,7 @@ internal static class HashHelper
             ? ToHex(hashBuffer[..written])
             : string.Empty;
 
-        arrayPool.Return(byteBuffer);
+        arrayPool.ReturnToPool(byteBuffer);
 
         return result;
     }

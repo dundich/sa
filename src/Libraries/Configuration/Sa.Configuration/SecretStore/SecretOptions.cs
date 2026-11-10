@@ -12,10 +12,13 @@ namespace Sa.Configuration.SecretStore;
 /// </remarks>
 public sealed record SecretOptions
 {
+    /// <summary>Plain secrets file name; defaults to <see cref="Secrets.DefaultFileName"/>.</summary>
     public string FileName { get; init; }
 
+    /// <summary>Command-line arguments used to resolve secrets; <see langword="null"/> uses the process arguments.</summary>
     public string[]? Args { get; init; }
 
+    /// <summary>Environment name used to pick environment-specific files; <see langword="null"/> is detected.</summary>
     public string? EnvironmentName { get; init; }
 
     /// <summary>
@@ -42,11 +45,20 @@ public sealed record SecretOptions
     /// </summary>
     public SecretResolutionOptions Resolution { get; init; } = new();
 
+    /// <summary>
+    /// Creates options with default values.
+    /// </summary>
     public SecretOptions()
     {
         FileName = Secrets.DefaultFileName;
     }
 
+    /// <summary>
+    /// Creates options with an explicit file name, arguments and environment.
+    /// </summary>
+    /// <param name="fileName">Plain secrets file name; <see langword="null"/> uses <see cref="Secrets.DefaultFileName"/>.</param>
+    /// <param name="args">Command-line arguments used to resolve secrets.</param>
+    /// <param name="environmentName">Environment name used to pick environment-specific files.</param>
     public SecretOptions(string? fileName, string[]? args = null, string? environmentName = null)
     {
         FileName = fileName ?? Secrets.DefaultFileName;

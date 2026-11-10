@@ -384,7 +384,7 @@ services
 IOutboxMessagePublisher billing = sp.GetRequiredKeyedService<IOutboxMessagePublisher>("billing");
 
 // фасад (основной UX)
-sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(invoice, tenantId: 1);
+sp.GetRequiredService<IOutboxPublisherResolver>().GetPublisher("billing").PublishSingle(invoice, tenantId: 1);
 ```
 
 ## Что ключуется
@@ -435,7 +435,7 @@ sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(i
 - составные ключи: одинаковый group id у двух провайдеров, композитный `Get`, ошибка неоднозначности
   строкового API;
 - default-key PG/Redis работают как раньше (все существующие наборы);
-- дубликат provider key — ошибка на старте; `IOutboxPublisherResolver.For(unknown)` — понятная ошибка.
+- дубликат provider key — ошибка на старте; `IOutboxPublisherResolver.GetPublisher(unknown)` — понятная ошибка.
 
 ## Статус
 

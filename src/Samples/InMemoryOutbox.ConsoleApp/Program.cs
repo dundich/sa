@@ -85,8 +85,8 @@ namespace InMemoryOutbox
         {
             foreach (IOutboxContextOperations<SomeMessage> message in messages.Span)
             {
-                logger.LogInformation(
-                    "[{Group}] tenant {Tenant} #{TaskId}: {PayloadId} — {Message}",
+                SampleLog.MessageConsumed(
+                    logger,
                     filter.ConsumerGroupId,
                     filter.TenantId,
                     message.DeliveryInfo.TaskId,
@@ -123,4 +123,12 @@ namespace InMemoryOutbox
     public partial class SomeMessageJsonSerializerContext : JsonSerializerContext
     {
     }
+}
+
+internal static partial class SampleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information,
+        Message = "[{Group}] tenant {Tenant} #{TaskId}: {PayloadId} — {Message}")]
+    public static partial void MessageConsumed(
+        ILogger logger, string group, int tenant, long taskId, string payloadId, string message);
 }

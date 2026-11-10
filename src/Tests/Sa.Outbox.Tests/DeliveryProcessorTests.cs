@@ -1,4 +1,4 @@
-using Sa.Classes;
+using Sa;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Partitional;
 

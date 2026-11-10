@@ -8,6 +8,38 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <NoWarn>1591;1701;1702;IDE1006;S3776</NoWarn>
+    <!--
+      Test code is not shipped, so the library-design rules enabled by AnalysisMode=Recommended
+      do not apply to it. Each entry is a rule that targets shipped API shape, allocation
+      behaviour, culture handling or naming conventions, and each fires only in tests/fixtures:
+        CA1707  underscores in test names (the repo's naming convention)
+        CA1000  static members on generic test helpers
+        CA1001  disposable fields in fixtures (xUnit owns their lifetime)
+        CA1051  visible instance fields in fixtures
+        CA1068  CancellationToken not last in a test helper
+        CA1305  IFormatProvider in assertion messages
+        CA1310  StringComparison in test data
+        CA1507  nameof for strings that are deliberately raw
+        CA1711  type-name suffix on test doubles
+        CA1725  parameter names of interface test doubles
+        CA1805  explicit default initializers in fixtures
+        CA1816  Dispose pattern in fixtures
+        CA1822  members that look static on xUnit classes
+        CA1826  indexer in test helpers
+        CA1852  sealing internal test types
+        CA1859  concrete return types in test helpers
+        CA1861  constant arrays as arguments (test data)
+        CA2012  ValueTask result access in assertions
+        CA2016  token forwarding in test helpers
+        CA2201  throwing System.Exception to simulate failures
+    -->
+    <NoWarn>$(NoWarn);CA1000;CA1001;CA1051;CA1068;CA1305;CA1310;CA1507;CA1707;CA1711;CA1725;CA1805;CA1816;CA1822;CA1826;CA1852;CA1859;CA1861;CA2012;CA2016;CA2201</NoWarn>
+
+    <!--
+      IDE0005 (unnecessary usings) needs a generated documentation file to run on build.
+      These projects are not packed, so the rule is turned off instead of emitting XML docs.
+    -->
+    <NoWarn>$(NoWarn);IDE0005</NoWarn>
   </PropertyGroup>
 
   <!--

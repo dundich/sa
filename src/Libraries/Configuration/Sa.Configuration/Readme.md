@@ -12,10 +12,17 @@ A .NET package that assembles and extends configuration:
 
 It plugs into the standard `Microsoft.Extensions.Configuration` pipeline, so it slots right into a normal ASP.NET setup.
 
+## Installation
+
+```bash
+dotnet add package Sa.Configuration
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [What it can do](#what-it-can-do)
 - [Layers and the builder](#layers-and-the-builder)
 - [Quick start](#quick-start)

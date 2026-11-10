@@ -1,7 +1,7 @@
-namespace Sa.Utils.WorkQueue;
 
 using System.Threading.Channels;
 
+namespace Sa.Utils.WorkQueue;
 /// <summary>
 /// The consuming half of the queue: the reader pool, how it is resized, and how
 /// callers observe it becoming idle.
@@ -12,7 +12,7 @@ using System.Threading.Channels;
 /// can be told to stop from three directions, and it is only released from its
 /// own <c>finally</c>. Each of those is a single method below.
 /// </remarks>
-public sealed partial class SaWorkQueue<TInput>
+public sealed partial class SaWorkChannel<TInput>
 {
     /// <summary>
     /// How many readers still hold a slot of the concurrency limit, i.e. how many
@@ -632,7 +632,7 @@ public sealed partial class SaWorkQueue<TInput>
     /// no reader, so the wait parks for it rather than returning.
     /// <para>
     /// Both early-return branches are the same idea — the queue cannot reach idle
-    /// on its own, and hanging would be a lie. <see cref="failIfNoProgress"/> picks
+    /// on its own, and hanging would be a lie. <c>failIfNoProgress</c> picks
     /// whether that is a silent return or an error, for callers that must not
     /// proceed on a queue that will never drain. The branch is chosen from
     /// <see cref="PoolState"/>, so the reason reported to the caller, the reason
@@ -719,7 +719,7 @@ public sealed partial class SaWorkQueue<TInput>
     /// Zeroes the pending count and releases the idle signal, but only once no
     /// reader can still be holding an item. A reader that outlived a timeout is
     /// still working, and zeroing here would claim idle while work is in flight —
-    /// its own <see cref="MarkInactive"/> is a guarded no-op by then and could not
+    /// its own <see cref="MarkInactive()"/> is a guarded no-op by then and could not
     /// restore the count.
     /// </summary>
     private void ResetPendingIfAllReadersDone()

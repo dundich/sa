@@ -8,7 +8,7 @@ public sealed record UploadFileInput
     /// <summary>
     /// Gets or sets the tenant identifier associated with the file. Defaults to 0.
     /// </summary>
-    public int TenantId { get; init; } = 0;
+    public int TenantId { get; init; }
 
     /// <summary>
     /// Gets or sets the file name. Defaults to an empty string.

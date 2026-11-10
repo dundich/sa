@@ -10,7 +10,7 @@ internal sealed class DefaultArrayPool
     private sealed class ArrayPool : IArrayPool
     {
         public T[] Rent<T>(int minimumLength) => ArrayPool<T>.Shared.Rent(minimumLength);
-        public void Return<T>(T[] array, bool clear = false) => ArrayPool<T>.Shared.Return(array, clear);
+        public void ReturnToPool<T>(T[] array, bool clear = false) => ArrayPool<T>.Shared.Return(array, clear);
     }
 
     // Не Lazy-с-подменой: своя реализация подключается через конструктор S3BucketClient, а не

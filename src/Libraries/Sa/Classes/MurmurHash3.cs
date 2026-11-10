@@ -1,15 +1,13 @@
 using System.Buffers.Binary;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
-namespace Sa.Classes;
+namespace Sa;
 
 /// <summary>
 /// https://github.com/odinmillion/MurmurHash.Net/blob/master/src/MurmurHash.Net/MurmurHash3.cs
 /// </summary>
 internal static class MurmurHash3
 {
-    [SuppressMessage("Major Code Smell", "S907:\"goto\" statement should not be used", Justification = "<Pending>")]
     public static uint Hash32(ReadOnlySpan<byte> bytes, uint seed)
     {
         var length = bytes.Length;

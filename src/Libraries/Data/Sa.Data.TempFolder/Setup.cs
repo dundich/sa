@@ -190,7 +190,7 @@ public static class Setup
     /// instance's keyed strategy slot; without an override the built-in named by the instance's
     /// <see cref="TempFolderOptions.Naming"/> / <see cref="TempFolderOptions.Cleanup"/> enum is
     /// selected for the key — at resolve time, because the enum may come from configuration.
-    /// The name-unique guard in <see cref="AddSaTempFolder"/> guarantees exactly one mapping per key.
+    /// The name-unique guard in <see cref="Setup.AddSaTempFolder(IServiceCollection, string, Action{ITempFolderBuilder})"/> guarantees exactly one mapping per key.
     /// </summary>
     private static void RegisterStrategies(IServiceCollection services, string name, TempFolderBuilder? builder, string optionsName)
     {
@@ -270,7 +270,7 @@ public static class Setup
 /// <summary>
 /// Sentinel marker recording that a temp folder is registered in this collection: carries the
 /// registration's key and options-instance name — the handles the background service and tests
-/// resolve the instance by. Registered one per <see cref="Setup.AddSaTempFolder"/> call.
+/// resolve the instance by. Registered one per <c>AddSaTempFolder</c> call.
 /// </summary>
 internal sealed class TempFolderRegistration(string name, string optionsName)
 {

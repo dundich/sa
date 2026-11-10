@@ -1,7 +1,5 @@
-using System.Text.RegularExpressions;
-using Sa.Classes;
 using Sa.Extensions;
-using Sa.Partitional.PostgreSql.Classes;
+using System.Text.RegularExpressions;
 
 namespace Sa.Partitional.PostgreSql;
 
@@ -70,24 +68,24 @@ public sealed record PgPartBy(
     /// <param name="range">The partitioning range to look up.</param>
     /// <returns>The matching <see cref="PgPartBy"/>, or <see cref="Day"/> as default.</returns>
     public static PgPartBy FromRange(PartByRange range)
-        => GetAll().FirstOrDefault(c => c.PartByRange == range) ?? Day;
+        => Enumeration.GetAll<PgPartBy>().FirstOrDefault(c => c.PartByRange == range) ?? Day;
 
     /// <summary>
     /// Resolves a <see cref="PgPartBy"/> instance from the value stored in the partition cache's
-    /// <c>part_by</c> column, i.e. from <see cref="Name"/> (<c>"Day"</c>, <c>"Month"</c>, <c>"Year"</c>).
+    /// <c>part_by</c> column, i.e. from <c>Name</c> (<c>"Day"</c>, <c>"Month"</c>, <c>"Year"</c>).
     /// </summary>
     /// <param name="part">The stored strategy name; <c>null</c> or an unknown name falls back to <see cref="Day"/>.</param>
     /// <returns>The corresponding <see cref="PgPartBy"/>.</returns>
     /// <remarks>
-    /// The lookup is by <see cref="Name"/> because that is what <c>SqlTemplate</c> writes into
-    /// <c>part_by</c>. It used to go through <see cref="Part.TryFromName"/>, whose registry holds
+    /// The lookup is by <c>Name</c> because that is what <c>SqlTemplate</c> writes into
+    /// <c>part_by</c>. It used to go through <c>Part.TryFromName</c>, whose registry holds
     /// the single entry <c>"root"</c>: every stored value therefore missed and resolved to
     /// <see cref="Part.Root"/>, i.e. to <see cref="Day"/>. A month- or year-partitioned table was
     /// then checked against a one-day range by <c>PartCache.InCache</c>, which never matched and
     /// re-ran the partition DDL on every call.
     /// </remarks>
     public static PgPartBy FromPartName(string? part)
-        => GetAll().FirstOrDefault(c => string.Equals(c.Name, part, StringComparison.Ordinal)) ?? Day;
+        => Enumeration.GetAll<PgPartBy>().FirstOrDefault(c => string.Equals(c.Name, part, StringComparison.Ordinal)) ?? Day;
 
     /// <summary>
     /// Returns the human-readable name of this partitioning strategy.

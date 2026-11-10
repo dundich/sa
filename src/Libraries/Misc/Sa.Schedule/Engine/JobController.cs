@@ -194,7 +194,9 @@ internal sealed partial class JobController(
         if (settings.Properties.IsRunOnce == true
             && _context.NumIterations > 0
             && !_retryOwed)
+        {
             return CanJobExecuteResult.Abort;
+        }
 
         if (_context.NumIterations == 0 && settings.Properties.Immediate == true)
         {

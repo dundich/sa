@@ -238,7 +238,7 @@ Demonstrates `Sa.Utils.WorkQueue` — a bounded, back-pressured task queue with 
 
 ### What it does
 
-1. Creates a `SaWorkQueue<int>` with an initial concurrency limit of 3 and a max of 8.
+1. Creates a `SaWorkChannel<int>` with an initial concurrency limit of 3 and a max of 8.
 2. Enqueues a batch of 10 items.
 3. While items flow, scales concurrency up to 6 and back down to 2 on the fly.
 4. Waits for idle, reports the processed count.

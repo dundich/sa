@@ -16,7 +16,7 @@ namespace Sa.Outbox.Delivery;
 /// </para>
 /// <para>
 /// A provider package (e.g. <c>Sa.Outbox.PostgreSql</c>) registers its own implementation that
-/// binds a configuration section addressed by <paramref name="configurationKey"/>. An empty key
+/// binds a configuration section addressed by <c>configurationKey</c>. An empty key
 /// means "no section to bind" — it is never a <em>group-level</em> configuration source. A provider
 /// may still apply its own provider-wide defaults before the section (for example the PostgreSQL
 /// package's polling defaults), so an empty key is not necessarily a no-op.
@@ -51,6 +51,7 @@ public interface IDeliveryGroupOptionsProvider
 /// </summary>
 public sealed class NoopDeliveryGroupOptionsProvider : IDeliveryGroupOptionsProvider
 {
+    /// <inheritdoc />
     public bool TryApply(string consumerGroupId, string? configurationKey, OutboxConsumerSettingsBuilder builder)
         => false;
 }

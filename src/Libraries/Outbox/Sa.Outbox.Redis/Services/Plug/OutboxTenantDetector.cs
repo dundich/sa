@@ -1,4 +1,3 @@
-using Sa.Outbox.Partitional;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.Redis.Configuration;
 using StackExchange.Redis;

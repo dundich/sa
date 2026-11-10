@@ -5,6 +5,7 @@ using Sa.Outbox.Redis.Services;
 
 namespace Sa.Outbox.Redis;
 
+/// <summary>Registers the Redis Streams-backed outbox provider.</summary>
 public static class Setup
 {
     /// <summary>

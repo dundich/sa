@@ -75,7 +75,7 @@ public class PgDataSourceScalarTests(PgDataSourceFixture fixture) : IClassFixtur
             """, cancellationToken: TestContext.Current.CancellationToken);
 
         var val = await fixture.DataSource.ExecuteScalarTyped<int>(
-            """INSERT INTO param_test_table (name, value) VALUES (@p0, @p1) RETURNING value""", 
+            """INSERT INTO param_test_table (name, value) VALUES (@p0, @p1) RETURNING value""",
             [new NpgsqlParameter { ParameterName = "p0", Value = "test" }, new NpgsqlParameter { ParameterName = "p1", Value = 99 }]
             , cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(99, val);

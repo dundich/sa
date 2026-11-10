@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Reflection;
 using Sa.Outbox;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PlugServices;
@@ -9,6 +8,7 @@ using Sa.Outbox.Redis;
 using Sa.Outbox.Redis.Configuration;
 using Sa.Outbox.Redis.Connection;
 using StackExchange.Redis;
+using System.Reflection;
 
 namespace Sa.Outbox.RedisTests;
 
@@ -156,7 +156,7 @@ public class MultiProviderRedisTests
         using ServiceProvider sp = Build();
         var manager = sp.GetRequiredService<IOutboxConsumerManager>();
 
-        Assert.Equal("rp-a", manager.Get("rp_a_group")?.ProviderKey);
-        Assert.Equal("rp-b", manager.Get("rp_b_group")?.ProviderKey);
+        Assert.Equal("rp-a", manager.GetSettings("rp_a_group")?.ProviderKey);
+        Assert.Equal("rp-b", manager.GetSettings("rp_b_group")?.ProviderKey);
     }
 }

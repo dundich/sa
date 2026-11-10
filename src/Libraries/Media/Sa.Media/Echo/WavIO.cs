@@ -33,9 +33,11 @@ internal static class WavIO
 
         long frameCount = dataSize / 4;
         if (frameCount > MaxInMemoryFrames)
+        {
             throw new NotSupportedException(
                 $"Recording is too long for in-memory processing ({frameCount:N0} frames > {MaxInMemoryFrames:N0}). " +
                 "Use CrossFeedSeparator.ProcessingMode.MinimumMemory instead.");
+        }
 
         int frames = (int)frameCount;
         float[] interleaved = ArrayPool<float>.Shared.Rent(frames * 2);

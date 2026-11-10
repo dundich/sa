@@ -102,7 +102,7 @@ public class PgProviderIsolationTests
         // Without the keyed registration the publisher used to resolve the default provider's writer
         // and silently publish into the wrong storage.
         InvalidOperationException exception =
-            Assert.Throws<InvalidOperationException>(() => resolver.For("ghost"));
+            Assert.Throws<InvalidOperationException>(() => resolver.GetPublisher("ghost"));
         Assert.Contains("ghost", exception.Message);
     }
 }

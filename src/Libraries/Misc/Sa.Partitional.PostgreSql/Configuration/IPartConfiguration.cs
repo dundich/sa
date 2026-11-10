@@ -3,7 +3,7 @@ using Sa.Data.PostgreSql;
 namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
-/// Fluent configuration surface returned by <see cref="Setup.AddSaPartitional"/>.
+/// Fluent configuration surface returned by <c>AddSaPartitional</c>.
 /// Use this interface to optionally wire up partitioned tables, caching, migration scheduling, cleanup scheduling, and the data source.
 /// </summary>
 public interface IPartConfiguration

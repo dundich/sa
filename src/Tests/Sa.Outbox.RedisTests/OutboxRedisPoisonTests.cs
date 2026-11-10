@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Outbox.Delivery;
@@ -8,6 +6,8 @@ using Sa.Outbox.Publication;
 using Sa.Outbox.Redis.Configuration;
 using Sa.Outbox.Redis.Poison;
 using StackExchange.Redis;
+using System.Collections.Concurrent;
+using System.Text;
 
 namespace Sa.Outbox.RedisTests;
 
@@ -133,7 +133,7 @@ public class OutboxRedisPoisonTests(OutboxRedisPoisonFixture fixture) : IClassFi
 
         Assert.Equal(1, await Manager.RentDelivery<TestMessage>(buffer, TimeSpan.FromMinutes(1), filter, ct));
 
-        buffer[0].Error(new InvalidOperationException("boom"), "permanent");
+        buffer[0].Fail(new InvalidOperationException("boom"), "permanent");
         Assert.Equal(1, await Manager.ReturnDelivery<TestMessage>(buffer.AsMemory(0, 1), filter, ct));
 
         RedisOutboxPoisonMessage message = Assert.Single(fixture.Handler.Messages);
@@ -168,7 +168,7 @@ public class OutboxRedisPoisonTests(OutboxRedisPoisonFixture fixture) : IClassFi
 
             Assert.Equal(1, await Manager.RentDelivery<TestMessage>(buffer, TimeSpan.FromMinutes(1), filter, ct));
 
-            buffer[0].Error(new InvalidOperationException("boom"), "permanent");
+            buffer[0].Fail(new InvalidOperationException("boom"), "permanent");
             await Manager.ReturnDelivery<TestMessage>(buffer.AsMemory(0, 1), filter, ct);
 
             // The handler threw, so the provider must not acknowledge: the message stays available.

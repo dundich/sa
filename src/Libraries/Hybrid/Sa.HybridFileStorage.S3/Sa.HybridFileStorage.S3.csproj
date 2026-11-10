@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <Description>File storage management in S3</Description>
+        <PackageTags>file-storage s3 object-storage</PackageTags>
     </PropertyGroup>
 
     <ItemGroup>

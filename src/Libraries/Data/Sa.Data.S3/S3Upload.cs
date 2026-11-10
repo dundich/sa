@@ -221,6 +221,7 @@ public sealed class S3Upload : IDisposable, IAsyncDisposable
         return _completed;
     }
 
+    /// <summary>Aborts the multipart upload and releases the request resources.</summary>
     public void Dispose()
     {
         if (_disposed)
@@ -229,12 +230,12 @@ public sealed class S3Upload : IDisposable, IAsyncDisposable
         }
 
         Array.Clear(_parts, 0, _partCount);
-        _arrayPool.Return(_parts, clear: true);
+        _arrayPool.ReturnToPool(_parts, clear: true);
         _parts = null!;
 
         if (_byteBuffer is not null)
         {
-            _arrayPool.Return(_byteBuffer);
+            _arrayPool.ReturnToPool(_byteBuffer);
             _byteBuffer = null;
         }
 

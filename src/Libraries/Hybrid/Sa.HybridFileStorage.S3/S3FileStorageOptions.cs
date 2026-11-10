@@ -1,5 +1,5 @@
-using System.ComponentModel.DataAnnotations;
 using Sa.Data.S3;
+using System.ComponentModel.DataAnnotations;
 
 namespace Sa.HybridFileStorage.S3;
 
@@ -12,7 +12,7 @@ namespace Sa.HybridFileStorage.S3;
 /// (normalisation), then validation. The connection and transport settings are inherited from
 /// <see cref="S3BucketClientSetupOptions"/> — the very type the bucket client is built from — so
 /// there is no second copy and no hand-written projection that can silently drop a property, and
-/// <see cref="UseHttp2"/> is no longer ignored by the registration.
+/// <c>UseHttp2</c> is no longer ignored by the registration.
 /// </remarks>
 public sealed class S3FileStorageOptions : S3BucketClientSetupOptions
 {
@@ -34,7 +34,7 @@ public sealed class S3FileStorageOptions : S3BucketClientSetupOptions
     /// <summary>
     /// Gets or sets a value indicating whether this storage is read-only. Defaults to <c>false</c>.
     /// </summary>
-    public bool IsReadOnly { get; set; } = false;
+    public bool IsReadOnly { get; set; }
 
     /// <summary>
     /// Initialises the options with the default region.
@@ -65,7 +65,7 @@ public sealed class S3FileStorageOptions : S3BucketClientSetupOptions
     /// <summary>
     /// Validates the current configuration and throws a <see cref="ValidationException"/> if any property is invalid.
     /// </summary>
-    /// <exception cref="ValidationException">Thrown when <see cref="S3BucketClientSetupOptions.Endpoint"/>, the credentials, <see cref="Basket"/>, <see cref="StorageType"/> or a transport setting is invalid.</exception>
+    /// <exception cref="ValidationException">Thrown when <c>Endpoint</c>, the credentials, <see cref="Basket"/>, <see cref="StorageType"/> or a transport setting is invalid.</exception>
     /// <remarks>
     /// Called by <see cref="S3FileStorageOptionsValidator"/> after the post-configuration step, so
     /// it validates normalised values (a trimmed endpoint without a trailing slash, trimmed names).
@@ -89,7 +89,7 @@ public sealed class S3FileStorageOptions : S3BucketClientSetupOptions
 }
 
 /// <summary>
-/// Default AWS region used when <see cref="S3FileStorageOptions.Region"/> is not specified.
+/// Default AWS region used when <c>Region</c> is not specified.
 /// </summary>
 public static class S3Defaults
 {

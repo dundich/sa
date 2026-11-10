@@ -1,5 +1,3 @@
-using Sa.Partitional.PostgreSql.Classes;
-
 namespace Sa.Partitional.PostgreSql.SqlBuilder;
 
 internal sealed class SqlTableBuilder(ITableSettings settings) : ISqlTableBuilder

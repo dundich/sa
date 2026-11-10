@@ -4,7 +4,7 @@ namespace Sa.Utils.WorkQueue;
 /// A single piece of work the queue runs, one item per call.
 /// </summary>
 /// <remarks>
-/// <b>Called concurrently.</b> Up to <see cref="ISaWorkQueue{TInput}.ConcurrencyLimit"/>
+/// <b>Called concurrently.</b> Up to <see cref="ISaWorkChannel{TInput}.ConcurrencyLimit"/>
 /// readers run items at the same time, so an implementation must be thread-safe — or
 /// resolvable as a singleton, which is how the DI registration wires it up.
 /// <para>

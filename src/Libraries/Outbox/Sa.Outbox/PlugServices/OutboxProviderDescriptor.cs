@@ -12,7 +12,7 @@ namespace Sa.Outbox.PlugServices;
 /// diagnostics without a service locator.
 /// </para>
 /// <para>
-/// One provider per container (see <see cref="OutboxProviderSetup.AddOutboxProvider"/>). The <see cref="Name"/> is
+/// One provider per container (see <c>AddOutboxProvider</c>). The <see cref="Name"/> is
 /// stable and human-facing ("PostgreSql", "Redis"); it is also the value future keyed multi-provider
 /// registrations would use, which is why it must not be a type name.
 /// </para>

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Configuration;
 using Npgsql;
-using Sa.Classes;
 using Sa.Data.PostgreSql;
 
 namespace Sa.Configuration.PostgreSql;

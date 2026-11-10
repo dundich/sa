@@ -1,4 +1,3 @@
-using Sa.Classes;
 using Sa.Outbox.PlugServices;
 using System.Buffers;
 
@@ -71,7 +70,7 @@ internal sealed class DeliveryTenant(
     {
         foreach (IOutboxContextOperations<TMessage> context in messages.Span)
         {
-            contextFactory.Return(context);
+            contextFactory.ReturnToPool(context);
         }
     }
 
@@ -130,7 +129,7 @@ internal sealed class DeliveryTenant(
             cancellationToken);
     }
 
-    private IAsyncDisposable RenewerLocker(
+    private LockRenewerHandle RenewerLocker(
         IOutboxDeliveryManager deliveryMan,
         OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
@@ -179,7 +178,7 @@ internal sealed class DeliveryTenant(
         public void MarkCompleting() => _completing = true;
     }
 
-    private static IMemoryOwner<IOutboxContextOperations<TMessage>> RentMemory<TMessage>(int size)
+    private static ClearingMemoryOwner<IOutboxContextOperations<TMessage>> RentMemory<TMessage>(int size)
         => new ClearingMemoryOwner<IOutboxContextOperations<TMessage>>(
             MemoryPool<IOutboxContextOperations<TMessage>>.Shared.Rent(size));
 

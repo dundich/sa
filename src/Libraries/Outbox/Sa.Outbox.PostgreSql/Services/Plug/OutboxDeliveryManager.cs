@@ -164,8 +164,8 @@ internal sealed partial class OutboxDeliveryManager(
                     break;
 
                 default:
-                    throw new ArgumentOutOfRangeException(
-                        nameof(action), action, "Unknown PostgreSQL Outbox poison action.");
+                    throw new InvalidOperationException(
+                        $"Unknown PostgreSQL Outbox poison action: {action}.");
             }
         }
 

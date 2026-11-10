@@ -40,7 +40,7 @@ namespace HybridFileStorage.Console
     {
         public async Task Run(CancellationToken cancellationToken = default)
         {
-            logger.LogInformation("starting");
+            SampleLog.Starting(logger);
 
             var expected = "Hello, HybridFileStorage!";
             using var stream = expected.ToStream();
@@ -60,7 +60,7 @@ namespace HybridFileStorage.Console
 
             Debug.Assert(isDowload);
 
-            System.Console.WriteLine("completed:{0}", actual ?? String.Empty);
+            System.Console.WriteLine("completed:{0}", actual ?? string.Empty);
 
             Debug.Assert(expected == actual);
 
@@ -92,4 +92,10 @@ namespace HybridFileStorage.Console
             return await reader.ReadToEndAsync(cancellationToken);
         }
     }
+}
+
+internal static partial class SampleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "starting")]
+    public static partial void Starting(ILogger logger);
 }

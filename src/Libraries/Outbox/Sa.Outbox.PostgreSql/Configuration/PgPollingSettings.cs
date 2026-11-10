@@ -198,10 +198,12 @@ public sealed class PgPollingSettings
     public PgPollingSettings WithPerTenantParallelism(int degree)
     {
         if (degree == 0 || degree < -1)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(degree),
                 degree,
                 "PerTenantMaxDegreeOfParallelism must be -1 (all processors) or greater than 0.");
+        }
 
         PerTenantMaxDegreeOfParallelism = degree;
         Enabled = true;
@@ -232,22 +234,28 @@ public sealed class PgPollingSettings
             throw new InvalidOperationException($"PgPollingSettings.IdleMaxInterval must be >= TimeSpan.Zero, got {IdleMaxInterval}.");
 
         if (IdleMaxInterval > TimeSpan.Zero && IdleMaxInterval < Interval)
+        {
             throw new InvalidOperationException(
                 $"PgPollingSettings.IdleMaxInterval ({IdleMaxInterval}) must be greater than or equal to Interval ({Interval}).");
+        }
 
         if (InitialDelay < TimeSpan.Zero)
             throw new InvalidOperationException($"PgPollingSettings.InitialDelay must be >= TimeSpan.Zero, got {InitialDelay}.");
 
         if (MaxProcessingIterations < -1)
+        {
             throw new InvalidOperationException(
                 $"PgPollingSettings.MaxProcessingIterations must be >= -1, got {MaxProcessingIterations}.");
+        }
 
         if (BatchingWindow is { } batchingWindow && batchingWindow < TimeSpan.Zero)
             throw new InvalidOperationException($"PgPollingSettings.BatchingWindow must be >= TimeSpan.Zero, got {batchingWindow}.");
 
         if (PerTenantMaxDegreeOfParallelism is { } degree && (degree == 0 || degree < -1))
+        {
             throw new InvalidOperationException(
                 $"PgPollingSettings.PerTenantMaxDegreeOfParallelism must be -1 or greater than 0, got {degree}.");
+        }
     }
 
     /// <summary>

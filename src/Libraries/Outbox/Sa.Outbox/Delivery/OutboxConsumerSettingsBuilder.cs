@@ -2,7 +2,7 @@ namespace Sa.Outbox.Delivery;
 
 /// <summary>
 /// Fluent builder for creating or mutating <see cref="OutboxConsumerSettings"/>.
-/// Use for bootstrap configuration (startup) and partial runtime updates via <see cref="BuildCopy(OutboxConsumerSettings)"/>.
+/// Use for bootstrap configuration (startup) and partial runtime updates via <c>BuildCopy</c>.
 /// </summary>
 public sealed class OutboxConsumerSettingsBuilder
 {
@@ -318,10 +318,12 @@ public sealed class OutboxConsumerSettingsBuilder
     public OutboxConsumerSettingsBuilder WithPerTenantMaxDegreeOfParallelism(int degree)
     {
         if (degree == 0 || degree < -1)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(degree),
                 degree,
                 "PerTenantMaxDegreeOfParallelism must be -1 (all processors) or greater than 0.");
+        }
 
         _perTenantMaxDegreeOfParallelism = degree;
         return this;

@@ -67,6 +67,9 @@ public sealed class CronTiming
     private readonly bool _dowHasSpecials;
     private readonly bool[] _dowLastOfMonth = new bool[CronLimits.DayOfWeekCount];
 
+    /// <summary>
+    /// The name of the timing, derived from its cron expression.
+    /// </summary>
     public string TimingName { get; }
 
     /// <summary>
@@ -395,15 +398,19 @@ public sealed class CronTiming
             // First valid minute in that hour
             int minute = _nextMinute[current.Minute];
             if (minute != -1)
+            {
                 return new DateTimeOffset(
                     current.Year, current.Month, current.Day, hour, minute, _firstSecond, current.Offset);
+            }
 
             // No minute at this hour → try next valid hour
             int nextHour = _nextHour[hour + 1];
             if (nextHour != -1)
+            {
                 return new DateTimeOffset(
                     current.Year, current.Month, current.Day,
                     nextHour, _firstMinute, _firstSecond, current.Offset);
+            }
 
             current = current.AddDays(1);
         }
@@ -433,7 +440,9 @@ public sealed class CronTiming
         {
             if (m >= CronLimits.MonthMin && m <= CronLimits.MonthMax
                 && CanMatchDay(dayOfMonth, MaxDaysInMonth(m)))
+            {
                 return;
+            }
         }
 
         throw new CronParseException(
@@ -488,8 +497,10 @@ public sealed class CronTiming
             // out-of-range index means the field bounds and the lookup table sizes have
             // drifted apart — fail loudly instead of silently dropping the value.
             if ((uint)value >= (uint)flags.Length)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(values), value, "Cron field value is outside its lookup table.");
+            }
 
             flags[value] = true;
         }
@@ -509,8 +520,11 @@ public sealed class CronTiming
 
         // Return the smallest valid value
         for (int i = min; i <= max; i++)
+        {
             if (flags[i])
                 return i;
+        }
+
         return -1; // no valid value (should not happen for well-formed expressions)
     }
 
@@ -535,9 +549,11 @@ public sealed class CronTiming
         // The format is detected by the field count: 5 fields start at the minute, 6 fields
         // start at the second. There is no year field — 7 fields is an error.
         if (fields.Length is not (5 or 6))
+        {
             throw new CronParseException(
                 "Cron expression must have 5 fields (minute through day-of-week) or 6 fields " +
                 $"(second through day-of-week), got {fields.Length}.", "expression", expression);
+        }
 
         return fields;
     }

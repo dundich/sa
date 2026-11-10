@@ -33,7 +33,7 @@ public interface IOutboxMessagePublisher
     /// <see cref="NotSupportedException"/> when one is supplied.
     /// </param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A <see cref="ValueTask{ulong}"/> with the number of successfully published messages.</returns>
+    /// <returns>A <c>ValueTask&lt;ulong&gt;</c> with the number of successfully published messages.</returns>
     ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
         int tenantId,
@@ -48,7 +48,7 @@ public interface IOutboxMessagePublisher
     /// <param name="messages">A collection of messages to be published.</param>
     /// <param name="tenantId">The tenant the messages belong to.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A <see cref="ValueTask{ulong}"/> with the number of successfully published messages.</returns>
+    /// <returns>A <c>ValueTask&lt;ulong&gt;</c> with the number of successfully published messages.</returns>
     ValueTask<ulong> Publish<TMessage>(
         IReadOnlyCollection<TMessage> messages,
         int tenantId,
@@ -131,7 +131,7 @@ public interface IOutboxMessagePublisher
     /// <summary>
     /// Publishes a single message for a specific tenant.
     /// </summary>
-    /// <returns>A <see cref="ValueTask{ulong}"/> with the number of successfully published messages (always 1 on success).</returns>
+    /// <returns>A <c>ValueTask&lt;ulong&gt;</c> with the number of successfully published messages (always 1 on success).</returns>
     ValueTask<ulong> PublishSingle<TMessage>(
         TMessage message,
         int tenantId,

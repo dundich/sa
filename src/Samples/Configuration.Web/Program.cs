@@ -112,13 +112,9 @@ settingsApi.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
 
 app.Run();
 
-#pragma warning disable S3903
 public sealed record Settings(string Key, string? Value);
 
-
 [JsonSerializable(typeof(Settings[]))]
-internal partial class AppJsonSerializerContext : JsonSerializerContext
+internal sealed partial class AppJsonSerializerContext : JsonSerializerContext
 {
-
 }
-#pragma warning restore S3903

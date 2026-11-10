@@ -25,7 +25,25 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-    <PackageReadmeFile>NuGet.md</PackageReadmeFile>
+    <!--
+      Ship IntelliSense: every public member is documented in source, so the XML file is
+      packaged next to the assembly. Missing/broken doc comments are build warnings.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!--
+      Every package carries its own README (Readme.md next to the project) rather than the
+      repository-level teaser: NuGet.org renders that file on the package page.
+    -->
+    <!--
+      Package validation runs on `dotnet pack`: it checks that the package is well formed and
+      that its runtime-specific assets agree. `PackageValidationBaselineVersion` is intentionally
+      absent until the next release publishes a package to the feed — set it to that version then
+      and breaking changes between releases fail the pack.
+    -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+
+    <PackageReadmeFile>Readme.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReleaseNotes>See https://github.com/dundich/Sa/releases</PackageReleaseNotes>
   </PropertyGroup>
@@ -33,13 +51,15 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="All" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Paths are resolved from this props file (src/Libraries/), not from the importing project. -->
-    <None Include="$(MSBuildThisFileDirectory)../../NuGet.md" Pack="true" PackagePath="/" />
     <None Include="$(MSBuildThisFileDirectory)../../icon.png" Pack="true" PackagePath="/" />
   </ItemGroup>
+
+  <!-- The per-package Readme.md is packed in Directory.Build.targets (see the comment there). -->
 
 </Project>

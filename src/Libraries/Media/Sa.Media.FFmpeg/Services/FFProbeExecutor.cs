@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Sa.Media.FFmpeg.Services;
 
-internal sealed class FFProbeExecutor(
+internal sealed partial class FFProbeExecutor(
     IFFRawExecutor executor,
     ILogger<FFProbeExecutor>? logger = null) : IFFProbeExecutor
 {
@@ -74,10 +74,7 @@ internal sealed class FFProbeExecutor(
                     // Потоковый вариант: если JSON не распознан, исключение наружу не выходит —
                     // ExecuteStdOutAsync уже проверил код возврата, а «пустые метаданные» здесь
                     // означают лишь, что ffprobe нечего сообщить. Логируем и возвращаем пустое.
-                    logger?.LogWarning(
-                        jsonEx,
-                        "Failed to deserialize FFprobe JSON output from a '{InputFormat}' stream. Returning empty metadata.",
-                        inputFormat);
+                    if (logger is not null) Log.ProbeJsonStreamFailed(logger, jsonEx, inputFormat);
                     metadata = MediaMetadata.Empty;
                 }
             },
@@ -99,7 +96,7 @@ internal sealed class FFProbeExecutor(
         catch (JsonException jsonEx)
         {
             // JSON невалиден — это уже настоящая ошибка, а не «нет метаданных».
-            logger?.LogWarning(jsonEx, "Failed to deserialize FFprobe JSON output for '{FilePath}'.", filePath);
+            if (logger is not null) Log.ProbeJsonFailed(logger, jsonEx, filePath);
             throw new ProcessExecutionException(
                 0,
                 $"FFprobe returned output that is not valid JSON for '{filePath}'. First 512 chars: {json.AsSpan(0, Math.Min(512, json.Length))}",
@@ -112,4 +109,16 @@ internal sealed class FFProbeExecutor(
         FormatName: metaDataInfo?.Format?.FormatName,
         BitRate: metaDataInfo?.Format?.BitRate.StrToInt(),
         Size: metaDataInfo?.Format?.Size.StrToLong());
+
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 2001, Level = LogLevel.Warning,
+            Message = "Failed to deserialize FFprobe JSON output from a '{InputFormat}' stream. Returning empty metadata.")]
+        public static partial void ProbeJsonStreamFailed(ILogger logger, Exception exception, string inputFormat);
+
+        [LoggerMessage(EventId = 2002, Level = LogLevel.Warning,
+            Message = "Failed to deserialize FFprobe JSON output for '{FilePath}'.")]
+        public static partial void ProbeJsonFailed(ILogger logger, Exception exception, string filePath);
+    }
 }

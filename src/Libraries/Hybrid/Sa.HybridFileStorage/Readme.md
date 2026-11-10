@@ -4,10 +4,17 @@
 
 Hybrid file storage abstraction with automatic provider failover. Unifies multiple storage backends (FileSystem, S3, PostgreSQL) under a single resilient API — if one provider becomes unavailable, the system switches to another.
 
+## Installation
+
+```bash
+dotnet add package Sa.HybridFileStorage
+```
+
 ---
 
 ## Table of Contents
 
+- [Installation](#installation)
 - [Virtual Folders (Baskets) Concept](#virtual-folders-baskets-concept)
 - [Supported Storage Providers](#supported-storage-providers)
 - [Key Features](#key-features)

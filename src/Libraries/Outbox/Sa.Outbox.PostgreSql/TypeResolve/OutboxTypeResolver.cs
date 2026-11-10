@@ -5,9 +5,12 @@ namespace Sa.Outbox.PostgreSql.TypeResolve;
 
 internal sealed class OutboxTypeResolver(
     IOutboxTypeCache cache,
-    IOutboxMsgTypeRepository repository) : IOutboxTypeResolver
+    IOutboxMsgTypeRepository repository) : IOutboxTypeResolver, IDisposable
 {
     private readonly SemaphoreSlim _insertLock = new(1, 1);
+
+    /// <summary>Releases the insert gate.</summary>
+    public void Dispose() => _insertLock.Dispose();
 
     public ValueTask<long> GetHashCode(string typeName, CancellationToken cancellationToken)
     {
@@ -76,6 +79,6 @@ internal sealed class OutboxTypeResolver(
 
         await cache.Reset(cancellationToken).ConfigureAwait(false);
 
-        return await cache.GetTypeName(typeHashCode, cancellationToken).ConfigureAwait(false) ?? typeHashCode.ToString();
+        return await cache.GetTypeName(typeHashCode, cancellationToken).ConfigureAwait(false) ?? typeHashCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 }

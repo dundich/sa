@@ -1,4 +1,4 @@
-namespace Sa.Partitional.PostgreSql.Classes;
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// Structural equality for a list-partition branch: <c>["tenant_a", "EU"]</c> equals

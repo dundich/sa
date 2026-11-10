@@ -7,6 +7,12 @@
     <IsPackable>false</IsPackable>
     <!-- Benchmarks are executables, not test modules for the MTP driver. -->
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+
+    <!--
+      IDE0005 (unnecessary usings) needs a generated documentation file to run on build.
+      These projects are not packed, so the rule is turned off instead of emitting XML docs.
+    -->
+    <NoWarn>$(NoWarn);IDE0005</NoWarn>
   </PropertyGroup>
 
 </Project>

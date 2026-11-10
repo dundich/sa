@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Sa.Partitional.PostgreSql;
 using Sa.Partitional.PostgreSql.Cleaning;
-using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSqlTests.Cleaning;
 

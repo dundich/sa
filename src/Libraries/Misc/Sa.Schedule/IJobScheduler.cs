@@ -5,7 +5,7 @@ namespace Sa.Schedule;
 /// <summary>
 /// This individual task scheduler is responsible for managing specific tasks.
 /// </summary>
-public interface IJobScheduler: IDisposable, IAsyncDisposable
+public interface IJobScheduler : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Gets the unique identifier of the job.
@@ -58,5 +58,5 @@ public interface IJobScheduler: IDisposable, IAsyncDisposable
     /// <summary>
     /// Stops the job scheduler asynchronously.
     /// </summary>
-    Task Stop();
+    Task StopAsync();
 }

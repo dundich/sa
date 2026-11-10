@@ -81,7 +81,7 @@ public class OutboxConsumerManagerTests
         manager.TryRegister(group, settings);
         Assert.True(manager.IsPaused(group));
 
-        manager.Resume(group);
+        manager.Unpause(group);
         Assert.False(manager.IsPaused(group));
     }
 
@@ -96,11 +96,11 @@ public class OutboxConsumerManagerTests
         manager.Pause(group);
         Assert.True(manager.IsPaused(group));
 
-        manager.Resume(group);
+        manager.Unpause(group);
         Assert.False(manager.IsPaused(group));
 
         // Settings preserved after pause/resume cycle
-        var retrieved = manager.Get(group);
+        var retrieved = manager.GetSettings(group);
         Assert.NotNull(retrieved);
         Assert.Equal(settings.Interval, retrieved.Interval);
         Assert.Equal(settings.MaxBatchSize, retrieved.MaxBatchSize);
@@ -120,7 +120,7 @@ public class OutboxConsumerManagerTests
     {
         var manager = CreateManager();
 
-        var exception = Assert.Throws<InvalidOperationException>(() => manager.Resume("non-existent"));
+        var exception = Assert.Throws<InvalidOperationException>(() => manager.Unpause("non-existent"));
         Assert.Contains("not registered", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -139,9 +139,9 @@ public class OutboxConsumerManagerTests
     {
         var manager = CreateManager();
 
-        Assert.Throws<ArgumentException>(() => manager.Resume(null!));
-        Assert.Throws<ArgumentException>(() => manager.Resume(""));
-        Assert.Throws<ArgumentException>(() => manager.Resume("   "));
+        Assert.Throws<ArgumentException>(() => manager.Unpause(null!));
+        Assert.Throws<ArgumentException>(() => manager.Unpause(""));
+        Assert.Throws<ArgumentException>(() => manager.Unpause("   "));
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class OutboxConsumerManagerTests
         manager.TryRegister(group, settings);
         manager.Pause(group);
 
-        var updated = manager.Get(group);
+        var updated = manager.GetSettings(group);
         Assert.NotNull(updated);
         Assert.True(updated.Paused);
         Assert.Equal(settings.Interval, updated.Interval);
@@ -218,7 +218,7 @@ public class OutboxConsumerManagerTests
         OutboxConsumerSettings? captured = null;
         using var subscription = manager.Subscribe(group, s => captured = s);
 
-        manager.Resume(group);
+        manager.Unpause(group);
 
         Assert.NotNull(captured);
         Assert.False(captured.Paused);
@@ -351,7 +351,7 @@ public class OutboxConsumerManagerTests
 
         manager.Apply(group, s => s with { MaxBatchSize = 128, MaxDeliveryAttempts = 5 });
 
-        var updated = manager.Get(group);
+        var updated = manager.GetSettings(group);
         Assert.NotNull(updated);
         Assert.Equal(128, updated.MaxBatchSize);
         Assert.Equal(5, updated.MaxDeliveryAttempts);
@@ -378,7 +378,7 @@ public class OutboxConsumerManagerTests
         var initialVersion = settings.Version;
 
         manager.Apply(group, s => s with { MaxBatchSize = 1, Version = s.Version + 1 });
-        var updated = manager.Get(group);
+        var updated = manager.GetSettings(group);
 
         // Version is managed by caller via transform — Apply itself does not auto-increment
         Assert.Equal(initialVersion + 1, updated!.Version);
@@ -397,7 +397,7 @@ public class OutboxConsumerManagerTests
         manager.Apply(group, s => s with { MaxDeliveryAttempts = 10 });
         manager.Apply(group, s => s with { Paused = true });
 
-        var final = manager.Get(group);
+        var final = manager.GetSettings(group);
         Assert.NotNull(final);
         Assert.Equal(8, final.MaxBatchSize);
         Assert.Equal(10, final.MaxDeliveryAttempts);
@@ -412,7 +412,7 @@ public class OutboxConsumerManagerTests
     public void Get_ReturnsNullForUnknownGroup()
     {
         var manager = CreateManager();
-        Assert.Null(manager.Get("unknown-group"));
+        Assert.Null(manager.GetSettings("unknown-group"));
     }
 
     [Fact]
@@ -424,7 +424,7 @@ public class OutboxConsumerManagerTests
 
         manager.TryRegister(group, settings);
 
-        var snapshot = manager.Get(group);
+        var snapshot = manager.GetSettings(group);
         Assert.NotNull(snapshot);
         Assert.Same(settings, snapshot);
     }
@@ -439,7 +439,7 @@ public class OutboxConsumerManagerTests
         manager.TryRegister(group, settings);
         manager.Apply(group, s => s with { MaxBatchSize = 256 });
 
-        var snapshot = manager.Get(group);
+        var snapshot = manager.GetSettings(group);
         Assert.NotNull(snapshot);
         Assert.Equal(256, snapshot.MaxBatchSize);
     }
@@ -566,7 +566,7 @@ public class OutboxConsumerManagerTests
             {
                 try
                 {
-                    var snapshot = manager.Get(group);
+                    var snapshot = manager.GetSettings(group);
                     if (snapshot is not null && (snapshot.MaxBatchSize < 1 || snapshot.MaxBatchSize > iterations))
                     {
                         // Snapshot received is consistent — even if we miss some updates
@@ -604,7 +604,7 @@ public class OutboxConsumerManagerTests
             {
                 manager.Pause(group);
                 await Task.Delay(1, cts.Token);
-                manager.Resume(group);
+                manager.Unpause(group);
             }
         }, cts.Token);
 
@@ -612,7 +612,7 @@ public class OutboxConsumerManagerTests
         {
             for (int i = 0; i < 50 && !cts.Token.IsCancellationRequested; i++)
             {
-                manager.Get(group);
+                manager.GetSettings(group);
                 await Task.Delay(1, cts.Token);
             }
         }, cts.Token);

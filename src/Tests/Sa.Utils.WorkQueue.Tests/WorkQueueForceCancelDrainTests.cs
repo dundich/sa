@@ -24,7 +24,7 @@ public sealed class WorkQueueForceCancelDrainTests
     public async Task ExpiredWait_KeepsTheBuffer_AndAReArmedPoolProcessesIt()
     {
         var clock = new ManualTimeProvider();
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
         var processor = new WedgedProcessor();
 
@@ -102,7 +102,7 @@ public sealed class WorkQueueForceCancelDrainTests
     public async Task CancelledWait_KeepsTheBuffer_AndSaysSo()
     {
         var clock = new ManualTimeProvider();
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
         var processor = new WedgedProcessor();
 
@@ -144,12 +144,12 @@ public sealed class WorkQueueForceCancelDrainTests
     [Fact]
     public async Task WaitThatCompletes_StillDropsTheBuffer()
     {
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
         var processor = new ReleasableProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback(statuses.Record),
             logger);
@@ -174,11 +174,11 @@ public sealed class WorkQueueForceCancelDrainTests
     [Fact]
     public async Task WaitForIdleAsync_OnADrainingQueue_StaysQuiet()
     {
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback(statuses.Record),
             logger);
@@ -197,13 +197,13 @@ public sealed class WorkQueueForceCancelDrainTests
     [Fact]
     public async Task WaitForIdleAsync_WhilePaused_SaysWhyItReturned()
     {
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(async (_, _) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(async (_, _) =>
                 {
                     started.TrySetResult();
                     await gate.Task.ConfigureAwait(false);
@@ -253,8 +253,8 @@ public sealed class WorkQueueForceCancelDrainTests
         var statuses = new StatusLog();
         var processed = 0;
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) =>
                 {
                     Interlocked.Increment(ref processed);
                     return Task.CompletedTask;
@@ -301,8 +301,8 @@ public sealed class WorkQueueForceCancelDrainTests
     {
         var statuses = new StatusLog();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1)
                 .WithMaxConcurrency(1)
                 .WithQueueCapacity(4)
@@ -327,13 +327,13 @@ public sealed class WorkQueueForceCancelDrainTests
         Assert.Equal(SaWorkStatus.Completed, statuses.Terminal(2));
     }
 
-    static SaWorkQueue<int> Build(
+    static SaWorkChannel<int> Build(
         WedgedProcessor processor,
         ManualTimeProvider clock,
-        RecordingLogger<SaWorkQueue<int>> logger,
+        RecordingLogger<SaWorkChannel<int>> logger,
         StatusLog statuses)
         => new(
-            SaWorkQueueOptions<int>.Create(processor)
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithTimeProvider(clock)
                 .WithStatusCallback(statuses.Record),

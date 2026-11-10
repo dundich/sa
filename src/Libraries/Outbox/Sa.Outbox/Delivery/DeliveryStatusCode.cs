@@ -1,6 +1,9 @@
 namespace Sa.Outbox.Delivery;
 
 
+/// <summary>
+/// Delivery state of an outbox message, persisted by the storage provider.
+/// </summary>
 public enum DeliveryStatusCode
 {
     /// <summary>
@@ -124,6 +127,7 @@ public enum DeliveryStatusCode
 
 
 
+/// <summary>Predicates over <see cref="DeliveryStatusCode"/> values.</summary>
 public static class DeliveryStatusCodeExtensions
 {
     /// <summary>

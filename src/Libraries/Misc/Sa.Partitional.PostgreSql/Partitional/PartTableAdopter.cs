@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Sa.Data.PostgreSql;
-using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.SqlBuilder;
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -345,7 +344,7 @@ internal sealed partial class PartTableAdopter(
     /// Moves the identity/serial sequence past the copied identifiers, so the next INSERT does not
     /// collide with existing rows.
     /// </summary>
-    private async Task ResetIdentity(
+    private static async Task ResetIdentity(
         PgTransaction tx,
         ITableSettings settings,
         string qualifiedTable,
@@ -609,7 +608,7 @@ WHERE d.refobjid = to_regclass(@table)
             + "around the conversion.");
     }
 
-    private async Task<string> BackupName(
+    private static async Task<string> BackupName(
         PgTransaction tx,
         ITableSettings settings,
         CancellationToken cancellationToken)
@@ -665,7 +664,7 @@ WHERE d.refobjid = to_regclass(@table)
 
     private static string Join(string[] values) => values.Length == 0 ? "<none>" : string.Join(", ", values);
 
-    private async Task<int> Execute(
+    private static async Task<int> Execute(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
@@ -707,7 +706,7 @@ WHERE d.refobjid = to_regclass(@table)
         return rows;
     }
 
-    private async Task<long> ScalarLong(
+    private static async Task<long> ScalarLong(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
@@ -717,7 +716,7 @@ WHERE d.refobjid = to_regclass(@table)
         return Convert.ToInt64(value, CultureInfo.InvariantCulture);
     }
 
-    private async Task<long?> ScalarLongNullable(
+    private static async Task<long?> ScalarLongNullable(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
@@ -727,7 +726,7 @@ WHERE d.refobjid = to_regclass(@table)
         return value is null or DBNull ? null : Convert.ToInt64(value, CultureInfo.InvariantCulture);
     }
 
-    private async Task<string?> ScalarString(
+    private static async Task<string?> ScalarString(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
@@ -737,7 +736,7 @@ WHERE d.refobjid = to_regclass(@table)
         return value is null or DBNull ? null : (string)value;
     }
 
-    private async Task<bool> ScalarBool(
+    private static async Task<bool> ScalarBool(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
@@ -747,7 +746,7 @@ WHERE d.refobjid = to_regclass(@table)
         return value is not null and not DBNull && (bool)value;
     }
 
-    private async Task<object?> Scalar(
+    private static async Task<object?> Scalar(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,

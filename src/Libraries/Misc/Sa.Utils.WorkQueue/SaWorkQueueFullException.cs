@@ -1,7 +1,7 @@
 namespace Sa.Utils.WorkQueue;
 
 /// <summary>
-/// Thrown by <see cref="ISaWorkQueue{TInput}.Enqueue"/> or <see cref="ISaWorkQueue{TInput}.EnqueueMany"/>
+/// Thrown by <see cref="ISaWorkChannel{TInput}.Enqueue"/> or <see cref="ISaWorkChannel{TInput}.EnqueueMany"/>
 /// when the queue buffer is full and the queue is configured with <see cref="SaEnqueueStrategy.Throw"/>.
 /// </summary>
 /// <remarks>
@@ -47,15 +47,15 @@ public class SaWorkQueueFullException : Exception
     /// <summary>Gets the number of items in the buffer when the failure was raised (equal to <see cref="QueueCapacity"/> when full).</summary>
     public int QueuedCount { get; init; }
 
-    /// <summary>Gets the display name of the item that could not be enqueued (single-item <see cref="ISaWorkQueue{TInput}.Enqueue"/> only).</summary>
+    /// <summary>Gets the display name of the item that could not be enqueued (single-item <see cref="ISaWorkChannel{TInput}.Enqueue"/> only).</summary>
     public string? ItemDisplayName { get; init; }
 
-    /// <summary>Gets the number of items accepted before the buffer became full (<see cref="ISaWorkQueue{TInput}.EnqueueMany"/> only).</summary>
+    /// <summary>Gets the number of items accepted before the buffer became full (<see cref="ISaWorkChannel{TInput}.EnqueueMany"/> only).</summary>
     public int? AcceptedCount { get; init; }
 
     /// <summary>
     /// Gets the total number of items attempted when the failure was raised
-    /// (<see cref="ISaWorkQueue{TInput}.EnqueueMany"/> only). For a lazy enumerable this is
+    /// (<see cref="ISaWorkChannel{TInput}.EnqueueMany"/> only). For a lazy enumerable this is
     /// <see cref="AcceptedCount"/> plus the item that could not be enqueued; items later in
     /// the collection were never enumerated.
     /// </summary>

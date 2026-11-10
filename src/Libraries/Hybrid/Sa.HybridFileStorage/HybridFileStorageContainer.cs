@@ -6,9 +6,10 @@ namespace Sa.HybridFileStorage;
 /// Thread-safe container for multiple <see cref="IFileStorage"/> providers.
 /// Uses copy-on-write semantics to allow safe enumeration during concurrent mutations.
 /// </summary>
-internal sealed class HybridFileStorageContainer
+internal sealed class HybridFileStorageContainer : IDisposable
 {
     private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
+
     private readonly List<IFileStorage> _storages;
     private readonly StorageTypeOrdering _ordering;
 
@@ -94,4 +95,7 @@ internal sealed class HybridFileStorageContainer
     /// <param name="candidates">The candidates in registration order.</param>
     public IEnumerable<IFileStorage> OrderCandidates(string? basket, IEnumerable<IFileStorage> candidates)
         => _ordering.Apply(basket, candidates);
+
+    /// <summary>Releases the reader/writer lock.</summary>
+    public void Dispose() => _lock.Dispose();
 }

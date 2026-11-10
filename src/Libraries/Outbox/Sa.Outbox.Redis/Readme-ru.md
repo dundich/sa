@@ -346,7 +346,7 @@ services
         r => r.WithConnectionString("billing"),
         outbox => outbox.WithDeliveries(d => d.AddDelivery<InvoiceConsumer, Invoice>("invoices")));
 
-var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
+var cache = sp.GetRequiredService<IOutboxPublisherResolver>().GetPublisher("cache");
 ```
 
 - Настройки, named options, `IDatabase` и все команды — per provider; `WithOutboxSettings` /

@@ -12,6 +12,9 @@ public sealed partial class S3BucketClient : IBucketOperations
     /// <summary>DeleteObjects принимает не больше 1000 ключей за запрос.</summary>
     private const int MaxKeysPerDeleteRequest = 1000;
 
+    /// <summary>Creates the bucket if it does not exist.</summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns><see langword="true"/> when the bucket exists after the call.</returns>
     public async Task<bool> CreateBucket(CancellationToken ct)
     {
         HttpResponseMessage response;
@@ -34,6 +37,9 @@ public sealed partial class S3BucketClient : IBucketOperations
         }
     }
 
+    /// <summary>Deletes the bucket without forcing a recursive delete.</summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns><see langword="true"/> when the bucket is gone.</returns>
     public async Task<bool> DeleteBucket(CancellationToken ct)
     {
         return await DeleteBucket(forceDelete: false, ct).ConfigureAwait(false);
@@ -113,7 +119,7 @@ public sealed partial class S3BucketClient : IBucketOperations
         }
     }
 
-    private async Task DeleteObjects(IReadOnlyList<string> keys, CancellationToken ct)
+    private async Task DeleteObjects(List<string> keys, CancellationToken ct)
     {
         var data = BuildDeleteObjectsBody(keys);
         var payload = Encoding.UTF8.GetBytes(data);
@@ -186,6 +192,9 @@ public sealed partial class S3BucketClient : IBucketOperations
         return builder.Append("</Delete>").Flush();
     }
 
+    /// <summary>Checks whether the bucket exists.</summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns><see langword="true"/> when the bucket exists.</returns>
     public async Task<bool> IsBucketExists(CancellationToken ct)
     {
         HttpResponseMessage response;

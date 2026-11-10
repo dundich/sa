@@ -4,10 +4,17 @@
 
 Lightweight Npgsql wrapper for common PostgreSQL operations — no ORM overhead, with DI, Native AOT support, and minimal allocations.
 
+## Installation
+
+```bash
+dotnet add package Sa.Data.PostgreSql
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Registration (DI)](#registration-di)
   - [With DI](#with-di)

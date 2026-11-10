@@ -44,7 +44,7 @@ public sealed class WorkQueueEnqueueStrategyTests
     [Fact]
     public void Default_Strategy_IsWait()
     {
-        var options = SaWorkQueueOptions<int>.Create(new CountingProcessor());
+        var options = SaWorkQueueOptions.Create<int>(new CountingProcessor());
         Assert.Equal(SaEnqueueStrategy.Wait, options.EnqueueStrategy);
     }
 
@@ -52,8 +52,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Wait_Strategy_BlocksWhenFull_ThenAccepts()
     {
         var processor = new GateProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(1)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Wait));
@@ -81,8 +81,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Skip_Strategy_ReturnsFalseWhenFull_AndDoesNotCountDroppedItem()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip));
@@ -107,8 +107,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Skip_Strategy_PausedAtRuntime_FillsThenSkips()
     {
         var processor = new GateProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip));
@@ -134,8 +134,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Throw_Strategy_ThrowsWhenFull()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Throw));
@@ -162,8 +162,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     {
         var processor = new CountingProcessor();
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip)
@@ -188,8 +188,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Throw_Strategy_ExceptionCarriesQueueAndItemInfo()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Throw)
@@ -217,8 +217,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Throw_Strategy_FailedEnqueue_DoesNotCorruptTaskCount()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Throw));
@@ -250,8 +250,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Stopped_Queue_ThrowsInAllStrategies(SaEnqueueStrategy strategy)
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(strategy));
@@ -277,8 +277,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Disposed_Queue_ThrowsInAllStrategies(SaEnqueueStrategy strategy)
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(strategy));
@@ -295,8 +295,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task AvailableCapacity_TracksBufferOccupancy()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(3));
 

@@ -1,9 +1,8 @@
-using Sa.Partitional.PostgreSql.Repositories;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Partitional.PostgreSql;
-using Sa.Partitional.PostgreSql.Classes;
+using Sa.Partitional.PostgreSql.Repositories;
 
 namespace Sa.Partitional.PostgreSqlTests.Repositories;
 

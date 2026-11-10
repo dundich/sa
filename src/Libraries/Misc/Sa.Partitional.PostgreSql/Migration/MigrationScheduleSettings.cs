@@ -30,7 +30,7 @@ public sealed class MigrationScheduleSettings
     /// or only be triggered manually via <see cref="IMigrationService"/>.
     /// Default is <c>false</c>.
     /// </summary>
-    public bool AsBackgroundJob { get; set; } = false;
+    public bool AsBackgroundJob { get; set; }
 
     /// <summary>
     /// Gets or sets the optional name of the hosted background service job.

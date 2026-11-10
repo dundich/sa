@@ -18,12 +18,21 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
     private Task<WavHeader>? _headerTask;
     private int _disposed;
 
+    /// <summary>
+    /// Creates a reader over the given pipe reader. The reader is not owned by this instance.
+    /// </summary>
+    /// <param name="reader">The pipe reader to read WAV data from.</param>
     public AsyncWavReader(PipeReader reader)
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _ownsReader = false;
     }
 
+    /// <summary>
+    /// Creates a reader over the given pipe reader.
+    /// </summary>
+    /// <param name="reader">The pipe reader to read WAV data from.</param>
+    /// <param name="ownsReader">If true, the pipe reader is completed when this instance is disposed.</param>
     public AsyncWavReader(PipeReader reader, bool ownsReader)
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
@@ -38,6 +47,12 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         _ownsStream = ownsStream;
     }
 
+    /// <summary>
+    /// Creates a reader over the given stream. The stream is left open when the reader is disposed.
+    /// </summary>
+    /// <param name="stream">The readable stream containing WAV data.</param>
+    /// <param name="options">Optional options for the underlying pipe reader.</param>
+    /// <returns>A reader over the stream.</returns>
     public static AsyncWavReader Create(Stream stream, StreamPipeReaderOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -53,6 +68,12 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         return new AsyncWavReader(reader, stream, ownsStream: false);
     }
 
+    /// <summary>
+    /// Creates a reader over the specified file.
+    /// </summary>
+    /// <param name="filePath">Path to the WAV file.</param>
+    /// <param name="fileOptions">Optional options used to open the file.</param>
+    /// <returns>A reader over the file.</returns>
     public static AsyncWavReader CreateFromFile(string filePath, FileStreamOptions? fileOptions = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(filePath);
@@ -72,6 +93,11 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         return new AsyncWavReader(reader, stream, ownsStream: true);
     }
 
+    /// <summary>
+    /// Reads and caches the WAV header.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the wait for the header.</param>
+    /// <returns>The parsed WAV header.</returns>
     public Task<WavHeader> GetHeaderAsync(CancellationToken cancellationToken)
     {
         if (_headerTask is null)
@@ -105,11 +131,13 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
     /// <summary>
     /// Читает сырые сэмплы по каналам с поддержкой обрезки по времени.
     /// </summary>
+    /// <param name="cutRange">Optional time range to read; the whole file is read when <c>null</c>.</param>
     /// <param name="allowBufferReuse">
     /// Если true - возвращает ссылку на внутренний буфер (высокая производительность, 
     /// но данные должны быть скопированы до следующего yield return).
     /// Если false - возвращает копию данных (безопасно, но с аллокациями).
     /// </param>
+    /// <param name="cancellationToken">A token to cancel the enumeration.</param>
 #pragma warning disable S3776
     public async IAsyncEnumerable<AudioPacket> ReadSamplesPerChannelAsync(
 #pragma warning restore S3776
@@ -291,12 +319,16 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
     /// <remarks>
     /// Для потоковой обработки или воспроизведения
     /// </remarks>
+    /// <param name="targetFormat">The audio encoding of the produced samples.</param>
+    /// <param name="cutRange">Optional time range to read; the whole file is read when <c>null</c>.</param>
+    /// <param name="samplesPerBatch">The number of samples per emitted batch.</param>
     /// <param name="allowBufferReuse">
     /// Если true (по умолчанию) — каждый пакет канала ссылается на пулированный буфер этого
     /// канала, который перезаписывается следующей порцией того же канала. Данные нужно
     /// скопировать (или обработать) до следующего <c>MoveNextAsync</c>.
     /// Если false — пакеты независимы и переживают следующую итерацию.
     /// </param>
+    /// <param name="cancellationToken">A token to cancel the enumeration.</param>
     public async IAsyncEnumerable<AudioPacket> ReadStreamableChunksAsync(
         AudioEncoding targetFormat = AudioEncoding.Pcm16BitSigned,
         TimeRange? cutRange = null,
@@ -413,6 +445,9 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         header.DataSize = (uint)size;
     }
 
+    /// <summary>
+    /// Releases the resources held by the reader.
+    /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -429,6 +464,10 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Asynchronously releases the resources held by the reader.
+    /// </summary>
+    /// <returns>A task that completes when the resources have been released.</returns>
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)

@@ -1,7 +1,7 @@
-using System.Globalization;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.Publication;
+using System.Globalization;
 
 namespace Sa.Outbox.Tests;
 

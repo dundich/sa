@@ -15,7 +15,7 @@ internal static class CollectionUtils
         if (copyLength > 0)
         {
             Array.Copy(array, newArray, copyLength);
-            arrayPool.Return(array, clear);
+            arrayPool.ReturnToPool(array, clear);
         }
 
         array = newArray;

@@ -1,4 +1,4 @@
-namespace Sa.Classes;
+namespace Sa;
 
 /// <summary>
 /// Class MimeTypeMap.
@@ -771,9 +771,9 @@ internal static class MimeTypeMap
         }
 
 
-        if (!str.StartsWith(Dot))
+        if (!str.StartsWith(Dot, StringComparison.Ordinal))
         {
-            var index = str.LastIndexOf(Dot);
+            var index = str.LastIndexOf(Dot, StringComparison.Ordinal);
             if (index != -1 && str.Length > index + 1)
             {
                 str = str[(index + 1)..];
@@ -808,7 +808,7 @@ internal static class MimeTypeMap
     {
         ArgumentNullException.ThrowIfNull(mimeType);
 
-        if (mimeType.StartsWith(Dot))
+        if (mimeType.StartsWith(Dot, StringComparison.Ordinal))
         {
             throw new ArgumentException("Requested mime type is not valid: " + mimeType);
         }

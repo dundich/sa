@@ -2,7 +2,7 @@ namespace Sa.Utils.WorkQueue;
 
 /// <summary>
 /// Whether an accepted item keeps observing the cancellation token its producer passed
-/// to <see cref="ISaWorkQueue{TInput}.Enqueue"/>.
+/// to <see cref="ISaWorkChannel{TInput}.Enqueue"/>.
 /// </summary>
 public enum SaProducerCancellationMode
 {

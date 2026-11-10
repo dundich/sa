@@ -170,7 +170,7 @@ internal ref struct ValueStringBuilder(Span<char> initialBuffer)
 
         if (toReturn is not null)
         {
-            _arrayPool.Return(toReturn);
+            _arrayPool.ReturnToPool(toReturn);
         }
     }
 
@@ -227,7 +227,7 @@ internal ref struct ValueStringBuilder(Span<char> initialBuffer)
         _buffer = _array = poolArray;
         if (toReturn is not null)
         {
-            _arrayPool.Return(toReturn);
+            _arrayPool.ReturnToPool(toReturn);
         }
     }
 }

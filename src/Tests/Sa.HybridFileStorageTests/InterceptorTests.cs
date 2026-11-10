@@ -129,7 +129,7 @@ public sealed class InterceptorTests : IAsyncLifetime
                 c.AddUploadInterceptor(interceptor)));
 
         using var provider = services.BuildServiceProvider();
-         var storage = provider.GetRequiredService<IHybridFileStorage>();
+        var storage = provider.GetRequiredService<IHybridFileStorage>();
 
         // Act — upload blocked for filesystem by interceptor, should fall back to InMemory
         var input = new UploadFileInput { FileName = "blocked.txt", TenantId = 1 };

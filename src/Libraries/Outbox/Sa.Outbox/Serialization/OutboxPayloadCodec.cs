@@ -15,12 +15,12 @@ namespace Sa.Outbox.Serialization;
 /// </remarks>
 public static class OutboxPayloadCodec
 {
-    private static readonly RecyclableMemoryStreamManager StreamManager = new();
+    private static readonly RecyclableMemoryStreamManager _streamManager = new();
 
     /// <summary>Serializes <paramref name="value"/> into a new exact-size byte array.</summary>
     public static byte[] Serialize<T>(IOutboxMessageSerializer serializer, T value)
     {
-        using MemoryStream stream = StreamManager.GetStream();
+        using MemoryStream stream = _streamManager.GetStream();
         serializer.Serialize(stream, value);
         return stream.ToArray();
     }

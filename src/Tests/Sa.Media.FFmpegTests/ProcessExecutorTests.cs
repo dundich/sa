@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using Sa.Media.FFmpeg.Services;
+using System.Diagnostics;
 
 namespace Sa.Media.FFmpegTests;
 

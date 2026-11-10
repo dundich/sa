@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Simple client for Npqsql</Description>
+    <Description>Simple client for Npgsql</Description>
+    <PackageTags>postgresql npgsql database</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

@@ -254,7 +254,7 @@ public class OutboxRedisTests(OutboxRedisFixture fixture) : IClassFixture<Outbox
         int rented = await Manager.RentDelivery<TestMessage>(buffer, TimeSpan.FromMinutes(1), filter, ct);
         Assert.Equal(1, rented);
 
-        buffer[0].Error(new InvalidOperationException("boom"), "permanent");
+        buffer[0].Fail(new InvalidOperationException("boom"), "permanent");
         int finished = await Manager.ReturnDelivery<TestMessage>(buffer.AsMemory(0, rented), filter, ct);
         Assert.Equal(1, finished);
 

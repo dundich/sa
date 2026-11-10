@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 
 namespace Sa.Utils.WorkQueue.Tests;
 
@@ -88,8 +88,8 @@ public sealed class WorkQueueStabilityTests
     public async Task WaitForIdle_DuringShutdown_CompletesNormally()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor).WithConcurrencyLimit(2));
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor).WithConcurrencyLimit(2));
 
         await queue.Enqueue(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
@@ -107,8 +107,8 @@ public sealed class WorkQueueStabilityTests
     public async Task StopReader_ReducesConcurrency_NoAutoReplace()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(2)
                 .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.StopReader));
 
@@ -126,8 +126,8 @@ public sealed class WorkQueueStabilityTests
     public async Task RapidLimitChanges_NoSpuriousReaders()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(2)
                 .WithMaxConcurrency(10));
 
@@ -151,8 +151,8 @@ public sealed class WorkQueueStabilityTests
     public async Task DecreaseThenIncrease_NoReaderLeak()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(4)
                 .WithMaxConcurrency(8));
 
@@ -179,8 +179,8 @@ public sealed class WorkQueueStabilityTests
         var processor = new CountingProcessor();
         var callbackFailures = 0;
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(2)
                 .WithStatusCallback((item, status, ex) =>
                 {
@@ -205,8 +205,8 @@ public sealed class WorkQueueStabilityTests
     public async Task SyncShutdown_WithStuckReader_CompletesViaTimeout()
     {
         var processor = new NonCooperativeProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(1)
                 .WithShutdownTimeout(TimeSpan.FromSeconds(1)));
@@ -225,8 +225,8 @@ public sealed class WorkQueueStabilityTests
     public async Task ForceCancelReaders_ConcurrencyLimitReflectsZero()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(3)
                 .WithMaxConcurrency(5));
 
@@ -249,8 +249,8 @@ public sealed class WorkQueueStabilityTests
     {
         var processor = new CountingProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithMaxConcurrency(4)
                 .WithHandleItemFaulted((item, _) =>
@@ -266,8 +266,8 @@ public sealed class WorkQueueStabilityTests
     public void MaxConcurrency_ReturnsConfiguredValue()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithMaxConcurrency(7)
                 .WithConcurrencyLimit(2));
 
@@ -278,8 +278,8 @@ public sealed class WorkQueueStabilityTests
     public void QueueCapacity_ReturnsConfiguredValue()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithQueueCapacity(42)
                 .WithConcurrencyLimit(2));
 
@@ -290,8 +290,8 @@ public sealed class WorkQueueStabilityTests
     public async Task ForceCancelReaders_Sync_CancelsAllReaders()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(3)
                 .WithMaxConcurrency(5)
                 .WithShutdownTimeout(TimeSpan.FromSeconds(5)));
@@ -312,8 +312,8 @@ public sealed class WorkQueueStabilityTests
     public async Task WaitForIdle_WhilePaused_SkipsWait()
     {
         var processor = new BlockingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1));
 
         await queue.Enqueue(1, TestToken);
@@ -340,8 +340,8 @@ public sealed class WorkQueueStabilityTests
     public async Task Enqueue_AfterPause_IsAcceptedButWaitsUntilLimitRestored()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1));
 
         // Bring the queue to a steady state first.
@@ -384,8 +384,8 @@ public sealed class WorkQueueStabilityTests
         var processor = new BlockingProcessor();
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithReaderCancelMode(SaReaderCancelMode.Soft)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
@@ -418,8 +418,8 @@ public sealed class WorkQueueStabilityTests
         var processor = new BlockingProcessor();
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(2)
                 .WithReaderCancelMode(SaReaderCancelMode.Soft)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
@@ -454,8 +454,8 @@ public sealed class WorkQueueStabilityTests
         var processor = new BlockingProcessor();
         var cancelled = 0;
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithReaderCancelMode(SaReaderCancelMode.Soft)
                 .WithStatusCallback((_, status, _) =>
@@ -480,8 +480,8 @@ public sealed class WorkQueueStabilityTests
         var processor = new BlockingProcessor();
         var cancelled = 0;
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(2)
                 .WithReaderCancelMode(SaReaderCancelMode.Soft)
                 .WithStatusCallback((_, status, _) =>
@@ -510,8 +510,8 @@ public sealed class WorkQueueStabilityTests
         // has not run) at re-arm time — and it was exactly that late finally
         // that used to decrement the freshly assigned limit to 0.
         var processor = new GateIgnoringProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(4)
                 .WithMaxConcurrency(4)
                 .WithShutdownTimeout(TimeSpan.FromSeconds(5)));
@@ -558,8 +558,8 @@ public sealed class WorkQueueStabilityTests
     public async Task WaitForIdle_FailIfPaused_ThrowsWhenExplicitlyPausedWithPendingWork()
     {
         var processor = new BlockingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor).WithConcurrencyLimit(1));
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor).WithConcurrencyLimit(1));
 
         await queue.Enqueue(1, TestToken);
         await Task.Delay(50, TestToken); // reader picks up item 1 and blocks on the gate
@@ -592,8 +592,8 @@ public sealed class WorkQueueStabilityTests
     [Fact]
     public async Task WaitForIdle_FailIfPaused_IdleQueue_ReturnsImmediately()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(new CountingProcessor()).WithConcurrencyLimit(1));
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(new CountingProcessor()).WithConcurrencyLimit(1));
 
         // No work at all: the wait returns immediately regardless of the flag.
         await queue.WaitForIdleAsync(failIfNoProgress: true, cancellationToken: TestToken);
@@ -613,8 +613,8 @@ public sealed class WorkQueueStabilityTests
         // is Active and accepts items, but no reader can ever drain them — the
         // wait must report the state instead of blocking forever.
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(2)
                 .WithMaxConcurrency(4));
 
@@ -661,10 +661,10 @@ public sealed class WorkQueueStabilityTests
     public async Task WaitForIdle_OnAPausedThenStoppedQueue_WaitsForTheDrain()
     {
         var processor = new StubbornProcessor();
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(200)),
@@ -706,8 +706,8 @@ public sealed class WorkQueueStabilityTests
     {
         var processor = new StubbornProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(200)));
@@ -742,11 +742,11 @@ public sealed class WorkQueueStabilityTests
     [Fact]
     public async Task WaitForIdle_OnALiveQueue_KeepsBothEarlyReturnsAndTheirCauses()
     {
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
 
         // Paused while still enabled: returns, logs Paused, throws QueuePaused.
-        using (var paused = new SaWorkQueue<int>(
-                   SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using (var paused = new SaWorkChannel<int>(
+                   SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                        .WithConcurrencyLimit(1)
                        .WithQueueCapacity(8),
                    logger))
@@ -768,8 +768,8 @@ public sealed class WorkQueueStabilityTests
         // QueueHasNoReaders. The two are different causes and the caller can only act
         // on one of them, so a single "no progress" would have been a loss.
         var processor = new CountingProcessor();
-        using var emptied = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var emptied = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithMaxConcurrency(4),
@@ -796,8 +796,8 @@ public sealed class WorkQueueStabilityTests
         // A queue created already paused never spawns readers; pending items
         // can never be processed, so the wait must not hang for them.
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor).WithConcurrencyLimit(0));
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor).WithConcurrencyLimit(0));
 
         await queue.Enqueue(1, TestToken); // accepted, no readers ever
 

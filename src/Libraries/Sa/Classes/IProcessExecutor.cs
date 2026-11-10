@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace Sa.Classes;
+namespace Sa;
 
 internal interface IProcessExecutor
 {
@@ -64,21 +64,12 @@ internal interface IProcessExecutor
 /// <summary>
 /// Represents the result of a process execution, including exit code and output streams.
 /// </summary>
-public record ProcessExecutionResult(
-    /// <summary>
-    /// The exit code returned by the executed process.
-    /// A value of 0 typically indicates success.
-    /// </summary>
+/// <param name="ExitCode">The exit code returned by the executed process. A value of 0 typically indicates success.</param>
+/// <param name="StandardOutput">The standard output (stdout) captured from the process.</param>
+/// <param name="StandardError">The standard error (stderr) captured from the process.</param>
+internal record ProcessExecutionResult(
     int ExitCode,
-
-    /// <summary>
-    /// The standard output (stdout) captured from the process.
-    /// </summary>
     string StandardOutput,
-
-    /// <summary>
-    /// The standard error (stderr) captured from the process.
-    /// </summary>
     string StandardError);
 
 
@@ -285,6 +276,8 @@ internal sealed class ProcessExecutor : IProcessExecutor
     /// <param name="startInfo">Настройки процесса.</param>
     /// <param name="inputStream">Поток для stdin</param>
     /// <param name="onOutput">Callback, получающий stdout. Должен быть асинхронным.</param>
+    /// <param name="timeout">Optional limit on the whole run; <see langword="null"/> waits indefinitely.</param>
+    /// <param name="cancellationToken">Token to abort the run.</param>
     /// <returns>Задача, завершающаяся после обработки потока и проверки результата.</returns>
     public async Task ExecuteStdOutAsync(
         ProcessStartInfo startInfo,
@@ -382,7 +375,7 @@ internal sealed class ProcessExecutor : IProcessExecutor
         }
         catch (Exception ex)
         {
-            errorBuilder.Append($"stderr: read failed: {ex.Message}");
+            errorBuilder.Append(System.Globalization.CultureInfo.InvariantCulture, $"stderr: read failed: {ex.Message}");
         }
     }
 
@@ -500,22 +493,35 @@ internal sealed class ProcessExecutor : IProcessExecutor
 
 
 // Custom exceptions
-public sealed class ProcessExecutionException(int exitCode, string message, Exception? inner = null)
+/// <summary>The executed process finished with a non-zero exit code.</summary>
+/// <param name="exitCode">The exit code reported by the process.</param>
+/// <param name="message">The error message.</param>
+/// <param name="inner">The underlying failure, if any.</param>
+internal sealed class ProcessExecutionException(int exitCode, string message, Exception? inner = null)
     : Exception(message, inner)
 {
+    /// <summary>The exit code reported by the process.</summary>
     public int Exitcode => exitCode;
 }
 
-public sealed class ProcessExecutionResultException(ProcessExecutionResult result)
+/// <summary>The process finished with a non-zero exit code; carries the full result.</summary>
+/// <param name="result">The captured exit code, stdout and stderr.</param>
+internal sealed class ProcessExecutionResultException(ProcessExecutionResult result)
     : Exception($"Process failed (exit={result.ExitCode}): {result.StandardError}")
 {
+    /// <summary>The captured exit code, stdout and stderr.</summary>
     public ProcessExecutionResult Result { get; } = result;
 }
 
-public sealed class ProcessStartException(string message) : IOException(message)
+/// <summary>The process could not be started.</summary>
+/// <param name="message">The error message.</param>
+internal sealed class ProcessStartException(string message) : IOException(message)
 {
 }
 
-public sealed class ProcessTimeoutException(string message, Exception? inner = null) : TimeoutException(message, inner)
+/// <summary>The process did not finish within the allotted time.</summary>
+/// <param name="message">The error message.</param>
+/// <param name="inner">The underlying failure, if any.</param>
+internal sealed class ProcessTimeoutException(string message, Exception? inner = null) : TimeoutException(message, inner)
 {
 }

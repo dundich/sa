@@ -108,9 +108,9 @@ public class ClientsConfigurationTests
         var factory = new ClientConfigurationFactory(configuration);
 
         Assert.Equal(["acme", "beta"], factory.Clients.Order());
-        Assert.True(factory.TryFor("acme", out _));
-        Assert.False(factory.TryFor("nope", out _));
-        Assert.Equal("light", factory.For("acme")["theme"]);
+        Assert.True(factory.TryGetClient("acme", out _));
+        Assert.False(factory.TryGetClient("nope", out _));
+        Assert.Equal("light", factory.GetClient("acme")["theme"]);
     }
 
     [Fact]

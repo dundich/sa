@@ -4,7 +4,7 @@
 
 Base infrastructure library for implementing the **Transactional Outbox** pattern in distributed .NET systems. Guarantees atomic message recording alongside business operations within a single database transaction, with reliable delivery, retries, locking, multi-threading, and multi-tenancy support.
 
-Defines abstractions and core logic — concrete database work (PostgreSQL, SQL Server, etc.) is implemented by provider packages (`Sa.Outbox.PostgreSql`, `Sa.Outbox.SqlServer`, etc.).
+Defines abstractions and core logic — concrete database work is implemented by provider packages (`Sa.Outbox.PostgreSql`, `Sa.Outbox.Redis`).
 
 ---
 
@@ -175,7 +175,7 @@ manager.Apply("orders", s => s with { MaxBatchSize = 64 });
 
 // Pause / Resume
 manager.Pause("orders");
-manager.Resume("orders");
+manager.Unpause("orders");
 
 // Subscribe to changes
 using var sub = manager.Subscribe("orders", updated =>

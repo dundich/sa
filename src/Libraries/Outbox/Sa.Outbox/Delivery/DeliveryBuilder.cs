@@ -82,7 +82,7 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services, strin
     static string SanitizeString(string input)
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(input);
-        return SanitizeRegex().Replace(input, "_").ToLower();
+        return SanitizeRegex().Replace(input, "_").ToLowerInvariant();
     }
 
     [GeneratedRegex(@"[^a-zA-Z0-9_]")]

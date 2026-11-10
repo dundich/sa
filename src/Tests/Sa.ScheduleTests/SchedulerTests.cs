@@ -134,7 +134,7 @@ public sealed class SchedulerTests
             return Task.FromResult(StartsAgain);
         }
 
-        public Task Stop()
+        public Task StopAsync()
         {
             StopCalls++;
 

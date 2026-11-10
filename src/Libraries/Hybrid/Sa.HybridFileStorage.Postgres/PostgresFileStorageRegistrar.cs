@@ -25,7 +25,7 @@ namespace Sa.HybridFileStorage.Postgres;
 internal static class PostgresFileStorageRegistrar
 {
     /// <summary>
-    /// Performs the shared registration logic for all <see cref="Setup.AddSaPostgreSqlFileStorage"/>
+    /// Performs the shared registration logic for all <c>AddSaPostgreSqlFileStorage</c>
     /// overloads.
     /// </summary>
     public static IPartConfiguration Register(

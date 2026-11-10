@@ -1,10 +1,10 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 
 namespace Sa.Utils.WorkQueue.Tests;
 
 /// <summary>
-/// What <see cref="ISaWorkQueue{TInput}.PoolState"/> reports, and the one case it
+/// What <see cref="ISaWorkChannel{TInput}.PoolState"/> reports, and the one case it
 /// was added for.
 /// </summary>
 /// <remarks>
@@ -21,8 +21,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public void PoolState_OnAFreshQueue_IsActive()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(2));
 
         Assert.True(queue.IsEnabled);
@@ -32,8 +32,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_AfterPausing_IsPaused_AndRaisingTheLimitRestoresIt()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(2)
                 .WithQueueCapacity(8));
 
@@ -64,13 +64,13 @@ public sealed class WorkQueuePoolStateTests
     {
         var processor = new GateProcessor();
 
-        using var cancelled = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var cancelled = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8));
 
-        using var paused = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var paused = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8));
 
@@ -97,8 +97,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_AfterEveryReaderFaulted_IsNoReaders()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => throw new InvalidOperationException("boom"))
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => throw new InvalidOperationException("boom"))
                 .WithConcurrencyLimit(1)
                 .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.StopReader));
 
@@ -114,8 +114,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_AfterShutdown_IsStopped()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1));
 
         await queue.ShutdownAsync();
@@ -139,8 +139,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task ConcurrencyLimit_AfterShutdown_KeepsTheLimitItWasStoppedAt()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(4)
                 .WithMaxConcurrency(4));
 
@@ -157,8 +157,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task ConcurrencyLimit_AfterDispose_KeepsTheLimitItWasStoppedAt()
     {
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(3)
                 .WithMaxConcurrency(3));
 
@@ -170,8 +170,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_AfterDispose_IsStopped()
     {
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1));
 
         // No using: the queue is disposed here, and disposing it again would be the only
@@ -194,8 +194,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_PausedThenStopped_IsStopped_AndNotPaused()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1));
 
         queue.ConcurrencyLimit = 0;
@@ -217,8 +217,8 @@ public sealed class WorkQueuePoolStateTests
     {
         var processor = new GateProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithMaxConcurrency(4));
@@ -261,10 +261,10 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_NamesTheSameReasonThatWaitForIdleAsyncLogs()
     {
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
 
-        using var paused = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var paused = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8),
             logger);
@@ -280,8 +280,8 @@ public sealed class WorkQueuePoolStateTests
         await paused.Enqueue(1, TestToken);
 
         var faulted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var emptied = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => throw new InvalidOperationException("boom"))
+        using var emptied = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => throw new InvalidOperationException("boom"))
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithHandleItemFaulted((_, _) =>
@@ -318,7 +318,7 @@ public sealed class WorkQueuePoolStateTests
     /// The wait loop parks on the idle signal, and that signal only fires when the pending
     /// count reaches zero. A pause stops the readers without finishing the buffered items,
     /// so nothing was ever going to wake the caller: it parked on a queue that
-    /// <see cref="ISaWorkQueue{TInput}.PoolState"/> was already describing as
+    /// <see cref="ISaWorkChannel{TInput}.PoolState"/> was already describing as
     /// <see cref="SaWorkPoolState.Paused"/>, which is one of the two states the wait is
     /// documented to return on.
     /// </remarks>
@@ -327,8 +327,8 @@ public sealed class WorkQueuePoolStateTests
     {
         var processor = new GateProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8));
 
@@ -363,8 +363,8 @@ public sealed class WorkQueuePoolStateTests
     {
         var processor = new WedgedProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8));
 

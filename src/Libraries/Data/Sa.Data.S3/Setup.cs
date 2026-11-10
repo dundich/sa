@@ -6,6 +6,9 @@ using Microsoft.Extensions.Options;
 
 namespace Sa.Data.S3;
 
+/// <summary>
+/// Registration helpers for S3 bucket clients.
+/// </summary>
 public static class Setup
 {
     /// <summary>
@@ -51,7 +54,7 @@ public static class Setup
     /// (<c>FromConfiguration</c>, сырые значения) и затем <c>Configure</c> из
     /// <c>Options(...)</c> → <c>PostConfigure</c> (нормализация этим методом) и затем
     /// <c>PostConfigure</c> из <c>Options(...)</c> → валидация. Поэтому валидация видит нормализованный
-    /// <see cref="S3BucketClientSetupOptions.Endpoint"/>, а <c>ValidateOnStart()</c> превращает
+    /// <see cref="S3BucketSettings.Endpoint"/>, а <c>ValidateOnStart()</c> превращает
     /// неверную конфигурацию в <see cref="OptionsValidationException"/> на старте хоста, а не в
     /// <see cref="UriFormatException"/> посреди первой загрузки.
     /// </para>

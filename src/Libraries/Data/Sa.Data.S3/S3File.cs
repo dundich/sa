@@ -71,12 +71,14 @@ public sealed class S3File : IDisposable
         get => _response.StatusCode;
     }
 
+    /// <summary>Whether the underlying response is a success status.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator bool(S3File file)
     {
         return file._response.IsSuccessStatusCode;
     }
 
+    /// <summary>Disposes the underlying HTTP response.</summary>
     public void Dispose()
     {
         _response.Dispose();
@@ -98,6 +100,7 @@ public sealed class S3File : IDisposable
         return new S3Stream(_response, stream);
     }
 
+    /// <inheritdoc />
     [ExcludeFromCodeCoverage]
     public override string ToString()
     {

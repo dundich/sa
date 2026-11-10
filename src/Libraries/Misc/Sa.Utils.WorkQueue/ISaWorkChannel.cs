@@ -5,7 +5,7 @@ namespace Sa.Utils.WorkQueue;
 /// Provides back-pressure, dynamic concurrency scaling, and per-item error strategies.
 /// </summary>
 /// <typeparam name="TInput">The type of work item processed by the queue.</typeparam>
-public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
+public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Gets whether the queue is active and accepting new items.
@@ -247,7 +247,7 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// <em>disposed</em> queue is rejected; a stopped one is a normal thing to wait on.
     /// </para>
     /// <para>
-    /// <see cref="failIfNoProgress"/> therefore throws the exception that matches the cause —
+    /// <c>failIfNoProgress</c> therefore throws the exception that matches the cause —
     /// the queue is paused, or it has no readers — rather than one generic failure, because the
     /// two call for different responses and the message is where the caller reads which one it
     /// hit.
@@ -331,8 +331,8 @@ public interface ISaWorkQueue<TInput> : IDisposable, IAsyncDisposable
     /// This method is idempotent.
     /// </summary>
     /// <param name="timeout">Optional maximum time to wait for readers to terminate. If <see langword="null"/>, waits indefinitely.</param>
-    /// <param name="cancellationToken">Token to cancel the wait.</param>
-    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is cancelled.</exception>
+    /// <param name="ct">Token to cancel the wait.</param>
+    /// <exception cref="OperationCanceledException">If <paramref name="ct"/> is cancelled.</exception>
     /// <exception cref="TimeoutException">If <paramref name="timeout"/> elapses before all readers terminate.</exception>
     /// <remarks>
     /// Always interrupts in-flight work (<see cref="SaWorkStatus.Cancelled"/>) even when the queue

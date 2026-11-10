@@ -1,0 +1,15 @@
+<Project>
+
+  <!--
+    Packs each library's own Readme.md into its NuGet package.
+
+    This lives in Directory.Build.targets, not Directory.Build.props: the SDK's default `None`
+    glob (which creates the Readme.md item) is evaluated after the props are imported, so an
+    `Update` in props would match nothing and Pack would fail with NU5039. Targets are imported
+    after the items exist.
+  -->
+  <ItemGroup>
+    <None Update="Readme.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

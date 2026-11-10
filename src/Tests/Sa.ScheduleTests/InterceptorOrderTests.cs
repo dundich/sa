@@ -35,20 +35,20 @@ public sealed class InterceptorOrderTests : IAsyncDisposable
 
     sealed class OuterInterceptor : IJobInterceptor
     {
-        public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
+        public async Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
         {
             Order.Add("outer-before");
-            await next();
+            await continuation();
             Order.Add("outer-after");
         }
     }
 
     sealed class InnerInterceptor : IJobInterceptor
     {
-        public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
+        public async Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
         {
             Order.Add("inner-before");
-            await next();
+            await continuation();
             Order.Add("inner-after");
         }
     }
@@ -109,7 +109,7 @@ public sealed class InterceptorOrderTests : IAsyncDisposable
         string[] expected = ["outer-before", "inner-before", "job", "inner-after", "outer-after"];
         Assert.Equal(expected, Order.Entries);
 
-        await _scheduler.Stop();
+        await _scheduler.StopAsync();
     }
 
     public async ValueTask DisposeAsync()

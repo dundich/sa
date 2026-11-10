@@ -22,7 +22,7 @@ internal sealed class InMemoryOutboxRecord
 
     public string Part { get; init; } = string.Empty;
 
-    /// <summary>The payload type identity the pipeline filters on (<see cref="Type.Name"/>).</summary>
+    /// <summary>The payload type identity the pipeline filters on (<c>Type.Name</c>).</summary>
     public string PayloadType { get; init; } = string.Empty;
 
     public string PayloadId { get; init; } = string.Empty;

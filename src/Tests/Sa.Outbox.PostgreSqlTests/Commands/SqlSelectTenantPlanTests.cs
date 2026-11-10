@@ -187,7 +187,4 @@ public class SqlSelectTenantPlanTests(SqlSelectTenantPlanTests.Fixture fixture)
             .Select(line => line.Contains("--", StringComparison.Ordinal)
                 ? line[..line.IndexOf("--", StringComparison.Ordinal)]
                 : line));
-
-    private static string ExecutableSql(SqlOutboxBuilder builder)
-        => ExecutableSql(builder.SqlSelectTenant);
 }

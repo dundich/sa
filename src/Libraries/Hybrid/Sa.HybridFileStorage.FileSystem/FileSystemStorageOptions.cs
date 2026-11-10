@@ -47,7 +47,7 @@ public sealed class FileSystemStorageOptions
     /// <summary>
     /// Gets or sets a value indicating whether this storage is read-only. Defaults to <c>false</c>.
     /// </summary>
-    public bool IsReadOnly { get; set; } = false;
+    public bool IsReadOnly { get; set; }
 
     /// <summary>
     /// Validates the current configuration and throws a <see cref="ValidationException"/> if any property is invalid.

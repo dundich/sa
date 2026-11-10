@@ -24,7 +24,7 @@
   - [Отмена со стороны продюсера](#отмена-со-стороны-продюсера)
 - [Стратегии обработки ошибок](#стратегии-обработки-ошибок)
 - [Жизненный цикл статусов](#жизненный-цикл-статусов)
-- [API — `ISaWorkQueue<TInput>`](#api--isaworkqueuetinput)
+- [API — `ISaWorkChannel<TInput>`](#api--isaworkqueuetinput)
 - [⚠️ Важные заметки](#-важные-заметки)
 
 ## Возможности
@@ -90,7 +90,7 @@ b.Configure((sp, opts) =>
 ### 3️⃣ Используйте через внедрение
 
 ```csharp
-public class OrderService(ISaWorkQueue<OrderInput> queue)
+public class OrderService(ISaWorkChannel<OrderInput> queue)
 {
     // false только в режиме Skip, когда буфер полон и элемент отброшен
     public async Task<bool> SubmitAsync(OrderInput order, CancellationToken ct)
@@ -409,7 +409,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 
 ---
 
-## API — `ISaWorkQueue<TInput>`
+## API — `ISaWorkChannel<TInput>`
 
 | Член | Тип | Описание |
 |------|-----|----------|
@@ -448,7 +448,7 @@ var opts = SaWorkQueueOptions<OrderInput>.Create(processor)
 9. **Возврат `Enqueue`**: `ValueTask<bool>` — `false` только в режиме `Skip` при полном буфере (элемент отброшен и сообщается как `Skipped` через `StatusChanged`). Остановленная/disposed очередь всегда бросает исключение; оно несётся `ValueTask` и раскрывается через `await`.
 10. **`AvailableCapacity`**: только информационно — свободные слоты буфера. Не влияет на `IsIdle()`.
 11. **Никогда из `Execute`**: не вызывайте `Shutdown`, `ShutdownAsync`, `ForceCancelReaders`, `ForceCancelReadersAsync`, `Dispose`/`DisposeAsync` из реализации `ISaWork<TInput>.Execute`: вызывающий читатель — одна из задач, на которые ждут эти методы, поэтому вызов блокируется на весь `ShutdownTimeout` (по умолч. 30с). Передайте работу фоновой задаче (например, `Task.Run`).
-12. **Валидация опций**: первичный конструктор `SaWorkQueueOptions<TInput>` публичен, поэтому его аргументы обходят guard-ы `With*`; конструктор `SaWorkQueue<TInput>` повторно валидирует и бросает `ArgumentOutOfRangeException` до создания канала — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, положительный `ShutdownTimeout`, а четыре стратегических enum-а (`EnqueueStrategy`, `ProducerCancellation`, `ReaderCancelMode`, `ReaderCancellationOrder`) должны быть *определёнными* значениями: неопределённое иначе проваливается в default-ветку и молча становится `Skip`, `Hard` или `Lifo`. Те же правила раньше доходят до конфигурации через `SaWorkQueueSettingsValidator` и сообщаются как `OptionsValidationException` — при старте хоста (`ValidateOnStart()`) или на первом resolve очереди — а не как `ArgumentOutOfRangeException`. `MaxConcurrency = 0` и `null` означают одно и то же — «кол-во ядер» (ровно то, что даёт `WithMaxConcurrency(0)`); отрицательное значение ничего не значит и отклоняется. Присваивание отрицательного `ConcurrencyLimit` после создания тоже бросает — молчаливый кламп в 0 дал бы очередь, навсегда приостановленную, но по-прежнему сообщающую `IsEnabled == true`. Клампом, а не ошибкой, обрабатывается только *положительное* значение выше `MaxConcurrency`.
+12. **Валидация опций**: первичный конструктор `SaWorkQueueOptions<TInput>` публичен, поэтому его аргументы обходят guard-ы `With*`; конструктор `SaWorkChannel<TInput>` повторно валидирует и бросает `ArgumentOutOfRangeException` до создания канала — `ConcurrencyLimit` ≥ 0, `QueueCapacity` ≥ 1, `MaxConcurrency` ≥ 0, положительный `ShutdownTimeout`, а четыре стратегических enum-а (`EnqueueStrategy`, `ProducerCancellation`, `ReaderCancelMode`, `ReaderCancellationOrder`) должны быть *определёнными* значениями: неопределённое иначе проваливается в default-ветку и молча становится `Skip`, `Hard` или `Lifo`. Те же правила раньше доходят до конфигурации через `SaWorkQueueSettingsValidator` и сообщаются как `OptionsValidationException` — при старте хоста (`ValidateOnStart()`) или на первом resolve очереди — а не как `ArgumentOutOfRangeException`. `MaxConcurrency = 0` и `null` означают одно и то же — «кол-во ядер» (ровно то, что даёт `WithMaxConcurrency(0)`); отрицательное значение ничего не значит и отклоняется. Присваивание отрицательного `ConcurrencyLimit` после создания тоже бросает — молчаливый кламп в 0 дал бы очередь, навсегда приостановленную, но по-прежнему сообщающую `IsEnabled == true`. Клампом, а не ошибкой, обрабатывается только *положительное* значение выше `MaxConcurrency`.
 
 ---
 

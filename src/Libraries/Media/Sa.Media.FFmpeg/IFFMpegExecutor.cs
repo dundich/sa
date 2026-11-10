@@ -62,6 +62,8 @@ public interface IFFMpegExecutor
     /// <param name="onOutput">A callback that receives the resulting audio stream in WAV format with PCM S16 LE data.</param>
     /// <param name="outputSampleRate">Target sample rate (default: 16000 Hz). Use null to preserve original.</param>
     /// <param name="outputChannelCount">Number of output channels (e.g. 1 for mono). Use null to preserve original layout.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous conversion operation.</returns>
     /// <exception cref="ProcessStartException">Thrown when FFmpeg process fails to start.</exception>
     /// <exception cref="ProcessExecutionException">Thrown when FFmpeg returns a non-zero exit code (e.g. unsupported format, decoding error).</exception>
@@ -121,6 +123,8 @@ public interface IFFMpegExecutor
     /// <param name="onOutput">A callback that receives the resulting raw s16le binary stream.</param>
     /// <param name="outputSampleRate">Target sample rate (default: 16000 Hz). Use null to preserve original.</param>
     /// <param name="outputChannelCount">Number of output channels (e.g. 1 for mono). Use null to preserve original layout.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous conversion operation.</returns>
     /// <exception cref="ProcessStartException">Thrown when FFmpeg process fails to start.</exception>
     /// <exception cref="ProcessExecutionException">Thrown when FFmpeg returns a non-zero exit code (e.g. unsupported format, decoding error).</exception>
@@ -206,6 +210,8 @@ public interface IFFMpegExecutor
     /// <param name="onOutput">A callback that receives the resulting raw f32le binary stream.</param>
     /// <param name="outputSampleRate">Target sample rate (default: 16000 Hz). Use null to preserve original.</param>
     /// <param name="outputChannelCount">Number of output channels (e.g. 1 for mono). Use null to preserve original layout.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous conversion operation.</returns>
     Task ConvertToPcmF32LeRaw(
         Stream inputStream,
@@ -223,6 +229,7 @@ public interface IFFMpegExecutor
     /// <param name="inputFileName">Path to the input audio file.</param>
     /// <param name="outputFileName">Path to the output file.</param>
     /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
     Task<string> ConvertToMp3(
@@ -239,6 +246,7 @@ public interface IFFMpegExecutor
     /// <param name="outputFileName">Path to the output file.</param>
     /// <param name="isLibopus">If true, uses the Opus codec (Linux only); otherwise uses Vorbis.</param>
     /// <param name="isOverwrite">If true, overwrites the output file if it already exists.</param>
+    /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
     Task<string> ConvertToOgg(
@@ -249,5 +257,8 @@ public interface IFFMpegExecutor
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Gets the default executor instance created with the default options.
+    /// </summary>
     public static IFFMpegExecutor Default { get; } = new FFMpegExecutorFactory().CreateFFMpegExecutor();
 }

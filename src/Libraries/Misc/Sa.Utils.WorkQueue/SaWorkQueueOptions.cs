@@ -1,7 +1,7 @@
 namespace Sa.Utils.WorkQueue;
 
 /// <summary>
-/// Immutable options for <see cref="SaWorkQueue{TInput}"/>.
+/// Immutable options for <see cref="SaWorkChannel{TInput}"/>.
 /// </summary>
 /// <remarks>
 /// The <c>With*</c> methods validate eagerly and are the preferred way to build options.
@@ -136,7 +136,7 @@ public sealed record SaWorkQueueOptions<TInput>(
     /// path — a reader that ignores cancellation, a force-cancel that never unwinds — is
     /// otherwise only reachable by sleeping through it. Point this at a controllable
     /// clock and those paths complete as soon as the test advances time.
-    /// </summary>
+    /// </param>
     /// <remarks>
     /// A production caller should leave this alone. It governs waits only, never the
     /// processors themselves, so a clock that jumps cannot corrupt a queue's state.
@@ -147,19 +147,26 @@ public sealed record SaWorkQueueOptions<TInput>(
         return this with { TimeProvider = timeProvider };
     }
 
+}
+
+/// <summary>Factory helpers for <see cref="SaWorkQueueOptions{TInput}"/>.</summary>
+public static class SaWorkQueueOptions
+{
     /// <summary>Creates options from a delegate that processes a single item.</summary>
+    /// <typeparam name="TInput">The item type.</typeparam>
     /// <param name="process">Async delegate that receives the item and a cancellation token.</param>
-    public static SaWorkQueueOptions<TInput> Create(Func<TInput, CancellationToken, Task> process)
+    public static SaWorkQueueOptions<TInput> Create<TInput>(Func<TInput, CancellationToken, Task> process)
     {
         ArgumentNullException.ThrowIfNull(process);
         return new(new DelegatingWork<TInput>(process));
     }
 
     /// <summary>Creates options from an <see cref="ISaWork{TInput}"/> processor.</summary>
-    public static SaWorkQueueOptions<TInput> Create(ISaWork<TInput> processor)
+    /// <typeparam name="TInput">The item type.</typeparam>
+    /// <param name="processor">The processor.</param>
+    public static SaWorkQueueOptions<TInput> Create<TInput>(ISaWork<TInput> processor)
     {
         ArgumentNullException.ThrowIfNull(processor);
         return new(processor);
     }
 }
-

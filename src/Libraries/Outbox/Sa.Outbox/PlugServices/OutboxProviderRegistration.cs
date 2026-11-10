@@ -2,7 +2,7 @@ namespace Sa.Outbox.PlugServices;
 
 /// <summary>
 /// DI marker written by <c>AddOutboxProvider</c>. Kept separate from the keyed contract
-/// registrations so the duplicate check can inspect the <see cref="IServiceCollection"/> before the
+/// registrations so the duplicate check can inspect the <c>IServiceCollection</c> before the
 /// container is built, so a keyed registry can tell "no provider for this key" apart from
 /// "provider registered but broken", and so validation needs no service construction.
 /// </summary>

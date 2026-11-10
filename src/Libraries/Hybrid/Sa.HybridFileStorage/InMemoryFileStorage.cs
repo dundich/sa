@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 namespace Sa.HybridFileStorage;
 
 /// <summary>
-/// An in-memory implementation of <see cref="IFileStorage"/> that stores file data as byte arrays in a <see cref="ConcurrentDictionary{TKey, TValue"/>.
+/// An in-memory implementation of <see cref="IFileStorage"/> that stores file data as byte arrays in a <c>ConcurrentDictionary&lt;string, byte[]&gt;</c>.
 /// Suitable for testing, caching, or small-scale scenarios where persistence is not required.
 /// </summary>
 public sealed class InMemoryFileStorage(
@@ -60,6 +60,11 @@ public sealed class InMemoryFileStorage(
         }
     }
 
+    /// <summary>Stores a copy of the stream under a new file id.</summary>
+    /// <param name="metadata">The upload metadata.</param>
+    /// <param name="fileStream">The content to store.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The stored file identity.</returns>
     public async Task<StorageResult> UploadAsync(
         UploadFileInput metadata,
         Stream fileStream,
@@ -74,7 +79,7 @@ public sealed class InMemoryFileStorage(
             .ConfigureAwait(false);
         byte[] fileData = memoryStream.ToArray();
 
-        string path = Path.Combine(Basket, metadata.TenantId.ToString(), metadata.FileName).Replace('\\', '/');
+        string path = Path.Combine(Basket, metadata.TenantId.ToString(System.Globalization.CultureInfo.InvariantCulture), metadata.FileName).Replace('\\', '/');
         //"storageType://basket/tenant/filename"
         string fileId = $"{StorageType}{SchemeSeparator}{path}";
 
@@ -108,6 +113,7 @@ public sealed class InMemoryFileStorage(
         return new StorageResult(fileId, fileId, StorageType, _timeProvider.GetUtcNow());
     }
 
+    /// <inheritdoc />
     public async Task<bool> DownloadAsync(
         string fileId,
         Func<Stream, CancellationToken, Task> loadStream,
@@ -127,6 +133,7 @@ public sealed class InMemoryFileStorage(
         return false;
     }
 
+    /// <inheritdoc />
     public Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
@@ -149,10 +156,12 @@ public sealed class InMemoryFileStorage(
         return Task.FromResult(false);
     }
 
+    /// <inheritdoc />
     public bool CanProcess(string? fileId)
         => !string.IsNullOrEmpty(fileId)
             && fileId.AsSpan().StartsWith(SchemePrefix.AsSpan(), StringComparison.Ordinal);
 
+    /// <inheritdoc />
     public async Task<FileMetadata?> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default)
     {
         if (!_storage.ContainsKey(fileId)) return null;

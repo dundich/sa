@@ -6,6 +6,7 @@ using Sa.Partitional.PostgreSql;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Sa.HybridFileStorage.Postgres;
 
@@ -64,10 +65,15 @@ internal sealed class PostgresFileStorage(
     // The qualified name and the four statements are fixed for the lifetime of the instance, so they
     // are built once. (Field initializers cannot read another field, hence the static helper.)
     private readonly string _qualifiedTableName = Qualify(options);
-    private readonly string _insertSql = string.Format(InsertSql, Qualify(options));
-    private readonly string _deleteSql = string.Format(DeleteSql, Qualify(options));
-    private readonly string _selectSql = string.Format(SelectSql, Qualify(options));
-    private readonly string _selectMetadataSql = string.Format(SelectMetadataSql, Qualify(options));
+    private static readonly CompositeFormat InsertSqlFormat = CompositeFormat.Parse(InsertSql);
+    private static readonly CompositeFormat DeleteSqlFormat = CompositeFormat.Parse(DeleteSql);
+    private static readonly CompositeFormat SelectSqlFormat = CompositeFormat.Parse(SelectSql);
+    private static readonly CompositeFormat SelectMetadataSqlFormat = CompositeFormat.Parse(SelectMetadataSql);
+
+    private readonly string _insertSql = string.Format(System.Globalization.CultureInfo.InvariantCulture, InsertSqlFormat, Qualify(options));
+    private readonly string _deleteSql = string.Format(System.Globalization.CultureInfo.InvariantCulture, DeleteSqlFormat, Qualify(options));
+    private readonly string _selectSql = string.Format(System.Globalization.CultureInfo.InvariantCulture, SelectSqlFormat, Qualify(options));
+    private readonly string _selectMetadataSql = string.Format(System.Globalization.CultureInfo.InvariantCulture, SelectMetadataSqlFormat, Qualify(options));
 
     private readonly string _schemePrefix
         = $"{options.StorageType}{FileIdParser.SchemeSeparator}{options.Basket}/";
@@ -124,7 +130,7 @@ internal sealed class PostgresFileStorage(
             throw new ArgumentException(
                 $"FileName exceeds the maximum length of {PostgresFileStorageTable.NameMaxLength} " +
                 $"characters, but was {metadata.FileName.Length}.",
-                nameof(UploadFileInput.FileName));
+                nameof(metadata));
         }
 
         // PostgreSQL text cannot hold a NUL byte, and the name reaches both the `name` column and the
@@ -132,7 +138,7 @@ internal sealed class PostgresFileStorage(
         if (metadata.FileName.Contains('\0'))
         {
             throw new ArgumentException(
-                "FileName must not contain a NUL character.", nameof(UploadFileInput.FileName));
+                "FileName must not contain a NUL character.", nameof(metadata));
         }
 
         // A seekable stream knows its size up front, so an oversized upload is rejected before any
@@ -164,7 +170,7 @@ internal sealed class PostgresFileStorage(
             throw new ArgumentException(
                 $"The file extension exceeds the maximum length of " +
                 $"{PostgresFileStorageTable.FileExtMaxLength} characters, but was {fileExtension.Length}.",
-                nameof(UploadFileInput.FileName));
+                nameof(metadata));
         }
 
         // If stream isn't seekable, copy into a recyclable MemoryStream first. Npgsql writes a

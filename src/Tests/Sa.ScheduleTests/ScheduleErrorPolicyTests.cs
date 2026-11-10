@@ -51,7 +51,7 @@ public sealed class ScheduleErrorPolicyTests
         // than being bypassed by an unresolvable handler.
         Assert.True(Volatile.Read(ref handlerCalls) >= 1);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public sealed class ScheduleErrorPolicyTests
 
         Assert.True(lifetime.StopRequests > 0, "ThenCloseApplication never reached the lifetime");
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public sealed class ScheduleErrorPolicyTests
 
         Assert.IsType<InvalidOperationException>(error);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     private static async Task WaitForAsync(Func<bool> condition)

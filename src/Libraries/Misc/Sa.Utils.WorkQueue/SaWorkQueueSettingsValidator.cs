@@ -6,7 +6,7 @@ namespace Sa.Utils.WorkQueue;
 /// Validates <see cref="SaWorkQueueSettings"/> for the options pipeline.
 /// </summary>
 /// <remarks>
-/// The same rules the <see cref="SaWorkQueue{TInput}"/> constructor enforces, checked
+/// The same rules the <see cref="SaWorkChannel{TInput}"/> constructor enforces, checked
 /// earlier — as an <see cref="OptionsValidationException"/> at host start
 /// (<c>ValidateOnStart()</c>) or on the first read of the options — so a typo in
 /// <c>appsettings</c> surfaces as a configuration error rather than an

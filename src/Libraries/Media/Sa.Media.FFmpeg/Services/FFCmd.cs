@@ -20,7 +20,7 @@ namespace Sa.Media.FFmpeg.Services;
 /// потому что параметром <c>async</c>-метода ref struct быть не может (CS4012). Оба одноразовые.
 /// </para>
 /// </summary>
-internal ref struct FFCmd
+internal ref struct FFCmd : IDisposable
 {
     ValueStringBuilder _b;
     string? _outputFileName;
@@ -100,7 +100,9 @@ internal ref struct FFCmd
         EnsureNotConsumed();
         _consumed = true;
 
-        return Build();
+        string command = Build();
+        _b.Dispose();
+        return command;
     }
 
     /// <summary>
@@ -115,19 +117,37 @@ internal ref struct FFCmd
         _consumed = true;
 
         if (_outputFileName is null)
+        {
             throw new InvalidOperationException(
                 $"{nameof(BuildFile)}() requires a file command built by {nameof(File)}(). " +
                 "This command has no output file — it writes to stdout.");
+        }
 
-        return (Build(), _outputFileName, _isOverwrite);
+        string command = Build();
+        _b.Dispose();
+        return (command, _outputFileName, _isOverwrite);
+    }
+
+    /// <summary>Returns the pooled buffer when the command was built but never used.</summary>
+    public void Dispose()
+    {
+        if (_consumed)
+        {
+            return;
+        }
+
+        _consumed = true;
+        _b.Dispose();
     }
 
     void EnsureNotConsumed()
     {
         if (_consumed)
+        {
             throw new InvalidOperationException(
                 $"{nameof(FFCmd)} is single-use: the command has already been built. " +
                 "Call ToString() or BuildFile() exactly once, at the point where the command is handed to the executor.");
+        }
     }
 
     string Build()

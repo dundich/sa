@@ -1,7 +1,6 @@
 using Npgsql;
 using Sa.Partitional.PostgreSql;
 using Sa.Partitional.PostgreSql.Cache;
-using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSqlTests.Cache;
 

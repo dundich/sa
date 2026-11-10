@@ -30,13 +30,13 @@ public interface IClientConfigurationFactory
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="client"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="client"/> is blank.</exception>
-    IConfiguration For(string client);
+    IConfiguration GetClient(string client);
 
     /// <summary>
     /// Resolves the view of <paramref name="client"/> and reports whether the configuration
     /// actually declares that client.
     /// </summary>
-    bool TryFor(string client, out IConfiguration configuration);
+    bool TryGetClient(string client, out IConfiguration configuration);
 }
 
 /// <summary>
@@ -83,7 +83,7 @@ public sealed class ClientConfigurationFactory : IClientConfigurationFactory
     }
 
     /// <inheritdoc/>
-    public IConfiguration For(string client)
+    public IConfiguration GetClient(string client)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(client);
 
@@ -92,9 +92,9 @@ public sealed class ClientConfigurationFactory : IClientConfigurationFactory
     }
 
     /// <inheritdoc/>
-    public bool TryFor(string client, out IConfiguration configuration)
+    public bool TryGetClient(string client, out IConfiguration configuration)
     {
-        configuration = For(client);
+        configuration = GetClient(client);
 
         return _configuration
             .GetSection(SectionPath)
@@ -158,7 +158,7 @@ public static class ClientConfigurationExtensions
 
         services.TryAddKeyedSingleton<IConfiguration>(
             KeyedService.AnyKey,
-            (sp, key) => sp.GetRequiredService<IClientConfigurationFactory>().For((string)key!));
+            (sp, key) => sp.GetRequiredService<IClientConfigurationFactory>().GetClient((string)key!));
 
         return services;
     }

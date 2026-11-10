@@ -122,7 +122,8 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
         // The alias is opt-in, so it must be switched on explicitly.
         var builder = new ConfigurationBuilder();
         var options = new PostgreSqlConfigurationOptions("SELECT key, value FROM config_provider_test WHERE key LIKE 'sa%' OR key = 'single_underscore_key'")
-        with { DoubleUnderscoreAsSeparator = true };
+        with
+        { DoubleUnderscoreAsSeparator = true };
 
         builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 
@@ -150,7 +151,8 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
         // With the alias off, a key that legitimately contains __ is stored verbatim.
         var builder = new ConfigurationBuilder();
         var options = new PostgreSqlConfigurationOptions("SELECT key, value FROM config_provider_test WHERE key IN ('literal__double', 'sa__pg__host')")
-        with { DoubleUnderscoreAsSeparator = false };
+        with
+        { DoubleUnderscoreAsSeparator = false };
 
         builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 

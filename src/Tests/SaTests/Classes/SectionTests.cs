@@ -1,5 +1,5 @@
-using Sa.Classes;
 
+using Sa;
 namespace SaTests.Classes;
 
 /// <summary>

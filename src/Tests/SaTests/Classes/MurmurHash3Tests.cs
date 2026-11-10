@@ -1,4 +1,4 @@
-using Sa.Classes;
+using Sa;
 using System.Text;
 
 namespace SaTests.Classes;

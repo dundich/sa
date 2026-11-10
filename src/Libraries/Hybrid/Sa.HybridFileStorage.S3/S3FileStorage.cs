@@ -1,4 +1,3 @@
-using Sa.Classes;
 using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
 using System.Runtime.CompilerServices;
@@ -89,7 +88,7 @@ internal sealed class S3FileStorage(
         await EnsureBucketAsync(cancellationToken).ConfigureAwait(false);
 
         // Оптимизированная сборка пути без лишних аллокаций
-        var filePath = string.Concat(_pathPrefix, "/", metadata.TenantId.ToString(), "/", metadata.FileName);
+        var filePath = string.Concat(_pathPrefix, "/", metadata.TenantId.ToString(System.Globalization.CultureInfo.InvariantCulture), "/", metadata.FileName);
 
         var extension = Path.GetExtension(filePath);
         var contentType = MimeTypeMap.GetMimeType(extension);

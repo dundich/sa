@@ -7,7 +7,7 @@ namespace Sa.Outbox.PostgreSql.Commands;
 
 internal sealed class ErrorDeliveryCommand(
     IPgDataSource dataSource,
-    SqlOutboxBuilder sqlTemplate): IErrorDeliveryCommand
+    SqlOutboxBuilder sqlTemplate) : IErrorDeliveryCommand
 {
 
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlError(len));
@@ -146,10 +146,10 @@ internal sealed class ErrorDeliveryCommand(
     internal readonly record struct ErrorRow(Exception Exception, string ErrorMessage, ErrorInfo Info);
 
     /// <summary>
-/// Hash of the compact error text, for callers that do not have the text at hand (test pins).
-/// The production path computes the text once in <see cref="GroupByException"/> and hashes it
-/// directly — do not route production through this helper, it would compose the text twice (M5).
-/// </summary>
+    /// Hash of the compact error text, for callers that do not have the text at hand (test pins).
+    /// The production path computes the text once in <see cref="GroupByException"/> and hashes it
+    /// directly — do not route production through this helper, it would compose the text twice (M5).
+    /// </summary>
     internal static long GetErrorMessageHash(Exception exception)
     {
         // Hash the same compact representation used in GetErrorMessage so that

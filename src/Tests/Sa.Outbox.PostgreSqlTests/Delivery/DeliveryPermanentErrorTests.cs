@@ -53,7 +53,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
             await Task.Delay(100, cancellationToken);
             foreach (var msg in messages.Span)
             {
-                msg.Error(s_err, "test");
+                msg.Fail(s_err, "test");
             }
         }
     }

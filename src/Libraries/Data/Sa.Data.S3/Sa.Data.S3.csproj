@@ -2,8 +2,8 @@
 
 	<PropertyGroup>
 		<Title>Sa.Data.S3</Title>
-		<Description>Simple client for S3 (Sa.Data.S3)</Description>
-		<PackageTags>s3</PackageTags>
+		<Description>Simple client for S3</Description>
+		<PackageTags>s3 object-storage cloud</PackageTags>
 	</PropertyGroup>
 
 	<ItemGroup>

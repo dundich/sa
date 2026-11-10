@@ -1,8 +1,7 @@
-namespace Sa.Utils.WorkQueue;
-
 using Microsoft.Extensions.Logging;
 using System.Threading.Channels;
 
+namespace Sa.Utils.WorkQueue;
 /// <summary>
 /// A bounded work queue. Producers push items into a fixed-size channel, a
 /// resizable pool of reader tasks takes them out and runs them, and every item
@@ -21,7 +20,7 @@ using System.Threading.Channels;
 /// <see cref="SnapshotReaderTasks"/>.</description></item>
 /// <item><description><c>_pendingSync</c> — the pending-item count and the idle
 /// signal. Written only by <see cref="MarkActive"/>,
-/// <see cref="MarkInactive"/> and <see cref="ResetPendingIfAllReadersDone"/>.</description></item>
+/// <see cref="MarkInactive()"/> and <see cref="ResetPendingIfAllReadersDone"/>.</description></item>
 /// </list>
 /// <para><b>Slot accounting.</b> A reader holds one slot of the concurrency limit
 /// from the moment it is registered until <see cref="RemoveReader"/> takes it
@@ -39,7 +38,7 @@ using System.Threading.Channels;
 /// <see cref="LaunchReader"/> after releasing it. Inline execution is kept — it is
 /// the queue's normal speed — but it no longer happens with a lock held.</para>
 /// </remarks>
-public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
+public sealed partial class SaWorkChannel<TInput> : ISaWorkChannel<TInput>
 {
     /// <summary>One item in the channel: the payload plus the token its producer owns.</summary>
     /// <remarks>
@@ -239,7 +238,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     /// <summary>
     /// Accepted-but-not-yet-finished items. Written only under
     /// <c>_pendingSync</c>, read without the lock through
-    /// <see cref="Volatile.Read(ref int)"/> so that <see cref="QueueTasks"/> and
+    /// <c>Volatile.Read(ref int)</c> so that <see cref="QueueTasks"/> and
     /// <see cref="IsIdle"/> stay callable from any thread without taking one.
     /// </summary>
     private int _taskCount;
@@ -253,7 +252,7 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
 
     /// <summary>
     /// Underlying int of <see cref="QueueState"/>. Written only through
-    /// Interlocked, read only through <see cref="Volatile.Read(ref int)"/>, so the
+    /// Interlocked, read only through <c>Volatile.Read(ref int)</c>, so the
     /// state is observed consistently across threads — a plain field read is not
     /// volatile on non-x86 architectures.
     /// </summary>
@@ -303,7 +302,10 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
     /// <summary>Whether the current logical flow is already running a shutdown of this queue.</summary>
     private bool IsShuttingDownHere => _shutdownDepth.Value > 0;
 
-    public SaWorkQueue(SaWorkQueueOptions<TInput> options, ILogger<SaWorkQueue<TInput>>? logger = null)
+    /// <summary>Creates a queue over the given options and starts its reader pool.</summary>
+    /// <param name="options">The validated queue configuration.</param>
+    /// <param name="logger">Optional logger for diagnostics.</param>
+    public SaWorkChannel(SaWorkQueueOptions<TInput> options, ILogger<SaWorkChannel<TInput>>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(options.Processor);
@@ -315,13 +317,13 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         if (options.ConcurrencyLimit < 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.ConcurrencyLimit), options.ConcurrencyLimit, "Concurrency limit must be 0 (paused) or positive.");
+                nameof(options), options.ConcurrencyLimit, "Concurrency limit must be 0 (paused) or positive.");
         }
 
         if (options.QueueCapacity is < 1)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.QueueCapacity), options.QueueCapacity, "Queue capacity must be at least 1.");
+                nameof(options), options.QueueCapacity, "Queue capacity must be at least 1.");
         }
 
         // "Unbounded" is expressed as null, or as 0 through WithMaxConcurrency,
@@ -331,14 +333,14 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         if (options.MaxConcurrency is < 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.MaxConcurrency), options.MaxConcurrency,
+                nameof(options), options.MaxConcurrency,
                 $"Max concurrency must be 0 (processor count) or positive; use null for the default.");
         }
 
         if (options.ShutdownTimeout is { } shutdownTimeout && shutdownTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.ShutdownTimeout), shutdownTimeout, "Shutdown timeout must be positive.");
+                nameof(options), shutdownTimeout, "Shutdown timeout must be positive.");
         }
 
         // The three strategy enums are read through switch arms and equality tests, so an
@@ -350,28 +352,28 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         if (!Enum.IsDefined(options.EnqueueStrategy))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.EnqueueStrategy), options.EnqueueStrategy,
+                nameof(options), options.EnqueueStrategy,
                 "Enqueue strategy must be Wait, Skip or Throw.");
         }
 
         if (!Enum.IsDefined(options.ReaderCancelMode))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.ReaderCancelMode), options.ReaderCancelMode,
+                nameof(options), options.ReaderCancelMode,
                 "Reader cancel mode must be Hard or Soft.");
         }
 
         if (!Enum.IsDefined(options.ReaderCancellationOrder))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.ReaderCancellationOrder), options.ReaderCancellationOrder,
+                nameof(options), options.ReaderCancellationOrder,
                 "Reader cancellation order must be Lifo, Fifo, RoundRobin or Random.");
         }
 
         if (!Enum.IsDefined(options.ProducerCancellation))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.ProducerCancellation), options.ProducerCancellation,
+                nameof(options), options.ProducerCancellation,
                 "Producer cancellation mode must be Observe or Detached.");
         }
 
@@ -411,10 +413,14 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         StartReaders(_concurrency);
     }
 
+    /// <summary>Whether the queue accepts new work (not paused, stopped or disposed).</summary>
     public bool IsEnabled => Volatile.Read(ref _state) == (int)QueueState.Active;
 
+    /// <summary>Number of accepted items that have not finished yet.</summary>
     public int QueueTasks => Volatile.Read(ref _taskCount);
 
+    /// <summary>Whether no accepted item is still in flight.</summary>
+    /// <returns><see langword="true"/> when the queue has nothing left to finish.</returns>
     public bool IsIdle() => Volatile.Read(ref _taskCount) == 0;
 
     /// <summary>
@@ -453,14 +459,19 @@ public sealed partial class SaWorkQueue<TInput> : ISaWorkQueue<TInput>
         }
     }
 
+    /// <summary>The configured upper bound of the reader pool.</summary>
     public int MaxConcurrency => _maxConcurrency;
+    /// <summary>The buffer capacity configured at construction.</summary>
     public int QueueCapacity => _queueCapacity;
 
+    /// <summary>Free slots left in the buffer.</summary>
     public int AvailableCapacity
         => _queueCapacity - (_queue.Reader.CanCount ? _queue.Reader.Count : 0);
 
+    /// <summary>The error that triggered the shutdown, if the queue stopped because of one.</summary>
     public Exception? ShutdownError => _shutdownError;
 
+    /// <summary>The current reader count; setting it resizes the pool (0 pauses the queue).</summary>
     public int ConcurrencyLimit
     {
         get => _concurrency;

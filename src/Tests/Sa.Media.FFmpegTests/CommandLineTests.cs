@@ -25,8 +25,10 @@ public sealed class CommandLineTests
         // артефактов предыдущих запусков (иначе «isOverwrite=false + файл есть» валит
         // тест, который в чистом каталоге прошёл бы).
         foreach (var file in new[] { Output, Path.Combine(Path.GetDirectoryName(Output)!, "out put.wav") })
+        {
             if (File.Exists(file))
                 File.Delete(file);
+        }
     }
 
     static (FFMpegExecutor Executor, RecordingProcessExecutor Process) CreateMpegExecutor()

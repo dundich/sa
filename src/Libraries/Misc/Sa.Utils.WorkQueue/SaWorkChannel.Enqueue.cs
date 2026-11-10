@@ -9,10 +9,10 @@ namespace Sa.Utils.WorkQueue;
 /// attempting the write, because a refusal is not known until the write is tried.
 /// The count therefore always has exactly one matching
 /// <see cref="RejectEnqueue"/> or <see cref="EnqueueWaitingAsync"/> on the failure
-/// branch — that pairing is what keeps <see cref="SaWorkQueue{TInput}.IsIdle"/>
+/// branch — that pairing is what keeps <see cref="SaWorkChannel{TInput}.IsIdle"/>
 /// honest.
 /// </remarks>
-public sealed partial class SaWorkQueue<TInput>
+public sealed partial class SaWorkChannel<TInput>
 {
     /// <inheritdoc />
     public async ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default)
@@ -198,7 +198,7 @@ public sealed partial class SaWorkQueue<TInput>
     /// Builds the "buffer is full" exception, in the shape the caller can use: a
     /// batch reports how far it got, a single enqueue names the item that missed.
     /// </summary>
-    private Exception FullException(WorkItem item, int? accepted, int? attempted)
+    private SaWorkQueueFullException FullException(WorkItem item, int? accepted, int? attempted)
         => attempted is null
             ? new SaWorkQueueFullException(_queueCapacity, _queue.Reader.Count, _getItemDisplayName(item.Input))
             : new SaWorkQueueFullException(_queueCapacity, _queue.Reader.Count, accepted!.Value, attempted.Value);

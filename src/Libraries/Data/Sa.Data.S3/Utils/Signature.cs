@@ -203,7 +203,7 @@ internal sealed class Signature(string region, string service, string secretKey,
             }
         }
 
-        _arrayPool.Return(byteBuffer);
+        _arrayPool.ReturnToPool(byteBuffer);
     }
 
 
@@ -236,7 +236,7 @@ internal sealed class Signature(string region, string service, string secretKey,
             ? written
             : -1;
 
-        _arrayPool.Return(byteBuffer);
+        _arrayPool.ReturnToPool(byteBuffer);
 
         return result;
     }

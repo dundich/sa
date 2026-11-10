@@ -1,5 +1,3 @@
-using System.Data;
-using System.Text;
 using Npgsql;
 using Sa.Extensions;
 using Sa.Outbox.PostgreSql.Configuration;
@@ -65,43 +63,43 @@ internal sealed class NpgsqlOutboxReader(PgOutboxTableSettings settings)
 
         public Ordinals GetOrdinals(NpgsqlDataReader reader) => Ordinals.Capture(reader, settings.TaskQueue);
 
-        public Guid GetMgsId(NpgsqlDataReader reader, in Ordinals o)
+        public static Guid GetMgsId(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetGuid(o.MsgId);
 
-        public string GetMgsPayloadId(NpgsqlDataReader reader, in Ordinals o)
+        public static string GetMgsPayloadId(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetString(o.MsgPayloadId);
 
-        public int GetTenantId(NpgsqlDataReader reader, in Ordinals o)
+        public static int GetTenantId(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt32(o.TenantId);
 
-        public string GetMsgPart(NpgsqlDataReader reader, in Ordinals o)
+        public static string GetMsgPart(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetString(o.MsgPart);
 
-        public DateTimeOffset GetMsgCreatedAt(NpgsqlDataReader reader, in Ordinals o)
+        public static DateTimeOffset GetMsgCreatedAt(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt64(o.MsgCreatedAt).ToDateTimeOffsetFromUnixTimestamp();
 
-        public long GetTaskId(NpgsqlDataReader reader, in Ordinals o)
+        public static long GetTaskId(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt64(o.TaskId);
 
-        public DateTimeOffset GetTaskCreatedAt(NpgsqlDataReader reader, in Ordinals o)
+        public static DateTimeOffset GetTaskCreatedAt(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt64(o.TaskCreatedAt).ToDateTimeOffsetFromUnixTimestamp();
 
-        public long GetDeliveryId(NpgsqlDataReader reader, in Ordinals o)
+        public static long GetDeliveryId(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt64(o.DeliveryId);
 
-        public int GetDeliveryAttempt(NpgsqlDataReader reader, in Ordinals o)
+        public static int GetDeliveryAttempt(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt32(o.DeliveryAttempt);
 
-        public long GetErrorId(NpgsqlDataReader reader, in Ordinals o)
+        public static long GetErrorId(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt64(o.ErrorId);
 
-        public string GetConsumerGroup(NpgsqlDataReader reader, in Ordinals o)
+        public static string GetConsumerGroup(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetString(o.ConsumerGroup);
 
-        public int GetDeliveryStatusCode(NpgsqlDataReader reader, in Ordinals o)
+        public static int GetDeliveryStatusCode(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt32(o.DeliveryStatusCode);
 
-        public string GetDeliveryStatusMessage(NpgsqlDataReader reader, in Ordinals o)
+        public static string GetDeliveryStatusMessage(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetString(o.DeliveryStatusMessage);
 
         /// <summary>
@@ -112,13 +110,12 @@ internal sealed class NpgsqlOutboxReader(PgOutboxTableSettings settings)
         /// to <see cref="DateTimeOffset.MinValue"/> here. Matches how GetMsgCreatedAt and
         /// GetTaskCreatedAt return a converted value rather than a raw column.
         /// </summary>
-        public DateTimeOffset GetDeliveryCreatedAt(NpgsqlDataReader reader, in Ordinals o)
+        public static DateTimeOffset GetDeliveryCreatedAt(NpgsqlDataReader reader, in Ordinals o)
         {
             var createdAt = reader.GetInt64(o.DeliveryCreatedAt);
             return createdAt == 0 ? DateTimeOffset.MinValue : createdAt.ToDateTimeOffsetFromUnixTimestamp();
         }
     }
-
     public class TypeReader(PgOutboxTableSettings settings)
     {
         /// <summary>
@@ -140,13 +137,12 @@ internal sealed class NpgsqlOutboxReader(PgOutboxTableSettings settings)
 
         public Ordinals GetOrdinals(NpgsqlDataReader reader) => Ordinals.Capture(reader, settings.Type);
 
-        public long GetTypeId(NpgsqlDataReader reader, in Ordinals o)
+        public static long GetTypeId(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt64(o.TypeId);
 
-        public string GetTypeName(NpgsqlDataReader reader, in Ordinals o)
+        public static string GetTypeName(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetString(o.TypeName);
     }
-
     public class MsgReader(PgOutboxTableSettings settings)
     {
         /// <summary>
@@ -167,10 +163,10 @@ internal sealed class NpgsqlOutboxReader(PgOutboxTableSettings settings)
 
         public Ordinals GetOrdinals(NpgsqlDataReader reader) => Ordinals.Capture(reader, settings.Message);
 
-        public Stream GetMgsPayload(NpgsqlDataReader reader, in Ordinals o)
+        public static Stream GetMgsPayload(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetStream(o.MsgPayload);
 
-        public int GetTenantId(NpgsqlDataReader reader, in Ordinals o)
+        public static int GetTenantId(NpgsqlDataReader reader, in Ordinals o)
             => reader.GetInt32(o.TenantId);
     }
 

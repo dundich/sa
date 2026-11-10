@@ -154,7 +154,7 @@ public sealed class JobErrorHandlerTests
 
         public Task<int> Restart(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
-        public Task Stop() => Task.WhenAll(jobs.Select(job => job.Stop()));
+        public Task StopAsync() => Task.WhenAll(jobs.Select(job => job.StopAsync()));
     }
 
     private sealed class FakeJobScheduler(Guid jobId) : IJobScheduler
@@ -180,7 +180,7 @@ public sealed class JobErrorHandlerTests
 
         public Task<bool> Start(CancellationToken cancellationToken) => Task.FromResult(true);
 
-        public Task Stop()
+        public Task StopAsync()
         {
             Interlocked.Increment(ref _stopCalls);
 

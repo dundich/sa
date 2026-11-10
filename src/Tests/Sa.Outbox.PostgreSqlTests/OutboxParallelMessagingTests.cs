@@ -148,7 +148,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
             await Task.Delay(300, TestContext.Current.CancellationToken);
         }
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.True(CommonCounter.Counter > 0);
     }

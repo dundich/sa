@@ -117,7 +117,7 @@ public sealed class OutboxBorrowedDataSourceTests(OutboxBorrowedDataSourceTests.
             await Task.Delay(200, TestContext.Current.CancellationToken);
         }
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.Equal((int)total, BorrowedConsumer.Counter);
     }

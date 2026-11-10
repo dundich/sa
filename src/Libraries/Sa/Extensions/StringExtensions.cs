@@ -1,4 +1,3 @@
-using Sa.Classes;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -41,7 +40,7 @@ internal static partial class StringExtensions
     public static string NormalizeWhiteSpace(this string? str, bool isTrimmed = true)
 #pragma warning restore S3776
     {
-        if (string.IsNullOrEmpty(str)) return String.Empty;
+        if (string.IsNullOrEmpty(str)) return string.Empty;
 
         bool slowPath = false;
 

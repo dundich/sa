@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <Description>FFmpeg wrapper</Description>
+        <Description>FFmpeg wrapper: media probing and transcoding</Description>
+        <PackageTags>audio video ffmpeg transcoding</PackageTags>
         <GeneratePathProperty>true</GeneratePathProperty>
         <!-- Должно совпадать с $(FfmpegSupportedRids) в buildTransitive\Sa.Media.FFmpeg.Rid.props -->
         <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>

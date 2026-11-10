@@ -224,7 +224,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         Assert.True(manager.IsPaused(group), "Группа должна быть паузнутой");
 
         // ProcessMessages with paused settings should return 0
-        var pausedSettings = manager.Get(group) ?? fixture.SettingsForTestGroup;
+        var pausedSettings = manager.GetSettings(group) ?? fixture.SettingsForTestGroup;
         result = await fixture.Sub.ProcessMessages<TestMessage>(pausedSettings, TestContext.Current.CancellationToken);
         Assert.Equal(0, result);
 
@@ -233,11 +233,11 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         Assert.Equal(consumedBeforePause, CountingMessageConsumer.TotalMessagesConsumed);
 
         // Resume
-        manager.Resume(group);
+        manager.Unpause(group);
         Assert.False(manager.IsPaused(group));
 
         // After resume, read updated settings from manager and process remaining messages
-        var resumedSettings = manager.Get(group) ?? fixture.SettingsForTestGroup;
+        var resumedSettings = manager.GetSettings(group) ?? fixture.SettingsForTestGroup;
         result = await fixture.Sub.ProcessMessages<TestMessage>(resumedSettings, TestContext.Current.CancellationToken);
         Assert.True(result > 0, "После Resume должны обработаться оставшиеся сообщения");
     }
@@ -267,7 +267,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         Assert.Equal(0, CountingMessageConsumer.ConsumeCount);
 
         // Resume and process
-        manager.Resume(group);
+        manager.Unpause(group);
 
         var result = await fixture.Sub.ProcessMessages<TestMessage>(fixture.SettingsForTestGroup, TestContext.Current.CancellationToken);
         Assert.True(result > 0, "После Resume должны обработаться сообщения");
@@ -309,7 +309,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
 
         // Pause and re-read settings from the manager — the authoritative snapshot includes Paused=true
         manager.Pause(group);
-        var pausedSettings = manager.Get(group) ?? fixture.SettingsForTestGroup;
+        var pausedSettings = manager.GetSettings(group) ?? fixture.SettingsForTestGroup;
         Assert.True(pausedSettings.Paused, "Settings retrieved from manager must reflect Paused state");
 
         // Small delay to ensure the pause is visible before the next poll
@@ -322,10 +322,10 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         Assert.Equal(0, pausedCount);
 
         // Resume
-        manager.Resume(group);
+        manager.Unpause(group);
 
         // Process remaining — read updated settings from manager after resume
-        var resumedSettings = manager.Get(group) ?? fixture.SettingsForTestGroup;
+        var resumedSettings = manager.GetSettings(group) ?? fixture.SettingsForTestGroup;
         long remainingCount = await fixture.Sub.ProcessMessages<TestMessage>(
             resumedSettings, TestContext.Current.CancellationToken);
         Assert.True(remainingCount > 0,
@@ -364,7 +364,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         // Apply new MaxBatchSize via manager
         manager.Apply(group, s => s with { MaxBatchSize = newMaxBatch });
 
-        var updatedSettings = manager.Get(group);
+        var updatedSettings = manager.GetSettings(group);
         Assert.NotNull(updatedSettings);
         Assert.Equal(newMaxBatch, updatedSettings.MaxBatchSize);
 
@@ -400,7 +400,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         manager.Apply(group, s => s with { MaxDeliveryAttempts = 5 });
         manager.Apply(group, s => s with { MaxBatchSize = 1 });
 
-        var finalSettings = manager.Get(group);
+        var finalSettings = manager.GetSettings(group);
         Assert.NotNull(finalSettings);
         Assert.Equal(1, finalSettings.MaxBatchSize);
         Assert.Equal(5, finalSettings.MaxDeliveryAttempts);
@@ -513,7 +513,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         var manager = fixture.ConsumerManager;
         var group = fixture.CountingGroupId;
 
-        var settings = manager.Get(group);
+        var settings = manager.GetSettings(group);
         Assert.NotNull(settings);
         Assert.Equal(group, settings.ConsumerGroupId);
     }
@@ -524,7 +524,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         // Arrange
         var manager = fixture.ConsumerManager;
 
-        var settings = manager.Get("non-existent-group");
+        var settings = manager.GetSettings("non-existent-group");
         Assert.Null(settings);
     }
 
@@ -541,7 +541,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         manager.Unregister(group);
 
         Assert.False(manager.IsRegistered(group));
-        Assert.Null(manager.Get(group));
+        Assert.Null(manager.GetSettings(group));
 
         // Restore for other tests in the sequential collection
         manager.TryRegister(group, settings);
@@ -678,7 +678,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
             {
                 try
                 {
-                    var settings = manager.Get(group);
+                    var settings = manager.GetSettings(group);
                     if (settings is not null)
                     {
                         _ = settings.MaxBatchSize;
@@ -704,7 +704,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
                 {
                     manager.Pause(group);
                     await Task.Delay(1, cts.Token);
-                    manager.Resume(group);
+                    manager.Unpause(group);
                 }
                 catch (Exception ex)
                 {

@@ -3,9 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
-using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.Poison;
-using Sa.Outbox.PostgreSql.Services;
 
 namespace Sa.Outbox.PostgreSql.Services.Plug;
 

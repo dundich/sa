@@ -1,5 +1,3 @@
-using Sa.Partitional.PostgreSql.Classes;
-
 namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
@@ -27,7 +25,7 @@ public interface IPartRepository
     /// For range partitioning this creates a date-bounded child; for list partitioning it creates a value-constrained child.
     /// </summary>
     /// <param name="tableName">The root table name (schema-qualified or unqualified).</param>
-    /// <param name="date">The reference date used to compute the partition boundary.</param>
+    /// <param name="periodStart">The reference date used to compute the partition boundary.</param>
     /// <param name="partValues">Partition key values.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>
@@ -36,7 +34,7 @@ public interface IPartRepository
     /// </returns>
     Task<int> CreatePart(
         string tableName,
-        DateTimeOffset date,
+        DateTimeOffset periodStart,
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default);
 

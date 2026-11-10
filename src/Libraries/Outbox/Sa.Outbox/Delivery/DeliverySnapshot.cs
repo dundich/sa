@@ -35,7 +35,7 @@ internal sealed class DeliverySnapshot(
         // partition creation.
         OutboxConsumerSettings[] settings = [.. consumerManager
                 .GetAllConsumerGroupIds()
-                .Select(groupId => consumerManager.Get(new OutboxGroupKey(providerKey, groupId)))
+                .Select(groupId => consumerManager.GetSettings(new OutboxGroupKey(providerKey, groupId)))
                 .Where(s => s != null)
                 .Cast<OutboxConsumerSettings>()];
         return settings;

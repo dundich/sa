@@ -2,6 +2,7 @@
 
 	<PropertyGroup>
 		<Description>Simple Outbox for Redis Streams (publishing and using messages)</Description>
+		<PackageTags>outbox redis streams messaging</PackageTags>
 	</PropertyGroup>
 
 	<ItemGroup>

@@ -26,7 +26,7 @@ public class SaWorkQueueRecoveryTests
             MaxConcurrency = 4
         };
 
-        using var queue = new SaWorkQueue<int>(options);
+        using var queue = new SaWorkChannel<int>(options);
 
         // Добавим несколько задач
         await queue.Enqueue(1, TestToken);
@@ -59,7 +59,7 @@ public class SaWorkQueueRecoveryTests
             StatusChanged = (item, status, ex) => statuses.Add(status),
             HandleItemFaulted = (_, __) => SaExecutionErrorStrategy.Continue
         };
-        using var queue = new SaWorkQueue<int>(options);
+        using var queue = new SaWorkChannel<int>(options);
 
         // Act
         await queue.Enqueue(1, TestToken);          // OK
@@ -93,7 +93,7 @@ public class SaWorkQueueRecoveryTests
             StatusChanged = (item, status, ex) => statuses.Add(status),
             HandleItemFaulted = (_, __) => SaExecutionErrorStrategy.StopReader
         };
-        using var queue = new SaWorkQueue<int>(options);
+        using var queue = new SaWorkChannel<int>(options);
 
         // Act
         await queue.Enqueue(1, TestToken);          // OK
@@ -125,7 +125,7 @@ public class SaWorkQueueRecoveryTests
             HandleItemFaulted = (_, __) => SaExecutionErrorStrategy.ShutdownQueue
         };
 
-        using var queue = new SaWorkQueue<int>(options);
+        using var queue = new SaWorkChannel<int>(options);
 
         // Act
         await queue.Enqueue(1, TestToken);          // OK

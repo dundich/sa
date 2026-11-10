@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Configuration;
-using Sa.Classes;
 using Sa.Configuration.SecretStore;
 
 namespace Sa.Configuration.PostProcessing;

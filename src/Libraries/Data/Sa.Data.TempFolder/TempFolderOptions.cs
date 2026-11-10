@@ -5,7 +5,7 @@ namespace Sa.Data.TempFolder;
 
 /// <summary>
 /// Configuration options for one temp-folder instance registered through
-/// <see cref="Setup.AddSaTempFolder"/>.
+/// <c>AddSaTempFolder</c>.
 /// </summary>
 /// <remarks>
 /// A single mutable type served by the standard <c>Microsoft.Extensions.Options</c> pipeline:
@@ -127,7 +127,7 @@ public sealed class TempFolderOptions
     /// completely: no cleanup, no volume scan, no <see cref="OnVolumeExceeded"/>, no free-space
     /// check. Startup access validation then only checks that the root exists and can be listed.
     /// </summary>
-    public bool ReadOnly { get; set; } = false;
+    public bool ReadOnly { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum total volume of the root directory in bytes.
@@ -136,7 +136,7 @@ public sealed class TempFolderOptions
     /// <see cref="OnVolumeExceeded"/>; the event only notifies — nothing is deleted because of
     /// the volume itself, expired-folder cleanup stays age-based.
     /// </summary>
-    public long MaxTotalSize { get; set; } = 0;
+    public long MaxTotalSize { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether folder sizes are measured and cached at all.
@@ -144,7 +144,7 @@ public sealed class TempFolderOptions
     /// <see cref="MaxTotalSize"/> is inert. Turn on to enable the low-priority background
     /// measurement.
     /// </summary>
-    public bool TrackVolume { get; set; } = false;
+    public bool TrackVolume { get; set; }
 
     /// <summary>
     /// Gets or sets the debounce delay before a file access (write or successful read) refreshes
@@ -191,7 +191,7 @@ public sealed class TempFolderOptions
     /// invokes <see cref="OnFreeSpaceReached"/> edge-triggered on reaching (or recovering from)
     /// this limit. The event only notifies — nothing is deleted because of the free space itself.
     /// </summary>
-    public long MinFreeSpace { get; set; } = 0;
+    public long MinFreeSpace { get; set; }
 
     /// <summary>
     /// Gets or sets how often the background service polls the free space of the root's volume.

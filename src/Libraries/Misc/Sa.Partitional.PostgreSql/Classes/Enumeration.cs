@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
-namespace Sa.Partitional.PostgreSql.Classes;
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// A base record that implements a type-safe enumeration pattern using reflection-discovered static fields.
@@ -42,7 +42,7 @@ public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberT
     /// Returns all registered enumeration values discovered via reflection.
     /// </summary>
     [DebuggerStepThrough]
-    public static IEnumerable<T> GetAll() => AllItems.Value.Values;
+    internal static IEnumerable<T> GetAll() => AllItems.Value.Values;
 
     /// <summary>
     /// Computes the absolute difference between the integer IDs of two enumeration values.
@@ -52,7 +52,7 @@ public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberT
     /// <param name="secondId">The second enumeration value.</param>
     /// <returns>The absolute difference between their <see cref="Id"/> values.</returns>
     [DebuggerStepThrough]
-    public static int DiffId(Enumeration<T> firstId, Enumeration<T> secondId)
+    internal static int DiffId(Enumeration<T> firstId, Enumeration<T> secondId)
         => Math.Abs(firstId.Id - secondId.Id);
 
     /// <summary>
@@ -63,7 +63,7 @@ public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberT
     /// <returns>The matching enumeration value.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no variant has the specified id.</exception>
     [DebuggerStepThrough]
-    public static T FromId(int id)
+    internal static T FromId(int id)
         => TryFromId(id, out var matchingItem)
             ? matchingItem
             : throw new InvalidOperationException($"'{id}' is not a valid value in {typeof(T)}");
@@ -76,7 +76,7 @@ public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberT
     /// <returns>The matching enumeration value.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no variant has the specified name.</exception>
     [DebuggerStepThrough]
-    public static T FromName(string name)
+    internal static T FromName(string name)
         => (TryFromName(name, out var matchingItem))
             ? matchingItem
         : throw new InvalidOperationException($"'{name}' is not a valid display name in {typeof(T)}");
@@ -90,7 +90,7 @@ public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberT
     /// <remarks>A <c>null</c> name is reported as "not found" rather than throwing from the
     /// underlying dictionary, so a nullable value read from the database can be passed straight in.</remarks>
     [DebuggerStepThrough]
-    public static bool TryFromName(string? name, [MaybeNullWhen(false)] out T item)
+    internal static bool TryFromName(string? name, [MaybeNullWhen(false)] out T item)
     {
         if (name is null)
         {
@@ -108,7 +108,7 @@ public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberT
     /// <param name="item">The matching enumeration value, or <c>null</c> if not found.</param>
     /// <returns><c>true</c> if a matching variant was found; otherwise <c>false</c>.</returns>
     [DebuggerStepThrough]
-    public static bool TryFromId(int id, [MaybeNullWhen(false)] out T item)
+    internal static bool TryFromId(int id, [MaybeNullWhen(false)] out T item)
         => AllItems.Value.TryGetValue(id, out item);
 
     /// <summary>
@@ -119,8 +119,84 @@ public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberT
     [DebuggerStepThrough]
     public int CompareTo(T? other) => Id.CompareTo(other!.Id);
 
+    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>.</summary>
+    /// <param name="left">The left value.</param>
+    /// <param name="right">The right value.</param>
+    /// <returns><see langword="true"/> when <paramref name="left"/> sorts before <paramref name="right"/>.</returns>
+    public static bool operator <(Enumeration<T> left, Enumeration<T> right) => left.Id < right.Id;
+
+    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>.</summary>
+    /// <param name="left">The left value.</param>
+    /// <param name="right">The right value.</param>
+    /// <returns><see langword="true"/> when <paramref name="left"/> sorts before or equal to <paramref name="right"/>.</returns>
+    public static bool operator <=(Enumeration<T> left, Enumeration<T> right) => left.Id <= right.Id;
+
+    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>.</summary>
+    /// <param name="left">The left value.</param>
+    /// <param name="right">The right value.</param>
+    /// <returns><see langword="true"/> when <paramref name="left"/> sorts after <paramref name="right"/>.</returns>
+    public static bool operator >(Enumeration<T> left, Enumeration<T> right) => left.Id > right.Id;
+
+    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>.</summary>
+    /// <param name="left">The left value.</param>
+    /// <param name="right">The right value.</param>
+    /// <returns><see langword="true"/> when <paramref name="left"/> sorts after or equal to <paramref name="right"/>.</returns>
+    public static bool operator >=(Enumeration<T> left, Enumeration<T> right) => left.Id >= right.Id;
+
     /// <summary>
     /// Returns the display <see cref="Name"/> of this enumeration value.
     /// </summary>
     public override string ToString() => Name;
+}
+
+/// <summary>
+/// Non-generic entry points for reflection-discovered enumeration variants. Lives outside
+/// <see cref="Enumeration{T}"/> because a static member on a generic type is per-instantiation
+/// and cannot be called without naming the variant type twice.
+/// </summary>
+public static class Enumeration
+{
+    /// <summary>Returns all variants of <typeparamref name="T"/>.</summary>
+    /// <typeparam name="T">The enumeration type.</typeparam>
+    public static IEnumerable<T> GetAll<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>()
+        where T : Enumeration<T>
+        => Enumeration<T>.GetAll();
+
+    /// <summary>Absolute difference between the ids of two variants.</summary>
+    /// <typeparam name="T">The enumeration type.</typeparam>
+    /// <param name="first">The first variant.</param>
+    /// <param name="second">The second variant.</param>
+    public static int DiffId<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>(T first, T second)
+        where T : Enumeration<T>
+        => Enumeration<T>.DiffId(first, second);
+
+    /// <summary>Looks up a variant by id; throws when it does not exist.</summary>
+    /// <typeparam name="T">The enumeration type.</typeparam>
+    /// <param name="id">The id to look up.</param>
+    public static T FromId<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>(int id)
+        where T : Enumeration<T>
+        => Enumeration<T>.FromId(id);
+
+    /// <summary>Looks up a variant by display name; throws when it does not exist.</summary>
+    /// <typeparam name="T">The enumeration type.</typeparam>
+    /// <param name="name">The display name to look up.</param>
+    public static T FromName<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>(string name)
+        where T : Enumeration<T>
+        => Enumeration<T>.FromName(name);
+
+    /// <summary>Attempts to look up a variant by display name.</summary>
+    /// <typeparam name="T">The enumeration type.</typeparam>
+    /// <param name="name">The display name to look up.</param>
+    /// <param name="item">The matching variant, or <see langword="null"/>.</param>
+    public static bool TryFromName<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>(string? name, [MaybeNullWhen(false)] out T item)
+        where T : Enumeration<T>
+        => Enumeration<T>.TryFromName(name, out item);
+
+    /// <summary>Attempts to look up a variant by id.</summary>
+    /// <typeparam name="T">The enumeration type.</typeparam>
+    /// <param name="id">The id to look up.</param>
+    /// <param name="item">The matching variant, or <see langword="null"/>.</param>
+    public static bool TryFromId<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>(int id, [MaybeNullWhen(false)] out T item)
+        where T : Enumeration<T>
+        => Enumeration<T>.TryFromId(id, out item);
 }

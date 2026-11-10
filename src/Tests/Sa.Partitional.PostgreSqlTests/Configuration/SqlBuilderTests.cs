@@ -264,7 +264,7 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
     }
 
     [Fact]
-        public void WithPartSeparator_KeepsTheSeparatorItWasGiven()
+    public void WithPartSeparator_KeepsTheSeparatorItWasGiven()
     {
         SchemaBuilder builder = new("public");
         builder.AddTable("sep", "id INT NOT NULL", "part TEXT NOT NULL")

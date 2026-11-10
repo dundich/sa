@@ -271,9 +271,11 @@ internal sealed class RedisOutboxConfiguration(
 
         if (_compatibilityBridge)
         {
+#pragma warning disable CS0618 // The bridge exists precisely to read the legacy provider-local alias.
             services.TryAddSingleton<IOutboxMessageSerializer>(static sp =>
                 (IOutboxMessageSerializer?)sp.GetService<Sa.Outbox.Redis.Serialization.IOutboxMessageSerializer>()
                 ?? JsonOutboxMessageSerializer.Instance);
+#pragma warning restore CS0618
         }
     }
 

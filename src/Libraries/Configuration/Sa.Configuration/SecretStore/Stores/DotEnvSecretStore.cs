@@ -1,5 +1,5 @@
-using System.Text;
 using Sa.Configuration.SecretStore.Engine;
+using System.Text;
 
 namespace Sa.Configuration.SecretStore.Stores;
 
@@ -15,6 +15,7 @@ namespace Sa.Configuration.SecretStore.Stores;
 /// </remarks>
 public sealed class DotEnvSecretStore : ISecretStore
 {
+    /// <summary>Default <c>.env</c> file name.</summary>
     public const string DefaultFileName = ".env";
 
     private readonly Dictionary<string, string?> _secrets;
@@ -28,6 +29,7 @@ public sealed class DotEnvSecretStore : ISecretStore
         _secrets = filepath is null ? [] : Load(filepath);
     }
 
+    /// <inheritdoc />
     public string? GetSecret(string key)
     {
         _secrets.TryGetValue(key, out var value);

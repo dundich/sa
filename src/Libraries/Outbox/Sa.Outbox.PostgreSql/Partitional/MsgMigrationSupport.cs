@@ -1,6 +1,5 @@
 using Sa.Outbox.Partitional;
 using Sa.Partitional.PostgreSql;
-using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Outbox.PostgreSql.Partitional;
 

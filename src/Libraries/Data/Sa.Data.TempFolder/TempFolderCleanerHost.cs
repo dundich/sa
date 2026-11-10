@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Sa.Data.TempFolder;
 
 /// <summary>
-/// Background service behind <see cref="Setup.AddSaTempFolder"/>: verifies every registered
+/// Background service behind <c>AddSaTempFolder</c>: verifies every registered
 /// instance's root at host start (fail fast), then runs each instance's periodic cleanup pass and
 /// — when configured — its independent low-priority volume scan and free-space check.
 /// </summary>
@@ -18,7 +18,7 @@ namespace Sa.Data.TempFolder;
 /// logged and never bring the host down — the next interval simply runs the pass again. All delays
 /// go through the container's <see cref="TimeProvider"/>, so tests can virtualise the schedule.
 /// </remarks>
-internal sealed class TempFolderCleanerHost : BackgroundService
+internal sealed partial class TempFolderCleanerHost : BackgroundService
 {
     private readonly IEnumerable<TempFolderRegistration> _registrations;
     private readonly IServiceProvider _services;
@@ -66,8 +66,7 @@ internal sealed class TempFolderCleanerHost : BackgroundService
 
             if (options.ReadOnly)
             {
-                _logger.LogDebug(
-                    "Temp folder '{Name}' is read-only; the background service ignores it.", registration.Name);
+                Log.ReadOnlySkipped(_logger, registration.Name);
                 continue;
             }
 
@@ -85,8 +84,7 @@ internal sealed class TempFolderCleanerHost : BackgroundService
             }
             else
             {
-                _logger.LogDebug(
-                    "Temp folder '{Name}': the cleanup is disabled; no cleanup loop is started.", registration.Name);
+                Log.CleanupDisabled(_logger, registration.Name);
             }
 
             if (folder.HasPeriodicVolumeScan())
@@ -163,7 +161,19 @@ internal sealed class TempFolderCleanerHost : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Temp folder background loop '{Loop}' failed; it will retry next interval.", loopName);
+            Log.LoopFailed(_logger, ex, loopName);
         }
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 3201, Level = LogLevel.Debug, Message = "Temp folder '{Name}' is read-only; the background service ignores it.")]
+        public static partial void ReadOnlySkipped(ILogger logger, string name);
+
+        [LoggerMessage(EventId = 3202, Level = LogLevel.Debug, Message = "Temp folder '{Name}': the cleanup is disabled; no cleanup loop is started.")]
+        public static partial void CleanupDisabled(ILogger logger, string name);
+
+        [LoggerMessage(EventId = 3203, Level = LogLevel.Error, Message = "Temp folder background loop '{Loop}' failed; it will retry next interval.")]
+        public static partial void LoopFailed(ILogger logger, Exception exception, string loop);
     }
 }

@@ -77,7 +77,7 @@ public class ExponentialDeliveryBackoffStrategyTests
             maxDelay: TimeSpan.FromMinutes(30));
 
         var backoff0 = strategy.GetBackoff(0);
-        var backoff1 = strategy.GetBackoff(1);
+        _ = strategy.GetBackoff(1);
 
         // Both should fall in the same range (2.5s..5s)
         Assert.True(backoff0 >= TimeSpan.FromSeconds(2.4));

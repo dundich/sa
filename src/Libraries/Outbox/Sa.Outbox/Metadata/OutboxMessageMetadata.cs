@@ -31,11 +31,11 @@ internal sealed class OutboxMessageMetadata
     /// </summary>
     private static class PublishableId<TMessage>
     {
-        private static readonly Func<TMessage, string>? Getter =
+        private static readonly Func<TMessage, string>? _getter =
             typeof(IOutboxPublishable).IsAssignableFrom(typeof(TMessage))
                 ? static message => ((IOutboxPublishable)message!).GetPayloadId()
                 : null;
 
-        public static string Get(TMessage message) => Getter?.Invoke(message) ?? string.Empty;
+        public static string Get(TMessage message) => _getter?.Invoke(message) ?? string.Empty;
     }
 }

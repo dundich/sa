@@ -13,7 +13,7 @@ namespace Sa.Configuration;
 /// <see cref="IConfigurationSource.Build"/>. The registry carries no configuration values itself:
 /// it only holds provider references, which keeps it valid across reloads.
 /// </remarks>
-public sealed class SaConfigurationRuntime : ISaConfigurationReloader
+public sealed class SaConfigurationRuntime : ISaConfigurationReloader, IDisposable
 {
     /// <summary>Key the runtime is stored under in the builder's property bag.</summary>
     public const string PropertyKey = "Sa.Configuration.Runtime";
@@ -90,8 +90,11 @@ public sealed class SaConfigurationRuntime : ISaConfigurationReloader
         _services = services;
     }
 
+    /// <summary>Releases the reload gate.</summary>
+    public void Dispose() => _gate.Dispose();
+
     /// <inheritdoc/>
-    public void ReloadDynamic() => ReloadDynamicAsync().GetAwaiter().GetResult();
+    public void ReloadDynamic() => ReloadDynamicAsync().AsTask().GetAwaiter().GetResult();
 
     /// <inheritdoc/>
     public async ValueTask ReloadDynamicAsync(CancellationToken cancellationToken = default)

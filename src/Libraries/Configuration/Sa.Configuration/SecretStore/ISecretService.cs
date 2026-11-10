@@ -1,5 +1,8 @@
 namespace Sa.Configuration.SecretStore;
 
+/// <summary>
+/// Resolves secret values and placeholder substitution.
+/// </summary>
 public interface ISecretService
 {
     /// <summary>

@@ -280,7 +280,7 @@ public sealed class ScheduleKeyedRegistrationTests
         Assert.False(jobScheduler.IsStarted);
         Assert.True(AbortCounter.Total >= 2);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     [Fact]
@@ -336,8 +336,8 @@ public sealed class ScheduleKeyedRegistrationTests
 
     private sealed class RecordingInterceptor : IJobInterceptor
     {
-        public Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
-            => next();
+        public Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
+            => continuation();
     }
 
     private sealed class NoopJob : IJob
@@ -385,7 +385,7 @@ public sealed class ScheduleKeyedRegistrationTests
 
         public Task<int> Restart(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
-        public Task Stop() => Task.WhenAll(jobs.Select(job => job.Stop()));
+        public Task StopAsync() => Task.WhenAll(jobs.Select(job => job.StopAsync()));
     }
 
     private sealed class FakeJobScheduler(Guid jobId) : IJobScheduler
@@ -408,7 +408,7 @@ public sealed class ScheduleKeyedRegistrationTests
 
         public Task<bool> Start(CancellationToken cancellationToken) => Task.FromResult(true);
 
-        public Task Stop()
+        public Task StopAsync()
         {
             Interlocked.Increment(ref _stopCalls);
 

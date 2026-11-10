@@ -1,7 +1,6 @@
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Sa.Partitional.PostgreSql;
-using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.Migration;
 
 namespace Sa.Partitional.PostgreSqlTests.Migration;

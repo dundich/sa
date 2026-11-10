@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Primitives;
-using Sa.Classes;
 
 namespace Sa.Configuration.PostProcessing;
 
@@ -14,7 +13,7 @@ namespace Sa.Configuration.PostProcessing;
 /// earlier pass derived, and a source registered later would silently beat an alias. Here a key
 /// this pass does not touch simply falls through to the provider that owns it.
 /// <para>
-/// <see cref="Data"/> is replaced on every load rather than mutated, so <c>Reload()</c> drops a
+/// <see cref="ConfigurationProvider.Data"/> is replaced on every load rather than mutated, so <c>Reload()</c> drops a
 /// key that disappeared from its source or from the alias map instead of serving it forever.
 /// </para>
 /// <para>
@@ -77,7 +76,7 @@ internal sealed class SaPostProcessingConfigurationProvider(
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
-            return;        _innerSubscription?.Dispose();
+            return; _innerSubscription?.Dispose();
         _innerSubscription = null;
 
         (_inner as IDisposable)?.Dispose();

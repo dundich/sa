@@ -86,38 +86,38 @@ public static class FileIdParser
         switch (format)
         {
             case FileIdFormat.WithTimestamp:
-            {
-                int secondSlash = afterFirst.IndexOf('/');
-                if (secondSlash == -1) return false;
+                {
+                    int secondSlash = afterFirst.IndexOf('/');
+                    if (secondSlash == -1) return false;
 
-                if (!long.TryParse(afterFirst[..secondSlash], NumberStyles.None, CultureInfo.InvariantCulture, out timestamp))
-                    return false;
+                    if (!long.TryParse(afterFirst[..secondSlash], NumberStyles.None, CultureInfo.InvariantCulture, out timestamp))
+                        return false;
 
-                fileName = afterFirst[(secondSlash + 1)..].ToString();
-                break;
-            }
+                    fileName = afterFirst[(secondSlash + 1)..].ToString();
+                    break;
+                }
 
             case FileIdFormat.WithoutTimestamp:
                 fileName = afterFirst.ToString();
                 break;
 
             default:
-            {
-                // Check if second part is a timestamp (Postgres) or filename (others)
-                int secondSlash = afterFirst.IndexOf('/');
-                if (secondSlash != -1 && long.TryParse(afterFirst[..secondSlash], NumberStyles.None, CultureInfo.InvariantCulture, out timestamp))
                 {
-                    // Postgres format: tenantId/timestamp/filename
-                    fileName = afterFirst[(secondSlash + 1)..].ToString();
-                }
-                else
-                {
-                    // Simple format: tenantId/filename
-                    fileName = afterFirst.ToString();
-                }
+                    // Check if second part is a timestamp (Postgres) or filename (others)
+                    int secondSlash = afterFirst.IndexOf('/');
+                    if (secondSlash != -1 && long.TryParse(afterFirst[..secondSlash], NumberStyles.None, CultureInfo.InvariantCulture, out timestamp))
+                    {
+                        // Postgres format: tenantId/timestamp/filename
+                        fileName = afterFirst[(secondSlash + 1)..].ToString();
+                    }
+                    else
+                    {
+                        // Simple format: tenantId/filename
+                        fileName = afterFirst.ToString();
+                    }
 
-                break;
-            }
+                    break;
+                }
         }
 
         return !string.IsNullOrEmpty(fileName);
@@ -150,5 +150,5 @@ public static class FileIdParser
     /// Extracts the file extension from a file name.
     /// </summary>
     public static string GetFileExtension(string fileName)
-        => Path.GetExtension(fileName ?? string.Empty).ToLower().TrimStart('.');
+        => Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant().TrimStart('.');
 }

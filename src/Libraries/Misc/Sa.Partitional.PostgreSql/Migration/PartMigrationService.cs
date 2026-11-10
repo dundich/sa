@@ -45,7 +45,7 @@ internal sealed partial class PartMigrationService(
 
         try
         {
-            return await Run(dates, cancellationToken, honorCallerToken: true).ConfigureAwait(false);
+            return await Run(dates, honorCallerToken: true, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -74,7 +74,7 @@ internal sealed partial class PartMigrationService(
 
             // The background job owns no token of its own: the scheduler's token is the host's,
             // and a started run has to reach the end.
-            return await Run(dates, cancellationToken, honorCallerToken: false).ConfigureAwait(false);
+            return await Run(dates, honorCallerToken: false, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -97,8 +97,8 @@ internal sealed partial class PartMigrationService(
     /// </returns>
     private async Task<int> Run(
         DateTimeOffset[] dates
-        , CancellationToken callerToken
-        , bool honorCallerToken)
+        , bool honorCallerToken
+        , CancellationToken callerToken)
     {
         using var deadlineCts = new CancellationTokenSource(settings.RunTimeout);
 

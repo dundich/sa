@@ -7,7 +7,7 @@ internal sealed class DeliveryJobInterceptor(IMigrationService migrationService)
 {
     public async Task OnHandle(
         IJobContext context,
-        Func<Task> next,
+        Func<Task> continuation,
         object? key,
         CancellationToken cancellationToken)
     {
@@ -17,6 +17,6 @@ internal sealed class DeliveryJobInterceptor(IMigrationService migrationService)
             return;
         }
 
-        await next();
+        await continuation();
     }
 }

@@ -1,7 +1,7 @@
-namespace Sa.Configuration.PostgreSql;
 
 using Npgsql;
 
+namespace Sa.Configuration.PostgreSql;
 /// <summary>
 /// Options for the PostgreSQL-backed configuration source.
 /// </summary>

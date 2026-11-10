@@ -22,8 +22,8 @@ internal sealed class SelectMsgTypeCommand(
                     haveOrdinals = true;
                 }
 
-                return (id: outboxReader.Type.GetTypeId(reader, in ordinals),
-                        typeName: outboxReader.Type.GetTypeName(reader, in ordinals));
+                return (id: NpgsqlOutboxReader.TypeReader.GetTypeId(reader, in ordinals),
+                        typeName: NpgsqlOutboxReader.TypeReader.GetTypeName(reader, in ordinals));
             }
         , cancellationToken);
     }

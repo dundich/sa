@@ -42,13 +42,13 @@ public class OutboxConsumerManagerListenerTests
         {
             // A transform that reads (or pauses) the manager used to hit the same non-reentrant
             // Lock that Apply itself was holding.
-            _ = manager.Get(group);
+            _ = manager.GetSettings(group);
             _ = manager.IsPaused(group);
             return s with { MaxBatchSize = 7 };
         }), TestToken);
 
         await apply.WaitAsync(TimeSpan.FromSeconds(5), TestToken);
-        Assert.Equal(7, manager.Get(group)!.MaxBatchSize);
+        Assert.Equal(7, manager.GetSettings(group)!.MaxBatchSize);
     }
 
     [Fact]

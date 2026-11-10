@@ -225,7 +225,7 @@ public sealed class FFMpegProcessorTests
             File.Delete(outputPath);
 
         // Получаем исходные настройки
-        var originalInfo = await IFFProbeExecutor.Default.GetMetaInfo(inputPath, CancellationToken);
+        _ = await IFFProbeExecutor.Default.GetMetaInfo(inputPath, CancellationToken);
         var (origChannels, origSampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRate(inputPath, CancellationToken);
 
         // Act

@@ -13,7 +13,7 @@ internal enum JobRunResult
     Finished,
 
     /// <summary>
-    /// The run was interrupted by the caller's stop token. <see cref="IJobScheduler.Stop"/>
+    /// The run was interrupted by the caller's stop token. <see cref="IJobScheduler.StopAsync"/>
     /// already moved the scheduler to the stopped state, so there is nothing to tear down.
     /// </summary>
     Stopped,

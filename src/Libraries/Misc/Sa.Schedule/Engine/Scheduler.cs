@@ -43,7 +43,7 @@ internal sealed class Scheduler(
     {
         try
         {
-            await job.Stop();
+            await job.StopAsync();
             return await job.Start(cancellationToken) ? 1 : 0;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -63,9 +63,9 @@ internal sealed class Scheduler(
         }
     }
 
-    public async Task Stop()
+    public async Task StopAsync()
     {
-        await Task.WhenAll(Jobs.Select(c => c.Stop()));
+        await Task.WhenAll(Jobs.Select(c => c.StopAsync()));
     }
 
     public void Dispose()
@@ -86,7 +86,7 @@ internal sealed class Scheduler(
         if (!_disposed)
         {
             _disposed = true;
-            await Stop();
+            await StopAsync();
             foreach (var job in Jobs)
             {
                 await job.DisposeAsync();

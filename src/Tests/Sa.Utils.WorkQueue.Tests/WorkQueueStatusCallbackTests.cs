@@ -30,8 +30,8 @@ public sealed class WorkQueueStatusCallbackTests
     {
         var probe = new PoolAccessProbe();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(static (_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(static (_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(0)
                 .WithStatusCallback(probe.OnStatus));
 
@@ -67,8 +67,8 @@ public sealed class WorkQueueStatusCallbackTests
     {
         int? firstReportThread = null;
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(static (_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(static (_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(0)
                 .WithStatusCallback((_, _, _) => firstReportThread ??= Environment.CurrentManagedThreadId));
 
@@ -107,7 +107,7 @@ public sealed class WorkQueueStatusCallbackTests
     {
         private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(10);
 
-        private SaWorkQueue<int>? _queue;
+        private SaWorkChannel<int>? _queue;
         private int _armed;
         private volatile bool _ran;
         private volatile bool _otherThreadGotIn;
@@ -121,7 +121,7 @@ public sealed class WorkQueueStatusCallbackTests
         /// </summary>
         public bool OtherThreadGotIn => _otherThreadGotIn;
 
-        public void Arm(SaWorkQueue<int> queue)
+        public void Arm(SaWorkChannel<int> queue)
         {
             _queue = queue;
             Volatile.Write(ref _armed, 1);

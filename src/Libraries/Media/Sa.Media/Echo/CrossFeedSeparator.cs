@@ -4,9 +4,31 @@ using System.Runtime.CompilerServices;
 namespace Sa.Media.Echo;
 
 
+/// <summary>
+/// Separates a stereo recording into per-speaker signals using cross-feed cancellation.
+/// </summary>
 public static class CrossFeedSeparator
 {
-    public enum ProcessingMode { Auto, MaximumSpeed, MinimumMemory, MinimumMemoryFastNormalize, Aggressive }
+    /// <summary>
+    /// Strategies for processing the recording.
+    /// </summary>
+    public enum ProcessingMode
+    {
+        /// <summary>Picks a strategy from the input size.</summary>
+        Auto,
+
+        /// <summary>Favours speed over memory usage.</summary>
+        MaximumSpeed,
+
+        /// <summary>Favours low memory usage.</summary>
+        MinimumMemory,
+
+        /// <summary>Low memory usage with fast normalization.</summary>
+        MinimumMemoryFastNormalize,
+
+        /// <summary>Applies aggressive separation.</summary>
+        Aggressive
+    }
 
     private readonly record struct AudioPacket(int FrameIndex, float LeftSample, float RightSample, bool IsFrameEof);
     private sealed record HeadInfo(int FrameSize, int FrameCount, int SampleRate, long TotalFrames);
@@ -15,6 +37,11 @@ public static class CrossFeedSeparator
     private const long MaxInMemorySamples = 64_000_000;
     private const long HardInMemorySamples = 200_000_000;
 
+    /// <summary>
+    /// Runs the separation pipeline for the given options.
+    /// </summary>
+    /// <param name="options">The separation options.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
     public static async Task ExecuteAsync(AudioSeparationOptions options, CancellationToken cancellationToken = default)
     {
         // Аргументы проверяем до обращения к файловой системе: неверные опции должны падать

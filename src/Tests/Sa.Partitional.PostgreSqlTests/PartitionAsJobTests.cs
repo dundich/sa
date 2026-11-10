@@ -54,7 +54,7 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture)
     {
         Console.WriteLine(fixture.ConnectionString);
 
-        int i =  await fixture.ServiceProvider
+        int i = await fixture.ServiceProvider
             .GetRequiredService<IScheduler>().Start(CancellationToken.None);
         Assert.True(i > 0);
 

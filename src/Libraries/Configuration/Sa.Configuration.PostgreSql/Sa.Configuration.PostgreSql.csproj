@@ -2,7 +2,8 @@
 
   
   <PropertyGroup>
-    <Description>add a PostgreSQL-based configuration source to IConfiguration</Description>
+    <Description>PostgreSQL-backed configuration source for IConfiguration</Description>
+    <PackageTags>configuration secrets postgresql database</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

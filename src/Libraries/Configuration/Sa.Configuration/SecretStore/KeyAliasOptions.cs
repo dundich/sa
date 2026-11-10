@@ -40,12 +40,16 @@ public sealed record KeyAliasOptions
         foreach (KeyValuePair<string, string> mapping in KeyAliases)
         {
             if (string.IsNullOrWhiteSpace(mapping.Key))
+            {
                 throw new ArgumentException(
                     $"{nameof(KeyAliases)}: every canonical key must be non-blank, but an empty mapping key was found.");
+            }
 
             if (string.IsNullOrWhiteSpace(mapping.Value))
+            {
                 throw new ArgumentException(
                     $"{nameof(KeyAliases)}: the mapping '{mapping.Key} → …' must not have a blank alias key.");
+            }
         }
     }
 }

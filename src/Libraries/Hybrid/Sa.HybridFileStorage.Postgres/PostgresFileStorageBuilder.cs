@@ -5,7 +5,7 @@ namespace Sa.HybridFileStorage.Postgres;
 /// <summary>
 /// Default <see cref="IPostgresFileStorageBuilder"/>: records the two configuring intents —
 /// the configuration section and the <c>Options(...)</c> pipeline actions — so
-/// <see cref="Setup.AddSaPostgreSqlFileStorage"/> can replay them in its fixed slot.
+/// <c>AddSaPostgreSqlFileStorage</c> can replay them in its fixed slot.
 /// </summary>
 internal sealed class PostgresFileStorageBuilder : IPostgresFileStorageBuilder
 {

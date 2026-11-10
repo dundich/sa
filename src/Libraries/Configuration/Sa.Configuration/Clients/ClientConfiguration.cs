@@ -86,11 +86,11 @@ public sealed class ClientConfiguration : IConfiguration, IConfigurationSection,
     }
 
     /// <inheritdoc/>
-    public IConfigurationSection GetSection(string path)
+    public IConfigurationSection GetSection(string key)
     {
-        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(key);
 
-        return new ClientConfiguration(_root, _section, _client, Combine(_path, path));
+        return new ClientConfiguration(_root, _section, _client, Combine(_path, key));
     }
 
     /// <inheritdoc/>
@@ -176,7 +176,8 @@ public sealed class ClientConfiguration : IConfiguration, IConfigurationSection,
         => path.Equals(_section, StringComparison.OrdinalIgnoreCase)
         || path.StartsWith(_section + ConfigurationPath.KeyDelimiter, StringComparison.OrdinalIgnoreCase);
 
-    private static string Combine(string prefix, string path)    {
+    private static string Combine(string prefix, string path)
+    {
         if (prefix.Length == 0)
             return path;
 

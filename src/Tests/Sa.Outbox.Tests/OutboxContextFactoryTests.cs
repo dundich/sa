@@ -20,7 +20,7 @@ public class OutboxContextFactoryTests
         first.Ok("done");
         first.Postpone(TimeSpan.FromSeconds(3), "postponed");
 
-        factory.Return(first);
+        factory.ReturnToPool(first);
 
         IOutboxContextOperations<PooledMessage> second = factory.Create(Message("id-2", new PooledMessage("second"), part));
 

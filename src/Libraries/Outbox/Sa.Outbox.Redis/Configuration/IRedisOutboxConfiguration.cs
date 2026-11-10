@@ -8,7 +8,7 @@ namespace Sa.Outbox.Redis.Configuration;
 
 /// <summary>
 /// Fluent configuration surface of the Redis-backed Outbox. Used inside
-/// <see cref="Setup.AddSaOutboxUsingRedis"/> to point the provider at a Redis server and to shape
+/// <c>AddSaOutboxUsingRedis</c> to point the provider at a Redis server and to shape
 /// the key layout and consumption.
 /// </summary>
 /// <remarks>

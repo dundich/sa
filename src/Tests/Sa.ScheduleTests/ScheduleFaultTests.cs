@@ -44,7 +44,7 @@ public sealed class ScheduleFaultTests : IAsyncDisposable
         Assert.False(_job.IsStarted, "IsStarted stayed true over a job that never started");
 
         // Teardown must stay safe after a failed start.
-        await _scheduler.Stop();
+        await _scheduler.StopAsync();
 
         Assert.False(_job.IsStarted);
     }

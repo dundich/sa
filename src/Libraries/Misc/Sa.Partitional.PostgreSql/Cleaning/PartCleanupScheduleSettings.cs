@@ -17,7 +17,7 @@ public sealed class PartCleanupScheduleSettings
     /// Gets or sets a value indicating whether the cleanup should be executed as a background job.
     /// Default is set to false, meaning the cleanup will not run as a job.
     /// </summary>
-    public bool AsBackgroundJob { get; set; } = false;
+    public bool AsBackgroundJob { get; set; }
 
     /// <summary>
     /// Gets or sets the duration after which old parts will be dropped.
@@ -87,7 +87,7 @@ public sealed class PartCleanupScheduleSettings
     /// receives rows is never pruned, because its subtree is not empty.
     /// </para>
     /// </remarks>
-    public bool PruneEmptyListParts { get; set; } = false;
+    public bool PruneEmptyListParts { get; set; }
 
     /// <summary>
     /// Validates the current settings and throws a <see cref="ValidationException"/> for the first

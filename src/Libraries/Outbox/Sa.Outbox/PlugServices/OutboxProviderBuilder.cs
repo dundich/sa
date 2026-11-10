@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace Sa.Outbox.PlugServices;
 
 /// <summary>
-/// Collects the three provider services for <see cref="OutboxProviderSetup.AddOutboxProvider"/>.
+/// Collects the three provider services for <c>AddOutboxProvider</c>.
 /// Each <c>With...</c> method replaces any earlier registration of that contract for the same
 /// provider key, so the provider package owns the choice and a decorator package cannot leave a
 /// stale implementation behind.
@@ -36,7 +36,7 @@ public sealed class OutboxProviderBuilder
     /// <summary>
     /// Registers the provider's <see cref="IOutboxBulkWriter"/> under the provider key. Required:
     /// without it the provider cannot publish, and
-    /// <see cref="OutboxProviderSetup.AddOutboxProvider"/> rejects the call.
+    /// <c>AddOutboxProvider</c> rejects the call.
     /// </summary>
     /// <typeparam name="T">The writer implementation, resolved from DI as a singleton.</typeparam>
     /// <returns>The same builder for chaining.</returns>

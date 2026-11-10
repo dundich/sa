@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<Description>For managing table partitioning in PostgreSQL</Description>
+		<Description>Declarative table partitioning for PostgreSQL</Description>
+		<PackageTags>postgresql partitioning tables maintenance</PackageTags>
 	</PropertyGroup>
 
 	<PropertyGroup>

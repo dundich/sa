@@ -1,0 +1,111 @@
+#nullable enable
+Sa.Outbox.Redis.Connection.IRedisOutboxConnectionProvider
+Sa.Outbox.Redis.Serialization.IOutboxMessageSerializer
+Sa.Outbox.Redis.Setup
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration
+Sa.Outbox.Redis.Configuration.RedisOutboxGroupStart.Lookback = 0 -> Sa.Outbox.Redis.Configuration.RedisOutboxGroupStart
+Sa.Outbox.Redis.Configuration.RedisOutboxGroupStart.Beginning = 1 -> Sa.Outbox.Redis.Configuration.RedisOutboxGroupStart
+Sa.Outbox.Redis.Configuration.RedisOutboxGroupStart
+Sa.Outbox.Redis.Configuration.RedisOutboxGroupStart.Now = 2 -> Sa.Outbox.Redis.Configuration.RedisOutboxGroupStart
+Sa.Outbox.Redis.Poison.IRedisOutboxPoisonHandler
+Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings
+Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.RedisOutboxConsumeSettings() -> void
+const Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.Defaults.MaxDeliveryAttempts = 5 -> int
+Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings
+Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings.RedisOutboxKeySettings() -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.Defaults
+const Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings.Defaults.Prefix = "sa:outbox" -> string!
+Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings.Defaults
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.OutboxId.get -> System.Guid
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.PayloadId.get -> string!
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.OutboxId.init -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.PayloadId.init -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.PayloadType.get -> string!
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.PayloadType.init -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.ConsumerGroup.get -> string!
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.ConsumerGroup.init -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Part.get -> string!
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.TenantId.get -> int
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Part.init -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.TenantId.init -> void
+override Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.ToString() -> string!
+static Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.operator !=(Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage? left, Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage? right) -> bool
+static Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.operator ==(Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage? left, Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage? right) -> bool
+override Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.GetHashCode() -> int
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Attempt.get -> int
+override Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Equals(object? obj) -> bool
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Attempt.init -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.StatusCode.get -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Equals(Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage? other) -> bool
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.<Clone>$() -> Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage!
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.StatusCode.init -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.StatusMessage.get -> string!
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Deconstruct(out System.Guid OutboxId, out string! PayloadId, out string! PayloadType, out string! ConsumerGroup, out int TenantId, out string! Part, out int Attempt, out Sa.Outbox.Delivery.DeliveryStatusCode StatusCode, out string! StatusMessage, out System.Exception? Exception, out System.ReadOnlyMemory<byte> Payload) -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.StatusMessage.init -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Exception.get -> System.Exception?
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Exception.init -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Payload.get -> System.ReadOnlyMemory<byte>
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.Payload.init -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.RedisOutboxRetentionSettings() -> void
+const Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.Defaults.TrimLimit = 10000 -> int
+Sa.Outbox.Redis.Configuration.RedisOutboxSettings
+Sa.Outbox.Redis.Configuration.RedisOutboxSettings.RedisOutboxSettings() -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.Defaults
+static Sa.Outbox.Redis.Setup.AddSaOutboxUsingRedis(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!>? configure, System.Action<Sa.Outbox.IOutboxBuilder!>? configureOutbox, string! scopeKey = "outbox") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Sa.Outbox.Redis.Setup.AddSaOutboxUsingRedis(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!>? configure = null, string! scopeKey = "outbox") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.Enabled.get -> bool
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithEnabled(bool enabled = true) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithConnectionMultiplexer(StackExchange.Redis.IConnectionMultiplexer! multiplexer) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithConnectionMultiplexer(System.Func<System.IServiceProvider!, StackExchange.Redis.IConnectionMultiplexer!>! multiplexerFactory) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithDatabase(StackExchange.Redis.IDatabase! database) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithDatabase(System.Func<System.IServiceProvider!, StackExchange.Redis.IDatabase!>! databaseFactory) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithConnectionString(string! connectionStringOrName = "Redis") -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithConnectionString(System.Func<System.IServiceProvider!, string?>! connectionStringOrNameFactory) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithConnectionOptions(System.Action<StackExchange.Redis.ConfigurationOptions!>! configureOptions) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithDatabaseIndex(int databaseIndex) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithOutboxSettings(System.Action<System.IServiceProvider!, Sa.Outbox.Redis.Configuration.RedisOutboxSettings!>? configure = null) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithConfiguration(string! configSectionPath) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithPoisonHandler(System.Func<System.IServiceProvider!, Sa.Outbox.Redis.Poison.IRedisOutboxPoisonHandler!>! poisonHandlerFactory) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithMessageSerializer(System.Func<System.IServiceProvider!, Sa.Outbox.Serialization.IOutboxMessageSerializer!>! messageSerializerFactory) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithPoisonHandler<TService>(TService! instance) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithPoisonHandler<TService>() -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Outbox.Redis.Configuration.RedisOutboxSettings!>!>! configureOptions) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithMessageSerializer<TService>(TService! instance) -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration.WithMessageSerializer<TService>() -> Sa.Outbox.Redis.Configuration.IRedisOutboxConfiguration!
+Sa.Outbox.Redis.Connection.IRedisOutboxConnectionProvider.Database.get -> StackExchange.Redis.IDatabase!
+Sa.Outbox.Redis.Connection.IRedisOutboxConnectionProvider.IsOwner.get -> bool
+Sa.Outbox.Redis.Configuration.RedisOutboxSettings.KeySettings.get -> Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings!
+Sa.Outbox.Redis.Configuration.RedisOutboxSettings.ConsumeSettings.get -> Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings!
+Sa.Outbox.Redis.Configuration.RedisOutboxSettings.KeySettings.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxSettings.ConsumeSettings.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxSettings.RetentionSettings.get -> Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings!
+Sa.Outbox.Redis.Configuration.RedisOutboxSettings.RetentionSettings.set -> void
+Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage.RedisOutboxPoisonMessage(System.Guid OutboxId, string! PayloadId, string! PayloadType, string! ConsumerGroup, int TenantId, string! Part, int Attempt, Sa.Outbox.Delivery.DeliveryStatusCode StatusCode, string! StatusMessage, System.Exception? Exception, System.ReadOnlyMemory<byte> Payload) -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.Enabled.get -> bool
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.Enabled.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.StreamMaxAge.get -> System.TimeSpan
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.StreamMaxAge.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.TrimInterval.get -> System.TimeSpan
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.TrimInterval.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.Approximate.get -> bool
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.Approximate.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.TrimLimit.get -> int
+Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.TrimLimit.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.StartFrom.get -> Sa.Outbox.Redis.Configuration.RedisOutboxGroupStart
+Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.StartFrom.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.PendingClaimIdle.get -> System.TimeSpan
+Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.PendingClaimIdle.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.MaxDeliveryAttempts.get -> int
+Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.MaxDeliveryAttempts.set -> void
+static Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.Defaults.StreamMaxAge.get -> System.TimeSpan
+static Sa.Outbox.Redis.Configuration.RedisOutboxRetentionSettings.Defaults.TrimInterval.get -> System.TimeSpan
+Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings.Prefix.get -> string!
+Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings.Prefix.set -> void
+Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings.Separator.get -> string!
+Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings.Separator.set -> void
+static Sa.Outbox.Redis.Configuration.RedisOutboxConsumeSettings.Defaults.PendingClaimIdle.get -> System.TimeSpan
+Sa.Outbox.Redis.Poison.IRedisOutboxPoisonHandler.Handle(Sa.Outbox.Redis.Poison.RedisOutboxPoisonMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings.StreamKey(int tenantId, string! part, string! payloadType) -> string!
+Sa.Outbox.Redis.Configuration.RedisOutboxKeySettings.TenantsKey() -> string!

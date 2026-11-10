@@ -137,8 +137,10 @@ internal static class CronFieldParser
         string stepToken = parts[1];
 
         if (ContainsSpecial(rangeToken) || ContainsSpecial(stepToken))
+        {
             throw new CronParseException(
                 $"The 'L' and 'W' specials cannot be used in a step for {name}.", name, token);
+        }
 
         int min = FieldMin[(int)kind];
         int max = FieldMax[(int)kind];
@@ -156,7 +158,9 @@ internal static class CronFieldParser
             if (rangeParts.Length != 2
                 || !TryParseNumber(rangeParts[0], out start)
                 || !TryParseNumber(rangeParts[1], out end))
+            {
                 throw new CronParseException($"Invalid range/step '{rangeToken}' for {name}.", name, rangeToken);
+            }
 
             start = ValidateRange(start, min, max, name, rangeToken);
             end = ValidateRange(end, min, max, name, rangeToken);
@@ -234,8 +238,10 @@ internal static class CronFieldParser
                     throw new CronParseException($"Invalid last-day offset '{offsetToken}' for {name}.", name, token);
 
                 if (offset > CronLimits.MaxLastDayOffset)
+                {
                     throw new CronParseException(
                         $"Last-day offset must be between 0 and {CronLimits.MaxLastDayOffset} for {name}.", name, token);
+                }
 
                 // "L-0" is the same day as "L".
                 if (offset == 0) acc.LastDay = true;
@@ -248,8 +254,10 @@ internal static class CronFieldParser
             {
                 string dayToken = token[..^1];
                 if (!TryParseNumber(dayToken, out int day))
+                {
                     throw new CronParseException(
                         $"The 'W' special needs a single day of month, for example '15W', but got '{token}'.", name, token);
+                }
 
                 acc.NearestWeekdays.Add(
                     ValidateRange(day, CronLimits.DayOfMonthMin, CronLimits.DayOfMonthMax, name, token));
@@ -263,8 +271,10 @@ internal static class CronFieldParser
         {
             string dayToken = token[..^1];
             if (!TryParseNumber(dayToken, out int day))
+            {
                 throw new CronParseException(
                     $"Invalid last-day-of-week value '{dayToken}' for {name}.", name, token);
+            }
 
             acc.LastWeekdaysOfMonth.Add(
                 ValidateRange(day, CronLimits.DayOfWeekMin, CronLimits.DayOfWeekMax, name, token));
@@ -286,8 +296,10 @@ internal static class CronFieldParser
         // "L"/"L-n" element combined with a separate "dW" element (for example "15W,L"):
         // those are two independent day rules with no defined precedence.
         if (acc.NearestWeekdays.Count > 0 && acc.HasLastDaySpecial)
+        {
             throw new CronParseException(
                 $"The 'W' special cannot be combined with 'L' in the {name} field.", name, token);
+        }
 
         if (acc.Values.Count == 0 && !acc.HasSpecials)
             throw new CronParseException($"Cron field '{token}' for {name} produced no values.", name, token);

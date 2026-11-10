@@ -4,24 +4,55 @@ using System.Runtime.InteropServices;
 
 namespace Sa.Media;
 
+/// <summary>
+/// Helpers for working with <see cref="TimeRange"/> values.
+/// </summary>
 public static class TimeRangeExtensions
 {
 
+    /// <summary>
+    /// Determines whether the range contains the given time.
+    /// </summary>
+    /// <param name="range">The range to test.</param>
+    /// <param name="time">The time to look for.</param>
+    /// <returns><c>true</c> if the time lies within the range; otherwise <c>false</c>.</returns>
     public static bool Contains(this TimeRange range, TimeSpan time)
         => time >= range.From && time <= range.To;
 
+    /// <summary>
+    /// Determines whether the range contains the given time in milliseconds.
+    /// </summary>
+    /// <param name="range">The range to test.</param>
+    /// <param name="milliseconds">The time to look for, in milliseconds.</param>
+    /// <returns><c>true</c> if the time lies within the range; otherwise <c>false</c>.</returns>
     public static bool Contains(this TimeRange range, long milliseconds)
         => milliseconds >= range.From.TotalMilliseconds && milliseconds <= range.To.TotalMilliseconds;
 
+    /// <summary>
+    /// Determines whether the range contains the given time in milliseconds.
+    /// </summary>
+    /// <param name="range">The range to test.</param>
+    /// <param name="milliseconds">The time to look for, in milliseconds.</param>
+    /// <returns><c>true</c> if the time lies within the range; otherwise <c>false</c>.</returns>
     public static bool Contains(this TimeRange range, double milliseconds)
         => milliseconds >= range.From.TotalMilliseconds && milliseconds <= range.To.TotalMilliseconds;
 
 
+    /// <summary>
+    /// Sorts the ranges in place by their start time.
+    /// </summary>
+    /// <param name="ranges">The ranges to sort.</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static void Sort(this Span<TimeRange> ranges)
         => ranges.Sort(static (a, b) => a.From.CompareTo(b.From));
 
 
+    /// <summary>
+    /// Merges ranges that are closer together than the given threshold.
+    /// </summary>
+    /// <param name="ranges">The ranges to merge.</param>
+    /// <param name="thresholdMilliseconds">The maximum gap, in milliseconds, between ranges that should be merged.</param>
+    /// <returns>The merged ranges.</returns>
     public static IReadOnlyCollection<TimeRange> Merge(
         this TimeRange[] ranges,
         int thresholdMilliseconds = 300)
@@ -29,6 +60,13 @@ public static class TimeRangeExtensions
 
 
 
+    /// <summary>
+    /// Merges close ranges within each chunk and stretches neighbouring ranges towards each other.
+    /// </summary>
+    /// <param name="chunks">The chunks of ranges to process.</param>
+    /// <param name="thresholdMilliseconds">The maximum gap, in milliseconds, between ranges that should be merged.</param>
+    /// <param name="gapMilliseconds">An additional gap to preserve between neighbouring ranges.</param>
+    /// <returns>The expanded chunks, preserving the original chunk layout.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
 #pragma warning disable S3776
 #pragma warning disable S2368

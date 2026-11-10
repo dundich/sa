@@ -1,5 +1,6 @@
 namespace Sa.Utils.WorkQueue;
 
+/// <summary>Which readers a concurrency decrease cancels first.</summary>
 public enum SaReaderCancellationOrder
 {
     /// <summary>

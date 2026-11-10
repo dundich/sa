@@ -24,10 +24,12 @@ internal static class FFmpegArgs
         foreach (var c in value)
         {
             if (!char.IsAsciiLetterOrDigit(c) && c != '_')
+            {
                 throw new ArgumentException(
                     $"'{value}' is not a valid FFmpeg format name. Expected letters, digits and underscores " +
                     "(for example: wav, mp3, ogg, s16le, f32le).",
                     paramName);
+            }
         }
     }
 
@@ -40,8 +42,10 @@ internal static class FFmpegArgs
         foreach (var c in value)
         {
             if (!char.IsAsciiLetterOrDigit(c) && c != '_' && c != '-' && c != '.')
+            {
                 throw new ArgumentException(
                     $"'{value}' may contain only letters, digits, '_', '-' and '.'.", paramName);
+            }
         }
     }
 

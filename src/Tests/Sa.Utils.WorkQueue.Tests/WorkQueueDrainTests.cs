@@ -47,8 +47,8 @@ public sealed class WorkQueueDrainTests
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
         using var cts = new CancellationTokenSource();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
@@ -78,8 +78,8 @@ public sealed class WorkQueueDrainTests
     public async Task Shutdown_StuckReader_KeepsIsIdleFalseUntilItemFinishes()
     {
         var processor = new NonCooperativeGateProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(1)
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(300)));
@@ -115,8 +115,8 @@ public sealed class WorkQueueDrainTests
         var processor = new GateProcessor();
         var dropped = new ConcurrentDictionary<int, string>();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithStatusCallback((item, status, ex) =>
@@ -164,8 +164,8 @@ public sealed class WorkQueueDrainTests
         var processor = new GateProcessor();
         var statuses = new ConcurrentDictionary<int, SaWorkStatus>();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(300))
@@ -181,7 +181,7 @@ public sealed class WorkQueueDrainTests
         // The public API offers no way to register a callback on the shutdown
         // CTS itself, so the fault is injected through the private field:
         // ShutdownAsync's CancelAsync must see the throwing callback.
-        var cts = (CancellationTokenSource)typeof(SaWorkQueue<int>)
+        var cts = (CancellationTokenSource)typeof(SaWorkChannel<int>)
             .GetField("_shutdownCts", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(queue)!;
         cts.Token.Register(() => throw new InvalidOperationException("boom"));

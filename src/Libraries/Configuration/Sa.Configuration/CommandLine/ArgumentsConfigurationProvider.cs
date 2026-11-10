@@ -1,8 +1,7 @@
-namespace Sa.Configuration.CommandLine;
 
 using Microsoft.Extensions.Configuration;
-using Sa.Classes;
 
+namespace Sa.Configuration.CommandLine;
 
 internal sealed class ArgumentsConfigurationSource : IConfigurationSource
 {

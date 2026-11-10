@@ -73,7 +73,7 @@ internal sealed class JobErrorHandler(
         {
             if (job.JobId == self) continue;
 
-            stops.Add(job.Stop());
+            stops.Add(job.StopAsync());
         }
 
         try
@@ -84,13 +84,15 @@ internal sealed class JobErrorHandler(
         {
             // A Stop() that failed must not hide the original error: the configured
             // action is applied below regardless.
-            logger?.LogStopAllJobsIncomplete(jobName, ex.ToString());
+            if (logger is not null && logger.IsEnabled(LogLevel.Warning))
+                logger.LogStopAllJobsIncomplete(jobName, ex.ToString());
         }
     }
 
     private void CloseApplication(string jobName, Exception exception)
     {
-        logger?.LogCloseApplication(jobName, error: exception.ToString());
+        if (logger is not null && logger.IsEnabled(LogLevel.Critical))
+            logger.LogCloseApplication(jobName, error: exception.ToString());
 
         if (lifetime == null) return;
 

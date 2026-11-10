@@ -13,6 +13,27 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <!--
+      `Recommended` rather than the SDK default: it turns on the library-design and
+      performance rules that matter for code shipped to consumers. Tests relax a handful of
+      them (see src/Tests/Directory.Build.props); everything else is fixed.
+    -->
+    <AnalysisMode>Recommended</AnalysisMode>
+    <!--
+      Style rules from .editorconfig are part of the build, not just an IDE hint:
+      with TreatWarningsAsErrors a violated style rule fails the build like any
+      other warning. Only rules the code already follows are set to `warning`.
+    -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!--
+      A warning is a defect that has not been triaged yet. The whole repository (libraries,
+      tests, samples, benchmarks) builds with warnings as errors so a new one fails the build
+      instead of accumulating quietly. Deliberate exceptions must be expressed narrowly:
+      `NoWarn` for a rule that does not apply, or a scoped `#pragma`/`SuppressMessage` with a
+      written justification — never by relaxing this property.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
     <!-- Only src/Libraries/Directory.Build.props flips this to true. -->
     <IsPackable>false</IsPackable>

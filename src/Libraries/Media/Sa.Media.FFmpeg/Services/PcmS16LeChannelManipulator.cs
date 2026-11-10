@@ -31,8 +31,10 @@ internal sealed class PcmS16LeChannelManipulator(
             .ConfigureAwait(false);
 
         if (!channels.HasValue || channels.Value <= 0)
+        {
             throw new InvalidOperationException(
                 $"Failed to determine the number of audio channels in '{inputFileName}'.");
+        }
 
         if (channels > 2)
         {

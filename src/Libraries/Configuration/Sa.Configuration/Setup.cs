@@ -5,6 +5,9 @@ using Sa.Configuration.SecretStore;
 
 namespace Sa.Configuration;
 
+/// <summary>
+/// Registers the Sa configuration pipeline.
+/// </summary>
 public static class Setup
 {
     /// <summary>

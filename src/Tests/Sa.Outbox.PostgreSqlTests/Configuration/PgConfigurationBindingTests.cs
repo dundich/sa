@@ -112,7 +112,7 @@ public class PgConfigurationBindingTests
 
         using ServiceProvider provider = services.BuildServiceProvider();
 
-        OutboxConsumerSettings? settings = provider.GetRequiredService<IOutboxConsumerManager>().Get(GroupId);
+        OutboxConsumerSettings? settings = provider.GetRequiredService<IOutboxConsumerManager>().GetSettings(GroupId);
 
         Assert.NotNull(settings);
         // The polling defaults came through the same call…

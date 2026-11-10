@@ -11,7 +11,7 @@ internal sealed class ScheduleHost(IScheduler scheduler) : IHostedService
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        Task stop = scheduler.Stop();
+        Task stop = scheduler.StopAsync();
 
         try
         {

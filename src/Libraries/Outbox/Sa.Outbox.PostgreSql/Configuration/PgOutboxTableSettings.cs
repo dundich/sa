@@ -44,7 +44,7 @@ public sealed class PgOutboxTableSettings
     /// When enabled, rows whose key was never migrated are kept instead of rejected.
     /// Default is false.
     /// </summary>
-    public bool UseDefaultPartition { get; set; } = false;
+    public bool UseDefaultPartition { get; set; }
 
     /// <summary>The active task queue table (read-write, SKIP LOCKED). Table name equals the base table name.</summary>
     public TaskQueueTable TaskQueue { get; } = new();
@@ -171,9 +171,12 @@ public sealed class PgOutboxTableSettings
             set
             {
                 if (value < 10 || value > 100)
+                {
                     throw new ArgumentOutOfRangeException(
                         nameof(value), value,
                         "FillFactor must be between 10 and 100 (PostgreSQL constraint).");
+                }
+
                 _fillFactor = value;
             }
         }
@@ -245,9 +248,12 @@ public sealed class PgOutboxTableSettings
             set
             {
                 if (value < 10 || value > 100)
+                {
                     throw new ArgumentOutOfRangeException(
                         nameof(value), value,
                         "FillFactor must be between 10 and 100 (PostgreSQL constraint).");
+                }
+
                 _fillFactor = value;
             }
         }
@@ -358,9 +364,12 @@ public sealed class PgOutboxTableSettings
             set
             {
                 if (value < 10 || value > 100)
+                {
                     throw new ArgumentOutOfRangeException(
                         nameof(value), value,
                         "FillFactor must be between 10 and 100 (PostgreSQL constraint).");
+                }
+
                 _fillFactor = value;
             }
         }
@@ -443,9 +452,12 @@ public sealed class PgOutboxTableSettings
             set
             {
                 if (value < 10 || value > 100)
+                {
                     throw new ArgumentOutOfRangeException(
                         nameof(value), value,
                         "FillFactor must be between 10 and 100 (PostgreSQL constraint).");
+                }
+
                 _fillFactor = value;
             }
         }

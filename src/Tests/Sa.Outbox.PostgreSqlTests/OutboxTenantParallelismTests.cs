@@ -169,7 +169,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         }
 
         await Task.Delay(500, TestContext.Current.CancellationToken);
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
 
         Assert.Equal((int)totalPublished, ParallelTestConsumer.TotalProcessed);

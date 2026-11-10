@@ -1,6 +1,6 @@
-using System.Buffers.Binary;
 using Sa.Media;
 using Sa.MediaTests.Echo;
+using System.Buffers.Binary;
 
 namespace Sa.MediaTests;
 

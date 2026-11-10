@@ -1,7 +1,15 @@
 namespace Sa.Media;
 
+/// <summary>
+/// Helpers for <see cref="AudioEncoding"/>.
+/// </summary>
 public static class AudioEncodingExtensions
 {
+    /// <summary>
+    /// Gets the number of bytes occupied by a single sample in the given encoding.
+    /// </summary>
+    /// <param name="encoding">The audio encoding.</param>
+    /// <returns>The size of one sample in bytes.</returns>
     public static int GetBytesPerSample(this AudioEncoding encoding) => encoding switch
     {
         AudioEncoding.Pcm8BitUnsigned => 1,
@@ -12,6 +20,11 @@ public static class AudioEncodingExtensions
         _ => throw new NotSupportedException($"Unknown audio encoding: {encoding}")
     };
 
+    /// <summary>
+    /// Gets the WAV format type corresponding to the given encoding.
+    /// </summary>
+    /// <param name="encoding">The audio encoding.</param>
+    /// <returns>The matching <see cref="WaveFormatType"/>.</returns>
     public static WaveFormatType GetWaveFormatType(this AudioEncoding encoding) => encoding switch
     {
         AudioEncoding.Pcm8BitUnsigned or

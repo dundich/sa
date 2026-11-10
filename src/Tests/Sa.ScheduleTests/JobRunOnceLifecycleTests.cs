@@ -158,7 +158,7 @@ public sealed class JobRunOnceErrorTests : IAsyncDisposable
 
         await WaitForConditionAsync(() => F.Runs >= 2);
 
-        await _scheduler.Stop();
+        await _scheduler.StopAsync();
     }
 
     public async ValueTask DisposeAsync()

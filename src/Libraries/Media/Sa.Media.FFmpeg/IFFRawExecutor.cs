@@ -24,6 +24,7 @@ public interface IFFRawExecutor
     /// <param name="commandArguments">The command-line arguments to pass to the executable.</param>
     /// <param name="throwOnError">If true, throws <see cref="ProcessExecutionResultException"/> when the process exits with a non-zero code. If false, the result is always returned regardless of exit code.</param>
     /// <param name="timeout">Optional timeout for the execution. If not provided, uses <see cref="DefaultTimeout"/>.</param>
+    /// <param name="configure">Optional callback that can adjust the <see cref="ProcessStartInfo"/> before the process starts.</param>
     /// <param name="cancellationToken">A token that can be used to cancel the execution.</param>
     /// <returns>A task that represents the asynchronous execution result.</returns>
     Task<ProcessExecutionResult> ExecuteAsync(
@@ -41,6 +42,7 @@ public interface IFFRawExecutor
     /// <param name="commandArguments">An enumerable collection of command-line arguments.</param>
     /// <param name="throwOnError">If true, throws <see cref="ProcessExecutionResultException"/> when the process exits with a non-zero code. If false, the result is always returned regardless of exit code.</param>
     /// <param name="timeout">Optional timeout for the execution. If not provided, uses <see cref="DefaultTimeout"/>.</param>
+    /// <param name="configure">Optional callback that can adjust the <see cref="ProcessStartInfo"/> before the process starts.</param>
     /// <param name="cancellationToken">A token that can be used to cancel the execution.</param>
     /// <returns>A task that represents the asynchronous execution result.</returns>
     Task<ProcessExecutionResult> ExecuteAsync(

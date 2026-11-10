@@ -87,6 +87,7 @@ public sealed class TenantSettings
         AutoDetect = true;
     }
 
+    /// <summary>Disables tenant auto-detection.</summary>
     public void WithNoAutoDetect()
     {
         AutoDetect = false;

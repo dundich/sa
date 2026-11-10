@@ -1,5 +1,6 @@
 namespace Sa.Outbox.PostgreSql.Configuration;
 
+/// <summary>Fluent helpers for <see cref="PgOutboxMigrationSettings"/>.</summary>
 public static class PgOutboxMigrationSettingsExtensions
 {
     /// <summary>

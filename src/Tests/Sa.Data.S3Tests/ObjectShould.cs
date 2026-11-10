@@ -331,9 +331,9 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         var fileStream = await file.GetStream(CancellationToken);
 
 
-        var read = await fileStream.ReadAsync(buffer, CancellationToken);
+        var read = await fileStream.ReadAsync(buffer.AsMemory(), CancellationToken);
         Assert.True(read > 0);
-        read = await fileStream.ReadAsync(buffer, 10, 20, CancellationToken);
+        read = await fileStream.ReadAsync(buffer.AsMemory(10, 20), CancellationToken);
         Assert.True(read > 0);
 
 
@@ -653,7 +653,7 @@ public class ObjectShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
             return System.Buffers.ArrayPool<T>.Shared.Rent(minimumLength);
         }
 
-        public void Return<T>(T[] array, bool clear = false)
+        public void ReturnToPool<T>(T[] array, bool clear = false)
             => System.Buffers.ArrayPool<T>.Shared.Return(array, clear);
     }
 

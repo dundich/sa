@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace Sa.Classes;
+namespace Sa;
 
 
 /// <summary>

@@ -24,6 +24,7 @@ public sealed class PgOutboxMigrationSettings
     /// </summary>
     public TimeSpan ExecutionInterval { get; set; }
 
+    /// <summary>Creates settings with the default jittered migration interval.</summary>
     public PgOutboxMigrationSettings()
     {
         ExecutionInterval = TimeSpan.FromHours(6)

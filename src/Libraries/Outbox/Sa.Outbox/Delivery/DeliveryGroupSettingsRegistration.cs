@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 namespace Sa.Outbox.Delivery;
 
 /// <summary>
@@ -12,7 +10,7 @@ namespace Sa.Outbox.Delivery;
 /// <b>Registration time</b> — <see cref="RegistrationTimeSettings"/> is built eagerly from
 /// <see cref="OutboxDefaults"/> and the user <c>configure</c> callback (called with a
 /// <c>null</c> provider, as before). The configuration section cannot be consulted yet —
-/// <see cref="IConfiguration"/> requires a live provider. The manager is pre-populated with this
+/// <c>IConfiguration</c> requires a live provider. The manager is pre-populated with this
 /// snapshot, so the group is known (and the built settings are captured) as soon as the DI
 /// container is configured — no scheduler needed.
 /// </item>

@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
-using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.SqlBuilder;
 using System.Globalization;
 using System.Runtime.ExceptionServices;
@@ -16,7 +15,7 @@ internal sealed partial class PartRepository(
     IPartTableAdopter adopter,
     // Required, not optional: the [LoggerMessage] methods dereference it, so a null logger
     // turned the first drop/migrate into a NullReferenceException.
-    ILogger<PartRepository> logger) : IPartRepository
+    ILogger<PartRepository> logger) : IPartRepository, IDisposable
 {
 
     /// <summary>
@@ -29,6 +28,9 @@ internal sealed partial class PartRepository(
     /// an <see cref="ObjectDisposedException"/> instead of finishing or waiting for its token.
     /// </remarks>
     private readonly SemaphoreSlim _migrationSemaphore = new(1, 1);
+
+    /// <summary>Releases the migration gate.</summary>
+    public void Dispose() => _migrationSemaphore.Dispose();
 
     /// <summary>
     /// SQLSTATE of "object in use" — what PostgreSQL raises when a
@@ -53,7 +55,7 @@ internal sealed partial class PartRepository(
 
     public async Task<int> CreatePart(
         string tableName,
-        DateTimeOffset date,
+        DateTimeOffset periodStart,
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default)
     {
@@ -63,7 +65,7 @@ internal sealed partial class PartRepository(
         // plain table would fail, and the conversion is a no-op once it has happened.
         await adopter.EnsureAdopted(tableName, cancellationToken).ConfigureAwait(false);
 
-        string sql = builder.CreateSql(date, partValues);
+        string sql = builder.CreateSql(periodStart, partValues);
 
         return await ExecuteDDL(sql, cancellationToken).ConfigureAwait(false);
     }

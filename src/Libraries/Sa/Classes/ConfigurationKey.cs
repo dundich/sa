@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Configuration;
 
-namespace Sa.Classes;
+namespace Sa;
 
 /// <summary>
 /// Normalizes keys coming from a storage that uses the environment-variable spelling of a

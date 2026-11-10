@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Partitional.PostgreSql;
 using Sa.Partitional.PostgreSql.Cache;
-using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSqlTests.Cache;
 

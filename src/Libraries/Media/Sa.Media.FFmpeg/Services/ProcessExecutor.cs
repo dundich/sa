@@ -5,7 +5,7 @@ namespace Sa.Media.FFmpeg.Services;
 
 
 
-internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) : IProcessExecutor
+internal sealed partial class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) : IProcessExecutor
 {
     public async Task<int> ExecuteAsync(
         ProcessStartInfo startInfo
@@ -208,6 +208,8 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
     /// <param name="startInfo">Настройки процесса.</param>
     /// <param name="inputStream">Поток для stdin</param>
     /// <param name="onOutput">Callback, получающий stdout. Должен быть асинхронным.</param>
+    /// <param name="timeout">Таймаут выполнения; <c>null</c> — использовать значение по умолчанию.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
     /// <returns>Задача, завершающаяся после обработки потока и проверки результата.</returns>
     public async Task ExecuteStdOutAsync(
         ProcessStartInfo startInfo,
@@ -311,8 +313,10 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
                 if (read == 0) break;
                 // Строки короткие, аллокация ограничена; усечение делает BoundedStringBuilder.
                 foreach (var chunk in new string(buffer, 0, read).Split('\n'))
+                {
                     if (chunk.Length > 0)
                         errorBuilder.AppendLine(chunk.TrimEnd('\r'));
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -414,16 +418,16 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
             }
             else
             {
-                logger?.LogWarning("Process did not terminate after Kill()");
+                if (logger is not null) Log.ProcessDidNotTerminate(logger);
             }
         }
         catch (InvalidOperationException ex)
         {
-            logger?.LogWarning(ex, "Process is invalid or already disposed.");
+            if (logger is not null) Log.ProcessInvalid(logger, ex);
         }
         catch (Exception ex)
         {
-            logger?.LogError(ex, "Unexpected error during process termination");
+            if (logger is not null) Log.ProcessTerminationFailed(logger, ex);
         }
         finally
         {
@@ -438,5 +442,21 @@ internal sealed class ProcessExecutor(ILogger<ProcessExecutor>? logger = null) :
         }
 
         return exitCode;
+    }
+
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 2101, Level = LogLevel.Warning,
+            Message = "Process did not terminate after Kill().")]
+        public static partial void ProcessDidNotTerminate(ILogger logger);
+
+        [LoggerMessage(EventId = 2102, Level = LogLevel.Warning,
+            Message = "Process is invalid or already disposed.")]
+        public static partial void ProcessInvalid(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 2103, Level = LogLevel.Error,
+            Message = "Unexpected error during process termination.")]
+        public static partial void ProcessTerminationFailed(ILogger logger, Exception exception);
     }
 }

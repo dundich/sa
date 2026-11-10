@@ -20,10 +20,10 @@ public sealed class WorkQueueTimeoutTests
     [Fact]
     public void TimeProvider_DefaultsToTheSystemClock()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask));
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask));
 
-        var field = typeof(SaWorkQueue<int>)
+        var field = typeof(SaWorkChannel<int>)
             .GetField("_timeProvider", BindingFlags.Instance | BindingFlags.NonPublic);
 
         Assert.NotNull(field);
@@ -33,7 +33,7 @@ public sealed class WorkQueueTimeoutTests
     [Fact]
     public void WithTimeProvider_Null_Throws()
     {
-        var options = SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask);
+        var options = SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask);
 
         var ex = Assert.Throws<ArgumentNullException>(() => options.WithTimeProvider(null!));
 
@@ -107,8 +107,8 @@ public sealed class WorkQueueTimeoutTests
         var clock = new ManualTimeProvider();
         var processor = new ReleasableProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithTimeProvider(clock));
 
@@ -192,11 +192,11 @@ public sealed class WorkQueueTimeoutTests
     /// </remarks>
     static async Task RunWithWedgedReaderAsync(
         ManualTimeProvider clock,
-        Func<WedgedProcessor, SaWorkQueue<int>, Task> body)
+        Func<WedgedProcessor, SaWorkChannel<int>, Task> body)
     {
         var processor = new WedgedProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithTimeProvider(clock));
 

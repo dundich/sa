@@ -10,6 +10,7 @@ namespace Sa.Outbox.Redis.Serialization;
 /// Implement the core interface in new code; this one is a subtype of it, so an implementation
 /// still satisfies the provider's <c>WithMessageSerializer(...)</c>.
 /// </remarks>
+[Obsolete("Implement Sa.Outbox.Serialization.IOutboxMessageSerializer instead; this alias will be removed in a future release.")]
 public interface IOutboxMessageSerializer : Sa.Outbox.Serialization.IOutboxMessageSerializer
 {
 }

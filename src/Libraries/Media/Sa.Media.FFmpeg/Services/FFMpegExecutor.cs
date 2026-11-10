@@ -228,9 +228,11 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
     {
         // Проверяем сами, потому что на это поведение FFmpeg код возврата не смотрит.
         if (!file.IsOverwrite && File.Exists(file.OutputFileName))
+        {
             throw new IOException(
                 $"Output file already exists and isOverwrite is false: '{file.OutputFileName}'. " +
                 "Pass isOverwrite: true to replace it.");
+        }
 
         var result = await executor.ExecuteAsync(
             file.Command,
@@ -239,10 +241,12 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!File.Exists(file.OutputFileName))
+        {
             throw new ProcessExecutionException(
                 0,
                 $"FFmpeg reported success but did not create '{file.OutputFileName}'. " +
                 $"Most likely the bundled build lacks the requested encoder.{Environment.NewLine}{result.StandardError}");
+        }
 
         return result.StandardError;
     }
@@ -277,10 +281,12 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
         var output = Path.GetFullPath(outputFileName);
 
         if (string.Equals(input, output, comparison))
+        {
             throw new ArgumentException(
                 $"Input and output must be different files, but both are '{input}'. " +
                 "FFmpeg would truncate the input before reading it.",
                 nameof(outputFileName));
+        }
 
         // Раньше несуществующий вход доходил до FFmpeg, который падал с exit code 1, а этот код
         // молча проглатывал ошибку. Проверяем здесь — с понятным сообщением.

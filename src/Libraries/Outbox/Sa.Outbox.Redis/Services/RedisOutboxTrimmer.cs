@@ -135,7 +135,7 @@ internal sealed partial class RedisOutboxTrimmer(
 
         if (removed > 0)
         {
-            LogStreamTrimmed(_logger, streamKey.ToString(), trimBefore.ToString(), removed);
+            LogStreamTrimmed(_logger, streamKey, trimBefore, removed);
         }
     }
 
@@ -257,7 +257,7 @@ internal sealed partial class RedisOutboxTrimmer(
         EventId = 8101,
         Level = LogLevel.Debug,
         Message = "Trimmed message stream '{Stream}' up to '{TrimBefore}': {Removed} entries removed.")]
-    static partial void LogStreamTrimmed(ILogger logger, string stream, string trimBefore, long removed);
+    static partial void LogStreamTrimmed(ILogger logger, RedisKey stream, RedisValue trimBefore, long removed);
 
     [LoggerMessage(
         EventId = 8103,

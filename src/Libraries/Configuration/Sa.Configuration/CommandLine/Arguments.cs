@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using Sa.Classes;
 
 namespace Sa.Configuration.CommandLine;
 
@@ -202,7 +201,9 @@ public sealed partial class Arguments
     {
         if (!Contains(param)
             || !float.TryParse(this[param], CultureInfo.InvariantCulture, out float result))
+        {
             return default;
+        }
 
         return result;
     }
@@ -216,7 +217,9 @@ public sealed partial class Arguments
     {
         if (!Contains(param)
             || !long.TryParse(this[param], CultureInfo.InvariantCulture, out long result))
+        {
             return default;
+        }
 
         return result;
     }
@@ -230,7 +233,9 @@ public sealed partial class Arguments
     {
         if (!Contains(param)
             || !TimeSpan.TryParse(this[param], CultureInfo.InvariantCulture, out TimeSpan result))
+        {
             return default;
+        }
 
         return result;
     }

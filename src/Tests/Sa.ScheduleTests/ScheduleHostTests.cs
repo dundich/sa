@@ -38,6 +38,6 @@ public sealed class ScheduleHostTests
 
         public Task<int> Restart(CancellationToken cancellationToken) => Task.FromResult(0);
 
-        public Task Stop() => _never.Task;
+        public Task StopAsync() => _never.Task;
     }
 }

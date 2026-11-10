@@ -19,7 +19,7 @@ namespace Sa.Utils.WorkQueue;
 /// to clean up, and an empty pool must not empty the buffer as a side effect.
 /// </para>
 /// </remarks>
-public sealed partial class SaWorkQueue<TInput>
+public sealed partial class SaWorkChannel<TInput>
 {
     /// <summary>
     /// Emergency stop of the pool: cancels every reader, drops the items still in

@@ -146,7 +146,7 @@ public sealed class ExtensionMethodTests : IAsyncLifetime
         // Register InMemory with explicit "mem_basket"
         services.AddSingleton<IFileStorage>(new InMemoryFileStorage(
             new InMemoryFileStorageOptions("mem_basket")));
-        
+
         // Register HybridFileStorage with logging
         services.AddSaHybridFileStorage(cfg => cfg.AddLogging());
 
@@ -195,7 +195,7 @@ public sealed class ExtensionMethodTests : IAsyncLifetime
     {
         // Arrange — manually register two InMemory storages with different baskets
         var services = new ServiceCollection();
-        
+
         services.AddSingleton<IFileStorage>(new InMemoryFileStorage(
             new InMemoryFileStorageOptions("source_basket")));
         services.AddSingleton<IFileStorage>(new InMemoryFileStorage(
@@ -254,7 +254,7 @@ public sealed class ExtensionMethodTests : IAsyncLifetime
     {
         // Arrange — manually register two InMemory storages with explicit baskets
         var services = new ServiceCollection();
-        
+
         services.AddSingleton<IFileStorage>(new InMemoryFileStorage(
             new InMemoryFileStorageOptions("batch_src")));
         services.AddSingleton<IFileStorage>(new InMemoryFileStorage(

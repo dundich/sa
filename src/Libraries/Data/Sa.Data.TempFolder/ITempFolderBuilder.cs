@@ -6,7 +6,7 @@ namespace Sa.Data.TempFolder;
 
 /// <summary>
 /// Collects the configuration of one temp-folder instance registered through
-/// <see cref="Setup.AddSaTempFolder"/>: the configuration section, the <see cref="Defaults"/>
+/// <c>AddSaTempFolder</c>: the configuration section, the <see cref="Defaults"/>
 /// channel, the standard options pipeline (<c>Configure</c> / <c>PostConfigure</c> /
 /// <c>Validate</c>) and optional code overrides for the cleanup / naming strategies, in one
 /// registration delegate.
@@ -26,7 +26,7 @@ public interface ITempFolderBuilder
 
     /// <summary>
     /// Binds <see cref="TempFolderOptions"/> from the given configuration section, e.g.
-    /// <c>"TempFolder:Uploads"</c>. Recorded and bound by <see cref="Setup.AddSaTempFolder"/> in
+    /// <c>"TempFolder:Uploads"</c>. Recorded and bound by <c>AddSaTempFolder</c> in
     /// the fixed slot before the <see cref="Options"/> actions — so an <c>Configure</c> there
     /// always wins over configuration. The last path wins.
     /// </summary>

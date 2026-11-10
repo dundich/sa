@@ -166,7 +166,7 @@ public static class Setup
         // builder captured here, so a bare call followed by a configuring one still builds the
         // queue the caller described.
         services.TryAdd(new ServiceDescriptor(
-            typeof(ISaWorkQueue<TInput>),
+            typeof(ISaWorkChannel<TInput>),
             sp => CreateQueue(sp, state.Builder),
             lifetime));
 
@@ -210,7 +210,7 @@ public static class Setup
     /// read runs the validators), the builder's processor and callbacks, then the escape
     /// hatch — the only stage that runs after configuration.
     /// </summary>
-    private static ISaWorkQueue<TInput> CreateQueue<TInput>(IServiceProvider services, WorkQueueBuilder<TInput>? builder)
+    private static SaWorkChannel<TInput> CreateQueue<TInput>(IServiceProvider services, WorkQueueBuilder<TInput>? builder)
     {
         var settings = services.GetRequiredService<IOptionsMonitor<SaWorkQueueSettings>>()
             .Get(QueueSettingsName<TInput>());
@@ -236,9 +236,9 @@ public static class Setup
             options = escapeHatch(services, options);
         }
 
-        var logger = services.GetService<ILogger<SaWorkQueue<TInput>>>();
+        var logger = services.GetService<ILogger<SaWorkChannel<TInput>>>();
 
-        return new SaWorkQueue<TInput>(options, logger);
+        return new SaWorkChannel<TInput>(options, logger);
     }
 
     private static ISaWork<TInput> ResolveProcessor<TInput>(IServiceProvider services, WorkQueueBuilder<TInput>? builder)
@@ -266,20 +266,20 @@ public static class Setup
     /// values above the automatic max are clamped to it.
     /// </param>
     /// <remarks>
-    /// <see cref="ISaWorkQueue{TInput}.MaxConcurrency"/> is left at the processor count, so the queue cannot scale above it
+    /// <see cref="ISaWorkChannel{TInput}.MaxConcurrency"/> is left at the processor count, so the queue cannot scale above it
     /// at runtime. Use the options directly (and <c>WithMaxConcurrency</c>) when a higher ceiling
     /// is needed.
     /// </remarks>
-    public static ISaWorkQueue<TInput> CreateSimple<TInput>(
+    public static ISaWorkChannel<TInput> CreateSimple<TInput>(
         this ISaWork<TInput> processor,
         int? concurrency = null)
     {
         ArgumentNullException.ThrowIfNull(processor);
 
-        var options = SaWorkQueueOptions<TInput>.Create(processor)
+        var options = SaWorkQueueOptions.Create<TInput>(processor)
             .WithConcurrencyLimit(concurrency ?? Environment.ProcessorCount);
 
-        return new SaWorkQueue<TInput>(options);
+        return new SaWorkChannel<TInput>(options);
     }
 
     /// <summary>Creates a work queue from a processing delegate with a fixed concurrency.</summary>
@@ -290,7 +290,7 @@ public static class Setup
     /// values above the automatic max are clamped to it.
     /// </param>
     /// <remarks>
-    /// <see cref="ISaWorkQueue{TInput}.MaxConcurrency"/> is left at the processor count, so the queue
+    /// <see cref="ISaWorkChannel{TInput}.MaxConcurrency"/> is left at the processor count, so the queue
     /// cannot scale above it at runtime. Use the options directly (and <c>WithMaxConcurrency</c>)
     /// when a higher ceiling is needed.
     /// <para>
@@ -301,16 +301,16 @@ public static class Setup
     /// which is an extension method and infers it from the receiver.
     /// </para>
     /// </remarks>
-    public static ISaWorkQueue<TInput> CreateSimple<TInput>(
+    public static ISaWorkChannel<TInput> CreateSimple<TInput>(
         Func<TInput, CancellationToken, Task> process,
         int? concurrency = null)
     {
         ArgumentNullException.ThrowIfNull(process);
 
-        var options = SaWorkQueueOptions<TInput>.Create(process)
+        var options = SaWorkQueueOptions.Create<TInput>(process)
             .WithConcurrencyLimit(concurrency ?? Environment.ProcessorCount);
 
-        return new SaWorkQueue<TInput>(options);
+        return new SaWorkChannel<TInput>(options);
     }
 }
 

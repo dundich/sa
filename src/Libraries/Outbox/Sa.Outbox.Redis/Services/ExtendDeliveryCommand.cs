@@ -1,4 +1,3 @@
-using Sa.Outbox.Delivery;
 using Sa.Outbox.Redis.Configuration;
 using StackExchange.Redis;
 

@@ -4,7 +4,7 @@ namespace Sa.Outbox.Delivery;
 /// Per-consumer-group idle state that feeds the adaptive poll schedule.
 /// <para>
 /// One instance lives for the lifetime of a consumer group (see
-/// <see cref="IOutboxIdleStateRegistry"/>). <see cref="DeliveryJob{TMessage}"/> reports the
+/// <see cref="IOutboxIdleStateRegistry"/>). <c>DeliveryJob&lt;TMessage&gt;</c> reports the
 /// outcome of every run here, and <see cref="AdaptiveIdleTiming"/> reads
 /// <see cref="CurrentInterval"/> to decide when the next run should happen.
 /// </para>

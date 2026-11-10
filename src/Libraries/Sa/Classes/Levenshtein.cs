@@ -1,8 +1,8 @@
+using Sa.Extensions;
 using System.Buffers;
 using System.Runtime.CompilerServices;
-using Sa.Extensions;
 
-namespace Sa.Classes;
+namespace Sa;
 
 
 /// <summary>
@@ -201,6 +201,7 @@ internal static class Levenshtein
         /// <param name="targetObjects">Collection of target objects to match against</param>
         /// <param name="targetStringSelector">Function to extract string from target objects</param>
         /// <param name="similarityThreshold">Minimum similarity threshold (0.0 - 1.0)</param>
+        /// <param name="isNormalize">Whether the strings are normalized before comparison.</param>
         /// <returns>Best match result or null if no matches found above threshold</returns>
         public static MatchResult<T>? FindBestMatch<T>(
             string? source,

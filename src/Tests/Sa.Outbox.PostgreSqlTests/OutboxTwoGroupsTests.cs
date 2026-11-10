@@ -120,7 +120,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
 
         await Task.Delay(200, TestContext.Current.CancellationToken);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.Equal((int)total, SomeMessageConsumerGr1.Counter);
         Assert.Equal((int)total, SomeMessageConsumerGr2.Counter);

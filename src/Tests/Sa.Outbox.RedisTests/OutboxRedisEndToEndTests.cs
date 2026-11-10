@@ -73,7 +73,7 @@ public class OutboxRedisEndToEndTests(OutboxRedisEndToEndFixture fixture) : ICla
         }
         finally
         {
-            await scheduler.Stop();
+            await scheduler.StopAsync();
         }
     }
 }

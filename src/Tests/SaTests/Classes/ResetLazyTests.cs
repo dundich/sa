@@ -1,4 +1,4 @@
-using Sa.Classes;
+using Sa;
 using System.Collections.Concurrent;
 
 namespace SaTests.Classes;

@@ -15,7 +15,7 @@ public interface IPartCleanupService
     /// Dropping partitions behind the cache's back does not invalidate the cached partition metadata,
     /// so a call made outside the background job leaves a stale snapshot in place until it expires
     /// (see <see cref="PartCacheSettings.CacheTtl"/>). Prefer the scheduled job, or run
-    /// <see cref="IPartitionManager.Migrate"/> and the cleanup from the same place, when the same
+    /// <c>IPartitionManager.Migrate</c> and the cleanup from the same place, when the same
     /// process is expected to see the change right away.
     /// </para>
     /// <para>

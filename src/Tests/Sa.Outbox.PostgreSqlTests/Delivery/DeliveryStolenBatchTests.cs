@@ -2,10 +2,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.Publication;
-using Sa.Outbox.PlugServices;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 

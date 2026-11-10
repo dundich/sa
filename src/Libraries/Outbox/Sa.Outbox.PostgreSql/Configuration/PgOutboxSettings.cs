@@ -22,7 +22,7 @@ public sealed class PgOutboxSettings
     public PgOutboxCleanupSettings CleanupSettings { get; } = new();
 
     /// <summary>
-    ///  Represents the consumption settings for retrieving & processing messages from the Outbox
+    ///  Represents the consumption settings for retrieving &amp; processing messages from the Outbox
     /// </summary>
     public PgOutboxConsumeSettings ConsumeSettings { get; } = new();
 

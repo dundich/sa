@@ -161,7 +161,7 @@ public static class HybridFileStorageExtensions
         int completed = 0;
 
         // Объект для синхронизации доступа к общим коллекциям и счетчикам
-        Lock lockObj = new ();
+        Lock lockObj = new();
 
         async Task<StorageResult?> ProcessFileAsync(string fileId, int index, CancellationToken ct)
         {

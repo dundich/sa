@@ -125,7 +125,7 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
         Assert.Equal((ulong)batchB.Length, sentB);
 
         await WaitForAsync(() => C2Consumer.Counter >= batchA.Length + batchB.Length, ct);
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         // The regression itself: with the old msg_id cursor batch B would never be seen.
         Assert.Equal(batchA.Length + batchB.Length, C2Consumer.Counter);
@@ -269,7 +269,7 @@ public class DeliveryMinOffsetFloorTests(DeliveryMinOffsetFloorTests.Fixture fix
 
         // Give the group a chance to (wrongly) deliver m1, then prove it never did.
         await Task.Delay(600, ct);
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.Equal(1, FloorConsumer.Counter);
 

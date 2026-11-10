@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.PostgreSql.Fixture;
 using Sa.Partitional.PostgreSql;
-using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSqlTests.Cleaning;
 
@@ -10,36 +9,33 @@ public class PartCleanupArchiveTests(PartCleanupArchiveTests.Fixture fixture) : 
     public class Fixture : PgDataSourceFixture<IPartCleanupService>
     {
         public Fixture()
+        {
+            Services.AddSaPartitional((_, builder) =>
             {
-                Services.AddSaPartitional((_, builder) =>
+                builder.AddSchema(schema =>
                 {
-                    builder.AddSchema(schema =>
-                    {
-                        schema.AddTable("cleanup_archive",
-                            "id INT NOT NULL",
-                            "city TEXT NOT NULL",
-                            "tenant_id INT NOT NULL",
-                            "payload_id TEXT NOT NULL"
-                        )
-                        .PartByList("tenant_id", "city")
-                        ;
-                    });
-                })
-                .AddDataSource(configure => configure.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)))
-                .AddPartCleanupSchedule(b => b.Configure((_, s) =>
-                {
-                    s.CleanupMode = PartCleanupMode.Archive;
-                    s.ArchiveSchemaName = "archive";
-                    s.DropPartsAfterRetention = TimeSpan.Zero;
-                }))
-                ;
-            }
+                    schema.AddTable("cleanup_archive",
+                        "id INT NOT NULL",
+                        "city TEXT NOT NULL",
+                        "tenant_id INT NOT NULL",
+                        "payload_id TEXT NOT NULL"
+                    )
+                    .PartByList("tenant_id", "city")
+                    ;
+                });
+            })
+            .AddDataSource(configure => configure.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)))
+            .AddPartCleanupSchedule(b => b.Configure((_, s) =>
+            {
+                s.CleanupMode = PartCleanupMode.Archive;
+                s.ArchiveSchemaName = "archive";
+                s.DropPartsAfterRetention = TimeSpan.Zero;
+            }))
+            ;
         }
+    }
 
     private IPartCleanupService Sub => fixture.Sub;
-
-    private Task<List<PartByRangeInfo>> GetParts()
-        => GetPartRep().GetPartsToDate("cleanup_archive", DateTimeOffset.UtcNow.AddDays(200));
 
     private IPartRepository GetPartRep() => fixture.ServiceProvider.GetRequiredService<IPartRepository>();
 

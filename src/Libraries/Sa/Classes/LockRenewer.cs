@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Sa.Classes;
+namespace Sa;
 
 /// <summary>
 /// Фоновое продление блокировки по таймеру.

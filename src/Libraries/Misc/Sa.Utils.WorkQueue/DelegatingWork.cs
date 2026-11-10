@@ -6,7 +6,7 @@ namespace Sa.Utils.WorkQueue;
 /// </summary>
 /// <remarks>
 /// Shared by the two entry points that accept a delegate —
-/// <see cref="SaWorkQueueOptions{TInput}.Create(Func{TInput, CancellationToken, Task})"/>
+/// <see cref="SaWorkQueueOptions.Create{TInput}(Func{TInput, CancellationToken, Task})"/>
 /// and <see cref="IWorkQueueBuilder{TInput}.WithProcess"/> — rather than nested privately in
 /// each. Both used to declare their own identical copy, which meant a change to the adapter
 /// had two places to be made and one of them could be missed silently.

@@ -2,7 +2,7 @@ namespace Sa.Outbox.PlugServices;
 
 /// <summary>
 /// One message inside an <see cref="OutboxMessageBatch{TMessage}"/>: the payload and its
-/// caller-supplied identifier. A struct rather than the <see cref="OutboxMessage{TMessage}"/>
+/// caller-supplied identifier. A struct rather than the <c>OutboxMessage&lt;TMessage&gt;</c>
 /// record, so a bulk publish does not allocate one wrapper object per message.
 /// </summary>
 /// <typeparam name="TMessage">The type of the payload.</typeparam>
@@ -18,6 +18,9 @@ public readonly record struct OutboxMessageBatchItem<TMessage>(
 /// <typeparam name="TMessage">The type of the payload.</typeparam>
 public readonly struct OutboxMessageBatch<TMessage>
 {
+    /// <summary>Creates a batch over the given messages and shared part info.</summary>
+    /// <param name="messages">The messages of the batch, in publish order.</param>
+    /// <param name="partInfo">Tenant, part and timestamp shared by the batch.</param>
     public OutboxMessageBatch(
         ReadOnlyMemory<OutboxMessageBatchItem<TMessage>> messages,
         OutboxPartInfo partInfo)

@@ -25,7 +25,7 @@ public sealed class JobErrorHandlerIntegrationTests : IAsyncDisposable
         // Let it run and process normally
         await Task.Delay(350, TestContext.Current.CancellationToken);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class JobErrorHandlerIntegrationTests : IAsyncDisposable
 
         await Task.Delay(250, TestContext.Current.CancellationToken);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     private sealed class TestJob : IJob

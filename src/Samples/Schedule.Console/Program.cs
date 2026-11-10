@@ -52,7 +52,7 @@ else
 _ = Task.Run(async () =>
 {
     await Task.Delay(5000);
-    await controller.Stop();
+    await controller.StopAsync();
     Console.WriteLine($"*** stopped & start after 2 sec");
 
     await Task.Delay(2000);
@@ -96,12 +96,12 @@ namespace Schedule.Console
     {
         public async Task OnHandle(
             IJobContext context,
-            Func<Task> next,
+            Func<Task> continuation,
             object? key,
             CancellationToken cancellationToken)
         {
             System.Console.WriteLine($"<beg>");
-            await next();
+            await continuation();
             System.Console.WriteLine($"<end>");
         }
     }

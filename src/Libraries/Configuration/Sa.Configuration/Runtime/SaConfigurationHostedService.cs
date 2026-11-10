@@ -19,7 +19,7 @@ namespace Sa.Configuration;
 /// place before the first request, and a failure fails the host start.
 /// </para>
 /// </remarks>
-internal sealed class SaConfigurationHostedService(IServiceProvider services, SaConfigurationRuntimeOptions options)
+internal sealed partial class SaConfigurationHostedService(IServiceProvider services, SaConfigurationRuntimeOptions options)
     : IHostedLifecycleService
 {
     private CancellationTokenSource? _polling;
@@ -85,7 +85,7 @@ internal sealed class SaConfigurationHostedService(IServiceProvider services, Sa
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            Logger.LogError(exception, "The initial load of the dynamic configuration layers failed.");
+            Log.InitialLoadFailed(Logger, exception);
             throw;
         }
     }
@@ -100,10 +100,7 @@ internal sealed class SaConfigurationHostedService(IServiceProvider services, Sa
             }
             catch (Exception exception)
             {
-                Logger.LogError(
-                    exception,
-                    "The background initial load of the dynamic configuration layers failed; "
-                    + "the static configuration stays in effect.");
+                Log.BackgroundInitialLoadFailed(Logger, exception);
             }
         }, CancellationToken.None);
 
@@ -132,10 +129,7 @@ internal sealed class SaConfigurationHostedService(IServiceProvider services, Sa
                 catch (Exception exception)
                 {
                     // The provider keeps its previous snapshot; one failed poll must not kill the loop.
-                    Logger.LogError(
-                        exception,
-                        "Periodic reload of the dynamic configuration layers failed; "
-                        + "the previous snapshot stays in effect.");
+                    Log.PeriodicReloadFailed(Logger, exception);
                 }
             }
         }
@@ -143,5 +137,20 @@ internal sealed class SaConfigurationHostedService(IServiceProvider services, Sa
         {
             // Normal shutdown.
         }
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 1001, Level = LogLevel.Error,
+            Message = "The initial load of the dynamic configuration layers failed.")]
+        public static partial void InitialLoadFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 1002, Level = LogLevel.Error,
+            Message = "The background initial load of the dynamic configuration layers failed; the static configuration stays in effect.")]
+        public static partial void BackgroundInitialLoadFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 1003, Level = LogLevel.Error,
+            Message = "Periodic reload of the dynamic configuration layers failed; the previous snapshot stays in effect.")]
+        public static partial void PeriodicReloadFailed(ILogger logger, Exception exception);
     }
 }

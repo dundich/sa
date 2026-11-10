@@ -36,8 +36,13 @@ public interface IScheduler
     /// Stops the scheduler.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task Stop();
+    Task StopAsync();
 
 
+    /// <summary>
+    /// Gets the scheduler of a registered job.
+    /// </summary>
+    /// <param name="jobId">The ID of the job.</param>
+    /// <returns>The job scheduler, or <see langword="null"/> when the job is not registered.</returns>
     IJobScheduler? GetSchedule(Guid jobId) => Jobs.FirstOrDefault(c => c.JobId == jobId);
 }

@@ -212,7 +212,7 @@ internal static class UrlUtils
         }
         finally
         {
-            arrayPool.Return(byteBuffer);
+            arrayPool.ReturnToPool(byteBuffer);
         }
     }
 }

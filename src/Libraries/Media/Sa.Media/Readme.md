@@ -4,10 +4,17 @@
 
 Async, memory-efficient WAV file reader for .NET 10+. Designed for Native AOT compatibility with zero allocations on hot paths. Includes a stereo cross-feed suppression pipeline (`Sa.Media.Echo`) for separating closely miked sources.
 
+## Installation
+
+```bash
+dotnet add package Sa.Media
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [Features](#features)
 - [Quick Start](#quick-start)
   - [Read header](#read-header)

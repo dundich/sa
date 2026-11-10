@@ -23,7 +23,7 @@ namespace Sa.Data.TempFolder;
 /// expired) or a pending entry (the folder is skipped): a file that was just written is never
 /// deleted, even in the quiet window before its touch fires.
 /// </remarks>
-internal sealed class CleanupGate
+internal sealed class CleanupGate : IDisposable
 {
     private readonly Lock _sync = new();
     private int _activity;
@@ -123,6 +123,19 @@ internal sealed class CleanupGate
         {
             _activity--;
         }
+    }
+
+    /// <summary>Releases the pending interrupt source.</summary>
+    public void Dispose()
+    {
+        CancellationTokenSource? interrupt;
+        lock (_sync)
+        {
+            interrupt = _interrupt;
+            _interrupt = null;
+        }
+
+        interrupt?.Dispose();
     }
 
     private void ReleasePass()

@@ -45,8 +45,8 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Wait_Strategy_AllAccepted_WhenBufferHasRoom()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(5));
 
@@ -65,8 +65,8 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Wait_Strategy_WaitsForSpace_ThenAcceptsAll()
     {
         var processor = new GateProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(1)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Wait));
@@ -92,8 +92,8 @@ public sealed class WorkQueueEnqueueManyTests
     {
         var processor = new CountingProcessor();
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip)
@@ -120,8 +120,8 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Throw_Strategy_PartialAcceptance_ThrowsWithBatchCounts()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Throw));
@@ -153,8 +153,8 @@ public sealed class WorkQueueEnqueueManyTests
     {
         var processor = new CountingProcessor();
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
 
@@ -172,8 +172,8 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Wait_Strategy_CancelledToken_ThrowsAndDoesNotCount()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(1));
 
@@ -203,8 +203,8 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Stopped_Queue_Throws()
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2));
 
@@ -226,8 +226,8 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Disposed_Queue_Throws()
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2));
 

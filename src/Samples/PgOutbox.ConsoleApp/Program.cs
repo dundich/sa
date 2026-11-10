@@ -6,8 +6,8 @@ using Sa.Outbox;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Configuration;
-using Sa.Outbox.PostgreSql.Serialization;
 using Sa.Outbox.Publication;
+using Sa.Outbox.Serialization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -86,7 +86,7 @@ namespace PgOutbox
 
     public sealed class RndConsumer(ILogger<RndConsumer> logger) : IConsumer<SomeMessage>
     {
-        static int s_counter = 0;
+        static int _counter;
 
         public async ValueTask Consume(
             OutboxConsumerSettings settings,
@@ -96,7 +96,7 @@ namespace PgOutbox
         {
             await Task.Delay(500, cancellationToken);
 
-            if (Interlocked.Increment(ref s_counter) > 2)
+            if (Interlocked.Increment(ref _counter) > 2)
             {
                 // runtime settings update — create a new settings snapshot
                 // (In practice this would go through IOutboxSettingsManager)
@@ -118,7 +118,7 @@ namespace PgOutbox
                     msg.Aborted("skip");
                     break;
                 case 1:
-                    msg.Warn(new Exception("No permanent error"));
+                    msg.Warn(new InvalidOperationException("No permanent error"));
                     break;
                 case 2:
                     msg.Postpone(TimeSpan.FromMinutes(1));
@@ -127,7 +127,7 @@ namespace PgOutbox
                     msg.Retry(TimeSpan.FromSeconds(30), "retry");
                     break;
                 case 4:
-                    msg.Error(new Exception("Permanent error"));
+                    msg.Fail(new InvalidOperationException("Permanent error"));
                     break;
                 default:
                     msg.Ok();
@@ -144,20 +144,15 @@ namespace PgOutbox
             OutboxMessageFilter filter,
             ReadOnlySpan<IOutboxContextOperations<SomeMessage>> messages)
         {
-            logger.LogWarning(
-                "======= {Group} : {Tenant} =======",
-                filter.ConsumerGroupId,
-                filter.TenantId);
+            SampleLog.MonitorHeader(logger, filter.ConsumerGroupId, filter.TenantId);
 
             foreach (var msg in messages)
             {
+                DateTimeOffset now = msg.GetUtcNow();
                 if (logger.IsEnabled(LogLevel.Information))
                 {
-                    logger.LogInformation("{Date}   #{TaskId}: {Payload} [{Code}]"
-                    , msg.GetUtcNow()
-                    , msg.DeliveryInfo.TaskId
-                    , msg.Payload
-                    , msg.DeliveryResult.Code);
+                    SampleLog.MonitorMessage(
+                        logger, now, msg.DeliveryInfo.TaskId, msg.Payload, msg.DeliveryResult.Code);
                 }
             }
         }
@@ -221,4 +216,14 @@ namespace PgOutbox
     {
     }
     #endregion
+}
+
+internal static partial class SampleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "======= {Group} : {Tenant} =======")]
+    public static partial void MonitorHeader(ILogger logger, string group, int tenant);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "{Date}   #{TaskId}: {Payload} [{Code}]")]
+    public static partial void MonitorMessage(
+        ILogger logger, DateTimeOffset date, long taskId, object payload, DeliveryStatusCode code);
 }

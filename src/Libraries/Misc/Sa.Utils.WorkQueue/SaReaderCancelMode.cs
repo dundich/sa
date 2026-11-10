@@ -1,5 +1,6 @@
 namespace Sa.Utils.WorkQueue;
 
+/// <summary>Whether a cancelled reader interrupts its in-flight item.</summary>
 public enum SaReaderCancelMode
 {
     /// <summary>
@@ -15,7 +16,7 @@ public enum SaReaderCancelMode
     /// Soft cancel: a removed reader finishes its current work item before exiting.
     /// </summary>
     /// <remarks>
-    /// Applies to limit decrease and pause (<see cref="ISaWorkQueue{TInput}.ConcurrencyLimit"/>):
+    /// Applies to limit decrease and pause (<see cref="ISaWorkChannel{TInput}.ConcurrencyLimit"/>):
     /// the in-flight item completes normally (<see cref="SaWorkStatus.Completed"/>) and items
     /// still in the channel remain queued for the remaining or replacement readers.
     /// Force cancel and shutdown always interrupt in-flight work regardless of this mode.

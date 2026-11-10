@@ -4,10 +4,17 @@
 
 Declarative PostgreSQL table partitioning library for .NET 10 — supports **range** (day / month / year) and **list** partitioning with automated migration, cleanup scheduling, and in-memory caching.
 
+## Installation
+
+```bash
+dotnet add package Sa.Partitional.PostgreSql
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [Properties](#properties)
   - [Partition management](#partition-management)
   - [Fluent Builder](#fluent-builder)

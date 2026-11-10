@@ -1,7 +1,7 @@
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.Redis.Configuration;
-using Sa.Outbox.Serialization;
 using Sa.Outbox.Redis.Services;
+using Sa.Outbox.Serialization;
 using StackExchange.Redis;
 
 namespace Sa.Outbox.Redis.Commands;

@@ -1,5 +1,8 @@
 namespace Sa.Schedule;
 
+/// <summary>
+/// Configures how errors raised by a job are handled.
+/// </summary>
 public interface IJobErrorHandlingBuilder
 {
     /// <summary>

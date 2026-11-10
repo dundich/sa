@@ -382,7 +382,7 @@ Publishing:
 ```csharp
 IOutboxMessagePublisher billing = sp.GetRequiredKeyedService<IOutboxMessagePublisher>("billing");
 
-sp.GetRequiredService<IOutboxPublisherResolver>().For("billing").PublishSingle(invoice, tenantId: 1);
+sp.GetRequiredService<IOutboxPublisherResolver>().GetPublisher("billing").PublishSingle(invoice, tenantId: 1);
 ```
 
 ## What is keyed
@@ -432,7 +432,7 @@ through an internal `IOutboxStorage` router. Public pipeline signatures do not c
 - composite keys: the same group id under two providers, a composite `Get`, the ambiguity error of
   the string API;
 - the default-key PG/Redis paths behave as before (all existing suites);
-- a duplicate provider key fails at startup; `IOutboxPublisherResolver.For(unknown)` — clear error.
+- a duplicate provider key fails at startup; `IOutboxPublisherResolver.GetPublisher(unknown)` — clear error.
 
 ## Status
 

@@ -11,7 +11,7 @@ namespace Sa.Utils.WorkQueue.Tests;
 /// <para>
 /// The shape that triggers it is ordinary: a paused queue whose buffer already
 /// holds an item, plus a processor that completes or faults without yielding. The
-/// reader started by the <see cref="ISaWorkQueue{TInput}.ConcurrencyLimit"/> setter
+/// reader started by the <see cref="ISaWorkChannel{TInput}.ConcurrencyLimit"/> setter
 /// then picks the item up on the spot, and — if the item does not complete
 /// normally — the loop reaches its <c>finally</c> and calls
 /// <c>RemoveReader</c> before the loop has ever finished starting.
@@ -72,10 +72,10 @@ public sealed class WorkQueueSyncReaderTests
     // below reach it by reflection. They check the two properties the registry has
     // to have: every entry is a usable reader, and none of them is a leftover.
 
-    private static readonly FieldInfo ReadersField = typeof(SaWorkQueue<int>)
+    private static readonly FieldInfo ReadersField = typeof(SaWorkChannel<int>)
         .GetField("_readers", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
-    private static readonly FieldInfo ReadersSyncField = typeof(SaWorkQueue<int>)
+    private static readonly FieldInfo ReadersSyncField = typeof(SaWorkChannel<int>)
         .GetField("_readersSync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
     private static readonly MethodInfo LockEnter = typeof(Lock).GetMethod(nameof(Lock.Enter))!;
@@ -95,7 +95,7 @@ public sealed class WorkQueueSyncReaderTests
     /// a <see cref="Lock"/> synchronizes through its own state, not through the object's
     /// monitor, so anything but the very same <see cref="Lock"/> provides no exclusion at all.
     /// </remarks>
-    private static List<object> Readers(SaWorkQueue<int> queue)
+    private static List<object> Readers(SaWorkChannel<int> queue)
     {
         var sync = ReadersSyncField.GetValue(queue)!;
 
@@ -113,9 +113,9 @@ public sealed class WorkQueueSyncReaderTests
     private static object? Prop(object instance, string name)
         => instance.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public)!.GetValue(instance);
 
-    private static int TrackedCount(SaWorkQueue<int> queue) => Readers(queue).Count;
+    private static int TrackedCount(SaWorkChannel<int> queue) => Readers(queue).Count;
 
-    private static int LiveCount(SaWorkQueue<int> queue)
+    private static int LiveCount(SaWorkChannel<int> queue)
         => Readers(queue).Count(r => (bool)Prop(r, "IsLive")!);
 
     /// <summary>
@@ -123,7 +123,7 @@ public sealed class WorkQueueSyncReaderTests
     /// cancelled reader leaves the registry from its own <c>finally</c>, so the
     /// count settles asynchronously after a limit change.
     /// </summary>
-    private static async Task WaitForTrackedCountAsync(SaWorkQueue<int> queue, int expected)
+    private static async Task WaitForTrackedCountAsync(SaWorkChannel<int> queue, int expected)
     {
         var deadline = Environment.TickCount64 + 5000;
         while (TrackedCount(queue) != expected)
@@ -139,7 +139,7 @@ public sealed class WorkQueueSyncReaderTests
     /// before it was registered leaves a disposed source behind, and that stale
     /// entry counts as a live reader forever.
     /// </summary>
-    private static void AssertNoDisposedReaders(SaWorkQueue<int> queue)
+    private static void AssertNoDisposedReaders(SaWorkChannel<int> queue)
     {
         foreach (var reader in Readers(queue))
         {
@@ -159,12 +159,12 @@ public sealed class WorkQueueSyncReaderTests
     /// A paused queue with a full buffer and a processor that never yields, so
     /// raising the limit starts a reader that runs to completion inline.
     /// </summary>
-    private static async Task<SaWorkQueue<int>> CreateWedgedQueueAsync(
+    private static async Task<SaWorkChannel<int>> CreateWedgedQueueAsync(
         SaExecutionErrorStrategy strategy,
         int bufferedItems = 4)
     {
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(FaultSynchronously)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(FaultSynchronously)
                 .WithConcurrencyLimit(0)
                 .WithMaxConcurrency(8)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip)
@@ -268,8 +268,8 @@ public sealed class WorkQueueSyncReaderTests
         // The processor has to be able to succeed eventually, otherwise restoring
         // readers just kills them again and the recovery path is unreachable.
         var processor = new SwitchableProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithMaxConcurrency(8)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip)
@@ -339,8 +339,8 @@ public sealed class WorkQueueSyncReaderTests
         // registered and observable right away.
         var gate = new TaskCompletionSource();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(async (int input, CancellationToken ct) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(async (int input, CancellationToken ct) =>
                 await gate.Task.WaitAsync(ct).ConfigureAwait(false))
                 .WithConcurrencyLimit(0)
                 .WithMaxConcurrency(4)
@@ -366,8 +366,8 @@ public sealed class WorkQueueSyncReaderTests
         // planned stop releases its slot when the decision is taken, so the reader
         // gives nothing up a second time when it unwinds.
         var gate = new TaskCompletionSource();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(async (int input, CancellationToken ct) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(async (int input, CancellationToken ct) =>
                 await gate.Task.WaitAsync(ct).ConfigureAwait(false))
                 .WithConcurrencyLimit(4)
                 .WithMaxConcurrency(8));
@@ -393,8 +393,8 @@ public sealed class WorkQueueSyncReaderTests
     public async Task ScaleUpAndDown_WithLiveReaders_IsUnaffected()
     {
         var processed = 0;
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((int input, CancellationToken ct) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((int input, CancellationToken ct) =>
             {
                 Interlocked.Increment(ref processed);
                 return Task.CompletedTask;

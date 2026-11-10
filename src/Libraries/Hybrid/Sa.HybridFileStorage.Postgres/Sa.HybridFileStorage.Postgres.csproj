@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <Description>File storage management in Pg</Description>
+    <PackageTags>file-storage postgresql database</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

@@ -165,7 +165,7 @@ Check the registry instead of guessing:
 
 ```csharp
 IOutboxConsumerManager manager = app.Services.GetRequiredService<IOutboxConsumerManager>();
-OutboxConsumerSettings? settings = manager.Get("orders");   // null → the group was not registered
+OutboxConsumerSettings? settings = manager.GetSettings("orders");   // null → the group was not registered
 ```
 
 For behaviour, log inside the consumer (step 3) or assert on a signal as the sample does.

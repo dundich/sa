@@ -80,7 +80,7 @@ public sealed class JobAbortIntegrationTests : IAsyncDisposable
 
         // Stop after an abort is a no-op, and the job must remain restartable:
         // the queue survived the abort, so Start() works again.
-        await _scheduler.Stop();
+        await _scheduler.StopAsync();
 
         Counter.Clear();
         Assert.Equal(1, await _scheduler.Start(TestContext.Current.CancellationToken));
@@ -89,7 +89,7 @@ public sealed class JobAbortIntegrationTests : IAsyncDisposable
         // The restarted job runs again (and eventually aborts again, which is fine).
         await WaitForConditionAsync(() => Counter.Total >= 2);
 
-        await _scheduler.Stop();
+        await _scheduler.StopAsync();
     }
 
     private static async Task WaitForConditionAsync(Func<bool> condition)

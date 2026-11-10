@@ -5,9 +5,8 @@ Console.WriteLine("=== Sa.WorkQueue sample ===");
 // A simple processor that prints the item, simulates work and honours cancellation.
 var processor = new PrintWork(Environment.ProcessorCount);
 
-using var queue = new SaWorkQueue<int>(
-    SaWorkQueueOptions<int>
-        .Create(processor)
+using var queue = new SaWorkChannel<int>(
+    SaWorkQueueOptions.Create<int>(processor)
         .WithConcurrencyLimit(3)
         .WithMaxConcurrency(8)
         .WithReaderCancellationOrder(SaReaderCancellationOrder.Lifo)
@@ -45,10 +44,10 @@ Console.WriteLine($"Enabled after shutdown: {queue.IsEnabled}");
 Console.WriteLine("*** THE END ***");
 
 #pragma warning disable S3903
-sealed class PrintWork(int id): ISaWork<int>
+sealed class PrintWork(int id) : ISaWork<int>
 #pragma warning restore S3903
 {
-    private int _processed = 0;
+    private int _processed;
 
     public int Id => id;
     public int Processed => _processed;

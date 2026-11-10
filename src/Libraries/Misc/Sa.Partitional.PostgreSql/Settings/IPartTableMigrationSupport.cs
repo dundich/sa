@@ -1,9 +1,7 @@
-using Sa.Partitional.PostgreSql.Classes;
-
 namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
-/// Contract for supplying list-partition values to <see cref="ITableBuilder.AddMigration"/>.
+/// Contract for supplying list-partition values to <c>ITableBuilder.AddMigration</c>.
 /// Implement this interface when partition values depend on runtime data (e.g. reading from another table).
 /// </summary>
 public interface IPartTableMigrationSupport
