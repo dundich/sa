@@ -173,7 +173,7 @@ public sealed class WorkQueueSyncReaderTests
 
         for (var i = 0; i < bufferedItems; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
 
         return queue;
@@ -278,7 +278,7 @@ public sealed class WorkQueueSyncReaderTests
 
         for (var i = 0; i < 8; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
 
         queue.ConcurrencyLimit = 4; // 4 readers each fault inline and die; 4 items remain
@@ -346,7 +346,7 @@ public sealed class WorkQueueSyncReaderTests
                 .WithMaxConcurrency(4)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         queue.ConcurrencyLimit = 2;
 
         Assert.Equal(2, TrackedCount(queue));
@@ -405,7 +405,7 @@ public sealed class WorkQueueSyncReaderTests
 
         for (var i = 0; i < 6; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
@@ -423,7 +423,7 @@ public sealed class WorkQueueSyncReaderTests
 
         for (var i = 0; i < 4; i++)
         {
-            await queue.Enqueue(100 + i, TestToken);
+            await queue.EnqueueAsync(100 + i, TestToken);
         }
 
         queue.ConcurrencyLimit = 4;

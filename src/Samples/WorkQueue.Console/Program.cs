@@ -20,7 +20,7 @@ using var queue = new SaWorkChannel<int>(
 const int total = 10;
 
 for (var i = 1; i <= total; i++)
-    await queue.Enqueue(i, CancellationToken.None);
+    await queue.EnqueueAsync(i, CancellationToken.None);
 
 Console.WriteLine($"Enqueued {total} items, concurrency = {queue.ConcurrencyLimit}");
 

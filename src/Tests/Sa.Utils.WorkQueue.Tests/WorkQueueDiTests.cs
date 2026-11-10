@@ -50,7 +50,7 @@ public class WorkQueueDiTests(WorkQueueTestFixture fixture) : IClassFixture<Work
 
 
         var input = new TestInput("test-1", 42);
-        await queue.Enqueue(input, TestContext.Current.CancellationToken);
+        await queue.EnqueueAsync(input, TestContext.Current.CancellationToken);
         await queue.WaitForIdleAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert

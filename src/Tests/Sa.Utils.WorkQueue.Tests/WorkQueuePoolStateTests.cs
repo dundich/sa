@@ -49,7 +49,7 @@ public sealed class WorkQueuePoolStateTests
 
         // The pool really is back, not just relabelled: the item queued while paused is
         // picked up now, which is the difference between a pause and a dead pool.
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(queue.IsIdle());
@@ -75,7 +75,7 @@ public sealed class WorkQueuePoolStateTests
                 .WithQueueCapacity(8));
 
         // Two queues, two ways of ending up with no readers.
-        await cancelled.Enqueue(1, TestToken);
+        await cancelled.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
         await cancelled.ForceCancelReadersAsync(ct: TestToken);
 
@@ -102,7 +102,7 @@ public sealed class WorkQueuePoolStateTests
                 .WithConcurrencyLimit(1)
                 .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.StopReader));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
 
         // The reader is stopped from its own thread, so the pool drains a moment after the
         // item is done with; poll rather than assume the order.
@@ -223,7 +223,7 @@ public sealed class WorkQueuePoolStateTests
                 .WithQueueCapacity(8)
                 .WithMaxConcurrency(4));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
         await queue.ForceCancelReadersAsync(ct: TestToken);
 
@@ -233,7 +233,7 @@ public sealed class WorkQueuePoolStateTests
         // it, which is what makes this a test of recovery rather than of the state
         // change. The gate is opened first — the first item was interrupted by the
         // force-cancel, so the second is the only one that can ever finish.
-        var second = queue.Enqueue(2, TestToken);
+        var second = queue.EnqueueAsync(2, TestToken);
         processor.Gate.TrySetResult();
 
         queue.ConcurrencyLimit = 2;
@@ -277,7 +277,7 @@ public sealed class WorkQueuePoolStateTests
         // dead pool instead — a force-cancel that waited for its readers would have
         // drained the buffer on the way out, leaving nothing to be honest about.
         paused.ConcurrencyLimit = 0;
-        await paused.Enqueue(1, TestToken);
+        await paused.EnqueueAsync(1, TestToken);
 
         var faulted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var emptied = new SaWorkChannel<int>(
@@ -291,12 +291,12 @@ public sealed class WorkQueuePoolStateTests
                 }),
             logger);
 
-        await emptied.Enqueue(1, TestToken);
+        await emptied.EnqueueAsync(1, TestToken);
         await faulted.Task.WaitAsync(TestToken);
         await WaitUntilAsync(() => emptied.PoolState == SaWorkPoolState.NoReaders, TestToken);
 
         // Nothing is left to take this one: that is the state being reported.
-        await emptied.Enqueue(2, TestToken);
+        await emptied.EnqueueAsync(2, TestToken);
 
         await paused.WaitForIdleAsync(cancellationToken: TestToken);
         await emptied.WaitForIdleAsync(cancellationToken: TestToken);
@@ -333,10 +333,10 @@ public sealed class WorkQueuePoolStateTests
                 .WithQueueCapacity(8));
 
         // One item in flight (held by the gate), two more in the buffer.
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
-        await queue.Enqueue(2, TestToken);
-        await queue.Enqueue(3, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
+        await queue.EnqueueAsync(3, TestToken);
 
         var waiting = queue.WaitForIdleAsync(cancellationToken: TestToken);
 
@@ -368,9 +368,9 @@ public sealed class WorkQueuePoolStateTests
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
 
         var waiting = queue.WaitForIdleAsync(cancellationToken: TestToken);
         await Task.Delay(100, TestToken);

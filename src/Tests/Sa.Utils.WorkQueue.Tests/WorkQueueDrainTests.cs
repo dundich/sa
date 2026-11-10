@@ -53,9 +53,9 @@ public sealed class WorkQueueDrainTests
                 .WithQueueCapacity(2)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
 
-        await queue.Enqueue(1, TestToken);      // picked up by the reader, blocked on the gate
+        await queue.EnqueueAsync(1, TestToken);      // picked up by the reader, blocked on the gate
         await Task.Delay(50, TestToken);
-        await queue.Enqueue(2, cts.Token);      // remains in the channel
+        await queue.EnqueueAsync(2, cts.Token);      // remains in the channel
         cts.Cancel();                           // the caller aborts the still-queued item
 
         await queue.ShutdownAsync();
@@ -84,7 +84,7 @@ public sealed class WorkQueueDrainTests
                 .WithQueueCapacity(1)
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(300)));
 
-        await queue.Enqueue(1, CancellationToken.None);
+        await queue.EnqueueAsync(1, CancellationToken.None);
         await Task.Delay(50, TestToken); // reader blocks on the gate and ignores the shutdown
 
         await queue.ShutdownAsync(); // the bounded reader wait times out; shutdown still completes
@@ -127,11 +127,11 @@ public sealed class WorkQueueDrainTests
                     }
                 }));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await Task.Delay(50, TestToken); // item 1 in flight, blocked on the gate
         for (var i = 2; i <= 5; i++)
         {
-            await queue.Enqueue(i, TestToken); // items 2..5 stay in the channel
+            await queue.EnqueueAsync(i, TestToken); // items 2..5 stay in the channel
         }
 
         await queue.ForceCancelReadersAsync(ct: TestToken);
@@ -171,11 +171,11 @@ public sealed class WorkQueueDrainTests
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(300))
                 .WithStatusCallback((item, status, _) => statuses[item] = status));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await Task.Delay(50, TestToken); // item 1 in flight, blocked on the gate
         for (var i = 2; i <= 5; i++)
         {
-            await queue.Enqueue(i, TestToken); // items 2..5 stay in the channel
+            await queue.EnqueueAsync(i, TestToken); // items 2..5 stay in the channel
         }
 
         // The public API offers no way to register a callback on the shutdown

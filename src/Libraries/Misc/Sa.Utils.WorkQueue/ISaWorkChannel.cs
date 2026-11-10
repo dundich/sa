@@ -93,7 +93,7 @@ public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Gets the capacity of the bounded channel.
-    /// When the queue is full, <see cref="Enqueue"/> behaves according to the configured
+    /// When the queue is full, <see cref="EnqueueAsync"/> behaves according to the configured
     /// <see cref="SaEnqueueStrategy"/>.
     /// </summary>
     int QueueCapacity { get; }
@@ -147,11 +147,11 @@ public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
     /// (<see cref="SaEnqueueStrategy.Wait"/> only), or was already cancelled when the item
     /// is offered in <see cref="SaProducerCancellationMode.Detached"/> mode.
     /// </exception>
-    ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default);
+    ValueTask<bool> EnqueueAsync(TInput input, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Attempts to add a work item to the queue without blocking.
-    /// Unlike <see cref="Enqueue(TInput, CancellationToken)"/>, this method never honors
+    /// Unlike <see cref="EnqueueAsync(TInput, CancellationToken)"/>, this method never honors
     /// the configured <see cref="SaEnqueueStrategy"/>: it performs a single non-blocking
     /// try-write and returns <see langword="false" /> when the buffer is full.
     /// </summary>
@@ -170,7 +170,7 @@ public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
     /// <para>
     /// The item carries no cancellation token, so it cannot be cancelled by the caller after
     /// acceptance — the reader runs it to a terminal status. Use
-    /// <see cref="Enqueue(TInput, CancellationToken)"/> when the work must remain abortable.
+    /// <see cref="EnqueueAsync(TInput, CancellationToken)"/> when the work must remain abortable.
     /// </para>
     /// </remarks>
     bool TryEnqueue(TInput input);
@@ -210,7 +210,7 @@ public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
     /// If <paramref name="cancellationToken"/> is cancelled while waiting for space, or is
     /// observed cancelled between items in <see cref="SaProducerCancellationMode.Detached"/> mode.
     /// </exception>
-    ValueTask<int> EnqueueMany(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default);
+    ValueTask<int> EnqueueManyAsync(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Asynchronously waits until all currently queued and in-progress tasks have completed.
@@ -272,7 +272,7 @@ public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
     /// completes the channel, waits for the readers to exit (bounded by the shutdown timeout),
     /// and drains the remaining buffer items (reporting them as <see cref="SaWorkStatus.Faulted"/>,
     /// or <see cref="SaWorkStatus.Aborted"/> when the caller's token was already cancelled).
-    /// Subsequent calls to <see cref="Enqueue"/> will throw <see cref="InvalidOperationException"/>.
+    /// Subsequent calls to <see cref="EnqueueAsync"/> will throw <see cref="InvalidOperationException"/>.
     /// This method is idempotent.
     /// </summary>
     /// <remarks>

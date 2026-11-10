@@ -29,8 +29,8 @@ public class SaWorkQueueRecoveryTests
         using var queue = new SaWorkChannel<int>(options);
 
         // Добавим несколько задач
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(2, ((TestProcessor)options.Processor).ProcessedCount);
@@ -42,7 +42,7 @@ public class SaWorkQueueRecoveryTests
 
         queue.ConcurrencyLimit = 2;
 
-        await queue.Enqueue(3, TestToken);
+        await queue.EnqueueAsync(3, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, ((TestProcessor)options.Processor).ProcessedCount);
     }
@@ -62,11 +62,11 @@ public class SaWorkQueueRecoveryTests
         using var queue = new SaWorkChannel<int>(options);
 
         // Act
-        await queue.Enqueue(1, TestToken);          // OK
+        await queue.EnqueueAsync(1, TestToken);          // OK
 
-        await queue.Enqueue(-1, TestToken);         // Fail
+        await queue.EnqueueAsync(-1, TestToken);         // Fail
 
-        await queue.Enqueue(2, TestToken);          // OK после fail
+        await queue.EnqueueAsync(2, TestToken);          // OK после fail
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
@@ -96,13 +96,13 @@ public class SaWorkQueueRecoveryTests
         using var queue = new SaWorkChannel<int>(options);
 
         // Act
-        await queue.Enqueue(1, TestToken);          // OK
+        await queue.EnqueueAsync(1, TestToken);          // OK
 
-        await queue.Enqueue(-1, TestToken);         // Fail
+        await queue.EnqueueAsync(-1, TestToken);         // Fail
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
-        await queue.Enqueue(1, TestToken);          // OK
+        await queue.EnqueueAsync(1, TestToken);          // OK
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
@@ -128,14 +128,14 @@ public class SaWorkQueueRecoveryTests
         using var queue = new SaWorkChannel<int>(options);
 
         // Act
-        await queue.Enqueue(1, TestToken);          // OK
+        await queue.EnqueueAsync(1, TestToken);          // OK
 
-        await queue.Enqueue(-1, TestToken);         // Fail
+        await queue.EnqueueAsync(-1, TestToken);         // Fail
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
             await queue.WaitForIdleAsync(cancellationToken: TestToken);
-            await queue.Enqueue(2, cancellationToken: CancellationToken.None);
+            await queue.EnqueueAsync(2, cancellationToken: CancellationToken.None);
         });
 
         Assert.False(queue.IsEnabled);

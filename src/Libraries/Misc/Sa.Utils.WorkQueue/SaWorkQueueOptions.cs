@@ -97,8 +97,8 @@ public sealed record SaWorkQueueOptions<TInput>(
     /// Sets the strategy applied when the queue buffer is full.
     /// </summary>
     /// <param name="strategy">
-    /// <see cref="SaEnqueueStrategy.Wait"/> (default) blocks <c>Enqueue</c> until space is available;
-    /// <see cref="SaEnqueueStrategy.Skip"/> drops the item and <c>Enqueue</c> returns <see langword="false"/>;
+    /// <see cref="SaEnqueueStrategy.Wait"/> (default) blocks <c>EnqueueAsync</c> until space is available;
+    /// <see cref="SaEnqueueStrategy.Skip"/> drops the item and <c>EnqueueAsync</c> returns <see langword="false"/>;
     /// <see cref="SaEnqueueStrategy.Throw"/> throws <see cref="SaWorkQueueFullException"/>.
     /// A stopped or disposed queue always throws regardless of the strategy.
     /// </param>
@@ -107,7 +107,7 @@ public sealed record SaWorkQueueOptions<TInput>(
 
     /// <summary>
     /// Sets whether an accepted item keeps observing the cancellation token its producer
-    /// passed to <c>Enqueue</c>.
+    /// passed to <c>EnqueueAsync</c>.
     /// </summary>
     /// <param name="mode">
     /// <see cref="SaProducerCancellationMode.Observe"/> (default) stores the token, so an

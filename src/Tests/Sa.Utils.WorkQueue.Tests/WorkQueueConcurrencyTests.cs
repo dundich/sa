@@ -148,7 +148,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model = new BlockingTaskModel();
             blockers.Add(model.AllowCompletion);
-            await queue.Enqueue(model, TestToken);
+            await queue.EnqueueAsync(model, TestToken);
         }
 
         await Task.Delay(200, TestToken);
@@ -179,7 +179,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         for (int i = 0; i < 5; i++)
         {
             var model = new BlockingTaskModel(Delay: TimeSpan.FromMilliseconds(10));
-            await queue.Enqueue(model, TestToken);
+            await queue.EnqueueAsync(model, TestToken);
             model.Unlock(); // Сразу разрешаем завершение
         }
 
@@ -211,7 +211,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model = new BlockingTaskModel(Id: $"P1-{i}");
             phase1Blockers.Add(model.AllowCompletion);
-            await queue.Enqueue(model, TestToken);
+            await queue.EnqueueAsync(model, TestToken);
         }
         await Task.Delay(150, TestToken);
 
@@ -225,7 +225,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model2 = new BlockingTaskModel(Id: $"P2-{i}");
             phase2Blockers.Add(model2.AllowCompletion);
-            await queue.Enqueue(model2, TestToken);
+            await queue.EnqueueAsync(model2, TestToken);
         }
         await Task.Delay(150, TestToken);
 
@@ -262,7 +262,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             blockers.Add(model.AllowCompletion);
             startedEvents.Add(startedTcs);
 
-            await queue.Enqueue(model, TestToken);
+            await queue.EnqueueAsync(model, TestToken);
         }
 
 
@@ -312,7 +312,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model = new BlockingTaskModel(Delay: TimeSpan.FromMilliseconds(20));
             blockers.Add(model.AllowCompletion);
-            await queue.Enqueue(model);
+            await queue.EnqueueAsync(model);
         });
 
         await Task.WhenAll(enqueueTasks);
@@ -347,7 +347,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             {
                 var model = new BlockingTaskModel(Id: $"T-{i++}");
                 blockers.Enqueue(model.AllowCompletion);
-                await queue.Enqueue(model, cts.Token);
+                await queue.EnqueueAsync(model, cts.Token);
                 await Task.Delay(20, cts.Token);
             }
         }, cts.Token);
@@ -514,7 +514,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         // TrackingWork gates every item on its own completion signal, so the signal
         // has to come before the await — Enqueue only completes at the terminal status.
         var model = new BlockingTaskModel();
-        var processed = queue.Enqueue(model, TestToken);
+        var processed = queue.EnqueueAsync(model, TestToken);
         model.AllowCompletion.SetResult();
 
         await processed;
@@ -553,7 +553,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
 
             var model = new BlockingTaskModel(Id: $"T-{i:D3}");
             models.Add(model);
-            var t = queue.Enqueue(model, TestToken).AsTask();
+            var t = queue.EnqueueAsync(model, TestToken).AsTask();
 
             tasks.Add(t);
         }
@@ -586,7 +586,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model = new BlockingTaskModel(Delay: TimeSpan.FromSeconds(20));
             model.Unlock();
-            return queue.Enqueue(model, cts.Token).AsTask();
+            return queue.EnqueueAsync(model, cts.Token).AsTask();
         });
 
         await Task.WhenAll(enqueueTasks);
@@ -642,8 +642,8 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             // Both fit in the buffer, so no producer parks: the pool is paused, not full.
             var first = new BlockingTaskModel(Id: "first");
             var second = new BlockingTaskModel(Id: "second");
-            await queue.Enqueue(first, TestToken);
-            await queue.Enqueue(second, TestToken);
+            await queue.EnqueueAsync(first, TestToken);
+            await queue.EnqueueAsync(second, TestToken);
 
             using var barrier = new Barrier(2);
             var raisers = new[]

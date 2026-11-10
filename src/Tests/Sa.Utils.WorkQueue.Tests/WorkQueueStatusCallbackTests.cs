@@ -37,7 +37,7 @@ public sealed class WorkQueueStatusCallbackTests
 
         // Paused, so the item waits in the buffer. The reader that the limit change
         // below starts will find it there and take it without yielding.
-        _ = queue.Enqueue(1, TestToken);
+        _ = queue.EnqueueAsync(1, TestToken);
         await WaitUntilAsync(() => queue.QueueTasks == 1, TestToken);
 
         probe.Arm(queue);
@@ -72,7 +72,7 @@ public sealed class WorkQueueStatusCallbackTests
                 .WithConcurrencyLimit(0)
                 .WithStatusCallback((_, _, _) => firstReportThread ??= Environment.CurrentManagedThreadId));
 
-        _ = queue.Enqueue(1, TestToken);
+        _ = queue.EnqueueAsync(1, TestToken);
         await WaitUntilAsync(() => queue.QueueTasks == 1, TestToken);
 
         var resizingThread = Environment.CurrentManagedThreadId;

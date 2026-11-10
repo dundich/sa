@@ -108,7 +108,7 @@ public sealed class SetupRegistrationTests
 
         Assert.Equal(1, queue.ConcurrencyLimit);
 
-        await queue.Enqueue(1, TestContext.Current.CancellationToken);
+        await queue.EnqueueAsync(1, TestContext.Current.CancellationToken);
         await completed.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         // Колбэк из второго вызова действительно подключён, а не просто «не упало».
@@ -450,7 +450,7 @@ public sealed class SetupRegistrationTests
         using var provider = services.BuildServiceProvider();
         using var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
-        await queue.Enqueue(42, TestContext.Current.CancellationToken);
+        await queue.EnqueueAsync(42, TestContext.Current.CancellationToken);
         await processed.Task.WaitAsync(TestContext.Current.CancellationToken);
     }
 
@@ -517,7 +517,7 @@ public sealed class SetupRegistrationTests
         using var provider = services.BuildServiceProvider();
         using var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
-        await queue.Enqueue(1, TestContext.Current.CancellationToken);
+        await queue.EnqueueAsync(1, TestContext.Current.CancellationToken);
         await gate.WaitAsync(TestContext.Current.CancellationToken);
 
         lock (statuses)

@@ -59,7 +59,7 @@ public sealed class WorkQueueCancellationOrderTests
         // limit is exactly what was requested, not a drifted value.
         for (var i = 1; i <= 8; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
@@ -93,7 +93,7 @@ public sealed class WorkQueueCancellationOrderTests
 
         for (var i = 1; i <= 5; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);

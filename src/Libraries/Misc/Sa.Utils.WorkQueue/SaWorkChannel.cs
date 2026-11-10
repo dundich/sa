@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
 
 namespace Sa.Utils.WorkQueue;
@@ -305,6 +306,8 @@ public sealed partial class SaWorkChannel<TInput> : ISaWorkChannel<TInput>
     /// <summary>Creates a queue over the given options and starts its reader pool.</summary>
     /// <param name="options">The validated queue configuration.</param>
     /// <param name="logger">Optional logger for diagnostics.</param>
+    [SuppressMessage("Usage", "CA2208:Instantiate argument exceptions correctly",
+        Justification = "The ctor validates an options record; the offending member is the property, and naming it in ParamName is what callers need.")]
     public SaWorkChannel(SaWorkQueueOptions<TInput> options, ILogger<SaWorkChannel<TInput>>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -317,13 +320,13 @@ public sealed partial class SaWorkChannel<TInput> : ISaWorkChannel<TInput>
         if (options.ConcurrencyLimit < 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options), options.ConcurrencyLimit, "Concurrency limit must be 0 (paused) or positive.");
+                nameof(options.ConcurrencyLimit), options.ConcurrencyLimit, "Concurrency limit must be 0 (paused) or positive.");
         }
 
         if (options.QueueCapacity is < 1)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options), options.QueueCapacity, "Queue capacity must be at least 1.");
+                nameof(options.QueueCapacity), options.QueueCapacity, "Queue capacity must be at least 1.");
         }
 
         // "Unbounded" is expressed as null, or as 0 through WithMaxConcurrency,
@@ -333,14 +336,14 @@ public sealed partial class SaWorkChannel<TInput> : ISaWorkChannel<TInput>
         if (options.MaxConcurrency is < 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options), options.MaxConcurrency,
+                nameof(options.MaxConcurrency), options.MaxConcurrency,
                 $"Max concurrency must be 0 (processor count) or positive; use null for the default.");
         }
 
         if (options.ShutdownTimeout is { } shutdownTimeout && shutdownTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options), shutdownTimeout, "Shutdown timeout must be positive.");
+                nameof(options.ShutdownTimeout), shutdownTimeout, "Shutdown timeout must be positive.");
         }
 
         // The three strategy enums are read through switch arms and equality tests, so an
@@ -352,28 +355,28 @@ public sealed partial class SaWorkChannel<TInput> : ISaWorkChannel<TInput>
         if (!Enum.IsDefined(options.EnqueueStrategy))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options), options.EnqueueStrategy,
+                nameof(options.EnqueueStrategy), options.EnqueueStrategy,
                 "Enqueue strategy must be Wait, Skip or Throw.");
         }
 
         if (!Enum.IsDefined(options.ReaderCancelMode))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options), options.ReaderCancelMode,
+                nameof(options.ReaderCancelMode), options.ReaderCancelMode,
                 "Reader cancel mode must be Hard or Soft.");
         }
 
         if (!Enum.IsDefined(options.ReaderCancellationOrder))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options), options.ReaderCancellationOrder,
+                nameof(options.ReaderCancellationOrder), options.ReaderCancellationOrder,
                 "Reader cancellation order must be Lifo, Fifo, RoundRobin or Random.");
         }
 
         if (!Enum.IsDefined(options.ProducerCancellation))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options), options.ProducerCancellation,
+                nameof(options.ProducerCancellation), options.ProducerCancellation,
                 "Producer cancellation mode must be Observe or Detached.");
         }
 

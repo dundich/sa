@@ -116,7 +116,7 @@ public sealed class WorkQueueOptionsValidationTests
         Assert.True(queue.IsIdle());
 
         queue.ConcurrencyLimit = 1; // resume
-        await queue.Enqueue(7, TestToken);
+        await queue.EnqueueAsync(7, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(queue.IsIdle());

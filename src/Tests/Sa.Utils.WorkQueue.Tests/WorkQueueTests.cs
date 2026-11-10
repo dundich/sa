@@ -52,7 +52,7 @@ public class WorkQueueTests
         using var queue = new SaWorkChannel<TestModel>(SaWorkQueueOptions.Create<TestModel>(processor));
 
         // Act
-        await queue.Enqueue(model, cancellationToken: TestToken);
+        await queue.EnqueueAsync(model, cancellationToken: TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert
@@ -72,7 +72,7 @@ public class WorkQueueTests
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         // Act
-        await queue.Enqueue(model, cancellationToken: TestToken);
+        await queue.EnqueueAsync(model, cancellationToken: TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
@@ -95,7 +95,7 @@ public class WorkQueueTests
 
         // Act
         foreach (var model in models)
-            await queue.Enqueue(model, cancellationToken: TestToken);
+            await queue.EnqueueAsync(model, cancellationToken: TestToken);
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
@@ -119,7 +119,7 @@ public class WorkQueueTests
 
         // Act
         foreach (var model in models)
-            await queue.Enqueue(model, cancellationToken: TestToken);
+            await queue.EnqueueAsync(model, cancellationToken: TestToken);
 
         await Task.Delay(50, TestToken);
 
@@ -148,7 +148,7 @@ public class WorkQueueTests
         var model = new TestModel();
 
         // Act
-        await queue.Enqueue(model, cancellationToken: TestToken);
+        await queue.EnqueueAsync(model, cancellationToken: TestToken);
         await Task.Delay(100, TestToken);
 
         // Assert
@@ -175,7 +175,7 @@ public class WorkQueueTests
         var model = new TestModel();
 
         // Act
-        await queue.Enqueue(model, cancellationToken: cts.Token);
+        await queue.EnqueueAsync(model, cancellationToken: cts.Token);
         await cts.CancelAsync();
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
@@ -220,7 +220,7 @@ public class WorkQueueTests
         // test times out, causing one task to complete before shutdown and breaking
         // Assert.Equal(5, errors.Count).
         for (int i = 0; i < 5; i++)
-            await queue.Enqueue(new TestModel(), cancellationToken: CancellationToken.None);
+            await queue.EnqueueAsync(new TestModel(), cancellationToken: CancellationToken.None);
 
         for (int i = 0; i < 5; i++)
         {
@@ -238,7 +238,7 @@ public class WorkQueueTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await queue.Enqueue(new TestModel(), cancellationToken: CancellationToken.None);
+            await queue.EnqueueAsync(new TestModel(), cancellationToken: CancellationToken.None);
         });
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
@@ -269,7 +269,7 @@ public class WorkQueueTests
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(4));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         Assert.True(await entered.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
 
         var first = queue.ShutdownAsync();
@@ -301,7 +301,7 @@ public class WorkQueueTests
         var model = new TestModel();
 
         // Act
-        await queue.Enqueue(model, cancellationToken: TestToken);
+        await queue.EnqueueAsync(model, cancellationToken: TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         // Assert
@@ -318,11 +318,11 @@ public class WorkQueueTests
         var queue = new SaWorkChannel<TestModel>(
             SaWorkQueueOptions.Create<TestModel>(processor));
 
-        await queue.Enqueue(new TestModel(), cancellationToken: TestToken);
+        await queue.EnqueueAsync(new TestModel(), cancellationToken: TestToken);
         await queue.DisposeAsync();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(()
-            => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());
+            => queue.EnqueueAsync(new TestModel(), cancellationToken: TestToken).AsTask());
     }
 
     [Fact]
@@ -363,7 +363,7 @@ public class WorkQueueTests
         queue.Dispose();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(()
-            => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());
+            => queue.EnqueueAsync(new TestModel(), cancellationToken: TestToken).AsTask());
     }
 
     [Fact]
@@ -374,11 +374,11 @@ public class WorkQueueTests
         var queue = new SaWorkChannel<TestModel>(
             SaWorkQueueOptions.Create<TestModel>(processor));
 
-        await queue.Enqueue(new TestModel(), cancellationToken: TestToken);
+        await queue.EnqueueAsync(new TestModel(), cancellationToken: TestToken);
         await queue.ShutdownAsync();
 
         await Assert.ThrowsAsync<InvalidOperationException>(()
-            => queue.Enqueue(new TestModel(), cancellationToken: TestToken).AsTask());
+            => queue.EnqueueAsync(new TestModel(), cancellationToken: TestToken).AsTask());
     }
 
     /// <summary>
@@ -404,7 +404,7 @@ public class WorkQueueTests
                 .WithMaxConcurrency(1)
                 .WithQueueCapacity(1));
 
-        await other.Enqueue(1, TestToken);
+        await other.EnqueueAsync(1, TestToken);
         await wedged.Entered.WaitAsync(TestToken);
 
         // This shutdown is owned by the test thread and cannot finish until the wedged item

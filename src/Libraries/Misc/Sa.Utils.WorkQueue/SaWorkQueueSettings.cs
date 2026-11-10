@@ -51,7 +51,7 @@ public sealed class SaWorkQueueSettings
     /// <summary>Optimises the channel for a single writer source. <see langword="null"/> = <see langword="false"/>.</summary>
     public bool? SingleWriter { get; set; }
 
-    /// <summary>What <c>Enqueue</c> does when the buffer is full. Default: <see cref="SaEnqueueStrategy.Wait"/>.</summary>
+    /// <summary>What <c>EnqueueAsync</c> does when the buffer is full. Default: <see cref="SaEnqueueStrategy.Wait"/>.</summary>
     public SaEnqueueStrategy EnqueueStrategy { get; set; } = SaEnqueueStrategy.Wait;
 
     /// <summary>

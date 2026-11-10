@@ -112,7 +112,7 @@ internal static class Program
     {
         for (var i = 0; i < count; i++)
         {
-            await queue.Enqueue(payload, token);
+            await queue.EnqueueAsync(payload, token);
         }
 
         await queue.WaitForIdleAsync(cancellationToken: token);
@@ -172,7 +172,7 @@ internal static class Program
     {
         for (var i = 0; i < count; i++)
         {
-            await queue.Enqueue(payload, CancellationToken.None);
+            await queue.EnqueueAsync(payload, CancellationToken.None);
         }
     }
 
@@ -229,7 +229,7 @@ internal static class Program
 
         for (var i = 0; i < items; i++)
         {
-            await queue.Enqueue(i, CancellationToken.None);
+            await queue.EnqueueAsync(i, CancellationToken.None);
         }
 
         return queue;

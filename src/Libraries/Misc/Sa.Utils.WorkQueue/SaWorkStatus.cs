@@ -36,7 +36,7 @@ public enum SaWorkStatus
     /// <summary>
     /// The item was not accepted into the buffer because it was full
     /// (the <see cref="SaEnqueueStrategy.Skip"/> strategy, or the non-blocking
-    /// <see cref="ISaWorkChannel{TInput}.TryEnqueue"/> / <see cref="ISaWorkChannel{TInput}.EnqueueMany"/>
+    /// <see cref="ISaWorkChannel{TInput}.TryEnqueue"/> / <see cref="ISaWorkChannel{TInput}.EnqueueManyAsync"/>
     /// while the buffer was full). The item was never processed.
     /// Automatic retry is permissible.
     /// </summary>

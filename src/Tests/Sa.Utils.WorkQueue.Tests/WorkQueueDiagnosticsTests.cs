@@ -43,7 +43,7 @@ public sealed class WorkQueueDiagnosticsTests
                     if (status == SaWorkStatus.Aborted) reported = error;
                 }));
 
-        var enqueued = queue.Enqueue(1, producerCts.Token);
+        var enqueued = queue.EnqueueAsync(1, producerCts.Token);
 
         await inProcessor.Task.WaitAsync(TestToken);
         await producerCts.CancelAsync();
@@ -82,7 +82,7 @@ public sealed class WorkQueueDiagnosticsTests
                     if (status == SaWorkStatus.Cancelled) reported = error;
                 }));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
 
         await inProcessor.Task.WaitAsync(TestToken);
         await queue.ShutdownAsync();
@@ -101,9 +101,9 @@ public sealed class WorkQueueDiagnosticsTests
                 .WithMaxConcurrency(4)
                 .WithQueueCapacity(1));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
 
-        var parked = Task.Run(() => queue.Enqueue(2, TestToken).AsTask(), TestToken);
+        var parked = Task.Run(() => queue.EnqueueAsync(2, TestToken).AsTask(), TestToken);
 
         await Task.Delay(200, TestToken);
         Assert.False(parked.IsCompleted);
@@ -128,7 +128,7 @@ public sealed class WorkQueueDiagnosticsTests
                 .WithConcurrencyLimit(1)
                 .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.ShutdownQueue));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.False(queue.IsEnabled);
@@ -169,8 +169,8 @@ public sealed class WorkQueueDiagnosticsTests
                     return SaExecutionErrorStrategy.ShutdownQueue;
                 }));
 
-        await queue.Enqueue(0, TestToken);
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(0, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
 
         await rootHandled.Task.WaitAsync(TestToken);
         await WaitForShutdownErrorAsync(queue, TestToken);

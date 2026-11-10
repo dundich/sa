@@ -8,14 +8,14 @@ namespace Sa.Utils.WorkQueue;
 /// Every path raises the pending count with <see cref="MarkActive"/> <em>before</em>
 /// attempting the write, because a refusal is not known until the write is tried.
 /// The count therefore always has exactly one matching
-/// <see cref="RejectEnqueue"/> or <see cref="EnqueueWaitingAsync"/> on the failure
+/// <see cref="RejectEnqueue"/> or <see cref="EnqueueWaiting"/> on the failure
 /// branch — that pairing is what keeps <see cref="SaWorkChannel{TInput}.IsIdle"/>
 /// honest.
 /// </remarks>
 public sealed partial class SaWorkChannel<TInput>
 {
     /// <inheritdoc />
-    public async ValueTask<bool> Enqueue(TInput input, CancellationToken cancellationToken = default)
+    public async ValueTask<bool> EnqueueAsync(TInput input, CancellationToken cancellationToken = default)
     {
         ThrowIfNotActive();
         ThrowIfDetachedAndCancelled(cancellationToken);
@@ -35,11 +35,11 @@ public sealed partial class SaWorkChannel<TInput>
             return false;
         }
 
-        return await EnqueueWaitingAsync(item, cancellationToken).ConfigureAwait(false);
+        return await EnqueueWaiting(item, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public async ValueTask<int> EnqueueMany(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default)
+    public async ValueTask<int> EnqueueManyAsync(IEnumerable<TInput> inputs, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(inputs);
         ThrowIfNotActive();
@@ -61,7 +61,7 @@ public sealed partial class SaWorkChannel<TInput>
             {
                 // Handles its own accounting and rethrows on failure, so the only
                 // way to get here is success.
-                if (await EnqueueWaitingAsync(item, cancellationToken).ConfigureAwait(false))
+                if (await EnqueueWaiting(item, cancellationToken).ConfigureAwait(false))
                 {
                     accepted++;
                 }
@@ -123,7 +123,7 @@ public sealed partial class SaWorkChannel<TInput>
     /// <see cref="ConcurrencyLimit"/>), <c>Shutdown</c> completing the writer,
     /// and the caller's own token.
     /// </remarks>
-    private async ValueTask<bool> EnqueueWaitingAsync(WorkItem item, CancellationToken cancellationToken)
+    private async ValueTask<bool> EnqueueWaiting(WorkItem item, CancellationToken cancellationToken)
     {
         MarkActive();
 
@@ -166,7 +166,7 @@ public sealed partial class SaWorkChannel<TInput>
     /// <param name="item">The refused item.</param>
     /// <param name="accepted">
     /// How many items a batch had already taken, for the message
-    /// <see cref="EnqueueMany"/> raises. <see langword="null"/> for the
+    /// <see cref="EnqueueManyAsync"/> raises. <see langword="null"/> for the
     /// single-item entry points, which name the item instead.
     /// </param>
     /// <param name="attempted">

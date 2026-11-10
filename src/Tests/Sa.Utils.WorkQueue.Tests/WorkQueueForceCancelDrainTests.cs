@@ -34,9 +34,9 @@ public sealed class WorkQueueForceCancelDrainTests
         {
             // Item 1 is taken by the single reader and wedges there; item 2 waits behind
             // it in the buffer. Everything below is about item 2.
-            _ = queue.Enqueue(1, TestToken);
+            _ = queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
-            var second = queue.Enqueue(2, TestToken);
+            var second = queue.EnqueueAsync(2, TestToken);
 
             var force = Task.Run(
                 () => queue.ForceCancelReadersAsync(TimeSpan.FromMinutes(5), TestToken),
@@ -110,9 +110,9 @@ public sealed class WorkQueueForceCancelDrainTests
 
         try
         {
-            _ = queue.Enqueue(1, TestToken);
+            _ = queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
-            _ = queue.Enqueue(2, TestToken);
+            _ = queue.EnqueueAsync(2, TestToken);
 
             using var cts = new CancellationTokenSource();
             var force = Task.Run(
@@ -154,9 +154,9 @@ public sealed class WorkQueueForceCancelDrainTests
                 .WithStatusCallback(statuses.Record),
             logger);
 
-        _ = queue.Enqueue(1, TestToken);
+        _ = queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
-        _ = queue.Enqueue(2, TestToken);
+        _ = queue.EnqueueAsync(2, TestToken);
 
         var force = Task.Run(() => queue.ForceCancelReadersAsync(ct: TestToken), TestToken);
 
@@ -183,7 +183,7 @@ public sealed class WorkQueueForceCancelDrainTests
                 .WithStatusCallback(statuses.Record),
             logger);
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(queue.IsIdle());
@@ -212,8 +212,8 @@ public sealed class WorkQueueForceCancelDrainTests
                 .WithStatusCallback(statuses.Record),
             logger);
 
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
 
         // Дождаться, пока элемент 1 действительно окажется внутри процессора. Пауза отменяет
         // ридера, а элемент, уже вынутый из буфера, но ещё не дошедший до процессора,
@@ -270,7 +270,7 @@ public sealed class WorkQueueForceCancelDrainTests
 
         for (var i = 1; i <= 3; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
 
         queue.ForceCancelReaders();
@@ -310,8 +310,8 @@ public sealed class WorkQueueForceCancelDrainTests
 
         queue.ConcurrencyLimit = 0;
 
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
 
         await queue.ForceCancelReadersAsync(ct: TestToken);
 

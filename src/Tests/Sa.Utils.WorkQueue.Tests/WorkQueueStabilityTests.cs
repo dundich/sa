@@ -91,7 +91,7 @@ public sealed class WorkQueueStabilityTests
         using var queue = new SaWorkChannel<int>(
             SaWorkQueueOptions.Create<int>(processor).WithConcurrencyLimit(2));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         var shutdownTask = queue.ShutdownAsync();
@@ -112,7 +112,7 @@ public sealed class WorkQueueStabilityTests
                 .WithConcurrencyLimit(2)
                 .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.StopReader));
 
-        await queue.Enqueue(-1, TestToken);
+        await queue.EnqueueAsync(-1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(1, queue.ConcurrencyLimit);
@@ -142,7 +142,7 @@ public sealed class WorkQueueStabilityTests
 
         Assert.Equal(3, queue.ConcurrencyLimit);
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
     }
@@ -167,7 +167,7 @@ public sealed class WorkQueueStabilityTests
 
         var items = Enumerable.Range(1, 8).ToArray();
         foreach (var item in items)
-            await queue.Enqueue(item, TestToken);
+            await queue.EnqueueAsync(item, TestToken);
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(8, processor.Processed);
@@ -191,9 +191,9 @@ public sealed class WorkQueueStabilityTests
                     }
                 }));
 
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(99, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(99, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
@@ -211,7 +211,7 @@ public sealed class WorkQueueStabilityTests
                 .WithQueueCapacity(1)
                 .WithShutdownTimeout(TimeSpan.FromSeconds(1)));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
 
 #pragma warning disable xUnit1051
         var shutdownTask = Task.Run(() => queue.Shutdown());
@@ -239,7 +239,7 @@ public sealed class WorkQueueStabilityTests
         await Task.Delay(50, TestToken);
         Assert.Equal(3, queue.ConcurrencyLimit);
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
     }
@@ -256,7 +256,7 @@ public sealed class WorkQueueStabilityTests
                 .WithHandleItemFaulted((item, _) =>
                     item == -1 ? SaExecutionErrorStrategy.StopReader : SaExecutionErrorStrategy.Continue));
 
-        await queue.Enqueue(-1, TestToken);
+        await queue.EnqueueAsync(-1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         await Task.Delay(100, TestToken);
         Assert.Equal(0, queue.ConcurrencyLimit);
@@ -303,7 +303,7 @@ public sealed class WorkQueueStabilityTests
         await Task.Delay(50, TestToken);
         Assert.Equal(3, queue.ConcurrencyLimit);
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
     }
@@ -316,8 +316,8 @@ public sealed class WorkQueueStabilityTests
             SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1));
 
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
 
         // Let the single reader pick up item 1 (it blocks on the gate); item 2 stays queued.
         await Task.Delay(50, TestToken);
@@ -345,7 +345,7 @@ public sealed class WorkQueueStabilityTests
                 .WithConcurrencyLimit(1));
 
         // Bring the queue to a steady state first.
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(1, processor.Processed);
 
@@ -357,7 +357,7 @@ public sealed class WorkQueueStabilityTests
 
         // Enqueue while paused: accepted (state Active, channel open),
         // but no reader exists, so the item just sits in the channel.
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
 
         Assert.Equal(1, queue.QueueTasks);
         Assert.False(queue.IsIdle());
@@ -390,9 +390,9 @@ public sealed class WorkQueueStabilityTests
                 .WithReaderCancelMode(SaReaderCancelMode.Soft)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await Task.Delay(50, TestToken); // Reader picks up item 1 and blocks on the gate
-        await queue.Enqueue(2, TestToken); // Item 2 stays in the channel
+        await queue.EnqueueAsync(2, TestToken); // Item 2 stays in the channel
 
         queue.ConcurrencyLimit = 0; // Pause: soft mode must not cancel the in-flight item
         await Task.Delay(50, TestToken);
@@ -424,10 +424,10 @@ public sealed class WorkQueueStabilityTests
                 .WithReaderCancelMode(SaReaderCancelMode.Soft)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
 
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
         await Task.Delay(50, TestToken); // Both readers block on the shared gate
-        await queue.Enqueue(3, TestToken); // Item 3 stays in the channel
+        await queue.EnqueueAsync(3, TestToken); // Item 3 stays in the channel
 
         queue.ConcurrencyLimit = 1; // One reader is removed softly — its in-flight item survives
         await Task.Delay(50, TestToken);
@@ -464,7 +464,7 @@ public sealed class WorkQueueStabilityTests
                         Interlocked.Increment(ref cancelled);
                 }));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await Task.Delay(50, TestToken); // Reader blocks on the gate
 
         await queue.ShutdownAsync();
@@ -490,8 +490,8 @@ public sealed class WorkQueueStabilityTests
                         Interlocked.Increment(ref cancelled);
                 }));
 
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
         await Task.Delay(50, TestToken); // Both readers block on the shared gate
 
         await queue.ForceCancelReadersAsync(ct: TestToken);
@@ -518,7 +518,7 @@ public sealed class WorkQueueStabilityTests
 
         for (var i = 1; i <= 4; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
         await Task.Delay(100, TestToken); // all four readers are stuck in the work
 
@@ -546,7 +546,7 @@ public sealed class WorkQueueStabilityTests
         Assert.Equal(4, queue.ConcurrencyLimit);
 
         // And the pool must be usable again: the restored readers process new work.
-        await queue.Enqueue(5, TestToken);
+        await queue.EnqueueAsync(5, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.True(queue.IsIdle());
         // The four stuck items completed once the gate opened (the processor
@@ -561,9 +561,9 @@ public sealed class WorkQueueStabilityTests
         using var queue = new SaWorkChannel<int>(
             SaWorkQueueOptions.Create<int>(processor).WithConcurrencyLimit(1));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await Task.Delay(50, TestToken); // reader picks up item 1 and blocks on the gate
-        await queue.Enqueue(2, TestToken); // item 2 stays in the channel
+        await queue.EnqueueAsync(2, TestToken); // item 2 stays in the channel
 
         queue.ConcurrencyLimit = 0; // explicit pause
         await Task.Delay(50, TestToken);
@@ -619,7 +619,7 @@ public sealed class WorkQueueStabilityTests
                 .WithMaxConcurrency(4));
 
         await queue.ForceCancelReadersAsync(ct: TestToken);
-        await queue.Enqueue(1, TestToken); // accepted, but no readers can drain it
+        await queue.EnqueueAsync(1, TestToken); // accepted, but no readers can drain it
 
         var wait = queue.WaitForIdleAsync(cancellationToken: TestToken);
         var completed = await Task.WhenAny(wait, Task.Delay(500, TestToken));
@@ -670,9 +670,9 @@ public sealed class WorkQueueStabilityTests
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(200)),
             logger);
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
-        await queue.Enqueue(2, TestToken); // stays in the buffer, the reader is busy
+        await queue.EnqueueAsync(2, TestToken); // stays in the buffer, the reader is busy
 
         queue.ConcurrencyLimit = 0;      // paused
         await queue.ShutdownAsync();     // ... and then stopped
@@ -712,9 +712,9 @@ public sealed class WorkQueueStabilityTests
                 .WithQueueCapacity(8)
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(200)));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
 
         queue.ConcurrencyLimit = 0;
         await queue.ShutdownAsync();
@@ -752,7 +752,7 @@ public sealed class WorkQueueStabilityTests
                    logger))
         {
             paused.ConcurrencyLimit = 0;
-            await paused.Enqueue(1, TestToken);
+            await paused.EnqueueAsync(1, TestToken);
 
             await paused.WaitForIdleAsync(cancellationToken: TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
 
@@ -775,9 +775,9 @@ public sealed class WorkQueueStabilityTests
                 .WithMaxConcurrency(4),
             logger);
 
-        await emptied.Enqueue(1, TestToken);
+        await emptied.EnqueueAsync(1, TestToken);
         await emptied.ForceCancelReadersAsync(ct: TestToken);
-        await emptied.Enqueue(2, TestToken);
+        await emptied.EnqueueAsync(2, TestToken);
 
         await emptied.WaitForIdleAsync(cancellationToken: TestToken).WaitAsync(TimeSpan.FromSeconds(30), TestToken);
 
@@ -799,7 +799,7 @@ public sealed class WorkQueueStabilityTests
         using var queue = new SaWorkChannel<int>(
             SaWorkQueueOptions.Create<int>(processor).WithConcurrencyLimit(0));
 
-        await queue.Enqueue(1, TestToken); // accepted, no readers ever
+        await queue.EnqueueAsync(1, TestToken); // accepted, no readers ever
 
         var wait = queue.WaitForIdleAsync(cancellationToken: TestToken);
         var completed = await Task.WhenAny(wait, Task.Delay(500, TestToken));

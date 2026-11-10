@@ -234,7 +234,7 @@ internal sealed class JobScheduler : IJobScheduler
                 IJobController controller = _createController(i);
                 controller.Pause();
                 controllers.Add(controller);
-                await _queue.Enqueue(controller, stoppingToken);
+                await _queue.EnqueueAsync(controller, stoppingToken);
             }
 
             success = true;

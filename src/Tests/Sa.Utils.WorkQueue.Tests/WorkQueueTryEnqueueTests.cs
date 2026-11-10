@@ -97,7 +97,7 @@ public sealed class WorkQueueTryEnqueueTests
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         queue.Shutdown();

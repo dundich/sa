@@ -47,7 +47,7 @@ public sealed class WorkQueueTimeoutTests
 
         await RunWithWedgedReaderAsync(clock, async (processor, queue) =>
         {
-            await queue.Enqueue(1, TestToken);
+            await queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
 
             var cancel = Task.Run(() => queue.ForceCancelReaders(), TestToken);
@@ -76,7 +76,7 @@ public sealed class WorkQueueTimeoutTests
 
         await RunWithWedgedReaderAsync(clock, async (processor, queue) =>
         {
-            await queue.Enqueue(1, TestToken);
+            await queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
 
             // An explicit timeout, so the 30-second default is not what is under test.
@@ -112,7 +112,7 @@ public sealed class WorkQueueTimeoutTests
                 .WithConcurrencyLimit(1)
                 .WithTimeProvider(clock));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
 
         var force = Task.Run(
@@ -135,7 +135,7 @@ public sealed class WorkQueueTimeoutTests
 
         await RunWithWedgedReaderAsync(clock, async (processor, queue) =>
         {
-            await queue.Enqueue(1, TestToken);
+            await queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
 
             var shutdown = Task.Run(() => queue.ShutdownAsync(), TestToken);
@@ -161,7 +161,7 @@ public sealed class WorkQueueTimeoutTests
 
         await RunWithWedgedReaderAsync(clock, async (processor, queue) =>
         {
-            await queue.Enqueue(1, TestToken);
+            await queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
 
             var shutdown = Task.Run(() => queue.Shutdown(), TestToken);

@@ -58,7 +58,7 @@ public sealed class WorkQueueProducerCancellationTests
                 .WithQueueCapacity(4)
                 .WithStatusCallback((_, status, _) => statuses.Add(status)));
 
-        await queue.Enqueue(1, producerCts.Token);
+        await queue.EnqueueAsync(1, producerCts.Token);
         await processor.Entered.Task.WaitAsync(TestToken);
 
         await producerCts.CancelAsync();
@@ -87,7 +87,7 @@ public sealed class WorkQueueProducerCancellationTests
                 .WithConcurrencyLimit(0) // paused: the item stays in the buffer
                 .WithQueueCapacity(4));
 
-        await queue.Enqueue(1, producerCts.Token);
+        await queue.EnqueueAsync(1, producerCts.Token);
         await producerCts.CancelAsync();
 
         queue.ConcurrencyLimit = 1;
@@ -105,7 +105,7 @@ public sealed class WorkQueueProducerCancellationTests
         using var queue = new SaWorkChannel<int>(Detached(new CompletedProcessor()));
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            async () => await queue.Enqueue(1, producerCts.Token));
+            async () => await queue.EnqueueAsync(1, producerCts.Token));
 
         Assert.Equal(0, queue.QueueTasks);
     }
@@ -119,9 +119,9 @@ public sealed class WorkQueueProducerCancellationTests
                 .WithQueueCapacity(1)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Wait));
 
-        await queue.Enqueue(1, CancellationToken.None); // fills the only slot
+        await queue.EnqueueAsync(1, CancellationToken.None); // fills the only slot
 
-        var waiting = queue.Enqueue(2, producerCts.Token);
+        var waiting = queue.EnqueueAsync(2, producerCts.Token);
         await Task.Delay(50, TestToken); // parked in WriteAsync
         await producerCts.CancelAsync();
 
@@ -142,7 +142,7 @@ public sealed class WorkQueueProducerCancellationTests
         var inputs = new CancellingSequence(producerCts, cancelBefore: 3);
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            async () => await queue.EnqueueMany(inputs, producerCts.Token));
+            async () => await queue.EnqueueManyAsync(inputs, producerCts.Token));
 
         // Items 1 and 2 were accepted; the check before item 3 stopped the batch.
         Assert.Equal(2, queue.QueueTasks);
@@ -158,7 +158,7 @@ public sealed class WorkQueueProducerCancellationTests
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback((_, status, _) => statuses.Add(status)));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await Task.Delay(50, TestToken);
 
         await queue.ShutdownAsync();
@@ -177,7 +177,7 @@ public sealed class WorkQueueProducerCancellationTests
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback((_, status, _) => statuses.Add(status)));
 
-        await queue.Enqueue(1, producerCts.Token);
+        await queue.EnqueueAsync(1, producerCts.Token);
         await Task.Delay(50, TestToken);
 
         await producerCts.CancelAsync();

@@ -33,7 +33,7 @@ internal sealed partial class SaConfigurationHostedService(IServiceProvider serv
     public Task StartingAsync(CancellationToken cancellationToken) => options.InitialLoad switch
     {
         SaDynamicInitialLoad.Hosted => InitializeAsync(cancellationToken),
-        SaDynamicInitialLoad.Background => StartBackgroundInitialization(),
+        SaDynamicInitialLoad.Background => StartBackgroundInitializationAsync(),
         _ => Task.CompletedTask
     };
 
@@ -90,7 +90,7 @@ internal sealed partial class SaConfigurationHostedService(IServiceProvider serv
         }
     }
 
-    private Task StartBackgroundInitialization()
+    private Task StartBackgroundInitializationAsync()
     {
         _ = Task.Run(async () =>
         {
