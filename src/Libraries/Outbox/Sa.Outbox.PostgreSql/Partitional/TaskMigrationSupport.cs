@@ -5,7 +5,7 @@ namespace Sa.Outbox.PostgreSql.Partitional;
 
 internal sealed class TaskMigrationSupport(IOutboxPartitionalSupport? partitionalSupport = null) : IPartTableMigrationSupport
 {
-    public async Task<StrOrNum[][]> GetParts(CancellationToken cancellationToken)
+    public async Task<StrOrNum[][]> GetPartsAsync(CancellationToken cancellationToken)
     {
         if (partitionalSupport == null) return [];
 

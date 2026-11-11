@@ -35,7 +35,7 @@ internal sealed partial class PartMigrationService(
         _migrationLock.Dispose();
     }
 
-    public async Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
+    public async Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(dates);
 
@@ -45,7 +45,7 @@ internal sealed partial class PartMigrationService(
 
         try
         {
-            return await Run(dates, honorCallerToken: true, cancellationToken).ConfigureAwait(false);
+            return await RunAsync(dates, honorCallerToken: true, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -53,7 +53,7 @@ internal sealed partial class PartMigrationService(
         }
     }
 
-    public async Task<int> Migrate(CancellationToken cancellationToken = default)
+    public async Task<int> MigrateAsync(CancellationToken cancellationToken = default)
     {
         // Bounded wait: a tick that cannot get the lock is skipped, not queued.
         if (!await _migrationLock.WaitAsync(settings.WaitMigrationTimeout, cancellationToken).ConfigureAwait(false))
@@ -74,7 +74,7 @@ internal sealed partial class PartMigrationService(
 
             // The background job owns no token of its own: the scheduler's token is the host's,
             // and a started run has to reach the end.
-            return await Run(dates, honorCallerToken: false, cancellationToken).ConfigureAwait(false);
+            return await RunAsync(dates, honorCallerToken: false, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -95,7 +95,7 @@ internal sealed partial class PartMigrationService(
     /// The number of statements executed, or <c>-1</c> when the run did not finish
     /// (the deadline elapsed or it was cancelled) - never "a negative number of partitions".
     /// </returns>
-    private async Task<int> Run(
+    private async Task<int> RunAsync(
         DateTimeOffset[] dates
         , bool honorCallerToken
         , CancellationToken callerToken)
@@ -116,7 +116,7 @@ internal sealed partial class PartMigrationService(
 
         try
         {
-            int result = await repository.Migrate(dates, runToken).ConfigureAwait(false);
+            int result = await repository.MigrateAsync(dates, runToken).ConfigureAwait(false);
 
             SignalMigrated();
 
@@ -162,7 +162,7 @@ internal sealed partial class PartMigrationService(
     /// Raises the one-shot <see cref="OnMigrated"/> signal.
     /// </summary>
     /// <remarks>
-    /// A manual <see cref="Migrate(CancellationToken)"/> can still be in flight when the host starts
+    /// A manual <see cref="MigrateAsync(CancellationToken)"/> can still be in flight when the host starts
     /// shutting down and disposes this service, so the source may already be gone. That is the normal
     /// end of a run, not a failure: an <see cref="ObjectDisposedException"/> here would otherwise
     /// escape as a migration error and abort the job on the way out.

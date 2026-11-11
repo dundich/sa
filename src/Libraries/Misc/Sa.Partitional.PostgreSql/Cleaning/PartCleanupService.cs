@@ -10,7 +10,7 @@ internal sealed partial class PartCleanupService(
     , ILogger<PartCleanupService> logger
     , TimeProvider? timeProvider = null) : IPartCleanupService
 {
-    public async Task<int> Clean(DateTimeOffset toDate, CancellationToken cancellationToken)
+    public async Task<int> CleanAsync(DateTimeOffset toDate, CancellationToken cancellationToken)
     {
         bool archive = settings.CleanupMode == PartCleanupMode.Archive;
 
@@ -24,17 +24,17 @@ internal sealed partial class PartCleanupService(
             try
             {
                 count += archive
-                    ? await repository.ArchivePartsToDate(
+                    ? await repository.ArchivePartsToDateAsync(
                         tableName,
                         toDate,
                         settings.ArchiveSchemaName,
                         settings.ArchiveCollisionMode,
                         cancellationToken).ConfigureAwait(false)
-                    : await repository.DropPartsToDate(tableName, toDate, cancellationToken).ConfigureAwait(false);
+                    : await repository.DropPartsToDateAsync(tableName, toDate, cancellationToken).ConfigureAwait(false);
 
                 if (settings.PruneEmptyListParts && table.Settings.PartByListFieldNames.Count > 0)
                 {
-                    count += await repository.PruneEmptyListParts(tableName, cancellationToken).ConfigureAwait(false);
+                    count += await repository.PruneEmptyListPartsAsync(tableName, cancellationToken).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -60,11 +60,11 @@ internal sealed partial class PartCleanupService(
         return count;
     }
 
-    public Task<int> Clean(CancellationToken cancellationToken)
+    public Task<int> CleanAsync(CancellationToken cancellationToken)
     {
         var tp = timeProvider ?? TimeProvider.System;
         DateTimeOffset toDate = tp.GetUtcNow().Add(-settings.DropPartsAfterRetention);
-        return Clean(toDate, cancellationToken);
+        return CleanAsync(toDate, cancellationToken);
     }
 
     [LoggerMessage(

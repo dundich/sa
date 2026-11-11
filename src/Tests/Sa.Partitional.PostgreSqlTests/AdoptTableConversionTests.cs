@@ -137,7 +137,7 @@ CREATE TABLE public.{name} (
         await CreateEmptyTable("adopt_empty");
 
         // EnsureParts goes through the same adoption step as Migrate.
-        await Manager.EnsureParts("adopt_empty", Today, [], Ct);
+        await Manager.EnsurePartsAsync("adopt_empty", Today, [], Ct);
 
         Assert.Equal("p", await RelKind("adopt_empty"));
         Assert.True(await Exists("public.adopt_empty__backup$"));
@@ -149,7 +149,7 @@ CREATE TABLE public.{name} (
         Assert.True(await Exists(partition));
 
         // A second run must not convert the table again.
-        await Manager.EnsureParts("adopt_empty", Today, [], Ct);
+        await Manager.EnsurePartsAsync("adopt_empty", Today, [], Ct);
 
         Assert.Equal("p", await RelKind("adopt_empty"));
         Assert.True(await Exists("public.adopt_empty__backup$"));
@@ -161,7 +161,7 @@ CREATE TABLE public.{name} (
             fixture.ServiceProvider.GetRequiredService<ISqlBuilder>(),
             NullLogger<PartTableAdopter>.Instance);
 
-        await restarted.EnsureAdopted("adopt_empty", Ct);
+        await restarted.EnsureAdoptedAsync("adopt_empty", Ct);
 
         Assert.Equal("p", await RelKind("adopt_empty"));
         Assert.True(await Exists("public.adopt_empty__backup$"));
@@ -179,7 +179,7 @@ CREATE TABLE public.{name} (
 INSERT INTO public.adopt_data (payload, created_at) VALUES ('today', @today), ('older', @older), ('older-2', @older);
 """, [new NpgsqlParameter<long>("today", Today.ToUnixTimeSeconds()), new NpgsqlParameter<long>("older", older.ToUnixTimeSeconds())], Ct);
 
-        await Manager.EnsureParts("adopt_data", Today, [], Ct);
+        await Manager.EnsurePartsAsync("adopt_data", Today, [], Ct);
 
         Assert.Equal("p", await RelKind("adopt_data"));
         Assert.Equal(3, await Count("public.adopt_data"));
@@ -227,7 +227,7 @@ INSERT INTO public.adopt_list (tenant, payload, created_at) VALUES
   ('tenant_b', 'b-1', @date);
 """, [new NpgsqlParameter<long>("date", Today.ToUnixTimeSeconds())], Ct);
 
-        await Manager.EnsureParts("adopt_list", Today, ["tenant_a"], Ct);
+        await Manager.EnsurePartsAsync("adopt_list", Today, ["tenant_a"], Ct);
 
         Assert.Equal("p", await RelKind("adopt_list"));
         Assert.Equal(3, await Count("public.adopt_list"));
@@ -268,7 +268,7 @@ INSERT INTO public.adopt_list2 (country, city, payload, created_at) VALUES
             new NpgsqlParameter<long>("date", Today.ToUnixTimeSeconds()),
         ], Ct);
 
-        await Manager.EnsureParts("adopt_list2", Today, ["a|s:b", "c"], Ct);
+        await Manager.EnsurePartsAsync("adopt_list2", Today, ["a|s:b", "c"], Ct);
 
         Assert.Equal("p", await RelKind("adopt_list2"));
         Assert.Equal(2, await Count("public.adopt_list2"));
@@ -287,7 +287,7 @@ INSERT INTO public.adopt_list2 (country, city, payload, created_at) VALUES
             "INSERT INTO public.adopt_drop (payload, created_at) VALUES ('kept', @date);",
             [new NpgsqlParameter<long>("date", Today.ToUnixTimeSeconds())], Ct);
 
-        await Manager.EnsureParts("adopt_drop", Today, [], Ct);
+        await Manager.EnsurePartsAsync("adopt_drop", Today, [], Ct);
 
         Assert.Equal("p", await RelKind("adopt_drop"));
         Assert.False(await Exists("public.adopt_drop__backup$"));
@@ -312,7 +312,7 @@ CREATE TABLE public.adopt_tz (
                 new NpgsqlParameter<DateTimeOffset>("older", Today.AddDays(-1).AddHours(8)),
             ], Ct);
 
-        await Manager.EnsureParts("adopt_tz", Today, [], Ct);
+        await Manager.EnsurePartsAsync("adopt_tz", Today, [], Ct);
 
         Assert.Equal("p", await RelKind("adopt_tz"));
         Assert.True(await Exists("public.adopt_tz__backup$"));
@@ -343,7 +343,7 @@ CREATE TABLE public.adopt_ts (
             "INSERT INTO public.adopt_ts (payload, created_at) VALUES ('today', @today);",
             [new NpgsqlParameter<DateTime>("today", Today.UtcDateTime.AddHours(10))], Ct);
 
-        await Manager.EnsureParts("adopt_ts", Today, [], Ct);
+        await Manager.EnsurePartsAsync("adopt_ts", Today, [], Ct);
 
         Assert.Equal("p", await RelKind("adopt_ts"));
         Assert.True(await Exists("public.adopt_ts__backup$"));
@@ -366,7 +366,7 @@ CREATE TABLE public.adopt_date (
             "INSERT INTO public.adopt_date (payload, created_at) VALUES ('today', @today);",
             [new NpgsqlParameter<DateOnly>("today", DateOnly.FromDateTime(Today.UtcDateTime))], Ct);
 
-        await Manager.EnsureParts("adopt_date", Today, [], Ct);
+        await Manager.EnsurePartsAsync("adopt_date", Today, [], Ct);
 
         Assert.Equal("p", await RelKind("adopt_date"));
         Assert.True(await Exists("public.adopt_date__backup$"));
@@ -378,7 +378,7 @@ CREATE TABLE public.adopt_date (
     public async Task MissingTable_IsRejected()
     {
         InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => Parts.CreatePart("adopt_missing", Today, [], Ct));
+            () => Parts.CreatePartAsync("adopt_missing", Today, [], Ct));
 
         Assert.Contains("does not exist", ex.Message, StringComparison.Ordinal);
     }
@@ -394,7 +394,7 @@ CREATE TABLE public.adopt_foreign (
 """, Ct);
 
         InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => Parts.CreatePart("adopt_foreign", Today, [], Ct));
+            () => Parts.CreatePartAsync("adopt_foreign", Today, [], Ct));
 
         Assert.Contains("already partitioned", ex.Message, StringComparison.Ordinal);
     }
@@ -411,7 +411,7 @@ CREATE TABLE public.adopt_mismatch (
 """, Ct);
 
         InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => Parts.CreatePart("adopt_mismatch", Today, [], Ct));
+            () => Parts.CreatePartAsync("adopt_mismatch", Today, [], Ct));
 
         Assert.Contains("does not match", ex.Message, StringComparison.Ordinal);
 
@@ -437,7 +437,7 @@ CREATE TABLE public.adopt_fk_child (
 """, Ct);
 
         InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => Parts.CreatePart("adopt_fk", Today, [], Ct));
+            () => Parts.CreatePartAsync("adopt_fk", Today, [], Ct));
 
         Assert.Contains("foreign keys", ex.Message, StringComparison.Ordinal);
         Assert.Equal("r", await RelKind("adopt_fk"));

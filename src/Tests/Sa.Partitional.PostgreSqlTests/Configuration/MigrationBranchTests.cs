@@ -35,7 +35,7 @@ public class MigrationBranchTests
     }
 
     private static async Task<string[]> Branches(ITableSettings settings)
-        => [.. (await settings.Migration.GetParts(Ct)).Select(branch => string.Join("|", branch.Select(v => v.ToString())))];
+        => [.. (await settings.Migration.GetPartsAsync(Ct)).Select(branch => string.Join("|", branch.Select(v => v.ToString())))];
 
     [Fact]
     public async Task OneArray_IsExactlyOneBranch()

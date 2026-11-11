@@ -76,7 +76,7 @@ public sealed class MsgCursorIndexTests(MsgCursorIndexTests.Fixture fixture)
         IMigrationService migration = fixture.ServiceProvider
             .GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
 
-        int executed = await migration.Migrate([day], Token);
+        int executed = await migration.MigrateAsync([day], Token);
         Assert.True(executed >= 0, $"migration reported an incomplete run (executed={executed})");
     }
 

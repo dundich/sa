@@ -68,7 +68,7 @@ namespace Partitional.ConsoleApp
     {
         public async Task ShouldRunTest(IPartitionManager partition)
         {
-            await partition.Migrate();
+            await partition.MigrateAsync();
             var parts = await repository.GetPartsToDate("customer", DateTime.Now.AddDays(3));
 
             if (logger.IsEnabled(LogLevel.Information))

@@ -34,13 +34,13 @@ internal sealed class OutboxPartRepository(
         foreach (DateTimeOffset date in dates)
         {
             i++;
-            await partManager.EnsureParts(tableSettings.Error.TableName, date.StartOfDay(), [], cancellationToken);
+            await partManager.EnsurePartsAsync(tableSettings.Error.TableName, date.StartOfDay(), [], cancellationToken);
         }
 
         return i;
     }
 
-    public Task<int> MigrateAsync() => partManager.Migrate(CancellationToken.None);
+    public Task<int> MigrateAsync() => partManager.MigrateAsync(CancellationToken.None);
 
 
     private async Task<int> EnsurePartsAsync(
@@ -73,7 +73,7 @@ internal sealed class OutboxPartRepository(
 
             i++;
 
-            await partManager.EnsureParts(
+            await partManager.EnsurePartsAsync(
                 databaseTableName,
                 day,
                 [part.TenantId, part.Part],

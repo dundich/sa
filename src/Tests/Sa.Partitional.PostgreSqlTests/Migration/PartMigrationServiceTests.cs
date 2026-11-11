@@ -22,7 +22,7 @@ public class PartMigrationServiceTests
         /// </summary>
         public CancellationToken RepositoryToken { get; private set; }
 
-        public Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
+        public Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
         {
             RepositoryToken = cancellationToken;
             Started.TrySetResult();
@@ -30,10 +30,10 @@ public class PartMigrationServiceTests
             return OnMigrate(cancellationToken);
         }
 
-        public Task<int> Migrate(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve, CancellationToken cancellationToken = default)
-            => Migrate(dates, cancellationToken);
+        public Task<int> MigrateAsync(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve, CancellationToken cancellationToken = default)
+            => MigrateAsync(dates, cancellationToken);
 
-        public Task<int> CreatePart(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
+        public Task<int> CreatePartAsync(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
         public Task<List<PartByRangeInfo>> GetPartsFromDate(string tableName, DateTimeOffset fromDate, CancellationToken cancellationToken = default)
@@ -42,16 +42,16 @@ public class PartMigrationServiceTests
         public Task<List<PartByRangeInfo>> GetPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<int> DropPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
+        public Task<int> DropPartsToDateAsync(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<int> ArchivePartsToDate(string tableName, DateTimeOffset toDate, string archiveSchemaName, CancellationToken cancellationToken = default)
+        public Task<int> ArchivePartsToDateAsync(string tableName, DateTimeOffset toDate, string archiveSchemaName, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<int> ArchivePartsToDate(string tableName, DateTimeOffset toDate, string archiveSchemaName, ArchiveCollisionMode collisionMode, CancellationToken cancellationToken = default)
+        public Task<int> ArchivePartsToDateAsync(string tableName, DateTimeOffset toDate, string archiveSchemaName, ArchiveCollisionMode collisionMode, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<int> PruneEmptyListParts(string tableName, CancellationToken cancellationToken = default)
+        public Task<int> PruneEmptyListPartsAsync(string tableName, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
     }
 
@@ -77,14 +77,14 @@ public class PartMigrationServiceTests
         FakeRepository repository = new();
         using PartMigrationService service = Create(repository);
 
-        int result = await service.Migrate(TestContext.Current.CancellationToken);
+        int result = await service.MigrateAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result);
         Assert.True(service.OnMigrated.IsCancellationRequested);
 
         // Already migrated, so waiting is a no-op.
         IMigrationService sut = service;
-        Assert.True(await sut.WaitMigration(TimeSpan.Zero, TestContext.Current.CancellationToken));
+        Assert.True(await sut.WaitMigrationAsync(TimeSpan.Zero, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class PartMigrationServiceTests
         using PartMigrationService service = Create(repository);
         using CancellationTokenSource callerCts = new();
 
-        await service.Migrate(callerCts.Token);
+        await service.MigrateAsync(callerCts.Token);
 
         Assert.True(repository.RepositoryToken.CanBeCanceled);
         Assert.NotEqual(callerCts.Token, repository.RepositoryToken);
@@ -107,7 +107,7 @@ public class PartMigrationServiceTests
         using PartMigrationService service = Create(repository);
         using CancellationTokenSource callerCts = new();
 
-        Task<int> run = service.Migrate(callerCts.Token);
+        Task<int> run = service.MigrateAsync(callerCts.Token);
 
         // Wait until the run is really under way, then cancel the caller: the DDL is idempotent,
         // so a started run has to reach the end instead of dying half-way.
@@ -131,7 +131,7 @@ public class PartMigrationServiceTests
 
         using PartMigrationService service = Create(repository, runTimeout: TimeSpan.FromMilliseconds(200));
 
-        Assert.Equal(-1, await service.Migrate(TestContext.Current.CancellationToken));
+        Assert.Equal(-1, await service.MigrateAsync(TestContext.Current.CancellationToken));
         Assert.False(service.OnMigrated.IsCancellationRequested);
     }
 
@@ -151,11 +151,11 @@ public class PartMigrationServiceTests
 
         using PartMigrationService service = Create(repository);
 
-        Task<int> first = service.Migrate(TestContext.Current.CancellationToken);
+        Task<int> first = service.MigrateAsync(TestContext.Current.CancellationToken);
         await repository.Started.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         // The second tick is skipped, not queued behind the first one.
-        Assert.Equal(-1, await service.Migrate(TestContext.Current.CancellationToken));
+        Assert.Equal(-1, await service.MigrateAsync(TestContext.Current.CancellationToken));
 
         gate.SetResult();
 
@@ -178,11 +178,11 @@ public class PartMigrationServiceTests
 
         using PartMigrationService service = Create(repository);
 
-        Task<int> manual = service.Migrate([DateTimeOffset.UnixEpoch], TestContext.Current.CancellationToken);
+        Task<int> manual = service.MigrateAsync([DateTimeOffset.UnixEpoch], TestContext.Current.CancellationToken);
         await repository.Started.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         // The manual overload used to bypass the lock entirely and run beside the background job.
-        Assert.Equal(-1, await service.Migrate(TestContext.Current.CancellationToken));
+        Assert.Equal(-1, await service.MigrateAsync(TestContext.Current.CancellationToken));
 
         gate.SetResult();
 
@@ -197,7 +197,7 @@ public class PartMigrationServiceTests
 
         IMigrationService sut = service;
 
-        bool completed = await sut.WaitMigration(
+        bool completed = await sut.WaitMigrationAsync(
             TimeSpan.FromMilliseconds(100),
             TestContext.Current.CancellationToken);
 
@@ -212,9 +212,9 @@ public class PartMigrationServiceTests
 
         IMigrationService sut = service;
 
-        Task<bool> waiting = sut.WaitMigration(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        Task<bool> waiting = sut.WaitMigrationAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
-        await service.Migrate(TestContext.Current.CancellationToken);
+        await service.MigrateAsync(TestContext.Current.CancellationToken);
 
         Assert.True(await waiting);
     }
@@ -271,7 +271,7 @@ public class PartMigrationServiceTests
         // The manual overload runs on a *linked* token, so the exception Npgsql raises carries that
         // linked token rather than the deadline's - comparing tokens reported the elapsed deadline
         // as "not the deadline", hiding the real cause in the log.
-        Assert.Equal(-1, await service.Migrate([DateTimeOffset.UnixEpoch], TestContext.Current.CancellationToken));
+        Assert.Equal(-1, await service.MigrateAsync([DateTimeOffset.UnixEpoch], TestContext.Current.CancellationToken));
 
         Assert.Contains(logger.Messages, m => m.Contains("DeadlineElapsed: True", StringComparison.Ordinal));
     }
@@ -292,7 +292,7 @@ public class PartMigrationServiceTests
         using PartMigrationService service = Create(repository, logger: logger);
         using CancellationTokenSource callerCts = new(TimeSpan.FromMilliseconds(200));
 
-        Assert.Equal(-1, await service.Migrate([DateTimeOffset.UnixEpoch], callerCts.Token));
+        Assert.Equal(-1, await service.MigrateAsync([DateTimeOffset.UnixEpoch], callerCts.Token));
 
         // The opposite direction: the run gave up on the caller's request, not on its own deadline.
         Assert.Contains(logger.Messages, m => m.Contains("DeadlineElapsed: False", StringComparison.Ordinal));
@@ -314,7 +314,7 @@ public class PartMigrationServiceTests
 
         PartMigrationService service = Create(repository);
 
-        Task<int> run = service.Migrate([DateTimeOffset.UnixEpoch], TestContext.Current.CancellationToken);
+        Task<int> run = service.MigrateAsync([DateTimeOffset.UnixEpoch], TestContext.Current.CancellationToken);
         await repository.Started.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         // The host disposes the service on its way out while a run still holds the lock - the normal

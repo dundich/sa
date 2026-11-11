@@ -77,22 +77,22 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
     [Fact]
     public async Task ReCreatedPartition_IsVisibleAgain_AfterItWasArchived()
     {
-        await Rep.Migrate([Day], Ct);
+        await Rep.MigrateAsync([Day], Ct);
 
-        Assert.Equal(1, await Rep.ArchivePartsToDate("repair_live", DateTimeOffset.UtcNow.AddDays(30), ArchiveSchema, Ct));
+        Assert.Equal(1, await Rep.ArchivePartsToDateAsync("repair_live", DateTimeOffset.UtcNow.AddDays(30), ArchiveSchema, Ct));
         Assert.True(await Exists($"\"{ArchiveSchema}\".\"repair_live__{Suffix}\""));
 
         // The archived window is written to again: the leaf is re-created in the live schema. The
         // cache row must follow (`archived` back to FALSE), otherwise it stays invisible to
         // EnsureParts and to every later cleanup pass.
-        await Rep.Migrate([Day], Ct);
+        await Rep.MigrateAsync([Day], Ct);
 
         Assert.True(await Exists($"public.\"repair_live__{Suffix}\""));
         Assert.Single(await Rep.GetPartsFromDate("repair_live", Day.AddDays(-1), Ct));
 
         // The archived copy still holds the same name, so archiving the re-created leaf would fail
         // with duplicate_table *after* the detach. The pass leaves it attached instead.
-        Assert.Equal(0, await Rep.ArchivePartsToDate("repair_live", DateTimeOffset.UtcNow.AddDays(30), ArchiveSchema, Ct));
+        Assert.Equal(0, await Rep.ArchivePartsToDateAsync("repair_live", DateTimeOffset.UtcNow.AddDays(30), ArchiveSchema, Ct));
         Assert.True(await Exists($"public.\"repair_live__{Suffix}\""));
         Assert.True(await Attached($"public.\"repair_live__{Suffix}\""));
     }
@@ -100,12 +100,12 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
     [Fact]
     public async Task GhostCacheRow_IsRemoved_WhenThePartitionIsGoneEverywhere()
     {
-        await Rep.Migrate([Day], Ct);
+        await Rep.MigrateAsync([Day], Ct);
 
         // Someone drops the partition by hand; the cache row stays behind.
         await fixture.DataSource.ExecuteNonQueryAsync($"DROP TABLE public.\"repair_ghost__{Suffix}\";", Ct);
 
-        await Rep.ArchivePartsToDate("repair_ghost", DateTimeOffset.UtcNow.AddDays(30), ArchiveSchema, Ct);
+        await Rep.ArchivePartsToDateAsync("repair_ghost", DateTimeOffset.UtcNow.AddDays(30), ArchiveSchema, Ct);
 
         // The stale row is gone, so the next pass does not warn about the same ghost partition again.
         Assert.Equal(0, await Count("public.\"repair_ghost__part$\""));
@@ -116,22 +116,22 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
     {
         DateTimeOffset cutoff = DateTimeOffset.UtcNow.AddDays(30);
 
-        await Rep.Migrate([Day], Ct);
+        await Rep.MigrateAsync([Day], Ct);
         await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.repair_rename (id, created_at) VALUES (1, {Day.ToUnixTimeSeconds()});", Ct);
 
-        Assert.Equal(1, await Rep.ArchivePartsToDate(
+        Assert.Equal(1, await Rep.ArchivePartsToDateAsync(
             "repair_rename", cutoff, ArchiveSchema, ArchiveCollisionMode.RenameExisting, Ct));
 
         // The window is written to again and expires a second time.
-        await Rep.Migrate([Day], Ct);
+        await Rep.MigrateAsync([Day], Ct);
         await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.repair_rename (id, created_at) VALUES (2, {Day.ToUnixTimeSeconds()});", Ct);
 
         Assert.True(await Exists($"public.\"repair_rename__{Suffix}\""));
         Assert.Single(await Rep.GetPartsFromDate("repair_rename", Day.AddDays(-1), Ct));
 
-        Assert.Equal(1, await Rep.ArchivePartsToDate(
+        Assert.Equal(1, await Rep.ArchivePartsToDateAsync(
             "repair_rename", cutoff, ArchiveSchema, ArchiveCollisionMode.RenameExisting, Ct));
 
         string canonical = $"\"{ArchiveSchema}\".\"repair_rename__{Suffix}\"";
@@ -145,9 +145,9 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
     [Fact]
     public async Task PruneEmptyListParts_DropsEmptyUndeclaredBranches_Only()
     {
-        await Rep.Migrate([Day], Ct);                                  // creates the declared "kept" branch
-        await Manager.EnsureParts("repair_prune", Day, ["transient"], Ct);
-        await Manager.EnsureParts("repair_prune", Day, ["busy"], Ct);
+        await Rep.MigrateAsync([Day], Ct);                                  // creates the declared "kept" branch
+        await Manager.EnsurePartsAsync("repair_prune", Day, ["transient"], Ct);
+        await Manager.EnsurePartsAsync("repair_prune", Day, ["busy"], Ct);
 
         await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.repair_prune (id, tenant, created_at) VALUES (3, 'busy', {Day.ToUnixTimeSeconds()});", Ct);
@@ -156,7 +156,7 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
         Assert.True(await Exists("public.\"repair_prune__transient\""));
         Assert.True(await Exists("public.\"repair_prune__busy\""));
 
-        int pruned = await Rep.PruneEmptyListParts("repair_prune", Ct);
+        int pruned = await Rep.PruneEmptyListPartsAsync("repair_prune", Ct);
 
         // "transient" is empty and not declared; "kept" is declared (migration would recreate it);
         // "busy" holds a row.

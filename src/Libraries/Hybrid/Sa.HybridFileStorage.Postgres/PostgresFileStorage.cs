@@ -154,7 +154,7 @@ internal sealed class PostgresFileStorage(
         long createdAt = createdAtDay.ToUnixTimeSeconds();
 
 
-        await partManager.EnsureParts(
+        await partManager.EnsurePartsAsync(
             _qualifiedTableName,
             createdAtDay,
             [metadata.TenantId, _partName],

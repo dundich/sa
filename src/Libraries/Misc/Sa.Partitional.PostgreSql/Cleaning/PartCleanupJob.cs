@@ -7,10 +7,10 @@ internal sealed class PartCleanupJob(IPartCleanupService cleaningService, IPartC
 {
     public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
     {
-        await cleaningService.Clean(cancellationToken).ConfigureAwait(false);
+        await cleaningService.CleanAsync(cancellationToken).ConfigureAwait(false);
 
         // Dropped partitions are still listed in the snapshot, which would keep InCache
         // reporting them as present. Unconditional for the same reason as MigrationJob.
-        await cache.RemoveCache().ConfigureAwait(false);
+        await cache.RemoveCacheAsync().ConfigureAwait(false);
     }
 }

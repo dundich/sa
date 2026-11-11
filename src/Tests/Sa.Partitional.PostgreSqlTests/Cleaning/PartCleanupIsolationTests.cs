@@ -22,7 +22,7 @@ public class PartCleanupIsolationTests
             NullLogger<PartCleanupService>.Instance);
 
         InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.Clean(DateTimeOffset.UtcNow, TestContext.Current.CancellationToken));
+            () => service.CleanAsync(DateTimeOffset.UtcNow, TestContext.Current.CancellationToken));
 
         Assert.Equal("public.bad failed", ex.Message);
         Assert.Equal(["public.good"], repository.Dropped);
@@ -39,7 +39,7 @@ public class PartCleanupIsolationTests
             new FakeSqlBuilder("public.a", "public.b"),
             NullLogger<PartCleanupService>.Instance);
 
-        int removed = await service.Clean(DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
+        int removed = await service.CleanAsync(DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, removed);
         Assert.Equal(["public.a", "public.b"], repository.Dropped);
@@ -49,7 +49,7 @@ public class PartCleanupIsolationTests
     {
         public List<string> Dropped { get; } = [];
 
-        public Task<int> DropPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
+        public Task<int> DropPartsToDateAsync(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
         {
             if (tableName == failing) throw new InvalidOperationException($"{tableName} failed");
 
@@ -57,13 +57,13 @@ public class PartCleanupIsolationTests
             return Task.FromResult(1);
         }
 
-        public Task<int> CreatePart(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
+        public Task<int> CreatePartAsync(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
+        public Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<int> Migrate(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve, CancellationToken cancellationToken = default)
+        public Task<int> MigrateAsync(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
         public Task<List<PartByRangeInfo>> GetPartsFromDate(string tableName, DateTimeOffset fromDate, CancellationToken cancellationToken = default)
@@ -72,13 +72,13 @@ public class PartCleanupIsolationTests
         public Task<List<PartByRangeInfo>> GetPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<int> ArchivePartsToDate(string tableName, DateTimeOffset toDate, string archiveSchemaName, CancellationToken cancellationToken = default)
+        public Task<int> ArchivePartsToDateAsync(string tableName, DateTimeOffset toDate, string archiveSchemaName, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<int> ArchivePartsToDate(string tableName, DateTimeOffset toDate, string archiveSchemaName, ArchiveCollisionMode collisionMode, CancellationToken cancellationToken = default)
+        public Task<int> ArchivePartsToDateAsync(string tableName, DateTimeOffset toDate, string archiveSchemaName, ArchiveCollisionMode collisionMode, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<int> PruneEmptyListParts(string tableName, CancellationToken cancellationToken = default)
+        public Task<int> PruneEmptyListPartsAsync(string tableName, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
     }
 

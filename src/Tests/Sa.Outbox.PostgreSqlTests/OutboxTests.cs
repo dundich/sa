@@ -111,7 +111,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
     private async Task Migrate()
     {
         var migrationService = ServiceProvider.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
-        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        bool r = await migrationService.WaitMigrationAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.True(r, "none migration");
     }
 }

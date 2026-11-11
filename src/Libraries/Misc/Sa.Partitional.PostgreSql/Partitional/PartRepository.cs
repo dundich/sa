@@ -38,7 +38,7 @@ internal sealed partial class PartRepository(
     /// </summary>
     private const string ObjectInUseSqlState = "55006";
 
-    public async Task<int> ExecuteDDL(string sql, CancellationToken cancellationToken)
+    public async Task<int> ExecuteDDLAsync(string sql, CancellationToken cancellationToken)
     {
         await _migrationSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -53,7 +53,7 @@ internal sealed partial class PartRepository(
         }
     }
 
-    public async Task<int> CreatePart(
+    public async Task<int> CreatePartAsync(
         string tableName,
         DateTimeOffset periodStart,
         StrOrNum[] partValues,
@@ -63,14 +63,14 @@ internal sealed partial class PartRepository(
 
         // An adopted table is a plain table until this call converts it; creating a partition on a
         // plain table would fail, and the conversion is a no-op once it has happened.
-        await adopter.EnsureAdopted(tableName, cancellationToken).ConfigureAwait(false);
+        await adopter.EnsureAdoptedAsync(tableName, cancellationToken).ConfigureAwait(false);
 
         string sql = builder.CreateSql(periodStart, partValues);
 
-        return await ExecuteDDL(sql, cancellationToken).ConfigureAwait(false);
+        return await ExecuteDDLAsync(sql, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<int> Migrate(
+    public async Task<int> MigrateAsync(
         DateTimeOffset[] dates,
         Func<string, Task<StrOrNum[][]>> resolve,
         CancellationToken cancellationToken = default)
@@ -86,7 +86,7 @@ internal sealed partial class PartRepository(
         {
             // Convert adopted tables before any partition DDL is generated for them: the generated
             // SQL assumes a partitioned root and never emits its CREATE TABLE in Adopt mode.
-            await adopter.EnsureAdopted(table, cancellationToken).ConfigureAwait(false);
+            await adopter.EnsureAdoptedAsync(table, cancellationToken).ConfigureAwait(false);
 
             return await resolve(table).ConfigureAwait(false);
         }).ConfigureAwait(false))
@@ -107,7 +107,7 @@ internal sealed partial class PartRepository(
 
             try
             {
-                await ExecuteDDL(batch.Sql!, cancellationToken).ConfigureAwait(false);
+                await ExecuteDDLAsync(batch.Sql!, cancellationToken).ConfigureAwait(false);
                 statements++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -135,11 +135,11 @@ internal sealed partial class PartRepository(
     }
 
 
-    public async Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
+    public async Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(dates);
 
-        int i = await Migrate(dates, async table =>
+        int i = await MigrateAsync(dates, async table =>
         {
             // The built-in settings always carry a migration support; it answers an empty series
             // when no list values were configured, which MigrateSql reports by skipping the table
@@ -149,7 +149,7 @@ internal sealed partial class PartRepository(
 
             if (builder?.Settings.Migration is not { } migration) return [];
 
-            return await migration.GetParts(cancellationToken).ConfigureAwait(false);
+            return await migration.GetPartsAsync(cancellationToken).ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);
 
         return i;
@@ -221,7 +221,7 @@ internal sealed partial class PartRepository(
             , cancellationToken: cancellationToken);
     }
 
-    public async Task<int> DropPartsToDate(
+    public async Task<int> DropPartsToDateAsync(
         string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
     {
         int droppedCount = 0;
@@ -238,7 +238,7 @@ internal sealed partial class PartRepository(
                 string sql = settings.DropPartSql(part.Id);
                 try
                 {
-                    await ExecuteDDL(sql, cancellationToken).ConfigureAwait(false);
+                    await ExecuteDDLAsync(sql, cancellationToken).ConfigureAwait(false);
                     droppedCount++;
                     LogSuccessfullyDropped(part.Id, part.RootTableName);
                 }
@@ -278,7 +278,7 @@ internal sealed partial class PartRepository(
     /// produced by <see cref="ITableBuilder.WithLongPartitionName"/> no longer carries the values, so
     /// such a partition is left alone — pruning is opt-in and must never guess.
     /// </remarks>
-    public async Task<int> PruneEmptyListParts(string tableName, CancellationToken cancellationToken = default)
+    public async Task<int> PruneEmptyListPartsAsync(string tableName, CancellationToken cancellationToken = default)
     {
         ITableSettings? settings = sqlBuilder[tableName]?.Settings;
 
@@ -289,7 +289,7 @@ internal sealed partial class PartRepository(
 
         // Resolved once, and only for this table: a branch the migration creates must never be pruned,
         // otherwise the cleanup and the next migration tick would fight over it.
-        StrOrNum[][] declaredValues = await settings.Migration.GetParts(cancellationToken).ConfigureAwait(false);
+        StrOrNum[][] declaredValues = await settings.Migration.GetPartsAsync(cancellationToken).ConfigureAwait(false);
         List<string[]> declared = [.. declaredValues.Select(branch => branch.Select(value => value.ToString()).ToArray())];
 
         List<ListPartition> parts = await PgRetryStrategy.ExecuteWithRetry(
@@ -320,9 +320,9 @@ internal sealed partial class PartRepository(
 
             try
             {
-                if (await TableHasRows(qualified, cancellationToken).ConfigureAwait(false)) continue;
+                if (await TableHasRowsAsync(qualified, cancellationToken).ConfigureAwait(false)) continue;
 
-                await ExecuteDDL(SqlTemplate.DropTableSql(qualified), cancellationToken).ConfigureAwait(false);
+                await ExecuteDDLAsync(SqlTemplate.DropTableSql(qualified), cancellationToken).ConfigureAwait(false);
                 pruned++;
             }
             catch (PostgresException pgErr) when (UndefinedTable(pgErr))
@@ -366,7 +366,7 @@ internal sealed partial class PartRepository(
         return false;
     }
 
-    private async Task<bool> TableHasRows(string qualifiedName, CancellationToken cancellationToken)
+    private async Task<bool> TableHasRowsAsync(string qualifiedName, CancellationToken cancellationToken)
     {
         List<bool> rows = await PgRetryStrategy.ExecuteWithRetry(
             async t => await dataSource.ExecuteReaderListAsync(
@@ -385,14 +385,14 @@ internal sealed partial class PartRepository(
     /// marking its metadata row as archived. Resumable: a run interrupted between any two steps is
     /// finished by the next one, and an already archived row is not returned by the placement query.
     /// </summary>
-    public Task<int> ArchivePartsToDate(
+    public Task<int> ArchivePartsToDateAsync(
         string tableName,
         DateTimeOffset toDate,
         string archiveSchemaName,
         CancellationToken cancellationToken = default)
-        => ArchivePartsToDate(tableName, toDate, archiveSchemaName, ArchiveCollisionMode.Fail, cancellationToken);
+        => ArchivePartsToDateAsync(tableName, toDate, archiveSchemaName, ArchiveCollisionMode.Fail, cancellationToken);
 
-    public async Task<int> ArchivePartsToDate(
+    public async Task<int> ArchivePartsToDateAsync(
         string tableName,
         DateTimeOffset toDate,
         string archiveSchemaName,
@@ -416,7 +416,7 @@ internal sealed partial class PartRepository(
         // Schema + cache column, once per table: idempotent, and it upgrades a cache table that was
         // created before archiving existed. Runs even with nothing to archive, so the schema is there
         // before the first move.
-        await ExecuteDDL(tableSettings.EnsureArchiveSql(archiveSchemaName), cancellationToken).ConfigureAwait(false);
+        await ExecuteDDLAsync(tableSettings.EnsureArchiveSql(archiveSchemaName), cancellationToken).ConfigureAwait(false);
 
         int archivedCount = 0;
 
@@ -432,7 +432,7 @@ internal sealed partial class PartRepository(
 
             try
             {
-                if (await ArchivePart(settings, part, archiveSchemaName, collisionMode, cancellationToken).ConfigureAwait(false))
+                if (await ArchivePartAsync(settings, part, archiveSchemaName, collisionMode, cancellationToken).ConfigureAwait(false))
                 {
                     archivedCount++;
                     LogSuccessfullyArchived(part.Id, part.RootTableName);
@@ -463,7 +463,7 @@ internal sealed partial class PartRepository(
     /// Archives a single partition, tolerating the states an interrupted run can leave behind.
     /// </summary>
     /// <returns><see langword="true"/> when the partition ends up archived; otherwise <see langword="false"/>.</returns>
-    private async Task<bool> ArchivePart(
+    private async Task<bool> ArchivePartAsync(
         ITableSettings settings,
         PartByRangeInfo part,
         string archiveSchemaName,
@@ -472,7 +472,7 @@ internal sealed partial class PartRepository(
     {
         string archiveQualified = SqlTemplate.QualifiedName(archiveSchemaName, BarePartName(part.Id));
 
-        PartLocation location = await GetPartLocation(settings, part, archiveQualified, cancellationToken).ConfigureAwait(false);
+        PartLocation location = await GetPartLocationAsync(settings, part, archiveQualified, cancellationToken).ConfigureAwait(false);
 
         if (location.InSource && location.InArchive)
         {
@@ -482,7 +482,7 @@ internal sealed partial class PartRepository(
             // the clash is handled before anything is touched.
             if (collisionMode == ArchiveCollisionMode.RenameExisting)
             {
-                await RenameArchivedCopy(settings, part, archiveQualified, archiveSchemaName, cancellationToken)
+                await RenameArchivedCopyAsync(settings, part, archiveQualified, archiveSchemaName, cancellationToken)
                     .ConfigureAwait(false);
             }
             else
@@ -497,7 +497,7 @@ internal sealed partial class PartRepository(
             if (location.InArchive)
             {
                 // Moved by an earlier run that did not reach the bookkeeping: just finish that.
-                await ExecuteDDL(settings.MarkArchivedSql(part.Id), cancellationToken).ConfigureAwait(false);
+                await ExecuteDDLAsync(settings.MarkArchivedSql(part.Id), cancellationToken).ConfigureAwait(false);
                 return true;
             }
 
@@ -505,7 +505,7 @@ internal sealed partial class PartRepository(
             // conversion that never completed). Keeping the row makes every later pass warn about
             // the same ghost partition, so the stale metadata is removed instead.
             LogPartNotFound(part.Id);
-            await ExecuteDDL(settings.DeletePartCacheRowSql(part.Id), cancellationToken).ConfigureAwait(false);
+            await ExecuteDDLAsync(settings.DeletePartCacheRowSql(part.Id), cancellationToken).ConfigureAwait(false);
             return false;
         }
 
@@ -513,18 +513,18 @@ internal sealed partial class PartRepository(
         {
             try
             {
-                await ExecuteDDL(settings.DetachPartSql(part.PartValues.ToArray(), part.Id), cancellationToken).ConfigureAwait(false);
+                await ExecuteDDLAsync(settings.DetachPartSql(part.PartValues.ToArray(), part.Id), cancellationToken).ConfigureAwait(false);
             }
             catch (PostgresException ex) when (ex.SqlState == ObjectInUseSqlState)
             {
                 // A previous DETACH CONCURRENTLY was interrupted and is still pending: no new detach
                 // of that parent is allowed until it is finalised.
                 LogFinalizeDetach(part.Id);
-                await ExecuteDDL(settings.FinalizeDetachPartSql(part.PartValues.ToArray(), part.Id), cancellationToken).ConfigureAwait(false);
+                await ExecuteDDLAsync(settings.FinalizeDetachPartSql(part.PartValues.ToArray(), part.Id), cancellationToken).ConfigureAwait(false);
             }
         }
 
-        await ExecuteDDL(settings.ArchivePartSql(part.Id, archiveSchemaName), cancellationToken).ConfigureAwait(false);
+        await ExecuteDDLAsync(settings.ArchivePartSql(part.Id, archiveSchemaName), cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -538,7 +538,7 @@ internal sealed partial class PartRepository(
     /// otherwise moving the new copy into the archive schema fails with <c>42P07 relation …_pkey
     /// already exists</c>.
     /// </remarks>
-    private async Task RenameArchivedCopy(
+    private async Task RenameArchivedCopyAsync(
         ITableSettings settings,
         PartByRangeInfo part,
         string archiveQualified,
@@ -550,17 +550,17 @@ internal sealed partial class PartRepository(
         // Read before the rename: afterwards the old table name resolves to nothing.
         List<string> indexes = await ListTableIndexes(archiveQualified, cancellationToken).ConfigureAwait(false);
 
-        string replacement = await FreeArchivedName(settings, archiveSchemaName, bare, cancellationToken).ConfigureAwait(false);
+        string replacement = await FreeArchivedNameAsync(settings, archiveSchemaName, bare, cancellationToken).ConfigureAwait(false);
 
-        await ExecuteDDL(SqlTemplate.RenameTableSql(archiveQualified, replacement), cancellationToken).ConfigureAwait(false);
+        await ExecuteDDLAsync(SqlTemplate.RenameTableSql(archiveQualified, replacement), cancellationToken).ConfigureAwait(false);
 
         foreach (string index in indexes)
         {
             string indexQualified = SqlTemplate.QualifiedName(archiveSchemaName, index);
-            string indexReplacement = await FreeArchivedName(settings, archiveSchemaName, index, cancellationToken)
+            string indexReplacement = await FreeArchivedNameAsync(settings, archiveSchemaName, index, cancellationToken)
                 .ConfigureAwait(false);
 
-            await ExecuteDDL(SqlTemplate.RenameIndexSql(indexQualified, indexReplacement), cancellationToken)
+            await ExecuteDDLAsync(SqlTemplate.RenameIndexSql(indexQualified, indexReplacement), cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -582,7 +582,7 @@ internal sealed partial class PartRepository(
     /// <summary>
     /// Finds a free <c>{name}{separator}prev$N</c> name in the archive schema.
     /// </summary>
-    private async Task<string> FreeArchivedName(
+    private async Task<string> FreeArchivedNameAsync(
         ITableSettings settings,
         string archiveSchemaName,
         string bareName,
@@ -594,7 +594,7 @@ internal sealed partial class PartRepository(
             string candidate = SqlTemplate.TrimIdentifier(
                 bareName, SqlTemplate.MaxIdentifierBytes - Encoding.UTF8.GetByteCount(suffix)) + suffix;
 
-            if (!await TableExists(SqlTemplate.QualifiedName(archiveSchemaName, candidate), cancellationToken)
+            if (!await TableExistsAsync(SqlTemplate.QualifiedName(archiveSchemaName, candidate), cancellationToken)
                 .ConfigureAwait(false))
             {
                 return candidate;
@@ -602,7 +602,7 @@ internal sealed partial class PartRepository(
         }
     }
 
-    private async Task<bool> TableExists(string qualifiedName, CancellationToken cancellationToken)
+    private async Task<bool> TableExistsAsync(string qualifiedName, CancellationToken cancellationToken)
     {
         List<bool> rows = await PgRetryStrategy.ExecuteWithRetry(
             async t => await dataSource.ExecuteReaderListAsync(
@@ -619,7 +619,7 @@ internal sealed partial class PartRepository(
     /// Reads where a partition currently is (its source schema, the archive schema) and whether it is
     /// still attached to its parent.
     /// </summary>
-    private async Task<PartLocation> GetPartLocation(
+    private async Task<PartLocation> GetPartLocationAsync(
         ITableSettings settings,
         PartByRangeInfo part,
         string archiveQualifiedName,

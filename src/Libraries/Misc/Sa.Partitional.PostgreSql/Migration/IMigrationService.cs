@@ -28,7 +28,7 @@ public interface IMigrationService
     /// </remarks>
     /// <param name="cancellationToken">A token that cancels the wait for the migration lock.</param>
     /// <returns>The number of executed DDL statements, or <c>-1</c> if the run did not complete.</returns>
-    Task<int> Migrate(CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Migrates partitions only for the specified dates.
@@ -45,7 +45,7 @@ public interface IMigrationService
     /// <param name="dates">An array of <see cref="DateTimeOffset"/> values for which to ensure partitions exist.</param>
     /// <param name="cancellationToken">A token that cancels both the wait for the migration lock and the run itself.</param>
     /// <returns>The number of executed DDL statements, or <c>-1</c> if the run did not complete.</returns>
-    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Waits asynchronously (up to <paramref name="timeout"/>) for an in-progress migration to complete.
@@ -55,13 +55,13 @@ public interface IMigrationService
     /// <param name="cancellationToken">A token that stops waiting. Cancellation is reported as
     /// <see langword="false"/>, not as an exception.</param>
     /// <returns><c>true</c> if migration completed within the timeout; <c>false</c> otherwise.</returns>
-    Task<bool> WaitMigration(TimeSpan timeout, CancellationToken cancellationToken = default)
+    Task<bool> WaitMigrationAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         if (OnMigrated.IsCancellationRequested) return Task.FromResult(true);
 
-        return Wait();
+        return WaitAsync();
 
-        async Task<bool> Wait()
+        async Task<bool> WaitAsync()
         {
             TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 

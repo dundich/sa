@@ -43,7 +43,7 @@ public class PartCleanupArchiveTests(PartCleanupArchiveTests.Fixture fixture) : 
     {
         DateTimeOffset date = DateTimeOffset.UtcNow.AddDays(-2);
 
-        await GetPartRep().Migrate([date], table =>
+        await GetPartRep().MigrateAsync([date], table =>
         {
             StrOrNum[][] result = table switch
             {
@@ -53,7 +53,7 @@ public class PartCleanupArchiveTests(PartCleanupArchiveTests.Fixture fixture) : 
             return Task.FromResult(result);
         }, CancellationToken.None);
 
-        await GetPartRep().Migrate([date], CancellationToken.None);
+        await GetPartRep().MigrateAsync([date], CancellationToken.None);
 
         // ensure cache has parts
         await GetPartRep().GetPartsToDate("cleanup_archive", DateTimeOffset.UtcNow.AddDays(10), CancellationToken.None);
@@ -72,7 +72,7 @@ public class PartCleanupArchiveTests(PartCleanupArchiveTests.Fixture fixture) : 
 
         DateTimeOffset toDate = DateTimeOffset.UtcNow.AddDays(100);
 
-        int archived = await Sub.Clean(toDate, CancellationToken.None);
+        int archived = await Sub.CleanAsync(toDate, CancellationToken.None);
         Assert.Equal(totalBefore, archived);
 
         List<PartByRangeInfo> partsAfter = await GetPartsFromDateNow();

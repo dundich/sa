@@ -78,7 +78,7 @@ public sealed class PublishPartLockTests(PublishPartLockTests.Fixture fixture)
         IMigrationService migration = fixture.ServiceProvider
             .GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
 
-        int executed = await migration.Migrate([Day], Token);
+        int executed = await migration.MigrateAsync([Day], Token);
         Assert.True(executed >= 0, $"migration reported an incomplete run (executed={executed})");
     }
 

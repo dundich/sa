@@ -10,28 +10,28 @@ Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.Equals(Sa.HybridFileSto
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.<Clone>$() -> Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions!
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.PostgresFileStorageOptions() -> void
 Sa.HybridFileStorage.Postgres.Setup
+Sa.HybridFileStorage.Postgres.IPostgresFileStorageBuilder.FromConfiguration(string! configSectionPath) -> Sa.HybridFileStorage.Postgres.IPostgresFileStorageBuilder!
 Sa.HybridFileStorage.Postgres.IPostgresFileStorageBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions!>!>! configureSettings) -> Sa.HybridFileStorage.Postgres.IPostgresFileStorageBuilder!
-Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.TableName.get -> string!
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.SchemaName.set -> void
+Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.SchemaName.get -> string?
+Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.TableName.get -> string!
+static Sa.HybridFileStorage.Postgres.Setup.AddSaPostgreSqlFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! key, System.Action<Sa.HybridFileStorage.Postgres.IPostgresFileStorageBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.TableName.set -> void
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.StorageType.get -> string!
-static Sa.HybridFileStorage.Postgres.Setup.AddSaPostgreSqlFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! key, System.Action<Sa.HybridFileStorage.Postgres.IPostgresFileStorageBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.IsReadOnly.get -> bool
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.StorageType.set -> void
+Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.IsReadOnly.get -> bool
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.IsReadOnly.set -> void
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.Basket.get -> string!
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.Basket.set -> void
-Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.ExpireDays.set -> void
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.ExpireDays.get -> int
+Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.ExpireDays.set -> void
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.MigrationScheduleForwardDays.get -> int
-Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.MigrationScheduleForwardDays.set -> void
 static Sa.HybridFileStorage.Postgres.Setup.AddSaPostgreSqlFileStorageChained(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! key, System.Action<Sa.HybridFileStorage.Postgres.IPostgresFileStorageBuilder!>? configure = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
+Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.MigrationScheduleForwardDays.set -> void
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.MaxUploadSizeBytes.get -> long
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.MaxUploadSizeBytes.set -> void
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.PartByRange.get -> Sa.Partitional.PostgreSql.PartByRange
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.PartByRange.set -> void
 static Sa.HybridFileStorage.Postgres.Setup.AddSaPostgreSqlFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! key, Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions! options) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.SchemaName.get -> string?
-Sa.HybridFileStorage.Postgres.IPostgresFileStorageBuilder.FromConfiguration(string! configSectionPath) -> Sa.HybridFileStorage.Postgres.IPostgresFileStorageBuilder!
 static Sa.HybridFileStorage.Postgres.Setup.AddSaPostgreSqlFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! key, Microsoft.Extensions.Options.IOptions<Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions!>! options) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.HybridFileStorage.Postgres.PostgresFileStorageOptions.Validate() -> void

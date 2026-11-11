@@ -524,7 +524,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
         Func<CancellationToken, Task<StrOrNum[][]>>? getPartValues,
         IPartTableMigrationSupport? original) : IPartTableMigrationSupport
     {
-        public async Task<StrOrNum[][]> GetParts(CancellationToken cancellationToken)
+        public async Task<StrOrNum[][]> GetPartsAsync(CancellationToken cancellationToken)
         {
             List<StrOrNum[]> result = partValues != null ? [.. partValues] : [];
 
@@ -536,7 +536,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
             if (original != null)
             {
-                StrOrNum[][] partItems = await original.GetParts(cancellationToken).ConfigureAwait(false);
+                StrOrNum[][] partItems = await original.GetPartsAsync(cancellationToken).ConfigureAwait(false);
                 result.AddRange(partItems);
             }
 

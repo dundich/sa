@@ -59,7 +59,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     {
         var sql = $"SELECT count(*) FROM public.\"test_11__{PartPostfix}\";";
         Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
-        await fixture.Sub.CreatePart("test_11", DateTimeOffset.Now, ["some", 12], TestContext.Current.CancellationToken);
+        await fixture.Sub.CreatePartAsync("test_11", DateTimeOffset.Now, ["some", 12], TestContext.Current.CancellationToken);
         int i = await fixture.DataSource.ExecuteReaderFirstAsync<int>(sql, TestContext.Current.CancellationToken);
         Assert.True(i > 0);
     }
@@ -68,7 +68,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     public async Task CreatePart_WithEmptyListTest()
     {
         var sql = $"SELECT count(*) FROM public.\"test_12__{PartPostfix}\";";
-        await fixture.Sub.CreatePart("test_12", DateTimeOffset.Now, [], TestContext.Current.CancellationToken);
+        await fixture.Sub.CreatePartAsync("test_12", DateTimeOffset.Now, [], TestContext.Current.CancellationToken);
         int i = await fixture.DataSource.ExecuteReaderFirstAsync<int>(sql, TestContext.Current.CancellationToken);
         Assert.True(i > 0);
     }
@@ -79,7 +79,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     {
         var timeExpected = new DateTimeOffset(2024, 12, 03, 00, 00, 00, TimeSpan.Zero);
 
-        await fixture.Sub.CreatePart(
+        await fixture.Sub.CreatePartAsync(
             "test_10",
             timeExpected.AddMinutes(22).AddHours(12),
             [1, "some1", "some2"],
@@ -105,7 +105,7 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     [Fact()]
     public async Task MigrateTest()
     {
-        int i = await fixture.Sub.Migrate([DateTime.Now, DateTime.Now.AddDays(1)], table =>
+        int i = await fixture.Sub.MigrateAsync([DateTime.Now, DateTime.Now.AddDays(1)], table =>
         {
             StrOrNum[][] result = table switch
             {
@@ -130,8 +130,8 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
         // and both CREATE TABLE statements reach PostgreSQL. IF NOT EXISTS plus ON CONFLICT DO
         // NOTHING make the second one a no-op instead of a duplicate-key error.
         await Task.WhenAll(
-            fixture.Sub.CreatePart("test_10", date, [7, "race1", "race1"], TestContext.Current.CancellationToken),
-            fixture.Sub.CreatePart("test_10", date, [7, "race1", "race1"], TestContext.Current.CancellationToken));
+            fixture.Sub.CreatePartAsync("test_10", date, [7, "race1", "race1"], TestContext.Current.CancellationToken),
+            fixture.Sub.CreatePartAsync("test_10", date, [7, "race1", "race1"], TestContext.Current.CancellationToken));
 
         int partitions = await fixture.DataSource.ExecuteReaderFirstAsync<int>(
             "SELECT count(*) FROM pg_class WHERE relname = 'test_10__7__race1__race1__y2025m03d07';",

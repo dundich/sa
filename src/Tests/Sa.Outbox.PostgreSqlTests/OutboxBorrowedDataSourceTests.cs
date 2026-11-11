@@ -107,7 +107,7 @@ public sealed class OutboxBorrowedDataSourceTests(OutboxBorrowedDataSourceTests.
         IMigrationService migration = ServiceProvider
             .GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
         Assert.True(
-            await migration.WaitMigration(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken),
+            await migration.WaitMigrationAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken),
             "migration did not run through the borrowed NpgsqlDataSource");
 
         // Delivery reads the queue and updates statuses through the borrowed pool.

@@ -153,14 +153,14 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
         CancellationToken ct = TestContext.Current.CancellationToken;
         StrOrNum[] key = Key("cache");
 
-        await Parts.EnsureParts(table, Day, key, ct);
+        await Parts.EnsurePartsAsync(table, Day, key, ct);
 
         // The regression: before the fix the stored strategy of a month/year table resolved to Day, so
         // `InCache` only matched on the first day of the period and every write re-ran the DDL.
-        Assert.True(await Cache.InCache(table, Day, key, ct), $"{table} ({granularity}) is not in the cache");
+        Assert.True(await Cache.InCacheAsync(table, Day, key, ct), $"{table} ({granularity}) is not in the cache");
 
         // A different key is a different partition, so it must still be a miss.
-        Assert.False(await Cache.InCache(table, Day, Key("other"), ct));
+        Assert.False(await Cache.InCacheAsync(table, Day, Key("other"), ct));
     }
 
     [Theory]
@@ -170,10 +170,10 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
         CancellationToken ct = TestContext.Current.CancellationToken;
         StrOrNum[] key = Key("idem");
 
-        await Parts.EnsureParts(table, Day, key, ct);
+        await Parts.EnsurePartsAsync(table, Day, key, ct);
         int afterFirst = (await Relations(table, ct)).Length;
 
-        await Parts.EnsureParts(table, Day, key, ct);
+        await Parts.EnsurePartsAsync(table, Day, key, ct);
         int afterSecond = (await Relations(table, ct)).Length;
 
         Assert.Equal(afterFirst, afterSecond);
@@ -186,9 +186,9 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
 
-        await Repository.Migrate([Day], _ => Task.FromResult<StrOrNum[][]>([Key("mig")]), ct);
+        await Repository.MigrateAsync([Day], _ => Task.FromResult<StrOrNum[][]>([Key("mig")]), ct);
         // A second pass must be a no-op, not a duplicate.
-        await Repository.Migrate([Day], _ => Task.FromResult<StrOrNum[][]>([Key("mig")]), ct);
+        await Repository.MigrateAsync([Day], _ => Task.FromResult<StrOrNum[][]>([Key("mig")]), ct);
 
         string leaf = Assert.Single(RangeLeaves(await Relations(table, ct), granularity, Day, "mig"));
         Assert.Contains("__mig__", leaf, StringComparison.Ordinal);
@@ -200,7 +200,7 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
 
-        await Parts.EnsureParts(table, Day, Key("write"), ct);
+        await Parts.EnsurePartsAsync(table, Day, Key("write"), ct);
         await InsertRow(table, "write", id: 1, Day.AddHours(12), ct);
 
         Assert.Equal(1L, await Rows(table, "write", ct));
@@ -213,12 +213,12 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
 
-        await Parts.EnsureParts(table, OlderDay, Key("drop"), ct);
-        await Parts.EnsureParts(table, Day, Key("drop"), ct);
+        await Parts.EnsurePartsAsync(table, OlderDay, Key("drop"), ct);
+        await Parts.EnsurePartsAsync(table, Day, Key("drop"), ct);
         await InsertRow(table, "drop", id: 1, OlderDay.AddHours(12), ct);
         await InsertRow(table, "drop", id: 2, Day.AddHours(12), ct);
 
-        await Repository.DropPartsToDate(table, Day, ct);
+        await Repository.DropPartsToDateAsync(table, Day, ct);
 
         // The older leaf is gone with its row, the recent one survives.
         Assert.Equal(1L, await Rows(table, "drop", ct));
@@ -232,14 +232,14 @@ public class PartitionGranularityTests(PartitionGranularityTests.Fixture fixture
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
 
-        await Parts.EnsureParts(table, OlderDay, Key("arch"), ct);
+        await Parts.EnsurePartsAsync(table, OlderDay, Key("arch"), ct);
         await InsertRow(table, "arch", id: 1, OlderDay.AddHours(12), ct);
 
-        int archived = await Repository.ArchivePartsToDate(table, Day, ArchiveSchema, ct);
+        int archived = await Repository.ArchivePartsToDateAsync(table, Day, ArchiveSchema, ct);
         Assert.Equal(1, archived);
 
         // A second pass has nothing left to do: the metadata row is archived and the query filters it.
-        int again = await Repository.ArchivePartsToDate(table, Day, ArchiveSchema, ct);
+        int again = await Repository.ArchivePartsToDateAsync(table, Day, ArchiveSchema, ct);
         Assert.Equal(0, again);
 
         // The leaf kept its name, moved to the archive schema, and the row is still readable there.

@@ -25,7 +25,7 @@ public interface IPartCleanupService
     /// </remarks>
     /// <param name="cancellationToken">A cancellation token to signal the operation's cancellation.</param>
     /// <returns>A task representing the asynchronous operation, containing the number of parts cleaned up.</returns>
-    Task<int> Clean(CancellationToken cancellationToken);
+    Task<int> CleanAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Asynchronously cleans up Outbox message parts up to a specified date.
@@ -35,5 +35,5 @@ public interface IPartCleanupService
     /// <param name="toDate">The date up to which parts should be cleaned up.</param>
     /// <param name="cancellationToken">A cancellation token to signal the operation's cancellation.</param>
     /// <returns>A task representing the asynchronous operation, containing the number of parts cleaned up.</returns>
-    Task<int> Clean(DateTimeOffset toDate, CancellationToken cancellationToken);
+    Task<int> CleanAsync(DateTimeOffset toDate, CancellationToken cancellationToken);
 }

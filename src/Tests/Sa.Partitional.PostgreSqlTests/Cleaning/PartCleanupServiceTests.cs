@@ -44,7 +44,7 @@ public class PartCleanupServiceTests(PartCleanupServiceTests.Fixture fixture) : 
 
     private async Task MigrateTest()
     {
-        await GetPartRep().Migrate([DateTimeOffset.Now], CancellationToken.None);
+        await GetPartRep().MigrateAsync([DateTimeOffset.Now], CancellationToken.None);
     }
 
     [Fact()]
@@ -59,7 +59,7 @@ public class PartCleanupServiceTests(PartCleanupServiceTests.Fixture fixture) : 
 
         DateTimeOffset toDate = DateTimeOffset.UtcNow.AddDays(1);
 
-        int i = await Sub.Clean(toDate, CancellationToken.None);
+        int i = await Sub.CleanAsync(toDate, CancellationToken.None);
         Assert.Equal(5, i);
 
         int expected = list.Count - i;

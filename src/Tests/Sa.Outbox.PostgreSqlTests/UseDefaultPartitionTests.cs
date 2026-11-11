@@ -96,7 +96,7 @@ public sealed class UseDefaultPartitionTests(UseDefaultPartitionTests.Fixture fi
         IMigrationService migration = fixture.ServiceProvider
             .GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
 
-        int executed = await migration.Migrate([Day], Token);
+        int executed = await migration.MigrateAsync([Day], Token);
         Assert.True(executed >= 0, $"migration reported an incomplete run (executed={executed})");
     }
 
@@ -245,7 +245,7 @@ public sealed class NoDefaultPartitionTests(NoDefaultPartitionTests.Fixture fixt
     {
         IMigrationService migration = fixture.ServiceProvider
             .GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
-        _ = await migration.Migrate([new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero)], Token);
+        _ = await migration.MigrateAsync([new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero)], Token);
 
         // No default partition anywhere in the schema.
         long defaults = await DataSource.ExecuteScalarTypedAsync<long>(

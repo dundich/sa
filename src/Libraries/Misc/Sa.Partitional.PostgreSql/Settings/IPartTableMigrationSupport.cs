@@ -11,5 +11,5 @@ public interface IPartTableMigrationSupport
     /// </summary>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>Partition values resolved at runtime.</returns>
-    Task<StrOrNum[][]> GetParts(CancellationToken cancellationToken);
+    Task<StrOrNum[][]> GetPartsAsync(CancellationToken cancellationToken);
 }

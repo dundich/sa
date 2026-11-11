@@ -33,11 +33,11 @@ internal sealed class PartCache(
     /// </summary>
     /// <remarks>
     /// The snapshot starts at <see cref="SnapshotFloor"/> and only widens by a partition period, so a
-    /// date older than the window is <i>never</i> in it: <see cref="InCache"/> keeps answering "not
+    /// date older than the window is <i>never</i> in it: <see cref="InCacheAsync"/> keeps answering "not
     /// there", and <c>EnsureParts</c> re-ran the whole (idempotent) DDL batch on every call. Backdated
     /// writes are exactly the case where that matters, so an ensured partition is remembered here for
     /// <see cref="PartCacheSettings.CacheTtl"/> - the same staleness the snapshot itself accepts.
-    /// The entries are dropped by <see cref="RemoveCache()"/>, which the migration and cleanup jobs
+    /// The entries are dropped by <see cref="RemoveCacheAsync()"/>, which the migration and cleanup jobs
     /// call after they changed partitions behind the cache's back.
     /// </remarks>
     private readonly ConcurrentDictionary<EnsuredKey, DateTimeOffset> _ensured = new();
@@ -47,7 +47,7 @@ internal sealed class PartCache(
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public async Task<bool> InCache(
+    public async Task<bool> InCacheAsync(
         string tableName,
         DateTimeOffset date,
         StrOrNum[] partValues,
@@ -255,7 +255,7 @@ internal sealed class PartCache(
         return (_timeProvider.GetUtcNow() - lookback).StartOfDay();
     }
 
-    public async Task EnsureCache(
+    public async Task EnsureCacheAsync(
         string tableName,
         DateTimeOffset date,
         StrOrNum[] partValues,
@@ -273,15 +273,15 @@ internal sealed class PartCache(
             _ensured.TryRemove(ensuredKey, out _);
         }
 
-        if (await InCache(tableName, date, partValues, cancellationToken).ConfigureAwait(false))
+        if (await InCacheAsync(tableName, date, partValues, cancellationToken).ConfigureAwait(false))
         {
             Remember(ensuredKey, now);
             return;
         }
 
-        await repository.CreatePart(tableName, date, partValues, cancellationToken).ConfigureAwait(false);
+        await repository.CreatePartAsync(tableName, date, partValues, cancellationToken).ConfigureAwait(false);
 
-        await RemoveCache(tableName, cancellationToken).ConfigureAwait(false);
+        await RemoveCacheAsync(tableName, cancellationToken).ConfigureAwait(false);
 
         Remember(ensuredKey, now);
 
@@ -322,7 +322,7 @@ internal sealed class PartCache(
         }
     }
 
-    public Task RemoveCache(string tableName, CancellationToken cancellationToken = default)
+    public Task RemoveCacheAsync(string tableName, CancellationToken cancellationToken = default)
     {
         ISqlTableBuilder? builder = sqlBuilder[tableName];
         if (_cache.TryRemove(CacheKey(tableName, builder), out CacheEntry? removed)) Discard(removed);
@@ -333,7 +333,7 @@ internal sealed class PartCache(
     /// Drops every cached snapshot. Used after a bulk change — a migration that created partitions,
     /// or a cleanup that dropped them — which happened behind the cache's back.
     /// </summary>
-    public Task RemoveCache()
+    public Task RemoveCacheAsync()
     {
         foreach (KeyValuePair<string, CacheEntry> item in _cache)
         {

@@ -32,7 +32,7 @@ public interface IPartRepository
     /// The result of the underlying multi-statement command: it is <c>0</c> for pure DDL on most
     /// servers (PostgreSQL reports no row count for <c>CREATE TABLE</c>), not <c>1</c>.
     /// </returns>
-    Task<int> CreatePart(
+    Task<int> CreatePartAsync(
         string tableName,
         DateTimeOffset periodStart,
         StrOrNum[] partValues,
@@ -49,7 +49,7 @@ public interface IPartRepository
     /// generated DDL is <c>IF NOT EXISTS</c>, so a re-run executes the same statements and counts
     /// them again.
     /// </returns>
-    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Ensures partitions for all tables, resolving list-partition values dynamically via <paramref name="resolve"/>.
@@ -58,7 +58,7 @@ public interface IPartRepository
     /// <param name="resolve">A function that receives a table name and returns the expected partition values.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>Number of DDL statements executed, not the number of partitions created (see the other overload).</returns>
-    Task<int> Migrate(
+    Task<int> MigrateAsync(
         DateTimeOffset[] dates,
         Func<string, Task<StrOrNum[][]>> resolve,
         CancellationToken cancellationToken = default);
@@ -95,7 +95,7 @@ public interface IPartRepository
     /// <param name="toDate">Upper-bound date — partitions up to and including this date will be dropped.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of partitions dropped.</returns>
-    Task<int> DropPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default);
+    Task<int> DropPartsToDateAsync(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Archives all partitions whose <see cref="PartByRangeInfo.FromDate"/> is less than or equal to
@@ -114,7 +114,7 @@ public interface IPartRepository
     /// <param name="archiveSchemaName">The schema the detached partitions are moved into.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of partitions archived.</returns>
-    Task<int> ArchivePartsToDate(
+    Task<int> ArchivePartsToDateAsync(
         string tableName,
         DateTimeOffset toDate,
         string archiveSchemaName,
@@ -130,7 +130,7 @@ public interface IPartRepository
     /// <param name="collisionMode">What to do when the target name is already taken.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of partitions archived.</returns>
-    Task<int> ArchivePartsToDate(
+    Task<int> ArchivePartsToDateAsync(
         string tableName,
         DateTimeOffset toDate,
         string archiveSchemaName,
@@ -150,5 +150,5 @@ public interface IPartRepository
     /// <param name="tableName">The root table name.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The number of list-level partitions dropped.</returns>
-    Task<int> PruneEmptyListParts(string tableName, CancellationToken cancellationToken = default);
+    Task<int> PruneEmptyListPartsAsync(string tableName, CancellationToken cancellationToken = default);
 }
