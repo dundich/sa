@@ -124,10 +124,12 @@ internal sealed class ErrorDeliveryCommand(
             // again in Fill, doubling the exception→text walk on the __error$ write path.
             string errorMessage = GetErrorMessage(message.Exception);
 
-            ErrorInfo info = new(
-                errorMessage.GetMurmurHash3(),
-                message.Exception.GetType().Name,
-                message.DeliveryResult.CreatedAt.StartOfDay());
+            ErrorInfo info = new()
+            {
+                ErrorId = errorMessage.GetMurmurHash3(),
+                TypeName = message.Exception.GetType().Name,
+                CreatedAt = message.DeliveryResult.CreatedAt.StartOfDay(),
+            };
 
             var key = new ErrorKey(info.ErrorId, info.CreatedAt);
 

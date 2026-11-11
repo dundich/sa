@@ -292,12 +292,14 @@ public class PartCacheFaultTests
         => new(repository, new FakeSqlBuilder(), Settings, new FixedTimeProvider(FixedNow));
 
     private static PartByRangeInfo MatchingPart(FakePartRepository repository)
-        => new(
-            Id: $"{Table}_y2026m09d24",
-            RootTableName: Table,
-            PartValues: PartValues,
-            PartBy: PgPartBy.Day,
-            FromDate: repository.LastFrom ?? ExpectedFrom);
+        => new()
+        {
+            Id = $"{Table}_y2026m09d24",
+            RootTableName = Table,
+            PartValues = PartValues,
+            PartBy = PgPartBy.Day,
+            FromDate = repository.LastFrom ?? ExpectedFrom,
+        };
 
     /// <summary>
     /// Fixed clock so the cache window start (<c>(now - CachedFromDate).StartOfDay()</c>)

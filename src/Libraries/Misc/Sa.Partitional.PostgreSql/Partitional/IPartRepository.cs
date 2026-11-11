@@ -3,17 +3,23 @@ namespace Sa.Partitional.PostgreSql;
 /// <summary>
 /// Represents information about a range-partitioned child table in PostgreSQL.
 /// </summary>
-/// <param name="Id">Fully qualified partition identifier, including schema (e.g. <c>"public"."outbox__y2026m06d26"</c>).</param>
-/// <param name="RootTableName">The name of the parent/root table from which this partition is derived.</param>
-/// <param name="PartValues">Partition key values — may be strings (for list) or numbers (for range dates). Read-only: this is metadata read back from the cache.</param>
-/// <param name="PartBy">The <see cref="PgPartBy"/> strategy that governs how this partition was created.</param>
-/// <param name="FromDate">The effective start date of the partition.</param>
-public sealed record PartByRangeInfo(
-    string Id,
-    string RootTableName,
-    IReadOnlyList<StrOrNum> PartValues,
-    PgPartBy PartBy,
-    DateTimeOffset FromDate);
+public sealed record PartByRangeInfo
+{
+    /// <summary>The partition identity.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>The root table the partition belongs to.</summary>
+    public required string RootTableName { get; init; }
+
+    /// <summary>The partition key values.</summary>
+    public required IReadOnlyList<StrOrNum> PartValues { get; init; }
+
+    /// <summary>The partition kind.</summary>
+    public required PgPartBy PartBy { get; init; }
+
+    /// <summary>The effective start date of the partition.</summary>
+    public DateTimeOffset FromDate { get; init; }
+}
 
 /// <summary>
 /// Repository that executes DDL statements for creating, querying, and dropping PostgreSQL partitions.

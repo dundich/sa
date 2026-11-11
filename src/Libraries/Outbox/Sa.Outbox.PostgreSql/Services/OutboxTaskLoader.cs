@@ -136,7 +136,11 @@ internal sealed partial class OutboxTaskLoader(
             if (copiedRows == 0)
                 return LoadGroupResult.Empty;
 
-            return new LoadGroupResult(checked((int)copiedRows), reader.GetInt64(1));
+            return new LoadGroupResult
+            {
+                CopiedRows = checked((int)copiedRows),
+                NewOffset = reader.GetInt64(1),
+            };
         }
         else
         {

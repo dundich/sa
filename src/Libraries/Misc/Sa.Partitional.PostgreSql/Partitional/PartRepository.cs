@@ -669,15 +669,16 @@ internal sealed partial class PartRepository(
 
     private static PartByRangeInfo ReadPartInfo(NpgsqlDataReader reader)
     {
-        return new PartByRangeInfo(
-            reader.GetString(0)
-            , reader.GetString(1)
+        return new PartByRangeInfo
+        {
+            Id = reader.GetString(0),
+            RootTableName = reader.GetString(1),
             // Wrapped: the metadata is read into an array, and the snapshot it lands in must not be
             // mutable through the public `StrOrNum[]`-looking property.
-            , Array.AsReadOnly(SqlTemplate.ParseStrOrNums(reader.GetString(2)))
-            , PgPartBy.FromPartName(reader.GetString(3))
-            , reader.GetInt64(4).ToDateTimeOffsetFromUnixTimestamp()
-        );
+            PartValues = Array.AsReadOnly(SqlTemplate.ParseStrOrNums(reader.GetString(2))),
+            PartBy = PgPartBy.FromPartName(reader.GetString(3)),
+            FromDate = reader.GetInt64(4).ToDateTimeOffsetFromUnixTimestamp(),
+        };
     }
 
     private static bool CanRetryByError(Exception ex, int _ = 0)
