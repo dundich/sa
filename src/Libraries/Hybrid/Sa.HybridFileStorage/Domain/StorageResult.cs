@@ -15,8 +15,17 @@ namespace Sa.HybridFileStorage.Domain;
 /// new StorageResult("file:///var/www/uploads/image.png", "/api/files/download/file/var/www/uploads/image.png", "file", DateTimeOffset.Now)
 /// </code>
 /// </summary>
-/// <param name="FileId">Unique file identifier in URI format: {storage_type}://{basket}/{tenant}/{path}[?params]</param>
-/// <param name="AbsoluteUrl">Publicly accessible URL for downloading the file</param>
-/// <param name="StorageType">Type of storage backend used ("pg", "s3", "file", "azure")</param>
-/// <param name="UploadedAt">Timestamp when the file was uploaded</param>
-public sealed record StorageResult(string FileId, string AbsoluteUrl, string StorageType, DateTimeOffset UploadedAt);
+public sealed record StorageResult
+{
+    /// <summary>The provider file id.</summary>
+    public required string FileId { get; init; }
+
+    /// <summary>The absolute URL or path the file is reachable by.</summary>
+    public required string AbsoluteUrl { get; init; }
+
+    /// <summary>The storage type that produced the result.</summary>
+    public required string StorageType { get; init; }
+
+    /// <summary>When the file was stored.</summary>
+    public DateTimeOffset UploadedAt { get; init; }
+}

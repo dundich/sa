@@ -110,7 +110,13 @@ public sealed class InMemoryFileStorage(
             _totalSizeBytes = newSize;
         }
 
-        return new StorageResult(fileId, fileId, StorageType, _timeProvider.GetUtcNow());
+        return new StorageResult
+        {
+            FileId = fileId,
+            AbsoluteUrl = fileId,
+            StorageType = StorageType,
+            UploadedAt = _timeProvider.GetUtcNow(),
+        };
     }
 
     /// <inheritdoc />

@@ -1,6 +1,5 @@
 #nullable enable
 Sa.Media.FFmpeg.IFFMpegBuilder
-Sa.Media.FFmpeg.IFFMpegLocator
 Sa.Media.FFmpeg.IFFMpegExecutorFactory
 Sa.Media.FFmpeg.FFMpegOptions
 override Sa.Media.FFmpeg.FFMpegOptions.ToString() -> string!
@@ -11,14 +10,15 @@ override Sa.Media.FFmpeg.FFMpegOptions.Equals(object? obj) -> bool
 Sa.Media.FFmpeg.FFMpegOptions.Equals(Sa.Media.FFmpeg.FFMpegOptions? other) -> bool
 Sa.Media.FFmpeg.FFMpegOptions.<Clone>$() -> Sa.Media.FFmpeg.FFMpegOptions!
 Sa.Media.FFmpeg.FFMpegOptions.FFMpegOptions() -> void
-Sa.Media.FFmpeg.IFFProbeExecutor
+Sa.Media.FFmpeg.IFFMpegLocator
 Sa.Media.FFmpeg.IPcmS16LeChannelManipulator
+Sa.Media.FFmpeg.IFFProbeExecutor
 Sa.Media.FFmpeg.IFFRawExecutor
+Sa.Media.FFmpeg.MediaMetadata.Duration.get -> double?
+Sa.Media.FFmpeg.MediaMetadata.Duration.init -> void
 Sa.Media.FFmpeg.Setup
 Sa.Media.FFmpeg.MediaMetadata.FormatName.get -> string?
-Sa.Media.FFmpeg.MediaMetadata.Duration.get -> double?
 Sa.Media.FFmpeg.MediaMetadata.FormatName.init -> void
-Sa.Media.FFmpeg.MediaMetadata.Duration.init -> void
 Sa.Media.FFmpeg.MediaMetadata.BitRate.get -> int?
 Sa.Media.FFmpeg.MediaMetadata.BitRate.init -> void
 Sa.Media.FFmpeg.MediaMetadata.Size.get -> long?
@@ -34,6 +34,7 @@ Sa.Media.FFmpeg.MediaMetadata.Equals(Sa.Media.FFmpeg.MediaMetadata? other) -> bo
 Sa.Media.FFmpeg.MediaMetadata.<Clone>$() -> Sa.Media.FFmpeg.MediaMetadata!
 Sa.Media.FFmpeg.MediaMetadata.Deconstruct(out double? Duration, out string? FormatName, out int? BitRate, out long? Size) -> void
 Sa.Media.FFmpeg.IFFMpegExecutor
+Sa.Media.FFmpeg.Services.ProcessExecutionException
 Sa.Media.FFmpeg.Services.ProcessExecutionResultException
 Sa.Media.FFmpeg.Services.ProcessStartException
 Sa.Media.FFmpeg.Services.ProcessTimeoutException
@@ -48,64 +49,62 @@ override Sa.Media.FFmpeg.Services.ProcessExecutionResult.Equals(object? obj) -> 
 virtual Sa.Media.FFmpeg.Services.ProcessExecutionResult.Equals(Sa.Media.FFmpeg.Services.ProcessExecutionResult? other) -> bool
 virtual Sa.Media.FFmpeg.Services.ProcessExecutionResult.<Clone>$() -> Sa.Media.FFmpeg.Services.ProcessExecutionResult!
 Sa.Media.FFmpeg.Services.ProcessExecutionResult.ProcessExecutionResult(Sa.Media.FFmpeg.Services.ProcessExecutionResult! original) -> void
-Sa.Media.FFmpeg.Services.ProcessExecutionResult.Deconstruct(out int ExitCode, out string! StandardOutput, out string! StandardError) -> void
-Sa.Media.FFmpeg.Services.ProcessExecutionResult.StandardOutput.get -> string!
-Sa.Media.FFmpeg.Services.ProcessExecutionResult.StandardOutput.init -> void
-Sa.Media.FFmpeg.Services.ProcessExecutionResult.StandardError.get -> string!
-Sa.Media.FFmpeg.Services.ProcessExecutionResult.StandardError.init -> void
-Sa.Media.FFmpeg.Services.ProcessExecutionResult.ExitCode.get -> int
-Sa.Media.FFmpeg.Services.ProcessExecutionResult.ExitCode.init -> void
-Sa.Media.FFmpeg.Services.ProcessExecutionException
+Sa.Media.FFmpeg.Services.ProcessExecutionResult.ProcessExecutionResult() -> void
+Sa.Media.FFmpeg.IFFMpegBuilder.FromConfiguration(string! configSectionPath) -> Sa.Media.FFmpeg.IFFMpegBuilder!
+Sa.Media.FFmpeg.IFFMpegBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Media.FFmpeg.FFMpegOptions!>!>! configureSettings) -> Sa.Media.FFmpeg.IFFMpegBuilder!
 Sa.Media.FFmpeg.FFMpegOptions.ExecutablePath.get -> string?
 Sa.Media.FFmpeg.FFMpegOptions.ExecutablePath.set -> void
-Sa.Media.FFmpeg.FFMpegOptions.WritableDirectory.get -> string?
 Sa.Media.FFmpeg.FFMpegOptions.WritableDirectory.set -> void
+Sa.Media.FFmpeg.FFMpegOptions.WritableDirectory.get -> string?
 Sa.Media.FFmpeg.FFMpegOptions.TimeoutSeconds.get -> int?
-Sa.Media.FFmpeg.FFMpegOptions.TimeoutSeconds.set -> void
-Sa.Media.FFmpeg.FFMpegOptions.Timeout.get -> System.TimeSpan?
-Sa.Media.FFmpeg.IFFMpegBuilder.FromConfiguration(string! configSectionPath) -> Sa.Media.FFmpeg.IFFMpegBuilder!
-Sa.Media.FFmpeg.IFFMpegExecutor.Executor.get -> Sa.Media.FFmpeg.IFFRawExecutor!
-Sa.Media.FFmpeg.IFFMpegExecutor.GetFormatsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegExecutor.GetVersionAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegExecutor.GetCodecsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LeAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LePreservingFormatAsync(string! inputFileName, string! outputFileName, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LeAsync(System.IO.Stream! inputStream, string! inputFormat, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! onOutput, int? outputSampleRate = 16000, ushort? outputChannelCount = null, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LeRawAsync(System.IO.Stream! inputStream, string! inputFormat, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! onOutput, int? outputSampleRate = 16000, ushort? outputChannelCount = null, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS32LeAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmF32LeAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LeRawAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Media.FFmpeg.FFMpegOptions!>!>! configureSettings) -> Sa.Media.FFmpeg.IFFMpegBuilder!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmF32LeRawAsync(System.IO.Stream! inputStream, string! inputFormat, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! onOutput, int? outputSampleRate = 16000, ushort? outputChannelCount = null, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmF32LeRawAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToOggAsync(string! inputFileName, string! outputFileName, bool isLibopus = false, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.IFFMpegExecutor.Default.get -> Sa.Media.FFmpeg.IFFMpegExecutor!
-Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToMp3Async(string! inputFileName, string! outputFileName, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
-Sa.Media.FFmpeg.FFMpegOptions.EnsureWritableDirectory() -> void
 Sa.Media.FFmpeg.IFFMpegExecutorFactory.CreateFFMpegExecutor(Sa.Media.FFmpeg.FFMpegOptions? options = null) -> Sa.Media.FFmpeg.IFFMpegExecutor!
 Sa.Media.FFmpeg.IFFMpegExecutorFactory.CreateFFProbeExecutor(Sa.Media.FFmpeg.FFMpegOptions? options = null) -> Sa.Media.FFmpeg.IFFProbeExecutor!
-Sa.Media.FFmpeg.IFFMpegLocator.FindFFmpegExecutablePath() -> string!
 Sa.Media.FFmpeg.IFFMpegLocator.FindFFprobeExecutablePath(string! ffmpegExecutablePath) -> string!
+Sa.Media.FFmpeg.IFFMpegLocator.FindFFmpegExecutablePath() -> string!
+Sa.Media.FFmpeg.FFMpegOptions.TimeoutSeconds.set -> void
 Sa.Media.FFmpeg.IFFProbeExecutor.Executor.get -> Sa.Media.FFmpeg.IFFRawExecutor!
+Sa.Media.FFmpeg.IFFMpegExecutor.Executor.get -> Sa.Media.FFmpeg.IFFRawExecutor!
+Sa.Media.FFmpeg.IFFMpegExecutor.GetVersionAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
 Sa.Media.FFmpeg.IFFProbeExecutor.GetChannelsAndSampleRateAsync(string! filePath, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<(int? channels, int? sampleRate)>!
+Sa.Media.FFmpeg.IFFMpegExecutor.GetFormatsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
 Sa.Media.FFmpeg.IFFProbeExecutor.GetMetaInfoAsync(string! filePath, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.Media.FFmpeg.MediaMetadata!>!
-Sa.Media.FFmpeg.IFFRawExecutor.ExecutablePath.get -> string!
-Sa.Media.FFmpeg.IFFRawExecutor.DefaultTimeout.get -> System.TimeSpan
+Sa.Media.FFmpeg.IFFMpegExecutor.GetCodecsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFProbeExecutor.GetMetaInfoAsync(System.IO.Stream! audioStream, string! inputFormat, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.Media.FFmpeg.MediaMetadata!>!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LeAsync(System.IO.Stream! inputStream, string! inputFormat, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! onOutput, int? outputSampleRate = 16000, ushort? outputChannelCount = null, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LePreservingFormatAsync(string! inputFileName, string! outputFileName, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LeRawAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LeRawAsync(System.IO.Stream! inputStream, string! inputFormat, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! onOutput, int? outputSampleRate = 16000, ushort? outputChannelCount = null, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS32LeAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmS16LeAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmF32LeAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToOggAsync(string! inputFileName, string! outputFileName, bool isLibopus = false, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmF32LeRawAsync(System.IO.Stream! inputStream, string! inputFormat, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! onOutput, int? outputSampleRate = 16000, ushort? outputChannelCount = null, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToPcmF32LeRawAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = 16000, ushort? outputChannelCount = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFMpegExecutor.ConvertToMp3Async(string! inputFileName, string! outputFileName, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFMpegExecutor.Default.get -> Sa.Media.FFmpeg.IFFMpegExecutor!
 Sa.Media.FFmpeg.IFFProbeExecutor.Default.get -> Sa.Media.FFmpeg.IFFProbeExecutor!
-Sa.Media.FFmpeg.IFFRawExecutor.ExecuteAsync(string! commandArguments, bool throwOnError = false, System.TimeSpan? timeout = null, System.Action<System.Diagnostics.ProcessStartInfo!>? configure = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.Media.FFmpeg.Services.ProcessExecutionResult!>!
-Sa.Media.FFmpeg.IPcmS16LeChannelManipulator.JoinAsync(string! leftFileName, string! rightFileName, string! outputFileName, int? outputSampleRate = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFRawExecutor.ExecutablePath.get -> string!
 Sa.Media.FFmpeg.IPcmS16LeChannelManipulator.SplitAsync(string! inputFileName, string! outputFileName, int? outputSampleRate = null, string! channelSuffix = "_channel_", bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string!>!>!
+Sa.Media.FFmpeg.IFFRawExecutor.DefaultTimeout.get -> System.TimeSpan
+Sa.Media.FFmpeg.IPcmS16LeChannelManipulator.JoinAsync(string! leftFileName, string! rightFileName, string! outputFileName, int? outputSampleRate = null, bool isOverwrite = true, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Sa.Media.FFmpeg.IFFRawExecutor.ExecuteAsync(string! commandArguments, bool throwOnError = false, System.TimeSpan? timeout = null, System.Action<System.Diagnostics.ProcessStartInfo!>? configure = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.Media.FFmpeg.Services.ProcessExecutionResult!>!
+Sa.Media.FFmpeg.FFMpegOptions.Timeout.get -> System.TimeSpan?
 Sa.Media.FFmpeg.MediaMetadata.MediaMetadata(double? Duration = null, string? FormatName = null, int? BitRate = null, long? Size = null) -> void
 Sa.Media.FFmpeg.IFFRawExecutor.ExecuteAsync(System.Collections.Generic.IEnumerable<string!>! commandArguments, bool throwOnError = false, System.TimeSpan? timeout = null, System.Action<System.Diagnostics.ProcessStartInfo!>? configure = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.Media.FFmpeg.Services.ProcessExecutionResult!>!
 Sa.Media.FFmpeg.IFFRawExecutor.ExecuteStdOutAsync(string! commandArguments, System.IO.Stream! inputStream, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! onOutput, System.TimeSpan? timeout = null, System.Action<System.Diagnostics.ProcessStartInfo!>? configure = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-Sa.Media.FFmpeg.IFFProbeExecutor.GetMetaInfoAsync(System.IO.Stream! audioStream, string! inputFormat, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.Media.FFmpeg.MediaMetadata!>!
+Sa.Media.FFmpeg.FFMpegOptions.EnsureWritableDirectory() -> void
 Sa.Media.FFmpeg.FFMpegOptions.Validate() -> void
-Sa.Media.FFmpeg.Services.ProcessExecutionException.ExitCode.get -> int
+static Sa.Media.FFmpeg.Setup.AddSaFFMpeg(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Media.FFmpeg.IFFMpegBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.Media.FFmpeg.Services.ProcessExecutionException.ProcessExecutionException(int exitCode, string! message, System.Exception? inner = null) -> void
-Sa.Media.FFmpeg.Services.ProcessExecutionResultException.Result.get -> Sa.Media.FFmpeg.Services.ProcessExecutionResult!
+Sa.Media.FFmpeg.Services.ProcessExecutionException.ExitCode.get -> int
 Sa.Media.FFmpeg.Services.ProcessExecutionResultException.ProcessExecutionResultException(Sa.Media.FFmpeg.Services.ProcessExecutionResult! result, string? commandLine = null) -> void
 Sa.Media.FFmpeg.Services.ProcessExecutionResultException.CommandLine.get -> string?
-Sa.Media.FFmpeg.Services.ProcessStartException.ProcessStartException(string! message) -> void
+Sa.Media.FFmpeg.Services.ProcessExecutionResultException.Result.get -> Sa.Media.FFmpeg.Services.ProcessExecutionResult!
+Sa.Media.FFmpeg.Services.ProcessExecutionResult.ExitCode.get -> int
+Sa.Media.FFmpeg.Services.ProcessExecutionResult.ExitCode.init -> void
+Sa.Media.FFmpeg.Services.ProcessExecutionResult.StandardOutput.init -> void
+Sa.Media.FFmpeg.Services.ProcessExecutionResult.StandardError.get -> string!
+Sa.Media.FFmpeg.Services.ProcessExecutionResult.StandardOutput.get -> string!
+Sa.Media.FFmpeg.Services.ProcessExecutionResult.StandardError.init -> void
 Sa.Media.FFmpeg.Services.ProcessTimeoutException.ProcessTimeoutException(string! message, System.Exception? inner = null) -> void
-Sa.Media.FFmpeg.Services.ProcessExecutionResult.ProcessExecutionResult(int ExitCode, string! StandardOutput, string! StandardError) -> void
-static Sa.Media.FFmpeg.Setup.AddSaFFMpeg(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Media.FFmpeg.IFFMpegBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Media.FFmpeg.Services.ProcessStartException.ProcessStartException(string! message) -> void

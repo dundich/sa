@@ -36,10 +36,12 @@ internal interface IProcessExecutor
             , cancellationToken
         ).ConfigureAwait(false);
 
-        var result = new ProcessExecutionResult(
-            exitcode,
-            StandardOutput: output.ToString(),
-            StandardError: error.ToString());
+        var result = new ProcessExecutionResult
+        {
+            ExitCode = exitcode,
+            StandardOutput = output.ToString(),
+            StandardError = error.ToString(),
+        };
 
         if (result.ExitCode == 0 || !throwOnError) return result;
 
@@ -64,13 +66,17 @@ internal interface IProcessExecutor
 /// <summary>
 /// Represents the result of a process execution, including exit code and output streams.
 /// </summary>
-/// <param name="ExitCode">The exit code returned by the executed process. A value of 0 typically indicates success.</param>
-/// <param name="StandardOutput">The standard output (stdout) captured from the process.</param>
-/// <param name="StandardError">The standard error (stderr) captured from the process.</param>
-internal record ProcessExecutionResult(
-    int ExitCode,
-    string StandardOutput,
-    string StandardError);
+internal record ProcessExecutionResult
+{
+    /// <summary>The exit code returned by the executed process.</summary>
+    public int ExitCode { get; init; }
+
+    /// <summary>The standard output (stdout) captured from the process.</summary>
+    public string StandardOutput { get; init; } = string.Empty;
+
+    /// <summary>The standard error (stderr) captured from the process.</summary>
+    public string StandardError { get; init; } = string.Empty;
+}
 
 
 

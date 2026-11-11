@@ -1,19 +1,18 @@
 #nullable enable
-Sa.HybridFileStorage.HybridFileStorageAggregateException
 Sa.HybridFileStorage.HybridFileStorageNoAvailableException
 Sa.HybridFileStorage.HybridFileStorageThrowHelper
+Sa.HybridFileStorage.HybridFileStorageAggregateException
+Sa.HybridFileStorage.HybridFileStorageWritableException
 Sa.HybridFileStorage.BatchOptions
-Sa.HybridFileStorage.BatchOptions.BatchOptions() -> void
 Sa.HybridFileStorage.FileIdFormat
+Sa.HybridFileStorage.BatchOptions.BatchOptions() -> void
 Sa.HybridFileStorage.FileIdFormat.Auto = 0 -> Sa.HybridFileStorage.FileIdFormat
 Sa.HybridFileStorage.FileIdFormat.WithTimestamp = 1 -> Sa.HybridFileStorage.FileIdFormat
-Sa.HybridFileStorage.BatchError.FileId.get -> string!
 Sa.HybridFileStorage.FileIdFormat.WithoutTimestamp = 2 -> Sa.HybridFileStorage.FileIdFormat
-Sa.HybridFileStorage.BatchError.FileId.init -> void
-Sa.HybridFileStorage.BatchError.Exception.get -> System.Exception!
-Sa.HybridFileStorage.BatchError.Exception.init -> void
 Sa.HybridFileStorage.BatchError.Index.get -> int
 Sa.HybridFileStorage.BatchError.Index.init -> void
+const Sa.HybridFileStorage.FileIdParser.SchemeSeparator = "://" -> string!
+Sa.HybridFileStorage.FileIdParser
 Sa.HybridFileStorage.BatchError
 Sa.HybridFileStorage.BatchError.BatchError() -> void
 ~override Sa.HybridFileStorage.BatchError.ToString() -> string
@@ -23,73 +22,18 @@ override Sa.HybridFileStorage.BatchError.GetHashCode() -> int
 ~override Sa.HybridFileStorage.BatchError.Equals(object obj) -> bool
 Sa.HybridFileStorage.BatchError.Equals(Sa.HybridFileStorage.BatchError other) -> bool
 Sa.HybridFileStorage.BatchError.Deconstruct(out string! FileId, out System.Exception! Exception, out int Index) -> void
-Sa.HybridFileStorage.HybridFileStorageWritableException
 Sa.HybridFileStorage.FileMetadata
-Sa.HybridFileStorage.FileMetadata.FileMetadata() -> void
 Sa.HybridFileStorage.BatchResult<T>
+Sa.HybridFileStorage.FileMetadata.FileMetadata() -> void
 Sa.HybridFileStorage.BatchResult<T>.BatchResult() -> void
-Sa.HybridFileStorage.FileIdParser
+Sa.HybridFileStorage.BatchError.Exception.get -> System.Exception!
+Sa.HybridFileStorage.BatchError.Exception.init -> void
+Sa.HybridFileStorage.BatchError.FileId.get -> string!
+Sa.HybridFileStorage.BatchError.FileId.init -> void
 Sa.HybridFileStorage.BatchOperationException<T>
-const Sa.HybridFileStorage.FileIdParser.SchemeSeparator = "://" -> string!
-Sa.HybridFileStorage.Domain.IFileStorage
-Sa.HybridFileStorage.IHybridFileStorageConfiguration
-Sa.HybridFileStorage.HybridFileStorageExtensions
-Sa.HybridFileStorage.Domain.StorageResult.FileId.get -> string!
-Sa.HybridFileStorage.Domain.StorageResult
-Sa.HybridFileStorage.Domain.StorageResult.FileId.init -> void
-override Sa.HybridFileStorage.Domain.StorageResult.ToString() -> string!
-Sa.HybridFileStorage.IInMemoryFileStorageBuilder
-static Sa.HybridFileStorage.Domain.StorageResult.operator !=(Sa.HybridFileStorage.Domain.StorageResult? left, Sa.HybridFileStorage.Domain.StorageResult? right) -> bool
-static Sa.HybridFileStorage.Domain.StorageResult.operator ==(Sa.HybridFileStorage.Domain.StorageResult? left, Sa.HybridFileStorage.Domain.StorageResult? right) -> bool
-override Sa.HybridFileStorage.Domain.StorageResult.GetHashCode() -> int
-override Sa.HybridFileStorage.Domain.StorageResult.Equals(object? obj) -> bool
-Sa.HybridFileStorage.Domain.StorageResult.Equals(Sa.HybridFileStorage.Domain.StorageResult? other) -> bool
-Sa.HybridFileStorage.Domain.StorageResult.<Clone>$() -> Sa.HybridFileStorage.Domain.StorageResult!
-Sa.HybridFileStorage.Domain.StorageResult.Deconstruct(out string! FileId, out string! AbsoluteUrl, out string! StorageType, out System.DateTimeOffset UploadedAt) -> void
-Sa.HybridFileStorage.Domain.StorageResult.AbsoluteUrl.get -> string!
-Sa.HybridFileStorage.Domain.StorageResult.AbsoluteUrl.init -> void
-Sa.HybridFileStorage.Domain.StorageResult.StorageType.get -> string!
-Sa.HybridFileStorage.Domain.StorageResult.StorageType.init -> void
-Sa.HybridFileStorage.Domain.StorageResult.UploadedAt.get -> System.DateTimeOffset
-Sa.HybridFileStorage.Domain.StorageResult.UploadedAt.init -> void
 Sa.HybridFileStorage.HybridFileStorageContainerConfiguration
-Sa.HybridFileStorage.BatchOperationProgress.Total.get -> int
-Sa.HybridFileStorage.BatchOperationProgress.Total.init -> void
-Sa.HybridFileStorage.BatchOperationProgress.Succeeded.get -> int
-Sa.HybridFileStorage.BatchOperationProgress.Completed.get -> int
-Sa.HybridFileStorage.BatchOperationProgress.Succeeded.init -> void
-Sa.HybridFileStorage.BatchOperationProgress.Completed.init -> void
-Sa.HybridFileStorage.BatchOperationProgress.Failed.get -> int
-Sa.HybridFileStorage.BatchOperationProgress.Failed.init -> void
-Sa.HybridFileStorage.BatchOperationProgress.Error.get -> System.Exception?
-Sa.HybridFileStorage.BatchOperationProgress.FileId.get -> string?
-Sa.HybridFileStorage.BatchOperationProgress.Error.init -> void
-Sa.HybridFileStorage.BatchOperationProgress.FileId.init -> void
-Sa.HybridFileStorage.InMemoryFileStorageOptions
-override Sa.HybridFileStorage.InMemoryFileStorageOptions.ToString() -> string!
-static Sa.HybridFileStorage.InMemoryFileStorageOptions.operator !=(Sa.HybridFileStorage.InMemoryFileStorageOptions? left, Sa.HybridFileStorage.InMemoryFileStorageOptions? right) -> bool
-Sa.HybridFileStorage.Domain.UploadFileInput
-static Sa.HybridFileStorage.InMemoryFileStorageOptions.operator ==(Sa.HybridFileStorage.InMemoryFileStorageOptions? left, Sa.HybridFileStorage.InMemoryFileStorageOptions? right) -> bool
-override Sa.HybridFileStorage.InMemoryFileStorageOptions.GetHashCode() -> int
-override Sa.HybridFileStorage.Domain.UploadFileInput.ToString() -> string!
-override Sa.HybridFileStorage.InMemoryFileStorageOptions.Equals(object? obj) -> bool
-Sa.HybridFileStorage.InMemoryFileStorageOptions.Equals(Sa.HybridFileStorage.InMemoryFileStorageOptions? other) -> bool
-static Sa.HybridFileStorage.Domain.UploadFileInput.operator !=(Sa.HybridFileStorage.Domain.UploadFileInput? left, Sa.HybridFileStorage.Domain.UploadFileInput? right) -> bool
-Sa.HybridFileStorage.InMemoryFileStorageOptions.<Clone>$() -> Sa.HybridFileStorage.InMemoryFileStorageOptions!
-static Sa.HybridFileStorage.Domain.UploadFileInput.operator ==(Sa.HybridFileStorage.Domain.UploadFileInput? left, Sa.HybridFileStorage.Domain.UploadFileInput? right) -> bool
-Sa.HybridFileStorage.InMemoryFileStorageOptions.Deconstruct(out string! Basket, out bool IsReadOnly, out long MaxSizeBytes) -> void
-override Sa.HybridFileStorage.Domain.UploadFileInput.GetHashCode() -> int
-override Sa.HybridFileStorage.Domain.UploadFileInput.Equals(object? obj) -> bool
-Sa.HybridFileStorage.Domain.UploadFileInput.Equals(Sa.HybridFileStorage.Domain.UploadFileInput? other) -> bool
-Sa.HybridFileStorage.InMemoryFileStorageOptions.MaxSizeBytes.get -> long
-Sa.HybridFileStorage.InMemoryFileStorageOptions.Basket.get -> string!
-Sa.HybridFileStorage.InMemoryFileStorageOptions.IsReadOnly.get -> bool
-Sa.HybridFileStorage.Domain.UploadFileInput.<Clone>$() -> Sa.HybridFileStorage.Domain.UploadFileInput!
-Sa.HybridFileStorage.InMemoryFileStorageOptions.IsReadOnly.init -> void
-Sa.HybridFileStorage.InMemoryFileStorageOptions.MaxSizeBytes.init -> void
-Sa.HybridFileStorage.InMemoryFileStorageOptions.Basket.init -> void
-Sa.HybridFileStorage.Domain.UploadFileInput.UploadFileInput() -> void
 Sa.HybridFileStorage.BatchOperationProgress
+Sa.HybridFileStorage.HybridFileStorageExtensions
 Sa.HybridFileStorage.BatchOperationProgress.BatchOperationProgress() -> void
 ~override Sa.HybridFileStorage.BatchOperationProgress.ToString() -> string
 static Sa.HybridFileStorage.BatchOperationProgress.operator !=(Sa.HybridFileStorage.BatchOperationProgress left, Sa.HybridFileStorage.BatchOperationProgress right) -> bool
@@ -98,123 +42,178 @@ override Sa.HybridFileStorage.BatchOperationProgress.GetHashCode() -> int
 ~override Sa.HybridFileStorage.BatchOperationProgress.Equals(object obj) -> bool
 Sa.HybridFileStorage.BatchOperationProgress.Equals(Sa.HybridFileStorage.BatchOperationProgress other) -> bool
 Sa.HybridFileStorage.BatchOperationProgress.Deconstruct(out int Total, out int Completed, out int Succeeded, out int Failed, out string? FileId, out System.Exception? Error) -> void
-Sa.HybridFileStorage.InMemoryFileStorage
+Sa.HybridFileStorage.Domain.IFileStorage
+Sa.HybridFileStorage.BatchOperationProgress.Total.get -> int
+Sa.HybridFileStorage.BatchOperationProgress.Total.init -> void
+Sa.HybridFileStorage.BatchOperationProgress.Succeeded.get -> int
+Sa.HybridFileStorage.BatchOperationProgress.Failed.get -> int
+Sa.HybridFileStorage.BatchOperationProgress.Failed.init -> void
+Sa.HybridFileStorage.BatchOperationProgress.FileId.get -> string?
+Sa.HybridFileStorage.BatchOperationProgress.Succeeded.init -> void
+Sa.HybridFileStorage.BatchOperationProgress.FileId.init -> void
+Sa.HybridFileStorage.BatchOperationProgress.Error.get -> System.Exception?
+Sa.HybridFileStorage.BatchOperationProgress.Error.init -> void
+Sa.HybridFileStorage.BatchOperationProgress.Completed.get -> int
+Sa.HybridFileStorage.BatchOperationProgress.Completed.init -> void
+Sa.HybridFileStorage.Domain.StorageResult
+override Sa.HybridFileStorage.Domain.StorageResult.ToString() -> string!
+static Sa.HybridFileStorage.Domain.StorageResult.operator !=(Sa.HybridFileStorage.Domain.StorageResult? left, Sa.HybridFileStorage.Domain.StorageResult? right) -> bool
+static Sa.HybridFileStorage.Domain.StorageResult.operator ==(Sa.HybridFileStorage.Domain.StorageResult? left, Sa.HybridFileStorage.Domain.StorageResult? right) -> bool
+override Sa.HybridFileStorage.Domain.StorageResult.GetHashCode() -> int
+override Sa.HybridFileStorage.Domain.StorageResult.Equals(object? obj) -> bool
+Sa.HybridFileStorage.Domain.StorageResult.Equals(Sa.HybridFileStorage.Domain.StorageResult? other) -> bool
+Sa.HybridFileStorage.Domain.StorageResult.<Clone>$() -> Sa.HybridFileStorage.Domain.StorageResult!
+Sa.HybridFileStorage.Domain.StorageResult.StorageResult() -> void
+Sa.HybridFileStorage.IInMemoryFileStorageBuilder
 Sa.HybridFileStorage.IHybridFileStorage
-const Sa.HybridFileStorage.InMemoryFileStorage.DefaultStorageType = "mem" -> string!
-const Sa.HybridFileStorage.InMemoryFileStorage.SchemeSeparator = "://" -> string!
+Sa.HybridFileStorage.IHybridFileStorageConfiguration
+Sa.HybridFileStorage.Domain.UploadFileInput
+override Sa.HybridFileStorage.Domain.UploadFileInput.ToString() -> string!
+Sa.HybridFileStorage.InMemoryFileStorageOptions
+static Sa.HybridFileStorage.Domain.UploadFileInput.operator !=(Sa.HybridFileStorage.Domain.UploadFileInput? left, Sa.HybridFileStorage.Domain.UploadFileInput? right) -> bool
+static Sa.HybridFileStorage.Domain.UploadFileInput.operator ==(Sa.HybridFileStorage.Domain.UploadFileInput? left, Sa.HybridFileStorage.Domain.UploadFileInput? right) -> bool
+override Sa.HybridFileStorage.InMemoryFileStorageOptions.ToString() -> string!
+override Sa.HybridFileStorage.Domain.UploadFileInput.GetHashCode() -> int
+static Sa.HybridFileStorage.InMemoryFileStorageOptions.operator !=(Sa.HybridFileStorage.InMemoryFileStorageOptions? left, Sa.HybridFileStorage.InMemoryFileStorageOptions? right) -> bool
+override Sa.HybridFileStorage.Domain.UploadFileInput.Equals(object? obj) -> bool
+static Sa.HybridFileStorage.InMemoryFileStorageOptions.operator ==(Sa.HybridFileStorage.InMemoryFileStorageOptions? left, Sa.HybridFileStorage.InMemoryFileStorageOptions? right) -> bool
+Sa.HybridFileStorage.Domain.UploadFileInput.Equals(Sa.HybridFileStorage.Domain.UploadFileInput? other) -> bool
+override Sa.HybridFileStorage.InMemoryFileStorageOptions.GetHashCode() -> int
+Sa.HybridFileStorage.Domain.UploadFileInput.<Clone>$() -> Sa.HybridFileStorage.Domain.UploadFileInput!
+override Sa.HybridFileStorage.InMemoryFileStorageOptions.Equals(object? obj) -> bool
+Sa.HybridFileStorage.Domain.UploadFileInput.UploadFileInput() -> void
+Sa.HybridFileStorage.InMemoryFileStorageOptions.Equals(Sa.HybridFileStorage.InMemoryFileStorageOptions? other) -> bool
+Sa.HybridFileStorage.InMemoryFileStorageOptions.<Clone>$() -> Sa.HybridFileStorage.InMemoryFileStorageOptions!
+Sa.HybridFileStorage.InMemoryFileStorageOptions.Deconstruct(out string! Basket, out bool IsReadOnly, out long MaxSizeBytes) -> void
+Sa.HybridFileStorage.InMemoryFileStorageOptions.Basket.get -> string!
+Sa.HybridFileStorage.InMemoryFileStorageOptions.Basket.init -> void
+Sa.HybridFileStorage.InMemoryFileStorageOptions.IsReadOnly.get -> bool
+Sa.HybridFileStorage.InMemoryFileStorageOptions.IsReadOnly.init -> void
+Sa.HybridFileStorage.InMemoryFileStorageOptions.MaxSizeBytes.get -> long
+Sa.HybridFileStorage.InMemoryFileStorageOptions.MaxSizeBytes.init -> void
 Sa.HybridFileStorage.Setup
-Sa.HybridFileStorage.Interceptors.IInterceptorContainer
-Sa.HybridFileStorage.Interceptors.IDownloadInterceptor
 Sa.HybridFileStorage.Interceptors.IDeleteInterceptor
-Sa.HybridFileStorage.Interceptors.IUploadInterceptor
 Sa.HybridFileStorage.StorageNaming
-const Sa.HybridFileStorage.StorageNaming.DefaultBasket = "share" -> string!
 const Sa.HybridFileStorage.StorageNaming.BasketMinLength = 3 -> int
-const Sa.HybridFileStorage.StorageNaming.BasketMaxLength = 63 -> int
-const Sa.HybridFileStorage.StorageNaming.StorageTypeMaxLength = 10 -> int
 const Sa.HybridFileStorage.StorageNaming.IdentifierMaxLength = 63 -> int
+const Sa.HybridFileStorage.StorageNaming.StorageTypeMaxLength = 10 -> int
+const Sa.HybridFileStorage.StorageNaming.BasketMaxLength = 63 -> int
+Sa.HybridFileStorage.Interceptors.IDownloadInterceptor
+const Sa.HybridFileStorage.StorageNaming.DefaultBasket = "share" -> string!
+Sa.HybridFileStorage.Interceptors.IInterceptorContainer
+Sa.HybridFileStorage.InMemoryFileStorage
+const Sa.HybridFileStorage.InMemoryFileStorage.SchemeSeparator = "://" -> string!
+const Sa.HybridFileStorage.InMemoryFileStorage.DefaultStorageType = "mem" -> string!
+Sa.HybridFileStorage.Interceptors.IUploadInterceptor
 Sa.HybridFileStorage.BatchError.BatchError(string! FileId, System.Exception! Exception, int Index) -> void
-Sa.HybridFileStorage.BatchOperationProgress.BatchOperationProgress(int Total, int Completed, int Succeeded, int Failed, string? FileId = null, System.Exception? Error = null) -> void
 Sa.HybridFileStorage.BatchOperationException<T>.BatchOperationException(string! message, Sa.HybridFileStorage.BatchResult<T>! result) -> void
+Sa.HybridFileStorage.BatchOperationProgress.BatchOperationProgress(int Total, int Completed, int Succeeded, int Failed, string? FileId = null, System.Exception? Error = null) -> void
 Sa.HybridFileStorage.BatchOperationException<T>.Result.get -> Sa.HybridFileStorage.BatchResult<T>!
-Sa.HybridFileStorage.BatchOptions.MaxDegreeOfParallelism.set -> void
 Sa.HybridFileStorage.BatchOptions.MaxDegreeOfParallelism.get -> int
+Sa.HybridFileStorage.BatchOptions.MaxDegreeOfParallelism.set -> void
 Sa.HybridFileStorage.BatchOptions.ContinueOnError.get -> bool
 Sa.HybridFileStorage.BatchOptions.ContinueOnError.set -> void
 Sa.HybridFileStorage.BatchOptions.OperationTimeout.get -> System.TimeSpan
 Sa.HybridFileStorage.BatchOptions.OperationTimeout.set -> void
-Sa.HybridFileStorage.BatchOperationProgress.PercentComplete.get -> double
 Sa.HybridFileStorage.BatchOptions.Progress.get -> System.IProgress<Sa.HybridFileStorage.BatchOperationProgress>?
 Sa.HybridFileStorage.BatchOptions.Progress.set -> void
-Sa.HybridFileStorage.BatchResult<T>.Succeeded.init -> void
+Sa.HybridFileStorage.BatchOperationProgress.PercentComplete.get -> double
+Sa.HybridFileStorage.BatchResult<T>.Succeeded.get -> System.Collections.Generic.IReadOnlyList<T>!
 override Sa.HybridFileStorage.BatchOperationException<T>.ToString() -> string!
+Sa.HybridFileStorage.BatchResult<T>.Succeeded.init -> void
 Sa.HybridFileStorage.BatchResult<T>.Failed.get -> System.Collections.Generic.IReadOnlyList<Sa.HybridFileStorage.BatchError>!
 Sa.HybridFileStorage.BatchResult<T>.Failed.init -> void
 Sa.HybridFileStorage.Domain.UploadFileInput.TenantId.get -> int
-Sa.HybridFileStorage.BatchResult<T>.Total.get -> int
 Sa.HybridFileStorage.Domain.UploadFileInput.TenantId.init -> void
+Sa.HybridFileStorage.BatchResult<T>.Total.get -> int
 Sa.HybridFileStorage.Domain.UploadFileInput.FileName.get -> string!
 Sa.HybridFileStorage.Domain.UploadFileInput.FileName.init -> void
-Sa.HybridFileStorage.HybridFileStorageNoAvailableException.HybridFileStorageNoAvailableException() -> void
-Sa.HybridFileStorage.BatchResult<T>.Succeeded.get -> System.Collections.Generic.IReadOnlyList<T>!
-Sa.HybridFileStorage.Domain.IFileStorage.StorageType.get -> string!
-Sa.HybridFileStorage.Domain.IFileStorage.Basket.get -> string!
-Sa.HybridFileStorage.Domain.IFileStorage.IsReadOnly.get -> bool
-Sa.HybridFileStorage.Domain.IFileStorage.CanProcess(string! fileId) -> bool
-Sa.HybridFileStorage.Domain.IFileStorage.DownloadAsync(string! fileId, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! loadStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
-Sa.HybridFileStorage.Domain.IFileStorage.UploadAsync(Sa.HybridFileStorage.Domain.UploadFileInput! metadata, System.IO.Stream! fileStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.Domain.StorageResult!>!
-Sa.HybridFileStorage.Domain.IFileStorage.GetMetadataAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.FileMetadata?>!
-Sa.HybridFileStorage.Domain.IFileStorage.DeleteAsync(string! fileId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
 static Sa.HybridFileStorage.Domain.UploadFileInput.Empty.get -> Sa.HybridFileStorage.Domain.UploadFileInput!
 Sa.HybridFileStorage.BatchResult<T>.HasErrors.get -> bool
-Sa.HybridFileStorage.Domain.StorageResult.StorageResult(string! FileId, string! AbsoluteUrl, string! StorageType, System.DateTimeOffset UploadedAt) -> void
-Sa.HybridFileStorage.Domain.UploadFileInput.Validate() -> void
-Sa.HybridFileStorage.BatchResult<T>.ThrowIfHasErrors(string? message = null) -> void
-Sa.HybridFileStorage.HybridFileStorageAggregateException.HybridFileStorageAggregateException(System.Collections.Generic.IEnumerable<System.Exception!>! innerExceptions) -> void
+Sa.HybridFileStorage.HybridFileStorageNoAvailableException.HybridFileStorageNoAvailableException() -> void
+Sa.HybridFileStorage.Domain.IFileStorage.Basket.get -> string!
+Sa.HybridFileStorage.Domain.IFileStorage.StorageType.get -> string!
+Sa.HybridFileStorage.Domain.IFileStorage.IsReadOnly.get -> bool
+Sa.HybridFileStorage.Domain.IFileStorage.CanProcess(string! fileId) -> bool
+Sa.HybridFileStorage.Domain.IFileStorage.UploadAsync(Sa.HybridFileStorage.Domain.UploadFileInput! metadata, System.IO.Stream! fileStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.Domain.StorageResult!>!
+Sa.HybridFileStorage.Domain.IFileStorage.DownloadAsync(string! fileId, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! loadStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+Sa.HybridFileStorage.Domain.IFileStorage.DeleteAsync(string! fileId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+Sa.HybridFileStorage.Domain.IFileStorage.GetMetadataAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.FileMetadata?>!
+Sa.HybridFileStorage.Domain.StorageResult.FileId.get -> string!
+Sa.HybridFileStorage.Domain.StorageResult.AbsoluteUrl.get -> string!
+Sa.HybridFileStorage.Domain.StorageResult.FileId.init -> void
 Sa.HybridFileStorage.HybridFileStorageWritableException.HybridFileStorageWritableException() -> void
+Sa.HybridFileStorage.Domain.StorageResult.AbsoluteUrl.init -> void
+Sa.HybridFileStorage.Domain.StorageResult.StorageType.get -> string!
+Sa.HybridFileStorage.Domain.StorageResult.StorageType.init -> void
+Sa.HybridFileStorage.HybridFileStorageAggregateException.HybridFileStorageAggregateException(System.Collections.Generic.IEnumerable<System.Exception!>! innerExceptions) -> void
+Sa.HybridFileStorage.Domain.StorageResult.UploadedAt.get -> System.DateTimeOffset
+Sa.HybridFileStorage.Domain.StorageResult.UploadedAt.init -> void
 static Sa.HybridFileStorage.HybridFileStorageThrowHelper.ThrowWritableException() -> void
+Sa.HybridFileStorage.BatchResult<T>.ThrowIfHasErrors(string? message = null) -> void
 static Sa.HybridFileStorage.FileIdParser.TryParse(string! fileId, out string! basket, out int tenantId, out long timestamp, out string! fileName) -> bool
 static Sa.HybridFileStorage.HybridFileStorageThrowHelper.ThrowInvalidFileIdFormat() -> void
-static Sa.HybridFileStorage.HybridFileStorageThrowHelper.ThrowSecurityException(string! path, string! basePath) -> void
-Sa.HybridFileStorage.HybridFileStorageContainerConfiguration.AddStorage(Sa.HybridFileStorage.Domain.IFileStorage! storage) -> Sa.HybridFileStorage.HybridFileStorageContainerConfiguration!
-static Sa.HybridFileStorage.HybridFileStorageExtensions.CopyFromFileAsync(this Sa.HybridFileStorage.IHybridFileStorage! storage, string! filePath, string! basket, Sa.HybridFileStorage.Domain.UploadFileInput! input, int bufferSize = 81920, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.Domain.StorageResult!>!
+Sa.HybridFileStorage.Domain.UploadFileInput.Validate() -> void
 Sa.HybridFileStorage.FileMetadata.Basket.get -> string!
-Sa.HybridFileStorage.FileMetadata.Basket.init -> void
 Sa.HybridFileStorage.FileMetadata.FileName.get -> string!
-Sa.HybridFileStorage.FileMetadata.FileName.init -> void
-Sa.HybridFileStorage.FileMetadata.TenantId.init -> void
+Sa.HybridFileStorage.FileMetadata.Basket.init -> void
 Sa.HybridFileStorage.FileMetadata.TenantId.get -> int
+Sa.HybridFileStorage.FileMetadata.TenantId.init -> void
 Sa.HybridFileStorage.FileMetadata.StorageType.get -> string!
 Sa.HybridFileStorage.FileMetadata.StorageType.init -> void
-Sa.HybridFileStorage.IHybridFileStorage.Storages.get -> System.Collections.Generic.IEnumerable<Sa.HybridFileStorage.Domain.IFileStorage!>!
-Sa.HybridFileStorage.IHybridFileStorage.UploadAsync(string! basket, Sa.HybridFileStorage.Domain.UploadFileInput! input, System.IO.Stream! fileStream, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.Domain.StorageResult!>!
-Sa.HybridFileStorage.IHybridFileStorage.DownloadAsync(string! fileId, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! loadStream, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
-Sa.HybridFileStorage.IHybridFileStorage.DeleteAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
-Sa.HybridFileStorage.IHybridFileStorageConfiguration.ConfigureInterceptors(System.Action<System.IServiceProvider!, Sa.HybridFileStorage.Interceptors.IInterceptorContainer!>! configure) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
-Sa.HybridFileStorage.IHybridFileStorage.GetMetadataAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.FileMetadata?>!
-Sa.HybridFileStorage.IHybridFileStorageConfiguration.AddLogging() -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
-Sa.HybridFileStorage.IHybridFileStorageConfiguration.ConfigureStorage(System.Action<System.IServiceProvider!, Sa.HybridFileStorage.HybridFileStorageContainerConfiguration!>! configure) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
-Sa.HybridFileStorage.IHybridFileStorageConfiguration.OrderTypes(params string![]! storageTypes) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
-Sa.HybridFileStorage.IHybridFileStorageConfiguration.OrderBasketTypes(string! basket, params string![]! storageTypes) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
-Sa.HybridFileStorage.IHybridFileStorageConfiguration.FromConfiguration(string! configSectionPath) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
-Sa.HybridFileStorage.IInMemoryFileStorageBuilder.FromConfiguration(string! configSectionPath) -> Sa.HybridFileStorage.IInMemoryFileStorageBuilder!
-Sa.HybridFileStorage.IInMemoryFileStorageBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.HybridFileStorage.InMemoryFileStorageOptions!>!>! configureSettings) -> Sa.HybridFileStorage.IInMemoryFileStorageBuilder!
-static Sa.HybridFileStorage.StorageNaming.ValidateBasket(string? basket, string! paramName) -> void
-Sa.HybridFileStorage.InMemoryFileStorage.InMemoryFileStorage(Sa.HybridFileStorage.InMemoryFileStorageOptions? options = null, System.TimeProvider? timeProvider = null) -> void
-Sa.HybridFileStorage.InMemoryFileStorage.Basket.get -> string!
-Sa.HybridFileStorage.InMemoryFileStorage.StorageType.get -> string!
-Sa.HybridFileStorage.InMemoryFileStorage.IsReadOnly.get -> bool
+static Sa.HybridFileStorage.HybridFileStorageThrowHelper.ThrowSecurityException(string! path, string! basePath) -> void
+Sa.HybridFileStorage.FileMetadata.FileName.init -> void
+Sa.HybridFileStorage.HybridFileStorageContainerConfiguration.AddStorage(Sa.HybridFileStorage.Domain.IFileStorage! storage) -> Sa.HybridFileStorage.HybridFileStorageContainerConfiguration!
+static Sa.HybridFileStorage.HybridFileStorageExtensions.CopyFromFileAsync(this Sa.HybridFileStorage.IHybridFileStorage! storage, string! filePath, string! basket, Sa.HybridFileStorage.Domain.UploadFileInput! input, int bufferSize = 81920, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.Domain.StorageResult!>!
 static Sa.HybridFileStorage.FileIdParser.TryParse(string! fileId, Sa.HybridFileStorage.FileIdFormat format, out string! basket, out int tenantId, out long timestamp, out string! fileName) -> bool
 static Sa.HybridFileStorage.HybridFileStorageExtensions.CopyToBasketAsync(this Sa.HybridFileStorage.IHybridFileStorage! storage, string! fileId, string! basket, System.Func<Sa.HybridFileStorage.FileMetadata!, Sa.HybridFileStorage.Domain.UploadFileInput!>? configure = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.Domain.StorageResult!>!
 static Sa.HybridFileStorage.FileIdParser.FormatToFileId(string! storageType, string! basket, int tenantId, System.DateTimeOffset date, string! fileName) -> string!
 static Sa.HybridFileStorage.FileIdParser.NormalizeFileName(string! fileName) -> string!
 static Sa.HybridFileStorage.FileIdParser.GetFileExtension(string! fileName) -> string!
+Sa.HybridFileStorage.IHybridFileStorage.Storages.get -> System.Collections.Generic.IEnumerable<Sa.HybridFileStorage.Domain.IFileStorage!>!
+Sa.HybridFileStorage.IHybridFileStorage.UploadAsync(string! basket, Sa.HybridFileStorage.Domain.UploadFileInput! input, System.IO.Stream! fileStream, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.Domain.StorageResult!>!
+Sa.HybridFileStorage.IHybridFileStorage.DownloadAsync(string! fileId, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! loadStream, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+Sa.HybridFileStorage.IHybridFileStorage.DeleteAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+Sa.HybridFileStorage.IHybridFileStorage.GetMetadataAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.FileMetadata?>!
+Sa.HybridFileStorage.IHybridFileStorageConfiguration.ConfigureInterceptors(System.Action<System.IServiceProvider!, Sa.HybridFileStorage.Interceptors.IInterceptorContainer!>! configure) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
+Sa.HybridFileStorage.IHybridFileStorageConfiguration.AddLogging() -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
+Sa.HybridFileStorage.IHybridFileStorageConfiguration.ConfigureStorage(System.Action<System.IServiceProvider!, Sa.HybridFileStorage.HybridFileStorageContainerConfiguration!>! configure) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
+Sa.HybridFileStorage.IHybridFileStorageConfiguration.OrderTypes(params string![]! storageTypes) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
+Sa.HybridFileStorage.IHybridFileStorageConfiguration.OrderBasketTypes(string! basket, params string![]! storageTypes) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
+Sa.HybridFileStorage.IHybridFileStorageConfiguration.FromConfiguration(string! configSectionPath) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
+Sa.HybridFileStorage.IInMemoryFileStorageBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.HybridFileStorage.InMemoryFileStorageOptions!>!>! configureSettings) -> Sa.HybridFileStorage.IInMemoryFileStorageBuilder!
+Sa.HybridFileStorage.IInMemoryFileStorageBuilder.FromConfiguration(string! configSectionPath) -> Sa.HybridFileStorage.IInMemoryFileStorageBuilder!
+Sa.HybridFileStorage.InMemoryFileStorage.InMemoryFileStorage(Sa.HybridFileStorage.InMemoryFileStorageOptions? options = null, System.TimeProvider? timeProvider = null) -> void
+Sa.HybridFileStorage.InMemoryFileStorage.Basket.get -> string!
+Sa.HybridFileStorage.InMemoryFileStorage.StorageType.get -> string!
+Sa.HybridFileStorage.InMemoryFileStorage.IsReadOnly.get -> bool
+static Sa.HybridFileStorage.StorageNaming.ValidateBasket(string? basket, string! paramName) -> void
 Sa.HybridFileStorage.InMemoryFileStorageOptions.InMemoryFileStorageOptions(string! Basket = "share", bool IsReadOnly = false, long MaxSizeBytes = 1073741824) -> void
+static Sa.HybridFileStorage.HybridFileStorageExtensions.CopyToScopeBatchAsync(this Sa.HybridFileStorage.IHybridFileStorage! storage, System.Collections.Generic.IEnumerable<string!>! fileIds, string! basket, System.Func<Sa.HybridFileStorage.FileMetadata!, Sa.HybridFileStorage.Domain.UploadFileInput!>? configure = null, Sa.HybridFileStorage.BatchOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.BatchResult<Sa.HybridFileStorage.Domain.StorageResult!>!>!
+Sa.HybridFileStorage.InMemoryFileStorageOptions.Validate() -> void
+Sa.HybridFileStorage.InMemoryFileStorage.UploadAsync(Sa.HybridFileStorage.Domain.UploadFileInput! metadata, System.IO.Stream! fileStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.Domain.StorageResult!>!
+Sa.HybridFileStorage.InMemoryFileStorage.DownloadAsync(string! fileId, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! loadStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
 static Sa.HybridFileStorage.StorageNaming.RequireStorageType(string? storageType, string! paramName) -> string!
 static Sa.HybridFileStorage.Setup.AddSaHybridFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.HybridFileStorage.IHybridFileStorageConfiguration!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.HybridFileStorage.InMemoryFileStorage.DeleteAsync(string! fileId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
 static Sa.HybridFileStorage.Setup.AddSaInMemoryFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Sa.HybridFileStorage.InMemoryFileStorageOptions? options = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Sa.HybridFileStorage.Setup.AddSaInMemoryFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.HybridFileStorage.IInMemoryFileStorageBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-static Sa.HybridFileStorage.Setup.AddSaInMemoryFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Options.IOptions<Sa.HybridFileStorage.InMemoryFileStorageOptions!>! options) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Sa.HybridFileStorage.Setup.AddSaInMemoryFileStorage(this Sa.HybridFileStorage.IHybridFileStorageConfiguration! configuration, Sa.HybridFileStorage.InMemoryFileStorageOptions? options = null) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
+static Sa.HybridFileStorage.Setup.AddSaInMemoryFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Options.IOptions<Sa.HybridFileStorage.InMemoryFileStorageOptions!>! options) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.HybridFileStorage.InMemoryFileStorage.CanProcess(string? fileId) -> bool
 static Sa.HybridFileStorage.Setup.AddSaInMemoryFileStorage(this Sa.HybridFileStorage.IHybridFileStorageConfiguration! configuration, System.Action<Sa.HybridFileStorage.IInMemoryFileStorageBuilder!>! configure) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
+static Sa.HybridFileStorage.StorageNaming.RequireIdentifier(string? identifier, string! paramName, int maxLength = 63) -> string!
 static Sa.HybridFileStorage.Setup.AddSaInMemoryFileStorage(this Sa.HybridFileStorage.IHybridFileStorageConfiguration! configuration, Microsoft.Extensions.Options.IOptions<Sa.HybridFileStorage.InMemoryFileStorageOptions!>! options) -> Sa.HybridFileStorage.IHybridFileStorageConfiguration!
-Sa.HybridFileStorage.Interceptors.IDeleteInterceptor.CanDeleteAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
-Sa.HybridFileStorage.Interceptors.IDeleteInterceptor.AfterDeleteAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, bool success, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-Sa.HybridFileStorage.Interceptors.IDeleteInterceptor.OnDeleteErrorAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, System.Exception! exception, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-Sa.HybridFileStorage.Interceptors.IDownloadInterceptor.OnDownloadErrorAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, System.Exception! exception, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-Sa.HybridFileStorage.Interceptors.IDownloadInterceptor.AfterDownloadAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, bool success, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-Sa.HybridFileStorage.Interceptors.IDownloadInterceptor.CanDownloadAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! loadStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
-Sa.HybridFileStorage.Interceptors.IInterceptorContainer.AddDeleteInterceptor(Sa.HybridFileStorage.Interceptors.IDeleteInterceptor! interceptor) -> Sa.HybridFileStorage.Interceptors.IInterceptorContainer!
-Sa.HybridFileStorage.Interceptors.IInterceptorContainer.AddDownloadInterceptor(Sa.HybridFileStorage.Interceptors.IDownloadInterceptor! interceptor) -> Sa.HybridFileStorage.Interceptors.IInterceptorContainer!
-Sa.HybridFileStorage.Interceptors.IInterceptorContainer.AddUploadInterceptor(Sa.HybridFileStorage.Interceptors.IUploadInterceptor! interceptor) -> Sa.HybridFileStorage.Interceptors.IInterceptorContainer!
 Sa.HybridFileStorage.Interceptors.IUploadInterceptor.CanUploadAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, Sa.HybridFileStorage.Domain.UploadFileInput! input, System.IO.Stream! fileStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
 Sa.HybridFileStorage.Interceptors.IUploadInterceptor.AfterUploadAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, Sa.HybridFileStorage.Domain.StorageResult! result, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 Sa.HybridFileStorage.Interceptors.IUploadInterceptor.OnUploadErrorAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, System.Exception! exception, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-Sa.HybridFileStorage.InMemoryFileStorageOptions.Validate() -> void
-static Sa.HybridFileStorage.StorageNaming.RequireIdentifier(string? identifier, string! paramName, int maxLength = 63) -> string!
-static Sa.HybridFileStorage.HybridFileStorageExtensions.CopyToScopeBatchAsync(this Sa.HybridFileStorage.IHybridFileStorage! storage, System.Collections.Generic.IEnumerable<string!>! fileIds, string! basket, System.Func<Sa.HybridFileStorage.FileMetadata!, Sa.HybridFileStorage.Domain.UploadFileInput!>? configure = null, Sa.HybridFileStorage.BatchOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.BatchResult<Sa.HybridFileStorage.Domain.StorageResult!>!>!
-Sa.HybridFileStorage.InMemoryFileStorage.UploadAsync(Sa.HybridFileStorage.Domain.UploadFileInput! metadata, System.IO.Stream! fileStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.Domain.StorageResult!>!
-Sa.HybridFileStorage.InMemoryFileStorage.DownloadAsync(string! fileId, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! loadStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
-Sa.HybridFileStorage.InMemoryFileStorage.DeleteAsync(string! fileId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
-Sa.HybridFileStorage.InMemoryFileStorage.CanProcess(string? fileId) -> bool
 Sa.HybridFileStorage.InMemoryFileStorage.GetMetadataAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Sa.HybridFileStorage.FileMetadata?>!
+Sa.HybridFileStorage.Interceptors.IDeleteInterceptor.CanDeleteAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+Sa.HybridFileStorage.Interceptors.IDeleteInterceptor.AfterDeleteAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, bool success, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Sa.HybridFileStorage.Interceptors.IDeleteInterceptor.OnDeleteErrorAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, System.Exception! exception, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Sa.HybridFileStorage.Interceptors.IDownloadInterceptor.CanDownloadAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! loadStream, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+Sa.HybridFileStorage.Interceptors.IDownloadInterceptor.AfterDownloadAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, bool success, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Sa.HybridFileStorage.Interceptors.IDownloadInterceptor.OnDownloadErrorAsync(Sa.HybridFileStorage.Domain.IFileStorage! storage, string! fileId, System.Exception! exception, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Sa.HybridFileStorage.Interceptors.IInterceptorContainer.AddDeleteInterceptor(Sa.HybridFileStorage.Interceptors.IDeleteInterceptor! interceptor) -> Sa.HybridFileStorage.Interceptors.IInterceptorContainer!
+Sa.HybridFileStorage.Interceptors.IInterceptorContainer.AddDownloadInterceptor(Sa.HybridFileStorage.Interceptors.IDownloadInterceptor! interceptor) -> Sa.HybridFileStorage.Interceptors.IInterceptorContainer!
+Sa.HybridFileStorage.Interceptors.IInterceptorContainer.AddUploadInterceptor(Sa.HybridFileStorage.Interceptors.IUploadInterceptor! interceptor) -> Sa.HybridFileStorage.Interceptors.IInterceptorContainer!

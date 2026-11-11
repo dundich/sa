@@ -97,11 +97,13 @@ internal sealed class S3FileStorage(
 
         var fileId = string.Concat(_schemePrefix, filePath);
 
-        return new StorageResult(
-            fileId,
-            client.BuildFileUrl(filePath),
-            _storageType,
-            _timeProvider.GetUtcNow());
+        return new StorageResult
+        {
+            FileId = fileId,
+            AbsoluteUrl = client.BuildFileUrl(filePath),
+            StorageType = _storageType,
+            UploadedAt = _timeProvider.GetUtcNow(),
+        };
     }
 
     private async Task EnsureBucketAsync(CancellationToken cancellationToken)

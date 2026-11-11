@@ -90,11 +90,13 @@ internal sealed class FileSystemStorage(
             .WriteAsync(fileStream, relativePath, cancellationToken)
             .ConfigureAwait(false);
 
-        return new StorageResult(
-            FileId: string.Concat(_schemePrefix, relativePath),
-            AbsoluteUrl: absolutePath,
-            StorageType: _storageType,
-            UploadedAt: _timeProvider.GetUtcNow());
+        return new StorageResult
+        {
+            FileId = string.Concat(_schemePrefix, relativePath),
+            AbsoluteUrl = absolutePath,
+            StorageType = _storageType,
+            UploadedAt = _timeProvider.GetUtcNow(),
+        };
     }
 
     public Task<bool> DownloadAsync(

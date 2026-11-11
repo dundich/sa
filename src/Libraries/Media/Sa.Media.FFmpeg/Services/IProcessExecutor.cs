@@ -64,10 +64,12 @@ internal interface IProcessExecutor
                 ex);
         }
 
-        var result = new ProcessExecutionResult(
-            exitcode,
-            StandardOutput: output.ToString(),
-            StandardError: error.ToString());
+        var result = new ProcessExecutionResult
+        {
+            ExitCode = exitcode,
+            StandardOutput = output.ToString(),
+            StandardError = error.ToString(),
+        };
 
         if (result.ExitCode == 0 || !throwOnError) return result;
 
