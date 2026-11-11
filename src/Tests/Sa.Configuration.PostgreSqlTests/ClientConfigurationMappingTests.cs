@@ -71,7 +71,7 @@ public sealed class ClientConfigurationMappingTests(ClientConfigurationMappingTe
         var builder = new ConfigurationBuilder();
         builder.AddSaPostgreSqlConfiguration(
             fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions(AllClientsSql) { ClientColumn = "client_id" });
+            new PostgreSqlConfigurationOptions { SelectSql = AllClientsSql, ClientColumn = "client_id" });
 
         IConfigurationRoot configuration = builder.Build();
 
@@ -99,10 +99,7 @@ public sealed class ClientConfigurationMappingTests(ClientConfigurationMappingTe
         var builder = new ConfigurationBuilder();
         builder.AddSaPostgreSqlConfiguration(
             fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions("SELECT key, value FROM env_style_settings")
-            {
-                DoubleUnderscoreAsSeparator = true,
-            });
+            new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM env_style_settings", DoubleUnderscoreAsSeparator = true, });
 
         IConfigurationRoot configuration = builder.Build();
 
@@ -128,12 +125,7 @@ public sealed class ClientConfigurationMappingTests(ClientConfigurationMappingTe
         var builder = new ConfigurationBuilder();
         builder.AddSaPostgreSqlConfiguration(
             fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions(
-                "SELECT key, value FROM client_settings WHERE client_id = @client_id",
-                new NpgsqlParameter("client_id", "acme"))
-            {
-                Client = "acme"
-            });
+            new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM client_settings WHERE client_id = @client_id", Parameters = [new NpgsqlParameter("client_id", "acme")], Client = "acme" });
 
         IConfigurationRoot configuration = builder.Build();
 
@@ -154,7 +146,7 @@ public sealed class ClientConfigurationMappingTests(ClientConfigurationMappingTe
         var builder = new ConfigurationBuilder();
         builder.AddSaPostgreSqlConfiguration(
             fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions(AllClientsSql) { ClientColumn = "client_id" });
+            new PostgreSqlConfigurationOptions { SelectSql = AllClientsSql, ClientColumn = "client_id" });
 
         IConfigurationRoot configuration = builder.Build();
         Assert.DoesNotContain("gamma", configuration.GetClientNames());
@@ -180,8 +172,7 @@ public sealed class ClientConfigurationMappingTests(ClientConfigurationMappingTe
         var builder = new ConfigurationBuilder();
         builder.AddSaConfiguration(_ => { });
         builder.AddSaPostgreSqlConfiguration(
-            new PostgreSqlConfigurationOptions(
-                "SELECT key, value FROM client_settings WHERE client_id IS NULL"));
+            new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM client_settings WHERE client_id IS NULL" });
 
         IConfigurationRoot configuration = builder.Build();
 
@@ -206,10 +197,7 @@ public sealed class ClientConfigurationMappingTests(ClientConfigurationMappingTe
         var builder = new ConfigurationBuilder();
         builder.AddSaPostgreSqlConfiguration(
             fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions("SELECT key, value, client_id FROM client_settings")
-            {
-                ClientColumn = "client_id"
-            });
+            new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value, client_id FROM client_settings", ClientColumn = "client_id" });
 
         var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
 

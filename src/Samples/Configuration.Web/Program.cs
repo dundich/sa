@@ -50,10 +50,10 @@ ds.ExecuteScalarAsync("""
 // and needs no late-bound resolution, so the values are available immediately.
 builder.Configuration.AddSaPostgreSqlConfiguration(
     PgConfigurationConnection.DataSource(ds),
-    new PostgreSqlConfigurationOptions(
-        // The provider takes the columns in this order: client, key, value.
-        SelectSql: "SELECT client_id, key, value FROM settings")
+    // The provider takes the columns in this order: client, key, value.
+    new PostgreSqlConfigurationOptions
     {
+        SelectSql = "SELECT client_id, key, value FROM settings",
         ClientColumn = "client_id",
         ClientsSection = ClientConfiguration.DefaultSectionPath,
     });

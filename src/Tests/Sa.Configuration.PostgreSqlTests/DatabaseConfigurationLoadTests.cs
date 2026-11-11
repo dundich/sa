@@ -337,7 +337,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         var builder = new ConfigurationBuilder();
         Assert.Throws<ArgumentException>(
             () => builder.AddSaPostgreSqlConfiguration(
-                fixture.ConnectionString, new PostgreSqlConfigurationOptions(" ")));
+                fixture.ConnectionString, new PostgreSqlConfigurationOptions { SelectSql = " " }));
     }
 
     [Fact]
@@ -346,7 +346,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         var builder = new ConfigurationBuilder();
         Assert.Throws<ArgumentOutOfRangeException>(
             () => builder.AddSaPostgreSqlConfiguration(
-                fixture.ConnectionString, new PostgreSqlConfigurationOptions(SelectSql) { MaxAttempts = -1 }));
+                fixture.ConnectionString, new PostgreSqlConfigurationOptions { SelectSql = SelectSql, MaxAttempts = -1 }));
     }
 
     [Fact]
@@ -364,7 +364,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         Assert.Throws<ArgumentException>(
             () => builder.AddSaPostgreSqlConfiguration(
                 fixture.ConnectionString,
-                new PostgreSqlConfigurationOptions(SelectSql) { Client = "acme", ClientColumn = "client_id" }));
+                new PostgreSqlConfigurationOptions { SelectSql = SelectSql, Client = "acme", ClientColumn = "client_id" }));
     }
 
     [Fact]
@@ -382,9 +382,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     public void ToString_RedactsParameters()
     {
         // Parameter values routinely carry secrets, so they may never reach a log line.
-        var options = new PostgreSqlConfigurationOptions(
-            SelectSql,
-            new NpgsqlParameter("pwd", "param-secret"));
+        var options = new PostgreSqlConfigurationOptions { SelectSql = SelectSql, Parameters = [new NpgsqlParameter("pwd", "param-secret")] };
 
         var text = options.ToString();
 
@@ -532,8 +530,9 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         => new(IPgDataSource.Create(fixture.ConnectionString), failuresBeforeSuccess, failure);
 
     private PostgreSqlConfigurationOptions Options(string selectSql, int maxAttempts = 3)
-        => new(selectSql)
+        => new()
         {
+            SelectSql = selectSql,
             // Keep the suite fast: the first retry is always immediate.
             MaxAttempts = maxAttempts,
             MedianFirstRetryDelay = 1,

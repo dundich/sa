@@ -5,20 +5,27 @@ namespace Sa.Configuration.PostgreSql;
 /// <summary>
 /// Options for the PostgreSQL-backed configuration source.
 /// </summary>
-/// <param name="SelectSql">
-/// Query returning two columns, <c>(key, value)</c>, or three columns, <c>(client, key, value)</c>
-/// when <see cref="ClientColumn"/> is set.
-/// </param>
-/// <param name="Parameters">Named parameters for <paramref name="SelectSql"/>. Cloned per load.</param>
 /// <remarks>
 /// The connection itself is not part of the options: pass it with
 /// <see cref="PgConfigurationConnection"/> (<c>ConnectionString</c>, <c>DataSource</c> or
 /// <c>FromServices</c>). This keeps "where the data comes from" and "what to read" independent.
 /// </remarks>
-public sealed record PostgreSqlConfigurationOptions(
-    string SelectSql,
-    params IReadOnlyCollection<NpgsqlParameter> Parameters)
+public sealed record PostgreSqlConfigurationOptions
 {
+    /// <summary>
+    /// Query returning two columns, <c>(key, value)</c>, or three columns, <c>(client, key, value)</c>
+    /// when <see cref="ClientColumn"/> is set.
+    /// </summary>
+    public required string SelectSql { get; init; }
+
+    /// <summary>Named parameters for <see cref="SelectSql"/>. Cloned per load.</summary>
+    public IReadOnlyCollection<NpgsqlParameter> Parameters { get; init; } = [];
+
+    /// <summary>Returns a copy carrying <paramref name="parameters"/> for <see cref="SelectSql"/>.</summary>
+    /// <param name="parameters">Named parameters, in any order; each is cloned per load.</param>
+    public PostgreSqlConfigurationOptions WithParameters(params NpgsqlParameter[] parameters)
+        => this with { Parameters = parameters };
+
     /// <summary>
     /// Total load attempts, including the first. Defaults to 3. Only transient Npgsql failures
     /// (network errors, <c>08xxx</c> SQLSTATEs and similar) are retried; a permanent error fails on
