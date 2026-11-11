@@ -74,7 +74,7 @@ public sealed class ScheduleFaultTests : IAsyncDisposable
             throw new InvalidOperationException("job constructor failed");
         }
 
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 }

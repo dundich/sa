@@ -1,19 +1,19 @@
 #nullable enable
-Sa.HybridFileStorage.S3.S3Defaults
 Sa.HybridFileStorage.S3.IS3FileStorageBuilder
 const Sa.HybridFileStorage.S3.S3Defaults.DefaultRegion = "eu-central-1" -> string!
-const Sa.HybridFileStorage.S3.S3FileStorageOptions.DefaultBasket = "share" -> string!
+Sa.HybridFileStorage.S3.S3Defaults
 Sa.HybridFileStorage.S3.S3FileStorageOptions
+const Sa.HybridFileStorage.S3.S3FileStorageOptions.DefaultBasket = "share" -> string!
 Sa.HybridFileStorage.S3.Setup
 Sa.HybridFileStorage.S3.IS3FileStorageBuilder.FromConfiguration(string! configSectionPath) -> Sa.HybridFileStorage.S3.IS3FileStorageBuilder!
-Sa.HybridFileStorage.S3.S3FileStorageOptions.StorageType.get -> string!
-Sa.HybridFileStorage.S3.S3FileStorageOptions.StorageType.set -> void
 Sa.HybridFileStorage.S3.IS3FileStorageBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.HybridFileStorage.S3.S3FileStorageOptions!>!>! configureSettings) -> Sa.HybridFileStorage.S3.IS3FileStorageBuilder!
-Sa.HybridFileStorage.S3.S3FileStorageOptions.Basket.get -> string!
+Sa.HybridFileStorage.S3.S3FileStorageOptions.StorageType.get -> string!
 static Sa.HybridFileStorage.S3.Setup.AddSaS3FileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.HybridFileStorage.S3.IS3FileStorageBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.HybridFileStorage.S3.S3FileStorageOptions.StorageType.set -> void
+Sa.HybridFileStorage.S3.S3FileStorageOptions.Basket.get -> string!
 Sa.HybridFileStorage.S3.S3FileStorageOptions.Basket.set -> void
 Sa.HybridFileStorage.S3.S3FileStorageOptions.IsReadOnly.get -> bool
 Sa.HybridFileStorage.S3.S3FileStorageOptions.IsReadOnly.set -> void
 Sa.HybridFileStorage.S3.S3FileStorageOptions.S3FileStorageOptions() -> void
-override Sa.HybridFileStorage.S3.S3FileStorageOptions.Validate() -> void
 override Sa.HybridFileStorage.S3.S3FileStorageOptions.Normalize() -> void
+override Sa.HybridFileStorage.S3.S3FileStorageOptions.Validate() -> void

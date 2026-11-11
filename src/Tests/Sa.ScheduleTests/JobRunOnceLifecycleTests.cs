@@ -24,7 +24,7 @@ public sealed class JobRunOnceLifecycleTests : IAsyncDisposable
 
     sealed class OnceJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             R.Inc();
             return Task.CompletedTask;
@@ -110,7 +110,7 @@ public sealed class JobRunOnceErrorTests : IAsyncDisposable
 
     sealed class FailingOnceJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             F.Inc();
             throw new InvalidOperationException("always fails");

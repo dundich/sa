@@ -25,7 +25,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         public long CancelledCount => Interlocked.Read(ref _cancelledCount);
         public long TotalProcessed => CompletedCount + FailedCount + CancelledCount;
 
-        public async Task Execute(BlockingTaskModel model, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(BlockingTaskModel model, CancellationToken cancellationToken)
         {
             int current = Interlocked.Increment(ref _currentParallel);
             try

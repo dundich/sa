@@ -30,8 +30,8 @@ internal sealed class OutboxBulkWriter(
         await partRepository.EnsureMsgParts([batch.PartInfo], cancellationToken);
 
         return transaction is null
-            ? await bulkCmd.Execute(batch, cancellationToken)
-            : await bulkCmd.Execute(batch, transaction, cancellationToken);
+            ? await bulkCmd.ExecuteAsync(batch, cancellationToken)
+            : await bulkCmd.ExecuteAsync(batch, transaction, cancellationToken);
     }
 
     private static NpgsqlTransaction? ResolveTransaction(object? context)

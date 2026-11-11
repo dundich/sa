@@ -572,7 +572,7 @@ public class JobSchedulerTests
 
     class TestJob : IJob
     {
-        public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken);
     }
 
@@ -680,7 +680,7 @@ public class JobSchedulerTests
             return ValueTask.FromResult(CanJobExecuteResult.Ok);
         }
 
-        public Task Execute(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ExecuteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public void ExecutionCompleted()
         {

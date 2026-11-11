@@ -529,7 +529,7 @@ public sealed class SetupRegistrationTests
 
     private sealed class DelegateWork(Func<int, CancellationToken, Task> process) : ISaWork<int>
     {
-        public Task Execute(int input, CancellationToken cancellationToken)
+        public Task ExecuteAsync(int input, CancellationToken cancellationToken)
             => process(input, cancellationToken);
     }
 }

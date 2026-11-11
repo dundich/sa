@@ -276,7 +276,7 @@ public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
     /// This method is idempotent.
     /// </summary>
     /// <remarks>
-    /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/>: the calling reader is
+    /// Never call this from inside <see cref="ISaWork{TInput}.ExecuteAsync"/>: the calling reader is
     /// one of the tasks being awaited, so the call blocks for the full
     /// <see cref="SaWorkQueueOptions{TInput}.ShutdownTimeout"/> (30 s by default) and only then
     /// returns. Hand the work off to a background task instead (see <c>JobScheduler.AbortJob</c>).
@@ -297,7 +297,7 @@ public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
     /// This method is idempotent.
     /// </summary>
     /// <remarks>
-    /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/> — see
+    /// Never call this from inside <see cref="ISaWork{TInput}.ExecuteAsync"/> — see
     /// <see cref="ShutdownAsync"/> for why, and use a background task instead.
     /// A call that finds a shutdown already running blocks until it finishes, exactly as
     /// <see cref="ShutdownAsync"/> awaits it.
@@ -313,7 +313,7 @@ public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
     /// <remarks>
     /// Always interrupts in-flight work (<see cref="SaWorkStatus.Cancelled"/>) even when the queue
     /// is configured with <see cref="SaReaderCancelMode.Soft"/>.
-    /// Never call this from inside <see cref="ISaWork{TInput}.Execute"/>: the calling reader is
+    /// Never call this from inside <see cref="ISaWork{TInput}.ExecuteAsync"/>: the calling reader is
     /// one of the tasks being awaited, so the call blocks for the full
     /// <see cref="SaWorkQueueOptions{TInput}.ShutdownTimeout"/>. Use a background task instead.
     /// <para>
@@ -337,7 +337,7 @@ public interface ISaWorkChannel<TInput> : IDisposable, IAsyncDisposable
     /// <remarks>
     /// Always interrupts in-flight work (<see cref="SaWorkStatus.Cancelled"/>) even when the queue
     /// is configured with <see cref="SaReaderCancelMode.Soft"/>.
-    /// Never <c>await</c> this from inside <see cref="ISaWork{TInput}.Execute"/> without first
+    /// Never <c>await</c> this from inside <see cref="ISaWork{TInput}.ExecuteAsync"/> without first
     /// hopping to a background task: the calling reader is one of the tasks being awaited,
     /// so the await can never complete on its own.
     /// <para>

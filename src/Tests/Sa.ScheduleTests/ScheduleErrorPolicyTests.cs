@@ -134,7 +134,7 @@ public sealed class ScheduleErrorPolicyTests
 
     private sealed class FailingJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => throw new InvalidOperationException("boom");
     }
 

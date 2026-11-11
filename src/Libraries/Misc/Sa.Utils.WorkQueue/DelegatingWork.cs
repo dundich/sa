@@ -15,6 +15,6 @@ namespace Sa.Utils.WorkQueue;
 internal sealed class DelegatingWork<TInput>(Func<TInput, CancellationToken, Task> process) : ISaWork<TInput>
 {
     /// <inheritdoc />
-    public Task Execute(TInput input, CancellationToken cancellationToken)
+    public Task ExecuteAsync(TInput input, CancellationToken cancellationToken)
         => process(input, cancellationToken);
 }

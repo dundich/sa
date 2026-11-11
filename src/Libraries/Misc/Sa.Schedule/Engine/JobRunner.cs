@@ -87,7 +87,7 @@ internal sealed class JobRunner() : IJobRunner
     {
         try
         {
-            await controller.Execute(cancellationToken);
+            await controller.ExecuteAsync(cancellationToken);
             controller.ExecutionCompleted();
         }
         catch (OperationCanceledException ex) when (ex.CancellationToken == cancellationToken)

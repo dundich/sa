@@ -10,7 +10,7 @@ internal static class AggressiveMode
     private const int HopRatio = 4;
     private const int WindowDurationMs = 32;
 
-    public static async Task Execute(
+    public static async Task ExecuteAsync(
         AudioSeparationOptions options, int sampleRate, double alpha, double beta, CancellationToken cancellationToken = default)
     {
         var inputPath = options.InputPath;

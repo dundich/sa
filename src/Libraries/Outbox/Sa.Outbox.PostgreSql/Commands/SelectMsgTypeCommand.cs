@@ -8,7 +8,7 @@ internal sealed class SelectMsgTypeCommand(
     SqlOutboxBuilder sql,
     NpgsqlOutboxReader outboxReader) : ISelectMsgTypeCommand
 {
-    public async Task<IReadOnlyCollection<(long id, string typeName)>> Execute(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<(long id, string typeName)>> ExecuteAsync(CancellationToken cancellationToken)
     {
         NpgsqlOutboxReader.TypeReader.Ordinals ordinals = default;
         bool haveOrdinals = false;

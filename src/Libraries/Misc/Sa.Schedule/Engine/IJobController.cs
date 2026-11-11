@@ -35,7 +35,7 @@ internal interface IJobController
     ValueTask WaitIfPaused(CancellationToken cancellationToken);
     ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken);
 
-    Task Execute(CancellationToken cancellationToken);
+    Task ExecuteAsync(CancellationToken cancellationToken);
     void ExecutionCompleted();
     void ExecutionFailed(Exception exception);
 }

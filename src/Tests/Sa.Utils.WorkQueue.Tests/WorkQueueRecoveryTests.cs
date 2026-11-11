@@ -8,7 +8,7 @@ public class SaWorkQueueRecoveryTests
     {
         public int ProcessedCount;
 
-        public Task Execute(int input, CancellationToken _)
+        public Task ExecuteAsync(int input, CancellationToken _)
         {
             if (input == failOnValue) throw new InvalidOperationException("Simulated processing failure");
             Interlocked.Increment(ref ProcessedCount);

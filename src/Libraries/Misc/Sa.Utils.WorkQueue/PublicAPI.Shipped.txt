@@ -1,86 +1,90 @@
 #nullable enable
-Sa.Utils.WorkQueue.SaReaderCancellationOrder.Lifo = 0 -> Sa.Utils.WorkQueue.SaReaderCancellationOrder
-Sa.Utils.WorkQueue.SaReaderCancellationOrder
 Sa.Utils.WorkQueue.SaProducerCancellationMode
+Sa.Utils.WorkQueue.SaProducerCancellationMode.Observe = 0 -> Sa.Utils.WorkQueue.SaProducerCancellationMode
+Sa.Utils.WorkQueue.SaProducerCancellationMode.Detached = 1 -> Sa.Utils.WorkQueue.SaProducerCancellationMode
+Sa.Utils.WorkQueue.SaReaderCancellationOrder
+Sa.Utils.WorkQueue.SaReaderCancellationOrder.Lifo = 0 -> Sa.Utils.WorkQueue.SaReaderCancellationOrder
+Sa.Utils.WorkQueue.SaReaderCancellationOrder.Fifo = 1 -> Sa.Utils.WorkQueue.SaReaderCancellationOrder
 Sa.Utils.WorkQueue.SaReaderCancellationOrder.RoundRobin = 2 -> Sa.Utils.WorkQueue.SaReaderCancellationOrder
 Sa.Utils.WorkQueue.SaReaderCancellationOrder.Random = 3 -> Sa.Utils.WorkQueue.SaReaderCancellationOrder
-Sa.Utils.WorkQueue.SaProducerCancellationMode.Detached = 1 -> Sa.Utils.WorkQueue.SaProducerCancellationMode
 Sa.Utils.WorkQueue.SaReaderCancelMode
+Sa.Utils.WorkQueue.SaReaderCancelMode.Hard = 0 -> Sa.Utils.WorkQueue.SaReaderCancelMode
 Sa.Utils.WorkQueue.SaReaderCancelMode.Soft = 1 -> Sa.Utils.WorkQueue.SaReaderCancelMode
 Sa.Utils.WorkQueue.ISaWork<TInput>
-Sa.Utils.WorkQueue.SaReaderCancellationOrder.Fifo = 1 -> Sa.Utils.WorkQueue.SaReaderCancellationOrder
 Sa.Utils.WorkQueue.SaWorkQueueFullException
-Sa.Utils.WorkQueue.SaReaderCancelMode.Hard = 0 -> Sa.Utils.WorkQueue.SaReaderCancelMode
-Sa.Utils.WorkQueue.ISaWorkChannel<TInput>
-Sa.Utils.WorkQueue.SaEnqueueStrategy
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>
-Sa.Utils.WorkQueue.SaEnqueueStrategy.Throw = 2 -> Sa.Utils.WorkQueue.SaEnqueueStrategy
-Sa.Utils.WorkQueue.SaProducerCancellationMode.Observe = 0 -> Sa.Utils.WorkQueue.SaProducerCancellationMode
+Sa.Utils.WorkQueue.SaEnqueueStrategy
 Sa.Utils.WorkQueue.SaEnqueueStrategy.Wait = 0 -> Sa.Utils.WorkQueue.SaEnqueueStrategy
+Sa.Utils.WorkQueue.SaEnqueueStrategy.Skip = 1 -> Sa.Utils.WorkQueue.SaEnqueueStrategy
+Sa.Utils.WorkQueue.ISaWorkChannel<TInput>
 Sa.Utils.WorkQueue.SaExecutionErrorStrategy.Continue = 0 -> Sa.Utils.WorkQueue.SaExecutionErrorStrategy
 Sa.Utils.WorkQueue.SaExecutionErrorStrategy
-Sa.Utils.WorkQueue.SaExecutionErrorStrategy.ShutdownQueue = 2 -> Sa.Utils.WorkQueue.SaExecutionErrorStrategy
-Sa.Utils.WorkQueue.SaWorkStatus.Running = 0 -> Sa.Utils.WorkQueue.SaWorkStatus
-Sa.Utils.WorkQueue.SaWorkStatus.Completed = 1 -> Sa.Utils.WorkQueue.SaWorkStatus
-Sa.Utils.WorkQueue.SaWorkStatus
-Sa.Utils.WorkQueue.SaWorkStatus.Cancelled = 3 -> Sa.Utils.WorkQueue.SaWorkStatus
-Sa.Utils.WorkQueue.SaWorkStatus.Aborted = 4 -> Sa.Utils.WorkQueue.SaWorkStatus
-Sa.Utils.WorkQueue.SaWorkStatus.Faulted = 2 -> Sa.Utils.WorkQueue.SaWorkStatus
-Sa.Utils.WorkQueue.SaWorkStatus.Skipped = 5 -> Sa.Utils.WorkQueue.SaWorkStatus
-Sa.Utils.WorkQueue.SaEnqueueStrategy.Skip = 1 -> Sa.Utils.WorkQueue.SaEnqueueStrategy
 Sa.Utils.WorkQueue.SaExecutionErrorStrategy.StopReader = 1 -> Sa.Utils.WorkQueue.SaExecutionErrorStrategy
+Sa.Utils.WorkQueue.SaEnqueueStrategy.Throw = 2 -> Sa.Utils.WorkQueue.SaEnqueueStrategy
+Sa.Utils.WorkQueue.SaExecutionErrorStrategy.ShutdownQueue = 2 -> Sa.Utils.WorkQueue.SaExecutionErrorStrategy
+Sa.Utils.WorkQueue.SaWorkStatus
+Sa.Utils.WorkQueue.SaWorkStatus.Completed = 1 -> Sa.Utils.WorkQueue.SaWorkStatus
+Sa.Utils.WorkQueue.SaWorkStatus.Faulted = 2 -> Sa.Utils.WorkQueue.SaWorkStatus
+Sa.Utils.WorkQueue.SaWorkStatus.Aborted = 4 -> Sa.Utils.WorkQueue.SaWorkStatus
+Sa.Utils.WorkQueue.SaWorkStatus.Skipped = 5 -> Sa.Utils.WorkQueue.SaWorkStatus
 Sa.Utils.WorkQueue.SaWorkQueueOptions
-Sa.Utils.WorkQueue.Setup
+Sa.Utils.WorkQueue.SaWorkStatus.Running = 0 -> Sa.Utils.WorkQueue.SaWorkStatus
 Sa.Utils.WorkQueue.SaWorkQueueSettings
 Sa.Utils.WorkQueue.SaWorkQueueSettings.SaWorkQueueSettings() -> void
+Sa.Utils.WorkQueue.Setup
+Sa.Utils.WorkQueue.SaWorkStatus.Cancelled = 3 -> Sa.Utils.WorkQueue.SaWorkStatus
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>
 Sa.Utils.WorkQueue.SaWorkPoolState
-Sa.Utils.WorkQueue.SaWorkPoolState.Stopped = 3 -> Sa.Utils.WorkQueue.SaWorkPoolState
-Sa.Utils.WorkQueue.SaWorkPoolState.NoReaders = 2 -> Sa.Utils.WorkQueue.SaWorkPoolState
-Sa.Utils.WorkQueue.SaWorkPoolState.Paused = 1 -> Sa.Utils.WorkQueue.SaWorkPoolState
 Sa.Utils.WorkQueue.SaWorkPoolState.Active = 0 -> Sa.Utils.WorkQueue.SaWorkPoolState
+Sa.Utils.WorkQueue.SaWorkPoolState.Paused = 1 -> Sa.Utils.WorkQueue.SaWorkPoolState
+Sa.Utils.WorkQueue.SaWorkPoolState.NoReaders = 2 -> Sa.Utils.WorkQueue.SaWorkPoolState
+Sa.Utils.WorkQueue.SaWorkPoolState.Stopped = 3 -> Sa.Utils.WorkQueue.SaWorkPoolState
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.QueueCapacity.get -> int?
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.QueueCapacity.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>
 override Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ToString() -> string!
 static Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.operator !=(Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>? left, Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>? right) -> bool
 static Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.operator ==(Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>? left, Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>? right) -> bool
 override Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.GetHashCode() -> int
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ConcurrencyLimit.get -> int?
 override Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.Equals(object? obj) -> bool
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.Equals(Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>? other) -> bool
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ConcurrencyLimit.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.<Clone>$() -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.Deconstruct(out Sa.Utils.WorkQueue.ISaWork<TInput>! Processor, out int? QueueCapacity, out int? ConcurrencyLimit, out int? MaxConcurrency, out bool? SingleWriter, out Sa.Utils.WorkQueue.SaEnqueueStrategy EnqueueStrategy, out Sa.Utils.WorkQueue.SaReaderCancelMode ReaderCancelMode, out Sa.Utils.WorkQueue.SaReaderCancellationOrder ReaderCancellationOrder, out System.Func<TInput, System.Exception!, Sa.Utils.WorkQueue.SaExecutionErrorStrategy>? HandleItemFaulted, out System.Action<TInput, Sa.Utils.WorkQueue.SaWorkStatus, System.Exception?>? StatusChanged, out System.Func<TInput, string!>? GetItemDisplayName, out System.TimeSpan? ShutdownTimeout, out System.TimeProvider? TimeProvider, out Sa.Utils.WorkQueue.SaProducerCancellationMode ProducerCancellation) -> void
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ConcurrencyLimit.get -> int?
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ConcurrencyLimit.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.MaxConcurrency.get -> int?
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.SingleWriter.get -> bool?
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.MaxConcurrency.init -> void
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.SingleWriter.get -> bool?
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.SingleWriter.init -> void
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ReaderCancelMode.get -> Sa.Utils.WorkQueue.SaReaderCancelMode
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ReaderCancelMode.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.EnqueueStrategy.get -> Sa.Utils.WorkQueue.SaEnqueueStrategy
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.EnqueueStrategy.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ReaderCancellationOrder.get -> Sa.Utils.WorkQueue.SaReaderCancellationOrder
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ReaderCancelMode.get -> Sa.Utils.WorkQueue.SaReaderCancelMode
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.HandleItemFaulted.get -> System.Func<TInput, System.Exception!, Sa.Utils.WorkQueue.SaExecutionErrorStrategy>?
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ReaderCancelMode.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ReaderCancellationOrder.init -> void
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.HandleItemFaulted.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.StatusChanged.get -> System.Action<TInput, Sa.Utils.WorkQueue.SaWorkStatus, System.Exception?>?
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.StatusChanged.init -> void
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.HandleItemFaulted.get -> System.Func<TInput, System.Exception!, Sa.Utils.WorkQueue.SaExecutionErrorStrategy>?
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.HandleItemFaulted.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.GetItemDisplayName.get -> System.Func<TInput, string!>?
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.GetItemDisplayName.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ShutdownTimeout.get -> System.TimeSpan?
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.TimeProvider.get -> System.TimeProvider?
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ShutdownTimeout.init -> void
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.TimeProvider.get -> System.TimeProvider?
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.TimeProvider.init -> void
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.Processor.get -> Sa.Utils.WorkQueue.ISaWork<TInput>!
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.Processor.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ProducerCancellation.get -> Sa.Utils.WorkQueue.SaProducerCancellationMode
 Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.ProducerCancellation.init -> void
-Sa.Utils.WorkQueue.ISaWork<TInput>.Execute(TInput input, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
-Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.QueueTasks.get -> int
+Sa.Utils.WorkQueue.ISaWork<TInput>.ExecuteAsync(TInput input, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.IsEnabled.get -> bool
+Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.QueueTasks.get -> int
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.IsIdle() -> bool
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.PoolState.get -> Sa.Utils.WorkQueue.SaWorkPoolState
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.ConcurrencyLimit.set -> void
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.ConcurrencyLimit.get -> int
-Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.MaxConcurrency.get -> int
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.QueueCapacity.get -> int
+Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.MaxConcurrency.get -> int
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.AvailableCapacity.get -> int
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.ShutdownError.get -> System.Exception?
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.TryEnqueue(TInput input) -> bool
@@ -91,96 +95,92 @@ Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.ShutdownAsync() -> System.Threading.Ta
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.Shutdown() -> void
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.ForceCancelReaders() -> void
 Sa.Utils.WorkQueue.ISaWorkChannel<TInput>.ForceCancelReadersAsync(System.TimeSpan? timeout = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.UseProcessor(Sa.Utils.WorkQueue.ISaWork<TInput>! processor) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.UseProcessor<TProcessor>() -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
-Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithProcess(System.Func<TInput, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! process) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithQueueCapacity(int capacity) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithConcurrencyLimit(int limit) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithMaxConcurrency(int limit) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithSingleWriter(bool singleWriter) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
-Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithEnqueueStrategy(Sa.Utils.WorkQueue.SaEnqueueStrategy strategy) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithProducerCancellation(Sa.Utils.WorkQueue.SaProducerCancellationMode mode) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
+Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithEnqueueStrategy(Sa.Utils.WorkQueue.SaEnqueueStrategy strategy) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithReaderCancelMode(Sa.Utils.WorkQueue.SaReaderCancelMode mode) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
-Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithReaderCancellationOrder(Sa.Utils.WorkQueue.SaReaderCancellationOrder order) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithShutdownTimeout(System.TimeSpan timeout) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
+Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithReaderCancellationOrder(Sa.Utils.WorkQueue.SaReaderCancellationOrder order) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.FromConfiguration(string! configSectionPath) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
-Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Utils.WorkQueue.SaWorkQueueSettings!>!>! configureSettings) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
-Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithStatusCallback(System.Action<TInput, Sa.Utils.WorkQueue.SaWorkStatus, System.Exception?>! callback) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithHandleItemFaulted(System.Func<TInput, System.Exception!, Sa.Utils.WorkQueue.SaExecutionErrorStrategy>! callback) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
+Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithStatusCallback(System.Action<TInput, Sa.Utils.WorkQueue.SaWorkStatus, System.Exception?>! callback) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
+Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Utils.WorkQueue.SaWorkQueueSettings!>!>! configureSettings) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithItemDisplayName(System.Func<TInput, string!>! getDisplayName) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
+Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.UseProcessor(Sa.Utils.WorkQueue.ISaWork<TInput>! processor) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithTimeProvider(System.TimeProvider! timeProvider) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.Configure(System.Func<System.IServiceProvider!, Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!, Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!>! configure) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
+Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>.WithProcess(System.Func<TInput, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! process) -> Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!
 Sa.Utils.WorkQueue.SaWorkQueueFullException.SaWorkQueueFullException() -> void
 Sa.Utils.WorkQueue.SaWorkQueueFullException.SaWorkQueueFullException(string! message) -> void
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.SaWorkQueueOptions(Sa.Utils.WorkQueue.ISaWork<TInput>! Processor, int? QueueCapacity = null, int? ConcurrencyLimit = null, int? MaxConcurrency = null, bool? SingleWriter = false, Sa.Utils.WorkQueue.SaEnqueueStrategy EnqueueStrategy = Sa.Utils.WorkQueue.SaEnqueueStrategy.Wait, Sa.Utils.WorkQueue.SaReaderCancelMode ReaderCancelMode = Sa.Utils.WorkQueue.SaReaderCancelMode.Hard, Sa.Utils.WorkQueue.SaReaderCancellationOrder ReaderCancellationOrder = Sa.Utils.WorkQueue.SaReaderCancellationOrder.Lifo, System.Func<TInput, System.Exception!, Sa.Utils.WorkQueue.SaExecutionErrorStrategy>? HandleItemFaulted = null, System.Action<TInput, Sa.Utils.WorkQueue.SaWorkStatus, System.Exception?>? StatusChanged = null, System.Func<TInput, string!>? GetItemDisplayName = null, System.TimeSpan? ShutdownTimeout = null, System.TimeProvider? TimeProvider = null, Sa.Utils.WorkQueue.SaProducerCancellationMode ProducerCancellation = Sa.Utils.WorkQueue.SaProducerCancellationMode.Observe) -> void
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithQueueCapacity(int capacity) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkQueueFullException.QueueCapacity.get -> int
-Sa.Utils.WorkQueue.SaWorkQueueFullException.QueuedCount.get -> int
 Sa.Utils.WorkQueue.SaWorkQueueFullException.QueueCapacity.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueFullException.QueuedCount.init -> void
+Sa.Utils.WorkQueue.SaWorkQueueFullException.QueuedCount.get -> int
 Sa.Utils.WorkQueue.SaWorkQueueFullException.ItemDisplayName.get -> string?
 Sa.Utils.WorkQueue.SaWorkQueueFullException.ItemDisplayName.init -> void
-Sa.Utils.WorkQueue.SaWorkQueueFullException.AcceptedCount.init -> void
 Sa.Utils.WorkQueue.SaWorkQueueFullException.AcceptedCount.get -> int?
+Sa.Utils.WorkQueue.SaWorkQueueFullException.AcceptedCount.init -> void
+Sa.Utils.WorkQueue.SaWorkQueueFullException.TotalCount.get -> int?
 Sa.Utils.WorkQueue.SaWorkQueueFullException.TotalCount.init -> void
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithConcurrencyLimit(int limit) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 static Sa.Utils.WorkQueue.SaWorkQueueOptions.Create<TInput>(System.Func<TInput, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! process) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
+static Sa.Utils.WorkQueue.SaWorkQueueOptions.Create<TInput>(Sa.Utils.WorkQueue.ISaWork<TInput>! processor) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkQueueSettings.QueueCapacity.get -> int?
 Sa.Utils.WorkQueue.SaWorkQueueSettings.QueueCapacity.set -> void
-Sa.Utils.WorkQueue.SaWorkQueueSettings.ConcurrencyLimit.set -> void
 Sa.Utils.WorkQueue.SaWorkQueueSettings.ConcurrencyLimit.get -> int?
-Sa.Utils.WorkQueue.SaWorkQueueSettings.MaxConcurrency.set -> void
+Sa.Utils.WorkQueue.SaWorkQueueSettings.ConcurrencyLimit.set -> void
 Sa.Utils.WorkQueue.SaWorkQueueSettings.MaxConcurrency.get -> int?
+Sa.Utils.WorkQueue.SaWorkQueueSettings.MaxConcurrency.set -> void
 Sa.Utils.WorkQueue.SaWorkQueueSettings.SingleWriter.get -> bool?
-Sa.Utils.WorkQueue.SaWorkQueueSettings.EnqueueStrategy.get -> Sa.Utils.WorkQueue.SaEnqueueStrategy
 Sa.Utils.WorkQueue.SaWorkQueueSettings.SingleWriter.set -> void
 Sa.Utils.WorkQueue.SaWorkQueueSettings.EnqueueStrategy.set -> void
 Sa.Utils.WorkQueue.SaWorkQueueSettings.ProducerCancellation.get -> Sa.Utils.WorkQueue.SaProducerCancellationMode
 Sa.Utils.WorkQueue.SaWorkQueueSettings.ProducerCancellation.set -> void
 Sa.Utils.WorkQueue.SaWorkQueueSettings.ReaderCancelMode.get -> Sa.Utils.WorkQueue.SaReaderCancelMode
-static Sa.Utils.WorkQueue.SaWorkQueueOptions.Create<TInput>(Sa.Utils.WorkQueue.ISaWork<TInput>! processor) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkQueueSettings.ReaderCancelMode.set -> void
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithMaxConcurrency(int limit) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueFullException.TotalCount.get -> int?
 Sa.Utils.WorkQueue.SaWorkQueueSettings.ReaderCancellationOrder.get -> Sa.Utils.WorkQueue.SaReaderCancellationOrder
 Sa.Utils.WorkQueue.SaWorkQueueSettings.ReaderCancellationOrder.set -> void
 Sa.Utils.WorkQueue.SaWorkQueueSettings.ShutdownTimeout.get -> System.TimeSpan?
 Sa.Utils.WorkQueue.SaWorkQueueSettings.ShutdownTimeout.set -> void
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.Processor.get -> Sa.Utils.WorkQueue.ISaWork<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.Processor.init -> void
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithStatusCallback(System.Action<TInput, Sa.Utils.WorkQueue.SaWorkStatus, System.Exception?>! cb) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithSingleWriter(bool sw) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithHandleItemFaulted(System.Func<TInput, System.Exception!, Sa.Utils.WorkQueue.SaExecutionErrorStrategy>! cb) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithReaderCancellationOrder(Sa.Utils.WorkQueue.SaReaderCancellationOrder order) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithReaderCancelMode(Sa.Utils.WorkQueue.SaReaderCancelMode mode) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithEnqueueStrategy(Sa.Utils.WorkQueue.SaEnqueueStrategy strategy) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithItemDisplayName(System.Func<TInput, string!>! toString) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithProducerCancellation(Sa.Utils.WorkQueue.SaProducerCancellationMode mode) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithShutdownTimeout(System.TimeSpan timeout) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithTimeProvider(System.TimeProvider! timeProvider) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
-Sa.Utils.WorkQueue.SaWorkChannel<TInput>.SaWorkChannel(Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>! options, Microsoft.Extensions.Logging.ILogger<Sa.Utils.WorkQueue.SaWorkChannel<TInput>!>? logger = null) -> void
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.SaWorkQueueOptions(Sa.Utils.WorkQueue.ISaWork<TInput>! Processor, int? QueueCapacity = null, int? ConcurrencyLimit = null, int? MaxConcurrency = null, bool? SingleWriter = false, Sa.Utils.WorkQueue.SaEnqueueStrategy EnqueueStrategy = Sa.Utils.WorkQueue.SaEnqueueStrategy.Wait, Sa.Utils.WorkQueue.SaReaderCancelMode ReaderCancelMode = Sa.Utils.WorkQueue.SaReaderCancelMode.Hard, Sa.Utils.WorkQueue.SaReaderCancellationOrder ReaderCancellationOrder = Sa.Utils.WorkQueue.SaReaderCancellationOrder.Lifo, System.Func<TInput, System.Exception!, Sa.Utils.WorkQueue.SaExecutionErrorStrategy>? HandleItemFaulted = null, System.Action<TInput, Sa.Utils.WorkQueue.SaWorkStatus, System.Exception?>? StatusChanged = null, System.Func<TInput, string!>? GetItemDisplayName = null, System.TimeSpan? ShutdownTimeout = null, System.TimeProvider? TimeProvider = null, Sa.Utils.WorkQueue.SaProducerCancellationMode ProducerCancellation = Sa.Utils.WorkQueue.SaProducerCancellationMode.Observe) -> void
+Sa.Utils.WorkQueue.SaWorkQueueSettings.EnqueueStrategy.get -> Sa.Utils.WorkQueue.SaEnqueueStrategy
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithQueueCapacity(int capacity) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithConcurrencyLimit(int limit) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.IsEnabled.get -> bool
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithMaxConcurrency(int limit) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.QueueTasks.get -> int
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithSingleWriter(bool sw) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.IsIdle() -> bool
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithStatusCallback(System.Action<TInput, Sa.Utils.WorkQueue.SaWorkStatus, System.Exception?>! cb) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.PoolState.get -> Sa.Utils.WorkQueue.SaWorkPoolState
-static Sa.Utils.WorkQueue.Setup.AddSaWorkQueue<TInput>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!>? configure = null, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime = Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithHandleItemFaulted(System.Func<TInput, System.Exception!, Sa.Utils.WorkQueue.SaExecutionErrorStrategy>! cb) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
+Sa.Utils.WorkQueue.SaWorkChannel<TInput>.SaWorkChannel(Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>! options, Microsoft.Extensions.Logging.ILogger<Sa.Utils.WorkQueue.SaWorkChannel<TInput>!>? logger = null) -> void
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithReaderCancellationOrder(Sa.Utils.WorkQueue.SaReaderCancellationOrder order) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.MaxConcurrency.get -> int
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.QueueCapacity.get -> int
-Sa.Utils.WorkQueue.SaWorkChannel<TInput>.ConcurrencyLimit.get -> int
-Sa.Utils.WorkQueue.SaWorkChannel<TInput>.ShutdownError.get -> System.Exception?
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithEnqueueStrategy(Sa.Utils.WorkQueue.SaEnqueueStrategy strategy) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithReaderCancelMode(Sa.Utils.WorkQueue.SaReaderCancelMode mode) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.AvailableCapacity.get -> int
+Sa.Utils.WorkQueue.SaWorkChannel<TInput>.ShutdownError.get -> System.Exception?
+Sa.Utils.WorkQueue.SaWorkChannel<TInput>.ConcurrencyLimit.get -> int
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.ConcurrencyLimit.set -> void
-static Sa.Utils.WorkQueue.Setup.CreateSimple<TInput>(this Sa.Utils.WorkQueue.ISaWork<TInput>! processor, int? concurrency = null) -> Sa.Utils.WorkQueue.ISaWorkChannel<TInput>!
-static Sa.Utils.WorkQueue.Setup.CreateSimple<TInput>(System.Func<TInput, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! process, int? concurrency = null) -> Sa.Utils.WorkQueue.ISaWorkChannel<TInput>!
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.QueueCapacity.get -> int?
-Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.QueueCapacity.init -> void
+static Sa.Utils.WorkQueue.Setup.AddSaWorkQueue<TInput>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Utils.WorkQueue.IWorkQueueBuilder<TInput>!>? configure = null, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime = Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithProducerCancellation(Sa.Utils.WorkQueue.SaProducerCancellationMode mode) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithItemDisplayName(System.Func<TInput, string!>! toString) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithShutdownTimeout(System.TimeSpan timeout) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
+Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>.WithTimeProvider(System.TimeProvider! timeProvider) -> Sa.Utils.WorkQueue.SaWorkQueueOptions<TInput>!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.EnqueueAsync(TInput input, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
-Sa.Utils.WorkQueue.SaWorkChannel<TInput>.TryEnqueue(TInput input) -> bool
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.EnqueueManyAsync(System.Collections.Generic.IEnumerable<TInput>! inputs, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
+Sa.Utils.WorkQueue.SaWorkChannel<TInput>.TryEnqueue(TInput input) -> bool
+static Sa.Utils.WorkQueue.Setup.CreateSimple<TInput>(System.Func<TInput, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! process, int? concurrency = null) -> Sa.Utils.WorkQueue.ISaWorkChannel<TInput>!
+static Sa.Utils.WorkQueue.Setup.CreateSimple<TInput>(this Sa.Utils.WorkQueue.ISaWork<TInput>! processor, int? concurrency = null) -> Sa.Utils.WorkQueue.ISaWorkChannel<TInput>!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.WaitForIdleAsync(bool failIfNoProgress = false, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.ForceCancelReaders() -> void
-Sa.Utils.WorkQueue.SaWorkChannel<TInput>.ForceCancelReadersAsync(System.TimeSpan? timeout = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.ShutdownAsync() -> System.Threading.Tasks.Task!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.Shutdown() -> void
+Sa.Utils.WorkQueue.SaWorkChannel<TInput>.ForceCancelReadersAsync(System.TimeSpan? timeout = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.Dispose() -> void
 Sa.Utils.WorkQueue.SaWorkChannel<TInput>.DisposeAsync() -> System.Threading.Tasks.ValueTask

@@ -5,7 +5,7 @@ namespace Sa.Partitional.PostgreSql.Cleaning;
 
 internal sealed class PartCleanupJob(IPartCleanupService cleaningService, IPartCache cache) : IJob
 {
-    public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
     {
         await cleaningService.Clean(cancellationToken).ConfigureAwait(false);
 

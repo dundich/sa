@@ -131,7 +131,7 @@ public sealed class JobErrorHandlerTests
 
     sealed class NoopJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 

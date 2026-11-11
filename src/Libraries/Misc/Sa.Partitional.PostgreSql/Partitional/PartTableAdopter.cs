@@ -134,7 +134,7 @@ internal sealed partial class PartTableAdopter(
 
         await using PgTransaction tx = await dataSource.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-        await Execute(tx, "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0));",
+        await ExecuteAsync(tx, "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0));",
             [new NpgsqlParameter<string>("key", settings.FullName)], cancellationToken).ConfigureAwait(false);
 
         // Re-read under the lock: another host may have converted the table while this one waited.
@@ -164,14 +164,14 @@ internal sealed partial class PartTableAdopter(
 
         LogConverting(settings.FullName, qualifiedBackup);
 
-        await Execute(tx,
+        await ExecuteAsync(tx,
             $"ALTER TABLE {qualifiedTable} RENAME TO {SqlTemplate.QuoteIdentifier(backupBare)};",
             [], cancellationToken).ConfigureAwait(false);
 
         // The root DDL is the one normally emitted by Create mode: schema, root table, primary key,
         // optional DEFAULT partition and post-SQL hook.
-        await Execute(tx, builder.CreateRootSql(), [], cancellationToken).ConfigureAwait(false);
-        await Execute(tx, builder.CreateCacheSql(), [], cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(tx, builder.CreateRootSql(), [], cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(tx, builder.CreateCacheSql(), [], cancellationToken).ConfigureAwait(false);
 
         int partitions = await CreatePartitionsForExistingRows(
             tx, builder, qualifiedBackup, cancellationToken).ConfigureAwait(false);
@@ -184,7 +184,7 @@ internal sealed partial class PartTableAdopter(
         {
             // Counts have already been verified at this point; dropping the original inside the same
             // transaction still rolls back with it if the commit fails.
-            await Execute(tx, $"DROP TABLE {qualifiedBackup};", [], cancellationToken).ConfigureAwait(false);
+            await ExecuteAsync(tx, $"DROP TABLE {qualifiedBackup};", [], cancellationToken).ConfigureAwait(false);
         }
 
         await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -248,7 +248,7 @@ internal sealed partial class PartTableAdopter(
             {
                 // Root and cache table were created above; per-partition batches must not repeat them.
                 string sql = builder.CreatePartSql(date, values);
-                await Execute(tx, sql, [], cancellationToken).ConfigureAwait(false);
+                await ExecuteAsync(tx, sql, [], cancellationToken).ConfigureAwait(false);
                 created++;
             }
         }
@@ -323,7 +323,7 @@ internal sealed partial class PartTableAdopter(
         // for a table without one is at best noise and is rejected by older servers.
         string overriding = source.HasAlwaysIdentity ? " OVERRIDING SYSTEM VALUE" : string.Empty;
 
-        await Execute(tx,
+        await ExecuteAsync(tx,
             $"INSERT INTO {qualifiedTable} ({columns}){overriding} SELECT {columns} FROM {qualifiedBackup};",
             [], cancellationToken).ConfigureAwait(false);
 
@@ -368,7 +368,7 @@ internal sealed partial class PartTableAdopter(
 
         if (maxId is null) return;
 
-        await Execute(tx, "SELECT setval(@sequence::regclass, @value);",
+        await ExecuteAsync(tx, "SELECT setval(@sequence::regclass, @value);",
             [
                 new NpgsqlParameter<string>("sequence", sequence),
                 new NpgsqlParameter<long>("value", maxId.Value),
@@ -664,7 +664,7 @@ WHERE d.refobjid = to_regclass(@table)
 
     private static string Join(string[] values) => values.Length == 0 ? "<none>" : string.Join(", ", values);
 
-    private static async Task<int> Execute(
+    private static async Task<int> ExecuteAsync(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,

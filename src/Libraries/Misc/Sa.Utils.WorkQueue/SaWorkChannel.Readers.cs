@@ -340,7 +340,7 @@ public sealed partial class SaWorkChannel<TInput>
                 {
                     ct.ThrowIfCancellationRequested();
                     OnStatusChanged(item.Input, SaWorkStatus.Running);
-                    await _processor.Execute(item.Input, ct).ConfigureAwait(false);
+                    await _processor.ExecuteAsync(item.Input, ct).ConfigureAwait(false);
                     OnStatusChanged(item.Input, SaWorkStatus.Completed);
                 }
                 catch (OperationCanceledException ex) when (item.CancellationToken.IsCancellationRequested)

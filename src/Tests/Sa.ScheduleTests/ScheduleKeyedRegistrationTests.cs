@@ -20,13 +20,13 @@ public sealed class ScheduleKeyedRegistrationTests
 
     private sealed class JobA : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
     private sealed class JobB : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
@@ -342,7 +342,7 @@ public sealed class ScheduleKeyedRegistrationTests
 
     private sealed class NoopJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
@@ -359,7 +359,7 @@ public sealed class ScheduleKeyedRegistrationTests
 
     private sealed class FailingJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             AbortCounter.Inc();
             throw new InvalidOperationException("always fails");

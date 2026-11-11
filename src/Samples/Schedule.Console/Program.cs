@@ -79,7 +79,7 @@ namespace Schedule.Console
 {
     public class SomeJob(TimeProvider currentTime) : IJob
     {
-        public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
             if (context.NumIterations >= 4 && context.NumIterations < 6)

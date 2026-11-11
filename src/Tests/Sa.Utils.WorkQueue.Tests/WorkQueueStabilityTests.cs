@@ -12,7 +12,7 @@ public sealed class WorkQueueStabilityTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public Task Execute(int input, CancellationToken ct)
+        public Task ExecuteAsync(int input, CancellationToken ct)
         {
             if (input == -1) throw new InvalidOperationException("Simulated fault");
             Interlocked.Increment(ref _processed);
@@ -33,7 +33,7 @@ public sealed class WorkQueueStabilityTests
 
         public void Release() => Gate.TrySetResult();
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             EnteredSource.TrySetResult();
 
@@ -48,7 +48,7 @@ public sealed class WorkQueueStabilityTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             await Gate.Task.WaitAsync(ct);
             if (input == -1) throw new InvalidOperationException("Simulated fault");
@@ -61,7 +61,7 @@ public sealed class WorkQueueStabilityTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             await Task.Delay(TimeSpan.FromSeconds(60), TestToken);
             Interlocked.Increment(ref _processed);
@@ -77,7 +77,7 @@ public sealed class WorkQueueStabilityTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             await Gate.Task;
             Interlocked.Increment(ref _processed);

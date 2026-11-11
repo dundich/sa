@@ -1,97 +1,97 @@
 #nullable enable
-Sa.Data.S3.IBucketOperations
-Sa.Data.S3.IS3BucketClientBuilder
 Sa.Data.S3.IArrayPool
+Sa.Data.S3.IBucketOperations
 Sa.Data.S3.IFileOperations
 Sa.Data.S3.IS3BucketClient
+Sa.Data.S3.IS3BucketClientBuilder
 Sa.Data.S3.S3BucketClientSetupOptions
 Sa.Data.S3.S3BucketClientSetupOptions.S3BucketClientSetupOptions() -> void
 Sa.Data.S3.S3BucketSettings
 Sa.Data.S3.S3BucketSettings.S3BucketSettings() -> void
-Sa.Data.S3.S3Upload
-Sa.Data.S3.Setup
-Sa.Data.S3.S3BucketClient
 Sa.Data.S3.S3File
+Sa.Data.S3.S3Upload
+Sa.Data.S3.S3BucketClient
+Sa.Data.S3.Setup
 Sa.Data.S3.IArrayPool.Rent<T>(int minimumLength) -> T[]!
 Sa.Data.S3.IArrayPool.ReturnToPool<T>(T[]! array, bool clear = false) -> void
-Sa.Data.S3.IBucketOperations.DeleteBucketAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.S3.IBucketOperations.CreateBucketAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.IBucketOperations.DeleteBucketAsync(bool forceDelete, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+Sa.Data.S3.IBucketOperations.DeleteBucketAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.S3.IBucketOperations.IsBucketExistsAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.IFileOperations.DeleteFileAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task!
-Sa.Data.S3.IFileOperations.BuildFileUrl(string! fileName, System.TimeSpan expiration) -> string!
+Sa.Data.S3.IBucketOperations.DeleteBucketAsync(bool forceDelete, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.S3.IFileOperations.BuildFileUrl(string! fileName) -> string!
 Sa.Data.S3.IFileOperations.GetFileAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<Sa.Data.S3.S3File!>!
+Sa.Data.S3.IFileOperations.BuildFileUrl(string! fileName, System.TimeSpan expiration) -> string!
+Sa.Data.S3.IFileOperations.DeleteFileAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task!
 Sa.Data.S3.IFileOperations.GetFileStreamAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<System.IO.Stream!>!
+Sa.Data.S3.IFileOperations.IsFileExistsAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.S3.IFileOperations.GetFileUrlAsync(string! fileName, System.TimeSpan expiration, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<string?>!
 Sa.Data.S3.IFileOperations.List(string? prefix, System.Threading.CancellationToken ct) -> System.Collections.Generic.IAsyncEnumerable<string!>!
-Sa.Data.S3.IFileOperations.IsFileExistsAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.IFileOperations.UploadFileAsync(string! fileName, string! contentType, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<Sa.Data.S3.S3Upload!>!
 Sa.Data.S3.IFileOperations.UploadFileAsync(string! fileName, string! contentType, byte[]! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+Sa.Data.S3.IFileOperations.UploadFileAsync(string! fileName, string! contentType, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<Sa.Data.S3.S3Upload!>!
 Sa.Data.S3.IFileOperations.UploadFileAsync(string! fileName, string! contentType, System.IO.Stream! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.IS3BucketClientBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Data.S3.S3BucketClientSetupOptions!>!>! configureSettings) -> Sa.Data.S3.IS3BucketClientBuilder!
 Sa.Data.S3.IS3BucketClient.Bucket.get -> string!
-Sa.Data.S3.S3BucketClientSetupOptions.TotalRequestTimeout.get -> System.TimeSpan
 Sa.Data.S3.IS3BucketClient.Endpoint.get -> System.Uri!
-Sa.Data.S3.S3BucketClientSetupOptions.ConnectionPoolLifetime.get -> System.TimeSpan
 Sa.Data.S3.IS3BucketClientBuilder.FromConfiguration(string! configSectionPath) -> Sa.Data.S3.IS3BucketClientBuilder!
+Sa.Data.S3.IS3BucketClientBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Data.S3.S3BucketClientSetupOptions!>!>! configureSettings) -> Sa.Data.S3.IS3BucketClientBuilder!
+Sa.Data.S3.S3BucketClientSetupOptions.TotalRequestTimeout.get -> System.TimeSpan
 Sa.Data.S3.S3BucketClientSetupOptions.TotalRequestTimeout.set -> void
+Sa.Data.S3.S3BucketClientSetupOptions.ConnectionPoolLifetime.get -> System.TimeSpan
 Sa.Data.S3.S3BucketClientSetupOptions.ConnectionPoolLifetime.set -> void
-Sa.Data.S3.S3BucketClientSetupOptions.HandlerLifetime.set -> void
 Sa.Data.S3.S3BucketClientSetupOptions.HandlerLifetime.get -> System.TimeSpan
-Sa.Data.S3.S3File.ContentType.get -> string?
-Sa.Data.S3.S3Upload.FileName.get -> string!
-Sa.Data.S3.S3File.Exists.get -> bool
-virtual Sa.Data.S3.S3BucketClientSetupOptions.Normalize() -> void
-Sa.Data.S3.S3File.Length.get -> long?
-Sa.Data.S3.S3Upload.UploadId.get -> string!
-static Sa.Data.S3.Setup.AddSaS3BucketClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! clientName, System.Action<Sa.Data.S3.IS3BucketClientBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-Sa.Data.S3.S3File.StatusCode.get -> System.Net.HttpStatusCode
-Sa.Data.S3.S3Upload.AbortAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.S3Upload.Written.get -> long
-Sa.Data.S3.S3File.Dispose() -> void
-static Sa.Data.S3.S3File.implicit operator bool(Sa.Data.S3.S3File! file) -> bool
-Sa.Data.S3.S3Upload.AddPartAsync(byte[]! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.S3Upload.AddPartAsync(byte[]! data, int length, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.S3File.GetStreamAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<System.IO.Stream!>!
+Sa.Data.S3.S3BucketClientSetupOptions.HandlerLifetime.set -> void
 Sa.Data.S3.S3BucketSettings.AccessKey.get -> string!
 Sa.Data.S3.S3BucketSettings.AccessKey.set -> void
 Sa.Data.S3.S3BucketSettings.SecretKey.get -> string!
 Sa.Data.S3.S3BucketSettings.SecretKey.set -> void
-Sa.Data.S3.S3BucketSettings.Bucket.set -> void
 Sa.Data.S3.S3BucketSettings.Bucket.get -> string!
+Sa.Data.S3.S3BucketClient.CreateBucketAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+Sa.Data.S3.S3BucketSettings.Bucket.set -> void
 Sa.Data.S3.S3BucketSettings.Endpoint.get -> string!
-Sa.Data.S3.S3BucketSettings.Region.get -> string!
 Sa.Data.S3.S3BucketSettings.Endpoint.set -> void
-Sa.Data.S3.S3BucketSettings.Service.get -> string!
+Sa.Data.S3.S3BucketSettings.Region.get -> string!
 Sa.Data.S3.S3BucketSettings.Region.set -> void
+Sa.Data.S3.S3BucketSettings.Service.get -> string!
 Sa.Data.S3.S3BucketSettings.Service.set -> void
 Sa.Data.S3.S3BucketSettings.UseHttp2.get -> bool
 Sa.Data.S3.S3BucketSettings.UseHttp2.set -> void
-Sa.Data.S3.S3BucketClient.CreateBucketAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+virtual Sa.Data.S3.S3BucketClientSetupOptions.Normalize() -> void
+Sa.Data.S3.S3File.ContentType.get -> string?
 Sa.Data.S3.S3BucketClient.DeleteBucketAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-virtual Sa.Data.S3.S3BucketSettings.Validate() -> void
-override Sa.Data.S3.S3File.ToString() -> string!
-Sa.Data.S3.S3Upload.AddPartsAsync(System.IO.Stream! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.S3Upload.AddPartsAsync(byte[]! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.S3BucketClient.DeleteBucketAsync(bool forceDelete, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+Sa.Data.S3.S3File.Exists.get -> bool
+Sa.Data.S3.S3File.Length.get -> long?
+Sa.Data.S3.S3File.StatusCode.get -> System.Net.HttpStatusCode
+static Sa.Data.S3.S3File.implicit operator bool(Sa.Data.S3.S3File! file) -> bool
+Sa.Data.S3.S3File.Dispose() -> void
+Sa.Data.S3.S3Upload.FileName.get -> string!
+Sa.Data.S3.S3Upload.UploadId.get -> string!
+Sa.Data.S3.S3Upload.Written.get -> long
+Sa.Data.S3.S3Upload.AbortAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+Sa.Data.S3.S3Upload.AddPartAsync(byte[]! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+static Sa.Data.S3.Setup.AddSaS3BucketClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! clientName, System.Action<Sa.Data.S3.IS3BucketClientBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 override Sa.Data.S3.S3BucketClientSetupOptions.Validate() -> void
-Sa.Data.S3.S3Upload.CompleteAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.S3Upload.Dispose() -> void
-Sa.Data.S3.S3Upload.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Sa.Data.S3.S3BucketClient.DeleteBucketAsync(bool forceDelete, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+Sa.Data.S3.S3Upload.AddPartAsync(byte[]! data, int length, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+virtual Sa.Data.S3.S3BucketSettings.Validate() -> void
+Sa.Data.S3.S3Upload.AddPartsAsync(System.IO.Stream! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
+Sa.Data.S3.S3File.GetStreamAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<System.IO.Stream!>!
+Sa.Data.S3.S3Upload.AddPartsAsync(byte[]! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.S3.S3BucketClient.IsBucketExistsAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.S3BucketClient.Endpoint.get -> System.Uri!
+override Sa.Data.S3.S3File.ToString() -> string!
 Sa.Data.S3.S3BucketClient.Bucket.get -> string!
-Sa.Data.S3.S3BucketClient.S3BucketClient(System.Net.Http.HttpClient! client, Sa.Data.S3.S3BucketSettings! settings, System.TimeProvider? timeProvider = null, Sa.Data.S3.IArrayPool? arrayPool = null) -> void
+Sa.Data.S3.S3BucketClient.Endpoint.get -> System.Uri!
+Sa.Data.S3.S3Upload.CompleteAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.S3.S3BucketClient.BuildFileUrl(string! fileName, System.TimeSpan expiration) -> string!
 Sa.Data.S3.S3BucketClient.BuildFileUrl(string! fileName) -> string!
+Sa.Data.S3.S3BucketClient.S3BucketClient(System.Net.Http.HttpClient! client, Sa.Data.S3.S3BucketSettings! settings, System.TimeProvider? timeProvider = null, Sa.Data.S3.IArrayPool? arrayPool = null) -> void
+Sa.Data.S3.S3Upload.Dispose() -> void
+Sa.Data.S3.S3Upload.DisposeAsync() -> System.Threading.Tasks.ValueTask
 Sa.Data.S3.S3BucketClient.DeleteFileAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task!
 Sa.Data.S3.S3BucketClient.GetFileAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<Sa.Data.S3.S3File!>!
-Sa.Data.S3.S3BucketClient.GetFileUrlAsync(string! fileName, System.TimeSpan expiration, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<string?>!
 Sa.Data.S3.S3BucketClient.GetFileStreamAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<System.IO.Stream!>!
+Sa.Data.S3.S3BucketClient.GetFileUrlAsync(string! fileName, System.TimeSpan expiration, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<string?>!
 Sa.Data.S3.S3BucketClient.IsFileExistsAsync(string! fileName, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.S3.S3BucketClient.List(string? prefix, System.Threading.CancellationToken ct) -> System.Collections.Generic.IAsyncEnumerable<string!>!
 Sa.Data.S3.S3BucketClient.UploadFileAsync(string! fileName, string! contentType, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<Sa.Data.S3.S3Upload!>!
 Sa.Data.S3.S3BucketClient.UploadFileAsync(string! fileName, string! contentType, System.IO.Stream! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
-Sa.Data.S3.S3BucketClient.UploadFileAsync(string! fileName, string! contentType, byte[]! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.S3.S3BucketClient.Dispose() -> void
+Sa.Data.S3.S3BucketClient.UploadFileAsync(string! fileName, string! contentType, byte[]! data, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<bool>!

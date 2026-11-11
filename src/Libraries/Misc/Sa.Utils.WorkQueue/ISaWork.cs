@@ -8,14 +8,14 @@ namespace Sa.Utils.WorkQueue;
 /// readers run items at the same time, so an implementation must be thread-safe — or
 /// resolvable as a singleton, which is how the DI registration wires it up.
 /// <para>
-/// <b>Cancellation.</b> <see cref="Execute"/> receives a token that is cancelled when the
+/// <b>Cancellation.</b> <see cref="ExecuteAsync"/> receives a token that is cancelled when the
 /// queue stops, when the reader is removed (limit decrease, pause — in
 /// <see cref="SaReaderCancelMode.Hard"/> mode), or when a force-cancel escalates a soft
 /// stop. An implementation that ignores it delays a shutdown by up to the configured
 /// <see cref="SaWorkQueueOptions{TInput}.ShutdownTimeout"/>; nothing can kill the thread.
 /// </para>
 /// <para>
-/// <b>Failures.</b> An exception leaving <see cref="Execute"/> is reported as
+/// <b>Failures.</b> An exception leaving <see cref="ExecuteAsync"/> is reported as
 /// <see cref="SaWorkStatus.Faulted"/> and handed to the configured
 /// <see cref="SaWorkQueueOptions{TInput}.HandleItemFaulted"/> strategy, which decides
 /// whether the reader continues, stops, or the whole queue shuts down.
@@ -28,5 +28,5 @@ public interface ISaWork<in TInput>
     /// <param name="input">The item to process.</param>
     /// <param name="cancellationToken">Token that cancels the work; see the type remarks.</param>
     /// <returns>A task that completes when the item is done.</returns>
-    Task Execute(TInput input, CancellationToken cancellationToken);
+    Task ExecuteAsync(TInput input, CancellationToken cancellationToken);
 }

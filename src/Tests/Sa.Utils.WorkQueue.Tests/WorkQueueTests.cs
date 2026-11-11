@@ -12,7 +12,7 @@ public class WorkQueueTests
 
     private sealed class TestWork : ISaWork<TestModel>
     {
-        public Task Execute(TestModel model, CancellationToken cancellationToken)
+        public Task ExecuteAsync(TestModel model, CancellationToken cancellationToken)
         {
             model.WasProcessed = true;
             return Task.CompletedTask;
@@ -23,7 +23,7 @@ public class WorkQueueTests
     {
         private readonly TimeSpan _delay = delay;
 
-        public async Task Execute(TestModel model, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(TestModel model, CancellationToken cancellationToken)
         {
             await Task.Delay(_delay, cancellationToken);
 
@@ -35,7 +35,7 @@ public class WorkQueueTests
 
     private sealed class TestWorkThatThrows : ISaWork<TestModel>
     {
-        public Task Execute(TestModel model, CancellationToken cancellationToken)
+        public Task ExecuteAsync(TestModel model, CancellationToken cancellationToken)
         {
             throw new InvalidOperationException("Test exception");
         }

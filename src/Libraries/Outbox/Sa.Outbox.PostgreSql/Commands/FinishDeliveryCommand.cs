@@ -15,7 +15,7 @@ internal sealed partial class FinishDeliveryCommand(
 
     private readonly ILogger _logger = logger ?? NullLogger<FinishDeliveryCommand>.Instance;
 
-    public async Task<int> Execute<TMessage>(
+    public async Task<int> ExecuteAsync<TMessage>(
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         IReadOnlyDictionary<Exception, ErrorInfo> errors,
         OutboxMessageFilter filter,

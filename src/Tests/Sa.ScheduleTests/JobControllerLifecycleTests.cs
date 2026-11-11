@@ -23,7 +23,7 @@ public sealed class JobControllerLifecycleTests
         var controller = MakeController(settings);
 
         controller.Start();
-        await controller.Execute(TestContext.Current.CancellationToken);
+        await controller.ExecuteAsync(TestContext.Current.CancellationToken);
         controller.ExecutionCompleted();
 
         // A successful completion must not mark the controller aborted.
@@ -188,7 +188,7 @@ public sealed class JobControllerLifecycleTests
         Assert.Equal(CanJobExecuteResult.Ok,
             await controller.CanExecute(TestContext.Current.CancellationToken));
 
-        await controller.Execute(TestContext.Current.CancellationToken);
+        await controller.ExecuteAsync(TestContext.Current.CancellationToken);
 
         // Second iteration must abort: RunOnce has fired.
         Assert.Equal(CanJobExecuteResult.Abort,
@@ -209,7 +209,7 @@ public sealed class JobControllerLifecycleTests
         var controller = new JobController(0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
 
         controller.Start();
-        await controller.Execute(TestContext.Current.CancellationToken);
+        await controller.ExecuteAsync(TestContext.Current.CancellationToken);
         controller.Shutdown();
 
         var scopes = factory.Scopes;
@@ -348,7 +348,7 @@ public sealed class JobControllerLifecycleTests
 
         // It fails, and one retry is still owed.
         var first = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => controller.Execute(ct));
+            () => controller.ExecuteAsync(ct));
         controller.ExecutionFailed(first);
         Assert.False(controller.AbortedByError);
 
@@ -358,7 +358,7 @@ public sealed class JobControllerLifecycleTests
         // The second attempt fails too; the budget (1 retry) is now spent and
         // nothing is owed — the job has run as "once" as it ever will.
         var second = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => controller.Execute(ct));
+            () => controller.ExecuteAsync(ct));
         controller.ExecutionFailed(second);
 
         Assert.Equal(CanJobExecuteResult.Abort, await controller.CanExecute(ct));
@@ -389,10 +389,10 @@ public sealed class JobControllerLifecycleTests
 
         // Attempt 1 fails (retry owed), attempt 2 succeeds.
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => controller.Execute(ct));
+            () => controller.ExecuteAsync(ct));
         controller.ExecutionFailed(failure);
 
-        await controller.Execute(ct);
+        await controller.ExecuteAsync(ct);
         controller.ExecutionCompleted();
 
         Assert.Equal(2, Volatile.Read(ref attempts));
@@ -623,13 +623,13 @@ public sealed class JobControllerLifecycleTests
 
     sealed class RecordingJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
     sealed class FailingJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => throw new InvalidOperationException("always fails");
     }
 
@@ -662,7 +662,7 @@ public sealed class JobControllerLifecycleTests
     /// <summary>Reports the context-stack depth it was handed on execution.</summary>
     sealed class StackProbeJob(Action<int> onExecute) : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             onExecute(context.Stack.Count());
             return Task.CompletedTask;
@@ -675,7 +675,7 @@ public sealed class JobControllerLifecycleTests
     /// </summary>
     sealed class FlakyJob(Func<bool> shouldFail) : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => shouldFail()
                 ? throw new InvalidOperationException("flaky")
                 : Task.CompletedTask;

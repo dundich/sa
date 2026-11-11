@@ -96,9 +96,9 @@ internal sealed partial class OutboxDeliveryManager(
 
         IReadOnlyDictionary<Exception, ErrorInfo> errors = errorLogs is not { Count: > 0 }
             ? ReadOnlyDictionary<Exception, ErrorInfo>.Empty
-            : await errorCmd.Execute(errorLogs.ToArray(), cancellationToken).ConfigureAwait(false);
+            : await errorCmd.ExecuteAsync(errorLogs.ToArray(), cancellationToken).ConfigureAwait(false);
 
-        return await finishCmd.Execute(messages, errors, filter, cancellationToken).ConfigureAwait(false);
+        return await finishCmd.ExecuteAsync(messages, errors, filter, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -176,7 +176,7 @@ internal sealed partial class OutboxDeliveryManager(
         TimeSpan lockExpiration,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
-            => extendCmd.Execute(lockExpiration, filter, cancellationToken);
+            => extendCmd.ExecuteAsync(lockExpiration, filter, cancellationToken);
 
     private async Task EnsureParts(OutboxMessageFilter filter, CancellationToken cancellationToken)
     {

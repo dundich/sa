@@ -235,7 +235,7 @@ public sealed class WorkQueueTimeoutTests
 
         public bool Left { get; private set; }
 
-        public async Task Execute(int input, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(int input, CancellationToken cancellationToken)
         {
             _entered.TrySetResult();
 

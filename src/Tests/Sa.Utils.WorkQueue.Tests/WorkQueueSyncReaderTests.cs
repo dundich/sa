@@ -60,7 +60,7 @@ public sealed class WorkQueueSyncReaderTests
             set => Volatile.Write(ref _shouldFail, value ? 1 : 0);
         }
 
-        public Task Execute(int input, CancellationToken ct)
+        public Task ExecuteAsync(int input, CancellationToken ct)
             => ShouldFail
                 ? throw new InvalidOperationException($"boom {input}")
                 : Task.CompletedTask;

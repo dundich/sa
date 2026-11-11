@@ -12,7 +12,7 @@ public sealed class TestWorkProcessor : ISaWork<TestInput>
     public int ExecuteCount { get; private set; }
     public TestInput? LastInput { get; private set; }
 
-    public Task Execute(TestInput input, CancellationToken cancellationToken)
+    public Task ExecuteAsync(TestInput input, CancellationToken cancellationToken)
     {
         ExecuteCount++;
         LastInput = input;

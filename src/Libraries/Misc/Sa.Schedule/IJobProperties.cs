@@ -36,7 +36,7 @@ public interface IJobProperties
     /// <c>null</c> is a valid, intentional mode — it is not a misconfiguration: the job runs
     /// back-to-back, starting the next iteration as soon as the previous one finished, with no
     /// wait in between. It is meant for frequent operations that pace themselves with their own
-    /// wait inside <see cref="IJob.Execute"/> (draining a queue, polling a channel). Without such
+    /// wait inside <see cref="IJob.ExecuteAsync"/> (draining a queue, polling a channel). Without such
     /// a self-wait the job spins and burns CPU — give it a timing (<c>Every*</c>/<c>WithCron</c>)
     /// or make the internal wait block.
     /// </para>

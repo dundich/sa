@@ -12,7 +12,7 @@ internal sealed class ErrorDeliveryCommand(
 
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlError(len));
 
-    public async Task<IReadOnlyDictionary<Exception, ErrorInfo>> Execute(
+    public async Task<IReadOnlyDictionary<Exception, ErrorInfo>> ExecuteAsync(
         ReadOnlyMemory<IOutboxContext> messages,
         CancellationToken cancellationToken)
     {

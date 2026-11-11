@@ -259,7 +259,7 @@ internal static class Program
 
     private sealed class SyncProcessor<T> : ISaWork<T>
     {
-        public Task Execute(T input, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ExecuteAsync(T input, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     /// <summary>
@@ -268,7 +268,7 @@ internal static class Program
     /// </summary>
     private sealed class YieldingProcessor<T> : ISaWork<T>
     {
-        public async Task Execute(T input, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(T input, CancellationToken cancellationToken)
             => await Task.Yield();
     }
 }

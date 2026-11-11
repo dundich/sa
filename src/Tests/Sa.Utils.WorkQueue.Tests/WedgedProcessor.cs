@@ -1,7 +1,7 @@
 namespace Sa.Utils.WorkQueue.Tests;
 
 /// <summary>
-/// A processor that blocks inside <see cref="Execute"/> until released, ignoring the
+/// A processor that blocks inside <see cref="ExecuteAsync"/> until released, ignoring the
 /// cancellation token it is handed.
 /// </summary>
 /// <remarks>
@@ -16,16 +16,16 @@ internal sealed class WedgedProcessor : ISaWork<int>
     private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _executions;
 
-    /// <summary>Completes once an item is inside <see cref="Execute"/>.</summary>
+    /// <summary>Completes once an item is inside <see cref="ExecuteAsync"/>.</summary>
     public Task Entered => _entered.Task;
 
-    /// <summary>How many items have entered <see cref="Execute"/>.</summary>
+    /// <summary>How many items have entered <see cref="ExecuteAsync"/>.</summary>
     public int Executions => Volatile.Read(ref _executions);
 
-    /// <summary>True once a released item has returned from <see cref="Execute"/>.</summary>
+    /// <summary>True once a released item has returned from <see cref="ExecuteAsync"/>.</summary>
     public bool Left { get; private set; }
 
-    public async Task Execute(int input, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(int input, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _executions);
         _entered.TrySetResult();

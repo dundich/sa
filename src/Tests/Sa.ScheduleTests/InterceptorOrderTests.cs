@@ -55,7 +55,7 @@ public sealed class InterceptorOrderTests : IAsyncDisposable
 
     sealed class SomeJob : IJob
     {
-        public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             Order.Add("job");
             await Task.Delay(10, cancellationToken);

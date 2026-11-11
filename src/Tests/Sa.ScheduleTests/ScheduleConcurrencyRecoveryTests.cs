@@ -12,7 +12,7 @@ namespace Sa.ScheduleTests;
 /// restored nothing until a full <c>Stop</c>+<c>Start</c>. The reader pool is now pinned at
 /// <c>MaxConcurrency</c> and the limit is applied through the controller pause gate.
 /// </para>
-/// The job blocks inside <c>Execute</c> on a shared semaphore, which makes the number of
+/// The job blocks inside <c>ExecuteAsync</c> on a shared semaphore, which makes the number of
 /// active slots observable without timing-based assertions.
 /// </summary>
 public sealed class ScheduleConcurrencyRecoveryTests : IAsyncDisposable
@@ -32,7 +32,7 @@ public sealed class ScheduleConcurrencyRecoveryTests : IAsyncDisposable
 
     private sealed class GatedJob(SemaphoreSlim gate) : IJob
     {
-        public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             Probe.Enter();
 

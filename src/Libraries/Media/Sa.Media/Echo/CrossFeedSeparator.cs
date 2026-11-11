@@ -79,7 +79,7 @@ public static class CrossFeedSeparator
             EstimateResult estimate = await EstimateLeakageStreamingAsync(
                 inputPath, head, options.DominanceThresholdDb, cancellationToken);
 
-            await AggressiveMode.Execute(options, head.SampleRate, estimate.Alpha, estimate.Beta, cancellationToken);
+            await AggressiveMode.ExecuteAsync(options, head.SampleRate, estimate.Alpha, estimate.Beta, cancellationToken);
             return;
         }
 

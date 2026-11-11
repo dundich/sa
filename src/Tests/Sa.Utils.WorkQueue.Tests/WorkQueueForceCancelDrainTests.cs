@@ -361,7 +361,7 @@ public sealed class WorkQueueForceCancelDrainTests
 
         public Task Entered => _entered.Task;
 
-        public async Task Execute(int input, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(int input, CancellationToken cancellationToken)
         {
             _entered.TrySetResult();
 

@@ -416,7 +416,7 @@ public sealed class WorkQueuePoolStateTests
 
         public Task Entered => EnteredSource.Task;
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             EnteredSource.TrySetResult();
 

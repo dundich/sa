@@ -9,8 +9,8 @@ internal sealed class OutboxMsgTypeRepository(
     ) : IOutboxMsgTypeRepository
 {
     public Task<int> Insert(long id, string typeName, CancellationToken cancellationToken)
-        => insertCmd.Execute(id, typeName, cancellationToken);
+        => insertCmd.ExecuteAsync(id, typeName, cancellationToken);
 
     public Task<IReadOnlyCollection<(long id, string typeName)>> SelectAll(CancellationToken cancellationToken)
-        => selectCmd.Execute(cancellationToken);
+        => selectCmd.ExecuteAsync(cancellationToken);
 }

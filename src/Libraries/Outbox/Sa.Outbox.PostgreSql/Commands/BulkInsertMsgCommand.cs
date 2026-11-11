@@ -22,7 +22,7 @@ internal sealed class BulkInsertMsgCommand(
     , IOutboxTypeResolver hashResolver
 ) : IBulkInsertMsgCommand
 {
-    public async ValueTask<ulong> Execute<TMessage>(
+    public async ValueTask<ulong> ExecuteAsync<TMessage>(
         OutboxMessageBatch<TMessage> batch,
         CancellationToken cancellationToken)
     {
@@ -31,7 +31,7 @@ internal sealed class BulkInsertMsgCommand(
         return await BulkWithRetry(batch, typeCode, cancellationToken);
     }
 
-    public async ValueTask<ulong> Execute<TMessage>(
+    public async ValueTask<ulong> ExecuteAsync<TMessage>(
         OutboxMessageBatch<TMessage> batch,
         NpgsqlTransaction transaction,
         CancellationToken cancellationToken)

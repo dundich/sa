@@ -19,7 +19,7 @@ public sealed class WorkQueueCancellationOrderTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public Task Execute(int input, CancellationToken ct)
+        public Task ExecuteAsync(int input, CancellationToken ct)
         {
             Interlocked.Increment(ref _processed);
             return Task.CompletedTask;

@@ -25,7 +25,7 @@ public sealed class JobAbortIntegrationTests : IAsyncDisposable
 
     sealed class FailingJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             Counter.Inc();
             throw new InvalidOperationException("always fails");

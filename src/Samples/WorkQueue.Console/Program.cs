@@ -52,7 +52,7 @@ sealed class PrintWork(int id) : ISaWork<int>
     public int Id => id;
     public int Processed => _processed;
 
-    public async Task Execute(int item, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(int item, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _processed);
         Console.WriteLine($"[{Id}] #{item} started");

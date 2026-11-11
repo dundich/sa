@@ -8,10 +8,10 @@ internal sealed class JobExecutor : IJob, IDisposable
     #region proxy
     class JobProxy(IJob job, IJobInterceptor interceptor, object? key) : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => interceptor.OnHandle(
                 context
-                , () => job.Execute(context, cancellationToken)
+                , () => job.ExecuteAsync(context, cancellationToken)
                 , key
                 , cancellationToken);
     }
@@ -56,6 +56,6 @@ internal sealed class JobExecutor : IJob, IDisposable
 
     public void Dispose() => _scope.Dispose();
 
-    public Task Execute(IJobContext context, CancellationToken cancellationToken)
-        => _job.Execute(context, cancellationToken);
+    public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
+        => _job.ExecuteAsync(context, cancellationToken);
 }

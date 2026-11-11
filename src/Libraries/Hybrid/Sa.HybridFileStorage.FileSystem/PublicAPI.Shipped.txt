@@ -1,18 +1,18 @@
 #nullable enable
-const Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.DefaultStorageType = "fs" -> string!
 Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions
+const Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.DefaultStorageType = "fs" -> string!
 Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.FileSystemStorageOptions() -> void
 const Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.DefaultBasket = "share" -> string!
-Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder
 Sa.HybridFileStorage.FileSystem.Setup
-static Sa.HybridFileStorage.FileSystem.Setup.AddSaFileSystemFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, System.Action<Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder
 Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.StorageType.get -> string!
-Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.Basket.get -> string!
+static Sa.HybridFileStorage.FileSystem.Setup.AddSaFileSystemFileStorage(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, System.Action<Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.StorageType.set -> void
+Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.Basket.get -> string!
 Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.Basket.set -> void
 Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.IsReadOnly.get -> bool
 Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.IsReadOnly.set -> void
+Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.Validate() -> void
 Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder.FromConfiguration(string! configSectionPath) -> Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder!
 Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions!>!>! configureSettings) -> Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder!
 Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder.TempFolder(System.Action<Sa.Data.TempFolder.ITempFolderBuilder!>! configureTempFolder) -> Sa.HybridFileStorage.FileSystem.IFileSystemStorageBuilder!
-Sa.HybridFileStorage.FileSystem.FileSystemStorageOptions.Validate() -> void

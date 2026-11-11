@@ -244,14 +244,14 @@ internal sealed partial class JobController(
         }
     }
 
-    public Task Execute(CancellationToken cancellationToken)
+    public Task ExecuteAsync(CancellationToken cancellationToken)
     {
         _context.NumIterations++;
         _context.ExecuteAt = timeProvider.GetUtcNow();
 
         EnsureExecutor();
 
-        return _executor!.Execute(_context, cancellationToken);
+        return _executor!.ExecuteAsync(_context, cancellationToken);
     }
 
     public void ExecutionCompleted()

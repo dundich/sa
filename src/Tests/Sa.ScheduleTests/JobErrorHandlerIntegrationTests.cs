@@ -70,7 +70,7 @@ public sealed class JobErrorHandlerIntegrationTests : IAsyncDisposable
 
     private sealed class TestJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.Delay(50, cancellationToken);
     }
 

@@ -1,43 +1,56 @@
 #nullable enable
 Sa.Outbox.PostgreSql.IdGen.IOutboxIdGenerator
 Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration
-Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgId = "msg_id" -> string!
+Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgSeq = "msg_seq" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.TenantId = "tenant_id" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgPart = "msg_part" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgPayloadId = "msg_payload_id" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgPayloadType = "msg_payload_type" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgPayload = "msg_payload" -> string!
-const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgCreatedAt = "msg_created_at" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.TaskId = "task_id" -> string!
+const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgCreatedAt = "msg_created_at" -> string!
+const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgPayloadSize = "msg_payload_size" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.ConsumerGroup = "consumer_group" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.TaskLockExpiresOn = "task_lock_expires_on" -> string!
+const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.TaskCreatedAt = "task_created_at" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.TaskTransactId = "task_transact_id" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.DeliveryId = "delivery_id" -> string!
+const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.DeliveryStatusCode = "delivery_status_code" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.DeliveryAttempt = "delivery_attempt" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.DeliveryStatusMessage = "delivery_status_message" -> string!
-const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.DeliveryStatusCode = "delivery_status_code" -> string!
-const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.MsgPayloadSize = "msg_payload_size" -> string!
-const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.ErrorId = "error_id" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.DeliveryCreatedAt = "delivery_created_at" -> string!
+const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.ErrorId = "error_id" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.ErrorType = "error_type" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.ErrorMessage = "error_message" -> string!
+const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.ErrorCreatedAt = "error_created_at" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.TypeId = "type_id" -> string!
-const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.TypeName = "type_name" -> string!
-const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.GroupOffsetSeq = "group_offset_seq" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.GroupOffset = "group_offset" -> string!
+const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.TypeName = "type_name" -> string!
 const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.GroupUpdatedAt = "group_updated_at" -> string!
+const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.GroupOffsetSeq = "group_offset_seq" -> string!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.PgOutboxCleanupSettings() -> void
-const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.ErrorCreatedAt = "error_created_at" -> string!
-const Sa.Outbox.PostgreSql.Configuration.OutboxFieldDefaults.TaskCreatedAt = "task_created_at" -> string!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions
-Sa.Outbox.PostgreSql.PgOutboxPublishExtensions
-Sa.Outbox.PostgreSql.Poison.IPgOutboxPoisonHandler
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction.Default = 0 -> Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction.Handled = 1 -> Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings
+Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings
+Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings.PgOutboxConsumeSettings() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettingsExtensions
+Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions
+Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions.PgOutboxOptions() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.PgOutboxTablesOptions() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.PgOutboxTableOptions() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.PgOutboxCleanupOptions() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.PgOutboxMigrationOptions() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxOptionsExtensions
+Sa.Outbox.PostgreSql.Configuration.PgOutboxPollingExtensions
+Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Balanced = 1 -> Sa.Outbox.PostgreSql.Configuration.PgPollingProfile
+const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Defaults.SqlPartSeparator = "__" -> string!
 Sa.Outbox.PostgreSql.Commands.ErrorInfo
 Sa.Outbox.PostgreSql.Commands.ErrorInfo.ErrorInfo() -> void
 ~override Sa.Outbox.PostgreSql.Commands.ErrorInfo.ToString() -> string
@@ -53,6 +66,18 @@ Sa.Outbox.PostgreSql.Commands.ErrorInfo.TypeName.get -> string!
 Sa.Outbox.PostgreSql.Commands.ErrorInfo.CreatedAt.get -> System.DateTimeOffset
 Sa.Outbox.PostgreSql.Commands.ErrorInfo.TypeName.set -> void
 Sa.Outbox.PostgreSql.Commands.ErrorInfo.CreatedAt.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings
+Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.PgOutboxSettings() -> void
+Sa.Outbox.PostgreSql.Poison.IPgOutboxPoisonHandler
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction.Default = 0 -> Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction.Handled = 1 -> Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.PgPollingOptions() -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Quiet = 0 -> Sa.Outbox.PostgreSql.Configuration.PgPollingProfile
+Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Responsive = 2 -> Sa.Outbox.PostgreSql.Configuration.PgPollingProfile
+Sa.Outbox.PostgreSql.Configuration.PgPollingProfile
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage
 override Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.ToString() -> string!
 static Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.operator !=(Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage? left, Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage? right) -> bool
@@ -64,36 +89,75 @@ Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.<Clone>$() -> Sa.Outbox.Postgr
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Deconstruct(out System.Guid OutboxId, out long TaskId, out string! PayloadId, out string! PayloadType, out string! ConsumerGroup, out int TenantId, out string! Part, out int Attempt, out Sa.Outbox.Delivery.DeliveryStatusCode StatusCode, out string! StatusMessage, out System.Exception! Exception, out System.ReadOnlyMemory<byte> Payload) -> void
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.OutboxId.get -> System.Guid
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.OutboxId.init -> void
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Attempt.get -> int
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Attempt.init -> void
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.StatusCode.get -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.StatusCode.init -> void
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.StatusMessage.get -> string!
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.TaskId.get -> long
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.StatusMessage.init -> void
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.TaskId.init -> void
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Exception.get -> System.Exception!
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Exception.init -> void
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.PayloadId.get -> string!
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.PayloadId.init -> void
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Payload.get -> System.ReadOnlyMemory<byte>
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Payload.init -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.PgOutboxDeliveryOptions() -> void
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.PayloadType.get -> string!
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.ConsumerGroup.get -> string!
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.PayloadType.init -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.PgOutboxTableSettings() -> void
+const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Defaults.DatabaseSchemaName = "public" -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Defaults
+const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Defaults.DatabaseTableName = "outbox" -> string!
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.ConsumerGroup.get -> string!
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.ConsumerGroup.init -> void
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.TenantId.get -> int
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.TenantId.init -> void
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Attempt.get -> int
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Part.get -> string!
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Attempt.init -> void
 Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Part.init -> void
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.StatusCode.get -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.StatusCode.init -> void
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Exception.get -> System.Exception!
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.StatusMessage.get -> string!
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Exception.init -> void
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.StatusMessage.init -> void
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Payload.get -> System.ReadOnlyMemory<byte>
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.Payload.init -> void
+const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.Suffix = "__msg$" -> string!
+Sa.Outbox.PostgreSql.Configuration.PgPollingSettings
+Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.PgPollingSettings() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.TableFields() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TaskQueueTable() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TableFields() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.MessageTable() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.DeliveryTable() -> void
+const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.Suffix = "__log$" -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.ErrorTable() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TableFields() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.TableFields() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TypeTable() -> void
+const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.Suffix = "__error$" -> string!
+const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.Suffix = "__type$" -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TableFields() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.OffsetTable() -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.TableFields() -> void
 Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions
-Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer
+const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.Suffix = "__offset$" -> string!
+Sa.Outbox.PostgreSql.PgOutboxPublishExtensions
 Sa.Outbox.PostgreSql.SqlBuilder.Setup
 Sa.Outbox.PostgreSql.Setup
-Sa.Outbox.PostgreSql.Services.LoadGroupResult
-override Sa.Outbox.PostgreSql.Services.LoadGroupResult.ToString() -> string!
+Sa.Outbox.PostgreSql.Serialization.IOutboxMessageSerializer
 Sa.Outbox.PostgreSql.Services.LoadGroupResult.CopiedRows.get -> int
 Sa.Outbox.PostgreSql.Services.LoadGroupResult.CopiedRows.init -> void
+Sa.Outbox.PostgreSql.Services.LoadGroupResult
+override Sa.Outbox.PostgreSql.Services.LoadGroupResult.ToString() -> string!
 static Sa.Outbox.PostgreSql.Services.LoadGroupResult.operator !=(Sa.Outbox.PostgreSql.Services.LoadGroupResult? left, Sa.Outbox.PostgreSql.Services.LoadGroupResult? right) -> bool
 static Sa.Outbox.PostgreSql.Services.LoadGroupResult.operator ==(Sa.Outbox.PostgreSql.Services.LoadGroupResult? left, Sa.Outbox.PostgreSql.Services.LoadGroupResult? right) -> bool
 override Sa.Outbox.PostgreSql.Services.LoadGroupResult.GetHashCode() -> int
@@ -103,78 +167,12 @@ Sa.Outbox.PostgreSql.Services.LoadGroupResult.<Clone>$() -> Sa.Outbox.PostgreSql
 Sa.Outbox.PostgreSql.Services.LoadGroupResult.Deconstruct(out int CopiedRows, out long NewOffset) -> void
 Sa.Outbox.PostgreSql.Services.LoadGroupResult.NewOffset.get -> long
 Sa.Outbox.PostgreSql.Services.LoadGroupResult.NewOffset.init -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings
-Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings.PgOutboxConsumeSettings() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.PgOutboxDeliveryOptions() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings
-Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions
-Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions.PgOutboxOptions() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettingsExtensions
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.PgOutboxTablesOptions() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.PgOutboxCleanupOptions() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.PgOutboxTableOptions() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxOptionsExtensions
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.PgOutboxMigrationOptions() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxPollingExtensions
-Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Balanced = 1 -> Sa.Outbox.PostgreSql.Configuration.PgPollingProfile
-const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Defaults.SqlPartSeparator = "__" -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings
-Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.PgOutboxSettings() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions
-Sa.Outbox.PostgreSql.Configuration.PgPollingSettings
-Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.PgPollingSettings() -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.PgPollingOptions() -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Responsive = 2 -> Sa.Outbox.PostgreSql.Configuration.PgPollingProfile
-Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Quiet = 0 -> Sa.Outbox.PostgreSql.Configuration.PgPollingProfile
-Sa.Outbox.PostgreSql.Configuration.PgPollingProfile
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.PgOutboxTableSettings() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Defaults
-const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Defaults.DatabaseTableName = "outbox" -> string!
-const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.Suffix = "__msg$" -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.MessageTable() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.TableFields() -> void
-const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Defaults.DatabaseSchemaName = "public" -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TaskQueueTable() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TableFields() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.DeliveryTable() -> void
-const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.Suffix = "__log$" -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TableFields() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.ErrorTable() -> void
-const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.Suffix = "__error$" -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.TableFields() -> void
-const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.Suffix = "__type$" -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TypeTable() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TableFields() -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.OffsetTable() -> void
-const Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.Suffix = "__offset$" -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.TableFields() -> void
-Sa.Outbox.PostgreSql.IdGen.IOutboxIdGenerator.GenId(System.DateTimeOffset timestamp) -> System.Guid
-Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.Interval.get -> System.TimeSpan
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.Enabled.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.Enabled.get -> bool
+Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.Interval.get -> System.TimeSpan
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.Interval.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.IdleMaxInterval.get -> System.TimeSpan
-Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.InitialDelay.get -> System.TimeSpan
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.IdleMaxInterval.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.InitialDelay.get -> System.TimeSpan
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.InitialDelay.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.MaxProcessingIterations.get -> int
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.MaxProcessingIterations.set -> void
@@ -182,17 +180,7 @@ Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.BatchingWindow.get -> Syste
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.BatchingWindow.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.PerTenantMaxDegreeOfParallelism.get -> int?
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.PerTenantMaxDegreeOfParallelism.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.UseBudget(System.TimeSpan deliveryBudget) -> Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!
-static Sa.Outbox.PostgreSql.PgOutboxPublishExtensions.Publish<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, int tenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.PgOutboxPoisonMessage(System.Guid OutboxId, long TaskId, string! PayloadId, string! PayloadType, string! ConsumerGroup, int TenantId, string! Part, int Attempt, Sa.Outbox.Delivery.DeliveryStatusCode StatusCode, string! StatusMessage, System.Exception! Exception, System.ReadOnlyMemory<byte> Payload) -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.UseProfile(Sa.Outbox.PostgreSql.Configuration.PgPollingProfile profile = Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Balanced) -> Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!
-static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, int tenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.PostgreSql.Poison.IPgOutboxPoisonHandler.Handle(Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction>
-static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, System.Func<TMessage, int>! getTenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-static Sa.Outbox.PostgreSql.PgOutboxPublishExtensions.PublishSingle<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, TMessage message, int tenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.WithBatchingWindow(System.TimeSpan batchingWindow) -> Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!
-Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.WithPerTenantParallelism(int degree) -> Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!
+Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration.Enabled.get -> bool
 Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration.WithEnabled(bool enabled = true) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
 Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration.WithMessageSerializer(System.Func<System.IServiceProvider!, Sa.Outbox.Serialization.IOutboxMessageSerializer!>! messageSerializerFactory) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
 Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration.WithMessageSerializer<TService>(TService! instance) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
@@ -203,81 +191,275 @@ Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration.WithPoisonHandler<TSer
 Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration.WithOutboxSettings(System.Action<System.IServiceProvider!, Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings!>? configure = null) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
 Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration.WithPolling(System.Action<System.IServiceProvider!, Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!>? configure = null) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
 Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration.WithDataSource(System.Action<Sa.Data.PostgreSql.IDataSourceBuilder!>? configure = null) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
+Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.IdleMaxInterval.get -> System.TimeSpan
+Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.UseBudget(System.TimeSpan deliveryBudget) -> Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!
+Sa.Outbox.PostgreSql.IdGen.IOutboxIdGenerator.GenId(System.DateTimeOffset timestamp) -> System.Guid
+Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.UseProfile(Sa.Outbox.PostgreSql.Configuration.PgPollingProfile profile = Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Balanced) -> Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!
+Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.WithBatchingWindow(System.TimeSpan batchingWindow) -> Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!
+Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.WithPerTenantParallelism(int degree) -> Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!
 Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.Disable() -> Sa.Outbox.PostgreSql.Configuration.PgPollingSettings!
-Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration.Enabled.get -> bool
-static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishSingleInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, TMessage message, int tenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+static Sa.Outbox.PostgreSql.PgOutboxPublishExtensions.Publish<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, int tenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+static Sa.Outbox.PostgreSql.PgOutboxPublishExtensions.PublishSingle<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, TMessage message, int tenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.AsBackgroundJob.get -> bool
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.AsBackgroundJob.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.DropPartsAfterRetention.get -> System.TimeSpan
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.CleanupMode.get -> Sa.Partitional.PostgreSql.PartCleanupMode
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.DropPartsAfterRetention.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.CleanupMode.get -> Sa.Partitional.PostgreSql.PartCleanupMode
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.CleanupMode.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.ArchiveSchemaName.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.ExecutionInterval.get -> System.TimeSpan
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.ArchiveSchemaName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.ExecutionInterval.get -> System.TimeSpan
 Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings.ExecutionInterval.set -> void
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.RunAsJob(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.RunImmediately(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
+override Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.ToString() -> string!
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Enabled.get -> bool?
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Enabled.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Profile.get -> Sa.Outbox.PostgreSql.Configuration.PgPollingProfile?
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Profile.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Interval.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Budget.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Budget.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Interval.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.IdleMaxInterval.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.IdleMaxInterval.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.InitialDelay.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.MaxProcessingIterations.get -> int?
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.MaxProcessingIterations.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.BatchingWindow.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.BatchingWindow.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.PerTenantMaxDegreeOfParallelism.get -> int?
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.InitialDelay.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.PerTenantMaxDegreeOfParallelism.set -> void
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.EscapeIdentifier(this string! identifier) -> string!
+Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage.PgOutboxPoisonMessage(System.Guid OutboxId, long TaskId, string! PayloadId, string! PayloadType, string! ConsumerGroup, int TenantId, string! Part, int Attempt, Sa.Outbox.Delivery.DeliveryStatusCode StatusCode, string! StatusMessage, System.Exception! Exception, System.ReadOnlyMemory<byte> Payload) -> void
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.SetAsJob(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings, bool asJob) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.WithRetentionPeriod(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings, System.TimeSpan retentionPeriod) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
-static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishSingleInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, TMessage message, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.RunImmediately(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.RunAsJob(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.WithRetentionDays(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings, int days) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.UseTestSettings(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.WithRetentionPeriod(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings, System.TimeSpan retentionPeriod) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
+Sa.Outbox.PostgreSql.Poison.IPgOutboxPoisonHandler.Handle(Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Sa.Outbox.PostgreSql.Poison.PgOutboxPoisonAction>
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.KeepForever(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.UseAggressiveCleanup(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.UseConservativeCleanup(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
-Sa.Outbox.PostgreSql.Commands.ErrorInfo.ErrorInfo(long ErrorId, string! TypeName, System.DateTimeOffset CreatedAt) -> void
-static Sa.Outbox.PostgreSql.Setup.AddSaOutboxUsingPostgreSql(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!>? configure, System.Action<Sa.Outbox.IOutboxBuilder!>? configureOutbox, string! scopeKey = "outbox") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedMsgTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedDeliveryTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedTypeTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettingsExtensions.UseProductionSettings(this Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
-static Sa.Outbox.PostgreSql.Setup.AddSaOutboxUsingPostgreSql(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!>? configure = null, string! scopeKey = "outbox") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedOffsetTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedErrorTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedTaskTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
+static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, int tenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, System.Func<TMessage, int>! getTenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.UseBaseTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! baseTableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.UseBaseTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! schemaName, string! baseTableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishSingleInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, TMessage message, int tenantId, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithSchema(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! schemaName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+static Sa.Outbox.PostgreSql.Publication.PgOutboxPublisherExtensions.PublishSingleInTransaction<TMessage>(this Sa.Outbox.Publication.IOutboxMessagePublisher! publisher, TMessage message, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithMsgTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithTaskTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithDeliveryTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithTypeTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithOffsetTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithErrorTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DatabaseSchemaName.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DatabaseSchemaName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.UseDefaultPartition.get -> bool
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.UseDefaultPartition.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueue.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Message.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Delivery.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Type.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Error.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Offset.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableName.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.ConsumerGroup.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.ConsumerGroup.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.TenantId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.TenantId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupOffset.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupOffset.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupOffsetSeq.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupUpdatedAt.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupOffsetSeq.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.All() -> string![]!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupUpdatedAt.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableName.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TypeId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TypeId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TypeName.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TypeName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.All() -> string![]!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.FillFactor.get -> int
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.FillFactor.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableName.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorType.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorType.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorCreatedAt.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorMessage.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorMessage.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorCreatedAt.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.All() -> string![]!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.FillFactor.get -> int
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.FillFactor.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableName.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryStatusCode.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryStatusCode.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryStatusMessage.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.MsgPayloadId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.MsgPayloadId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TenantId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TenantId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.ConsumerGroup.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.ConsumerGroup.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskCreatedAt.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskCreatedAt.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskTransactId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskTransactId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskLockExpiresOn.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskLockExpiresOn.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryStatusMessage.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.ErrorId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.ErrorId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryCreatedAt.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryCreatedAt.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings.WithMinOffset(string! consumerGroupId, System.Guid offset) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings.WithMinOffset(string! consumerGroupId, System.DateTimeOffset offset) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.All() -> string![]!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableName.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.FillFactor.get -> int
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.FillFactor.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.Interval.get -> System.TimeSpan?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.Interval.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.InitialDelay.get -> System.TimeSpan?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.InitialDelay.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.ConcurrencyLimit.get -> int?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.ConcurrencyLimit.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxConcurrency.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxConcurrency.get -> int?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxConcurrency.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.RetryCountOnError.get -> int?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxBatchSize.get -> int?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.RetryCountOnError.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxBatchSize.get -> int?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxBatchSize.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxProcessingIterations.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxProcessingIterations.get -> int?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxProcessingIterations.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.IterationDelay.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskId.get -> string!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.IterationDelay.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.LockDuration.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.LockRenewal.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.LockRenewal.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskId.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.LockDuration.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.LockRenewal.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.ConsumerGroup.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskLockExpiresOn.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.LockRenewal.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.LookbackInterval.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskLockExpiresOn.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskTransactId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskTransactId.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.LookbackInterval.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxDeliveryAttempts.get -> int?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgId.get -> string!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.MaxDeliveryAttempts.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.ConsumerGroup.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgSeq.get -> string!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.BatchingWindow.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgSeq.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.BatchingWindow.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPart.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPart.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.PerTenantTimeout.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.PerTenantTimeout.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.PerTenantMaxDegreeOfParallelism.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.IdleMaxInterval.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.IdleMaxInterval.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TenantId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TenantId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPayloadId.get -> string!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.PerTenantMaxDegreeOfParallelism.get -> int?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.AsBackgroundJob.get -> bool
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPayloadId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.PerTenantTimeout.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.IdleMaxInterval.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.PerTenantMaxDegreeOfParallelism.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxDeliveryOptions.IdleMaxInterval.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPayloadType.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPayloadType.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgCreatedAt.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgCreatedAt.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryAttempt.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryAttempt.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryStatusCode.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryStatusCode.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryStatusMessage.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryCreatedAt.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryStatusMessage.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryCreatedAt.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.ErrorId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.ErrorId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskCreatedAt.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskCreatedAt.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.All() -> string![]!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableName.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.FillFactor.get -> int
+Sa.Outbox.PostgreSql.Commands.ErrorInfo.ErrorInfo(long ErrorId, string! TypeName, System.DateTimeOffset CreatedAt) -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.FillFactor.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgSeq.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgSeq.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.TenantId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPart.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPart.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadId.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadType.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadType.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayload.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayload.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadSize.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.TenantId.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadSize.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgCreatedAt.get -> string!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgCreatedAt.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.All() -> string![]!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.TableSettings.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.MigrationSettings.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.CleanupSettings.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.ConsumeSettings.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.AsBackgroundJob.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.ForwardDays.get -> int
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.AsBackgroundJob.get -> bool
 Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.ForwardDays.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.ExecutionInterval.get -> System.TimeSpan
 Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.ExecutionInterval.set -> void
-static Sa.Outbox.PostgreSql.Services.LoadGroupResult.Empty.get -> Sa.Outbox.PostgreSql.Services.LoadGroupResult!
-Sa.Outbox.PostgreSql.Services.LoadGroupResult.LoadGroupResult(int CopiedRows, long NewOffset) -> void
-Sa.Outbox.PostgreSql.Services.LoadGroupResult.IsEmpty() -> bool
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.ExecutionInterval.get -> System.TimeSpan
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxPollingExtensions.WithPollingBudget(this Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration! configuration, System.TimeSpan deliveryBudget) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.PgOutboxMigrationSettings() -> void
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxPollingExtensions.WithPollingProfile(this Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration! configuration, Sa.Outbox.PostgreSql.Configuration.PgPollingProfile profile = Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Balanced) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.ForwardDays.get -> int
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettingsExtensions.RunAsJob(this Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings!
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettingsExtensions.WithExecutionInterval(this Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings! settings, System.TimeSpan interval) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings!
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettingsExtensions.UseProductionSettings(this Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings!
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxPollingExtensions.WithPollingFromConfiguration(this Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration! configuration, string! sectionPath) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettingsExtensions.UseDevelopmentSettings(this Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings!
 static Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettingsExtensions.UseTestSettings(this Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings! settings) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings!
+static Sa.Outbox.PostgreSql.Setup.AddSaOutboxUsingPostgreSql(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!>? configure, System.Action<Sa.Outbox.IOutboxBuilder!>? configureOutbox, string! scopeKey = "outbox") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Sa.Outbox.PostgreSql.Setup.AddSaOutboxUsingPostgreSql(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!>? configure = null, string! scopeKey = "outbox") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions.Schema.get -> string?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions.Schema.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions.UseDefaultPartition.get -> bool?
@@ -288,26 +470,27 @@ Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions.Tables.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions.Migration.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions.Cleanup.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxOptions.Cleanup.set -> void
-override Sa.Outbox.PostgreSql.Configuration.PgPollingSettings.ToString() -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings.PgOutboxMigrationSettings() -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Enabled.get -> bool?
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Enabled.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Profile.get -> Sa.Outbox.PostgreSql.Configuration.PgPollingProfile?
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Profile.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Budget.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Budget.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Interval.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.Interval.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.IdleMaxInterval.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.IdleMaxInterval.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.InitialDelay.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.InitialDelay.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.MaxProcessingIterations.get -> int?
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.MaxProcessingIterations.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.BatchingWindow.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.BatchingWindow.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.PerTenantMaxDegreeOfParallelism.get -> int?
-Sa.Outbox.PostgreSql.Configuration.PgPollingOptions.PerTenantMaxDegreeOfParallelism.set -> void
+static Sa.Outbox.PostgreSql.Configuration.PgOutboxOptionsExtensions.WithOutboxSettingsFromConfiguration(this Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration! configuration, string! sectionPath) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.AsBackgroundJob.get -> bool?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.AsBackgroundJob.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.DropPartsAfterRetention.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.DropPartsAfterRetention.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.CleanupMode.get -> Sa.Partitional.PostgreSql.PartCleanupMode?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.CleanupMode.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.ArchiveSchemaName.get -> string?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.ArchiveSchemaName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.ExecutionInterval.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.ExecutionInterval.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.AsBackgroundJob.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.AsBackgroundJob.get -> bool?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.ForwardDays.get -> int?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.ForwardDays.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.ExecutionInterval.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.ExecutionInterval.get -> System.TimeSpan?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.TableName.get -> string?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.TableName.set -> void
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.FillFactor.get -> int?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.FillFactor.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.TaskQueue.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.TaskQueue.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Message.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions?
@@ -316,193 +499,10 @@ Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Delivery.get -> Sa.Outb
 Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Delivery.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Error.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Error.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Type.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Type.set -> void
 Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Offset.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions?
+Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Type.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions?
 Sa.Outbox.PostgreSql.Configuration.PgOutboxTablesOptions.Offset.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.TableName.get -> string?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.TableName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.FillFactor.get -> int?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableOptions.FillFactor.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.AsBackgroundJob.get -> bool?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.AsBackgroundJob.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.ForwardDays.get -> int?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.ExecutionInterval.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.ExecutionInterval.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationOptions.ForwardDays.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.AsBackgroundJob.get -> bool?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.AsBackgroundJob.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.DropPartsAfterRetention.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.DropPartsAfterRetention.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.CleanupMode.get -> Sa.Partitional.PostgreSql.PartCleanupMode?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.CleanupMode.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.ArchiveSchemaName.get -> string?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.ExecutionInterval.get -> System.TimeSpan?
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.ArchiveSchemaName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupOptions.ExecutionInterval.set -> void
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxOptionsExtensions.WithOutboxSettingsFromConfiguration(this Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration! configuration, string! sectionPath) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxPollingExtensions.WithPollingBudget(this Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration! configuration, System.TimeSpan deliveryBudget) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.TableSettings.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.MigrationSettings.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxMigrationSettings!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.CleanupSettings.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxCleanupSettings!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxSettings.ConsumeSettings.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxConsumeSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.EscapeIdentifier(this string! identifier) -> string!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxPollingExtensions.WithPollingProfile(this Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration! configuration, Sa.Outbox.PostgreSql.Configuration.PgPollingProfile profile = Sa.Outbox.PostgreSql.Configuration.PgPollingProfile.Balanced) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxPollingExtensions.WithPollingFromConfiguration(this Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration! configuration, string! sectionPath) -> Sa.Outbox.PostgreSql.Configuration.IPgOutboxConfiguration!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DatabaseSchemaName.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DatabaseSchemaName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.UseDefaultPartition.get -> bool
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.UseDefaultPartition.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueue.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Message.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Delivery.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Error.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Type.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.Offset.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableName.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableName.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.FillFactor.get -> int
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableName.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.FillFactor.get -> int
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.FillFactor.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.ConsumerGroup.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.FillFactor.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.ConsumerGroup.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.TenantId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.TenantId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupOffset.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupOffset.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupOffsetSeq.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupOffsetSeq.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupUpdatedAt.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.GroupUpdatedAt.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableName.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.FillFactor.get -> int
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.FillFactor.get -> int
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.ConsumerGroup.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.ConsumerGroup.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TypeId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TypeId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskLockExpiresOn.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskLockExpiresOn.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TypeName.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskTransactId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskTransactId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.TypeName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgSeq.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.FillFactor.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.FillFactor.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgSeq.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPart.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPart.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TypeTable.TableFields.All() -> string![]!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableName.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableName.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TenantId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TenantId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableName.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPayloadId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.Fields.get -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPayloadId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPayloadType.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgPayloadType.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgCreatedAt.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.MsgCreatedAt.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryAttempt.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryAttempt.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryStatusCode.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryStatusCode.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryStatusMessage.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryStatusMessage.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorType.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryStatusCode.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorType.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryCreatedAt.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryStatusCode.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorMessage.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.DeliveryCreatedAt.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorMessage.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryStatusMessage.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorCreatedAt.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryStatusMessage.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.ErrorId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.ErrorCreatedAt.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.MsgPayloadId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskCreatedAt.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.ErrorId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.TaskCreatedAt.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.MsgPayloadId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TenantId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TenantId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.ConsumerGroup.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.ConsumerGroup.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.ErrorTable.TableFields.All() -> string![]!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskCreatedAt.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskCreatedAt.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskTransactId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskTransactId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskLockExpiresOn.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.TaskLockExpiresOn.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.ErrorId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.ErrorId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryCreatedAt.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.DeliveryCreatedAt.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.TaskQueueTable.TableFields.All() -> string![]!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.DeliveryTable.TableFields.All() -> string![]!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgSeq.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgSeq.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.TenantId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.TenantId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPart.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.OffsetTable.TableFields.All() -> string![]!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPart.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadId.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadId.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadType.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadType.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayload.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadSize.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayloadSize.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgPayload.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgCreatedAt.get -> string!
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.MsgCreatedAt.set -> void
-Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings.MessageTable.TableFields.All() -> string![]!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedMsgTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedTypeTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedDeliveryTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedOffsetTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedErrorTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.GetQualifiedTaskTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings) -> string!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.UseBaseTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! baseTableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithSchema(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! schemaName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.UseBaseTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! schemaName, string! baseTableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithMsgTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithTaskTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithDeliveryTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithErrorTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithTypeTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
-static Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettingsExtensions.WithOffsetTableName(this Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings! settings, string! tableName) -> Sa.Outbox.PostgreSql.Configuration.PgOutboxTableSettings!
+Sa.Outbox.PostgreSql.Services.LoadGroupResult.LoadGroupResult(int CopiedRows, long NewOffset) -> void
+static Sa.Outbox.PostgreSql.Services.LoadGroupResult.Empty.get -> Sa.Outbox.PostgreSql.Services.LoadGroupResult!
+Sa.Outbox.PostgreSql.Services.LoadGroupResult.IsEmpty() -> bool

@@ -34,7 +34,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
 
         public async ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
         {
-            var rows = await command.Execute(cancellationToken);
+            var rows = await command.ExecuteAsync(cancellationToken);
             Interlocked.Exchange(ref CountTenant, rows.Count);
             return [.. rows];
         }

@@ -31,7 +31,7 @@ internal sealed class DeliveryJob<TMessage>(
     /// next iteration: work resets the poll interval, an empty queue backs it off.
     /// </para>
     /// </summary>
-    public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
     {
         var settings = settingsManager.GetSettings(groupKey)
             ?? throw new InvalidOperationException($"No OutboxConsumerSettings for consumer group '{groupKey}'.");

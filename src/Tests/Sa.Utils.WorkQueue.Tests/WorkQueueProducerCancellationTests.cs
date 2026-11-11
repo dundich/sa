@@ -14,7 +14,7 @@ public sealed class WorkQueueProducerCancellationTests
 
     private sealed class CompletedProcessor : ISaWork<int>
     {
-        public Task Execute(int input, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ExecuteAsync(int input, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     /// <summary>Blocks until the test opens the gate and deliberately ignores the token.</summary>
@@ -26,7 +26,7 @@ public sealed class WorkQueueProducerCancellationTests
 
         public int Completed => Volatile.Read(ref _completed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             Entered.TrySetResult();
             await Gate.Task.ConfigureAwait(false);
@@ -37,7 +37,7 @@ public sealed class WorkQueueProducerCancellationTests
     /// <summary>Runs until the token it is given is cancelled.</summary>
     private sealed class InfiniteProcessor : ISaWork<int>
     {
-        public Task Execute(int input, CancellationToken ct)
+        public Task ExecuteAsync(int input, CancellationToken ct)
             => Task.Delay(Timeout.Infinite, ct);
     }
 

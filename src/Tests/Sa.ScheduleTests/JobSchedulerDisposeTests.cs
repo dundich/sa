@@ -48,7 +48,7 @@ public sealed class JobSchedulerDisposeTests
     /// </summary>
     sealed class SlowScopeJob : IJob
     {
-        public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             Probe.Begin();
 

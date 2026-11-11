@@ -18,7 +18,7 @@ public sealed class WorkQueueDrainTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             await Gate.Task.WaitAsync(ct);
             Interlocked.Increment(ref _processed);
@@ -31,7 +31,7 @@ public sealed class WorkQueueDrainTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             // Deliberately ignores ct: a processor that never observes
             // cancellation must not corrupt the queue's work accounting.

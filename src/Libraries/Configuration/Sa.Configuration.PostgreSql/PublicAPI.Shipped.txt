@@ -1,22 +1,18 @@
 #nullable enable
-Sa.Configuration.PostgreSql.PgConnectionKind.FromServices = 2 -> Sa.Configuration.PostgreSql.PgConnectionKind
-Sa.Configuration.PostgreSql.PgConnectionKind.DataSource = 1 -> Sa.Configuration.PostgreSql.PgConnectionKind
 Sa.Configuration.PostgreSql.PgConnectionKind
 Sa.Configuration.PostgreSql.PgConnectionKind.ConnectionString = 0 -> Sa.Configuration.PostgreSql.PgConnectionKind
+Sa.Configuration.PostgreSql.PgConnectionKind.DataSource = 1 -> Sa.Configuration.PostgreSql.PgConnectionKind
+Sa.Configuration.PostgreSql.PgConnectionKind.FromServices = 2 -> Sa.Configuration.PostgreSql.PgConnectionKind
 Sa.Configuration.PostgreSql.Setup
-Sa.Configuration.PostgreSql.DatabaseConfigurationSource
 Sa.Configuration.PostgreSql.PgConfigurationConnection
+Sa.Configuration.PostgreSql.DatabaseConfigurationSource
 static Sa.Configuration.PostgreSql.PgConfigurationConnection.operator !=(Sa.Configuration.PostgreSql.PgConfigurationConnection? left, Sa.Configuration.PostgreSql.PgConfigurationConnection? right) -> bool
 static Sa.Configuration.PostgreSql.PgConfigurationConnection.operator ==(Sa.Configuration.PostgreSql.PgConfigurationConnection? left, Sa.Configuration.PostgreSql.PgConfigurationConnection? right) -> bool
 override Sa.Configuration.PostgreSql.PgConfigurationConnection.GetHashCode() -> int
 override Sa.Configuration.PostgreSql.PgConfigurationConnection.Equals(object? obj) -> bool
 Sa.Configuration.PostgreSql.PgConfigurationConnection.Equals(Sa.Configuration.PostgreSql.PgConfigurationConnection? other) -> bool
 Sa.Configuration.PostgreSql.PgConfigurationConnection.<Clone>$() -> Sa.Configuration.PostgreSql.PgConfigurationConnection!
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.SelectSql.get -> string!
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Parameters.get -> System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>!
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.SelectSql.init -> void
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Parameters.init -> void
 static Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.operator !=(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions? left, Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions? right) -> bool
 static Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.operator ==(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions? left, Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions? right) -> bool
 override Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.GetHashCode() -> int
@@ -24,46 +20,50 @@ override Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Equals(objec
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Equals(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions? other) -> bool
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.<Clone>$() -> Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions!
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Deconstruct(out string! SelectSql, out System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! Parameters) -> void
-Sa.Configuration.PostgreSql.DatabaseConfigurationProvider
-static Sa.Configuration.PostgreSql.Setup.AddSaPostgreSqlConfiguration(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options) -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
+Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.SelectSql.get -> string!
+Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Parameters.get -> System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>!
+Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.SelectSql.init -> void
+Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Parameters.init -> void
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.PostgreSqlConfigurationOptions(string! SelectSql, params System.Collections.Generic.IReadOnlyCollection<Npgsql.NpgsqlParameter!>! Parameters) -> void
+static Sa.Configuration.PostgreSql.Setup.AddSaPostgreSqlConfiguration(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options) -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.MaxAttempts.get -> int
-Sa.Configuration.PostgreSql.PgConfigurationConnection.Optional.get -> bool
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.MaxAttempts.init -> void
-Sa.Configuration.PostgreSql.PgConfigurationConnection.Optional.init -> void
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.MedianFirstRetryDelay.get -> int
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.MedianFirstRetryDelay.init -> void
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.SkipEmptyValues.get -> bool
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.SkipEmptyValues.init -> void
+Sa.Configuration.PostgreSql.PgConfigurationConnection.Optional.get -> bool
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.DoubleUnderscoreAsSeparator.get -> bool
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.DoubleUnderscoreAsSeparator.init -> void
+Sa.Configuration.PostgreSql.PgConfigurationConnection.Optional.init -> void
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.LastWins.get -> bool
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.LastWins.init -> void
+Sa.Configuration.PostgreSql.DatabaseConfigurationProvider
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Client.get -> string?
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientColumn.get -> string?
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Client.init -> void
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientsSection.get -> string!
+Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientColumn.get -> string?
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientColumn.init -> void
+Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientsSection.get -> string!
+Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientsSection.init -> void
 Sa.Configuration.PostgreSql.DatabaseConfigurationSource.DatabaseConfigurationSource(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options, Sa.Configuration.PostgreSql.PgConfigurationConnection! connection) -> void
 Sa.Configuration.PostgreSql.DatabaseConfigurationSource.DatabaseConfigurationSource(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options) -> void
 static Sa.Configuration.PostgreSql.Setup.AddSaPostgreSqlConfiguration(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, Sa.Configuration.PostgreSql.PgConfigurationConnection! connection, Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options) -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
-Sa.Configuration.PostgreSql.DatabaseConfigurationSource.DatabaseConfigurationSource(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options, string! connectionString) -> void
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientsSection.init -> void
-Sa.Configuration.PostgreSql.DatabaseConfigurationSource.DatabaseConfigurationSource(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options, Sa.Data.PostgreSql.IPgDataSource! dataSource) -> void
 static Sa.Configuration.PostgreSql.Setup.AddSaPostgreSqlConfiguration(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, string! connectionString, Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options) -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
-Sa.Configuration.PostgreSql.DatabaseConfigurationSource.Connection.get -> Sa.Configuration.PostgreSql.PgConfigurationConnection!
-Sa.Configuration.PostgreSql.DatabaseConfigurationSource.Options.get -> Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions!
 static Sa.Configuration.PostgreSql.Setup.AddSaPostgreSqlConfiguration(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, Sa.Data.PostgreSql.IPgDataSource! dataSource, Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options) -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
 static Sa.Configuration.PostgreSql.PgConfigurationConnection.ConnectionString(string! connectionString) -> Sa.Configuration.PostgreSql.PgConfigurationConnection!
-Sa.Configuration.PostgreSql.DatabaseConfigurationSource.Build(Microsoft.Extensions.Configuration.IConfigurationBuilder! builder) -> Microsoft.Extensions.Configuration.IConfigurationProvider!
-override Sa.Configuration.PostgreSql.DatabaseConfigurationProvider.Load() -> void
+Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.DoubleUnderscoreAsSeparator.init -> void
+Sa.Configuration.PostgreSql.DatabaseConfigurationSource.DatabaseConfigurationSource(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options, string! connectionString) -> void
+Sa.Configuration.PostgreSql.DatabaseConfigurationSource.DatabaseConfigurationSource(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options, Sa.Data.PostgreSql.IPgDataSource! dataSource) -> void
 static Sa.Configuration.PostgreSql.PgConfigurationConnection.DataSource(Sa.Data.PostgreSql.IPgDataSource! dataSource) -> Sa.Configuration.PostgreSql.PgConfigurationConnection!
-override Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ToString() -> string!
-Sa.Configuration.PostgreSql.DatabaseConfigurationSource.Dispose() -> void
+Sa.Configuration.PostgreSql.DatabaseConfigurationSource.Options.get -> Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions!
+Sa.Configuration.PostgreSql.DatabaseConfigurationSource.Connection.get -> Sa.Configuration.PostgreSql.PgConfigurationConnection!
+override Sa.Configuration.PostgreSql.DatabaseConfigurationProvider.Load() -> void
 static Sa.Configuration.PostgreSql.PgConfigurationConnection.FromServices(string? serviceKey = null) -> Sa.Configuration.PostgreSql.PgConfigurationConnection!
-Sa.Configuration.PostgreSql.DatabaseConfigurationProvider.LoadAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Sa.Configuration.PostgreSql.PgConfigurationConnection.AsOptional() -> Sa.Configuration.PostgreSql.PgConfigurationConnection!
+override Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ToString() -> string!
+Sa.Configuration.PostgreSql.DatabaseConfigurationSource.Build(Microsoft.Extensions.Configuration.IConfigurationBuilder! builder) -> Microsoft.Extensions.Configuration.IConfigurationProvider!
+Sa.Configuration.PostgreSql.DatabaseConfigurationProvider.LoadAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Sa.Configuration.PostgreSql.DatabaseConfigurationProvider.Reload() -> void
+Sa.Configuration.PostgreSql.DatabaseConfigurationSource.Dispose() -> void
 override Sa.Configuration.PostgreSql.DatabaseConfigurationProvider.TryGet(string! key, out string? value) -> bool
-Sa.Configuration.PostgreSql.DatabaseConfigurationProvider.Dispose() -> void
 override Sa.Configuration.PostgreSql.PgConfigurationConnection.ToString() -> string!
+Sa.Configuration.PostgreSql.DatabaseConfigurationProvider.Dispose() -> void

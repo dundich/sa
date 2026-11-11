@@ -8,7 +8,7 @@ internal sealed class SelectTenantCommand(
     IPgDataSource dataSource,
     SqlOutboxBuilder sql) : ISelectTenantCommand
 {
-    public async Task<IReadOnlyCollection<int>> Execute(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<int>> ExecuteAsync(CancellationToken cancellationToken)
     {
         try
         {

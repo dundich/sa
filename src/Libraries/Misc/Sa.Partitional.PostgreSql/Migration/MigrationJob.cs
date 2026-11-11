@@ -5,7 +5,7 @@ namespace Sa.Partitional.PostgreSql.Migration;
 
 internal sealed class MigrationJob(IMigrationService service, IPartCache cache) : IJob
 {
-    public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
     {
         await service.Migrate(cancellationToken).ConfigureAwait(false);
 
