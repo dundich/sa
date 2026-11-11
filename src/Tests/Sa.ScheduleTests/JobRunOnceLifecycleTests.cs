@@ -53,7 +53,7 @@ public sealed class JobRunOnceLifecycleTests : IAsyncDisposable
     {
         R.Clear();
 
-        Assert.Equal(1, await _scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await _scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         // Exactly one iteration, and the job stops by itself — no error, no
         // Stop() call — IsStarted must go false (before the fix it stayed true
@@ -63,8 +63,8 @@ public sealed class JobRunOnceLifecycleTests : IAsyncDisposable
 
         // "stop permanently": neither the aggregate scheduler Start() nor a
         // direct job scheduler Start() may re-run the consumed job.
-        Assert.Equal(0, await _scheduler.Start(TestContext.Current.CancellationToken));
-        Assert.False(await _jobScheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(0, await _scheduler.StartAsync(TestContext.Current.CancellationToken));
+        Assert.False(await _jobScheduler.StartAsync(TestContext.Current.CancellationToken));
 
         await Task.Delay(150, TestContext.Current.CancellationToken);
 
@@ -144,7 +144,7 @@ public sealed class JobRunOnceErrorTests : IAsyncDisposable
     {
         F.Clear();
 
-        Assert.Equal(1, await _scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await _scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         // 1 attempt + 1 retry, then the error action aborts the job.
         await WaitForConditionAsync(() => F.Runs >= 2 && !_jobScheduler.IsStarted);
@@ -153,7 +153,7 @@ public sealed class JobRunOnceErrorTests : IAsyncDisposable
         // Unlike a natural completion, the error abort leaves the job
         // restartable — the run-once budget was not consumed.
         F.Clear();
-        Assert.Equal(1, await _scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await _scheduler.StartAsync(TestContext.Current.CancellationToken));
         Assert.True(_jobScheduler.IsStarted);
 
         await WaitForConditionAsync(() => F.Runs >= 2);

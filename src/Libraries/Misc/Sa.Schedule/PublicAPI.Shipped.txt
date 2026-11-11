@@ -1,36 +1,35 @@
 #nullable enable
 Sa.Schedule.IJob
 Sa.Schedule.Cron.CronParseException
-Sa.Schedule.IJobErrorHandling
 Sa.Schedule.IJobBuilder
+Sa.Schedule.IJobContext
+Sa.Schedule.IJobErrorHandling
+Sa.Schedule.Cron.CronTiming
 Sa.Schedule.IJobErrorHandlingBuilder
 Sa.Schedule.IJobProperties
+Sa.Schedule.IJobInterceptor
 Sa.Schedule.IJobSnapshot
 Sa.Schedule.IJobTiming
-Sa.Schedule.IJobInterceptor
-Sa.Schedule.IJobContext
-Sa.Schedule.IJobScheduler
-Sa.Schedule.IScheduleSettings
-Sa.Schedule.IScheduler
-Sa.Schedule.Cron.CronTiming
 Sa.Schedule.IJobSettings
+Sa.Schedule.IJobScheduler
 Sa.Schedule.JobException
+Sa.Schedule.IScheduler
 Sa.Schedule.JobOptions
 Sa.Schedule.JobOptions.JobOptions() -> void
+Sa.Schedule.IScheduleSettings
 Sa.Schedule.IScheduleBuilder
 Sa.Schedule.ScheduleOptions
 Sa.Schedule.ScheduleOptions.ScheduleOptions() -> void
 Sa.Schedule.ErrorHandlingAction.CloseApplication = 0 -> Sa.Schedule.ErrorHandlingAction
-const Sa.Schedule.Setup.DefaultName = "default" -> string!
-Sa.Schedule.ErrorHandlingAction.AbortJob = 1 -> Sa.Schedule.ErrorHandlingAction
 Sa.Schedule.ErrorHandlingAction
+Sa.Schedule.ErrorHandlingAction.AbortJob = 1 -> Sa.Schedule.ErrorHandlingAction
 Sa.Schedule.ErrorHandlingAction.StopAllJobs = 2 -> Sa.Schedule.ErrorHandlingAction
 static Sa.Schedule.Setup.AddSaSchedule(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Schedule.IScheduleBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.Schedule.Cron.CronTiming.TimingName.get -> string!
-Sa.Schedule.Cron.CronTiming.Expression.get -> string!
 Sa.Schedule.Setup
-static Sa.Schedule.Setup.AddSaSchedule(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! scheduleName, System.Action<Sa.Schedule.IScheduleBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Schedule.Cron.CronTiming.Expression.get -> string!
 Sa.Schedule.Cron.CronTiming.CronTiming(string! expression, string? name = null) -> void
+static Sa.Schedule.Setup.AddSaSchedule(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! scheduleName, System.Action<Sa.Schedule.IScheduleBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.Schedule.IJob.ExecuteAsync(Sa.Schedule.IJobContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 Sa.Schedule.IJobBuilder.WithName(string! name) -> Sa.Schedule.IJobBuilder!
 Sa.Schedule.IJobBuilder.StartImmediate() -> Sa.Schedule.IJobBuilder!
@@ -40,8 +39,11 @@ Sa.Schedule.IJobBuilder.WithInitialDelay(System.TimeSpan delay) -> Sa.Schedule.I
 Sa.Schedule.IJobBuilder.WithTiming(Sa.Schedule.IJobTiming! timing) -> Sa.Schedule.IJobBuilder!
 Sa.Schedule.IJobBuilder.WithTag(object! tag) -> Sa.Schedule.IJobBuilder!
 Sa.Schedule.IJobBuilder.EveryTime(System.TimeSpan timeSpan, string? name = null) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IJobContext.JobName.get -> string!
+Sa.Schedule.IJobBuilder.EverySeconds(int seconds = 1) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.EveryMinutes(int minutes = 1) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.EveryHours(int hours = 1) -> Sa.Schedule.IJobBuilder!
 Sa.Schedule.IJobContext.Settings.get -> Sa.Schedule.IJobSettings!
+Sa.Schedule.IJobContext.JobName.get -> string!
 Sa.Schedule.IJobContext.NumIterations.get -> ulong
 Sa.Schedule.IJobContext.FailedIterations.get -> ulong
 Sa.Schedule.IJobContext.CompletedIterations.get -> ulong
@@ -55,22 +57,43 @@ Sa.Schedule.IJobContext.Logger.get -> Microsoft.Extensions.Logging.ILogger!
 Sa.Schedule.IJobErrorHandling.ThenAction.get -> Sa.Schedule.ErrorHandlingAction
 Sa.Schedule.IJobErrorHandling.RetryCount.get -> int?
 Sa.Schedule.IJobErrorHandling.SuppressError.get -> System.Func<System.Exception!, bool>?
-Sa.Schedule.IJobErrorHandlingBuilder.ThenCloseApplication() -> Sa.Schedule.IJobErrorHandlingBuilder!
+Sa.Schedule.IJobErrorHandling.HasSuppressError.get -> bool
+Sa.Schedule.IJobErrorHandling.HasRetryAttempts.get -> bool
+Sa.Schedule.IJobBuilder.EveryDays(int days = 1) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.OnceIn(System.TimeSpan delay) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.WithCron(string! cronExpression, string? name = null) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.WithTimeZone(System.TimeZoneInfo! timeZone) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.WithTimeZone(string! timeZoneId) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.WithConcurrencyLimit(int limit) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.WithMaxConcurrency(int limit) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.WithShutdownTimeout(System.TimeSpan timeout) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.Merge(Sa.Schedule.IJobProperties! props) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.ConfigureErrorHandling(System.Action<Sa.Schedule.IJobErrorHandlingBuilder!>! configure) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IJobBuilder.Disabled() -> Sa.Schedule.IJobBuilder!
 Sa.Schedule.IJobErrorHandlingBuilder.IfErrorRetry(int? count = null) -> Sa.Schedule.IJobErrorHandlingBuilder!
+Sa.Schedule.IJobErrorHandlingBuilder.ThenCloseApplication() -> Sa.Schedule.IJobErrorHandlingBuilder!
 Sa.Schedule.IJobErrorHandlingBuilder.ThenAbortJob() -> Sa.Schedule.IJobErrorHandlingBuilder!
 Sa.Schedule.IJobErrorHandlingBuilder.ThenStopAllJobs() -> Sa.Schedule.IJobErrorHandlingBuilder!
 Sa.Schedule.IJobErrorHandlingBuilder.DoSuppressError(System.Func<System.Exception!, bool>? suppressError = null) -> Sa.Schedule.IJobErrorHandlingBuilder!
+static Sa.Schedule.Cron.CronTiming.For(string! expression, string? name = null) -> Sa.Schedule.Cron.CronTiming!
+static Sa.Schedule.Cron.CronTiming.Strict(string! expression, string? name = null) -> Sa.Schedule.Cron.CronTiming!
+Sa.Schedule.Cron.CronTiming.GetNextOccurrence(System.DateTimeOffset dateTime) -> System.DateTimeOffset?
+Sa.Schedule.Cron.CronParseException.Field.get -> string?
+Sa.Schedule.Cron.CronParseException.Token.get -> string?
+Sa.Schedule.Cron.CronParseException.CronParseException(string! message) -> void
+Sa.Schedule.Cron.CronParseException.CronParseException(string! message, string! field, string! token) -> void
+Sa.Schedule.Cron.CronParseException.CronParseException(string! message, string! field, string! token, System.Exception! innerException) -> void
 Sa.Schedule.IJobProperties.JobName.get -> string?
-Sa.Schedule.IJobInterceptor.OnHandle(Sa.Schedule.IJobContext! context, System.Func<System.Threading.Tasks.Task!>! continuation, object? key, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Sa.Schedule.IJobInterceptor.OnHandleAsync(Sa.Schedule.IJobContext! context, System.Func<System.Threading.Tasks.Task!>! continuation, object? key, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 Sa.Schedule.IJobProperties.Immediate.get -> bool?
 Sa.Schedule.IJobProperties.IsRunOnce.get -> bool?
-Sa.Schedule.IJobProperties.InitialDelay.get -> System.TimeSpan?
 Sa.Schedule.IJobProperties.Disabled.get -> bool?
+Sa.Schedule.IJobProperties.InitialDelay.get -> System.TimeSpan?
 Sa.Schedule.IJobProperties.Timing.get -> Sa.Schedule.IJobTiming?
 Sa.Schedule.IJobProperties.TimeZone.get -> System.TimeZoneInfo?
 Sa.Schedule.IJobProperties.ContextStackSize.get -> int?
-Sa.Schedule.IJobProperties.ConcurrencyLimit.get -> int?
 Sa.Schedule.IJobProperties.Tag.get -> object?
+Sa.Schedule.IJobProperties.ConcurrencyLimit.get -> int?
 Sa.Schedule.IJobProperties.MaxConcurrency.get -> int?
 Sa.Schedule.IJobProperties.ShutdownTimeout.get -> System.TimeSpan?
 Sa.Schedule.IJobScheduler.JobId.get -> System.Guid
@@ -79,44 +102,39 @@ Sa.Schedule.IJobScheduler.QueueTasks.get -> int
 Sa.Schedule.IJobScheduler.ConcurrencyLimit.get -> int
 Sa.Schedule.IJobScheduler.ConcurrencyLimit.set -> void
 Sa.Schedule.IJobScheduler.StartChangeToken() -> Microsoft.Extensions.Primitives.IChangeToken!
-Sa.Schedule.IJobScheduler.Start(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+Sa.Schedule.IJobScheduler.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
 Sa.Schedule.IJobScheduler.StopAsync() -> System.Threading.Tasks.Task!
-Sa.Schedule.IJobSettings.JobType.get -> System.Type!
 Sa.Schedule.IJobSettings.JobId.get -> System.Guid
+Sa.Schedule.IJobSettings.JobType.get -> System.Type!
 Sa.Schedule.IJobSettings.Properties.get -> Sa.Schedule.IJobProperties!
 Sa.Schedule.IJobSettings.ErrorHandling.get -> Sa.Schedule.IJobErrorHandling!
 Sa.Schedule.IJobSnapshot.JobName.get -> string!
-Sa.Schedule.IJobSnapshot.FailedIterations.get -> ulong
 Sa.Schedule.IJobSnapshot.NumIterations.get -> ulong
+Sa.Schedule.IJobSnapshot.FailedIterations.get -> ulong
 Sa.Schedule.IJobSnapshot.CompletedIterations.get -> ulong
 Sa.Schedule.IJobSnapshot.CreatedAt.get -> System.DateTimeOffset
-Sa.Schedule.IJobSnapshot.ExecuteAt.get -> System.DateTimeOffset?
 Sa.Schedule.IJobSnapshot.FailedRetries.get -> int
+Sa.Schedule.IJobSnapshot.ExecuteAt.get -> System.DateTimeOffset?
 Sa.Schedule.IJobSnapshot.LastErrorMessage.get -> string?
 Sa.Schedule.IJobSnapshot.StackDepth.get -> int
+Sa.Schedule.IScheduleBuilder.AddJob<T>(System.Guid? jobId = null) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IScheduleBuilder.AddJob(System.Func<Sa.Schedule.IJobContext!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! action, System.Guid? jobId = null) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.IScheduleBuilder.AddJob<T>(System.Action<System.IServiceProvider!, Sa.Schedule.IJobBuilder!>! configure, System.Guid? jobId = null) -> Sa.Schedule.IScheduleBuilder!
+Sa.Schedule.IScheduleBuilder.AddInterceptor<T>(object? key = null) -> Sa.Schedule.IScheduleBuilder!
 Sa.Schedule.IJobTiming.TimingName.get -> string!
 Sa.Schedule.IJobTiming.GetNextOccurrence(System.DateTimeOffset dateTime) -> System.DateTimeOffset?
-Sa.Schedule.IScheduleBuilder.AddJob(System.Func<Sa.Schedule.IJobContext!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! action, System.Guid? jobId = null) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IScheduleBuilder.AddJob<T>(System.Guid? jobId = null) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IScheduleBuilder.AddInterceptor<T>(object? key = null) -> Sa.Schedule.IScheduleBuilder!
-Sa.Schedule.IScheduleBuilder.AddJob<T>(System.Action<System.IServiceProvider!, Sa.Schedule.IJobBuilder!>! configure, System.Guid? jobId = null) -> Sa.Schedule.IScheduleBuilder!
 Sa.Schedule.IScheduleBuilder.UseHostedService() -> Sa.Schedule.IScheduleBuilder!
 Sa.Schedule.IScheduleBuilder.AddErrorHandler(System.Func<Sa.Schedule.IJobContext!, System.Exception!, bool>! handler) -> Sa.Schedule.IScheduleBuilder!
 Sa.Schedule.IScheduleBuilder.FromConfiguration(string! configSectionPath) -> Sa.Schedule.IScheduleBuilder!
 Sa.Schedule.IScheduleBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Schedule.ScheduleOptions!>!>! configureSettings) -> Sa.Schedule.IScheduleBuilder!
-Sa.Schedule.IScheduler.Settings.get -> Sa.Schedule.IScheduleSettings!
-Sa.Schedule.IScheduler.Jobs.get -> System.Collections.Generic.IReadOnlyCollection<Sa.Schedule.IJobScheduler!>!
-Sa.Schedule.IScheduler.Start(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
-Sa.Schedule.IScheduler.StopAsync() -> System.Threading.Tasks.Task!
-Sa.Schedule.IScheduler.Restart(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
-Sa.Schedule.IJobBuilder.EverySeconds(int seconds = 1) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IJobErrorHandling.HasSuppressError.get -> bool
-Sa.Schedule.IJobErrorHandling.HasRetryAttempts.get -> bool
 Sa.Schedule.IScheduleSettings.IsHostedService.get -> bool
+Sa.Schedule.IScheduler.Settings.get -> Sa.Schedule.IScheduleSettings!
 Sa.Schedule.IScheduleSettings.HandleError.get -> System.Func<Sa.Schedule.IJobContext!, System.Exception!, bool>?
 Sa.Schedule.IScheduleSettings.GetJobSettings() -> System.Collections.Generic.IEnumerable<Sa.Schedule.IJobSettings!>!
-Sa.Schedule.IJobBuilder.EveryMinutes(int minutes = 1) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IScheduler.GetSchedule(System.Guid jobId) -> Sa.Schedule.IJobScheduler?
+Sa.Schedule.IScheduler.Jobs.get -> System.Collections.Generic.IReadOnlyCollection<Sa.Schedule.IJobScheduler!>!
+Sa.Schedule.IScheduler.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+Sa.Schedule.IScheduler.StopAsync() -> System.Threading.Tasks.Task!
+Sa.Schedule.IScheduler.RestartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
 Sa.Schedule.JobOptions.Disabled.get -> bool?
 Sa.Schedule.JobOptions.Disabled.set -> void
 Sa.Schedule.JobOptions.Immediate.get -> bool?
@@ -125,39 +143,21 @@ Sa.Schedule.JobOptions.IsRunOnce.get -> bool?
 Sa.Schedule.JobOptions.IsRunOnce.set -> void
 Sa.Schedule.JobOptions.Cron.get -> string?
 Sa.Schedule.JobOptions.Cron.set -> void
-Sa.Schedule.ScheduleOptions.TimeZone.get -> string?
 Sa.Schedule.JobOptions.Every.get -> System.TimeSpan?
-Sa.Schedule.ScheduleOptions.TimeZone.set -> void
 Sa.Schedule.JobOptions.Every.set -> void
 Sa.Schedule.JobOptions.TimeZone.get -> string?
-Sa.Schedule.IJobBuilder.EveryHours(int hours = 1) -> Sa.Schedule.IJobBuilder!
+Sa.Schedule.JobOptions.TimeZone.set -> void
+Sa.Schedule.JobOptions.InitialDelay.set -> void
+Sa.Schedule.JobOptions.InitialDelay.get -> System.TimeSpan?
+Sa.Schedule.JobException.JobException(Sa.Schedule.IJobContext! context, System.Exception? innerException) -> void
+Sa.Schedule.JobOptions.ConcurrencyLimit.get -> int?
+Sa.Schedule.JobOptions.ConcurrencyLimit.set -> void
+Sa.Schedule.IScheduler.GetSchedule(System.Guid jobId) -> Sa.Schedule.IJobScheduler?
+Sa.Schedule.JobOptions.MaxConcurrency.get -> int?
+Sa.Schedule.JobOptions.MaxConcurrency.set -> void
+Sa.Schedule.JobException.ContextSnapshot.get -> Sa.Schedule.IJobSnapshot!
+Sa.Schedule.ScheduleOptions.TimeZone.set -> void
+Sa.Schedule.ScheduleOptions.TimeZone.get -> string?
 Sa.Schedule.ScheduleOptions.Jobs.get -> System.Collections.Generic.Dictionary<string!, Sa.Schedule.JobOptions!>!
 Sa.Schedule.ScheduleOptions.Jobs.set -> void
-Sa.Schedule.JobOptions.TimeZone.set -> void
-Sa.Schedule.JobOptions.InitialDelay.get -> System.TimeSpan?
-Sa.Schedule.JobOptions.ConcurrencyLimit.get -> int?
-Sa.Schedule.JobOptions.MaxConcurrency.get -> int?
-Sa.Schedule.JobOptions.InitialDelay.set -> void
-Sa.Schedule.JobOptions.ConcurrencyLimit.set -> void
-Sa.Schedule.IJobBuilder.EveryDays(int days = 1) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IJobBuilder.OnceIn(System.TimeSpan delay) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IJobBuilder.WithCron(string! cronExpression, string? name = null) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IJobBuilder.WithTimeZone(System.TimeZoneInfo! timeZone) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.Cron.CronParseException.Field.get -> string?
-Sa.Schedule.IJobBuilder.WithTimeZone(string! timeZoneId) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.Cron.CronParseException.Token.get -> string?
-Sa.Schedule.IJobBuilder.WithConcurrencyLimit(int limit) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IJobBuilder.WithMaxConcurrency(int limit) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IJobBuilder.WithShutdownTimeout(System.TimeSpan timeout) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IJobBuilder.Merge(Sa.Schedule.IJobProperties! props) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.JobOptions.MaxConcurrency.set -> void
-Sa.Schedule.IJobBuilder.ConfigureErrorHandling(System.Action<Sa.Schedule.IJobErrorHandlingBuilder!>! configure) -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.IJobBuilder.Disabled() -> Sa.Schedule.IJobBuilder!
-Sa.Schedule.Cron.CronParseException.CronParseException(string! message) -> void
-Sa.Schedule.Cron.CronParseException.CronParseException(string! message, string! field, string! token) -> void
-Sa.Schedule.Cron.CronParseException.CronParseException(string! message, string! field, string! token, System.Exception! innerException) -> void
-Sa.Schedule.JobException.JobException(Sa.Schedule.IJobContext! context, System.Exception? innerException) -> void
-Sa.Schedule.JobException.ContextSnapshot.get -> Sa.Schedule.IJobSnapshot!
-static Sa.Schedule.Cron.CronTiming.Strict(string! expression, string? name = null) -> Sa.Schedule.Cron.CronTiming!
-static Sa.Schedule.Cron.CronTiming.For(string! expression, string? name = null) -> Sa.Schedule.Cron.CronTiming!
-Sa.Schedule.Cron.CronTiming.GetNextOccurrence(System.DateTimeOffset dateTime) -> System.DateTimeOffset?
+const Sa.Schedule.Setup.DefaultName = "default" -> string!

@@ -56,7 +56,7 @@ public class OutboxRedisEndToEndTests(OutboxRedisEndToEndFixture fixture) : ICla
         IServiceProvider services = fixture.ServiceProvider;
 
         IScheduler scheduler = services.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        int started = await scheduler.Start(ct);
+        int started = await scheduler.StartAsync(ct);
         Assert.True(started > 0, "the outbox schedule must start at least one job");
 
         try

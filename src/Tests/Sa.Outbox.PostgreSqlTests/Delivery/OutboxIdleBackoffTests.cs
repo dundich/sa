@@ -73,7 +73,7 @@ public sealed class OutboxIdleBackoffTests(OutboxIdleBackoffTests.Fixture fixtur
         var ct = TestContext.Current.CancellationToken;
 
         var scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        Assert.True(await scheduler.Start(ct) >= 1);
+        Assert.True(await scheduler.StartAsync(ct) >= 1);
 
         var registry = fixture.ServiceProvider.GetRequiredService<IOutboxIdleStateRegistry>();
         var state = registry.Get(new OutboxGroupKey(OutboxScope.DefaultKey, fixture.ConsumerSettings.ConsumerGroupId));

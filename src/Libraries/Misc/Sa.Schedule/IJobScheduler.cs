@@ -53,7 +53,7 @@ public interface IJobScheduler : IDisposable, IAsyncDisposable
     /// <summary>
     /// Starts the job scheduler asynchronously.
     /// </summary>
-    Task<bool> Start(CancellationToken cancellationToken);
+    Task<bool> StartAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Stops the job scheduler asynchronously.

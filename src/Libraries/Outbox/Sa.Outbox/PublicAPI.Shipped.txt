@@ -1,79 +1,12 @@
 #nullable enable
-Sa.Outbox.IConsumer
 Sa.Outbox.IConsumer<TMessage>
+Sa.Outbox.IConsumer
 Sa.Outbox.IOutboxContext<TMessage>
-Sa.Outbox.IOutboxContextOperations<TMessage>
-Sa.Outbox.IOutboxDeliveryJobInterceptor
-Sa.Outbox.IOutboxPublishable
 Sa.Outbox.IOutboxContext
-Sa.Outbox.InMemory.InMemoryOutboxSettings
-Sa.Outbox.InMemory.InMemoryOutboxSettings.InMemoryOutboxSettings() -> void
+Sa.Outbox.IOutboxPublishable
+Sa.Outbox.IOutboxDeliveryJobInterceptor
+Sa.Outbox.IOutboxContextOperations<TMessage>
 Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder
-Sa.Outbox.Delivery.IDeliveryBatcher
-static readonly Sa.Outbox.Delivery.ExponentialDeliveryBackoffStrategy.Shared -> Sa.Outbox.Delivery.ExponentialDeliveryBackoffStrategy!
-Sa.Outbox.Delivery.ExponentialDeliveryBackoffStrategy
-Sa.Outbox.Delivery.DeliveryStatusCode.Pending = 0 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Postpone = 103 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Retry = 104 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.IDeliveryBuilder
-Sa.Outbox.Delivery.DeliveryStatusCode.Ok = 200 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Accepted = 202 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Created = 201 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Ok203 = 203 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Aborted = 299 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.NoContent = 204 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Processing = 100 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Error = 500 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Warn = 400 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.MovedPermanently = 301 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Error501 = 501 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Error502 = 502 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Error505 = 505 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Error504 = 504 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Error506 = 506 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Error507 = 507 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.MaximumAttemptsError = 508 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.ExponentialIdleWaitStrategy
-Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCode.Error503 = 503 -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatusCodeExtensions
-Sa.Outbox.Delivery.IDeliveryGroupOptionsProvider
-static readonly Sa.Outbox.Delivery.ExponentialIdleWaitStrategy.Shared -> Sa.Outbox.Delivery.ExponentialIdleWaitStrategy!
-Sa.Outbox.Delivery.NoopDeliveryGroupOptionsProvider
-Sa.Outbox.Delivery.NoopDeliveryGroupOptionsProvider.NoopDeliveryGroupOptionsProvider() -> void
-static readonly Sa.Outbox.Delivery.FixedIntervalWaitStrategy.Shared -> Sa.Outbox.Delivery.FixedIntervalWaitStrategy!
-Sa.Outbox.Delivery.FixedIntervalWaitStrategy
-Sa.Outbox.Delivery.FixedIntervalWaitStrategy.FixedIntervalWaitStrategy() -> void
-Sa.Outbox.Delivery.IDeliveryProcessor
-Sa.Outbox.Delivery.IConsumerGroupNamingStrategy
-Sa.Outbox.Delivery.IDeliveryBackoffStrategy
-Sa.Outbox.Delivery.IDeliverySnapshot
-Sa.Outbox.OutboxPartInfo.CreatedAt.get -> System.DateTimeOffset
-Sa.Outbox.OutboxPartInfo.CreatedAt.init -> void
-Sa.Outbox.Delivery.IOutboxContextFactory
-Sa.Outbox.OutboxPartInfo.Part.get -> string!
-Sa.Outbox.OutboxPartInfo.Part.init -> void
-Sa.Outbox.Delivery.IEmptyQueueWaitStrategy
-const Sa.Outbox.OutboxScope.DefaultKey = "outbox" -> string!
-Sa.Outbox.OutboxScope
-Sa.Outbox.Partitional.OutboxTenantPartPair.TenantId.get -> int
-Sa.Outbox.Partitional.OutboxTenantPartPair.TenantId.init -> void
-Sa.Outbox.InMemory.Setup
-Sa.Outbox.Partitional.OutboxTenantPartPair.Part.get -> string!
-Sa.Outbox.Partitional.OutboxTenantPartPair.Part.init -> void
-Sa.Outbox.Partitional.IOutboxPartitionalSupport
-Sa.Outbox.OutboxPartInfo.TenantId.get -> int
-Sa.Outbox.OutboxPartInfo.TenantId.init -> void
-Sa.Outbox.Partitional.OutboxTenantPartPair
-Sa.Outbox.Partitional.OutboxTenantPartPair.OutboxTenantPartPair() -> void
-~override Sa.Outbox.Partitional.OutboxTenantPartPair.ToString() -> string
-static Sa.Outbox.Partitional.OutboxTenantPartPair.operator !=(Sa.Outbox.Partitional.OutboxTenantPartPair left, Sa.Outbox.Partitional.OutboxTenantPartPair right) -> bool
-static Sa.Outbox.Partitional.OutboxTenantPartPair.operator ==(Sa.Outbox.Partitional.OutboxTenantPartPair left, Sa.Outbox.Partitional.OutboxTenantPartPair right) -> bool
-override Sa.Outbox.Partitional.OutboxTenantPartPair.GetHashCode() -> int
-~override Sa.Outbox.Partitional.OutboxTenantPartPair.Equals(object obj) -> bool
-Sa.Outbox.Partitional.OutboxTenantPartPair.Equals(Sa.Outbox.Partitional.OutboxTenantPartPair other) -> bool
-Sa.Outbox.Partitional.OutboxTenantPartPair.Deconstruct(out int TenantId, out string! Part) -> void
-Sa.Outbox.Partitional.ITenantSource
 Sa.Outbox.OutboxPartInfo
 Sa.Outbox.OutboxPartInfo.OutboxPartInfo() -> void
 ~override Sa.Outbox.OutboxPartInfo.ToString() -> string
@@ -83,29 +16,14 @@ override Sa.Outbox.OutboxPartInfo.GetHashCode() -> int
 ~override Sa.Outbox.OutboxPartInfo.Equals(object obj) -> bool
 Sa.Outbox.OutboxPartInfo.Equals(Sa.Outbox.OutboxPartInfo other) -> bool
 Sa.Outbox.OutboxPartInfo.Deconstruct(out int TenantId, out string! Part, out System.DateTimeOffset CreatedAt) -> void
-Sa.Outbox.Delivery.IOutboxConsumerManager
-Sa.Outbox.Delivery.Job.IDeliveryJob
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.OutboxConsumerSettingsBuilder() -> void
-static readonly Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.NoLockDuration -> System.TimeSpan
-Sa.Outbox.Delivery.OutboxGroupKey
-Sa.Outbox.Delivery.OutboxGroupKey.ProviderKey.get -> string!
-Sa.Outbox.Delivery.OutboxGroupKey.ProviderKey.init -> void
-Sa.Outbox.Delivery.OutboxGroupKey.OutboxGroupKey() -> void
-static Sa.Outbox.Delivery.OutboxGroupKey.operator !=(Sa.Outbox.Delivery.OutboxGroupKey left, Sa.Outbox.Delivery.OutboxGroupKey right) -> bool
-static Sa.Outbox.Delivery.OutboxGroupKey.operator ==(Sa.Outbox.Delivery.OutboxGroupKey left, Sa.Outbox.Delivery.OutboxGroupKey right) -> bool
-override Sa.Outbox.Delivery.OutboxGroupKey.GetHashCode() -> int
-~override Sa.Outbox.Delivery.OutboxGroupKey.Equals(object obj) -> bool
-Sa.Outbox.Delivery.OutboxGroupKey.Equals(Sa.Outbox.Delivery.OutboxGroupKey other) -> bool
-Sa.Outbox.Delivery.OutboxGroupKey.Deconstruct(out string! ProviderKey, out string! GroupId) -> void
-Sa.Outbox.Delivery.OutboxGroupKey.GroupId.get -> string!
-Sa.Outbox.Delivery.OutboxGroupKey.GroupId.init -> void
-Sa.Outbox.Delivery.DeliveryStatus.Code.get -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Delivery.DeliveryStatus.Message.get -> string!
-Sa.Outbox.Delivery.DeliveryStatus.Message.init -> void
-Sa.Outbox.Delivery.DeliveryStatus.Code.init -> void
-Sa.Outbox.Delivery.DeliveryStatus.CreatedAt.get -> System.DateTimeOffset
-Sa.Outbox.Delivery.DeliveryStatus.CreatedAt.init -> void
+Sa.Outbox.OutboxPartInfo.TenantId.get -> int
+Sa.Outbox.OutboxPartInfo.TenantId.init -> void
+Sa.Outbox.OutboxPartInfo.Part.get -> string!
+Sa.Outbox.OutboxPartInfo.Part.init -> void
+Sa.Outbox.OutboxPartInfo.CreatedAt.get -> System.DateTimeOffset
+Sa.Outbox.OutboxPartInfo.CreatedAt.init -> void
+const Sa.Outbox.OutboxScope.DefaultKey = "outbox" -> string!
+Sa.Outbox.OutboxScope
 Sa.Outbox.Delivery.DeliveryStatus
 Sa.Outbox.Delivery.DeliveryStatus.DeliveryStatus() -> void
 ~override Sa.Outbox.Delivery.DeliveryStatus.ToString() -> string
@@ -115,475 +33,557 @@ override Sa.Outbox.Delivery.DeliveryStatus.GetHashCode() -> int
 ~override Sa.Outbox.Delivery.DeliveryStatus.Equals(object obj) -> bool
 Sa.Outbox.Delivery.DeliveryStatus.Equals(Sa.Outbox.Delivery.DeliveryStatus other) -> bool
 Sa.Outbox.Delivery.DeliveryStatus.Deconstruct(out Sa.Outbox.Delivery.DeliveryStatusCode Code, out string! Message, out System.DateTimeOffset CreatedAt) -> void
-Sa.Outbox.OutboxMessageFilter.TransactId.get -> string!
-Sa.Outbox.OutboxMessageFilter.TransactId.init -> void
+Sa.Outbox.Delivery.DeliveryStatus.Code.get -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatus.Code.init -> void
+Sa.Outbox.Delivery.DeliveryStatus.Message.get -> string!
+Sa.Outbox.Delivery.DeliveryStatus.Message.init -> void
+Sa.Outbox.Delivery.DeliveryStatus.CreatedAt.get -> System.DateTimeOffset
+Sa.Outbox.Delivery.DeliveryStatus.CreatedAt.init -> void
+Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Partitional.OutboxTenantPartPair
+Sa.Outbox.Partitional.OutboxTenantPartPair.OutboxTenantPartPair() -> void
+~override Sa.Outbox.Partitional.OutboxTenantPartPair.ToString() -> string
+static Sa.Outbox.Partitional.OutboxTenantPartPair.operator !=(Sa.Outbox.Partitional.OutboxTenantPartPair left, Sa.Outbox.Partitional.OutboxTenantPartPair right) -> bool
+static Sa.Outbox.Partitional.OutboxTenantPartPair.operator ==(Sa.Outbox.Partitional.OutboxTenantPartPair left, Sa.Outbox.Partitional.OutboxTenantPartPair right) -> bool
+override Sa.Outbox.Partitional.OutboxTenantPartPair.GetHashCode() -> int
+~override Sa.Outbox.Partitional.OutboxTenantPartPair.Equals(object obj) -> bool
+Sa.Outbox.Partitional.OutboxTenantPartPair.Equals(Sa.Outbox.Partitional.OutboxTenantPartPair other) -> bool
+Sa.Outbox.Partitional.OutboxTenantPartPair.Deconstruct(out int TenantId, out string! Part) -> void
+Sa.Outbox.Partitional.OutboxTenantPartPair.TenantId.get -> int
+Sa.Outbox.Partitional.OutboxTenantPartPair.TenantId.init -> void
+Sa.Outbox.Partitional.OutboxTenantPartPair.Part.get -> string!
+Sa.Outbox.Partitional.OutboxTenantPartPair.Part.init -> void
+Sa.Outbox.Delivery.DeliveryStatusCode.Pending = 0 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Processing = 100 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Postpone = 103 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Retry = 104 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Accepted = 202 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Created = 201 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Ok = 200 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Ok203 = 203 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.MovedPermanently = 301 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Warn = 400 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Error = 500 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Error501 = 501 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Error502 = 502 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Aborted = 299 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Error506 = 506 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Error503 = 503 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Error505 = 505 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Error504 = 504 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.Error507 = 507 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Delivery.DeliveryStatusCode.MaximumAttemptsError = 508 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Partitional.IOutboxPartitionalSupport
+Sa.Outbox.Delivery.DeliveryStatusCode.NoContent = 204 -> Sa.Outbox.Delivery.DeliveryStatusCode
+Sa.Outbox.Partitional.ITenantSource
+const Sa.Outbox.Delivery.OutboxDeliveryConfiguration.DefaultSectionPrefix = "Outbox:DeliveryGroups" -> string!
+Sa.Outbox.Publication.IOutboxMessagePublisher
+Sa.Outbox.Delivery.DeliveryStatusCodeExtensions
+Sa.Outbox.InMemory.InMemoryOutboxSettings
+Sa.Outbox.InMemory.InMemoryOutboxSettings.InMemoryOutboxSettings() -> void
+Sa.Outbox.Publication.IOutboxPublisherResolver
+Sa.Outbox.InMemory.Setup
+Sa.Outbox.Setup
+Sa.Outbox.Exceptions.DeliveryPermanentException
+Sa.Outbox.Exceptions.DeliveryException
+Sa.Outbox.Partitional.TenantSettings
+Sa.Outbox.Partitional.TenantSettings.TenantSettings() -> void
+Sa.Outbox.PlugServices.IOutboxBulkWriter
+Sa.Outbox.Exceptions.OutboxException
+Sa.Outbox.PlugServices.IOutboxProviderRegistry
+static readonly Sa.Outbox.Delivery.ExponentialIdleWaitStrategy.Shared -> Sa.Outbox.Delivery.ExponentialIdleWaitStrategy!
+Sa.Outbox.PlugServices.IOutboxDeliveryManager
+Sa.Outbox.Delivery.ExponentialIdleWaitStrategy
+Sa.Outbox.PlugServices.IOutboxTenantDetector
+static readonly Sa.Outbox.Delivery.ExponentialDeliveryBackoffStrategy.Shared -> Sa.Outbox.Delivery.ExponentialDeliveryBackoffStrategy!
+Sa.Outbox.Delivery.ExponentialDeliveryBackoffStrategy
+Sa.Outbox.Delivery.IDeliveryBatcher
+Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>
+Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.OutboxMessageBatch() -> void
+Sa.Outbox.Delivery.IDeliveryBuilder
+static readonly Sa.Outbox.Delivery.FixedIntervalWaitStrategy.Shared -> Sa.Outbox.Delivery.FixedIntervalWaitStrategy!
+Sa.Outbox.Delivery.FixedIntervalWaitStrategy
+Sa.Outbox.Delivery.FixedIntervalWaitStrategy.FixedIntervalWaitStrategy() -> void
+Sa.Outbox.Delivery.IConsumerGroupNamingStrategy
+Sa.Outbox.Delivery.IDeliveryBackoffStrategy
+Sa.Outbox.Delivery.IDeliveryGroupOptionsProvider
+Sa.Outbox.PlugServices.OutboxProviderBuilder
+Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>
+Sa.Outbox.Delivery.IDeliveryProcessor
+Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.PayloadId.get -> string!
+Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.OutboxMessageBatchItem() -> void
+Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.PayloadId.init -> void
+~override Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.ToString() -> string
+static Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.operator !=(Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> left, Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> right) -> bool
+static Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.operator ==(Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> left, Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> right) -> bool
+Sa.Outbox.Delivery.NoopDeliveryGroupOptionsProvider
+override Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.GetHashCode() -> int
+Sa.Outbox.Delivery.NoopDeliveryGroupOptionsProvider.NoopDeliveryGroupOptionsProvider() -> void
+~override Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Equals(object obj) -> bool
+Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Equals(Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> other) -> bool
+Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Deconstruct(out string! PayloadId, out TMessage Payload) -> void
+Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Payload.get -> TMessage
+Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Payload.init -> void
+Sa.Outbox.Delivery.IDeliverySnapshot
+Sa.Outbox.Delivery.IEmptyQueueWaitStrategy
+Sa.Outbox.PlugServices.OutboxProviderCapabilities.PublishContext = 1 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
+Sa.Outbox.PlugServices.OutboxProviderCapabilities.None = 0 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
+Sa.Outbox.PlugServices.OutboxProviderCapabilities.TenantDetection = 2 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
+Sa.Outbox.IOutboxBuilder
+Sa.Outbox.PlugServices.OutboxProviderCapabilities.LockExtension = 4 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
+Sa.Outbox.PlugServices.OutboxProviderCapabilities.Postponement = 8 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
+Sa.Outbox.PlugServices.IOutboxHealth
+Sa.Outbox.Delivery.IOutboxContextFactory
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.Name.get -> string!
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.Name.init -> void
+Sa.Outbox.PlugServices.OutboxProviderDescriptor
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.Capabilities.get -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.Capabilities.init -> void
+override Sa.Outbox.PlugServices.OutboxProviderDescriptor.ToString() -> string!
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.Version.get -> string?
+static Sa.Outbox.PlugServices.OutboxProviderDescriptor.operator !=(Sa.Outbox.PlugServices.OutboxProviderDescriptor? left, Sa.Outbox.PlugServices.OutboxProviderDescriptor? right) -> bool
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.Version.init -> void
+static Sa.Outbox.PlugServices.OutboxProviderDescriptor.operator ==(Sa.Outbox.PlugServices.OutboxProviderDescriptor? left, Sa.Outbox.PlugServices.OutboxProviderDescriptor? right) -> bool
+override Sa.Outbox.PlugServices.OutboxProviderDescriptor.GetHashCode() -> int
+Sa.Outbox.PlugServices.OutboxProviderHealthReport
+override Sa.Outbox.PlugServices.OutboxProviderDescriptor.Equals(object? obj) -> bool
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.OutboxProviderHealthReport() -> void
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.Equals(Sa.Outbox.PlugServices.OutboxProviderDescriptor? other) -> bool
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.<Clone>$() -> Sa.Outbox.PlugServices.OutboxProviderDescriptor!
+~override Sa.Outbox.PlugServices.OutboxProviderHealthReport.ToString() -> string
+static Sa.Outbox.PlugServices.OutboxProviderHealthReport.operator !=(Sa.Outbox.PlugServices.OutboxProviderHealthReport left, Sa.Outbox.PlugServices.OutboxProviderHealthReport right) -> bool
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.Deconstruct(out string! Name, out Sa.Outbox.PlugServices.OutboxProviderCapabilities Capabilities, out string? Version) -> void
+static Sa.Outbox.PlugServices.OutboxProviderHealthReport.operator ==(Sa.Outbox.PlugServices.OutboxProviderHealthReport left, Sa.Outbox.PlugServices.OutboxProviderHealthReport right) -> bool
+override Sa.Outbox.PlugServices.OutboxProviderHealthReport.GetHashCode() -> int
+~override Sa.Outbox.PlugServices.OutboxProviderHealthReport.Equals(object obj) -> bool
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.ProviderKey.get -> string!
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.Equals(Sa.Outbox.PlugServices.OutboxProviderHealthReport other) -> bool
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.ProviderKey.init -> void
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.Deconstruct(out string! ProviderKey, out bool Healthy, out string? Reason, out System.TimeSpan Latency) -> void
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.Healthy.get -> bool
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.Healthy.init -> void
+Sa.Outbox.Publication.OutboxPublishSettings
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.Reason.get -> string?
+override Sa.Outbox.Publication.OutboxPublishSettings.ToString() -> string!
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.Reason.init -> void
+static Sa.Outbox.Publication.OutboxPublishSettings.operator !=(Sa.Outbox.Publication.OutboxPublishSettings? left, Sa.Outbox.Publication.OutboxPublishSettings? right) -> bool
+static Sa.Outbox.Publication.OutboxPublishSettings.operator ==(Sa.Outbox.Publication.OutboxPublishSettings? left, Sa.Outbox.Publication.OutboxPublishSettings? right) -> bool
+override Sa.Outbox.Publication.OutboxPublishSettings.GetHashCode() -> int
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.Latency.get -> System.TimeSpan
+override Sa.Outbox.Publication.OutboxPublishSettings.Equals(object? obj) -> bool
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.Latency.init -> void
+Sa.Outbox.Publication.OutboxPublishSettings.Equals(Sa.Outbox.Publication.OutboxPublishSettings? other) -> bool
+Sa.Outbox.Publication.OutboxPublishSettings.<Clone>$() -> Sa.Outbox.Publication.OutboxPublishSettings!
+Sa.Outbox.PlugServices.OutboxProviderCapabilities
+Sa.Outbox.PlugServices.IOutboxProviderHealth
+Sa.Outbox.Delivery.OutboxGroupKey.ProviderKey.get -> string!
+Sa.Outbox.Delivery.OutboxGroupKey.GroupId.get -> string!
+Sa.Outbox.Delivery.OutboxGroupKey.ProviderKey.init -> void
+Sa.Outbox.Publication.OutboxPublishSettingsExtensions
+Sa.Outbox.Delivery.Job.IDeliveryJob
+Sa.Outbox.PlugServices.IOutboxProviderInitializer
+Sa.Outbox.Delivery.OutboxGroupKey.GroupId.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.OutboxConsumerSettingsBuilder() -> void
+Sa.Outbox.Delivery.OutboxGroupKey
+Sa.Outbox.Delivery.OutboxGroupKey.OutboxGroupKey() -> void
+static Sa.Outbox.Delivery.OutboxGroupKey.operator !=(Sa.Outbox.Delivery.OutboxGroupKey left, Sa.Outbox.Delivery.OutboxGroupKey right) -> bool
+static Sa.Outbox.Delivery.OutboxGroupKey.operator ==(Sa.Outbox.Delivery.OutboxGroupKey left, Sa.Outbox.Delivery.OutboxGroupKey right) -> bool
+override Sa.Outbox.Delivery.OutboxGroupKey.GetHashCode() -> int
+~override Sa.Outbox.Delivery.OutboxGroupKey.Equals(object obj) -> bool
+static readonly Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.NoLockDuration -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxGroupKey.Equals(Sa.Outbox.Delivery.OutboxGroupKey other) -> bool
+Sa.Outbox.Delivery.OutboxGroupKey.Deconstruct(out string! ProviderKey, out string! GroupId) -> void
+Sa.Outbox.Delivery.IOutboxConsumerManager
+Sa.Outbox.PlugServices.OutboxProviderSetup
+Sa.Outbox.Delivery.OutboxRentToken.SubKey.get -> long
+Sa.Outbox.Delivery.OutboxRentToken.SubKey.init -> void
+Sa.Outbox.Delivery.OutboxRentToken
+Sa.Outbox.Delivery.OutboxRentToken.OutboxRentToken() -> void
 Sa.Outbox.OutboxMessageFilter
+static Sa.Outbox.Delivery.OutboxRentToken.operator !=(Sa.Outbox.Delivery.OutboxRentToken left, Sa.Outbox.Delivery.OutboxRentToken right) -> bool
+static Sa.Outbox.Delivery.OutboxRentToken.operator ==(Sa.Outbox.Delivery.OutboxRentToken left, Sa.Outbox.Delivery.OutboxRentToken right) -> bool
+override Sa.Outbox.Delivery.OutboxRentToken.GetHashCode() -> int
 override Sa.Outbox.OutboxMessageFilter.ToString() -> string!
+~override Sa.Outbox.Delivery.OutboxRentToken.Equals(object obj) -> bool
+Sa.Outbox.Delivery.OutboxRentToken.Equals(Sa.Outbox.Delivery.OutboxRentToken other) -> bool
 static Sa.Outbox.OutboxMessageFilter.operator !=(Sa.Outbox.OutboxMessageFilter? left, Sa.Outbox.OutboxMessageFilter? right) -> bool
+Sa.Outbox.Delivery.OutboxRentToken.Deconstruct(out long Key, out long SubKey) -> void
+Sa.Outbox.OutboxMessageFilter.TransactId.get -> string!
 static Sa.Outbox.OutboxMessageFilter.operator ==(Sa.Outbox.OutboxMessageFilter? left, Sa.Outbox.OutboxMessageFilter? right) -> bool
 override Sa.Outbox.OutboxMessageFilter.GetHashCode() -> int
+Sa.Outbox.OutboxMessageFilter.TransactId.init -> void
 override Sa.Outbox.OutboxMessageFilter.Equals(object? obj) -> bool
 Sa.Outbox.OutboxMessageFilter.Equals(Sa.Outbox.OutboxMessageFilter? other) -> bool
 Sa.Outbox.OutboxMessageFilter.<Clone>$() -> Sa.Outbox.OutboxMessageFilter!
-Sa.Outbox.OutboxMessageFilter.Deconstruct(out string! TransactId, out string! ConsumerGroupId, out string! PayloadType, out int TenantId, out string! Part, out System.DateTimeOffset FromDate, out System.DateTimeOffset ToDate, out System.DateTimeOffset NowDate, out string! ProviderKey) -> void
 Sa.Outbox.OutboxMessageFilter.ConsumerGroupId.get -> string!
-Sa.Outbox.OutboxMessageFilter.ConsumerGroupId.init -> void
 Sa.Outbox.OutboxMessageFilter.PayloadType.get -> string!
+Sa.Outbox.OutboxMessageFilter.ConsumerGroupId.init -> void
 Sa.Outbox.OutboxMessageFilter.PayloadType.init -> void
+Sa.Outbox.OutboxMessageFilter.Deconstruct(out string! TransactId, out string! ConsumerGroupId, out string! PayloadType, out int TenantId, out string! Part, out System.DateTimeOffset FromDate, out System.DateTimeOffset ToDate, out System.DateTimeOffset NowDate, out string! ProviderKey) -> void
 Sa.Outbox.OutboxMessageFilter.TenantId.get -> int
 Sa.Outbox.OutboxMessageFilter.TenantId.init -> void
+Sa.Outbox.Delivery.OutboxRentToken.Key.get -> long
+Sa.Outbox.Delivery.OutboxRentToken.Key.init -> void
 Sa.Outbox.OutboxMessageFilter.Part.get -> string!
-Sa.Outbox.OutboxMessageFilter.Part.init -> void
 Sa.Outbox.OutboxMessageFilter.FromDate.get -> System.DateTimeOffset
 Sa.Outbox.OutboxMessageFilter.FromDate.init -> void
 Sa.Outbox.OutboxMessageFilter.ToDate.get -> System.DateTimeOffset
 Sa.Outbox.OutboxMessageFilter.ToDate.init -> void
 Sa.Outbox.OutboxMessageFilter.NowDate.get -> System.DateTimeOffset
-Sa.Outbox.OutboxMessageFilter.NowDate.init -> void
 Sa.Outbox.OutboxMessageFilter.ProviderKey.get -> string!
+Sa.Outbox.OutboxMessageFilter.NowDate.init -> void
 Sa.Outbox.OutboxMessageFilter.ProviderKey.init -> void
-Sa.Outbox.Partitional.TenantSettings
-Sa.Outbox.Partitional.TenantSettings.TenantSettings() -> void
-Sa.Outbox.Setup
-Sa.Outbox.Exceptions.DeliveryException
-Sa.Outbox.PlugServices.IOutboxDeliveryManager
-Sa.Outbox.PlugServices.IOutboxProviderRegistry
-Sa.Outbox.Delivery.OutboxRentToken
-Sa.Outbox.Delivery.OutboxRentToken.OutboxRentToken() -> void
-static Sa.Outbox.Delivery.OutboxRentToken.operator !=(Sa.Outbox.Delivery.OutboxRentToken left, Sa.Outbox.Delivery.OutboxRentToken right) -> bool
-static Sa.Outbox.Delivery.OutboxRentToken.operator ==(Sa.Outbox.Delivery.OutboxRentToken left, Sa.Outbox.Delivery.OutboxRentToken right) -> bool
-override Sa.Outbox.Delivery.OutboxRentToken.GetHashCode() -> int
-~override Sa.Outbox.Delivery.OutboxRentToken.Equals(object obj) -> bool
-Sa.Outbox.Delivery.OutboxRentToken.Equals(Sa.Outbox.Delivery.OutboxRentToken other) -> bool
-Sa.Outbox.Delivery.OutboxRentToken.Deconstruct(out long Key, out long SubKey) -> void
-Sa.Outbox.PlugServices.IOutboxTenantDetector
-Sa.Outbox.Delivery.OutboxRentToken.Key.get -> long
-Sa.Outbox.Delivery.OutboxRentToken.Key.init -> void
-Sa.Outbox.Delivery.OutboxRentToken.SubKey.get -> long
-Sa.Outbox.Delivery.OutboxRentToken.SubKey.init -> void
-Sa.Outbox.Exceptions.OutboxException
-Sa.Outbox.Publication.IOutboxMessagePublisher
+Sa.Outbox.OutboxMessageFilter.Part.init -> void
 Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.TaskId.get -> long
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.DeliveryId.get -> long
 Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.TaskId.init -> void
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.DeliveryId.init -> void
-Sa.Outbox.PlugServices.IOutboxBulkWriter
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Attempt.get -> int
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.LastErrorId.get -> long
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Attempt.init -> void
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.LastErrorId.init -> void
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Status.get -> Sa.Outbox.Delivery.DeliveryStatus
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.PartInfo.get -> Sa.Outbox.OutboxPartInfo
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Status.init -> void
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.PartInfo.init -> void
-Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>
-Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.OutboxMessageBatch() -> void
-Sa.Outbox.Exceptions.DeliveryPermanentException
-Sa.Outbox.IOutboxBuilder
-const Sa.Outbox.Delivery.OutboxDeliveryConfiguration.DefaultSectionPrefix = "Outbox:DeliveryGroups" -> string!
-Sa.Outbox.PlugServices.OutboxProviderBuilder
-Sa.Outbox.Serialization.IOutboxMessageSerializer
-Sa.Outbox.PlugServices.OutboxProviderCapabilities.None = 0 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
-Sa.Outbox.PlugServices.OutboxProviderCapabilities
-Sa.Outbox.PlugServices.OutboxProviderCapabilities.PublishContext = 1 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
-Sa.Outbox.PlugServices.OutboxProviderCapabilities.TenantDetection = 2 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
-Sa.Outbox.PlugServices.OutboxProviderCapabilities.LockExtension = 4 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
 Sa.Outbox.Delivery.OutboxTaskDeliveryInfo
 Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.OutboxTaskDeliveryInfo() -> void
-Sa.Outbox.PlugServices.OutboxProviderCapabilities.Postponement = 8 -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
 ~override Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.ToString() -> string
 static Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.operator !=(Sa.Outbox.Delivery.OutboxTaskDeliveryInfo left, Sa.Outbox.Delivery.OutboxTaskDeliveryInfo right) -> bool
 static Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.operator ==(Sa.Outbox.Delivery.OutboxTaskDeliveryInfo left, Sa.Outbox.Delivery.OutboxTaskDeliveryInfo right) -> bool
 override Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.GetHashCode() -> int
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.DeliveryId.get -> long
 ~override Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Equals(object obj) -> bool
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Attempt.get -> int
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.DeliveryId.init -> void
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Attempt.init -> void
 Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Equals(Sa.Outbox.Delivery.OutboxTaskDeliveryInfo other) -> bool
 Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Deconstruct(out long TaskId, out long DeliveryId, out int Attempt, out long LastErrorId, out Sa.Outbox.Delivery.DeliveryStatus Status, out Sa.Outbox.OutboxPartInfo PartInfo) -> void
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.LastErrorId.get -> long
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Status.get -> Sa.Outbox.Delivery.DeliveryStatus
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.LastErrorId.init -> void
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.Status.init -> void
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.PartInfo.get -> Sa.Outbox.OutboxPartInfo
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.PartInfo.init -> void
 Sa.Outbox.Serialization.OutboxPayloadCodec
-Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.PayloadId.get -> string!
-Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.PayloadId.init -> void
-Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Payload.get -> TMessage
-Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Payload.init -> void
-Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>
-Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.OutboxMessageBatchItem() -> void
-~override Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.ToString() -> string
-static Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.operator !=(Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> left, Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> right) -> bool
-static Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.operator ==(Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> left, Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> right) -> bool
-override Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.GetHashCode() -> int
-~override Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Equals(object obj) -> bool
-Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Equals(Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage> other) -> bool
-Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.Deconstruct(out string! PayloadId, out TMessage Payload) -> void
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.ProviderKey.get -> string!
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.ProviderKey.init -> void
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.Healthy.get -> bool
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.Healthy.init -> void
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.Reason.get -> string?
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.Reason.init -> void
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.Latency.get -> System.TimeSpan
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.Latency.init -> void
-Sa.Outbox.PlugServices.OutboxProviderHealthReport
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.OutboxProviderHealthReport() -> void
-~override Sa.Outbox.PlugServices.OutboxProviderHealthReport.ToString() -> string
-static Sa.Outbox.PlugServices.OutboxProviderHealthReport.operator !=(Sa.Outbox.PlugServices.OutboxProviderHealthReport left, Sa.Outbox.PlugServices.OutboxProviderHealthReport right) -> bool
-static Sa.Outbox.PlugServices.OutboxProviderHealthReport.operator ==(Sa.Outbox.PlugServices.OutboxProviderHealthReport left, Sa.Outbox.PlugServices.OutboxProviderHealthReport right) -> bool
-override Sa.Outbox.PlugServices.OutboxProviderHealthReport.GetHashCode() -> int
-~override Sa.Outbox.PlugServices.OutboxProviderHealthReport.Equals(object obj) -> bool
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.Equals(Sa.Outbox.PlugServices.OutboxProviderHealthReport other) -> bool
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.Deconstruct(out string! ProviderKey, out bool Healthy, out string? Reason, out System.TimeSpan Latency) -> void
-Sa.Outbox.PlugServices.IOutboxProviderHealth
-Sa.Outbox.PlugServices.IOutboxHealth
-Sa.Outbox.PlugServices.IOutboxProviderInitializer
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.Version.get -> string?
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.Name.get -> string!
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.Capabilities.get -> Sa.Outbox.PlugServices.OutboxProviderCapabilities
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.Version.init -> void
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.Name.init -> void
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.Capabilities.init -> void
-Sa.Outbox.PlugServices.OutboxProviderDescriptor
-override Sa.Outbox.PlugServices.OutboxProviderDescriptor.ToString() -> string!
-static Sa.Outbox.PlugServices.OutboxProviderDescriptor.operator !=(Sa.Outbox.PlugServices.OutboxProviderDescriptor? left, Sa.Outbox.PlugServices.OutboxProviderDescriptor? right) -> bool
-static Sa.Outbox.PlugServices.OutboxProviderDescriptor.operator ==(Sa.Outbox.PlugServices.OutboxProviderDescriptor? left, Sa.Outbox.PlugServices.OutboxProviderDescriptor? right) -> bool
-override Sa.Outbox.PlugServices.OutboxProviderDescriptor.GetHashCode() -> int
-override Sa.Outbox.PlugServices.OutboxProviderDescriptor.Equals(object? obj) -> bool
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.Equals(Sa.Outbox.PlugServices.OutboxProviderDescriptor? other) -> bool
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.<Clone>$() -> Sa.Outbox.PlugServices.OutboxProviderDescriptor!
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.Deconstruct(out string! Name, out Sa.Outbox.PlugServices.OutboxProviderCapabilities Capabilities, out string? Version) -> void
-Sa.Outbox.Publication.IOutboxPublisherResolver
-Sa.Outbox.PlugServices.OutboxProviderSetup
-Sa.Outbox.Publication.OutboxPublishSettings
-override Sa.Outbox.Publication.OutboxPublishSettings.ToString() -> string!
-static Sa.Outbox.Publication.OutboxPublishSettings.operator !=(Sa.Outbox.Publication.OutboxPublishSettings? left, Sa.Outbox.Publication.OutboxPublishSettings? right) -> bool
-static Sa.Outbox.Publication.OutboxPublishSettings.operator ==(Sa.Outbox.Publication.OutboxPublishSettings? left, Sa.Outbox.Publication.OutboxPublishSettings? right) -> bool
-override Sa.Outbox.Publication.OutboxPublishSettings.GetHashCode() -> int
-override Sa.Outbox.Publication.OutboxPublishSettings.Equals(object? obj) -> bool
-Sa.Outbox.Publication.OutboxPublishSettings.Equals(Sa.Outbox.Publication.OutboxPublishSettings? other) -> bool
-Sa.Outbox.Publication.OutboxPublishSettings.<Clone>$() -> Sa.Outbox.Publication.OutboxPublishSettings!
-Sa.Outbox.Publication.OutboxPublishSettingsExtensions
 Sa.Outbox.Serialization.JsonOutboxMessageSerializer
 Sa.Outbox.Serialization.JsonOutboxMessageSerializer.JsonOutboxMessageSerializer() -> void
+Sa.Outbox.Serialization.IOutboxMessageSerializer
 Sa.Outbox.Delivery.OutboxDefaults
 Sa.Outbox.Delivery.OutboxDeliveryConfiguration
-Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.PayloadId.get -> string!
-Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.OutboxId.get -> System.Guid
-Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.PayloadId.init -> void
-Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.OutboxId.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.AsSingleton.get -> bool
+Sa.Outbox.Delivery.OutboxConsumerSettings.Interval.get -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettings.AsSingleton.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.ConsumerGroupId.get -> string!
+Sa.Outbox.Delivery.OutboxConsumerSettings.ConcurrencyLimit.get -> int
+Sa.Outbox.Delivery.OutboxConsumerSettings.Interval.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.ConsumerGroupId.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.ConcurrencyLimit.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings
+static Sa.Outbox.Delivery.OutboxConsumerSettings.operator !=(Sa.Outbox.Delivery.OutboxConsumerSettings? left, Sa.Outbox.Delivery.OutboxConsumerSettings? right) -> bool
+static Sa.Outbox.Delivery.OutboxConsumerSettings.operator ==(Sa.Outbox.Delivery.OutboxConsumerSettings? left, Sa.Outbox.Delivery.OutboxConsumerSettings? right) -> bool
+override Sa.Outbox.Delivery.OutboxConsumerSettings.GetHashCode() -> int
+override Sa.Outbox.Delivery.OutboxConsumerSettings.Equals(object? obj) -> bool
+Sa.Outbox.Delivery.OutboxConsumerSettings.MaxConcurrency.get -> int
+Sa.Outbox.Delivery.OutboxConsumerSettings.Equals(Sa.Outbox.Delivery.OutboxConsumerSettings? other) -> bool
+Sa.Outbox.Delivery.OutboxConsumerSettings.RetryCountOnError.get -> int
+Sa.Outbox.Delivery.OutboxConsumerSettings.<Clone>$() -> Sa.Outbox.Delivery.OutboxConsumerSettings!
+Sa.Outbox.Delivery.OutboxConsumerSettings.MaxConcurrency.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.RetryCountOnError.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.MaxProcessingIterations.get -> int
+Sa.Outbox.Delivery.OutboxConsumerSettings.MaxBatchSize.get -> int
+Sa.Outbox.Delivery.OutboxConsumerSettings.MaxProcessingIterations.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.MaxBatchSize.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.Deconstruct(out string! ConsumerGroupId, out bool AsSingleton, out System.TimeSpan Interval, out System.TimeSpan InitialDelay, out int ConcurrencyLimit, out int MaxConcurrency, out int RetryCountOnError, out int MaxBatchSize, out int MaxProcessingIterations, out System.TimeSpan IterationDelay, out System.TimeSpan LockDuration, out System.TimeSpan LockRenewal, out System.TimeSpan LookbackInterval, out int MaxDeliveryAttempts, out System.TimeSpan BatchingWindow, out System.TimeSpan PerTenantTimeout, out int PerTenantMaxDegreeOfParallelism, out bool Paused, out int Version, out string! ProviderKey, out System.TimeSpan IdleMaxInterval, out object? Tag) -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.IterationDelay.get -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettings.IterationDelay.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.LockRenewal.get -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettings.LockRenewal.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.LookbackInterval.get -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettings.MaxDeliveryAttempts.get -> int
+Sa.Outbox.Delivery.OutboxConsumerSettings.LookbackInterval.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.MaxDeliveryAttempts.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.BatchingWindow.get -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettings.BatchingWindow.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.PerTenantMaxDegreeOfParallelism.get -> int
+Sa.Outbox.Delivery.OutboxConsumerSettings.PerTenantTimeout.get -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettings.Paused.get -> bool
+Sa.Outbox.Delivery.OutboxConsumerSettings.PerTenantTimeout.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.PerTenantMaxDegreeOfParallelism.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.Version.get -> int
+Sa.Outbox.Delivery.OutboxConsumerSettings.Paused.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.ProviderKey.get -> string!
+Sa.Outbox.Delivery.OutboxConsumerSettings.ProviderKey.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.Version.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.InitialDelay.get -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettings.InitialDelay.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.IdleMaxInterval.get -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettings.IdleMaxInterval.init -> void
+Sa.Outbox.Delivery.OutboxConsumerSettings.Tag.get -> object?
+Sa.Outbox.Delivery.OutboxConsumerSettings.Tag.init -> void
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.Payload.get -> TMessage
-Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.Payload.init -> void
-Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.PartInfo.get -> Sa.Outbox.OutboxPartInfo
-Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.PartInfo.init -> void
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.DeliveryInfo.get -> Sa.Outbox.Delivery.OutboxTaskDeliveryInfo
+Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.OutboxId.get -> System.Guid
+Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.PartInfo.get -> Sa.Outbox.OutboxPartInfo
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.RentToken.get -> Sa.Outbox.Delivery.OutboxRentToken
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.DeliveryInfo.init -> void
+Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.Payload.init -> void
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.RentToken.init -> void
+Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.OutboxId.init -> void
+Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.PartInfo.init -> void
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.OutboxDeliveryMessage() -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.AsSingleton.get -> bool
-Sa.Outbox.Delivery.OutboxConsumerSettings.ConsumerGroupId.get -> string!
 ~override Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.ToString() -> string
-Sa.Outbox.Delivery.OutboxConsumerSettings.AsSingleton.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.ConsumerGroupId.init -> void
 static Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.operator !=(Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage> left, Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage> right) -> bool
-Sa.Outbox.Delivery.OutboxConsumerSettings
 static Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.operator ==(Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage> left, Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage> right) -> bool
 override Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.GetHashCode() -> int
 ~override Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.Equals(object obj) -> bool
-static Sa.Outbox.Delivery.OutboxConsumerSettings.operator !=(Sa.Outbox.Delivery.OutboxConsumerSettings? left, Sa.Outbox.Delivery.OutboxConsumerSettings? right) -> bool
-static Sa.Outbox.Delivery.OutboxConsumerSettings.operator ==(Sa.Outbox.Delivery.OutboxConsumerSettings? left, Sa.Outbox.Delivery.OutboxConsumerSettings? right) -> bool
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.Equals(Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage> other) -> bool
-override Sa.Outbox.Delivery.OutboxConsumerSettings.GetHashCode() -> int
-override Sa.Outbox.Delivery.OutboxConsumerSettings.Equals(object? obj) -> bool
-Sa.Outbox.Delivery.OutboxConsumerSettings.Equals(Sa.Outbox.Delivery.OutboxConsumerSettings? other) -> bool
-Sa.Outbox.Delivery.OutboxConsumerSettings.<Clone>$() -> Sa.Outbox.Delivery.OutboxConsumerSettings!
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.Deconstruct(out System.Guid OutboxId, out string! PayloadId, out TMessage Payload, out Sa.Outbox.OutboxPartInfo PartInfo, out Sa.Outbox.Delivery.OutboxTaskDeliveryInfo DeliveryInfo, out Sa.Outbox.Delivery.OutboxRentToken RentToken) -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.Deconstruct(out string! ConsumerGroupId, out bool AsSingleton, out System.TimeSpan Interval, out System.TimeSpan InitialDelay, out int ConcurrencyLimit, out int MaxConcurrency, out int RetryCountOnError, out int MaxBatchSize, out int MaxProcessingIterations, out System.TimeSpan IterationDelay, out System.TimeSpan LockDuration, out System.TimeSpan LockRenewal, out System.TimeSpan LookbackInterval, out int MaxDeliveryAttempts, out System.TimeSpan BatchingWindow, out System.TimeSpan PerTenantTimeout, out int PerTenantMaxDegreeOfParallelism, out bool Paused, out int Version, out string! ProviderKey, out System.TimeSpan IdleMaxInterval, out object? Tag) -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.Interval.get -> System.TimeSpan
-Sa.Outbox.Delivery.OutboxConsumerSettings.InitialDelay.get -> System.TimeSpan
-Sa.Outbox.Delivery.OutboxConsumerSettings.Interval.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.InitialDelay.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.ConcurrencyLimit.get -> int
-Sa.Outbox.Delivery.OutboxConsumerSettings.ConcurrencyLimit.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.MaxConcurrency.get -> int
-Sa.Outbox.Delivery.OutboxConsumerSettings.RetryCountOnError.get -> int
-Sa.Outbox.Delivery.OutboxConsumerSettings.MaxConcurrency.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.RetryCountOnError.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.MaxBatchSize.get -> int
-Sa.Outbox.Delivery.OutboxConsumerSettings.MaxProcessingIterations.get -> int
-Sa.Outbox.Delivery.OutboxConsumerSettings.MaxBatchSize.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.MaxProcessingIterations.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.IterationDelay.get -> System.TimeSpan
-Sa.Outbox.Delivery.OutboxConsumerSettings.IterationDelay.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.LockDuration.get -> System.TimeSpan
-Sa.Outbox.Delivery.OutboxConsumerSettings.LockRenewal.get -> System.TimeSpan
-Sa.Outbox.Delivery.OutboxConsumerSettings.LockDuration.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.LookbackInterval.get -> System.TimeSpan
-Sa.Outbox.Delivery.OutboxConsumerSettings.LockRenewal.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.LookbackInterval.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.MaxDeliveryAttempts.get -> int
-Sa.Outbox.Delivery.OutboxConsumerSettings.PerTenantTimeout.get -> System.TimeSpan
-Sa.Outbox.Delivery.OutboxConsumerSettings.MaxDeliveryAttempts.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.PerTenantTimeout.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.PerTenantMaxDegreeOfParallelism.get -> int
-Sa.Outbox.Delivery.OutboxConsumerSettings.PerTenantMaxDegreeOfParallelism.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.Paused.get -> bool
-Sa.Outbox.Delivery.OutboxConsumerSettings.Version.get -> int
-Sa.Outbox.Delivery.OutboxConsumerSettings.ProviderKey.get -> string!
-Sa.Outbox.Delivery.OutboxConsumerSettings.Version.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.Paused.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.ProviderKey.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.IdleMaxInterval.get -> System.TimeSpan
-Sa.Outbox.Delivery.OutboxConsumerSettings.Tag.get -> object?
-Sa.Outbox.Delivery.OutboxConsumerSettings.IdleMaxInterval.init -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.Tag.init -> void
-Sa.Outbox.Exceptions.OutboxException.OutboxException() -> void
+Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.PayloadId.get -> string!
+Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.PayloadId.init -> void
 static Sa.Outbox.Setup.AddSaOutbox(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Outbox.IOutboxBuilder!>? build = null, string! scopeKey = "outbox") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Outbox.Delivery.OutboxConsumerSettings.LockDuration.get -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettings.LockDuration.init -> void
+Sa.Outbox.Exceptions.OutboxException.OutboxException() -> void
 Sa.Outbox.Exceptions.OutboxException.OutboxException(string! message) -> void
-Sa.Outbox.Exceptions.OutboxException.OutboxException(string! message, System.Exception? innerException) -> void
-Sa.Outbox.Exceptions.DeliveryPermanentException.DeliveryPermanentException(string! message, System.Exception? innerException = null, Sa.Outbox.Delivery.DeliveryStatusCode statusCode = Sa.Outbox.Delivery.DeliveryStatusCode.Error) -> void
 Sa.Outbox.IConsumer<TMessage>.Consume(Sa.Outbox.Delivery.OutboxConsumerSettings! settings, Sa.Outbox.OutboxMessageFilter! filter, System.ReadOnlyMemory<Sa.Outbox.IOutboxContextOperations<TMessage>!> messages, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 Sa.Outbox.Exceptions.DeliveryException.DeliveryException(string! message, System.Exception? innerException, Sa.Outbox.Delivery.DeliveryStatusCode statusCode, System.TimeSpan? postponeDelay = null) -> void
+Sa.Outbox.Exceptions.OutboxException.OutboxException(string! message, System.Exception? innerException) -> void
 Sa.Outbox.Exceptions.DeliveryException.StatusCode.get -> Sa.Outbox.Delivery.DeliveryStatusCode
-Sa.Outbox.Exceptions.DeliveryException.PostponeDelay.get -> System.TimeSpan?
-Sa.Outbox.IOutboxBuilder.WithPublishSettings(System.Func<System.IServiceProvider!, Sa.Outbox.Publication.OutboxPublishSettings!, Sa.Outbox.Publication.OutboxPublishSettings!>! configure) -> Sa.Outbox.IOutboxBuilder!
 Sa.Outbox.IOutboxBuilder.WithDeliveries(System.Action<Sa.Outbox.Delivery.IDeliveryBuilder!>! build) -> Sa.Outbox.IOutboxBuilder!
+Sa.Outbox.IOutboxBuilder.WithPublishSettings(System.Func<System.IServiceProvider!, Sa.Outbox.Publication.OutboxPublishSettings!, Sa.Outbox.Publication.OutboxPublishSettings!>! configure) -> Sa.Outbox.IOutboxBuilder!
 Sa.Outbox.IOutboxBuilder.WithDeliveryConfigurationSection(string? sectionPrefix = "Outbox:DeliveryGroups") -> Sa.Outbox.IOutboxBuilder!
+Sa.Outbox.IOutboxBuilder.WithDeliveryBatcher<TImplementation>() -> Sa.Outbox.IOutboxBuilder!
 Sa.Outbox.IOutboxBuilder.WithTenants(System.Action<System.IServiceProvider!, Sa.Outbox.Partitional.TenantSettings!>! configure) -> Sa.Outbox.IOutboxBuilder!
 Sa.Outbox.IOutboxBuilder.WithIdleWaitStrategy<TImplementation>() -> Sa.Outbox.IOutboxBuilder!
-Sa.Outbox.IOutboxBuilder.WithDeliveryBatcher<TImplementation>() -> Sa.Outbox.IOutboxBuilder!
 Sa.Outbox.IOutboxBuilder.WithIdleWaitStrategy(Sa.Outbox.Delivery.IEmptyQueueWaitStrategy! strategy) -> Sa.Outbox.IOutboxBuilder!
 Sa.Outbox.IOutboxBuilder.WithMessageSerializer(System.Func<System.IServiceProvider!, Sa.Outbox.Serialization.IOutboxMessageSerializer!>! messageSerializerFactory) -> Sa.Outbox.IOutboxBuilder!
-Sa.Outbox.IOutboxBuilder.WithMessageSerializer<TService>() -> Sa.Outbox.IOutboxBuilder!
 Sa.Outbox.IOutboxBuilder.WithMessageSerializer<TService>(TService! instance) -> Sa.Outbox.IOutboxBuilder!
+Sa.Outbox.IOutboxBuilder.WithMessageSerializer<TService>() -> Sa.Outbox.IOutboxBuilder!
 Sa.Outbox.IOutboxBuilder.WithMetadata(System.Action<System.IServiceProvider!, Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder!>! configure) -> Sa.Outbox.IOutboxBuilder!
-Sa.Outbox.IOutboxBuilder.AddMetadata<TMessage>(string! partName, System.Func<TMessage, string!>? getPayloadId = null) -> Sa.Outbox.IOutboxBuilder!
-static Sa.Outbox.Serialization.OutboxPayloadCodec.Serialize<T>(Sa.Outbox.Serialization.IOutboxMessageSerializer! serializer, T value) -> byte[]!
-Sa.Outbox.IOutboxBuilder.AddMetadata<TMessage>() -> Sa.Outbox.IOutboxBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettings.BatchingWindow.get -> System.TimeSpan
-static Sa.Outbox.Serialization.OutboxPayloadCodec.Deserialize<T>(Sa.Outbox.Serialization.IOutboxMessageSerializer! serializer, byte[]! payload) -> T?
-Sa.Outbox.Delivery.OutboxConsumerSettings.BatchingWindow.init -> void
-static Sa.Outbox.Serialization.JsonOutboxMessageSerializer.Instance.get -> Sa.Outbox.Serialization.JsonOutboxMessageSerializer!
-Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.OutboxTaskDeliveryInfo(long TaskId, long DeliveryId, int Attempt, long LastErrorId, Sa.Outbox.Delivery.DeliveryStatus Status, Sa.Outbox.OutboxPartInfo PartInfo) -> void
-Sa.Outbox.InMemory.InMemoryOutboxSettings.Capacity.get -> int
-Sa.Outbox.InMemory.InMemoryOutboxSettings.Enabled.set -> void
-Sa.Outbox.InMemory.InMemoryOutboxSettings.Enabled.get -> bool
-Sa.Outbox.Serialization.JsonOutboxMessageSerializer.Deserialize<T>(System.IO.Stream! stream) -> T?
-Sa.Outbox.InMemory.InMemoryOutboxSettings.Capacity.set -> void
-Sa.Outbox.Delivery.OutboxRentToken.OutboxRentToken(long Key, long SubKey = 0) -> void
+Sa.Outbox.IOutboxContext.OutboxId.get -> System.Guid
 Sa.Outbox.IOutboxContext.PayloadId.get -> string!
 Sa.Outbox.IOutboxContext.PartInfo.get -> Sa.Outbox.OutboxPartInfo
-Sa.Outbox.IOutboxContext.OutboxId.get -> System.Guid
-Sa.Outbox.IOutboxContext.DeliveryResult.get -> Sa.Outbox.Delivery.DeliveryStatus
 Sa.Outbox.IOutboxContext.DeliveryInfo.get -> Sa.Outbox.Delivery.OutboxTaskDeliveryInfo
 Sa.Outbox.IOutboxContext.RentToken.get -> Sa.Outbox.Delivery.OutboxRentToken
-Sa.Outbox.IOutboxContext.PostponeDelay.get -> System.TimeSpan
+Sa.Outbox.IOutboxContext.DeliveryResult.get -> Sa.Outbox.Delivery.DeliveryStatus
 Sa.Outbox.IOutboxContext.Exception.get -> System.Exception?
-static Sa.Outbox.Delivery.OutboxRentToken.None.get -> Sa.Outbox.Delivery.OutboxRentToken
-Sa.Outbox.Serialization.JsonOutboxMessageSerializer.Serialize<T>(System.IO.Stream! stream, T value) -> void
-Sa.Outbox.Serialization.IOutboxMessageSerializer.Serialize<T>(System.IO.Stream! stream, T value) -> void
-override Sa.Outbox.Delivery.OutboxRentToken.ToString() -> string!
-Sa.Outbox.Delivery.OutboxRentToken.IsNone.get -> bool
-Sa.Outbox.Serialization.IOutboxMessageSerializer.Deserialize<T>(System.IO.Stream! stream) -> T?
+Sa.Outbox.IOutboxContext.PostponeDelay.get -> System.TimeSpan
+Sa.Outbox.Exceptions.DeliveryException.PostponeDelay.get -> System.TimeSpan?
 Sa.Outbox.IOutboxContext<TMessage>.Payload.get -> TMessage
 Sa.Outbox.IOutboxContextOperations<TMessage>.Ok(string? message = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.Created(string? message = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.Accepted(string? message = null) -> void
-Sa.Outbox.IOutboxContextOperations<TMessage>.NoContent(string? message = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.Ok203(string? message = null) -> void
-Sa.Outbox.IOutboxContextOperations<TMessage>.Aborted(string? message = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.MovedPermanently(string? message = null) -> void
+Sa.Outbox.IOutboxContextOperations<TMessage>.NoContent(string? message = null) -> void
+Sa.Outbox.IOutboxContextOperations<TMessage>.Aborted(string? message = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.Postpone(System.TimeSpan postpone, string? message = null) -> void
-Sa.Outbox.IOutboxContextOperations<TMessage>.Warn(System.Exception! exception, string? message = null, System.TimeSpan? postpone = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.Retry(System.TimeSpan postpone, string? message = null) -> void
-Sa.Outbox.IOutboxContextOperations<TMessage>.Fail(System.Exception! exception, string? message = null) -> void
+Sa.Outbox.IOutboxContextOperations<TMessage>.Warn(System.Exception! exception, string? message = null, System.TimeSpan? postpone = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.Error501(System.Exception! exception, string? message = null) -> void
-Sa.Outbox.IOutboxContextOperations<TMessage>.Error503(System.Exception! exception, string? message = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.Error502(System.Exception! exception, string? message = null) -> void
-Sa.Outbox.IOutboxContextOperations<TMessage>.Error505(System.Exception! exception, string? message = null) -> void
+Sa.Outbox.IOutboxContextOperations<TMessage>.Error503(System.Exception! exception, string? message = null) -> void
+Sa.Outbox.IOutboxContextOperations<TMessage>.Fail(System.Exception! exception, string? message = null) -> void
+Sa.Outbox.IOutboxContextOperations<TMessage>.Error504(System.Exception! exception, string? message = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.Error506(System.Exception! exception, string? message = null) -> void
-Sa.Outbox.IOutboxContextOperations<TMessage>.Error507(System.Exception! exception, string? message = null) -> void
+Sa.Outbox.IOutboxBuilder.AddMetadata<TMessage>(string! partName, System.Func<TMessage, string!>? getPayloadId = null) -> Sa.Outbox.IOutboxBuilder!
+Sa.Outbox.IOutboxContextOperations<TMessage>.Error505(System.Exception! exception, string? message = null) -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.ErrorMaxAttempts() -> void
 Sa.Outbox.IOutboxContextOperations<TMessage>.GetUtcNow() -> System.DateTimeOffset
+Sa.Outbox.IOutboxBuilder.AddMetadata<TMessage>() -> Sa.Outbox.IOutboxBuilder!
+Sa.Outbox.IOutboxContextOperations<TMessage>.Error507(System.Exception! exception, string? message = null) -> void
+Sa.Outbox.IOutboxPublishable.GetPayloadId() -> string!
+Sa.Outbox.IOutboxPublishable.GetTenantId() -> int
+Sa.Outbox.IOutboxPublishable.PartName.get -> string!
+Sa.Outbox.InMemory.InMemoryOutboxSettings.Enabled.get -> bool
+Sa.Outbox.InMemory.InMemoryOutboxSettings.Enabled.set -> void
+Sa.Outbox.InMemory.InMemoryOutboxSettings.Capacity.get -> int
+Sa.Outbox.InMemory.InMemoryOutboxSettings.Capacity.set -> void
+Sa.Outbox.Exceptions.DeliveryPermanentException.DeliveryPermanentException(string! message, System.Exception? innerException = null, Sa.Outbox.Delivery.DeliveryStatusCode statusCode = Sa.Outbox.Delivery.DeliveryStatusCode.Error) -> void
+Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder.AddMetadata<TMessage>(string! partName, System.Func<TMessage, string!>? getPayloadId = null) -> Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder!
+Sa.Outbox.OutboxMessageFilter.OutboxMessageFilter(string! TransactId, string! ConsumerGroupId, string! PayloadType, int TenantId, string! Part, System.DateTimeOffset FromDate, System.DateTimeOffset ToDate, System.DateTimeOffset NowDate, string! ProviderKey = "outbox") -> void
+Sa.Outbox.Delivery.OutboxTaskDeliveryInfo.OutboxTaskDeliveryInfo(long TaskId, long DeliveryId, int Attempt, long LastErrorId, Sa.Outbox.Delivery.DeliveryStatus Status, Sa.Outbox.OutboxPartInfo PartInfo) -> void
+Sa.Outbox.OutboxPartInfo.OutboxPartInfo(int TenantId, string! Part, System.DateTimeOffset CreatedAt) -> void
 static Sa.Outbox.InMemory.Setup.AddSaOutboxUsingInMemory(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Outbox.InMemory.InMemoryOutboxSettings!>? configure, System.Action<Sa.Outbox.IOutboxBuilder!>? configureOutbox, string! scopeKey = "outbox") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Outbox.Delivery.OutboxRentToken.OutboxRentToken(long Key, long SubKey = 0) -> void
+static Sa.Outbox.OutboxScope.EnsureValid(string? scopeKey) -> string!
+static Sa.Outbox.Delivery.OutboxRentToken.None.get -> Sa.Outbox.Delivery.OutboxRentToken
+Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder.AddMetadata<TMessage>() -> Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder!
+Sa.Outbox.Delivery.OutboxRentToken.IsNone.get -> bool
+Sa.Outbox.PlugServices.IOutboxBulkWriter.InsertBulk<TMessage>(Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage> batch, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+override Sa.Outbox.Delivery.OutboxRentToken.ToString() -> string!
+Sa.Outbox.PlugServices.IOutboxBulkWriter.InsertBulk<TMessage>(Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage> batch, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, int tenantId, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Outbox.Publication.IOutboxPublisherResolver.GetPublisher(string! providerKey) -> Sa.Outbox.Publication.IOutboxMessagePublisher!
 static Sa.Outbox.InMemory.Setup.AddSaOutboxUsingInMemory(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Outbox.InMemory.InMemoryOutboxSettings!>? configure = null, string! scopeKey = "outbox") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-Sa.Outbox.IOutboxContextOperations<TMessage>.Error504(System.Exception! exception, string? message = null) -> void
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithMaxBatchSize(this Sa.Outbox.Publication.OutboxPublishSettings! settings, int batchSize) -> Sa.Outbox.Publication.OutboxPublishSettings!
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch32(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch64(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch128(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch16(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch256(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch512(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch1024(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch2048(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
-static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithMaximumBatch(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
-Sa.Outbox.Publication.OutboxPublishSettings.MaxBatchSize.get -> int
-Sa.Outbox.Publication.OutboxPublishSettings.OutboxPublishSettings(int MaxBatchSize = 256) -> void
+Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, int tenantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Outbox.Partitional.OutboxTenantPartPair.OutboxTenantPartPair(int TenantId, string! Part) -> void
+Sa.Outbox.Partitional.TenantSettings.AutoDetect.get -> bool
+Sa.Outbox.Partitional.TenantSettings.GetTenantIds.get -> System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<int[]!>>!
+Sa.Outbox.PlugServices.IOutboxDeliveryManager.RentDelivery<TMessage>(System.Memory<Sa.Outbox.IOutboxContextOperations<TMessage>!> writeBuffer, System.TimeSpan lockDuration, Sa.Outbox.OutboxMessageFilter! filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+Sa.Outbox.PlugServices.IOutboxDeliveryManager.ExtendDelivery(System.TimeSpan lockExpiration, Sa.Outbox.OutboxMessageFilter! filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+Sa.Outbox.PlugServices.IOutboxDeliveryManager.ReturnDelivery<TMessage>(System.ReadOnlyMemory<Sa.Outbox.IOutboxContextOperations<TMessage>!> messages, Sa.Outbox.OutboxMessageFilter! filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+Sa.Outbox.Partitional.TenantSettings.WithTenantProvider(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<int[]!>>! getTenantIds) -> void
+Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, System.Func<TMessage, int>! getTenantId, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Outbox.Partitional.TenantSettings.WithTenantSource(Sa.Outbox.Partitional.ITenantSource! source) -> void
+Sa.Outbox.Partitional.TenantSettings.WithTenantIds(params int[]! tenantIds) -> void
+Sa.Outbox.PlugServices.IOutboxProviderRegistry.Descriptor.get -> Sa.Outbox.PlugServices.OutboxProviderDescriptor!
+Sa.Outbox.Serialization.IOutboxMessageSerializer.Deserialize<T>(System.IO.Stream! stream) -> T?
+Sa.Outbox.Serialization.IOutboxMessageSerializer.Serialize<T>(System.IO.Stream! stream, T value) -> void
+Sa.Outbox.Partitional.TenantSettings.WithAutoDetect() -> void
+Sa.Outbox.PlugServices.IOutboxTenantDetector.CanDetect.get -> bool
+Sa.Outbox.Partitional.TenantSettings.WithNoAutoDetect() -> void
+static Sa.Outbox.Serialization.OutboxPayloadCodec.Serialize<T>(Sa.Outbox.Serialization.IOutboxMessageSerializer! serializer, T value) -> byte[]!
 Sa.Outbox.Delivery.OutboxGroupKey.OutboxGroupKey(string! ProviderKey, string! GroupId) -> void
-Sa.Outbox.Publication.OutboxPublishSettings.MaxBatchSize.init -> void
 override Sa.Outbox.Delivery.OutboxGroupKey.ToString() -> string!
-Sa.Outbox.Publication.OutboxPublishSettings.WithMaxBatchSize(int batchSize) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Serialization.OutboxPayloadCodec.Deserialize<T>(Sa.Outbox.Serialization.IOutboxMessageSerializer! serializer, byte[]! payload) -> T?
 Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage>.OutboxDeliveryMessage(System.Guid OutboxId, string! PayloadId, TMessage Payload, Sa.Outbox.OutboxPartInfo PartInfo, Sa.Outbox.Delivery.OutboxTaskDeliveryInfo DeliveryInfo, Sa.Outbox.Delivery.OutboxRentToken RentToken = default(Sa.Outbox.Delivery.OutboxRentToken)) -> void
 Sa.Outbox.Delivery.OutboxDeliveryConfiguration.SectionPrefix.get -> string?
 Sa.Outbox.Delivery.OutboxDeliveryConfiguration.OutboxDeliveryConfiguration(string? sectionPrefix = "Outbox:DeliveryGroups") -> void
 Sa.Outbox.Delivery.OutboxDeliveryConfiguration.ResolveSection(string! consumerGroupId) -> string?
 static Sa.Outbox.Delivery.OutboxDefaults.Interval.get -> System.TimeSpan
-static Sa.Outbox.Delivery.OutboxDefaults.InitialDelay.get -> System.TimeSpan
 static Sa.Outbox.Delivery.OutboxDefaults.ConcurrencyLimit.get -> int
+static Sa.Outbox.Delivery.OutboxDefaults.InitialDelay.get -> System.TimeSpan
 static Sa.Outbox.Delivery.OutboxDefaults.AsSingleton.get -> bool
 static Sa.Outbox.Delivery.OutboxDefaults.MaxConcurrency.get -> int
 static Sa.Outbox.Delivery.OutboxDefaults.RetryCountOnError.get -> int
+static Sa.Outbox.Delivery.OutboxDefaults.MaxBatchSize.get -> int
+static Sa.Outbox.Serialization.JsonOutboxMessageSerializer.Instance.get -> Sa.Outbox.Serialization.JsonOutboxMessageSerializer!
 static Sa.Outbox.Delivery.OutboxDefaults.MaxProcessingIterations.get -> int
 static Sa.Outbox.Delivery.OutboxDefaults.IterationDelay.get -> System.TimeSpan
-static Sa.Outbox.Delivery.OutboxDefaults.MaxBatchSize.get -> int
 static Sa.Outbox.Delivery.OutboxDefaults.LockDuration.get -> System.TimeSpan
 static Sa.Outbox.Delivery.OutboxDefaults.LockRenewal.get -> System.TimeSpan
+Sa.Outbox.Serialization.JsonOutboxMessageSerializer.Deserialize<T>(System.IO.Stream! stream) -> T?
 static Sa.Outbox.Delivery.OutboxDefaults.MaxDeliveryAttempts.get -> int
 static Sa.Outbox.Delivery.OutboxDefaults.LookbackInterval.get -> System.TimeSpan
 static Sa.Outbox.Delivery.OutboxDefaults.BatchingWindow.get -> System.TimeSpan
+Sa.Outbox.Serialization.JsonOutboxMessageSerializer.Serialize<T>(System.IO.Stream! stream, T value) -> void
 static Sa.Outbox.Delivery.OutboxDefaults.PerTenantTimeout.get -> System.TimeSpan
 static Sa.Outbox.Delivery.OutboxDefaults.PerTenantMaxDegreeOfParallelism.get -> int
+Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, System.Func<TMessage, int>! getTenantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
 static Sa.Outbox.Delivery.OutboxDefaults.Paused.get -> bool
 static Sa.Outbox.Delivery.OutboxDefaults.IdleMaxInterval.get -> System.TimeSpan
-Sa.Outbox.Publication.IOutboxPublisherResolver.GetPublisher(string! providerKey) -> Sa.Outbox.Publication.IOutboxMessagePublisher!
-Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, int tenantId, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, int tenantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, System.Func<TMessage, int>! getTenantId, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, System.Func<TMessage, int>! getTenantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.Build() -> Sa.Outbox.Delivery.OutboxConsumerSettings!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithConsumerGroupId(string! consumerGroupId) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithProviderKey(string! providerKey) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.AsSingleton(bool value = true) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithInterval(System.TimeSpan interval) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithInitialDelay(System.TimeSpan initialDelay) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.StartImmediately() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Publication.IOutboxMessagePublisher.PublishSingle<TMessage>(TMessage message, int tenantId, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithConcurrencyLimit(int concurrencyLimit) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Publication.IOutboxMessagePublisher.PublishSingle<TMessage>(TMessage message, int tenantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithMaxConcurrency(int maxConcurrency) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Publication.IOutboxMessagePublisher.PublishSingle<TMessage>(TMessage message, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithRetryCountOnError(int retryCountOnError) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithNoRetries() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Publication.IOutboxMessagePublisher.PublishSingle<TMessage>(TMessage message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithMaxBatchSize(int maxBatchSize) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithInfiniteRetries() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithMaxProcessingIterations(int maxProcessingIterations) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithSingleIteration() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithUnlimitedIterations() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithIterationDelay(System.TimeSpan iterationDelay) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithIdleBackoff(System.TimeSpan maxInterval) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithFixedInterval() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithLockDuration(System.TimeSpan lockDuration) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithNoLockDuration() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithLockRenewal(System.TimeSpan lockRenewal) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithLookbackInterval(System.TimeSpan lookbackInterval) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithMaxDeliveryAttempts(int maxDeliveryAttempts) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithBatchingWindow(System.TimeSpan batchingWindow) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithNoBatchingWindow() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithPerTenantTimeout(System.TimeSpan perTenantTimeout) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithPerTenantMaxDegreeOfParallelism(int degree) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithTenantSequentialProcessing() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithTenantMaxParallelism() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.Resumed() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.Paused(bool paused = true) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithTag(object! tag) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
-Sa.Outbox.Delivery.OutboxConsumerSettings.OutboxConsumerSettings(string! ConsumerGroupId, bool AsSingleton, System.TimeSpan Interval, System.TimeSpan InitialDelay, int ConcurrencyLimit, int MaxConcurrency, int RetryCountOnError, int MaxBatchSize, int MaxProcessingIterations, System.TimeSpan IterationDelay, System.TimeSpan LockDuration, System.TimeSpan LockRenewal, System.TimeSpan LookbackInterval, int MaxDeliveryAttempts, System.TimeSpan BatchingWindow, System.TimeSpan PerTenantTimeout, int PerTenantMaxDegreeOfParallelism, bool Paused, int Version, string! ProviderKey = "outbox", System.TimeSpan IdleMaxInterval = default(System.TimeSpan), object? Tag = null) -> void
-Sa.Outbox.Delivery.OutboxConsumerSettings.Validate() -> System.Collections.Generic.List<string!>!
+Sa.Outbox.Publication.OutboxPublishSettings.OutboxPublishSettings(int MaxBatchSize = 256) -> void
+Sa.Outbox.Publication.OutboxPublishSettings.MaxBatchSize.get -> int
+Sa.Outbox.Publication.OutboxPublishSettings.MaxBatchSize.init -> void
+Sa.Outbox.Publication.OutboxPublishSettings.WithMaxBatchSize(int batchSize) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithMaxBatchSize(this Sa.Outbox.Publication.OutboxPublishSettings! settings, int batchSize) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch16(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch32(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch64(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch128(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch256(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch1024(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch512(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithMaximumBatch(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
+static Sa.Outbox.Publication.OutboxPublishSettingsExtensions.WithBatch2048(this Sa.Outbox.Publication.OutboxPublishSettings! settings) -> Sa.Outbox.Publication.OutboxPublishSettings!
 static Sa.Outbox.PlugServices.OutboxProviderSetup.AddOutboxProvider(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! providerKey, Sa.Outbox.PlugServices.OutboxProviderDescriptor! descriptor, System.Action<Sa.Outbox.PlugServices.OutboxProviderBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-Sa.Outbox.Delivery.OutboxConsumerSettings.ThrowIfInvalid() -> void
-Sa.Outbox.IOutboxPublishable.GetPayloadId() -> string!
-Sa.Outbox.IOutboxPublishable.GetTenantId() -> int
-Sa.Outbox.IOutboxPublishable.PartName.get -> string!
-static Sa.Outbox.PlugServices.OutboxProviderSetup.AddOutboxProvider(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Sa.Outbox.PlugServices.OutboxProviderDescriptor! descriptor, System.Action<Sa.Outbox.PlugServices.OutboxProviderBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-override Sa.Outbox.Delivery.OutboxConsumerSettings.ToString() -> string!
-Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder.AddMetadata<TMessage>(string! partName, System.Func<TMessage, string!>? getPayloadId = null) -> Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder!
-Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder.AddMetadata<TMessage>() -> Sa.Outbox.Metadata.IOutboxMessageMetadataBuilder!
-Sa.Outbox.OutboxMessageFilter.OutboxMessageFilter(string! TransactId, string! ConsumerGroupId, string! PayloadType, int TenantId, string! Part, System.DateTimeOffset FromDate, System.DateTimeOffset ToDate, System.DateTimeOffset NowDate, string! ProviderKey = "outbox") -> void
-Sa.Outbox.OutboxPartInfo.OutboxPartInfo(int TenantId, string! Part, System.DateTimeOffset CreatedAt) -> void
+Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
 Sa.Outbox.Delivery.DeliveryStatus.DeliveryStatus(Sa.Outbox.Delivery.DeliveryStatusCode Code, string! Message, System.DateTimeOffset CreatedAt) -> void
-static Sa.Outbox.OutboxScope.EnsureValid(string? scopeKey) -> string!
-Sa.Outbox.Partitional.TenantSettings.AutoDetect.get -> bool
-Sa.Outbox.Partitional.TenantSettings.GetTenantIds.get -> System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<int[]!>>!
-Sa.Outbox.Partitional.TenantSettings.WithTenantProvider(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<int[]!>>! getTenantIds) -> void
-Sa.Outbox.PlugServices.IOutboxBulkWriter.InsertBulk<TMessage>(Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage> batch, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.PlugServices.IOutboxBulkWriter.InsertBulk<TMessage>(Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage> batch, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
-Sa.Outbox.PlugServices.IOutboxDeliveryManager.RentDelivery<TMessage>(System.Memory<Sa.Outbox.IOutboxContextOperations<TMessage>!> writeBuffer, System.TimeSpan lockDuration, Sa.Outbox.OutboxMessageFilter! filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
-Sa.Outbox.PlugServices.IOutboxDeliveryManager.ExtendDelivery(System.TimeSpan lockExpiration, Sa.Outbox.OutboxMessageFilter! filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
-Sa.Outbox.PlugServices.IOutboxTenantDetector.CanDetect.get -> bool
-Sa.Outbox.PlugServices.IOutboxProviderRegistry.Descriptor.get -> Sa.Outbox.PlugServices.OutboxProviderDescriptor!
-Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.OutboxMessageBatchItem(string! PayloadId, TMessage Payload) -> void
-Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.OutboxMessageBatch(System.ReadOnlyMemory<Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>> messages, Sa.Outbox.OutboxPartInfo partInfo) -> void
-Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.Messages.get -> System.ReadOnlyMemory<Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>>
-Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.PartInfo.get -> Sa.Outbox.OutboxPartInfo
-Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.Count.get -> int
-Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.IsEmpty.get -> bool
-Sa.Outbox.PlugServices.IOutboxDeliveryManager.ReturnDelivery<TMessage>(System.ReadOnlyMemory<Sa.Outbox.IOutboxContextOperations<TMessage>!> messages, Sa.Outbox.OutboxMessageFilter! filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
 static Sa.Outbox.Delivery.DeliveryStatusCodeExtensions.IsPending(this Sa.Outbox.Delivery.DeliveryStatusCode statusCode) -> bool
-Sa.Outbox.Partitional.TenantSettings.WithTenantSource(Sa.Outbox.Partitional.ITenantSource! source) -> void
+static Sa.Outbox.PlugServices.OutboxProviderSetup.AddOutboxProvider(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Sa.Outbox.PlugServices.OutboxProviderDescriptor! descriptor, System.Action<Sa.Outbox.PlugServices.OutboxProviderBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Sa.Outbox.Delivery.DeliveryStatusCodeExtensions.IsProcessing(this Sa.Outbox.Delivery.DeliveryStatusCode statusCode) -> bool
 static Sa.Outbox.Delivery.DeliveryStatusCodeExtensions.IsPostponed(this Sa.Outbox.Delivery.DeliveryStatusCode statusCode) -> bool
 static Sa.Outbox.Delivery.DeliveryStatusCodeExtensions.IsRetry(this Sa.Outbox.Delivery.DeliveryStatusCode statusCode) -> bool
 static Sa.Outbox.Delivery.DeliveryStatusCodeExtensions.IsSuccess(this Sa.Outbox.Delivery.DeliveryStatusCode statusCode) -> bool
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.OutboxProviderDescriptor(string! Name, Sa.Outbox.PlugServices.OutboxProviderCapabilities Capabilities = Sa.Outbox.PlugServices.OutboxProviderCapabilities.None, string? Version = null) -> void
-Sa.Outbox.Partitional.TenantSettings.WithTenantIds(params int[]! tenantIds) -> void
-Sa.Outbox.PlugServices.IOutboxProviderHealth.CheckAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Sa.Outbox.PlugServices.OutboxProviderHealthReport>
-Sa.Outbox.PlugServices.IOutboxHealth.CheckAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Sa.Outbox.PlugServices.OutboxProviderHealthReport>!>
-Sa.Outbox.PlugServices.OutboxProviderDescriptor.Supports(Sa.Outbox.PlugServices.OutboxProviderCapabilities capability) -> bool
-Sa.Outbox.Partitional.TenantSettings.WithAutoDetect() -> void
-Sa.Outbox.Partitional.TenantSettings.WithNoAutoDetect() -> void
-Sa.Outbox.PlugServices.OutboxProviderBuilder.WithBulkWriter<T>() -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
-Sa.Outbox.PlugServices.OutboxProviderBuilder.WithBulkWriter(System.Func<System.IServiceProvider!, Sa.Outbox.PlugServices.IOutboxBulkWriter!>! factory) -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
-Sa.Outbox.PlugServices.OutboxProviderBuilder.WithDeliveryManager<T>() -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
 static Sa.Outbox.Delivery.DeliveryStatusCodeExtensions.IsAborted(this Sa.Outbox.Delivery.DeliveryStatusCode statusCode) -> bool
-static Sa.Outbox.Delivery.DeliveryStatusCodeExtensions.IsError(this Sa.Outbox.Delivery.DeliveryStatusCode statusCode) -> bool
 static Sa.Outbox.Delivery.DeliveryStatusCodeExtensions.IsWarning(this Sa.Outbox.Delivery.DeliveryStatusCode statusCode) -> bool
+static Sa.Outbox.Delivery.DeliveryStatusCodeExtensions.IsError(this Sa.Outbox.Delivery.DeliveryStatusCode statusCode) -> bool
+Sa.Outbox.Publication.IOutboxMessagePublisher.Publish<TMessage>(System.Collections.Generic.IReadOnlyCollection<TMessage>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Outbox.Publication.IOutboxMessagePublisher.PublishSingle<TMessage>(TMessage message, int tenantId, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Outbox.Publication.IOutboxMessagePublisher.PublishSingle<TMessage>(TMessage message, int tenantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Outbox.Publication.IOutboxMessagePublisher.PublishSingle<TMessage>(TMessage message, object? context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Outbox.Publication.IOutboxMessagePublisher.PublishSingle<TMessage>(TMessage message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ulong>
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.Build() -> Sa.Outbox.Delivery.OutboxConsumerSettings!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithConsumerGroupId(string! consumerGroupId) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithProviderKey(string! providerKey) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.AsSingleton(bool value = true) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithInterval(System.TimeSpan interval) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithInitialDelay(System.TimeSpan initialDelay) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.StartImmediately() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithConcurrencyLimit(int concurrencyLimit) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>.OutboxMessageBatchItem(string! PayloadId, TMessage Payload) -> void
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithMaxConcurrency(int maxConcurrency) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithRetryCountOnError(int retryCountOnError) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithNoRetries() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithInfiniteRetries() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithMaxBatchSize(int maxBatchSize) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithMaxProcessingIterations(int maxProcessingIterations) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithSingleIteration() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithUnlimitedIterations() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithIterationDelay(System.TimeSpan iterationDelay) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.OutboxMessageBatch(System.ReadOnlyMemory<Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>> messages, Sa.Outbox.OutboxPartInfo partInfo) -> void
+Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.Messages.get -> System.ReadOnlyMemory<Sa.Outbox.PlugServices.OutboxMessageBatchItem<TMessage>>
+Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.PartInfo.get -> Sa.Outbox.OutboxPartInfo
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithIdleBackoff(System.TimeSpan maxInterval) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.IsEmpty.get -> bool
+Sa.Outbox.Delivery.ExponentialIdleWaitStrategy.ExponentialIdleWaitStrategy(double multiplier = 2, double jitter = 0.2) -> void
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithFixedInterval() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.PlugServices.OutboxMessageBatch<TMessage>.Count.get -> int
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithLockDuration(System.TimeSpan lockDuration) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithNoLockDuration() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
 Sa.Outbox.PlugServices.IOutboxProviderInitializer.InitializeAsync() -> System.Threading.Tasks.ValueTask
-Sa.Outbox.PlugServices.OutboxProviderHealthReport.OutboxProviderHealthReport(string! ProviderKey, bool Healthy, string? Reason = null, System.TimeSpan Latency = default(System.TimeSpan)) -> void
-Sa.Outbox.Delivery.FixedIntervalWaitStrategy.GetNextWait(System.TimeSpan baseInterval, System.TimeSpan maxInterval, int consecutiveEmptyPolls) -> System.TimeSpan
-Sa.Outbox.Delivery.IConsumerGroupNamingStrategy.GetConsumerGroupName<TConsumer>() -> string!
-Sa.Outbox.Delivery.IDeliveryBackoffStrategy.GetBackoff(int attemptNumber) -> System.TimeSpan
-Sa.Outbox.Delivery.IDeliveryBuilder.AddDelivery<TConsumer, TMessage>(string! consumerGroupId, System.Action<System.IServiceProvider!, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!>? configure = null, System.Guid? jobId = null, string? configurationKey = null) -> Sa.Outbox.Delivery.IDeliveryBuilder!
-Sa.Outbox.Delivery.IDeliveryBuilder.AddDeliveryScoped<TConsumer, TMessage>(string! consumerGroupId, System.Action<System.IServiceProvider!, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!>? configure = null, System.Guid? jobId = null, string? configurationKey = null) -> Sa.Outbox.Delivery.IDeliveryBuilder!
-Sa.Outbox.Delivery.IDeliveryBuilder.AddDeliveryScoped<TConsumer, TMessage>(System.Action<System.IServiceProvider!, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!>? configure = null, System.Guid? jobId = null, string? configurationKey = null) -> Sa.Outbox.Delivery.IDeliveryBuilder!
-Sa.Outbox.Delivery.IDeliveryBuilder.AddDelivery<TConsumer, TMessage>(System.Action<System.IServiceProvider!, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!>? configure = null, System.Guid? jobId = null, string? configurationKey = null) -> Sa.Outbox.Delivery.IDeliveryBuilder!
-Sa.Outbox.Delivery.IDeliveryBuilder.ConfigureDefaultNamingStrategy(Sa.Outbox.Delivery.IConsumerGroupNamingStrategy! strategy) -> Sa.Outbox.Delivery.IDeliveryBuilder!
-Sa.Outbox.PlugServices.OutboxProviderBuilder.WithDeliveryManager(System.Func<System.IServiceProvider!, Sa.Outbox.PlugServices.IOutboxDeliveryManager!>! factory) -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
-Sa.Outbox.Delivery.IDeliveryBatcher.CalculateBatchSize(int maxBatchSize, Sa.Outbox.OutboxMessageFilter! filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
-Sa.Outbox.PlugServices.OutboxProviderBuilder.WithTenantDetector<T>() -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
-Sa.Outbox.Delivery.IDeliveryGroupOptionsProvider.TryApply(string! consumerGroupId, string? configurationKey, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder! builder) -> bool
-Sa.Outbox.Delivery.NoopDeliveryGroupOptionsProvider.TryApply(string! consumerGroupId, string? configurationKey, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder! builder) -> bool
-Sa.Outbox.Delivery.IDeliveryProcessor.ProcessMessages<TMessage>(Sa.Outbox.Delivery.OutboxConsumerSettings! settings, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<long>!
-Sa.Outbox.Delivery.IDeliverySnapshot.ConsumerSettings.get -> Sa.Outbox.Delivery.OutboxConsumerSettings![]!
-Sa.Outbox.Delivery.IDeliverySnapshot.Parts.get -> string![]!
-Sa.Outbox.PlugServices.OutboxProviderBuilder.WithTenantDetector(System.Func<System.IServiceProvider!, Sa.Outbox.PlugServices.IOutboxTenantDetector!>! factory) -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
-Sa.Outbox.Delivery.IEmptyQueueWaitStrategy.GetNextWait(System.TimeSpan baseInterval, System.TimeSpan maxInterval, int consecutiveEmptyPolls) -> System.TimeSpan
-Sa.Outbox.Delivery.IDeliverySnapshot.GetConsumeGroupIds() -> System.Collections.Generic.IEnumerable<string!>!
-Sa.Outbox.Delivery.IOutboxConsumerManager.Apply(string! consumerGroupId, System.Func<Sa.Outbox.Delivery.OutboxConsumerSettings!, Sa.Outbox.Delivery.OutboxConsumerSettings!>! transform) -> void
-Sa.Outbox.Delivery.IOutboxConsumerManager.Apply(Sa.Outbox.Delivery.OutboxGroupKey key, System.Func<Sa.Outbox.Delivery.OutboxConsumerSettings!, Sa.Outbox.Delivery.OutboxConsumerSettings!>! transform) -> void
-Sa.Outbox.Delivery.IOutboxContextFactory.ReturnToPool<TMessage>(Sa.Outbox.IOutboxContextOperations<TMessage>! context) -> void
-Sa.Outbox.Delivery.IOutboxContextFactory.Create<TMessage>(Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage> deliveryMessage) -> Sa.Outbox.IOutboxContextOperations<TMessage>!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithLockRenewal(System.TimeSpan lockRenewal) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithLookbackInterval(System.TimeSpan lookbackInterval) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithMaxDeliveryAttempts(int maxDeliveryAttempts) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Partitional.ITenantSource.GetTenantIds(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int[]!>
 Sa.Outbox.Partitional.IOutboxPartitionalSupport.GetTenantIds(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int[]!>
 Sa.Outbox.Partitional.IOutboxPartitionalSupport.GetTaskParts(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyCollection<Sa.Outbox.Partitional.OutboxTenantPartPair>!>!
 Sa.Outbox.Partitional.IOutboxPartitionalSupport.GetMsgParts(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyCollection<Sa.Outbox.Partitional.OutboxTenantPartPair>!>!
-Sa.Outbox.Partitional.ITenantSource.GetTenantIds(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int[]!>
-Sa.Outbox.Partitional.OutboxTenantPartPair.OutboxTenantPartPair(int TenantId, string! Part) -> void
+Sa.Outbox.Delivery.FixedIntervalWaitStrategy.GetNextWait(System.TimeSpan baseInterval, System.TimeSpan maxInterval, int consecutiveEmptyPolls) -> System.TimeSpan
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithBatchingWindow(System.TimeSpan batchingWindow) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.IConsumerGroupNamingStrategy.GetConsumerGroupName<TConsumer>() -> string!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithPerTenantTimeout(System.TimeSpan perTenantTimeout) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithPerTenantMaxDegreeOfParallelism(int degree) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.PlugServices.OutboxProviderBuilder.WithBulkWriter<T>() -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithTenantSequentialProcessing() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
 Sa.Outbox.Delivery.ExponentialDeliveryBackoffStrategy.ExponentialDeliveryBackoffStrategy(System.TimeSpan baseDelay = default(System.TimeSpan), System.TimeSpan maxDelay = default(System.TimeSpan), double jitterFactorMin = 0.5, double jitterFactorMax = 1) -> void
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithTenantMaxParallelism() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithNoBatchingWindow() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.Paused(bool paused = true) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.Resumed() -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder.WithTag(object! tag) -> Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!
 Sa.Outbox.Delivery.ExponentialDeliveryBackoffStrategy.GetBackoff(int attemptNumber) -> System.TimeSpan
-Sa.Outbox.Delivery.ExponentialIdleWaitStrategy.ExponentialIdleWaitStrategy(double multiplier = 2, double jitter = 0.2) -> void
+Sa.Outbox.PlugServices.IOutboxHealth.CheckAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Sa.Outbox.PlugServices.OutboxProviderHealthReport>!>
+Sa.Outbox.PlugServices.IOutboxProviderHealth.CheckAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Sa.Outbox.PlugServices.OutboxProviderHealthReport>
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.OutboxProviderDescriptor(string! Name, Sa.Outbox.PlugServices.OutboxProviderCapabilities Capabilities = Sa.Outbox.PlugServices.OutboxProviderCapabilities.None, string? Version = null) -> void
+Sa.Outbox.PlugServices.OutboxProviderHealthReport.OutboxProviderHealthReport(string! ProviderKey, bool Healthy, string? Reason = null, System.TimeSpan Latency = default(System.TimeSpan)) -> void
+Sa.Outbox.Delivery.IDeliveryBackoffStrategy.GetBackoff(int attemptNumber) -> System.TimeSpan
+Sa.Outbox.Delivery.IDeliveryBatcher.CalculateBatchSize(int maxBatchSize, Sa.Outbox.OutboxMessageFilter! filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+Sa.Outbox.Delivery.IDeliveryBuilder.AddDelivery<TConsumer, TMessage>(string! consumerGroupId, System.Action<System.IServiceProvider!, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!>? configure = null, System.Guid? jobId = null, string? configurationKey = null) -> Sa.Outbox.Delivery.IDeliveryBuilder!
+Sa.Outbox.Delivery.IDeliveryBuilder.AddDeliveryScoped<TConsumer, TMessage>(System.Action<System.IServiceProvider!, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!>? configure = null, System.Guid? jobId = null, string? configurationKey = null) -> Sa.Outbox.Delivery.IDeliveryBuilder!
+Sa.Outbox.Delivery.IDeliveryBuilder.AddDeliveryScoped<TConsumer, TMessage>(string! consumerGroupId, System.Action<System.IServiceProvider!, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!>? configure = null, System.Guid? jobId = null, string? configurationKey = null) -> Sa.Outbox.Delivery.IDeliveryBuilder!
+Sa.Outbox.Delivery.IDeliveryBuilder.AddDelivery<TConsumer, TMessage>(System.Action<System.IServiceProvider!, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder!>? configure = null, System.Guid? jobId = null, string? configurationKey = null) -> Sa.Outbox.Delivery.IDeliveryBuilder!
+Sa.Outbox.Delivery.IDeliveryBuilder.ConfigureDefaultNamingStrategy(Sa.Outbox.Delivery.IConsumerGroupNamingStrategy! strategy) -> Sa.Outbox.Delivery.IDeliveryBuilder!
+Sa.Outbox.Delivery.IDeliveryGroupOptionsProvider.TryApply(string! consumerGroupId, string? configurationKey, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder! builder) -> bool
+Sa.Outbox.Delivery.NoopDeliveryGroupOptionsProvider.TryApply(string! consumerGroupId, string? configurationKey, Sa.Outbox.Delivery.OutboxConsumerSettingsBuilder! builder) -> bool
+Sa.Outbox.Delivery.OutboxConsumerSettings.OutboxConsumerSettings(string! ConsumerGroupId, bool AsSingleton, System.TimeSpan Interval, System.TimeSpan InitialDelay, int ConcurrencyLimit, int MaxConcurrency, int RetryCountOnError, int MaxBatchSize, int MaxProcessingIterations, System.TimeSpan IterationDelay, System.TimeSpan LockDuration, System.TimeSpan LockRenewal, System.TimeSpan LookbackInterval, int MaxDeliveryAttempts, System.TimeSpan BatchingWindow, System.TimeSpan PerTenantTimeout, int PerTenantMaxDegreeOfParallelism, bool Paused, int Version, string! ProviderKey = "outbox", System.TimeSpan IdleMaxInterval = default(System.TimeSpan), object? Tag = null) -> void
+Sa.Outbox.Delivery.IDeliveryProcessor.ProcessMessages<TMessage>(Sa.Outbox.Delivery.OutboxConsumerSettings! settings, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<long>!
+Sa.Outbox.Delivery.IDeliverySnapshot.Parts.get -> string![]!
+Sa.Outbox.Delivery.IDeliverySnapshot.ConsumerSettings.get -> Sa.Outbox.Delivery.OutboxConsumerSettings![]!
+Sa.Outbox.Delivery.IEmptyQueueWaitStrategy.GetNextWait(System.TimeSpan baseInterval, System.TimeSpan maxInterval, int consecutiveEmptyPolls) -> System.TimeSpan
+Sa.Outbox.PlugServices.OutboxProviderBuilder.WithBulkWriter(System.Func<System.IServiceProvider!, Sa.Outbox.PlugServices.IOutboxBulkWriter!>! factory) -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
+Sa.Outbox.Delivery.IDeliverySnapshot.GetConsumeGroupIds() -> System.Collections.Generic.IEnumerable<string!>!
+Sa.Outbox.Delivery.IOutboxContextFactory.Create<TMessage>(Sa.Outbox.Delivery.OutboxDeliveryMessage<TMessage> deliveryMessage) -> Sa.Outbox.IOutboxContextOperations<TMessage>!
+Sa.Outbox.Delivery.IOutboxContextFactory.ReturnToPool<TMessage>(Sa.Outbox.IOutboxContextOperations<TMessage>! context) -> void
 Sa.Outbox.Delivery.ExponentialIdleWaitStrategy.GetNextWait(System.TimeSpan baseInterval, System.TimeSpan maxInterval, int consecutiveEmptyPolls) -> System.TimeSpan
+Sa.Outbox.PlugServices.OutboxProviderBuilder.WithDeliveryManager<T>() -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
+Sa.Outbox.Delivery.IOutboxConsumerManager.Apply(string! consumerGroupId, System.Func<Sa.Outbox.Delivery.OutboxConsumerSettings!, Sa.Outbox.Delivery.OutboxConsumerSettings!>! transform) -> void
+Sa.Outbox.Delivery.IOutboxConsumerManager.Apply(Sa.Outbox.Delivery.OutboxGroupKey key, System.Func<Sa.Outbox.Delivery.OutboxConsumerSettings!, Sa.Outbox.Delivery.OutboxConsumerSettings!>! transform) -> void
 Sa.Outbox.Delivery.IOutboxConsumerManager.TryRegister(string! consumerGroupId, Sa.Outbox.Delivery.OutboxConsumerSettings! settings) -> bool
 Sa.Outbox.Delivery.IOutboxConsumerManager.TryRegister(Sa.Outbox.Delivery.OutboxGroupKey key, Sa.Outbox.Delivery.OutboxConsumerSettings! settings) -> bool
 Sa.Outbox.Delivery.IOutboxConsumerManager.GetSettings(string! consumerGroupId) -> Sa.Outbox.Delivery.OutboxConsumerSettings?
 Sa.Outbox.Delivery.IOutboxConsumerManager.GetSettings(Sa.Outbox.Delivery.OutboxGroupKey key) -> Sa.Outbox.Delivery.OutboxConsumerSettings?
-Sa.Outbox.Delivery.IOutboxConsumerManager.Pause(Sa.Outbox.Delivery.OutboxGroupKey key) -> void
 Sa.Outbox.Delivery.IOutboxConsumerManager.Pause(string! consumerGroupId) -> void
+Sa.Outbox.Delivery.IOutboxConsumerManager.Pause(Sa.Outbox.Delivery.OutboxGroupKey key) -> void
 Sa.Outbox.Delivery.IOutboxConsumerManager.Unpause(string! consumerGroupId) -> void
 Sa.Outbox.Delivery.IOutboxConsumerManager.Unpause(Sa.Outbox.Delivery.OutboxGroupKey key) -> void
 Sa.Outbox.Delivery.IOutboxConsumerManager.IsPaused(string! consumerGroupId) -> bool
 Sa.Outbox.Delivery.IOutboxConsumerManager.IsPaused(Sa.Outbox.Delivery.OutboxGroupKey key) -> bool
 Sa.Outbox.Delivery.IOutboxConsumerManager.IsRegistered(string! consumerGroupId) -> bool
-Sa.Outbox.Delivery.IOutboxConsumerManager.Unregister(string! consumerGroupId) -> void
 Sa.Outbox.Delivery.IOutboxConsumerManager.IsRegistered(Sa.Outbox.Delivery.OutboxGroupKey key) -> bool
+Sa.Outbox.Delivery.IOutboxConsumerManager.Unregister(string! consumerGroupId) -> void
 Sa.Outbox.Delivery.IOutboxConsumerManager.Unregister(Sa.Outbox.Delivery.OutboxGroupKey key) -> void
 Sa.Outbox.Delivery.IOutboxConsumerManager.GetAllConsumerGroupIds() -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Sa.Outbox.Delivery.IOutboxConsumerManager.Subscribe(string! consumerGroupId, System.Action<Sa.Outbox.Delivery.OutboxConsumerSettings!>! onChanged) -> System.IDisposable!
+Sa.Outbox.PlugServices.OutboxProviderDescriptor.Supports(Sa.Outbox.PlugServices.OutboxProviderCapabilities capability) -> bool
 Sa.Outbox.Delivery.IOutboxConsumerManager.Subscribe(Sa.Outbox.Delivery.OutboxGroupKey key, System.Action<Sa.Outbox.Delivery.OutboxConsumerSettings!>! onChanged) -> System.IDisposable!
+Sa.Outbox.PlugServices.OutboxProviderBuilder.WithDeliveryManager(System.Func<System.IServiceProvider!, Sa.Outbox.PlugServices.IOutboxDeliveryManager!>! factory) -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
+Sa.Outbox.PlugServices.OutboxProviderBuilder.WithTenantDetector<T>() -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettings.Validate() -> System.Collections.Generic.List<string!>!
+Sa.Outbox.PlugServices.OutboxProviderBuilder.WithTenantDetector(System.Func<System.IServiceProvider!, Sa.Outbox.PlugServices.IOutboxTenantDetector!>! factory) -> Sa.Outbox.PlugServices.OutboxProviderBuilder!
+Sa.Outbox.Delivery.OutboxConsumerSettings.ThrowIfInvalid() -> void
+override Sa.Outbox.Delivery.OutboxConsumerSettings.ToString() -> string!

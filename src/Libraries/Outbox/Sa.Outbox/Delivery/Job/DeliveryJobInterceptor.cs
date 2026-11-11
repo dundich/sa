@@ -19,7 +19,7 @@ internal sealed class DeliveryJobInterceptor(IEnumerable<IOutboxDeliveryJobInter
     /// "simplify" this into a loop over a shared <c>next</c>.
     /// </para>
     /// </summary>
-    public Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
+    public Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
     {
         Func<Task> current = continuation;
 
@@ -27,7 +27,7 @@ internal sealed class DeliveryJobInterceptor(IEnumerable<IOutboxDeliveryJobInter
         {
             var nextInChain = current;
 
-            current = () => interceptor.OnHandle(context, nextInChain, key, cancellationToken);
+            current = () => interceptor.OnHandleAsync(context, nextInChain, key, cancellationToken);
         }
 
         return current();

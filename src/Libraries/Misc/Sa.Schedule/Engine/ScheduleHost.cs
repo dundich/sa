@@ -6,7 +6,7 @@ internal sealed class ScheduleHost(IScheduler scheduler) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await scheduler.Start(cancellationToken);
+        await scheduler.StartAsync(cancellationToken);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)

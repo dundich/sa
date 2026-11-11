@@ -77,7 +77,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 
         // start cron schedules
         var scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        int i = await scheduler.Start(CancellationToken.None);
+        int i = await scheduler.StartAsync(CancellationToken.None);
         Assert.True(i > 0);
 
         // start delivery message

@@ -265,7 +265,7 @@ public sealed class ScheduleKeyedRegistrationTests
 
         AbortCounter.Clear();
 
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
         Assert.True(jobScheduler.IsStarted);
 
         var deadline = DateTime.UtcNow.AddSeconds(15);
@@ -336,7 +336,7 @@ public sealed class ScheduleKeyedRegistrationTests
 
     private sealed class RecordingInterceptor : IJobInterceptor
     {
-        public Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
+        public Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
             => continuation();
     }
 
@@ -381,9 +381,9 @@ public sealed class ScheduleKeyedRegistrationTests
 
         public IReadOnlyCollection<IJobScheduler> Jobs { get; } = jobs;
 
-        public Task<int> Start(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
+        public Task<int> StartAsync(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
-        public Task<int> Restart(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
+        public Task<int> RestartAsync(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
         public Task StopAsync() => Task.WhenAll(jobs.Select(job => job.StopAsync()));
     }
@@ -406,7 +406,7 @@ public sealed class ScheduleKeyedRegistrationTests
 
         public IChangeToken StartChangeToken() => new CancellationChangeToken(CancellationToken.None);
 
-        public Task<bool> Start(CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> StartAsync(CancellationToken cancellationToken) => Task.FromResult(true);
 
         public Task StopAsync()
         {

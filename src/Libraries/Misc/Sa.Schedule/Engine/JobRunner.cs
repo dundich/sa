@@ -4,24 +4,24 @@ namespace Sa.Schedule.Engine;
 
 internal sealed class JobRunner() : IJobRunner
 {
-    public async Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+    public async Task<JobRunResult> RunAsync(IJobController controller, CancellationToken cancellationToken)
     {
         JobRunResult result;
 
         try
         {
-            await controller.WaitToRun(cancellationToken);
+            await controller.WaitToRunAsync(cancellationToken);
 
             // Do not open the iteration scope while the slot is paused: with the
             // reader pool held at MaxConcurrency every pre-allocated slot runs this
             // loop, and an inactive one must not pin a DI scope (DbContext,
             // connection, ...) for as long as it stays paused. RunLoop re-checks the
             // gate on every iteration, so this is only the initial barrier.
-            await controller.WaitIfPaused(cancellationToken);
+            await controller.WaitIfPausedAsync(cancellationToken);
 
             controller.Start();
 
-            result = await RunLoop(controller, cancellationToken);
+            result = await RunLoopAsync(controller, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -39,15 +39,15 @@ internal sealed class JobRunner() : IJobRunner
     }
 
     [StackTraceHidden]
-    private static async Task<JobRunResult> RunLoop(IJobController controller, CancellationToken cancellationToken)
+    private static async Task<JobRunResult> RunLoopAsync(IJobController controller, CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                await controller.WaitIfPaused(cancellationToken);
+                await controller.WaitIfPausedAsync(cancellationToken);
 
-                if (await controller.CanExecute(cancellationToken) == CanJobExecuteResult.Abort)
+                if (await controller.CanExecuteAsync(cancellationToken) == CanJobExecuteResult.Abort)
                 {
                     // Any abort exit is "no more work" — the job completed its
                     // run-once, its schedule can never fire, or the error handling
@@ -75,13 +75,13 @@ internal sealed class JobRunner() : IJobRunner
                 return JobRunResult.Faulted;
             }
 
-            await ExecuteIteration(controller, cancellationToken);
+            await ExecuteIterationAsync(controller, cancellationToken);
         }
 
         return JobRunResult.Stopped;
     }
 
-    private static async Task ExecuteIteration(
+    private static async Task ExecuteIterationAsync(
         IJobController controller,
         CancellationToken cancellationToken)
     {

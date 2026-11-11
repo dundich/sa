@@ -65,7 +65,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture)
     [Fact]
     public async Task Check_Executing_RunOnce_ForMultiJobs()
     {
-        int started = await Sub.Start(CancellationToken.None);
+        int started = await Sub.StartAsync(CancellationToken.None);
 
         Assert.Equal(2, started);
 

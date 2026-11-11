@@ -55,7 +55,7 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture)
         Console.WriteLine(fixture.ConnectionString);
 
         int i = await fixture.ServiceProvider
-            .GetRequiredService<IScheduler>().Start(CancellationToken.None);
+            .GetRequiredService<IScheduler>().StartAsync(CancellationToken.None);
         Assert.True(i > 0);
 
         await Task.Delay(800, TestContext.Current.CancellationToken);

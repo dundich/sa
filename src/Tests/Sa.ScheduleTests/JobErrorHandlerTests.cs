@@ -150,9 +150,9 @@ public sealed class JobErrorHandlerTests
 
         public IReadOnlyCollection<IJobScheduler> Jobs { get; } = jobs;
 
-        public Task<int> Start(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
+        public Task<int> StartAsync(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
-        public Task<int> Restart(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
+        public Task<int> RestartAsync(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
         public Task StopAsync() => Task.WhenAll(jobs.Select(job => job.StopAsync()));
     }
@@ -178,7 +178,7 @@ public sealed class JobErrorHandlerTests
 
         public IChangeToken StartChangeToken() => new CancellationChangeToken(CancellationToken.None);
 
-        public Task<bool> Start(CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> StartAsync(CancellationToken cancellationToken) => Task.FromResult(true);
 
         public Task StopAsync()
         {

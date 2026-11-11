@@ -5,7 +5,7 @@ namespace Sa.Outbox.PostgreSql.Interceptors;
 
 internal sealed class DeliveryJobInterceptor(IMigrationService migrationService) : IOutboxDeliveryJobInterceptor
 {
-    public async Task OnHandle(
+    public async Task OnHandleAsync(
         IJobContext context,
         Func<Task> continuation,
         object? key,

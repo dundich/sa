@@ -93,7 +93,7 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
         var ct = TestContext.Current.CancellationToken;
 
         var scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        Assert.True(await scheduler.Start(ct) >= 1);
+        Assert.True(await scheduler.StartAsync(ct) >= 1);
 
         var publisher = fixture.Publisher;
 
@@ -263,7 +263,7 @@ public class DeliveryMinOffsetFloorTests(DeliveryMinOffsetFloorTests.Fixture fix
         Assert.Equal(1UL, sentM2);
 
         var scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        Assert.True(await scheduler.Start(ct) >= 1);
+        Assert.True(await scheduler.StartAsync(ct) >= 1);
 
         await WaitForAsync(() => FloorConsumer.Counter >= 1, ct);
 

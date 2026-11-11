@@ -205,7 +205,7 @@ public sealed class JobExecutorTests
         public int Entered { get; private set; }
         public int Exit { get; private set; }
 
-        public async Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken ct)
+        public async Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken ct)
         {
             Entered++;
             await continuation();
@@ -220,7 +220,7 @@ public sealed class JobExecutorTests
         public int Entered { get; private set; }
         public int Exit { get; private set; }
 
-        public async Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken ct)
+        public async Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken ct)
         {
             Entered++;
             Recorder.Add($"{_name}-in");

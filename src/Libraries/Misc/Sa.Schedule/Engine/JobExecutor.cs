@@ -9,7 +9,7 @@ internal sealed class JobExecutor : IJob, IDisposable
     class JobProxy(IJob job, IJobInterceptor interceptor, object? key) : IJob
     {
         public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
-            => interceptor.OnHandle(
+            => interceptor.OnHandleAsync(
                 context
                 , () => job.ExecuteAsync(context, cancellationToken)
                 , key

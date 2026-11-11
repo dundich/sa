@@ -111,7 +111,7 @@ public class JobControllerTests
         var controller = CreateController(settings);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await controller.WaitIfPaused(TestContext.Current.CancellationToken);
+        await controller.WaitIfPausedAsync(TestContext.Current.CancellationToken);
         sw.Stop();
 
         Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(100));
@@ -126,7 +126,7 @@ public class JobControllerTests
         controller.Pause();
 
         var cts = new CancellationTokenSource(100);
-        var ex = await Record.ExceptionAsync(async () => await controller.WaitIfPaused(cts.Token));
+        var ex = await Record.ExceptionAsync(async () => await controller.WaitIfPausedAsync(cts.Token));
 
         Assert.IsType<OperationCanceledException>(ex);
     }
@@ -141,7 +141,7 @@ public class JobControllerTests
 
         // The gate is async: while paused it yields and the returned
         // ValueTask stays incomplete until Resume.
-        ValueTask wait = controller.WaitIfPaused(CancellationToken.None);
+        ValueTask wait = controller.WaitIfPausedAsync(CancellationToken.None);
 
         // Let the waiter park on the pause gate
         await Task.Delay(100, TestContext.Current.CancellationToken);
@@ -160,7 +160,7 @@ public class JobControllerTests
 
         controller.Pause();
 
-        ValueTask wait = controller.WaitIfPaused(CancellationToken.None);
+        ValueTask wait = controller.WaitIfPausedAsync(CancellationToken.None);
 
         // Let the waiter park on the pause gate
         await Task.Delay(100, TestContext.Current.CancellationToken);

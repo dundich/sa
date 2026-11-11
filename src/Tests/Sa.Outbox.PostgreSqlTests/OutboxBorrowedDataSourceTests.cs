@@ -91,7 +91,7 @@ public sealed class OutboxBorrowedDataSourceTests(OutboxBorrowedDataSourceTests.
     {
         IScheduler scheduler = ServiceProvider
             .GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        Assert.True(await scheduler.Start(CancellationToken.None) >= 1);
+        Assert.True(await scheduler.StartAsync(CancellationToken.None) >= 1);
 
         IOutboxMessagePublisher publisher =
             ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();

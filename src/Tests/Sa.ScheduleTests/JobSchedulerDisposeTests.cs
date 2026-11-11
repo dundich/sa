@@ -68,7 +68,7 @@ public sealed class JobSchedulerDisposeTests
         Probe.Reset();
         var scheduler = CreateScheduler();
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         // Wait until the iteration is actually running before disposing.
         await WaitForConditionAsync(() => Probe.Begun);
@@ -86,7 +86,7 @@ public sealed class JobSchedulerDisposeTests
         Probe.Reset();
         var scheduler = CreateScheduler();
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         await WaitForConditionAsync(() => Probe.Begun);
 

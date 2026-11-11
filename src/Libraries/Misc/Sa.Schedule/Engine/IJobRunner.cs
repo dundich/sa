@@ -43,5 +43,5 @@ internal interface IJobRunner
     /// <see cref="JobRunResult.Faulted"/> into the same teardown <i>without</i> consuming
     /// it, so a faulted RunOnce job can still be started again.
     /// </returns>
-    Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken);
+    Task<JobRunResult> RunAsync(IJobController controller, CancellationToken cancellationToken);
 }

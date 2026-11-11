@@ -133,7 +133,7 @@ public sealed class JobControllerLifecycleTests
 
         var controller = MakeController(settings);
 
-        var result = await controller.CanExecute(TestContext.Current.CancellationToken);
+        var result = await controller.CanExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(CanJobExecuteResult.Ok, result);
 
@@ -149,7 +149,7 @@ public sealed class JobControllerLifecycleTests
 
         var controller = MakeController(settings);
 
-        var result = await controller.CanExecute(TestContext.Current.CancellationToken);
+        var result = await controller.CanExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(CanJobExecuteResult.Ok, result);
 
@@ -167,7 +167,7 @@ public sealed class JobControllerLifecycleTests
 
         var controller = MakeController(settings);
 
-        var result = await controller.CanExecute(TestContext.Current.CancellationToken);
+        var result = await controller.CanExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(CanJobExecuteResult.Abort, result);
 
@@ -186,13 +186,13 @@ public sealed class JobControllerLifecycleTests
 
         // First iteration is allowed.
         Assert.Equal(CanJobExecuteResult.Ok,
-            await controller.CanExecute(TestContext.Current.CancellationToken));
+            await controller.CanExecuteAsync(TestContext.Current.CancellationToken));
 
         await controller.ExecuteAsync(TestContext.Current.CancellationToken);
 
         // Second iteration must abort: RunOnce has fired.
         Assert.Equal(CanJobExecuteResult.Abort,
-            await controller.CanExecute(TestContext.Current.CancellationToken));
+            await controller.CanExecuteAsync(TestContext.Current.CancellationToken));
 
         controller.Shutdown();
     }
@@ -277,7 +277,7 @@ public sealed class JobControllerLifecycleTests
     {
         // Regression (#1): Task.Delay rejects a single delay above int.MaxValue ms
         // (~24.9 days) with ArgumentOutOfRangeException. The wait must be chunked
-        // instead — otherwise the exception escapes CanExecute (outside the runner's
+        // instead — otherwise the exception escapes CanExecuteAsync (outside the runner's
         // per-iteration try/catch), faults the queue item and silently kills the slot
         // while IsStarted still reports true.
         var jobId = Guid.NewGuid();
@@ -287,7 +287,7 @@ public sealed class JobControllerLifecycleTests
         var controller = MakeController(settings);
         using var cts = new CancellationTokenSource();
 
-        Task<CanJobExecuteResult> run = controller.CanExecute(cts.Token).AsTask();
+        Task<CanJobExecuteResult> run = controller.CanExecuteAsync(cts.Token).AsTask();
 
         // Give a (synchronously) faulting implementation a chance to surface.
         await Task.Delay(50, TestContext.Current.CancellationToken);
@@ -315,7 +315,7 @@ public sealed class JobControllerLifecycleTests
         var controller = MakeController(settings);
         using var cts = new CancellationTokenSource();
 
-        Task run = controller.WaitToRun(cts.Token).AsTask();
+        Task run = controller.WaitToRunAsync(cts.Token).AsTask();
 
         await Task.Delay(50, TestContext.Current.CancellationToken);
 
@@ -344,7 +344,7 @@ public sealed class JobControllerLifecycleTests
         var ct = TestContext.Current.CancellationToken;
 
         // First attempt is allowed.
-        Assert.Equal(CanJobExecuteResult.Ok, await controller.CanExecute(ct));
+        Assert.Equal(CanJobExecuteResult.Ok, await controller.CanExecuteAsync(ct));
 
         // It fails, and one retry is still owed.
         var first = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -353,7 +353,7 @@ public sealed class JobControllerLifecycleTests
         Assert.False(controller.AbortedByError);
 
         // The gate must stay open between two attempts of the *same* run.
-        Assert.Equal(CanJobExecuteResult.Ok, await controller.CanExecute(ct));
+        Assert.Equal(CanJobExecuteResult.Ok, await controller.CanExecuteAsync(ct));
 
         // The second attempt fails too; the budget (1 retry) is now spent and
         // nothing is owed — the job has run as "once" as it ever will.
@@ -361,7 +361,7 @@ public sealed class JobControllerLifecycleTests
             () => controller.ExecuteAsync(ct));
         controller.ExecutionFailed(second);
 
-        Assert.Equal(CanJobExecuteResult.Abort, await controller.CanExecute(ct));
+        Assert.Equal(CanJobExecuteResult.Abort, await controller.CanExecuteAsync(ct));
 
         controller.Shutdown();
     }
@@ -385,7 +385,7 @@ public sealed class JobControllerLifecycleTests
         controller.Start();
         var ct = TestContext.Current.CancellationToken;
 
-        Assert.Equal(CanJobExecuteResult.Ok, await controller.CanExecute(ct));
+        Assert.Equal(CanJobExecuteResult.Ok, await controller.CanExecuteAsync(ct));
 
         // Attempt 1 fails (retry owed), attempt 2 succeeds.
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -396,7 +396,7 @@ public sealed class JobControllerLifecycleTests
         controller.ExecutionCompleted();
 
         Assert.Equal(2, Volatile.Read(ref attempts));
-        Assert.Equal(CanJobExecuteResult.Abort, await controller.CanExecute(ct));
+        Assert.Equal(CanJobExecuteResult.Abort, await controller.CanExecuteAsync(ct));
 
         controller.Shutdown();
     }
@@ -425,7 +425,7 @@ public sealed class JobControllerLifecycleTests
             0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
 
         JobRunResult result = await new JobRunner()
-            .Run(controller, TestContext.Current.CancellationToken);
+            .RunAsync(controller, TestContext.Current.CancellationToken);
 
         Assert.Equal(3, Volatile.Read(ref attempts)); // 1 attempt + 2 retries
 
@@ -547,7 +547,7 @@ public sealed class JobControllerLifecycleTests
         controller.Start();
 
         JobRunResult result = await new JobRunner()
-            .Run(controller, TestContext.Current.CancellationToken);
+            .RunAsync(controller, TestContext.Current.CancellationToken);
 
         // A loop-level failure is reported as "faulted", not "finished": the scheduler
         // tears the slot down but must not consume a RunOnce budget for it.
@@ -600,7 +600,7 @@ public sealed class JobControllerLifecycleTests
             0, settings, new InterceptorSettings([]), factory, TimeProvider.System);
 
         JobRunResult result = await new JobRunner()
-            .Run(controller, TestContext.Current.CancellationToken);
+            .RunAsync(controller, TestContext.Current.CancellationToken);
 
         Assert.Equal(JobRunResult.Finished, result);
         Assert.Equal(1, observedDepth);

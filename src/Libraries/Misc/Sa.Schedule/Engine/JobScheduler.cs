@@ -97,7 +97,7 @@ internal sealed class JobScheduler : IJobScheduler
         _limit = Math.Clamp(settings.Properties.ConcurrencyLimit.GetValueOrDefault(1), 0, maxConcurrency);
 
         _queue = new SaWorkChannel<IJobController>(
-            SaWorkQueueOptions.Create<IJobController>(RunJob)
+            SaWorkQueueOptions.Create<IJobController>(RunJobAsync)
             .WithQueueCapacity(maxConcurrency)
             .WithMaxConcurrency(maxConcurrency)
             // The reader pool is raised to MaxConcurrency on the first Start() and
@@ -166,7 +166,7 @@ internal sealed class JobScheduler : IJobScheduler
     }
 
 
-    public async Task<bool> Start(CancellationToken cancellationToken)
+    public async Task<bool> StartAsync(CancellationToken cancellationToken)
     {
         CancellationToken stoppingToken;
         CancellationTokenSource source;
@@ -318,7 +318,7 @@ internal sealed class JobScheduler : IJobScheduler
     /// <para>
     /// The stop token is linked to the caller's token, so cancelling the caller's token (the host's
     /// startup token, a scoped request, ...) ends the job without <see cref="StopAsync"/> being called. The
-    /// scheduler used to learn about that only from a slot, in <see cref="RunJob"/> — and the queue
+    /// scheduler used to learn about that only from a slot, in <see cref="RunJobAsync"/> — and the queue
     /// drops an item whose producer token is already cancelled <i>before</i> invoking the processor
     /// (<c>SaWorkChannel.ExecuteItemAsync</c> throws at its cancellation gate and reports the item as
     /// <c>Aborted</c>), so a slot that never started left <see cref="IsStarted"/> true over a dead job
@@ -351,7 +351,7 @@ internal sealed class JobScheduler : IJobScheduler
 
     /// <summary>
     /// Reflects a fired stop token in the scheduler state, unless the token belongs to a superseded
-    /// start (a new <see cref="Start"/> cancels the previous source before arming its own) or the
+    /// start (a new <see cref="StartAsync"/> cancels the previous source before arming its own) or the
     /// scheduler is already disposed.
     /// </summary>
     private void OnStopTokenCancelled(CancellationTokenSource source)
@@ -403,13 +403,13 @@ internal sealed class JobScheduler : IJobScheduler
     /// <summary>
     /// Processes a job slot on a queue reader: runs the slot's loop until it exits.
     /// </summary>
-    private async Task RunJob(IJobController controller, CancellationToken ct)
+    private async Task RunJobAsync(IJobController controller, CancellationToken ct)
     {
         JobRunResult result;
 
         try
         {
-            result = await _runner.Run(controller, ct);
+            result = await _runner.RunAsync(controller, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -481,7 +481,7 @@ internal sealed class JobScheduler : IJobScheduler
     /// unsatisfiable schedule) or after its error handling requested an abort:
     /// interrupts the running iterations, force-cancels all readers, and marks
     /// the job as stopped. The queue stays active, so the job can be started
-    /// again with <see cref="Start"/> (unless it was a RunOnce job, which
+    /// again with <see cref="StartAsync"/> (unless it was a RunOnce job, which
     /// refuses to run again).
     /// </summary>
     /// <param name="faulted">

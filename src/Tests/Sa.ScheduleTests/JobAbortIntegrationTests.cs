@@ -67,7 +67,7 @@ public sealed class JobAbortIntegrationTests : IAsyncDisposable
     {
         Counter.Clear();
 
-        Assert.Equal(1, await _scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await _scheduler.StartAsync(TestContext.Current.CancellationToken));
         Assert.True(_jobScheduler.IsStarted);
 
         // The job runs once, retries once, then the error handler aborts it.
@@ -83,7 +83,7 @@ public sealed class JobAbortIntegrationTests : IAsyncDisposable
         await _scheduler.StopAsync();
 
         Counter.Clear();
-        Assert.Equal(1, await _scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await _scheduler.StartAsync(TestContext.Current.CancellationToken));
         Assert.True(_jobScheduler.IsStarted);
 
         // The restarted job runs again (and eventually aborts again, which is fine).

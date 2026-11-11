@@ -19,32 +19,32 @@ internal sealed class Scheduler(
     /// <summary>
     /// Start all jobs
     /// </summary>
-    public async Task<int> Start(CancellationToken cancellationToken)
+    public async Task<int> StartAsync(CancellationToken cancellationToken)
     {
         var results = await Task.WhenAll(
             Jobs
-                .Select(c => c.Start(cancellationToken)));
+                .Select(c => c.StartAsync(cancellationToken)));
         return results.Count(r => r);
     }
 
-    public async Task<int> Restart(CancellationToken cancellationToken)
+    public async Task<int> RestartAsync(CancellationToken cancellationToken)
     {
         // Restart only what is running (a stopped job — error-aborted, run-once
         // consumed — is not brought back), and count the jobs that actually started
         // again rather than the ones that were merely stopped.
         IJobScheduler[] jobs = [.. Jobs.Where(c => c.IsStarted)];
 
-        int[] results = await Task.WhenAll(jobs.Select(c => RestartJob(c, cancellationToken)));
+        int[] results = await Task.WhenAll(jobs.Select(c => RestartJobAsync(c, cancellationToken)));
 
         return results.Count(r => r == 1);
     }
 
-    private async Task<int> RestartJob(IJobScheduler job, CancellationToken cancellationToken)
+    private async Task<int> RestartJobAsync(IJobScheduler job, CancellationToken cancellationToken)
     {
         try
         {
             await job.StopAsync();
-            return await job.Start(cancellationToken) ? 1 : 0;
+            return await job.StartAsync(cancellationToken) ? 1 : 0;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -43,7 +43,7 @@ public sealed class ScheduleErrorPolicyTests
         await using var provider = services.BuildServiceProvider();
         var scheduler = provider.GetRequiredService<IScheduler>();
 
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         await WaitForAsync(() => Volatile.Read(ref handlerCalls) >= 1);
 
@@ -74,7 +74,7 @@ public sealed class ScheduleErrorPolicyTests
         await using var provider = services.BuildServiceProvider();
         var scheduler = provider.GetRequiredService<IScheduler>();
 
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         await WaitForAsync(() => lifetime.StopRequests > 0);
 
@@ -109,7 +109,7 @@ public sealed class ScheduleErrorPolicyTests
         await using var provider = services.BuildServiceProvider();
         var scheduler = provider.GetRequiredService<IScheduler>();
 
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         Exception error = await seen.Task.WaitAsync(
             TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);

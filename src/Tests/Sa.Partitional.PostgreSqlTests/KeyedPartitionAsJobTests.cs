@@ -47,7 +47,7 @@ public class KeyedPartitionAsJobTests(KeyedPartitionAsJobTests.Fixture fixture)
     {
         IScheduler scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(ModuleKey);
 
-        int started = await scheduler.Start(TestContext.Current.CancellationToken);
+        int started = await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(started > 0);
 
         await Task.Delay(800, TestContext.Current.CancellationToken);

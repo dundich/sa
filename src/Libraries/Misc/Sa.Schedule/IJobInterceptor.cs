@@ -13,5 +13,5 @@ public interface IJobInterceptor
     /// <param name="key">An optional key associated with the job.</param>
     /// <param name="cancellationToken">A token that can be used to cancel the job handling operation.</param>
     /// <returns>A task that represents the result of the job handling operation.</returns>
-    Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken);
+    Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken);
 }

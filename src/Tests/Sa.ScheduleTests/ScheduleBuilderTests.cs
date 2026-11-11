@@ -58,7 +58,7 @@ public class ScheduleBuilderTests
         Assert.Single(provider.GetKeyedServices<FuncJob>(jobId));
 
         var scheduler = provider.GetRequiredService<IScheduler>();
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         await WaitForConditionAsync(() =>
             secondCalled && !scheduler.GetSchedule(jobId)!.IsStarted);
@@ -349,7 +349,7 @@ public class ScheduleBuilderTests
 
     sealed class TestInterceptor : IJobInterceptor
     {
-        public Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
+        public Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
             => continuation();
     }
 }

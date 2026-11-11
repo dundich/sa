@@ -35,7 +35,7 @@ public sealed class InterceptorOrderTests : IAsyncDisposable
 
     sealed class OuterInterceptor : IJobInterceptor
     {
-        public async Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
+        public async Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
         {
             Order.Add("outer-before");
             await continuation();
@@ -45,7 +45,7 @@ public sealed class InterceptorOrderTests : IAsyncDisposable
 
     sealed class InnerInterceptor : IJobInterceptor
     {
-        public async Task OnHandle(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
+        public async Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
         {
             Order.Add("inner-before");
             await continuation();
@@ -92,7 +92,7 @@ public sealed class InterceptorOrderTests : IAsyncDisposable
     {
         Order.Clear();
 
-        Assert.Equal(1, await _scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await _scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         // The job is RunOnce — wait for its single run to finish
         var deadline = DateTime.UtcNow.AddSeconds(10);

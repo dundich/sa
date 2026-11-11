@@ -77,7 +77,7 @@ public sealed class ScheduleConcurrencyTests(ScheduleConcurrencyTests.Fixture fi
     {
         Fixture.Reset();
 
-        int i = await Sub.Start(CancellationToken.None);
+        int i = await Sub.StartAsync(CancellationToken.None);
 
         Assert.NotEqual(0, i);
 

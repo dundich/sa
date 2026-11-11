@@ -1,58 +1,58 @@
 #nullable enable
 Sa.Data.TempFolder.FilePathResolver.IFilePathResolver
 Sa.Data.TempFolder.FilePathResolver.IFileSystemService
-Sa.Data.TempFolder.Cleanup.CleanupContext
-Sa.Data.TempFolder.Cleanup.CleanupContext.CleanupContext() -> void
 Sa.Data.TempFolder.Cleanup.ICleanupStrategy
-const Sa.Data.TempFolder.Cleanup.AgeBasedCleanupStrategy.MaxSearchDepth = 16 -> int
 Sa.Data.TempFolder.Cleanup.AgeBasedCleanupStrategy
 Sa.Data.TempFolder.Cleanup.AgeBasedCleanupStrategy.AgeBasedCleanupStrategy() -> void
-Sa.Data.TempFolder.Naming.DateFolderNameStrategy
-Sa.Data.TempFolder.Naming.GuidV7FolderNameStrategy
-Sa.Data.TempFolder.FilePathResolver.Setup
-Sa.Data.TempFolder.Naming.IFolderNameStrategy
-Sa.Data.TempFolder.Naming.GuidV7FolderNameStrategy.GuidV7FolderNameStrategy() -> void
-const Sa.Data.TempFolder.FilePathResolver.Setup.DefaultName = "default" -> string!
+const Sa.Data.TempFolder.Cleanup.AgeBasedCleanupStrategy.MaxSearchDepth = 16 -> int
+Sa.Data.TempFolder.Cleanup.CleanupContext
+Sa.Data.TempFolder.Cleanup.CleanupContext.CleanupContext() -> void
 Sa.Data.TempFolder.ITempFolder
-Sa.Data.TempFolder.PathGuard
-Sa.Data.TempFolder.ITempFolderBuilder
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver
+Sa.Data.TempFolder.Naming.DateFolderNameStrategy
+Sa.Data.TempFolder.ITempFolderBuilder
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver.Resolved -> System.EventHandler?
-const Sa.Data.TempFolder.Setup.DefaultName = "default" -> string!
-Sa.Data.TempFolder.Setup
-Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType
-Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType.None = 0 -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType.Map = 2 -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType
-Sa.Data.TempFolder.TempFolderAgeSource
-Sa.Data.TempFolder.TempFolderAgeSource.CreationTime = 1 -> Sa.Data.TempFolder.TempFolderAgeSource
-Sa.Data.TempFolder.TempFolderAgeSource.LastWriteTime = 0 -> Sa.Data.TempFolder.TempFolderAgeSource
-Sa.Data.TempFolder.TempFolderCleanupKind.AgeBased = 0 -> Sa.Data.TempFolder.TempFolderCleanupKind
-Sa.Data.TempFolder.TempFolderNamingKind
-Sa.Data.TempFolder.TempFolderCleanupKind
-Sa.Data.TempFolder.TempFolderNamingKind.GuidV7 = 0 -> Sa.Data.TempFolder.TempFolderNamingKind
-Sa.Data.TempFolder.TempFolderNamingKind.Date = 1 -> Sa.Data.TempFolder.TempFolderNamingKind
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType.Direct = 1 -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType
-Sa.Data.TempFolder.TempFolderVolumeArgs
+Sa.Data.TempFolder.Naming.GuidV7FolderNameStrategy
+Sa.Data.TempFolder.Naming.GuidV7FolderNameStrategy.GuidV7FolderNameStrategy() -> void
+Sa.Data.TempFolder.Naming.IFolderNameStrategy
+Sa.Data.TempFolder.FilePathResolver.Setup
+Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType.None = 0 -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType
+const Sa.Data.TempFolder.FilePathResolver.Setup.DefaultName = "default" -> string!
+Sa.Data.TempFolder.PathGuard
+Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvedPathType
+Sa.Data.TempFolder.Setup
+const Sa.Data.TempFolder.Setup.DefaultName = "default" -> string!
+Sa.Data.TempFolder.TempFolderAgeSource
+Sa.Data.TempFolder.TempFolderAgeSource.LastWriteTime = 0 -> Sa.Data.TempFolder.TempFolderAgeSource
+Sa.Data.TempFolder.TempFolderAgeSource.CreationTime = 1 -> Sa.Data.TempFolder.TempFolderAgeSource
+Sa.Data.TempFolder.TempFolderNamingKind.GuidV7 = 0 -> Sa.Data.TempFolder.TempFolderNamingKind
+Sa.Data.TempFolder.TempFolderNamingKind
+Sa.Data.TempFolder.TempFolderNamingKind.Date = 1 -> Sa.Data.TempFolder.TempFolderNamingKind
+Sa.Data.TempFolder.TempFolderCleanupKind
+Sa.Data.TempFolder.TempFolderCleanupKind.AgeBased = 0 -> Sa.Data.TempFolder.TempFolderCleanupKind
 Sa.Data.TempFolder.TempFolderFreeSpaceArgs
 Sa.Data.TempFolder.TempFolderOptions
 Sa.Data.TempFolder.TempFolderOptions.TempFolderOptions() -> void
-Sa.Data.TempFolder.Cleanup.ICleanupStrategy.SelectForDeletion(Sa.Data.TempFolder.Cleanup.CleanupContext! context) -> System.Collections.Generic.IReadOnlyList<string!>!
+Sa.Data.TempFolder.TempFolderVolumeArgs
 Sa.Data.TempFolder.Cleanup.CleanupContext.RootPath.get -> string!
+Sa.Data.TempFolder.Cleanup.CleanupContext.RootPath.init -> void
 Sa.Data.TempFolder.Cleanup.CleanupContext.Options.get -> Sa.Data.TempFolder.TempFolderOptions!
 Sa.Data.TempFolder.Cleanup.CleanupContext.Options.init -> void
 Sa.Data.TempFolder.Cleanup.CleanupContext.TimeProvider.get -> System.TimeProvider!
-Sa.Data.TempFolder.Cleanup.CleanupContext.RootPath.init -> void
 Sa.Data.TempFolder.Cleanup.CleanupContext.TimeProvider.init -> void
-Sa.Data.TempFolder.Cleanup.AgeBasedCleanupStrategy.SelectForDeletion(Sa.Data.TempFolder.Cleanup.CleanupContext! context) -> System.Collections.Generic.IReadOnlyList<string!>!
+Sa.Data.TempFolder.Cleanup.ICleanupStrategy.SelectForDeletion(Sa.Data.TempFolder.Cleanup.CleanupContext! context) -> System.Collections.Generic.IReadOnlyList<string!>!
 Sa.Data.TempFolder.FilePathResolver.IFilePathResolver.ResolvePath(string! dbPath, bool asRelativePath = false) -> string?
 Sa.Data.TempFolder.FilePathResolver.IFileSystemService.FileExists(string! path) -> bool
 Sa.Data.TempFolder.FilePathResolver.IFileSystemService.DirectoryExists(string! path) -> bool
 Sa.Data.TempFolder.FilePathResolver.IFileSystemService.EnumerateFiles(string! directory, string! pattern) -> System.Collections.Generic.IEnumerable<string!>!
-Sa.Data.TempFolder.ITempFolder.Name.get -> string!
+Sa.Data.TempFolder.Cleanup.AgeBasedCleanupStrategy.SelectForDeletion(Sa.Data.TempFolder.Cleanup.CleanupContext! context) -> System.Collections.Generic.IReadOnlyList<string!>!
 Sa.Data.TempFolder.ITempFolder.RootPath.get -> string!
+Sa.Data.TempFolder.ITempFolder.Name.get -> string!
 Sa.Data.TempFolder.ITempFolder.CreateSubfolder(string? subfolder = null) -> string!
-Sa.Data.TempFolder.ITempFolder.CopyFileAsync(string! sourcePath, string? subfolder = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<(string! RelativePath, string! AbsolutePath)>
 Sa.Data.TempFolder.ITempFolder.WriteAsync(System.IO.Stream! source, string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<(string! RelativePath, string! AbsolutePath)>
+Sa.Data.TempFolder.ITempFolder.CopyFileAsync(string! sourcePath, string? subfolder = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<(string! RelativePath, string! AbsolutePath)>
 Sa.Data.TempFolder.ITempFolder.ReadAsync(string! path, System.Func<System.IO.Stream!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! loadStream, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.TempFolder.ITempFolder.DeleteFileAsync(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
 Sa.Data.TempFolder.ITempFolder.EnumerateFilesAsync(string! pattern, string? subfolder = null, bool recursive = false, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<string!>!
@@ -60,85 +60,85 @@ Sa.Data.TempFolder.ITempFolder.CleanupExpiredAsync(System.Threading.Cancellation
 Sa.Data.TempFolder.ITempFolder.EnsureAccessAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Sa.Data.TempFolder.ITempFolderBuilder.Defaults(System.Action<Sa.Data.TempFolder.TempFolderOptions!>! configureDefaults) -> Sa.Data.TempFolder.ITempFolderBuilder!
 Sa.Data.TempFolder.ITempFolderBuilder.FromConfiguration(string! configSectionPath) -> Sa.Data.TempFolder.ITempFolderBuilder!
-Sa.Data.TempFolder.ITempFolderBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Data.TempFolder.TempFolderOptions!>!>! configureSettings) -> Sa.Data.TempFolder.ITempFolderBuilder!
 Sa.Data.TempFolder.ITempFolderBuilder.UseNamingStrategy<T>() -> Sa.Data.TempFolder.ITempFolderBuilder!
-Sa.Data.TempFolder.Naming.IFolderNameStrategy.CreateFolderName(Sa.Data.TempFolder.TempFolderOptions! options) -> string!
-static Sa.Data.TempFolder.FilePathResolver.Setup.AddFilePathResolver(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, string! configuredPath, System.Action<Sa.Data.TempFolder.FilePathResolver.FilePathResolver!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-Sa.Data.TempFolder.Naming.GuidV7FolderNameStrategy.CreateFolderName(Sa.Data.TempFolder.TempFolderOptions! options) -> string!
 Sa.Data.TempFolder.ITempFolderBuilder.UseCleanupStrategy<T>() -> Sa.Data.TempFolder.ITempFolderBuilder!
-static Sa.Data.TempFolder.FilePathResolver.Setup.AddFilePathResolver(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! configuredPath, System.Action<Sa.Data.TempFolder.FilePathResolver.FilePathResolver!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-static Sa.Data.TempFolder.PathGuard.HasUnsafeCharacters(string? value) -> bool
-Sa.Data.TempFolder.Naming.DateFolderNameStrategy.DateFolderNameStrategy(System.TimeProvider? timeProvider = null) -> void
+Sa.Data.TempFolder.ITempFolderBuilder.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<Sa.Data.TempFolder.TempFolderOptions!>!>! configureSettings) -> Sa.Data.TempFolder.ITempFolderBuilder!
+Sa.Data.TempFolder.Naming.IFolderNameStrategy.CreateFolderName(Sa.Data.TempFolder.TempFolderOptions! options) -> string!
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver.FilePathResolver(Sa.Data.TempFolder.FilePathResolver.IFileSystemService! fileSystem, string! configuredPath) -> void
+Sa.Data.TempFolder.Naming.DateFolderNameStrategy.DateFolderNameStrategy(System.TimeProvider? timeProvider = null) -> void
 static Sa.Data.TempFolder.FilePathResolver.FilePathResolver.Create(string! configuredPath) -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver!
+Sa.Data.TempFolder.Naming.GuidV7FolderNameStrategy.CreateFolderName(Sa.Data.TempFolder.TempFolderOptions! options) -> string!
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ConfiguredPath.get -> string!
+static Sa.Data.TempFolder.FilePathResolver.Setup.AddFilePathResolver(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, string! configuredPath, System.Action<Sa.Data.TempFolder.FilePathResolver.FilePathResolver!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Sa.Data.TempFolder.PathGuard.HasUnsafeCharacters(string? value) -> bool
+static Sa.Data.TempFolder.FilePathResolver.Setup.AddFilePathResolver(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! configuredPath, System.Action<Sa.Data.TempFolder.FilePathResolver.FilePathResolver!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.Data.TempFolder.Naming.DateFolderNameStrategy.CreateFolderName(Sa.Data.TempFolder.TempFolderOptions! options) -> string!
+Sa.Data.TempFolder.FilePathResolver.FilePathResolver.PossibleExtensions.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver.IsResolved.get -> bool
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver.IsDeepSearch.get -> bool
-Sa.Data.TempFolder.FilePathResolver.FilePathResolver.PossibleExtensions.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver.IsForceSearchEnabled.get -> bool
-Sa.Data.TempFolder.FilePathResolver.FilePathResolver.WithPossibleExtensions(params string![]! possibleExtensions) -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver!
 Sa.Data.TempFolder.TempFolderFreeSpaceArgs.TempFolderFreeSpaceArgs(string! name, string! rootPath, long availableFreeSpace, long minFreeSpace, bool reached) -> void
 Sa.Data.TempFolder.TempFolderFreeSpaceArgs.Name.get -> string!
 Sa.Data.TempFolder.TempFolderFreeSpaceArgs.RootPath.get -> string!
 Sa.Data.TempFolder.TempFolderFreeSpaceArgs.AvailableFreeSpace.get -> long
 Sa.Data.TempFolder.TempFolderFreeSpaceArgs.MinFreeSpace.get -> long
 Sa.Data.TempFolder.TempFolderFreeSpaceArgs.Reached.get -> bool
-Sa.Data.TempFolder.TempFolderOptions.RootPath.get -> string!
+static Sa.Data.TempFolder.PathGuard.Resolve(string! rootPath, string! path) -> string!
+Sa.Data.TempFolder.FilePathResolver.FilePathResolver.WithPossibleExtensions(params string![]! possibleExtensions) -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver!
+static Sa.Data.TempFolder.PathGuard.IsInside(string! rootPath, string! candidate) -> bool
+static Sa.Data.TempFolder.PathGuard.IsSymlink(string! path) -> bool
 Sa.Data.TempFolder.FilePathResolver.FilePathResolver.WithMap(string! map) -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver!
+Sa.Data.TempFolder.FilePathResolver.FilePathResolver.WithDeepSearch(bool deep) -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver!
+Sa.Data.TempFolder.FilePathResolver.FilePathResolver.WithForceSearch(bool force) -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver!
+Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvePath(string! dbPath, bool asRelativePath = false) -> string?
+Sa.Data.TempFolder.TempFolderOptions.RootPath.get -> string!
 Sa.Data.TempFolder.TempFolderOptions.RootPath.set -> void
-Sa.Data.TempFolder.TempFolderOptions.MaxAge.set -> void
 Sa.Data.TempFolder.TempFolderOptions.MaxAge.get -> System.TimeSpan
+static Sa.Data.TempFolder.PathGuard.AssertNoSymlinkComponents(string! rootPath, string! absolutePath) -> void
+Sa.Data.TempFolder.TempFolderOptions.MaxAge.set -> void
 Sa.Data.TempFolder.TempFolderOptions.AgeSource.get -> Sa.Data.TempFolder.TempFolderAgeSource
 Sa.Data.TempFolder.TempFolderOptions.AgeSource.set -> void
 Sa.Data.TempFolder.TempFolderOptions.FolderPrefix.get -> string!
 Sa.Data.TempFolder.TempFolderOptions.FolderPrefix.set -> void
-Sa.Data.TempFolder.TempFolderOptions.FolderNameFormat.set -> void
 Sa.Data.TempFolder.TempFolderOptions.FolderNameFormat.get -> string!
+Sa.Data.TempFolder.TempFolderOptions.FolderNameFormat.set -> void
 Sa.Data.TempFolder.TempFolderOptions.OverwriteFiles.get -> bool
 Sa.Data.TempFolder.TempFolderOptions.OverwriteFiles.set -> void
 Sa.Data.TempFolder.TempFolderOptions.MaxFoldersPerPass.get -> int
-Sa.Data.TempFolder.TempFolderOptions.CleanupInterval.get -> System.TimeSpan
 Sa.Data.TempFolder.TempFolderOptions.MaxFoldersPerPass.set -> void
-Sa.Data.TempFolder.FilePathResolver.FilePathResolver.WithDeepSearch(bool deep) -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver!
+Sa.Data.TempFolder.TempFolderOptions.CleanupInterval.get -> System.TimeSpan
 Sa.Data.TempFolder.TempFolderOptions.CleanupInterval.set -> void
 Sa.Data.TempFolder.TempFolderOptions.CleanupEnabled.get -> bool
 Sa.Data.TempFolder.TempFolderOptions.CleanupEnabled.set -> void
+Sa.Data.TempFolder.TempFolderOptions.VolumeScanInterval.set -> void
 Sa.Data.TempFolder.TempFolderOptions.VolumeScanInterval.get -> System.TimeSpan
 Sa.Data.TempFolder.TempFolderOptions.ReadOnly.get -> bool
-Sa.Data.TempFolder.TempFolderOptions.VolumeScanInterval.set -> void
-Sa.Data.TempFolder.FilePathResolver.FilePathResolver.WithForceSearch(bool force) -> Sa.Data.TempFolder.FilePathResolver.FilePathResolver!
 Sa.Data.TempFolder.TempFolderOptions.MaxTotalSize.get -> long
 Sa.Data.TempFolder.TempFolderOptions.ReadOnly.set -> void
+Sa.Data.TempFolder.TempFolderOptions.TrackVolume.get -> bool
 Sa.Data.TempFolder.TempFolderOptions.MaxTotalSize.set -> void
 Sa.Data.TempFolder.TempFolderOptions.TrackVolume.set -> void
-Sa.Data.TempFolder.TempFolderOptions.TouchDebounce.get -> System.TimeSpan
-Sa.Data.TempFolder.TempFolderOptions.TrackVolume.get -> bool
-Sa.Data.TempFolder.TempFolderOptions.TouchDebounce.set -> void
 Sa.Data.TempFolder.TempFolderOptions.Cleanup.get -> Sa.Data.TempFolder.TempFolderCleanupKind
-Sa.Data.TempFolder.TempFolderOptions.Cleanup.set -> void
+Sa.Data.TempFolder.TempFolderOptions.TouchDebounce.get -> System.TimeSpan
+Sa.Data.TempFolder.TempFolderOptions.TouchDebounce.set -> void
 Sa.Data.TempFolder.TempFolderOptions.Naming.get -> Sa.Data.TempFolder.TempFolderNamingKind
 Sa.Data.TempFolder.TempFolderOptions.Naming.set -> void
+Sa.Data.TempFolder.TempFolderOptions.Cleanup.set -> void
 Sa.Data.TempFolder.TempFolderOptions.OnVolumeExceeded.set -> void
 Sa.Data.TempFolder.TempFolderOptions.OnVolumeExceeded.get -> System.Action<Sa.Data.TempFolder.TempFolderVolumeArgs!>?
-Sa.Data.TempFolder.TempFolderOptions.OnFreeSpaceReached.set -> void
 Sa.Data.TempFolder.TempFolderOptions.OnFreeSpaceReached.get -> System.Action<Sa.Data.TempFolder.TempFolderFreeSpaceArgs!>?
 Sa.Data.TempFolder.TempFolderOptions.MinFreeSpace.get -> long
 Sa.Data.TempFolder.TempFolderOptions.MinFreeSpace.set -> void
 Sa.Data.TempFolder.TempFolderOptions.FreeSpaceCheckInterval.get -> System.TimeSpan
 Sa.Data.TempFolder.TempFolderOptions.FreeSpaceCheckInterval.set -> void
 Sa.Data.TempFolder.TempFolderVolumeArgs.TempFolderVolumeArgs(string! name, string! rootPath, long totalSize, long maxTotalSize, bool exceeded) -> void
-Sa.Data.TempFolder.TempFolderVolumeArgs.Name.get -> string!
 Sa.Data.TempFolder.TempFolderVolumeArgs.RootPath.get -> string!
-Sa.Data.TempFolder.TempFolderVolumeArgs.TotalSize.get -> long
+Sa.Data.TempFolder.TempFolderVolumeArgs.Name.get -> string!
 Sa.Data.TempFolder.TempFolderVolumeArgs.MaxTotalSize.get -> long
+Sa.Data.TempFolder.TempFolderVolumeArgs.TotalSize.get -> long
 Sa.Data.TempFolder.TempFolderVolumeArgs.Exceeded.get -> bool
-Sa.Data.TempFolder.FilePathResolver.FilePathResolver.ResolvePath(string! dbPath, bool asRelativePath = false) -> string?
-static Sa.Data.TempFolder.PathGuard.Resolve(string! rootPath, string! path) -> string!
-static Sa.Data.TempFolder.PathGuard.IsInside(string! rootPath, string! candidate) -> bool
-static Sa.Data.TempFolder.PathGuard.IsSymlink(string! path) -> bool
-static Sa.Data.TempFolder.Setup.AddSaTempFolder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, System.Action<Sa.Data.TempFolder.ITempFolderBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-static Sa.Data.TempFolder.Setup.AddSaTempFolder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Data.TempFolder.ITempFolderBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-static Sa.Data.TempFolder.PathGuard.AssertNoSymlinkComponents(string! rootPath, string! absolutePath) -> void
-Sa.Data.TempFolder.TempFolderOptions.Validate() -> void
 static Sa.Data.TempFolder.PathGuard.TopSegment(string! rootPath, string! absolutePath) -> string?
+Sa.Data.TempFolder.TempFolderOptions.OnFreeSpaceReached.set -> void
+static Sa.Data.TempFolder.Setup.AddSaTempFolder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, System.Action<Sa.Data.TempFolder.ITempFolderBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Data.TempFolder.TempFolderOptions.Validate() -> void
+static Sa.Data.TempFolder.Setup.AddSaTempFolder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Sa.Data.TempFolder.ITempFolderBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

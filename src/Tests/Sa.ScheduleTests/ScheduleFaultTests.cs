@@ -36,7 +36,7 @@ public sealed class ScheduleFaultTests : IAsyncDisposable
         // Start may report true (the slots spawned, then the fault landed) or false
         // (the fault landed while starting) — both are fine. What must never happen
         // is a scheduler that reports a running job that is dead.
-        _ = await _scheduler.Start(TestContext.Current.CancellationToken);
+        _ = await _scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         await WaitForAsync(() =>
             Volatile.Read(ref ExplodingJob.Attempts) >= 1 && !_job.IsStarted);

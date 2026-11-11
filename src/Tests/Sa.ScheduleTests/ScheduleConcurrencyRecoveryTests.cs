@@ -75,7 +75,7 @@ public sealed class ScheduleConcurrencyRecoveryTests : IAsyncDisposable
         Probe.Reset();
         var ct = TestContext.Current.CancellationToken;
 
-        Assert.Equal(1, await _scheduler.Start(ct));
+        Assert.Equal(1, await _scheduler.StartAsync(ct));
 
         // All three pre-allocated slots are live from the start and blocked in Execute.
         await WaitForAsync(() => Probe.Active == 3, ct);

@@ -46,7 +46,7 @@ public sealed class ScheduleSetupTests(ScheduleSetupTests.Fixture fixture)
     [Fact]
     public async Task Check_ExecuteCounterJob()
     {
-        int started = await Sub.Start(CancellationToken.None);
+        int started = await Sub.StartAsync(CancellationToken.None);
 
         Assert.Equal(1, started);
 
