@@ -180,7 +180,11 @@ public sealed class WorkQueueDiagnosticsTests
         releaseSecond.SetResult();
 
         await laterHandled.Task.WaitAsync(TestToken);
-        await WaitForShutdownErrorAsync(queue, TestToken);
+
+        // ShutdownError is recorded before ShutdownAsync flips the state, so waiting for the
+        // error alone still races IsEnabled: the recorded reason is visible while the readers
+        // are still being stopped.
+        await WaitForStoppedAsync(queue, TestToken);
 
         Assert.False(queue.IsEnabled);
         Assert.Same(root, queue.ShutdownError);
@@ -200,6 +204,29 @@ public sealed class WorkQueueDiagnosticsTests
         while (queue.ShutdownError is null)
         {
             await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Waits until the asynchronous shutdown has flipped the queue out of the active state.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ISaWorkChannel{TInput}.ShutdownError"/> is written before <c>ShutdownAsync</c>
+    /// runs — it records why the queue is going down, while the state flips once the readers have
+    /// stopped — so synchronising on the error alone still races
+    /// <see cref="ISaWorkChannel{TInput}.IsEnabled"/>. The bounded wait fails the test instead of
+    /// hanging it if the shutdown never completes.
+    /// </remarks>
+    static async Task WaitForStoppedAsync<TInput>(
+        ISaWorkChannel<TInput> queue,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+
+        while (queue.IsEnabled)
+        {
+            await Task.Delay(10, timeout.Token).ConfigureAwait(false);
         }
     }
 
