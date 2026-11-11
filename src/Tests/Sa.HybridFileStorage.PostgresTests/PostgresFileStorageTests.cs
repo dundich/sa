@@ -115,7 +115,9 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
                 new UploadFileInput { FileName = "bad\0name.txt", TenantId = 1 },
                 content, fixture.CancellationToken));
 
-        Assert.Equal(nameof(UploadFileInput.FileName), ex.ParamName);
+        // The guard lives in UploadAsync, so the argument it names is the method's own parameter
+        // (`metadata`), not the FileName property that carries the bad value (CA2208).
+        Assert.Equal("metadata", ex.ParamName);
     }
 
     [Fact]
