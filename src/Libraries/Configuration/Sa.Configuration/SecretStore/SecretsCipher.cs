@@ -6,11 +6,20 @@ namespace Sa.Configuration.SecretStore;
 /// <summary>
 /// Header metadata of an encrypted secrets file.
 /// </summary>
-/// <param name="Kdf">Key derivation function: <c>pbkdf2-sha256</c> or <c>none</c>.</param>
-/// <param name="Iterations">PBKDF2 iterations; <c>0</c> for a raw key.</param>
-/// <param name="Client">Client the file belongs to, if declared.</param>
-/// <param name="Environment">Environment the file belongs to, if declared.</param>
-public sealed record SecretsFileHeader(string Kdf, int Iterations, string? Client, string? Environment);
+public sealed record SecretsFileHeader
+{
+    /// <summary>Key derivation function: <c>pbkdf2-sha256</c> or <c>none</c>.</summary>
+    public required string Kdf { get; init; }
+
+    /// <summary>PBKDF2 iterations; <c>0</c> for a raw key.</summary>
+    public int Iterations { get; init; }
+
+    /// <summary>Client the file belongs to, if declared.</summary>
+    public string? Client { get; init; }
+
+    /// <summary>Environment the file belongs to, if declared.</summary>
+    public string? Environment { get; init; }
+}
 
 /// <summary>
 /// Encrypts and decrypts <c>key=value</c> secrets files.
@@ -261,11 +270,13 @@ public static class SecretsCipher
 
         ParsedHeader header = ParseHeader(SplitLines(encryptedContent), out _);
 
-        return new SecretsFileHeader(
-            header.IsRawKey ? KdfNone : KdfPbkdf2,
-            header.IsRawKey ? 0 : header.Iterations,
-            header.Client,
-            header.Environment);
+        return new SecretsFileHeader
+        {
+            Kdf = header.IsRawKey ? KdfNone : KdfPbkdf2,
+            Iterations = header.IsRawKey ? 0 : header.Iterations,
+            Client = header.Client,
+            Environment = header.Environment,
+        };
     }
 
     internal static byte[] DeriveKey(string key, byte[] salt, int iterations)
