@@ -24,7 +24,7 @@ internal sealed class OutboxDeliveryManager(
         CancellationToken cancellationToken)
             => finishCommand.ExecuteAsync(messages, filter, cancellationToken);
 
-    public Task<int> ExtendDelivery(
+    public Task<int> ExtendDeliveryAsync(
         TimeSpan lockExpiration,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)

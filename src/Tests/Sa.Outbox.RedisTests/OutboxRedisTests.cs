@@ -285,7 +285,7 @@ public class OutboxRedisTests(OutboxRedisFixture fixture) : IClassFixture<Outbox
 
         // The renewal addresses the same consumer (TransactId), resets the idle time and must not
         // count as another delivery.
-        int extended = await Manager.ExtendDelivery(TimeSpan.FromMinutes(10), filter, ct);
+        int extended = await Manager.ExtendDeliveryAsync(TimeSpan.FromMinutes(10), filter, ct);
         Assert.Equal(1, extended);
 
         StreamPendingMessageInfo[] pending = await Database.StreamPendingMessagesAsync(
@@ -315,7 +315,7 @@ public class OutboxRedisTests(OutboxRedisFixture fixture) : IClassFixture<Outbox
         await publisher.Publish([new TestMessage("2")], second, ct);
 
         IOutboxTenantDetector detector = Services.GetRequiredService<IOutboxTenantDetector>();
-        int[] tenants = await detector.GetTenantIds(ct);
+        int[] tenants = await detector.GetTenantIdsAsync(ct);
 
         Assert.Contains(first, tenants);
         Assert.Contains(second, tenants);

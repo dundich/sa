@@ -29,7 +29,7 @@ public sealed class OutboxScopeIsolationTests
 
     sealed class TestConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

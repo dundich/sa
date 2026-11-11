@@ -21,7 +21,7 @@ public class DeliveryCancellationRetryTests(DeliveryCancellationRetryTests.Fixtu
         /// <summary>Set by the test: while non-null, the first call cancels it and throws.</summary>
         public static CancellationTokenSource? Cts;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

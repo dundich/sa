@@ -29,7 +29,7 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
 
         public static void Reset() => Counter = 0;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -191,7 +191,7 @@ public class DeliveryMinOffsetFloorTests(DeliveryMinOffsetFloorTests.Fixture fix
 
         public static void Reset() => Counter = 0;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

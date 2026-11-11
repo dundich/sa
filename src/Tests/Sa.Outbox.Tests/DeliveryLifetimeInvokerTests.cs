@@ -20,7 +20,7 @@ public class DeliveryLifetimeInvokerTests
 
         public int Calls;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<MsgA>> messages,
@@ -34,7 +34,7 @@ public class DeliveryLifetimeInvokerTests
     private sealed class ConsumerB : IConsumer<MsgB>
     {
         public int Calls;
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<MsgB>> messages,

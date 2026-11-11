@@ -15,7 +15,7 @@ namespace Sa.Outbox.Delivery;
 /// </summary>
 internal sealed class DeliveryBatcher : IDeliveryBatcher
 {
-    public ValueTask<int> CalculateBatchSize(
+    public ValueTask<int> CalculateBatchSizeAsync(
         int maxBatchSize,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)

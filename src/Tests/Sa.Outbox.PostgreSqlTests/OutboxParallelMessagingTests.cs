@@ -53,7 +53,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     class SomeMessageConsumer1 : IConsumer<SomeMessage1>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage1>> messages,
@@ -66,7 +66,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     class SomeMessageConsumer2 : IConsumer<SomeMessage2>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage2>> messages,

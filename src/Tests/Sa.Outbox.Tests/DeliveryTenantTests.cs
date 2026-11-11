@@ -135,7 +135,7 @@ public sealed class DeliveryTenantTests
             return messages.Length;
         }
 
-        public Task<int> ExtendDelivery(
+        public Task<int> ExtendDeliveryAsync(
             TimeSpan lockExpiration,
             OutboxMessageFilter filter,
             CancellationToken cancellationToken)
@@ -160,7 +160,7 @@ public sealed class DeliveryTenantTests
 
     private sealed class FakeBatcher : IDeliveryBatcher
     {
-        public ValueTask<int> CalculateBatchSize(
+        public ValueTask<int> CalculateBatchSizeAsync(
             int maxBatchSize,
             OutboxMessageFilter filter,
             CancellationToken cancellationToken)

@@ -8,7 +8,7 @@ internal sealed class OutboxMsgTypeRepository(
     ISelectMsgTypeCommand selectCmd
     ) : IOutboxMsgTypeRepository
 {
-    public Task<int> Insert(long id, string typeName, CancellationToken cancellationToken)
+    public Task<int> InsertAsync(long id, string typeName, CancellationToken cancellationToken)
         => insertCmd.ExecuteAsync(id, typeName, cancellationToken);
 
     public Task<IReadOnlyCollection<(long id, string typeName)>> SelectAll(CancellationToken cancellationToken)

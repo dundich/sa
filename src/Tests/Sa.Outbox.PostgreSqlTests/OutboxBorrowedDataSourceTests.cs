@@ -37,7 +37,7 @@ public sealed class OutboxBorrowedDataSourceTests(OutboxBorrowedDataSourceTests.
 
         public static int Counter => Volatile.Read(ref s_Counter);
 
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<BorrowedMessage>> messages,

@@ -65,7 +65,7 @@ internal sealed class InMemoryOutboxDeliveryManager(
         return Task.FromResult(store.Return(outcomes, filter));
     }
 
-    public Task<int> ExtendDelivery(
+    public Task<int> ExtendDeliveryAsync(
         TimeSpan lockExpiration,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)

@@ -23,7 +23,7 @@ public class PgProviderIsolationTests
 
     private sealed class ConsumerA : IConsumer<Message>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<Message>> messages,
@@ -33,7 +33,7 @@ public class PgProviderIsolationTests
 
     private sealed class ConsumerB : IConsumer<Message>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<Message>> messages,

@@ -181,9 +181,9 @@ public class DeliveryProcessorTests
     // finds nothing here, which is a reliable way to waste an afternoon.
     private sealed class FakeTenantProvider(int[] tenantIds) : ITenantProvider
     {
-        public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken) => ValueTask.FromResult(tenantIds);
+        public ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken) => ValueTask.FromResult(tenantIds);
 
-        public ValueTask<int[]> GetTenantIds(string providerKey, CancellationToken cancellationToken)
+        public ValueTask<int[]> GetTenantIdsAsync(string providerKey, CancellationToken cancellationToken)
             => ValueTask.FromResult(tenantIds);
     }
 }

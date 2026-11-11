@@ -12,7 +12,7 @@ internal sealed class ExtendDeliveryCommand(
 {
     public async Task<int> ExecuteAsync(TimeSpan lockExpiration, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
+        long typeCode = await hashResolver.GetHashCodeAsync(filter.PayloadType, cancellationToken);
         var lockExpiresOn = filter.NowDate + lockExpiration;
 
         return await dataSource.ExecuteNonQueryAsync(sql.SqlExtendDelivery, cmd => cmd

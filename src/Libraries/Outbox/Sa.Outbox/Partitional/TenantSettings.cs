@@ -45,7 +45,7 @@ public sealed class TenantSettings
     public void WithTenantSource(ITenantSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        GetTenantIds = source.GetTenantIds;
+        GetTenantIds = source.GetTenantIdsAsync;
         _explicitSourceSet = true;
         // An explicit source is authoritative: it must not fall through to plug-service
         // auto-detection (which would ignore the source and return []).

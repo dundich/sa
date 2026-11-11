@@ -37,7 +37,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
             AllowConsume = new ManualResetEventSlim(true);
         }
 
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -78,7 +78,7 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
             ReleaseBlocking = new ManualResetEventSlim(false);
         }
 
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

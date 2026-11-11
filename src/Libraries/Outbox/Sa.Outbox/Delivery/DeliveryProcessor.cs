@@ -30,7 +30,7 @@ internal sealed class DeliveryProcessor(
         if (batchSize == 0) return 0;
 
         int[] tenantIds = await tenantProvider
-            .GetTenantIds(settings.ProviderKey, cancellationToken)
+            .GetTenantIdsAsync(settings.ProviderKey, cancellationToken)
             .ConfigureAwait(false);
         if (tenantIds.Length == 0) return 0;
 

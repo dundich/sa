@@ -25,7 +25,7 @@ public sealed class RecordingPgPoisonHandler : IPgOutboxPoisonHandler
         Result = PgOutboxPoisonAction.Default;
     }
 
-    public ValueTask<PgOutboxPoisonAction> Handle(PgOutboxPoisonMessage message, CancellationToken cancellationToken)
+    public ValueTask<PgOutboxPoisonAction> HandleAsync(PgOutboxPoisonMessage message, CancellationToken cancellationToken)
     {
         _messages.Enqueue(message);
         return ValueTask.FromResult(Result);
@@ -44,7 +44,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         private static readonly TestException s_err = new("test permanent error");
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

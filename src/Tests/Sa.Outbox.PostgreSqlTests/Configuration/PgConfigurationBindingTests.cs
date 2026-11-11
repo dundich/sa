@@ -27,7 +27,7 @@ public class PgConfigurationBindingTests
 
     internal sealed class BindingConsumer : IConsumer<BindingMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<BindingMessage>> messages,

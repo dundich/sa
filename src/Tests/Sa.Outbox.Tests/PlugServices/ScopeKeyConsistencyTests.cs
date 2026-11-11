@@ -23,7 +23,7 @@ public class ScopeKeyConsistencyTests
 
     internal sealed class TestConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -55,7 +55,7 @@ public class ScopeKeyConsistencyTests
             CancellationToken cancellationToken)
             => Task.FromResult(messages.Length);
 
-        public Task<int> ExtendDelivery(
+        public Task<int> ExtendDeliveryAsync(
             TimeSpan lockExpiration,
             OutboxMessageFilter filter,
             CancellationToken cancellationToken)

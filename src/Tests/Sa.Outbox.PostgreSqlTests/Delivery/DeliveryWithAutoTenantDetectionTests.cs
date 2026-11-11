@@ -15,7 +15,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
 {
     class TestConsumer : IConsumer<TestMessage>
     {
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -32,7 +32,7 @@ public class DeliveryWithAutoTenantDetectionTests(DeliveryWithAutoTenantDetectio
 
         public bool CanDetect => true;
 
-        public async ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+        public async ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
         {
             var rows = await command.ExecuteAsync(cancellationToken);
             Interlocked.Exchange(ref CountTenant, rows.Count);

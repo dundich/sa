@@ -18,7 +18,7 @@ public interface IOutboxPartitionalSupport
     /// <summary>
     /// Retrieves an array of tenant IDs.
     /// </summary>
-    ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken);
+    ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Asynchronously retrieves a collection of tenant-part pairs.

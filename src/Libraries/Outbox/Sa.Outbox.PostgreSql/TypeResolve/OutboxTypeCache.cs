@@ -10,7 +10,7 @@ internal sealed class OutboxTypeCache : IOutboxTypeCache
 
     /// <summary>
     /// The last successfully loaded snapshot, published for the synchronous fast path.
-    /// <see cref="Reset"/> clears it so the next lookup cannot keep answering from the map
+    /// <see cref="ResetAsync"/> clears it so the next lookup cannot keep answering from the map
     /// that was just invalidated; a load still in flight may republish an older append-only
     /// snapshot, which only makes a lookup for a newly added type fall back to the slow path.
     /// </summary>
@@ -28,7 +28,7 @@ internal sealed class OutboxTypeCache : IOutboxTypeCache
     public OutboxTypeCache(IOutboxMsgTypeRepository repository)
     {
         _repository = repository;
-        _cache = new(Load);
+        _cache = new(LoadAsync);
     }
 
     internal class Storage
@@ -76,19 +76,19 @@ internal sealed class OutboxTypeCache : IOutboxTypeCache
         return typeName is not null;
     }
 
-    public async Task<long?> GetCode(string typeName, CancellationToken cancellationToken)
+    public async Task<long?> GetCodeAsync(string typeName, CancellationToken cancellationToken)
     {
-        Storage storage = await GetStorage(cancellationToken).ConfigureAwait(false);
+        Storage storage = await GetStorageAsync(cancellationToken).ConfigureAwait(false);
         return storage.GetCode(typeName);
     }
 
-    public async Task<string?> GetTypeName(long code, CancellationToken cancellationToken)
+    public async Task<string?> GetTypeNameAsync(long code, CancellationToken cancellationToken)
     {
-        Storage storage = await GetStorage(cancellationToken).ConfigureAwait(false);
+        Storage storage = await GetStorageAsync(cancellationToken).ConfigureAwait(false);
         return storage.GetType(code);
     }
 
-    public Task Reset(CancellationToken cancellationToken)
+    public Task ResetAsync(CancellationToken cancellationToken)
     {
         // Reset is not cancellable on purpose: the caller has already written the row, and
         // honouring a cancel here would leave the in-process map stale forever. The token is
@@ -102,21 +102,21 @@ internal sealed class OutboxTypeCache : IOutboxTypeCache
         return Task.CompletedTask;
     }
 
-    private Task<Storage> GetStorage(CancellationToken cancellationToken)
+    private Task<Storage> GetStorageAsync(CancellationToken cancellationToken)
     {
         // Only the caller that starts the load owns its token. Replacing this after the factory
         // has started would not affect the in-flight request anyway — it reads the scope once.
         if (!_cache.IsValueCreated)
             _loadScope = new LoadScope(cancellationToken);
 
-        return Observe(_cache.Value);
+        return ObserveAsync(_cache.Value);
     }
 
     /// <summary>
     /// A faulted load used to stick in <see cref="ResetLazy{T}"/> forever: every later
-    /// <see cref="GetCode"/> replayed the same failure and never tried the database again.
+    /// <see cref="GetCodeAsync"/> replayed the same failure and never tried the database again.
     /// </summary>
-    private async Task<Storage> Observe(Task<Storage> load)
+    private async Task<Storage> ObserveAsync(Task<Storage> load)
     {
         try
         {
@@ -129,7 +129,7 @@ internal sealed class OutboxTypeCache : IOutboxTypeCache
         }
     }
 
-    private async Task<Storage> Load()
+    private async Task<Storage> LoadAsync()
     {
         CancellationToken token = _loadScope.Token;
         var hashCodes = await _repository.SelectAll(token).ConfigureAwait(false);

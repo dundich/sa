@@ -66,7 +66,7 @@ internal sealed partial class FinishDeliveryCommand(
 
                 try
                 {
-                    await poisonHandler.Handle(poison, cancellationToken).ConfigureAwait(false);
+                    await poisonHandler.HandleAsync(poison, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

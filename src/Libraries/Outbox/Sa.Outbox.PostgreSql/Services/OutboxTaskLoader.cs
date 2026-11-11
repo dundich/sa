@@ -34,7 +34,7 @@ internal sealed partial class OutboxTaskLoader(
 
     internal sealed record ConsumerGroupIdentifier(string ConsumerGroupId, int TenantId);
 
-    public async Task<LoadGroupResult> LoadNewTasks(
+    public async Task<LoadGroupResult> LoadNewTasksAsync(
         OutboxMessageFilter filter,
         int batchSize,
         CancellationToken cancellationToken = default)
@@ -43,7 +43,7 @@ internal sealed partial class OutboxTaskLoader(
 
         try
         {
-            return await LoadGroupAndShiftOffsetWithRetry(filter, batchSize, cancellationToken);
+            return await LoadGroupAndShiftOffsetWithRetryAsync(filter, batchSize, cancellationToken);
         }
         catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
@@ -62,17 +62,17 @@ internal sealed partial class OutboxTaskLoader(
         }
     }
 
-    private async Task<LoadGroupResult> LoadGroupAndShiftOffsetWithRetry(
+    private async Task<LoadGroupResult> LoadGroupAndShiftOffsetWithRetryAsync(
         OutboxMessageFilter filter,
         int batchSize,
         CancellationToken cancellationToken)
     {
         return await PgRetryStrategy.ExecuteWithRetry(
-            async t => await LoadGroupAndShiftOffset(filter, batchSize, t),
+            async t => await LoadGroupAndShiftOffsetAsync(filter, batchSize, t),
             cancellationToken: cancellationToken);
     }
 
-    private async Task<LoadGroupResult> LoadGroupAndShiftOffset(
+    private async Task<LoadGroupResult> LoadGroupAndShiftOffsetAsync(
         OutboxMessageFilter filter,
         int batchSize,
         CancellationToken cancellationToken)
@@ -83,12 +83,12 @@ internal sealed partial class OutboxTaskLoader(
 
         ConsumerGroupIdentifier consumerGroup = new(filter.ConsumerGroupId, filter.TenantId);
 
-        await AcquireOffsetLock(consumerGroup, conn, tx, cancellationToken);
+        await AcquireOffsetLockAsync(consumerGroup, conn, tx, cancellationToken);
 
 
-        long currentOffset = await GetCurrentOffset(consumerGroup, conn, tx, cancellationToken);
+        long currentOffset = await GetCurrentOffsetAsync(consumerGroup, conn, tx, cancellationToken);
 
-        var batchResult = await LoadTasksByOffset(currentOffset, filter, batchSize, conn, tx, cancellationToken);
+        var batchResult = await LoadTasksByOffsetAsync(currentOffset, filter, batchSize, conn, tx, cancellationToken);
 
         if (!batchResult.IsEmpty() && batchResult.NewOffset != currentOffset)
         {
@@ -100,7 +100,7 @@ internal sealed partial class OutboxTaskLoader(
         return batchResult;
     }
 
-    private async Task<LoadGroupResult> LoadTasksByOffset(
+    private async Task<LoadGroupResult> LoadTasksByOffsetAsync(
         long currentOffset,
         OutboxMessageFilter filter,
         int batchSize,
@@ -108,7 +108,7 @@ internal sealed partial class OutboxTaskLoader(
         NpgsqlTransaction? tx,
         CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
+        long typeCode = await hashResolver.GetHashCodeAsync(filter.PayloadType, cancellationToken);
 
         await using var command = new NpgsqlCommand(sql.SqlLoadConsumerGroup, conn, tx);
 
@@ -144,7 +144,7 @@ internal sealed partial class OutboxTaskLoader(
         }
     }
 
-    private async Task AcquireOffsetLock(
+    private async Task AcquireOffsetLockAsync(
         ConsumerGroupIdentifier consumerGroup,
         NpgsqlConnection conn,
         NpgsqlTransaction? tx,
@@ -174,7 +174,7 @@ internal sealed partial class OutboxTaskLoader(
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private async Task<long> GetCurrentOffset(
+    private async Task<long> GetCurrentOffsetAsync(
         ConsumerGroupIdentifier consumerGroup,
         NpgsqlConnection conn,
         NpgsqlTransaction? tx,
@@ -192,7 +192,7 @@ internal sealed partial class OutboxTaskLoader(
 
         long currentOffset = (currentOffsetObj != null)
             ? (long)currentOffsetObj
-            : await InitializeOffset(consumerGroup, minOffset, conn, tx, cancellationToken);
+            : await InitializeOffsetAsync(consumerGroup, minOffset, conn, tx, cancellationToken);
 
         return (currentOffset > minOffset) ? currentOffset : minOffset;
     }
@@ -246,7 +246,7 @@ internal sealed partial class OutboxTaskLoader(
         return floor;
     }
 
-    private async Task<long> InitializeOffset(
+    private async Task<long> InitializeOffsetAsync(
         ConsumerGroupIdentifier consumerGroup,
         long minOffset,
         NpgsqlConnection conn,

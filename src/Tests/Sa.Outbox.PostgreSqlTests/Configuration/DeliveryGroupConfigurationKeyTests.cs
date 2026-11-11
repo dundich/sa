@@ -21,7 +21,7 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
 
     internal sealed class PriorityConsumer : IConsumer<PriorityMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<PriorityMessage>> messages,
@@ -31,7 +31,7 @@ public class DeliveryGroupConfigurationKeyTests(DeliveryGroupConfigurationKeyTes
 
     internal sealed class NoConfigKeyConsumer : IConsumer<PriorityMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<PriorityMessage>> messages,

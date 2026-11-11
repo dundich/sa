@@ -101,12 +101,12 @@ public class InMemoryDeliveryTests
         Assert.Equal(1, await RentAsync(provider, clock, buffer, "tx-2", lockDuration: TimeSpan.FromSeconds(10)));
         Assert.NotEqual(firstToken, buffer[0].RentToken);
 
-        Assert.Equal(0, await provider.Manager().ExtendDelivery(
+        Assert.Equal(0, await provider.Manager().ExtendDeliveryAsync(
             TimeSpan.FromSeconds(10),
             InMemoryTestHost.Filter<TestMessage>("tx-1", now: clock.Now),
             TestToken));
 
-        Assert.Equal(1, await provider.Manager().ExtendDelivery(
+        Assert.Equal(1, await provider.Manager().ExtendDeliveryAsync(
             TimeSpan.FromSeconds(10),
             InMemoryTestHost.Filter<TestMessage>("tx-2", now: clock.Now),
             TestToken));
@@ -137,7 +137,7 @@ public class InMemoryDeliveryTests
         Assert.Equal(0, applied);
 
         // The new owner still holds the lease.
-        Assert.Equal(1, await provider.Manager().ExtendDelivery(
+        Assert.Equal(1, await provider.Manager().ExtendDeliveryAsync(
             TimeSpan.FromSeconds(10),
             InMemoryTestHost.Filter<TestMessage>("tx-2", now: clock.Now),
             TestToken));
@@ -156,7 +156,7 @@ public class InMemoryDeliveryTests
         IOutboxContextOperations<TestMessage>[] buffer = InMemoryTestHost.RentBuffer<TestMessage>(2);
         Assert.Equal(2, await RentAsync(provider, clock, buffer, "tx-1"));
 
-        Assert.Equal(2, await provider.Manager().ExtendDelivery(
+        Assert.Equal(2, await provider.Manager().ExtendDeliveryAsync(
             TimeSpan.FromSeconds(30),
             InMemoryTestHost.Filter<TestMessage>("tx-1", now: clock.Now),
             TestToken));
@@ -169,7 +169,7 @@ public class InMemoryDeliveryTests
             InMemoryTestHost.Filter<TestMessage>("tx-1", now: clock.Now),
             TestToken);
 
-        Assert.Equal(0, await provider.Manager().ExtendDelivery(
+        Assert.Equal(0, await provider.Manager().ExtendDeliveryAsync(
             TimeSpan.FromSeconds(30),
             InMemoryTestHost.Filter<TestMessage>("tx-1", now: clock.Now),
             TestToken));
@@ -189,7 +189,7 @@ public class InMemoryDeliveryTests
             InMemoryTestHost.Batch(new[] { new TestMessage("t2") }, tenantId: 2, createdAt: clock.Now),
             TestToken);
 
-        Assert.Equal(new[] { 1, 2 }, await provider.Detector().GetTenantIds(TestToken));
+        Assert.Equal(new[] { 1, 2 }, await provider.Detector().GetTenantIdsAsync(TestToken));
 
         IOutboxContextOperations<TestMessage>[] buffer = InMemoryTestHost.RentBuffer<TestMessage>(1);
         await RentAsync(provider, clock, buffer, "tx-1", tenantId: 1);
@@ -199,7 +199,7 @@ public class InMemoryDeliveryTests
             InMemoryTestHost.Filter<TestMessage>("tx-1", tenantId: 1, now: clock.Now),
             TestToken);
 
-        Assert.Equal(new[] { 2 }, await provider.Detector().GetTenantIds(TestToken));
+        Assert.Equal(new[] { 2 }, await provider.Detector().GetTenantIdsAsync(TestToken));
     }
 
     [Fact]

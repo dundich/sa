@@ -23,7 +23,7 @@ public sealed class OutboxIdleBackoffTests(OutboxIdleBackoffTests.Fixture fixtur
 
         public static void Reset() => Counter = 0;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

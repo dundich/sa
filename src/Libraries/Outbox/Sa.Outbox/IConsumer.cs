@@ -23,7 +23,7 @@ public interface IConsumer<TMessage> : IConsumer
     /// contexts are recycled, so a consumer must not retain the memory, a context, or the payload
     /// through them beyond this call.
     /// </remarks>
-    ValueTask Consume(
+    ValueTask ConsumeAsync(
         OutboxConsumerSettings settings,
         OutboxMessageFilter filter,
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,

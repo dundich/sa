@@ -261,7 +261,7 @@ public class OutboxProviderSetupTests
 
     internal sealed class FakeConsumer : IConsumer<FakeMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<FakeMessage>> messages,
@@ -293,7 +293,7 @@ public class OutboxProviderSetupTests
             CancellationToken cancellationToken)
             => Task.FromResult(messages.Length);
 
-        public Task<int> ExtendDelivery(
+        public Task<int> ExtendDeliveryAsync(
             TimeSpan lockExpiration,
             OutboxMessageFilter filter,
             CancellationToken cancellationToken)
@@ -304,7 +304,7 @@ public class OutboxProviderSetupTests
     {
         public bool CanDetect => true;
 
-        public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+        public ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
             => new([1]);
     }
 

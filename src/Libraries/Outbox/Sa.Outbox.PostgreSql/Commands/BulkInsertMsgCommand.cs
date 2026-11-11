@@ -26,7 +26,7 @@ internal sealed class BulkInsertMsgCommand(
         OutboxMessageBatch<TMessage> batch,
         CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetHashCode(typeof(TMessage).Name, cancellationToken);
+        long typeCode = await hashResolver.GetHashCodeAsync(typeof(TMessage).Name, cancellationToken);
 
         return await BulkWithRetry(batch, typeCode, cancellationToken);
     }
@@ -40,9 +40,9 @@ internal sealed class BulkInsertMsgCommand(
 
         NpgsqlConnection connection = GetOpenConnection(transaction);
 
-        long typeCode = await hashResolver.GetHashCode(typeof(TMessage).Name, cancellationToken);
+        long typeCode = await hashResolver.GetHashCodeAsync(typeof(TMessage).Name, cancellationToken);
 
-        await LockPublishParts(
+        await LockPublishPartsAsync(
             [PgAdvisoryKeys.ForPart(batch.PartInfo.TenantId, batch.PartInfo.Part)],
             connection, transaction, cancellationToken);
 
@@ -60,7 +60,7 @@ internal sealed class BulkInsertMsgCommand(
     /// what keeps <c>msg_seq</c> order equal to commit order within a part — see
     /// <see cref="SqlOutboxBuilder.SqlLockPublishParts"/> for why the cursor needs that.
     /// </summary>
-    private async Task LockPublishParts(
+    private async Task LockPublishPartsAsync(
         int[] keys,
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -81,7 +81,7 @@ internal sealed class BulkInsertMsgCommand(
         int[] keys = [PgAdvisoryKeys.ForPart(batch.PartInfo.TenantId, batch.PartInfo.Part)];
 
         return await PgRetryStrategy.ExecuteWithRetry(
-            async t => await InsertUnderPartLock(
+            async t => await InsertUnderPartLockAsync(
                 keys,
                 async (writer, ct) =>
                 {
@@ -98,7 +98,7 @@ internal sealed class BulkInsertMsgCommand(
     /// statement would be released at the end of that statement's implicit transaction, i.e. before
     /// the COPY it is supposed to cover.
     /// </summary>
-    private async Task<ulong> InsertUnderPartLock(
+    private async Task<ulong> InsertUnderPartLockAsync(
         int[] keys,
         Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write,
         CancellationToken cancellationToken)
@@ -110,7 +110,7 @@ internal sealed class BulkInsertMsgCommand(
             .BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        await LockPublishParts(keys, connection, transaction, cancellationToken).ConfigureAwait(false);
+        await LockPublishPartsAsync(keys, connection, transaction, cancellationToken).ConfigureAwait(false);
 
         ulong written;
 

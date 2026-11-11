@@ -8,7 +8,7 @@ internal class OutboxTenantDetector(ISelectTenantCommand command) : IOutboxTenan
 {
     public bool CanDetect => true;
 
-    public async ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+    public async ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
     {
         return [.. await ExecuteWithRetry(cancellationToken)];
     }

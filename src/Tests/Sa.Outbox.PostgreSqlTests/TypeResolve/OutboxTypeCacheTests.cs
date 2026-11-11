@@ -18,16 +18,16 @@ public class OutboxTypeCacheTests
         var repository = new FakeTypeRepository();
         var cache = new OutboxTypeCache(repository);
 
-        Assert.Null(await cache.GetCode("A", TestToken));
+        Assert.Null(await cache.GetCodeAsync("A", TestToken));
 
         repository.Rows.Add((1, "A"));
 
         // Still the snapshot taken by the first call.
-        Assert.Null(await cache.GetCode("A", TestToken));
+        Assert.Null(await cache.GetCodeAsync("A", TestToken));
 
-        await cache.Reset(TestToken);
+        await cache.ResetAsync(TestToken);
 
-        Assert.Equal(1, await cache.GetCode("A", TestToken));
+        Assert.Equal(1, await cache.GetCodeAsync("A", TestToken));
     }
 
     [Fact]
@@ -37,8 +37,8 @@ public class OutboxTypeCacheTests
         repository.Rows.Add((0, "Zero"));
         var cache = new OutboxTypeCache(repository);
 
-        Assert.Equal(0, await cache.GetCode("Zero", TestToken));
-        Assert.Null(await cache.GetCode("Absent", TestToken));
+        Assert.Equal(0, await cache.GetCodeAsync("Zero", TestToken));
+        Assert.Null(await cache.GetCodeAsync("Absent", TestToken));
     }
 
     [Fact]
@@ -47,13 +47,13 @@ public class OutboxTypeCacheTests
         var repository = new FakeTypeRepository { FailOnSelect = true };
         var cache = new OutboxTypeCache(repository);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => cache.GetCode("A", TestToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => cache.GetCodeAsync("A", TestToken));
 
         // A faulted load used to be cached for the lifetime of the process.
         repository.FailOnSelect = false;
         repository.Rows.Add((1, "A"));
 
-        Assert.Equal(1, await cache.GetCode("A", TestToken));
+        Assert.Equal(1, await cache.GetCodeAsync("A", TestToken));
     }
 
     [Fact]
@@ -63,15 +63,15 @@ public class OutboxTypeCacheTests
         var cache = new OutboxTypeCache(repository);
         var resolver = new OutboxTypeResolver(cache, repository);
 
-        long code = await resolver.GetHashCode("B", TestToken);
+        long code = await resolver.GetHashCodeAsync("B", TestToken);
 
         // Same hash, different name: what a Murmur3 collision looks like to the resolver.
         repository.Rows.Clear();
         repository.Rows.Add((code, "A"));
-        await cache.Reset(TestToken);
+        await cache.ResetAsync(TestToken);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await resolver.GetHashCode("B", TestToken));
+            async () => await resolver.GetHashCodeAsync("B", TestToken));
 
         Assert.Contains("'B'", exception.Message, StringComparison.Ordinal);
         Assert.Contains("'A'", exception.Message, StringComparison.Ordinal);
@@ -85,11 +85,11 @@ public class OutboxTypeCacheTests
         var cache = new OutboxTypeCache(repository);
         var resolver = new OutboxTypeResolver(cache, repository);
 
-        Assert.Equal(1, await resolver.GetHashCode("A", TestToken));
+        Assert.Equal(1, await resolver.GetHashCodeAsync("A", TestToken));
         var loadsAfterFirst = repository.SelectAllCalls;
 
         // Served by the synchronous snapshot: no second SELECT, no task on the hot path.
-        Assert.Equal(1, await resolver.GetHashCode("A", TestToken));
+        Assert.Equal(1, await resolver.GetHashCodeAsync("A", TestToken));
         Assert.Equal(loadsAfterFirst, repository.SelectAllCalls);
     }
 
@@ -100,7 +100,7 @@ public class OutboxTypeCacheTests
         var cache = new OutboxTypeCache(repository);
         var resolver = new OutboxTypeResolver(cache, repository);
 
-        long code = await resolver.GetHashCode("NewType", TestToken);
+        long code = await resolver.GetHashCodeAsync("NewType", TestToken);
 
         Assert.NotEqual(0, code);
         Assert.Single(repository.Rows);
@@ -108,7 +108,7 @@ public class OutboxTypeCacheTests
         Assert.Equal(1, repository.InsertCalls);
 
         // Cached now: no second insert.
-        Assert.Equal(code, await resolver.GetHashCode("NewType", TestToken));
+        Assert.Equal(code, await resolver.GetHashCodeAsync("NewType", TestToken));
         Assert.Equal(1, repository.InsertCalls);
     }
 
@@ -122,7 +122,7 @@ public class OutboxTypeCacheTests
 
         public bool FailOnSelect { get; set; }
 
-        public Task<int> Insert(long id, string typeName, CancellationToken cancellationToken)
+        public Task<int> InsertAsync(long id, string typeName, CancellationToken cancellationToken)
         {
             InsertCalls++;
 

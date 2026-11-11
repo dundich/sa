@@ -24,7 +24,7 @@ internal sealed class StartDeliveryCommand(
     {
 
         int batchSize = writeBuffer.Length;
-        long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
+        long typeCode = await hashResolver.GetHashCodeAsync(filter.PayloadType, cancellationToken);
         var lockOn = filter.NowDate + lockDuration;
 
         // Column ordinals are resolved once, on the first row, and read by index afterwards (M3).

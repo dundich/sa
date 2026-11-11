@@ -92,7 +92,7 @@ internal sealed class DeliveryTenant(
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
     {
-        var calculatedSize = await batcher.CalculateBatchSize(
+        var calculatedSize = await batcher.CalculateBatchSizeAsync(
             settings.MaxBatchSize,
             filter,
             cancellationToken);
@@ -140,7 +140,7 @@ internal sealed class DeliveryTenant(
                 , async t =>
                 {
                     var nowDate = GetUtcNow();
-                    int renewed = await deliveryMan.ExtendDelivery(
+                    int renewed = await deliveryMan.ExtendDeliveryAsync(
                         settings.LockDuration
                         , filter with { NowDate = nowDate }
                         , t).ConfigureAwait(false);

@@ -29,7 +29,7 @@ public class OutboxRedisEndToEndFixture : OutboxRedisFixture
     {
         private static int s_consumed;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

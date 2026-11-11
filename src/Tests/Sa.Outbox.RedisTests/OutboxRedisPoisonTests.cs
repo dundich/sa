@@ -27,7 +27,7 @@ public sealed class RecordingPoisonHandler : IRedisOutboxPoisonHandler
         Throw = false;
     }
 
-    public ValueTask Handle(RedisOutboxPoisonMessage message, CancellationToken cancellationToken)
+    public ValueTask HandleAsync(RedisOutboxPoisonMessage message, CancellationToken cancellationToken)
     {
         if (Throw)
             throw new InvalidOperationException("poison handler failure");

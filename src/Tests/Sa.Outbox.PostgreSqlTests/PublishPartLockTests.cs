@@ -166,7 +166,7 @@ public sealed class PublishPartLockTests(PublishPartLockTests.Fixture fixture)
 
     private sealed class NoopConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

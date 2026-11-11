@@ -18,7 +18,7 @@ internal sealed class OutboxTenantDetector(IDatabase database, RedisOutboxSettin
 {
     public bool CanDetect => true;
 
-    public async ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+    public async ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 

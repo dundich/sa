@@ -15,17 +15,17 @@ internal sealed class OutboxPartRepository(
     /// <summary>What the two partition key values of a task/delivery leaf are, for error messages.</summary>
     private const string ConsumerGroupKey = "tenant id, consumer group";
 
-    public Task<int> EnsureMsgParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
-        => EnsureParts(tableSettings.Message.TableName, MessageKey, outboxParts, cancellationToken);
+    public Task<int> EnsureMsgPartsAsync(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
+        => EnsurePartsAsync(tableSettings.Message.TableName, MessageKey, outboxParts, cancellationToken);
 
-    public Task<int> EnsureTaskParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
-        => EnsureParts(tableSettings.TaskQueue.TableName, ConsumerGroupKey, outboxParts, cancellationToken);
+    public Task<int> EnsureTaskPartsAsync(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
+        => EnsurePartsAsync(tableSettings.TaskQueue.TableName, ConsumerGroupKey, outboxParts, cancellationToken);
 
-    public Task<int> EnsureDeliveryParts(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
-        => EnsureParts(tableSettings.Delivery.TableName, ConsumerGroupKey, outboxParts, cancellationToken);
+    public Task<int> EnsureDeliveryPartsAsync(IEnumerable<OutboxPartInfo> outboxParts, CancellationToken cancellationToken)
+        => EnsurePartsAsync(tableSettings.Delivery.TableName, ConsumerGroupKey, outboxParts, cancellationToken);
 
 
-    public async Task<int> EnsureErrorParts(IEnumerable<DateTimeOffset> dates, CancellationToken cancellationToken)
+    public async Task<int> EnsureErrorPartsAsync(IEnumerable<DateTimeOffset> dates, CancellationToken cancellationToken)
     {
         // Callers hand over a day-keyed set (ReturnDelivery builds it with StartOfDay), so the
         // extra Select(...).Distinct() pass only allocated an iterator and a second set.
@@ -40,10 +40,10 @@ internal sealed class OutboxPartRepository(
         return i;
     }
 
-    public Task<int> Migrate() => partManager.Migrate(CancellationToken.None);
+    public Task<int> MigrateAsync() => partManager.Migrate(CancellationToken.None);
 
 
-    private async Task<int> EnsureParts(
+    private async Task<int> EnsurePartsAsync(
         string databaseTableName,
         string partitionKeyNames,
         IEnumerable<OutboxPartInfo> outboxParts,

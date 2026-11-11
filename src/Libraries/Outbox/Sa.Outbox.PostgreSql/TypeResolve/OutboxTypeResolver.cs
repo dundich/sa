@@ -12,7 +12,7 @@ internal sealed class OutboxTypeResolver(
     /// <summary>Releases the insert gate.</summary>
     public void Dispose() => _insertLock.Dispose();
 
-    public ValueTask<long> GetHashCode(string typeName, CancellationToken cancellationToken)
+    public ValueTask<long> GetHashCodeAsync(string typeName, CancellationToken cancellationToken)
     {
         // Hot path: the snapshot is loaded and already knows this type. Returning a ValueTask
         // avoids the Task<long> the async method would allocate even when it completes
@@ -22,12 +22,12 @@ internal sealed class OutboxTypeResolver(
             return new ValueTask<long>(cached);
         }
 
-        return new ValueTask<long>(GetHashCodeSlow(typeName, cancellationToken));
+        return new ValueTask<long>(GetHashCodeSlowAsync(typeName, cancellationToken));
     }
 
-    private async Task<long> GetHashCodeSlow(string typeName, CancellationToken cancellationToken)
+    private async Task<long> GetHashCodeSlowAsync(string typeName, CancellationToken cancellationToken)
     {
-        long? code = await cache.GetCode(typeName, cancellationToken).ConfigureAwait(false);
+        long? code = await cache.GetCodeAsync(typeName, cancellationToken).ConfigureAwait(false);
 
         if (code is not null) return code.Value;
 
@@ -37,17 +37,17 @@ internal sealed class OutboxTypeResolver(
         try
         {
             // Double-check after acquiring the lock — another thread may have inserted it already.
-            long? existing = await cache.GetCode(typeName, cancellationToken).ConfigureAwait(false);
+            long? existing = await cache.GetCodeAsync(typeName, cancellationToken).ConfigureAwait(false);
             if (existing is not null) return existing.Value;
 
-            await repository.Insert(computed, typeName, cancellationToken).ConfigureAwait(false);
-            await cache.Reset(cancellationToken).ConfigureAwait(false);
+            await repository.InsertAsync(computed, typeName, cancellationToken).ConfigureAwait(false);
+            await cache.ResetAsync(cancellationToken).ConfigureAwait(false);
 
             // ON CONFLICT DO NOTHING does not tell us we won. Two short names can share a
             // Murmur3 value; returning the colliding code would make a consumer deserialize
             // the other type's payload. The hash input stays Type.Name — changing it would
             // split the cursor from rows already stored.
-            string? stored = await cache.GetTypeName(computed, cancellationToken).ConfigureAwait(false);
+            string? stored = await cache.GetTypeNameAsync(computed, cancellationToken).ConfigureAwait(false);
             if (!string.Equals(stored, typeName, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
@@ -62,23 +62,23 @@ internal sealed class OutboxTypeResolver(
         return computed;
     }
 
-    public ValueTask<string> GetTypeName(long typeHashCode, CancellationToken cancellationToken)
+    public ValueTask<string> GetTypeNameAsync(long typeHashCode, CancellationToken cancellationToken)
     {
         if (cache.TryGetTypeName(typeHashCode, out string? known) && known is not null)
         {
             return new ValueTask<string>(known);
         }
 
-        return new ValueTask<string>(GetTypeNameSlow(typeHashCode, cancellationToken));
+        return new ValueTask<string>(GetTypeNameSlowAsync(typeHashCode, cancellationToken));
     }
 
-    private async Task<string> GetTypeNameSlow(long typeHashCode, CancellationToken cancellationToken)
+    private async Task<string> GetTypeNameSlowAsync(long typeHashCode, CancellationToken cancellationToken)
     {
-        string? typeName = await cache.GetTypeName(typeHashCode, cancellationToken).ConfigureAwait(false);
+        string? typeName = await cache.GetTypeNameAsync(typeHashCode, cancellationToken).ConfigureAwait(false);
         if (typeName != null) return typeName;
 
-        await cache.Reset(cancellationToken).ConfigureAwait(false);
+        await cache.ResetAsync(cancellationToken).ConfigureAwait(false);
 
-        return await cache.GetTypeName(typeHashCode, cancellationToken).ConfigureAwait(false) ?? typeHashCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return await cache.GetTypeNameAsync(typeHashCode, cancellationToken).ConfigureAwait(false) ?? typeHashCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 }

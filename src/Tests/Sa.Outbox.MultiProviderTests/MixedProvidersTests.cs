@@ -54,7 +54,7 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
 
     internal sealed class PgConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -64,7 +64,7 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
 
     internal sealed class RedisConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

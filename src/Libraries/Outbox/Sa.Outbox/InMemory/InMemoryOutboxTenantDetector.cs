@@ -14,7 +14,7 @@ internal sealed class InMemoryOutboxTenantDetector(InMemoryOutboxStore store) : 
 {
     public bool CanDetect => true;
 
-    public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+    public ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 

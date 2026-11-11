@@ -203,7 +203,7 @@ internal sealed partial class RentDeliveryCommand(
 
             try
             {
-                await poisonHandler.Handle(message, cancellationToken).ConfigureAwait(false);
+                await poisonHandler.HandleAsync(message, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

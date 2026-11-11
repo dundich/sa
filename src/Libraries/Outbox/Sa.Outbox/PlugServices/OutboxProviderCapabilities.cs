@@ -30,7 +30,7 @@ public enum OutboxProviderCapabilities
     TenantDetection = 1 << 1,
 
     /// <summary>
-    /// <see cref="IOutboxDeliveryManager.ExtendDelivery(TimeSpan, OutboxMessageFilter, CancellationToken)"/>
+    /// <see cref="IOutboxDeliveryManager.ExtendDeliveryAsync(TimeSpan, OutboxMessageFilter, CancellationToken)"/>
     /// is meaningful: the provider renews a rented lease as the core's lock renewer asks.
     /// </summary>
     LockExtension = 1 << 2,

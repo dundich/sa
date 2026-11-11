@@ -82,6 +82,8 @@ namespace PgOutbox
             await Task.Delay(100, cancellationToken);
             Monitor.Log(logger, filter, messages.Span);
         }
+
+        public ValueTask ConsumeAsync(OutboxConsumerSettings settings, OutboxMessageFilter filter, ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages, CancellationToken cancellationToken) => throw new NotImplementedException();
     }
 
     public sealed class RndConsumer(ILogger<RndConsumer> logger) : IConsumer<SomeMessage>
@@ -134,6 +136,8 @@ namespace PgOutbox
                     break;
             }
         }
+
+        public ValueTask ConsumeAsync(OutboxConsumerSettings settings, OutboxMessageFilter filter, ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages, CancellationToken cancellationToken) => throw new NotImplementedException();
     }
 
 

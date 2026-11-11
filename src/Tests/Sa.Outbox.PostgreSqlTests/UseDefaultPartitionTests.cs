@@ -188,7 +188,7 @@ public sealed class UseDefaultPartitionTests(UseDefaultPartitionTests.Fixture fi
 
     private sealed class NoopConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -347,7 +347,7 @@ public sealed class NoDefaultPartitionTests(NoDefaultPartitionTests.Fixture fixt
 
     private sealed class NoopConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

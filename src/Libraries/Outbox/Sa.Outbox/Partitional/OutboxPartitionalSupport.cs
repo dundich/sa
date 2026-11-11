@@ -18,17 +18,17 @@ internal sealed class OutboxPartitionalSupport(
         return await GetPairs(snapshot?.GetConsumeGroupIds() ?? [], cancellationToken).ConfigureAwait(false);
     }
 
-    public async ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+    public async ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
     {
         if (tenantProvider == null) return [];
 
-        return await tenantProvider.GetTenantIds(providerKey, cancellationToken).ConfigureAwait(false);
+        return await tenantProvider.GetTenantIdsAsync(providerKey, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyCollection<OutboxTenantPartPair>> GetPairs(
         IEnumerable<string> parts, CancellationToken cancellationToken)
     {
-        int[] tenantIds = await GetTenantIds(cancellationToken).ConfigureAwait(false);
+        int[] tenantIds = await GetTenantIdsAsync(cancellationToken).ConfigureAwait(false);
         if (tenantIds.Length == 0) return [];
 
         List<OutboxTenantPartPair> result = [];

@@ -20,7 +20,7 @@ public class TenantSourceAuthoritativeTests
     private sealed class FakeDetector(params int[] detected) : IOutboxTenantDetector
     {
         public bool CanDetect => true;
-        public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken) => ValueTask.FromResult(detected);
+        public ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken) => ValueTask.FromResult(detected);
     }
 
     private static TenantProvider Provider(TenantSettings settings, IOutboxTenantDetector? detector = null) =>
@@ -77,7 +77,7 @@ public class TenantSourceAuthoritativeTests
         settings.WithTenantIds(1, 2, 3);
         var provider = Provider(settings, new FakeDetector(999));
 
-        var ids = await provider.GetTenantIds(TestToken);
+        var ids = await provider.GetTenantIdsAsync(TestToken);
 
         Assert.Equal(new[] { 1, 2, 3 }, ids);
     }
@@ -94,7 +94,7 @@ public class TenantSourceAuthoritativeTests
         settings.WithTenantSource(source);
         var provider = Provider(settings, new FakeDetector(1, 2, 3));
 
-        var ids = await provider.GetTenantIds(TestToken);
+        var ids = await provider.GetTenantIdsAsync(TestToken);
 
         Assert.Equal(new[] { 999 }, ids);
     }
@@ -109,7 +109,7 @@ public class TenantSourceAuthoritativeTests
         settings.WithTenantProvider(_ => ValueTask.FromResult(new[] { 5, 6 }));
         var provider = Provider(settings, new FakeDetector(999));
 
-        var ids = await provider.GetTenantIds(TestToken);
+        var ids = await provider.GetTenantIdsAsync(TestToken);
 
         Assert.Equal(new[] { 5, 6 }, ids);
     }
@@ -125,7 +125,7 @@ public class TenantSourceAuthoritativeTests
         settings.WithAutoDetect();
         var provider = Provider(settings, new FakeDetector(11, 22));
 
-        var ids = await provider.GetTenantIds(TestToken);
+        var ids = await provider.GetTenantIdsAsync(TestToken);
 
         Assert.Equal(new[] { 11, 22 }, ids);
     }
@@ -142,7 +142,7 @@ public class TenantSourceAuthoritativeTests
         settings.WithAutoDetect();
         var provider = Provider(settings);
 
-        var ids = await provider.GetTenantIds(TestToken);
+        var ids = await provider.GetTenantIdsAsync(TestToken);
 
         Assert.Equal(Array.Empty<int>(), ids);
     }

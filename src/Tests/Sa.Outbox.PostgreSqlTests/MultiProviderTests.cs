@@ -35,7 +35,7 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
 
     internal sealed class ConsumerA : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -45,7 +45,7 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
 
     internal sealed class ConsumerB : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -149,8 +149,8 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
         IOutboxPartitionalSupport a = sp.GetRequiredKeyedService<IOutboxPartitionalSupport>(ProviderA);
         IOutboxPartitionalSupport b = sp.GetRequiredKeyedService<IOutboxPartitionalSupport>(ProviderB);
 
-        Assert.Equal(new[] { 1 }, await a.GetTenantIds(TestToken));
-        Assert.Equal(new[] { 2, 3 }, await b.GetTenantIds(TestToken));
+        Assert.Equal(new[] { 1 }, await a.GetTenantIdsAsync(TestToken));
+        Assert.Equal(new[] { 2, 3 }, await b.GetTenantIdsAsync(TestToken));
     }
 
     [Fact]

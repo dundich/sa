@@ -77,7 +77,7 @@ namespace InMemoryOutbox
 
     public sealed class PrintConsumer(ILogger<PrintConsumer> logger, DeliverySignal signal) : IConsumer<SomeMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
