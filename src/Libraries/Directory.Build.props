@@ -19,6 +19,15 @@
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
 
+    <!--
+      IsAotCompatible turns the trim/AOT analyzers on for our own code. These two go one step
+      further: a reference whose assembly does not carry the `IsTrimmable` / `IsAotCompatible`
+      metadata is itself a warning, so a dependency that would break a trimmed or AOT
+      consumer fails the build here instead of at the consumer's publish step.
+    -->
+    <VerifyReferenceTrimCompatibility>true</VerifyReferenceTrimCompatibility>
+    <VerifyReferenceAotCompatibility>true</VerifyReferenceAotCompatibility>
+
     <!-- Source Link / symbol package (snupkg + SourceLink is the supported combination). -->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>

@@ -3,6 +3,14 @@
     <PropertyGroup>
         <Description>File storage management in S3</Description>
         <PackageTags>file-storage s3 object-storage</PackageTags>
+
+        <!--
+          Same upstream gap as in Sa.Data.S3.csproj: this project sees the unmarked
+          Microsoft.Extensions.Http.Resilience closure (ObjectPool, Polly.*, RateLimiting)
+          through its ProjectReference, and there is no marked version to pin to.
+        -->
+        <VerifyReferenceTrimCompatibility>false</VerifyReferenceTrimCompatibility>
+        <VerifyReferenceAotCompatibility>false</VerifyReferenceAotCompatibility>
     </PropertyGroup>
 
     <ItemGroup>

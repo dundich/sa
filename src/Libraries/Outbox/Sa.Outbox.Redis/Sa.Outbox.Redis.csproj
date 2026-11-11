@@ -3,6 +3,16 @@
 	<PropertyGroup>
 		<Description>Simple Outbox for Redis Streams (publishing and using messages)</Description>
 		<PackageTags>outbox redis streams messaging</PackageTags>
+
+		<!--
+		  VerifyReference* are disabled for this project only: StackExchange.Redis 3.4.31 and its
+		  transitive RESPite publish no IsTrimmable/IsAotCompatible assembly metadata in any
+		  released version — there is no drop-in replacement, so this is an upstream gap rather
+		  than a defect in our code. The library's own code is still covered by the
+		  IsAotCompatible/IsTrimmable analyzers.
+		-->
+		<VerifyReferenceTrimCompatibility>false</VerifyReferenceTrimCompatibility>
+		<VerifyReferenceAotCompatibility>false</VerifyReferenceAotCompatibility>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -12,7 +22,6 @@
 
 	<ItemGroup>
 		<PackageReference Include="StackExchange.Redis" />
-		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
 		<!-- IConfiguration is only read for the "Redis" connection string default. -->
 		<PackageReference Include="Microsoft.Extensions.Configuration" />
 		<!-- The settings type is a standard Microsoft.Extensions.Options instance. -->

@@ -4,6 +4,20 @@
 		<Title>Sa.Data.S3</Title>
 		<Description>Simple client for S3</Description>
 		<PackageTags>s3 object-storage cloud</PackageTags>
+
+		<!--
+		  VerifyReference* отключены точечно: Microsoft.Extensions.Http.Resilience (штатный
+		  AddStandardResilienceHandler, который оставлен намеренно) тянет неразмеченный
+		  транзитивный граф: Microsoft.Extensions.ObjectPool, Polly.Core, Polly.Extensions,
+		  Polly.RateLimiting (8.4.2), System.Threading.RateLimiting (8.0.0). Ни один из них не
+		  публикует IsAotCompatible/IsTrimmable во всех проверенных версиях (вплоть до 11.0.0) —
+		  это пробел апстрима, а не нашего кода: пиннинг версий не помогает, ObjectPool не
+		  размечен никогда. Собственная замена конвейера была отвергнута в пользу штатного
+		  обработчика Microsoft. Свой код библиотеки по-прежнему проверяется анализаторами
+		  IsAotCompatible/IsTrimmable.
+		-->
+		<VerifyReferenceTrimCompatibility>false</VerifyReferenceTrimCompatibility>
+		<VerifyReferenceAotCompatibility>false</VerifyReferenceAotCompatibility>
 	</PropertyGroup>
 
 	<ItemGroup>
