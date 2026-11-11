@@ -53,14 +53,16 @@ public class OutboxRedisFixture : SaFixture
     {
         DateTimeOffset moment = now ?? DateTimeOffset.UtcNow;
 
-        return new OutboxMessageFilter(
-            TransactId: Guid.CreateVersion7().ToString("N"),
-            ConsumerGroupId: consumerGroupId,
-            PayloadType: typeof(TMessage).Name,
-            TenantId: tenantId,
-            Part: PartName,
-            FromDate: moment.AddDays(-1),
-            ToDate: moment - (batchingWindow ?? TimeSpan.Zero),
-            NowDate: moment);
+        return new OutboxMessageFilter
+        {
+            TransactId = Guid.CreateVersion7().ToString("N"),
+            ConsumerGroupId = consumerGroupId,
+            PayloadType = typeof(TMessage).Name,
+            TenantId = tenantId,
+            Part = PartName,
+            FromDate = moment.AddDays(-1),
+            ToDate = moment - (batchingWindow ?? TimeSpan.Zero),
+            NowDate = moment
+        };
     }
 }

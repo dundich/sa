@@ -16,15 +16,17 @@ public class DeliveryCourierTests
             PerTenantMaxDegreeOfParallelism: 1, Paused: false, Version: 0);
 
     private static OutboxMessageFilter CreateFilter()
-        => new(
-            "txn-1",
-            "test-group",
-            "Sa.Outbox.Tests.DeliveryCourierTests+TestMessage",
-            1,
-            "part-1",
-            DateTimeOffset.MinValue,
-            DateTimeOffset.MaxValue,
-            DateTimeOffset.UtcNow);
+        => new()
+        {
+            TransactId = "txn-1",
+            ConsumerGroupId = "test-group",
+            PayloadType = "Sa.Outbox.Tests.DeliveryCourierTests+TestMessage",
+            TenantId = 1,
+            Part = "part-1",
+            FromDate = DateTimeOffset.MinValue,
+            ToDate = DateTimeOffset.MaxValue,
+            NowDate = DateTimeOffset.UtcNow,
+        };
 
     private static ReadOnlyMemory<IOutboxContextOperations<TestMessage>> ToMessages(params FakeOutboxContext<TestMessage>[] contexts)
         => new(contexts);

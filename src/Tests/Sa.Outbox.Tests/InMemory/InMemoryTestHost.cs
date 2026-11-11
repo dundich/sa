@@ -52,15 +52,17 @@ internal static class InMemoryTestHost
     {
         DateTimeOffset at = now ?? Start;
 
-        return new OutboxMessageFilter(
-            TransactId: transactId,
-            ConsumerGroupId: consumerGroup,
-            PayloadType: typeof(T).Name,
-            TenantId: tenantId,
-            Part: part,
-            FromDate: DateTimeOffset.MinValue,
-            ToDate: at,
-            NowDate: at);
+        return new OutboxMessageFilter
+        {
+            TransactId = transactId,
+            ConsumerGroupId = consumerGroup,
+            PayloadType = typeof(T).Name,
+            TenantId = tenantId,
+            Part = part,
+            FromDate = DateTimeOffset.MinValue,
+            ToDate = at,
+            NowDate = at
+        };
     }
 
     public static IOutboxContextOperations<T>[] RentBuffer<T>(int size) => new IOutboxContextOperations<T>[size];
