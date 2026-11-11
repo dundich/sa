@@ -25,8 +25,8 @@ public sealed class FailoverTests : IAsyncLifetime
     {
         // Arrange — two read-only storages, all operations should fail
         var services = new ServiceCollection()
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions(string.Empty, IsReadOnly: true))
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions(string.Empty, IsReadOnly: true))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = string.Empty, IsReadOnly = true })
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = string.Empty, IsReadOnly = true })
             .AddSaHybridFileStorage();
 
         using var provider = services.BuildServiceProvider();
@@ -49,7 +49,7 @@ public sealed class FailoverTests : IAsyncLifetime
                 .Options(ob => ob.Configure(x => x.Basket = "shared"))
                 .TempFolder(tb => tb.Options(ob => ob.Configure(x =>
                     x.RootPath = $"failover_{Path.GetRandomFileName()}"))))
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("shared"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared" })
             .AddSaHybridFileStorage(b => b.ConfigureInterceptors((sp, c) => c.AddUploadInterceptor(interceptor)));
 
         using var provider = services.BuildServiceProvider();
@@ -72,7 +72,7 @@ public sealed class FailoverTests : IAsyncLifetime
         // Arrange
         var services = new ServiceCollection()
             .AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) =>
-                c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions(string.Empty, IsReadOnly: true)))));
+                c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = string.Empty, IsReadOnly = true }))));
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IHybridFileStorage>();
@@ -107,8 +107,8 @@ public sealed class FailoverTests : IAsyncLifetime
     {
         // Arrange — register two InMemory storages with different baskets
         var services = new ServiceCollection()
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("basket-a"))
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("basket-b"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "basket-a" })
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "basket-b" })
             .AddSaHybridFileStorage();
 
         using var provider = services.BuildServiceProvider();
@@ -166,8 +166,8 @@ public sealed class FailoverTests : IAsyncLifetime
     {
         // Arrange — two backends of one type in one basket; a per-instance interceptor pushes
         // the upload into the second one only, so the first answers "not found" on download.
-        var first = new InMemoryFileStorage(new InMemoryFileStorageOptions("shared"));
-        var second = new InMemoryFileStorage(new InMemoryFileStorageOptions("shared"));
+        var first = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared" });
+        var second = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared" });
 
         var services = new ServiceCollection()
             .AddSaHybridFileStorage(b => b
@@ -199,8 +199,8 @@ public sealed class FailoverTests : IAsyncLifetime
     public async Task HybridFileStorage_DeleteAsync_ContinuesAfterNotFoundWithinTheSameType()
     {
         // Arrange — the file lives only in the second storage of the type (see download above).
-        var first = new InMemoryFileStorage(new InMemoryFileStorageOptions("shared"));
-        var second = new InMemoryFileStorage(new InMemoryFileStorageOptions("shared"));
+        var first = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared" });
+        var second = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared" });
 
         var services = new ServiceCollection()
             .AddSaHybridFileStorage(b => b
@@ -226,8 +226,8 @@ public sealed class FailoverTests : IAsyncLifetime
     public async Task HybridFileStorage_GetMetadataAsync_ContinuesAfterNotFoundWithinTheSameType()
     {
         // Arrange — the file lives only in the second storage of the type.
-        var first = new InMemoryFileStorage(new InMemoryFileStorageOptions("shared"));
-        var second = new InMemoryFileStorage(new InMemoryFileStorageOptions("shared"));
+        var first = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared" });
+        var second = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared" });
 
         var services = new ServiceCollection()
             .AddSaHybridFileStorage(b => b
@@ -256,7 +256,7 @@ public sealed class FailoverTests : IAsyncLifetime
         // Arrange — a storage whose type shares the file ID prefix ("m") also recognizes the
         // file ID. After a miss in "mem" the chain must stop at the type change instead of
         // letting the other type answer.
-        var mem = new InMemoryFileStorage(new InMemoryFileStorageOptions("share"));
+        var mem = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "share" });
         var other = new FakeFileStorage("share", "m", hasFileOnDownload: true);
 
         var services = new ServiceCollection()
@@ -284,7 +284,7 @@ public sealed class FailoverTests : IAsyncLifetime
         var second = new FakeFileStorage("share", "fake");
 
         var services = new ServiceCollection()
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("share"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "share" })
             .AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) => c.AddStorage(second)));
 
         using var provider = services.BuildServiceProvider();
@@ -311,7 +311,7 @@ public sealed class FailoverTests : IAsyncLifetime
         var second = new FakeFileStorage("share", "fake");
 
         var services = new ServiceCollection()
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("share"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "share" })
             .AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) => c.AddStorage(second)));
 
         using var provider = services.BuildServiceProvider();
@@ -335,7 +335,7 @@ public sealed class FailoverTests : IAsyncLifetime
     {
         // Arrange — one writable storage; the token is cancelled before the call.
         var services = new ServiceCollection()
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("share"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "share" })
             .AddSaHybridFileStorage();
 
         using var provider = services.BuildServiceProvider();
@@ -364,7 +364,7 @@ public sealed class FailoverTests : IAsyncLifetime
         var services = new ServiceCollection()
             .AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) =>
                 c.AddStorage(new InMemoryFileStorage(
-                    new InMemoryFileStorageOptions("share", IsReadOnly: true)))));
+                    new InMemoryFileStorageOptions { Basket = "share", IsReadOnly = true }))));
 
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IHybridFileStorage>();
@@ -381,7 +381,7 @@ public sealed class FailoverTests : IAsyncLifetime
         // writable one must still receive the delete (the writability check must not reject a
         // chain that has a writable candidate).
         var readOnly = new FakeFileStorage("share", "mem", isReadOnly: true);
-        var writable = new InMemoryFileStorage(new InMemoryFileStorageOptions("share"));
+        var writable = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "share" });
 
         var services = new ServiceCollection()
             .AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) => c.AddStorage(readOnly).AddStorage(writable)));

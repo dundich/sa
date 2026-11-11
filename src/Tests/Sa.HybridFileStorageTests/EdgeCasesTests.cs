@@ -43,7 +43,7 @@ public sealed class EdgeCasesTests
     public async Task InMemoryFileStorage_UploadAsync_MaxSizeBytesExceeded_ThrowsInvalidOperationException()
     {
         // Arrange — limit to 1MB
-        var options = new InMemoryFileStorageOptions("test") { MaxSizeBytes = 1 * 1024 * 1024 };
+        var options = new InMemoryFileStorageOptions { Basket = "test", MaxSizeBytes = 1 * 1024 * 1024 };
         var storage = new InMemoryFileStorage(options);
 
         // Fill up most of the capacity
@@ -70,7 +70,7 @@ public sealed class EdgeCasesTests
         // Arrange — a 1000-byte limit and 16 parallel uploads of the same new 600-byte file.
         // Without an atomic read-check-write each upload that sees no previous payload charges the
         // full size, so the limit trips while a single file's worth of data is held.
-        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions("test") { MaxSizeBytes = 1000 });
+        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "test", MaxSizeBytes = 1000 });
         var input = new UploadFileInput { FileName = "parallel.bin", TenantId = 1 };
 
         // Act
@@ -89,7 +89,7 @@ public sealed class EdgeCasesTests
     {
         // Arrange — a 1000-byte limit holding one 600-byte file. Each re-upload replaces the
         // payload of the same file ID, so the accounting must stay net-zero per overwrite.
-        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions("test") { MaxSizeBytes = 1000 });
+        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "test", MaxSizeBytes = 1000 });
         var input = new UploadFileInput { FileName = "same.bin", TenantId = 1 };
 
         // Act — five replacements of one file (3000 bytes written, 600 bytes retained)
@@ -113,7 +113,7 @@ public sealed class EdgeCasesTests
     {
         // Arrange — a large file replaced by a small one must free the difference, otherwise a
         // later upload of that size would be rejected although the storage holds less data.
-        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions("test") { MaxSizeBytes = 1000 });
+        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "test", MaxSizeBytes = 1000 });
         var input = new UploadFileInput { FileName = "shrinks.bin", TenantId = 1 };
 
         await storage.UploadAsync(input, new MemoryStream(new byte[900]), CancellationToken.None);
@@ -177,7 +177,7 @@ public sealed class EdgeCasesTests
     public async Task InMemoryFileStorage_ReadOnly_UploadThrowsWritableException()
     {
         // Arrange
-        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions("test") { IsReadOnly = true });
+        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "test", IsReadOnly = true });
         using var stream = FixtureHelper.GetByteStream();
 
         // Act & Assert
@@ -189,7 +189,7 @@ public sealed class EdgeCasesTests
     public async Task InMemoryFileStorage_ReadOnly_DeleteThrowsWritableException()
     {
         // Arrange
-        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions("test") { IsReadOnly = true });
+        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "test", IsReadOnly = true });
 
         // Act & Assert
         await Assert.ThrowsAsync<HybridFileStorageWritableException>(() =>
@@ -219,7 +219,7 @@ public sealed class EdgeCasesTests
     public async Task InMemoryFileStorage_SizeTracking_TracksTotalBytes()
     {
         // Arrange — use reflection to verify internal size tracking
-        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions("test") { MaxSizeBytes = 0 }); // unlimited
+        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "test", MaxSizeBytes = 0 }); // unlimited
         using var stream = FixtureHelper.GetByteStream(1024);
 
         // Act
@@ -255,7 +255,7 @@ public sealed class EdgeCasesTests
     {
         // Arrange — a directory named with a number is part of the name for this provider and
         // must not be mistaken for the Postgres timestamp segment.
-        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions("share"));
+        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "share" });
         var input = new UploadFileInput { FileName = "2024/report.pdf", TenantId = 1 };
 
         using var stream = FixtureHelper.GetByteStream();
@@ -276,7 +276,7 @@ public sealed class EdgeCasesTests
     {
         // Arrange
         const string expectedBasket = "my-custom-basket";
-        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions(expectedBasket));
+        var storage = new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = expectedBasket });
 
         // Assert
         Assert.Equal(expectedBasket, storage.Basket);

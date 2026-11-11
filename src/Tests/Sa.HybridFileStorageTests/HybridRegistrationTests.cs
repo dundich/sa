@@ -32,12 +32,12 @@ public sealed class HybridRegistrationTests
         var services = new ServiceCollection();
         services.AddSaInMemoryFileStorage();
         services.AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) =>
-            c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions("extra")))));
+            c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "extra" }))));
 
         // The first registration is in place; the second builder's storages would never run.
         Assert.Throws<InvalidOperationException>(() => services.AddSaHybridFileStorage(b =>
             b.ConfigureStorage((_, c) =>
-                c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions("lost"))))));
+                c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "lost" })))));
 
         using var provider = services.BuildServiceProvider();
         var hybrid = provider.GetRequiredService<IHybridFileStorage>();
@@ -88,7 +88,7 @@ public sealed class HybridRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) =>
-            c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions("direct")))));
+            c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "direct" }))));
 
         using var provider = services.BuildServiceProvider();
 
@@ -115,7 +115,7 @@ public sealed class HybridRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddSaHybridFileStorage(b => b.AddSaInMemoryFileStorage(
-            new InMemoryFileStorageOptions("pipeline")));
+            new InMemoryFileStorageOptions { Basket = "pipeline" }));
 
         using var provider = services.BuildServiceProvider();
 
@@ -133,9 +133,9 @@ public sealed class HybridRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddSaHybridFileStorage(b => b
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("memory"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "memory" })
             .ConfigureStorage((_, c) =>
-                c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions("second")))));
+                c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "second" }))));
 
         using var provider = services.BuildServiceProvider();
 
@@ -165,7 +165,7 @@ public sealed class HybridRegistrationTests
         // A non-empty basket is validated against the shared rules (see the test below).
         var services = new ServiceCollection();
         services.AddSaHybridFileStorage(b =>
-            b.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions(string.Empty)));
+            b.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = string.Empty }));
 
         using var provider = services.BuildServiceProvider();
 
@@ -179,7 +179,7 @@ public sealed class HybridRegistrationTests
         // A null basket is not "no basket": it would fail inside Path.Combine on the first upload.
         // An empty string is the supported way to declare a basket-less storage.
         var services = new ServiceCollection();
-        services.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions(Basket: null!));
+        services.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = null! });
 
         using var provider = services.BuildServiceProvider();
 
@@ -195,7 +195,7 @@ public sealed class HybridRegistrationTests
         // The same rules every other provider applies: a path separator in a non-empty basket
         // would split the file ID into an extra segment (or escape the storage root).
         var services = new ServiceCollection();
-        services.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("share/nested"));
+        services.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "share/nested" });
 
         using var provider = services.BuildServiceProvider();
 

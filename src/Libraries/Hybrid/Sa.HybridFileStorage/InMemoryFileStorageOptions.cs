@@ -5,14 +5,17 @@ namespace Sa.HybridFileStorage;
 /// <summary>
 /// Configuration options for the in-memory file storage provider.
 /// </summary>
-/// <param name="Basket">The default basket (container) name. Defaults to <c>"share"</c>.</param>
-/// <param name="IsReadOnly"><c>true</c> if the storage should reject write operations; otherwise, <c>false</c>.</param>
-/// <param name="MaxSizeBytes">Maximum total size in bytes for all stored files. Default is 1 GB (<c>1_073_741_824</c>). Set to zero or negative to disable the limit.</param>
-public sealed record InMemoryFileStorageOptions(
-    string Basket = "share",
-    bool IsReadOnly = false,
-    long MaxSizeBytes = 1_073_741_824)
+public sealed record InMemoryFileStorageOptions
 {
+    /// <summary>The basket (virtual folder) served by the storage.</summary>
+    public string Basket { get; init; } = "share";
+
+    /// <summary>Whether writes are rejected.</summary>
+    public bool IsReadOnly { get; init; }
+
+    /// <summary>Upper bound of the stored bytes.</summary>
+    public long MaxSizeBytes { get; init; } = 1_073_741_824;
+
     /// <summary>
     /// Validates the current configuration and throws a <see cref="ValidationException"/> when the
     /// basket name is malformed.
