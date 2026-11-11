@@ -119,13 +119,14 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         int? queueCapacity = null,
         int? maxConcurrency = null)
     {
-        var options = new SaWorkQueueOptions<BlockingTaskModel>(
-            Processor: work,
-            ConcurrencyLimit: concurrencyLimit,
-            MaxConcurrency: maxConcurrency ?? concurrencyLimit * 2,
-            QueueCapacity: queueCapacity ?? 100,
-            StatusChanged: work.HandleChanges
-        );
+        var options = new SaWorkQueueOptions<BlockingTaskModel>
+        {
+            Processor = work,
+            ConcurrencyLimit = concurrencyLimit,
+            MaxConcurrency = maxConcurrency ?? concurrencyLimit * 2,
+            QueueCapacity = queueCapacity ?? 100,
+            StatusChanged = work.HandleChanges
+        };
 
         var queue = new SaWorkChannel<BlockingTaskModel>(options);
         _disposables.Add(queue);
@@ -632,12 +633,14 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             var work = new TrackingWork((_, _) => Task.CompletedTask);
 
             await using var queue = new SaWorkChannel<BlockingTaskModel>(
-                new SaWorkQueueOptions<BlockingTaskModel>(
-                    Processor: work,
-                    ConcurrencyLimit: 0,
-                    MaxConcurrency: 1,
-                    QueueCapacity: 4,
-                    StatusChanged: work.HandleChanges));
+                new SaWorkQueueOptions<BlockingTaskModel>
+                {
+                    Processor = work,
+                    ConcurrencyLimit = 0,
+                    MaxConcurrency = 1,
+                    QueueCapacity = 4,
+                    StatusChanged = work.HandleChanges
+                });
 
             // Both fit in the buffer, so no producer parks: the pool is paused, not full.
             var first = new BlockingTaskModel(Id: "first");

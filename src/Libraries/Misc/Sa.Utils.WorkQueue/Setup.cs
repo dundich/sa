@@ -215,21 +215,23 @@ public static class Setup
         var settings = services.GetRequiredService<IOptionsMonitor<SaWorkQueueSettings>>()
             .Get(QueueSettingsName<TInput>());
 
-        var options = new SaWorkQueueOptions<TInput>(
-            Processor: ResolveProcessor(services, builder),
-            QueueCapacity: settings.QueueCapacity,
-            ConcurrencyLimit: settings.ConcurrencyLimit,
-            MaxConcurrency: settings.MaxConcurrency,
-            SingleWriter: settings.SingleWriter,
-            EnqueueStrategy: settings.EnqueueStrategy,
-            ProducerCancellation: settings.ProducerCancellation,
-            ReaderCancelMode: settings.ReaderCancelMode,
-            ReaderCancellationOrder: settings.ReaderCancellationOrder,
-            HandleItemFaulted: builder?.HandleItemFaulted,
-            StatusChanged: builder?.StatusChanged,
-            GetItemDisplayName: builder?.GetItemDisplayName,
-            ShutdownTimeout: settings.ShutdownTimeout,
-            TimeProvider: builder?.TimeProvider);
+        var options = new SaWorkQueueOptions<TInput>
+        {
+            Processor = ResolveProcessor(services, builder),
+            QueueCapacity = settings.QueueCapacity,
+            ConcurrencyLimit = settings.ConcurrencyLimit,
+            MaxConcurrency = settings.MaxConcurrency,
+            SingleWriter = settings.SingleWriter,
+            EnqueueStrategy = settings.EnqueueStrategy,
+            ProducerCancellation = settings.ProducerCancellation,
+            ReaderCancelMode = settings.ReaderCancelMode,
+            ReaderCancellationOrder = settings.ReaderCancellationOrder,
+            HandleItemFaulted = builder?.HandleItemFaulted,
+            StatusChanged = builder?.StatusChanged,
+            GetItemDisplayName = builder?.GetItemDisplayName,
+            ShutdownTimeout = settings.ShutdownTimeout,
+            TimeProvider = builder?.TimeProvider
+        };
 
         if (builder?.EscapeHatch is { } escapeHatch)
         {

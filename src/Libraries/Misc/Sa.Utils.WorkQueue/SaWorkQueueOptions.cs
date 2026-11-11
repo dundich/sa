@@ -5,29 +5,57 @@ namespace Sa.Utils.WorkQueue;
 /// </summary>
 /// <remarks>
 /// The <c>With*</c> methods validate eagerly and are the preferred way to build options.
-/// The primary constructor is public, so its arguments bypass those guards: the queue
-/// constructor re-validates everything (<c>ConcurrencyLimit</c> must not be negative,
-/// <c>QueueCapacity</c> must be at least 1, <c>ShutdownTimeout</c> must be positive, and
-/// the four strategy enums must be defined values) and throws
+/// The properties can also be set directly through an object initializer, which bypasses
+/// those guards: the queue constructor re-validates everything (<c>ConcurrencyLimit</c> must
+/// not be negative, <c>QueueCapacity</c> must be at least 1, <c>ShutdownTimeout</c> must be
+/// positive, and the four strategy enums must be defined values) and throws
 /// <see cref="ArgumentOutOfRangeException"/> before creating the channel. Either way, an invalid
 /// value fails the same way.
 /// </remarks>
-public sealed record SaWorkQueueOptions<TInput>(
-    ISaWork<TInput> Processor,
-    int? QueueCapacity = null,
-    int? ConcurrencyLimit = null,
-    int? MaxConcurrency = null,
-    bool? SingleWriter = false,
-    SaEnqueueStrategy EnqueueStrategy = SaEnqueueStrategy.Wait,
-    SaReaderCancelMode ReaderCancelMode = SaReaderCancelMode.Hard,
-    SaReaderCancellationOrder ReaderCancellationOrder = SaReaderCancellationOrder.Lifo,
-    Func<TInput, Exception, SaExecutionErrorStrategy>? HandleItemFaulted = null,
-    Action<TInput, SaWorkStatus, Exception?>? StatusChanged = null,
-    Func<TInput, string>? GetItemDisplayName = null,
-    TimeSpan? ShutdownTimeout = null,
-    TimeProvider? TimeProvider = null,
-    SaProducerCancellationMode ProducerCancellation = SaProducerCancellationMode.Observe)
+public sealed record SaWorkQueueOptions<TInput>
 {
+    /// <summary>The processor that runs each accepted item.</summary>
+    public required ISaWork<TInput> Processor { get; init; }
+
+    /// <summary>Buffer capacity; <see langword="null"/> for the channel default.</summary>
+    public int? QueueCapacity { get; init; }
+
+    /// <summary>Parallel processors; <c>0</c> pauses processing; <see langword="null"/> for automatic.</summary>
+    public int? ConcurrencyLimit { get; init; }
+
+    /// <summary>Absolute maximum number of reader tasks; <c>0</c> defaults to the CPU count.</summary>
+    public int? MaxConcurrency { get; init; }
+
+    /// <summary>Whether the source is optimised for a single writer.</summary>
+    public bool? SingleWriter { get; init; } = false;
+
+    /// <summary>What an enqueue does when the buffer is full.</summary>
+    public SaEnqueueStrategy EnqueueStrategy { get; init; } = SaEnqueueStrategy.Wait;
+
+    /// <summary>How a removed reader treats its in-flight item.</summary>
+    public SaReaderCancelMode ReaderCancelMode { get; init; } = SaReaderCancelMode.Hard;
+
+    /// <summary>Which readers are cancelled first when the limit decreases.</summary>
+    public SaReaderCancellationOrder ReaderCancellationOrder { get; init; } = SaReaderCancellationOrder.Lifo;
+
+    /// <summary>Maps a processor failure to an execution strategy; unset shuts the queue down.</summary>
+    public Func<TInput, Exception, SaExecutionErrorStrategy>? HandleItemFaulted { get; init; }
+
+    /// <summary>Receives every status transition of a work item.</summary>
+    public Action<TInput, SaWorkStatus, Exception?>? StatusChanged { get; init; }
+
+    /// <summary>Renders an item for diagnostics.</summary>
+    public Func<TInput, string>? GetItemDisplayName { get; init; }
+
+    /// <summary>Maximum wait for readers during shutdown or force-cancel; defaults to 30 seconds.</summary>
+    public TimeSpan? ShutdownTimeout { get; init; }
+
+    /// <summary>Clock behind every bounded wait inside the queue.</summary>
+    public TimeProvider? TimeProvider { get; init; }
+
+    /// <summary>How producer cancellation is treated after an item is accepted.</summary>
+    public SaProducerCancellationMode ProducerCancellation { get; init; } = SaProducerCancellationMode.Observe;
+
     /// <summary>Creates a new options instance with the specified queue capacity.</summary>
     /// <param name="capacity">Must be at least 1.</param>
     public SaWorkQueueOptions<TInput> WithQueueCapacity(int capacity)
@@ -158,7 +186,7 @@ public static class SaWorkQueueOptions
     public static SaWorkQueueOptions<TInput> Create<TInput>(Func<TInput, CancellationToken, Task> process)
     {
         ArgumentNullException.ThrowIfNull(process);
-        return new(new DelegatingWork<TInput>(process));
+        return new() { Processor = new DelegatingWork<TInput>(process) };
     }
 
     /// <summary>Creates options from an <see cref="ISaWork{TInput}"/> processor.</summary>
@@ -167,6 +195,6 @@ public static class SaWorkQueueOptions
     public static SaWorkQueueOptions<TInput> Create<TInput>(ISaWork<TInput> processor)
     {
         ArgumentNullException.ThrowIfNull(processor);
-        return new(processor);
+        return new() { Processor = processor };
     }
 }

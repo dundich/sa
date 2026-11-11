@@ -30,7 +30,7 @@ public sealed class WorkQueueOptionsValidationTests
     public void Ctor_NegativeQueueCapacity_Throws()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(
-            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int>(new CountingProcessor(), QueueCapacity: -5)));
+            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int> { Processor = new CountingProcessor(), QueueCapacity = -5 }));
 
         Assert.Equal(nameof(SaWorkQueueOptions<int>.QueueCapacity), ex.ParamName);
     }
@@ -39,7 +39,7 @@ public sealed class WorkQueueOptionsValidationTests
     public void Ctor_ZeroQueueCapacity_Throws()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(
-            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int>(new CountingProcessor(), QueueCapacity: 0)));
+            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int> { Processor = new CountingProcessor(), QueueCapacity = 0 }));
 
         Assert.Equal(nameof(SaWorkQueueOptions<int>.QueueCapacity), ex.ParamName);
     }
@@ -48,7 +48,7 @@ public sealed class WorkQueueOptionsValidationTests
     public void Ctor_NegativeConcurrencyLimit_Throws()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(
-            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int>(new CountingProcessor(), ConcurrencyLimit: -3)));
+            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int> { Processor = new CountingProcessor(), ConcurrencyLimit = -3 }));
 
         Assert.Equal(nameof(SaWorkQueueOptions<int>.ConcurrencyLimit), ex.ParamName);
     }
@@ -59,8 +59,11 @@ public sealed class WorkQueueOptionsValidationTests
     public void Ctor_NonPositiveShutdownTimeout_Throws(int milliseconds)
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(
-            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int>(new CountingProcessor(),
-                ShutdownTimeout: TimeSpan.FromMilliseconds(milliseconds))));
+            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int>
+            {
+                Processor = new CountingProcessor(),
+                ShutdownTimeout = TimeSpan.FromMilliseconds(milliseconds)
+            }));
 
         Assert.Equal(nameof(SaWorkQueueOptions<int>.ShutdownTimeout), ex.ParamName);
     }
@@ -69,9 +72,11 @@ public sealed class WorkQueueOptionsValidationTests
     public void Ctor_UndefinedProducerCancellation_Throws()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(
-            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int>(
-                new CountingProcessor(),
-                ProducerCancellation: (SaProducerCancellationMode)42)));
+            () => new SaWorkChannel<int>(new SaWorkQueueOptions<int>
+            {
+                Processor = new CountingProcessor(),
+                ProducerCancellation = (SaProducerCancellationMode)42
+            }));
 
         Assert.Equal(nameof(SaWorkQueueOptions<int>.ProducerCancellation), ex.ParamName);
     }
@@ -105,11 +110,13 @@ public sealed class WorkQueueOptionsValidationTests
         // The minimum acceptable values must not just pass validation —
         // the queue built from them has to be fully functional.
         var processor = new CountingProcessor();
-        using var queue = new SaWorkChannel<int>(new SaWorkQueueOptions<int>(
-            processor,
-            QueueCapacity: 1,
-            ConcurrencyLimit: 0, // valid: starts paused
-            ShutdownTimeout: TimeSpan.FromMilliseconds(1)));
+        using var queue = new SaWorkChannel<int>(new SaWorkQueueOptions<int>
+        {
+            Processor = processor,
+            QueueCapacity = 1,
+            ConcurrencyLimit = 0, // valid: starts paused
+            ShutdownTimeout = TimeSpan.FromMilliseconds(1)
+        });
 
         Assert.Equal(0, queue.ConcurrencyLimit);
         Assert.Equal(1, queue.QueueCapacity);
@@ -133,15 +140,15 @@ public sealed class WorkQueueOptionsValidationTests
     public void Ctor_UndefinedStrategyEnums_Throw()
     {
         var enqueue = Assert.Throws<ArgumentOutOfRangeException>(() => new SaWorkChannel<int>(
-            new SaWorkQueueOptions<int>(new CountingProcessor(), EnqueueStrategy: (SaEnqueueStrategy)99)));
+            new SaWorkQueueOptions<int> { Processor = new CountingProcessor(), EnqueueStrategy = (SaEnqueueStrategy)99 }));
         Assert.Equal(nameof(SaWorkQueueOptions<int>.EnqueueStrategy), enqueue.ParamName);
 
         var mode = Assert.Throws<ArgumentOutOfRangeException>(() => new SaWorkChannel<int>(
-            new SaWorkQueueOptions<int>(new CountingProcessor(), ReaderCancelMode: (SaReaderCancelMode)99)));
+            new SaWorkQueueOptions<int> { Processor = new CountingProcessor(), ReaderCancelMode = (SaReaderCancelMode)99 }));
         Assert.Equal(nameof(SaWorkQueueOptions<int>.ReaderCancelMode), mode.ParamName);
 
         var order = Assert.Throws<ArgumentOutOfRangeException>(() => new SaWorkChannel<int>(
-            new SaWorkQueueOptions<int>(new CountingProcessor(), ReaderCancellationOrder: (SaReaderCancellationOrder)99)));
+            new SaWorkQueueOptions<int> { Processor = new CountingProcessor(), ReaderCancellationOrder = (SaReaderCancellationOrder)99 }));
         Assert.Equal(nameof(SaWorkQueueOptions<int>.ReaderCancellationOrder), order.ParamName);
     }
 
@@ -149,11 +156,13 @@ public sealed class WorkQueueOptionsValidationTests
     public void Ctor_DefinedStrategyEnums_AreAccepted()
     {
         // The guard must be about *defined* values, not about one blessed combination.
-        using var queue = new SaWorkChannel<int>(new SaWorkQueueOptions<int>(
-            new CountingProcessor(),
-            EnqueueStrategy: SaEnqueueStrategy.Throw,
-            ReaderCancelMode: SaReaderCancelMode.Soft,
-            ReaderCancellationOrder: SaReaderCancellationOrder.Random));
+        using var queue = new SaWorkChannel<int>(new SaWorkQueueOptions<int>
+        {
+            Processor = new CountingProcessor(),
+            EnqueueStrategy = SaEnqueueStrategy.Throw,
+            ReaderCancelMode = SaReaderCancelMode.Soft,
+            ReaderCancellationOrder = SaReaderCancellationOrder.Random
+        });
 
         Assert.True(queue.IsEnabled);
     }

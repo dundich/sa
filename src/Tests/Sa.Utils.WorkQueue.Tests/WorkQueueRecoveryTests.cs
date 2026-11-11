@@ -20,8 +20,9 @@ public class SaWorkQueueRecoveryTests
     public async Task ForceCancelReaders_ThenResetConcurrency_ReadersRecoverAndProcessItems()
     {
         // Arrange
-        var options = new SaWorkQueueOptions<int>(new TestProcessor())
+        var options = new SaWorkQueueOptions<int>
         {
+            Processor = new TestProcessor(),
             ConcurrencyLimit = 2,
             MaxConcurrency = 4
         };
@@ -53,8 +54,9 @@ public class SaWorkQueueRecoveryTests
         // Arrange
         var statuses = new List<SaWorkStatus>();
         var processor = new TestProcessor(failOnValue: -1);
-        var options = new SaWorkQueueOptions<int>(processor)
+        var options = new SaWorkQueueOptions<int>
         {
+            Processor = processor,
             ConcurrencyLimit = 1,
             StatusChanged = (item, status, ex) => statuses.Add(status),
             HandleItemFaulted = (_, __) => SaExecutionErrorStrategy.Continue
@@ -87,8 +89,9 @@ public class SaWorkQueueRecoveryTests
         // Arrange
         var statuses = new List<SaWorkStatus>();
         var processor = new TestProcessor(failOnValue: -1);
-        var options = new SaWorkQueueOptions<int>(processor)
+        var options = new SaWorkQueueOptions<int>
         {
+            Processor = processor,
             ConcurrencyLimit = 2,
             StatusChanged = (item, status, ex) => statuses.Add(status),
             HandleItemFaulted = (_, __) => SaExecutionErrorStrategy.StopReader
@@ -118,8 +121,9 @@ public class SaWorkQueueRecoveryTests
         // Arrange
         var statuses = new List<SaWorkStatus>();
         var processor = new TestProcessor(failOnValue: -1);
-        var options = new SaWorkQueueOptions<int>(processor)
+        var options = new SaWorkQueueOptions<int>
         {
+            Processor = processor,
             ConcurrencyLimit = 2,
             StatusChanged = (item, status, ex) => statuses.Add(status),
             HandleItemFaulted = (_, __) => SaExecutionErrorStrategy.ShutdownQueue
