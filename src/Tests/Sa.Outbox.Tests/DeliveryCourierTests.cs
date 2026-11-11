@@ -7,13 +7,28 @@ public class DeliveryCourierTests
     private sealed class TestMessage { }
 
     private static OutboxConsumerSettings CreateSettings(int maxDeliveryAttempts = 3)
-        => new(ConsumerGroupId: "test-group", AsSingleton: false, Interval: TimeSpan.FromMinutes(1), InitialDelay: TimeSpan.Zero,
-            ConcurrencyLimit: 1, MaxConcurrency: 1, RetryCountOnError: 0,
-            MaxBatchSize: 16, MaxProcessingIterations: -1, IterationDelay: TimeSpan.Zero,
-            LockDuration: TimeSpan.FromSeconds(10), LockRenewal: TimeSpan.FromSeconds(3),
-            LookbackInterval: TimeSpan.FromDays(7), MaxDeliveryAttempts: maxDeliveryAttempts,
-            BatchingWindow: TimeSpan.FromSeconds(3), PerTenantTimeout: TimeSpan.Zero,
-            PerTenantMaxDegreeOfParallelism: 1, Paused: false, Version: 0);
+        => new OutboxConsumerSettings
+        {
+            ConsumerGroupId = "test-group",
+            AsSingleton = false,
+            Interval = TimeSpan.FromMinutes(1),
+            InitialDelay = TimeSpan.Zero,
+            ConcurrencyLimit = 1,
+            MaxConcurrency = 1,
+            RetryCountOnError = 0,
+            MaxBatchSize = 16,
+            MaxProcessingIterations = -1,
+            IterationDelay = TimeSpan.Zero,
+            LockDuration = TimeSpan.FromSeconds(10),
+            LockRenewal = TimeSpan.FromSeconds(3),
+            LookbackInterval = TimeSpan.FromDays(7),
+            MaxDeliveryAttempts = maxDeliveryAttempts,
+            BatchingWindow = TimeSpan.FromSeconds(3),
+            PerTenantTimeout = TimeSpan.Zero,
+            PerTenantMaxDegreeOfParallelism = 1,
+            Paused = false,
+            Version = 0
+        };
 
     private static OutboxMessageFilter CreateFilter()
         => new()

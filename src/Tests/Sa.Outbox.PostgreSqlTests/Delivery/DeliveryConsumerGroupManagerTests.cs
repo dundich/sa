@@ -129,26 +129,28 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
 
             if (!manager.IsRegistered(blockingId))
             {
-                var blockingSettings = new OutboxConsumerSettings(
-                    ConsumerGroupId: BlockingGroupId,
-                    AsSingleton: false,
-                    Interval: TimeSpan.FromMilliseconds(200),
-                    InitialDelay: TimeSpan.Zero,
-                    ConcurrencyLimit: 1,
-                    MaxConcurrency: 1,
-                    RetryCountOnError: 0,
-                    MaxBatchSize: 1,
-                    MaxProcessingIterations: -1,
-                    IterationDelay: TimeSpan.Zero,
-                    LockDuration: TestLockDuration,
-                    LockRenewal: TestLockRenewal,
-                    LookbackInterval: TimeSpan.FromDays(7),
-                    MaxDeliveryAttempts: 3,
-                    BatchingWindow: TimeSpan.Zero,
-                    PerTenantTimeout: TimeSpan.Zero,
-                    PerTenantMaxDegreeOfParallelism: 1,
-                    Paused: false,
-                    Version: 0);
+                var blockingSettings = new OutboxConsumerSettings
+                {
+                    ConsumerGroupId = BlockingGroupId,
+                    AsSingleton = false,
+                    Interval = TimeSpan.FromMilliseconds(200),
+                    InitialDelay = TimeSpan.Zero,
+                    ConcurrencyLimit = 1,
+                    MaxConcurrency = 1,
+                    RetryCountOnError = 0,
+                    MaxBatchSize = 1,
+                    MaxProcessingIterations = -1,
+                    IterationDelay = TimeSpan.Zero,
+                    LockDuration = TestLockDuration,
+                    LockRenewal = TestLockRenewal,
+                    LookbackInterval = TimeSpan.FromDays(7),
+                    MaxDeliveryAttempts = 3,
+                    BatchingWindow = TimeSpan.Zero,
+                    PerTenantTimeout = TimeSpan.Zero,
+                    PerTenantMaxDegreeOfParallelism = 1,
+                    Paused = false,
+                    Version = 0
+                };
                 manager.TryRegister(BlockingGroupId, blockingSettings);
             }
 

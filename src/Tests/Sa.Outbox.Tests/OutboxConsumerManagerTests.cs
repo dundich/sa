@@ -7,26 +7,28 @@ public class OutboxConsumerManagerTests
     private static OutboxConsumerSettings CreateSettings(
         string consumerGroupId = "test-group",
         bool paused = false)
-        => new(
-            ConsumerGroupId: consumerGroupId,
-            AsSingleton: false,
-            Interval: TimeSpan.FromSeconds(5),
-            InitialDelay: TimeSpan.Zero,
-            ConcurrencyLimit: 1,
-            MaxConcurrency: 1,
-            RetryCountOnError: 0,
-            MaxBatchSize: 16,
-            MaxProcessingIterations: -1,
-            IterationDelay: TimeSpan.Zero,
-            LockDuration: TimeSpan.FromSeconds(10),
-            LockRenewal: TimeSpan.FromSeconds(3),
-            LookbackInterval: TimeSpan.FromDays(7),
-            MaxDeliveryAttempts: 3,
-            BatchingWindow: TimeSpan.Zero,
-            PerTenantTimeout: TimeSpan.Zero,
-            PerTenantMaxDegreeOfParallelism: 1,
-            Paused: paused,
-            Version: 0);
+        => new OutboxConsumerSettings
+        {
+            ConsumerGroupId = consumerGroupId,
+            AsSingleton = false,
+            Interval = TimeSpan.FromSeconds(5),
+            InitialDelay = TimeSpan.Zero,
+            ConcurrencyLimit = 1,
+            MaxConcurrency = 1,
+            RetryCountOnError = 0,
+            MaxBatchSize = 16,
+            MaxProcessingIterations = -1,
+            IterationDelay = TimeSpan.Zero,
+            LockDuration = TimeSpan.FromSeconds(10),
+            LockRenewal = TimeSpan.FromSeconds(3),
+            LookbackInterval = TimeSpan.FromDays(7),
+            MaxDeliveryAttempts = 3,
+            BatchingWindow = TimeSpan.Zero,
+            PerTenantTimeout = TimeSpan.Zero,
+            PerTenantMaxDegreeOfParallelism = 1,
+            Paused = paused,
+            Version = 0
+        };
 
     private static IOutboxConsumerManager CreateManager()
         => new OutboxConsumerManager();

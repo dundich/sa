@@ -5,53 +5,73 @@ namespace Sa.Outbox.Delivery;
 /// This is the single source of truth — all delivery code reads from this type only.
 /// Create new instances via <see cref="OutboxConsumerSettingsBuilder"/> or the <c>with</c> expression.
 /// </summary>
-/// <param name="ConsumerGroupId">Unique identifier for the consumer group. Groups settings for a single logical consumer.</param>
-/// <param name="AsSingleton">When true — the consumer runs as a singleton (one instance across the entire cluster). When false — each application instance runs its own consumer copy.</param>
-/// <param name="Interval">Periodicity of the consumer run (interval between processing iterations).</param>
-/// <param name="InitialDelay">Initial delay before the consumer's first run after application startup.</param>
-/// <param name="ConcurrencyLimit">Maximum number of concurrent threads for message processing at the consumer group level.</param>
-/// <param name="MaxConcurrency">Maximum number of simultaneously running processors (jobs) within this group.</param>
-/// <param name="RetryCountOnError">Number of job retry attempts on error. Must be non-negative; <see cref="OutboxConsumerSettingsBuilder.WithInfiniteRetries"/> sets <see cref="int.MaxValue"/>, which is the practical "no limit".</param>
-/// <param name="MaxBatchSize">Maximum batch size (number of messages) per processing iteration.</param>
-/// <param name="MaxProcessingIterations">Maximum number of processing iterations per cycle (-1 = unlimited).</param>
-/// <param name="IterationDelay">Delay between processing iterations within a single cycle.</param>
-/// <param name="LockDuration">Lock duration for record processing (lock TTL). Must be greater than TimeSpan.Zero — a task without a TTL would never become re-rentable after a worker crash. The record is locked from other consumers for this period.</param>
-/// <param name="LockRenewal">Lock renewal interval. Must be greater than TimeSpan.Zero (zero would break the renewal timer) and less than LockDuration.</param>
-/// <param name="LookbackInterval">Lookback interval — how far back in time to search for unprocessed messages. Used to catch up messages that may have been missed during idle periods.</param>
-/// <param name="MaxDeliveryAttempts">Maximum delivery attempt count for a message before sending it to the dead-letter queue (DLQ).</param>
-/// <param name="BatchingWindow">Time window for aggregating messages into a batch. Messages accumulated within this window are processed together.</param>
-/// <param name="PerTenantTimeout">Timeout for processing a single tenant's data. Exceeding this timeout aborts the tenant's processing.</param>
-/// <param name="PerTenantMaxDegreeOfParallelism">Maximum degree of parallelism for tenant-level processing. 1 = sequential, >1 = parallel.</param>
-/// <param name="Paused">Consumer pause flag. When true, processing is suspended but the consumer remains active. Allows temporarily halting processing without stopping the entire service.</param>
-/// <param name="Version">Settings version. Incremented on every change for change detection. Used for optimistic locking and notifying subscribers.</param>
-/// <param name="ProviderKey">The provider key of the storage this group belongs to (equal to the outbox scope key). The delivery pipeline resolves the keyed storage contracts by this value; a single-provider application keeps <see cref="OutboxScope.DefaultKey"/>.</param>
-/// <param name="IdleMaxInterval">Upper bound for the adaptive poll interval used while the consumer group's queue stays empty. <see cref="TimeSpan.Zero"/> (default) disables adaptive back-off — the poll period stays at <see cref="Interval"/>. When set, it must be at least <see cref="Interval"/>, and the wait between empty polls grows from <see cref="Interval"/> towards this bound according to <see cref="IEmptyQueueWaitStrategy"/>.</param>
-/// <param name="Tag">Free-form application tag carried with the settings; not used by the pipeline.</param>
-public sealed record OutboxConsumerSettings(
-    string ConsumerGroupId,
-    bool AsSingleton,
-    TimeSpan Interval,
-    TimeSpan InitialDelay,
-    int ConcurrencyLimit,
-    int MaxConcurrency,
-    int RetryCountOnError,
-    int MaxBatchSize,
-    int MaxProcessingIterations,
-    TimeSpan IterationDelay,
-    TimeSpan LockDuration,
-    TimeSpan LockRenewal,
-    TimeSpan LookbackInterval,
-    int MaxDeliveryAttempts,
-    TimeSpan BatchingWindow,
-    TimeSpan PerTenantTimeout,
-    int PerTenantMaxDegreeOfParallelism,
-    bool Paused,
-    int Version,
-    string ProviderKey = OutboxScope.DefaultKey,
-    TimeSpan IdleMaxInterval = default,
-    // User tag
-    object? Tag = null)
+public sealed record OutboxConsumerSettings
 {
+    /// <summary>Unique identifier for the consumer group. Groups settings for a single logical consumer.</summary>
+    public required string ConsumerGroupId { get; init; }
+
+    /// <summary>When true — the consumer runs as a singleton (one instance across the entire cluster). When false — each application instance runs its own consumer copy.</summary>
+    public required bool AsSingleton { get; init; }
+
+    /// <summary>Periodicity of the consumer run (interval between processing iterations).</summary>
+    public required TimeSpan Interval { get; init; }
+
+    /// <summary>Initial delay before the consumer's first run after application startup.</summary>
+    public required TimeSpan InitialDelay { get; init; }
+
+    /// <summary>Maximum number of concurrent threads for message processing at the consumer group level.</summary>
+    public required int ConcurrencyLimit { get; init; }
+
+    /// <summary>Maximum number of simultaneously running processors (jobs) within this group.</summary>
+    public required int MaxConcurrency { get; init; }
+
+    /// <summary>Number of job retry attempts on error. Must be non-negative; <see cref="OutboxConsumerSettingsBuilder.WithInfiniteRetries"/> sets <see cref="int.MaxValue"/>, which is the practical "no limit".</summary>
+    public required int RetryCountOnError { get; init; }
+
+    /// <summary>Maximum batch size (number of messages) per processing iteration.</summary>
+    public required int MaxBatchSize { get; init; }
+
+    /// <summary>Maximum number of processing iterations per cycle (-1 = unlimited).</summary>
+    public required int MaxProcessingIterations { get; init; }
+
+    /// <summary>Delay between processing iterations within a single cycle.</summary>
+    public required TimeSpan IterationDelay { get; init; }
+
+    /// <summary>Lock duration for record processing (lock TTL). Must be greater than TimeSpan.Zero — a task without a TTL would never become re-rentable after a worker crash. The record is locked from other consumers for this period.</summary>
+    public required TimeSpan LockDuration { get; init; }
+
+    /// <summary>Lock renewal interval. Must be greater than TimeSpan.Zero (zero would break the renewal timer) and less than LockDuration.</summary>
+    public required TimeSpan LockRenewal { get; init; }
+
+    /// <summary>Lookback interval — how far back in time to search for unprocessed messages. Used to catch up messages that may have been missed during idle periods.</summary>
+    public required TimeSpan LookbackInterval { get; init; }
+
+    /// <summary>Maximum delivery attempt count for a message before sending it to the dead-letter queue (DLQ).</summary>
+    public required int MaxDeliveryAttempts { get; init; }
+
+    /// <summary>Time window for aggregating messages into a batch. Messages accumulated within this window are processed together.</summary>
+    public required TimeSpan BatchingWindow { get; init; }
+
+    /// <summary>Timeout for processing a single tenant's data. Exceeding this timeout aborts the tenant's processing.</summary>
+    public required TimeSpan PerTenantTimeout { get; init; }
+
+    /// <summary>Maximum degree of parallelism for tenant-level processing. 1 = sequential, >1 = parallel.</summary>
+    public required int PerTenantMaxDegreeOfParallelism { get; init; }
+
+    /// <summary>Consumer pause flag. When true, processing is suspended but the consumer remains active. Allows temporarily halting processing without stopping the entire service.</summary>
+    public required bool Paused { get; init; }
+
+    /// <summary>Settings version. Incremented on every change for change detection. Used for optimistic locking and notifying subscribers.</summary>
+    public required int Version { get; init; }
+
+    /// <summary>The provider key of the storage this group belongs to (equal to the outbox scope key). The delivery pipeline resolves the keyed storage contracts by this value; a single-provider application keeps <see cref="OutboxScope.DefaultKey"/>.</summary>
+    public string ProviderKey { get; init; } = OutboxScope.DefaultKey;
+
+    /// <summary>Upper bound for the adaptive poll interval used while the consumer group's queue stays empty. <see cref="TimeSpan.Zero"/> (default) disables adaptive back-off — the poll period stays at <see cref="Interval"/>. When set, it must be at least <see cref="Interval"/>, and the wait between empty polls grows from <see cref="Interval"/> towards this bound according to <see cref="IEmptyQueueWaitStrategy"/>.</summary>
+    public TimeSpan IdleMaxInterval { get; init; }
+
+    /// <summary>Free-form application tag carried with the settings; not used by the pipeline.</summary>
+    public object? Tag { get; init; }
     /// <summary>
     /// Validates all settings and returns a list of error messages.
     /// Empty list means valid.

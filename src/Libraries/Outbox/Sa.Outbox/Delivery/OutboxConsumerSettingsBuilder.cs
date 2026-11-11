@@ -36,29 +36,31 @@ public sealed class OutboxConsumerSettingsBuilder
     /// </summary>
     public OutboxConsumerSettings Build()
     {
-        return new OutboxConsumerSettings(
-            _consumerGroupId ?? throw new InvalidOperationException("ConsumerGroupId is required."),
-            _asSingleton ?? OutboxDefaults.AsSingleton,
-            _interval ?? OutboxDefaults.Interval,
-            _initialDelay ?? OutboxDefaults.InitialDelay,
-            _concurrencyLimit ?? OutboxDefaults.ConcurrencyLimit,
-            _maxConcurrency ?? OutboxDefaults.MaxConcurrency,
-            _retryCountOnError ?? OutboxDefaults.RetryCountOnError,
-            _maxBatchSize ?? OutboxDefaults.MaxBatchSize,
-            _maxProcessingIterations ?? OutboxDefaults.MaxProcessingIterations,
-            _iterationDelay ?? OutboxDefaults.IterationDelay,
-            _lockDuration ?? OutboxDefaults.LockDuration,
-            _lockRenewal ?? OutboxDefaults.LockRenewal,
-            _lookbackInterval ?? OutboxDefaults.LookbackInterval,
-            _maxDeliveryAttempts ?? OutboxDefaults.MaxDeliveryAttempts,
-            _batchingWindow ?? OutboxDefaults.BatchingWindow,
-            _perTenantTimeout ?? OutboxDefaults.PerTenantTimeout,
-            _perTenantMaxDegreeOfParallelism ?? OutboxDefaults.PerTenantMaxDegreeOfParallelism,
-            _paused ?? OutboxDefaults.Paused,
-            0,
-            _providerKey ?? OutboxScope.DefaultKey,
-            _idleMaxInterval ?? OutboxDefaults.IdleMaxInterval,
-            _tag);
+        return new OutboxConsumerSettings
+        {
+            ConsumerGroupId = _consumerGroupId ?? throw new InvalidOperationException("ConsumerGroupId is required."),
+            AsSingleton = _asSingleton ?? OutboxDefaults.AsSingleton,
+            Interval = _interval ?? OutboxDefaults.Interval,
+            InitialDelay = _initialDelay ?? OutboxDefaults.InitialDelay,
+            ConcurrencyLimit = _concurrencyLimit ?? OutboxDefaults.ConcurrencyLimit,
+            MaxConcurrency = _maxConcurrency ?? OutboxDefaults.MaxConcurrency,
+            RetryCountOnError = _retryCountOnError ?? OutboxDefaults.RetryCountOnError,
+            MaxBatchSize = _maxBatchSize ?? OutboxDefaults.MaxBatchSize,
+            MaxProcessingIterations = _maxProcessingIterations ?? OutboxDefaults.MaxProcessingIterations,
+            IterationDelay = _iterationDelay ?? OutboxDefaults.IterationDelay,
+            LockDuration = _lockDuration ?? OutboxDefaults.LockDuration,
+            LockRenewal = _lockRenewal ?? OutboxDefaults.LockRenewal,
+            LookbackInterval = _lookbackInterval ?? OutboxDefaults.LookbackInterval,
+            MaxDeliveryAttempts = _maxDeliveryAttempts ?? OutboxDefaults.MaxDeliveryAttempts,
+            BatchingWindow = _batchingWindow ?? OutboxDefaults.BatchingWindow,
+            PerTenantTimeout = _perTenantTimeout ?? OutboxDefaults.PerTenantTimeout,
+            PerTenantMaxDegreeOfParallelism = _perTenantMaxDegreeOfParallelism ?? OutboxDefaults.PerTenantMaxDegreeOfParallelism,
+            Paused = _paused ?? OutboxDefaults.Paused,
+            Version = 0,
+            ProviderKey = _providerKey ?? OutboxScope.DefaultKey,
+            IdleMaxInterval = _idleMaxInterval ?? OutboxDefaults.IdleMaxInterval,
+            Tag = _tag
+        };
     }
 
 
