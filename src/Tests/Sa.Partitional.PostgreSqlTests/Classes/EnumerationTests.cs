@@ -46,8 +46,8 @@ public class EnumerationTests
     {
         // string.GetHashCode() is randomised per process, so two parts with the same name could carry
         // different ids and stop matching each other.
-        Part first = new("day", PartByRange.Day);
-        Part second = new("day", PartByRange.Day);
+        Part first = new() { Id = Part.StableId("day"), Name = "day", PartBy = PartByRange.Day };
+        Part second = new() { Id = Part.StableId("day"), Name = "day", PartBy = PartByRange.Day };
 
         Assert.Equal(first.Id, second.Id);
         Assert.Equal(0, Enumeration.DiffId(first, second));
@@ -65,7 +65,7 @@ public class EnumerationTests
     [Fact]
     public void Part_Id_IsDistinct_PerVariant()
     {
-        int[] ids = [.. new[] { "root", "day", "month", "year" }.Select(name => new Part(name, PartByRange.Day).Id)];
+        int[] ids = [.. new[] { "root", "day", "month", "year" }.Select(name => new Part { Id = Part.StableId(name), Name = name, PartBy = PartByRange.Day }.Id)];
 
         Assert.Equal(ids.Length, ids.Distinct().Count());
     }

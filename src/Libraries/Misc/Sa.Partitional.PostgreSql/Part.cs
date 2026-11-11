@@ -4,10 +4,11 @@ namespace Sa.Partitional.PostgreSql;
 /// Describes a partitioning granularity (root, day, month, year) used by <see cref="PgPartBy"/>.
 /// Inherits from <see cref="Enumeration{T}"/> for safe, id-based lookup.
 /// </summary>
-/// <param name="Name">Unique display name of the partition kind.</param>
-/// <param name="PartBy">The <see cref="PartByRange"/> that drives date-range computation.</param>
-public sealed record Part(string Name, PartByRange PartBy) : Enumeration<Part>(StableId(Name), Name)
+public sealed record Part : Enumeration<Part>
 {
+    /// <summary>The <see cref="PartByRange"/> that drives date-range computation.</summary>
+    public required PartByRange PartBy { get; init; }
+
     /// <summary>
     /// The identifier string for the root (unpartitioned) partition.
     /// </summary>
@@ -16,7 +17,7 @@ public sealed record Part(string Name, PartByRange PartBy) : Enumeration<Part>(S
     /// <summary>
     /// The root partition instance — always uses <see cref="PartByRange.Day"/> as its range.
     /// </summary>
-    public static readonly Part Root = new(RootId, PartByRange.Day);
+    public static readonly Part Root = new() { Id = StableId(RootId), Name = RootId, PartBy = PartByRange.Day };
 
     /// <summary>
     /// A process-independent 32-bit id (FNV-1a over the UTF-16 code units).
@@ -28,7 +29,7 @@ public sealed record Part(string Name, PartByRange PartBy) : Enumeration<Part>(S
     /// only variant name that reaches storage is <c>Name</c>; the id stays in memory, and a
     /// stable one makes that true by construction rather than by convention.
     /// </remarks>
-    private static int StableId(string name)
+    internal static int StableId(string name)
     {
         uint hash = 2166136261u; // FNV offset basis
         foreach (char c in name)

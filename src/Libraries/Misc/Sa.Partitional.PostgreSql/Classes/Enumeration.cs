@@ -12,11 +12,15 @@ namespace Sa.Partitional.PostgreSql;
 /// The derived enumeration type. Enforced via the recursive generic constraint <c>where T : Enumeration{T}</c>.
 /// All enum variants must be declared as <c>public static readonly T</c> fields.
 /// </typeparam>
-/// <param name="Id">Unique integer identifier used for database storage and comparison.</param>
-/// <param name="Name">Human-readable display name.</param>
-public record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>(int Id, string Name)
+public abstract record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] T>
     : IComparable<T> where T : Enumeration<T>
 {
+    /// <summary>Unique integer identifier used for database storage and comparison.</summary>
+    public required int Id { get; init; }
+
+    /// <summary>Human-readable display name.</summary>
+    public required string Name { get; init; }
+
 
     private static readonly Lazy<Dictionary<int, T>> AllItems = new(() =>
     {

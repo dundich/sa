@@ -7,47 +7,58 @@ namespace Sa.Partitional.PostgreSql;
 /// Encapsulates a PostgreSQL partitioning strategy (day / month / year) together with the functions
 /// needed to compute date ranges, format partition names, and parse them back.
 /// </summary>
-/// <param name="PartByRange">The underlying <see cref="PartByRange"/> enum value.</param>
-/// <param name="GetRange">Computes the inclusive-exclusive <see cref="LimSection{T}"/> for a given date.</param>
-/// <param name="Fmt">Formats a <see cref="DateTimeOffset"/> into a PostgreSQL-compatible partition name.</param>
-/// <param name="ParseFmt">Parses a partition name string back into a <see cref="DateTimeOffset"/>.</param>
-public sealed record PgPartBy(
-    PartByRange PartByRange
-    , Func<DateTimeOffset, LimSection<DateTimeOffset>> GetRange
-    , Func<DateTimeOffset, string> Fmt
-    , Func<string, DateTimeOffset?> ParseFmt
-) : Enumeration<PgPartBy>((int)PartByRange, PartByRange.ToString())
+public sealed record PgPartBy : Enumeration<PgPartBy>
 {
+    /// <summary>The underlying <see cref="PartByRange"/> enum value.</summary>
+    public required PartByRange PartByRange { get; init; }
+
+    /// <summary>Computes the inclusive-exclusive <see cref="LimSection{T}"/> for a given date.</summary>
+    public required Func<DateTimeOffset, LimSection<DateTimeOffset>> GetRange { get; init; }
+
+    /// <summary>Formats a <see cref="DateTimeOffset"/> into a PostgreSQL-compatible partition name.</summary>
+    public required Func<DateTimeOffset, string> Fmt { get; init; }
+
+    /// <summary>Parses a partition name string back into a <see cref="DateTimeOffset"/>.</summary>
+    public required Func<string, DateTimeOffset?> ParseFmt { get; init; }
 
     /// <summary>
     /// Day-based partitioning (<c>yYYYYmmDD</c>).
     /// </summary>
-    public static readonly PgPartBy Day = new(
-        PartByRange: PartByRange.Day
-        , GetRange: static date => date.ToUniversalTime().StartOfDay().RangeTo(date => date.AddDays(1), false)
-        , Fmt: static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}d{u.Day:00}")
-        , ParseFmt: static str => StrToDate(str, PartByRange.Day)
-    );
+    public static readonly PgPartBy Day = new()
+    {
+        Id = (int)PartByRange.Day,
+        Name = PartByRange.Day.ToString(),
+        PartByRange = PartByRange.Day,
+        GetRange = static date => date.ToUniversalTime().StartOfDay().RangeTo(date => date.AddDays(1), false),
+        Fmt = static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}d{u.Day:00}"),
+        ParseFmt = static str => StrToDate(str, PartByRange.Day),
+    };
 
     /// <summary>
     /// Month-based partitioning (<c>yYYYYmm</c>).
     /// </summary>
-    public static readonly PgPartBy Month = new(
-        PartByRange: PartByRange.Month
-        , GetRange: static date => date.ToUniversalTime().StartOfMonth().RangeTo(date => date.AddMonths(1), false)
-        , Fmt: static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}")
-        , ParseFmt: static str => StrToDate(str, PartByRange.Month)
-    );
+    public static readonly PgPartBy Month = new()
+    {
+        Id = (int)PartByRange.Month,
+        Name = PartByRange.Month.ToString(),
+        PartByRange = PartByRange.Month,
+        GetRange = static date => date.ToUniversalTime().StartOfMonth().RangeTo(date => date.AddMonths(1), false),
+        Fmt = static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}"),
+        ParseFmt = static str => StrToDate(str, PartByRange.Month),
+    };
 
     /// <summary>
     /// Year-based partitioning (<c>yYYYY</c>).
     /// </summary>
-    public static readonly PgPartBy Year = new(
-        PartByRange: PartByRange.Year
-        , GetRange: static date => date.ToUniversalTime().StartOfYear().RangeTo(date => date.AddYears(1), false)
-        , Fmt: static ts => UtcStamp(ts, static u => $"y{u.Year:0000}")
-        , ParseFmt: static str => StrToDate(str, PartByRange.Year)
-    );
+    public static readonly PgPartBy Year = new()
+    {
+        Id = (int)PartByRange.Year,
+        Name = PartByRange.Year.ToString(),
+        PartByRange = PartByRange.Year,
+        GetRange = static date => date.ToUniversalTime().StartOfYear().RangeTo(date => date.AddYears(1), false),
+        Fmt = static ts => UtcStamp(ts, static u => $"y{u.Year:0000}"),
+        ParseFmt = static str => StrToDate(str, PartByRange.Year),
+    };
 
     /// <summary>
     /// Renders the partition name from a date's <b>UTC</b> calendar parts, matching the UTC range
