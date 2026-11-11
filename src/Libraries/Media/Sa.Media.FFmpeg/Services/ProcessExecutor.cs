@@ -335,7 +335,7 @@ internal sealed partial class ProcessExecutor(ILogger<ProcessExecutor>? logger =
     /// Закрывает stdin после завершения.
     /// ВАЖНО: поток вызывающего НЕ закрывается и НЕ освобождается — он остаётся
     /// ответственностью вызывающего. Раньше здесь стоял 'await using', из-за чего после
-    /// ConvertToPcmS16Le(stream, ...) повторное использование того же FileStream падало с
+    /// ConvertToPcmS16LeAsync(stream, ...) повторное использование того же FileStream падало с
     /// ObjectDisposedException.
     /// </summary>
     private static async Task WriteToStdInAsync(

@@ -32,7 +32,7 @@ public sealed class PcmS16LeChannelManipulatorTests
         Assert.EndsWith("output_channel_0.wav_", result[0]);
         Assert.EndsWith("output_channel_1.wav_", result[1]);
 
-        (int? channels, int? sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRate(result[0], CancellationToken);
+        (int? channels, int? sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRateAsync(result[0], CancellationToken);
 
         Assert.Equal(1, channels);
         Assert.Equal(16000, sampleRate);
@@ -59,7 +59,7 @@ public sealed class PcmS16LeChannelManipulatorTests
         Assert.Equal("./data/stereo_join.wav_", result);
 
         (int? channels, int? sampleRate) =
-            await IFFProbeExecutor.Default.GetChannelsAndSampleRate(result, CancellationToken);
+            await IFFProbeExecutor.Default.GetChannelsAndSampleRateAsync(result, CancellationToken);
 
         Assert.Equal(2, channels);
         Assert.Equal(16000, sampleRate);

@@ -124,7 +124,7 @@ internal static class WavHeaderReader
         return header;
     }
 
-    public static async Task<WavHeader> ReadHeader(
+    public static async Task<WavHeader> ReadHeaderAsync(
         string filePath,
         CancellationToken cancellationToken = default)
     {

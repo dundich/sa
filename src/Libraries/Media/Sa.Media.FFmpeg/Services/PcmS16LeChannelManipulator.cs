@@ -27,7 +27,7 @@ internal sealed class PcmS16LeChannelManipulator(
         FFmpegArgs.ValidateFileNameToken(channelSuffix, nameof(channelSuffix));
 
         // Получаем количество каналов из метаданных
-        var (channels, _) = await _ffprobe.GetChannelsAndSampleRate(inputFileName, cancellationToken)
+        var (channels, _) = await _ffprobe.GetChannelsAndSampleRateAsync(inputFileName, cancellationToken)
             .ConfigureAwait(false);
 
         if (!channels.HasValue || channels.Value <= 0)
@@ -50,7 +50,7 @@ internal sealed class PcmS16LeChannelManipulator(
         if (channels == 1)
         {
             var file0 = $"{outFilePrefix}{channelSuffix}0{outFileExtension}";
-            await _ffmpeg.ConvertToPcmS16Le(
+            await _ffmpeg.ConvertToPcmS16LeAsync(
                 inputFileName,
                 file0,
                 outputSampleRate,

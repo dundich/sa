@@ -120,7 +120,7 @@ public static class CrossFeedSeparator
 
     private static async Task<HeadInfo> ReadHeadInfoAsync(string path, CancellationToken cancellationToken)
     {
-        WavHeader wavHeader = await WavHeaderReader.ReadHeader(path, cancellationToken);
+        WavHeader wavHeader = await WavHeaderReader.ReadHeaderAsync(path, cancellationToken);
         if (wavHeader.NumChannels != 2)
             throw new InvalidOperationException($"Expected a stereo recording, found {wavHeader.NumChannels} channel(s)");
         int sampleRate = (int)wavHeader.SampleRate;

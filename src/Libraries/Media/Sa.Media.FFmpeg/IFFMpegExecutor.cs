@@ -17,21 +17,21 @@ public interface IFFMpegExecutor
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A string containing the FFmpeg version output (standard output).</returns>
-    Task<string> GetVersion(CancellationToken cancellationToken = default);
+    Task<string> GetVersionAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets a list of supported formats by executing the <c>ffmpeg -formats</c> command.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A string containing the list of supported formats (standard output).</returns>
-    Task<string> GetFormats(CancellationToken cancellationToken = default);
+    Task<string> GetFormatsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets a list of supported codecs by executing the <c>ffmpeg -codecs</c> command.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A string containing the list of supported codecs (standard output).</returns>
-    Task<string> GetCodecs(CancellationToken cancellationToken = default);
+    Task<string> GetCodecsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Converts an audio file to PCM S16 LE format (16-bit signed integer, little-endian).
@@ -44,7 +44,7 @@ public interface IFFMpegExecutor
     /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
-    Task<string> ConvertToPcmS16Le(
+    Task<string> ConvertToPcmS16LeAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -68,7 +68,7 @@ public interface IFFMpegExecutor
     /// <exception cref="ProcessStartException">Thrown when FFmpeg process fails to start.</exception>
     /// <exception cref="ProcessExecutionException">Thrown when FFmpeg returns a non-zero exit code (e.g. unsupported format, decoding error).</exception>
     /// <exception cref="ArgumentException">Thrown if required parameters are invalid (e.g. null stream, empty format).</exception>
-    Task ConvertToPcmS16Le(
+    Task ConvertToPcmS16LeAsync(
             Stream inputStream,
             string inputFormat,
             Func<Stream, CancellationToken, Task> onOutput,
@@ -86,7 +86,7 @@ public interface IFFMpegExecutor
     /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
-    Task<string> ConvertToPcmS16LePreservingFormat(
+    Task<string> ConvertToPcmS16LePreservingFormatAsync(
         string inputFileName,
         string outputFileName,
         bool isOverwrite = true,
@@ -105,7 +105,7 @@ public interface IFFMpegExecutor
     /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
-    Task<string> ConvertToPcmS16LeRaw(
+    Task<string> ConvertToPcmS16LeRawAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -129,7 +129,7 @@ public interface IFFMpegExecutor
     /// <exception cref="ProcessStartException">Thrown when FFmpeg process fails to start.</exception>
     /// <exception cref="ProcessExecutionException">Thrown when FFmpeg returns a non-zero exit code (e.g. unsupported format, decoding error).</exception>
     /// <exception cref="ArgumentException">Thrown if required parameters are invalid (e.g. null stream, empty format).</exception>
-    Task ConvertToPcmS16LeRaw(
+    Task ConvertToPcmS16LeRawAsync(
         Stream inputStream,
         string inputFormat,
         Func<Stream, CancellationToken, Task> onOutput,
@@ -150,7 +150,7 @@ public interface IFFMpegExecutor
     /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
-    Task<string> ConvertToPcmS32Le(
+    Task<string> ConvertToPcmS32LeAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -171,7 +171,7 @@ public interface IFFMpegExecutor
     /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
-    Task<string> ConvertToPcmF32Le(
+    Task<string> ConvertToPcmF32LeAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -192,7 +192,7 @@ public interface IFFMpegExecutor
     /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
-    Task<string> ConvertToPcmF32LeRaw(
+    Task<string> ConvertToPcmF32LeRawAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -213,7 +213,7 @@ public interface IFFMpegExecutor
     /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous conversion operation.</returns>
-    Task ConvertToPcmF32LeRaw(
+    Task ConvertToPcmF32LeRawAsync(
         Stream inputStream,
         string inputFormat,
         Func<Stream, CancellationToken, Task> onOutput,
@@ -232,7 +232,7 @@ public interface IFFMpegExecutor
     /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
-    Task<string> ConvertToMp3(
+    Task<string> ConvertToMp3Async(
         string inputFileName,
         string outputFileName,
         bool isOverwrite = true,
@@ -249,7 +249,7 @@ public interface IFFMpegExecutor
     /// <param name="timeout">Optional override for the operation timeout.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>Stderr output from FFmpeg (useful for logging warnings/errors).</returns>
-    Task<string> ConvertToOgg(
+    Task<string> ConvertToOggAsync(
         string inputFileName,
         string outputFileName,
         bool isLibopus = false,

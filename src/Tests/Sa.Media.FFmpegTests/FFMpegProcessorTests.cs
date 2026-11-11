@@ -14,7 +14,7 @@ public sealed class FFMpegProcessorTests
     public async Task GetVersion_ShouldNotEmptyGetVersion()
     {
         // Act
-        var r = await Processor.GetVersion(CancellationToken);
+        var r = await Processor.GetVersionAsync(CancellationToken);
         Assert.NotEmpty(r);
     }
 
@@ -22,7 +22,7 @@ public sealed class FFMpegProcessorTests
     public async Task GetFormats_ShouldNotEmpty()
     {
         // Act
-        var r = await Processor.GetFormats(CancellationToken);
+        var r = await Processor.GetFormatsAsync(CancellationToken);
         Assert.NotEmpty(r);
     }
 
@@ -30,7 +30,7 @@ public sealed class FFMpegProcessorTests
     public async Task GetCodecs_ShouldNotEmpty()
     {
         // Act
-        var r = await Processor.GetCodecs(CancellationToken);
+        var r = await Processor.GetCodecsAsync(CancellationToken);
         Assert.NotEmpty(r);
     }
 
@@ -40,7 +40,7 @@ public sealed class FFMpegProcessorTests
     public async Task ConvertToPcm16Wav_CallsFFmpegWithCorrectArguments(string testFilePath)
     {
         // Act
-        await Processor.ConvertToPcmS16Le(
+        await Processor.ConvertToPcmS16LeAsync(
             testFilePath, "./data/output.wav", isOverwrite: true, cancellationToken: CancellationToken);
         Assert.True(File.Exists("./data/output.wav"));
     }
@@ -59,7 +59,7 @@ public sealed class FFMpegProcessorTests
         // new FileStream("./data/output.wav", FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
 
         // Act
-        await Processor.ConvertToPcmS16Le(inputStream, ext, async (outStream, _) =>
+        await Processor.ConvertToPcmS16LeAsync(inputStream, ext, async (outStream, _) =>
         {
             await outStream.CopyToAsync(fileStream, CancellationToken);
             await fileStream.FlushAsync(CancellationToken);
@@ -68,7 +68,7 @@ public sealed class FFMpegProcessorTests
         Assert.True(fileStream.Length > 0);
 
         fileStream.Position = 0;
-        var info = await IFFProbeExecutor.Default.GetMetaInfo(fileStream, "wav", CancellationToken);
+        var info = await IFFProbeExecutor.Default.GetMetaInfoAsync(fileStream, "wav", CancellationToken);
         Assert.Equal("wav", info.FormatName);
     }
 
@@ -83,7 +83,7 @@ public sealed class FFMpegProcessorTests
         // Act
         var ex = await Assert.ThrowsAsync<ProcessExecutionException>(async () =>
         {
-            await Processor.ConvertToPcmS16Le(inputStream, ext,
+            await Processor.ConvertToPcmS16LeAsync(inputStream, ext,
                 (_, __) => Task.CompletedTask,
                 cancellationToken: CancellationToken);
         });
@@ -102,7 +102,7 @@ public sealed class FFMpegProcessorTests
 
         var ex = await Assert.ThrowsAsync<Exception>(async () =>
         {
-            await Processor.ConvertToPcmS16Le(inputStream, ext,
+            await Processor.ConvertToPcmS16LeAsync(inputStream, ext,
                 (_, __) => throw new Exception("test"),
                 cancellationToken: CancellationToken);
         });
@@ -116,7 +116,7 @@ public sealed class FFMpegProcessorTests
     {
         await Assert.ThrowsAsync<ProcessExecutionException>(async () =>
         {
-            await Processor.ConvertToPcmS16Le(new MemoryStream(),
+            await Processor.ConvertToPcmS16LeAsync(new MemoryStream(),
                 "wav",
                 (_, __) => Task.CompletedTask,
                 cancellationToken: CancellationToken);
@@ -135,7 +135,7 @@ public sealed class FFMpegProcessorTests
         // Act & Assert
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            await Processor.ConvertToPcmS16Le(
+            await Processor.ConvertToPcmS16LeAsync(
                 inputStream: inputStream,
                 inputFormat: "mp3",
                 onOutput: (_, __) => Task.CompletedTask,
@@ -155,7 +155,7 @@ public sealed class FFMpegProcessorTests
 
         var fn = "./data/output.mp3";
         // Act
-        await Processor.ConvertToMp3(
+        await Processor.ConvertToMp3Async(
             testFilePath, fn, isOverwrite: true, cancellationToken: CancellationToken);
         Assert.True(File.Exists(fn));
 
@@ -178,7 +178,7 @@ public sealed class FFMpegProcessorTests
 
         var fn = "./data/output.ogg_";
         // Act
-        await Processor.ConvertToOgg(
+        await Processor.ConvertToOggAsync(
             testFilePath, fn, isOverwrite: true, cancellationToken: CancellationToken);
         Assert.True(File.Exists(fn));
     }
@@ -196,7 +196,7 @@ public sealed class FFMpegProcessorTests
         if (File.Exists(outputPath))
             File.Delete(outputPath);
 
-        await Processor.ConvertToPcmS16Le(
+        await Processor.ConvertToPcmS16LeAsync(
             inputFileName: inputPath,
             outputFileName: outputPath,
             isOverwrite: true,
@@ -208,7 +208,7 @@ public sealed class FFMpegProcessorTests
         Assert.True(File.Exists(outputPath));
 
         var ffprobe = CreateFFProbeExecutor();
-        var (channels, sampleRate) = await ffprobe.GetChannelsAndSampleRate(outputPath, cancellationToken: CancellationToken);
+        var (channels, sampleRate) = await ffprobe.GetChannelsAndSampleRateAsync(outputPath, cancellationToken: CancellationToken);
 
         Assert.Equal(1, channels);
         Assert.Equal(8000, sampleRate);
@@ -225,11 +225,11 @@ public sealed class FFMpegProcessorTests
             File.Delete(outputPath);
 
         // Получаем исходные настройки
-        _ = await IFFProbeExecutor.Default.GetMetaInfo(inputPath, CancellationToken);
-        var (origChannels, origSampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRate(inputPath, CancellationToken);
+        _ = await IFFProbeExecutor.Default.GetMetaInfoAsync(inputPath, CancellationToken);
+        var (origChannels, origSampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRateAsync(inputPath, CancellationToken);
 
         // Act
-        await Processor.ConvertToPcmS16LePreservingFormat(
+        await Processor.ConvertToPcmS16LePreservingFormatAsync(
             inputFileName: inputPath,
             outputFileName: outputPath,
             isOverwrite: true,
@@ -239,7 +239,7 @@ public sealed class FFMpegProcessorTests
         Assert.True(File.Exists(outputPath));
 
         var ffprobe = CreateFFProbeExecutor();
-        var (outChannels, outSampleRate) = await ffprobe.GetChannelsAndSampleRate(outputPath, cancellationToken: CancellationToken);
+        var (outChannels, outSampleRate) = await ffprobe.GetChannelsAndSampleRateAsync(outputPath, cancellationToken: CancellationToken);
 
         Assert.Equal(origChannels, outChannels);
         Assert.Equal(origSampleRate, outSampleRate);
@@ -256,7 +256,7 @@ public sealed class FFMpegProcessorTests
             File.Delete(outputPath);
 
         // Act
-        await Processor.ConvertToPcmS32Le(
+        await Processor.ConvertToPcmS32LeAsync(
             inputFileName: inputPath,
             outputFileName: outputPath,
             outputSampleRate: 48000,
@@ -269,7 +269,7 @@ public sealed class FFMpegProcessorTests
         Assert.True(new FileInfo(outputPath).Length > 0);
 
         var ffprobe = CreateFFProbeExecutor();
-        var (channels, sampleRate) = await ffprobe.GetChannelsAndSampleRate(outputPath, cancellationToken: CancellationToken);
+        var (channels, sampleRate) = await ffprobe.GetChannelsAndSampleRateAsync(outputPath, cancellationToken: CancellationToken);
 
         Assert.Equal(2, channels);
         Assert.Equal(48000, sampleRate);
@@ -286,7 +286,7 @@ public sealed class FFMpegProcessorTests
             File.Delete(outputPath);
 
         // Act
-        await Processor.ConvertToPcmF32LeRaw(
+        await Processor.ConvertToPcmF32LeRawAsync(
             inputFileName: inputPath,
             outputFileName: outputPath,
             outputSampleRate: 48000,
@@ -315,7 +315,7 @@ public sealed class FFMpegProcessorTests
 
         // Act
         var rawBytes = new MemoryStream();
-        await Processor.ConvertToPcmF32LeRaw(inputStream, ext,
+        await Processor.ConvertToPcmF32LeRawAsync(inputStream, ext,
             async (outStream, _) =>
             {
                 await outStream.CopyToAsync(rawBytes, CancellationToken);

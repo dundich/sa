@@ -255,7 +255,7 @@ public static class SecretsCipher
     /// <summary>
     /// Reads the header of an encrypted document without decrypting it.
     /// </summary>
-    public static SecretsFileHeader ReadHeader(string encryptedContent)
+    public static SecretsFileHeader ReadHeaderAsync(string encryptedContent)
     {
         ArgumentNullException.ThrowIfNull(encryptedContent);
 

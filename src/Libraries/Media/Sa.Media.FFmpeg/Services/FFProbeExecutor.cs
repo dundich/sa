@@ -9,7 +9,7 @@ internal sealed partial class FFProbeExecutor(
 {
     public IFFRawExecutor Executor => executor;
 
-    public async Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRate(string filePath, CancellationToken cancellationToken = default)
+    public async Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRateAsync(string filePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
@@ -31,7 +31,7 @@ internal sealed partial class FFProbeExecutor(
         return FFOutputParser.ParseChannelsAndSampleRate(result.StandardOutput);
     }
 
-    public async Task<MediaMetadata> GetMetaInfo(string filePath, CancellationToken cancellationToken = default)
+    public async Task<MediaMetadata> GetMetaInfoAsync(string filePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
@@ -48,7 +48,7 @@ internal sealed partial class FFProbeExecutor(
         return Parse(output.StandardOutput, filePath);
     }
 
-    public async Task<MediaMetadata> GetMetaInfo(Stream audioStream, string inputFormat, CancellationToken cancellationToken = default)
+    public async Task<MediaMetadata> GetMetaInfoAsync(Stream audioStream, string inputFormat, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(audioStream);
         FFmpegArgs.ValidateFormatName(inputFormat, nameof(inputFormat));
