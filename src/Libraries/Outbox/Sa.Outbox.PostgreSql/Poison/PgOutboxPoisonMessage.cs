@@ -20,31 +20,30 @@ namespace Sa.Outbox.PostgreSql.Poison;
 /// duplicates.
 /// </para>
 /// </remarks>
-/// <param name="OutboxId">The message id (<c>msg_id</c>).</param>
-/// <param name="TaskId">The task id (<c>task_id</c>), for correlation with <c>task$</c> and <c>__log$</c>.</param>
-/// <param name="PayloadId">The caller-supplied business id (<c>msg_payload_id</c>).</param>
-/// <param name="PayloadType">The full payload type name, for diagnostics.</param>
-/// <param name="ConsumerGroup">The consumer group that gave up on the message.</param>
-/// <param name="TenantId">The tenant the message belongs to.</param>
-/// <param name="Part">The outbox part name the message was published under.</param>
-/// <param name="Attempt">
-/// The failed delivery number, 1-based and including this one: the stored
-/// <c>delivery_attempt</c> plus one.
-/// </param>
-/// <param name="StatusCode">The permanent code: <c>Error</c>/<c>Error5xx</c> or <c>MaximumAttemptsError</c>.</param>
-/// <param name="StatusMessage">The status text set by the consumer or the courier.</param>
-/// <param name="Exception">The consumer exception.</param>
-/// <param name="Payload">The payload serialized with the core <c>IOutboxMessageSerializer</c>.</param>
-public sealed record PgOutboxPoisonMessage(
-    Guid OutboxId,
-    long TaskId,
-    string PayloadId,
-    string PayloadType,
-    string ConsumerGroup,
-    int TenantId,
-    string Part,
-    int Attempt,
-    DeliveryStatusCode StatusCode,
-    string StatusMessage,
-    Exception Exception,
-    ReadOnlyMemory<byte> Payload);
+public sealed record PgOutboxPoisonMessage
+{
+    /// <summary>OutboxId.</summary>
+    public Guid OutboxId { get; init; }
+    /// <summary>TaskId.</summary>
+    public long TaskId { get; init; }
+    /// <summary>PayloadId.</summary>
+    public required string PayloadId { get; init; }
+    /// <summary>PayloadType.</summary>
+    public required string PayloadType { get; init; }
+    /// <summary>ConsumerGroup.</summary>
+    public required string ConsumerGroup { get; init; }
+    /// <summary>TenantId.</summary>
+    public int TenantId { get; init; }
+    /// <summary>Part.</summary>
+    public required string Part { get; init; }
+    /// <summary>Attempt.</summary>
+    public int Attempt { get; init; }
+    /// <summary>StatusCode.</summary>
+    public DeliveryStatusCode StatusCode { get; init; }
+    /// <summary>StatusMessage.</summary>
+    public required string StatusMessage { get; init; }
+    /// <summary>Exception.</summary>
+    public required Exception Exception { get; init; }
+    /// <summary>Payload.</summary>
+    public ReadOnlyMemory<byte> Payload { get; init; }
+}

@@ -18,29 +18,28 @@ namespace Sa.Outbox.Redis.Poison;
 /// claimed again, so handling is at-least-once, exactly like delivery.
 /// </para>
 /// </remarks>
-/// <param name="OutboxId">The id the pipeline exposed for the message (the packed stream id).</param>
-/// <param name="PayloadId">The caller-supplied business id (<c>OutboxMessage.PayloadId</c>).</param>
-/// <param name="PayloadType">The full payload type name, for diagnostics.</param>
-/// <param name="ConsumerGroup">The consumer group that gave up on the message.</param>
-/// <param name="TenantId">The tenant the message belongs to.</param>
-/// <param name="Part">The part name the message was published under.</param>
-/// <param name="Attempt">
-/// The failed delivery number, 1-based and including this one. A message dropped after
-/// <c>MaxDeliveryAttempts</c> therefore reports the delivery counter from Redis.
-/// </param>
-/// <param name="StatusCode">Why the provider stopped: <c>MaximumAttemptsError</c> for poison, the consumer's permanent code otherwise.</param>
-/// <param name="StatusMessage">The status text: provider message or consumer result message.</param>
-/// <param name="Exception">The consumer exception for a permanent outcome; <see langword="null"/> for the delivery-counter path.</param>
-/// <param name="Payload">The serialized payload, as it was written to the stream.</param>
-public sealed record RedisOutboxPoisonMessage(
-    Guid OutboxId,
-    string PayloadId,
-    string PayloadType,
-    string ConsumerGroup,
-    int TenantId,
-    string Part,
-    int Attempt,
-    DeliveryStatusCode StatusCode,
-    string StatusMessage,
-    Exception? Exception,
-    ReadOnlyMemory<byte> Payload);
+public sealed record RedisOutboxPoisonMessage
+{
+    /// <summary>OutboxId.</summary>
+    public Guid OutboxId { get; init; }
+    /// <summary>PayloadId.</summary>
+    public required string PayloadId { get; init; }
+    /// <summary>PayloadType.</summary>
+    public required string PayloadType { get; init; }
+    /// <summary>ConsumerGroup.</summary>
+    public required string ConsumerGroup { get; init; }
+    /// <summary>TenantId.</summary>
+    public int TenantId { get; init; }
+    /// <summary>Part.</summary>
+    public required string Part { get; init; }
+    /// <summary>Attempt.</summary>
+    public int Attempt { get; init; }
+    /// <summary>StatusCode.</summary>
+    public DeliveryStatusCode StatusCode { get; init; }
+    /// <summary>StatusMessage.</summary>
+    public required string StatusMessage { get; init; }
+    /// <summary>Exception.</summary>
+    public Exception? Exception { get; init; }
+    /// <summary>Payload.</summary>
+    public ReadOnlyMemory<byte> Payload { get; init; }
+}

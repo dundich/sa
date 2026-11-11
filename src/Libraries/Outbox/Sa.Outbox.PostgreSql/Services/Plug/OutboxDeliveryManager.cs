@@ -126,19 +126,21 @@ internal sealed partial class OutboxDeliveryManager(
                 payload = stream.ToArray();
             }
 
-            var message = new PgOutboxPoisonMessage(
-                OutboxId: context.OutboxId,
-                TaskId: context.DeliveryInfo.TaskId,
-                PayloadId: context.PayloadId,
-                PayloadType: typeof(TMessage).FullName ?? typeof(TMessage).Name,
-                ConsumerGroup: context.DeliveryInfo.PartInfo.Part,
-                TenantId: context.PartInfo.TenantId,
-                Part: context.PartInfo.Part,
-                Attempt: context.DeliveryInfo.Attempt + 1,
-                StatusCode: context.DeliveryResult.Code,
-                StatusMessage: context.DeliveryResult.Message,
-                Exception: context.Exception!,
-                Payload: payload);
+            var message = new PgOutboxPoisonMessage
+            {
+                OutboxId = context.OutboxId,
+                TaskId = context.DeliveryInfo.TaskId,
+                PayloadId = context.PayloadId,
+                PayloadType = typeof(TMessage).FullName ?? typeof(TMessage).Name,
+                ConsumerGroup = context.DeliveryInfo.PartInfo.Part,
+                TenantId = context.PartInfo.TenantId,
+                Part = context.PartInfo.Part,
+                Attempt = context.DeliveryInfo.Attempt + 1,
+                StatusCode = context.DeliveryResult.Code,
+                StatusMessage = context.DeliveryResult.Message,
+                Exception = context.Exception!,
+                Payload = payload
+            };
 
             PgOutboxPoisonAction action;
 

@@ -19,18 +19,20 @@ internal static class RedisOutboxPoisonMessageFactory
         string statusMessage,
         Exception? exception = null)
     {
-        return new RedisOutboxPoisonMessage(
-            OutboxId: RedisStreamId.ToOutboxId(entry.Id),
-            PayloadId: (string?)entry[RedisOutboxFields.PayloadId] ?? string.Empty,
-            PayloadType: (string?)entry[RedisOutboxFields.PayloadType] ?? filter.PayloadType,
-            ConsumerGroup: filter.ConsumerGroupId,
-            TenantId: filter.TenantId,
-            Part: filter.Part,
-            Attempt: attempt,
-            StatusCode: statusCode,
-            StatusMessage: statusMessage,
-            Exception: exception,
-            Payload: (byte[]?)entry[RedisOutboxFields.Payload] ?? []);
+        return new RedisOutboxPoisonMessage
+        {
+            OutboxId = RedisStreamId.ToOutboxId(entry.Id),
+            PayloadId = (string?)entry[RedisOutboxFields.PayloadId] ?? string.Empty,
+            PayloadType = (string?)entry[RedisOutboxFields.PayloadType] ?? filter.PayloadType,
+            ConsumerGroup = filter.ConsumerGroupId,
+            TenantId = filter.TenantId,
+            Part = filter.Part,
+            Attempt = attempt,
+            StatusCode = statusCode,
+            StatusMessage = statusMessage,
+            Exception = exception,
+            Payload = (byte[]?)entry[RedisOutboxFields.Payload] ?? []
+        };
     }
 
     /// <summary>Builds the message from a delivered context and its serialized payload.</summary>
@@ -42,17 +44,19 @@ internal static class RedisOutboxPoisonMessageFactory
         DeliveryStatusCode statusCode = context.DeliveryResult.Code;
         string statusMessage = context.DeliveryResult.Message;
 
-        return new RedisOutboxPoisonMessage(
-            OutboxId: context.OutboxId,
-            PayloadId: context.PayloadId,
-            PayloadType: typeof(TMessage).FullName ?? typeof(TMessage).Name,
-            ConsumerGroup: filter.ConsumerGroupId,
-            TenantId: filter.TenantId,
-            Part: filter.Part,
-            Attempt: context.DeliveryInfo.Attempt + 1,
-            StatusCode: statusCode,
-            StatusMessage: statusMessage,
-            Exception: context.Exception,
-            Payload: payload);
+        return new RedisOutboxPoisonMessage
+        {
+            OutboxId = context.OutboxId,
+            PayloadId = context.PayloadId,
+            PayloadType = typeof(TMessage).FullName ?? typeof(TMessage).Name,
+            ConsumerGroup = filter.ConsumerGroupId,
+            TenantId = filter.TenantId,
+            Part = filter.Part,
+            Attempt = context.DeliveryInfo.Attempt + 1,
+            StatusCode = statusCode,
+            StatusMessage = statusMessage,
+            Exception = context.Exception,
+            Payload = payload
+        };
     }
 }
