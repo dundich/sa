@@ -27,9 +27,11 @@ public abstract record StrOrNum
     /// <summary>
     /// String variant of the discriminated union.
     /// </summary>
-    /// <param name="Item">The string value.</param>
-    public record ChoiceStr(string Item) : StrOrNum
+    public record ChoiceStr : StrOrNum
     {
+        /// <summary>The string value.</summary>
+        public required string Item { get; init; }
+
         /// <summary>
         /// Returns the underlying string value.
         /// </summary>
@@ -40,9 +42,11 @@ public abstract record StrOrNum
     /// <summary>
     /// Numeric variant of the discriminated union.
     /// </summary>
-    /// <param name="Item">The <see cref="long"/> value.</param>
-    public record ChoiceNum(long Item) : StrOrNum
+    public record ChoiceNum : StrOrNum
     {
+        /// <summary>The <see cref="long"/> value.</summary>
+        public required long Item { get; init; }
+
         /// <summary>
         /// Returns the invariant-culture representation of the numeric value.
         /// </summary>
@@ -66,22 +70,22 @@ public abstract record StrOrNum
     /// <summary>
     /// Implicitly converts a <see cref="string"/> to a <see cref="StrOrNum"/> wrapping <see cref="ChoiceStr"/>.
     /// </summary>
-    public static implicit operator StrOrNum(string item) => new ChoiceStr(item);
+    public static implicit operator StrOrNum(string item) => new ChoiceStr { Item = item };
 
     /// <summary>
     /// Implicitly converts an <see cref="int"/> to a <see cref="StrOrNum"/> wrapping <see cref="ChoiceNum"/>.
     /// </summary>
-    public static implicit operator StrOrNum(int item) => new ChoiceNum(item);
+    public static implicit operator StrOrNum(int item) => new ChoiceNum { Item = item };
 
     /// <summary>
     /// Implicitly converts a <see cref="long"/> to a <see cref="StrOrNum"/> wrapping <see cref="ChoiceNum"/>.
     /// </summary>
-    public static implicit operator StrOrNum(long item) => new ChoiceNum(item);
+    public static implicit operator StrOrNum(long item) => new ChoiceNum { Item = item };
 
     /// <summary>
     /// Implicitly converts a <see cref="short"/> to a <see cref="StrOrNum"/> wrapping <see cref="ChoiceNum"/>.
     /// </summary>
-    public static implicit operator StrOrNum(short item) => new ChoiceNum(item);
+    public static implicit operator StrOrNum(short item) => new ChoiceNum { Item = item };
 
     /// <summary>
     /// Explicitly extracts the underlying <see cref="string"/> from a <see cref="ChoiceStr"/>,
@@ -150,7 +154,7 @@ public abstract record StrOrNum
     /// text, instead of silently becoming the number 0. Callers that need to detect the corruption
     /// use <see cref="TryFromFmtStr"/>.</remarks>
     public static StrOrNum FromFmtStr(string? fmtInput)
-        => TryFromFmtStr(fmtInput, out StrOrNum? result) ? result : new ChoiceStr(fmtInput ?? string.Empty);
+        => TryFromFmtStr(fmtInput, out StrOrNum? result) ? result : new ChoiceStr { Item = fmtInput ?? string.Empty };
 
     /// <summary>
     /// Strict counterpart of <see cref="FromFmtStr"/>: reports whether <paramref name="fmtInput"/>
@@ -167,7 +171,7 @@ public abstract record StrOrNum
 
         if (fmtInput.StartsWith("s:", StringComparison.Ordinal))
         {
-            result = new ChoiceStr(UnescapeFmt(fmtInput.AsSpan()[2..]));
+            result = new ChoiceStr { Item = UnescapeFmt(fmtInput.AsSpan()[2..]) };
             return true;
         }
 
@@ -175,11 +179,11 @@ public abstract record StrOrNum
         {
             if (StrToLong(fmtInput.AsSpan()[2..]) is not long num) return false;
 
-            result = new ChoiceNum(num);
+            result = new ChoiceNum { Item = num };
             return true;
         }
 
-        result = new ChoiceStr(fmtInput);
+        result = new ChoiceStr { Item = fmtInput };
         return true;
     }
 

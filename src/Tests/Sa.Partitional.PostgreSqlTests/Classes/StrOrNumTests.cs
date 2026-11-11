@@ -114,11 +114,11 @@ public class StrOrNumTests
     {
         // Several values share one column, joined by a comma, so a comma inside a value used to come
         // back as two values and stop matching the request that created the partition.
-        StrOrNum original = new StrOrNum.ChoiceStr(value);
+        StrOrNum original = new StrOrNum.ChoiceStr { Item = value };
 
         StrOrNum parsed = StrOrNum.FromFmtStr(original.ToFmtString());
 
-        Assert.Equal(new StrOrNum.ChoiceStr(value), parsed);
+        Assert.Equal(new StrOrNum.ChoiceStr { Item = value }, parsed);
     }
 
     [Theory]
@@ -133,21 +133,21 @@ public class StrOrNumTests
 
         StrOrNum parsed = StrOrNum.FromFmtStr(original.ToFmtString());
 
-        Assert.Equal(new StrOrNum.ChoiceNum(value), parsed);
+        Assert.Equal(new StrOrNum.ChoiceNum { Item = value }, parsed);
     }
 
     [Fact]
     public void ToFmtString_EscapesTheSeparatorAndTheEscapeCharacter()
     {
-        Assert.Equal(@"s:a\,b", new StrOrNum.ChoiceStr("a,b").ToFmtString());
-        Assert.Equal(@"s:a\\b", new StrOrNum.ChoiceStr(@"a\b").ToFmtString());
-        Assert.Equal("n:42", new StrOrNum.ChoiceNum(42).ToFmtString());
+        Assert.Equal(@"s:a\,b", new StrOrNum.ChoiceStr { Item = "a,b" }.ToFmtString());
+        Assert.Equal(@"s:a\\b", new StrOrNum.ChoiceStr { Item = @"a\b" }.ToFmtString());
+        Assert.Equal("n:42", new StrOrNum.ChoiceNum { Item = 42 }.ToFmtString());
     }
 
     [Fact]
     public void RoundTrip_ThroughJson_KeepsTheSeparator()
     {
-        StrOrNum original = new StrOrNum.ChoiceStr("a,b");
+        StrOrNum original = new StrOrNum.ChoiceStr { Item = "a,b" };
 
         StrOrNum actual = original.ToJson().FromJson<StrOrNum>()!;
 
@@ -210,7 +210,7 @@ public class StrOrNumTests
     [Fact]
     public void PartValues_SeparatorInsideAValue_DoesNotSplitIt()
     {
-        StrOrNum[] values = [new StrOrNum.ChoiceStr("a,b"), new StrOrNum.ChoiceStr("c,d")];
+        StrOrNum[] values = [new StrOrNum.ChoiceStr { Item = "a,b" }, new StrOrNum.ChoiceStr { Item = "c,d" }];
 
         string encoded = string.Join(',', values.Select(v => v.ToFmtString()));
         StrOrNum[] decoded = SqlTemplate.ParseStrOrNums(encoded);

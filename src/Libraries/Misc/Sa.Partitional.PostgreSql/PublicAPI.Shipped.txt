@@ -1,29 +1,44 @@
 #nullable enable
 Sa.Partitional.PostgreSql.ArchiveCollisionMode.Fail = 0 -> Sa.Partitional.PostgreSql.ArchiveCollisionMode
 Sa.Partitional.PostgreSql.ArchiveCollisionMode
+Sa.Partitional.PostgreSql.ArchiveCollisionMode.RenameExisting = 1 -> Sa.Partitional.PostgreSql.ArchiveCollisionMode
 Sa.Partitional.PostgreSql.StrOrNumConverter
 Sa.Partitional.PostgreSql.StrOrNumConverter.StrOrNumConverter() -> void
-Sa.Partitional.PostgreSql.ArchiveCollisionMode.RenameExisting = 1 -> Sa.Partitional.PostgreSql.ArchiveCollisionMode
-Sa.Partitional.PostgreSql.IMigrationTreeBuilder
 Sa.Partitional.PostgreSql.IPartCleanupService
-Sa.Partitional.PostgreSql.ISchemaBuilder
+Sa.Partitional.PostgreSql.IMigrationTreeBuilder
+Sa.Partitional.PostgreSql.IPartConfiguration
 Sa.Partitional.PostgreSql.ISettingsBuilder
-Sa.LimSection<T>
-override Sa.LimSection<T>.EqualityContract.get -> System.Type!
-override Sa.LimSection<T>.ToString() -> string!
-override Sa.LimSection<T>.PrintMembers(System.Text.StringBuilder! builder) -> bool
-static Sa.LimSection<T>.operator !=(Sa.LimSection<T>? left, Sa.LimSection<T>? right) -> bool
-static Sa.LimSection<T>.operator ==(Sa.LimSection<T>? left, Sa.LimSection<T>? right) -> bool
-override Sa.LimSection<T>.GetHashCode() -> int
-override Sa.LimSection<T>.Equals(object? obj) -> bool
-override sealed Sa.LimSection<T>.Equals(Sa.Section<T>? other) -> bool
-virtual Sa.LimSection<T>.Equals(Sa.LimSection<T>? other) -> bool
-override Sa.LimSection<T>.<Clone>$() -> Sa.LimSection<T>!
-Sa.LimSection<T>.LimSection(Sa.LimSection<T>! original) -> void
-Sa.LimSection<T>.Deconstruct(out T Start, out T End, out bool HasEnd) -> void
+Sa.Partitional.PostgreSql.ISchemaBuilder
+Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings>
+Sa.Partitional.PostgreSql.ConversionBackupMode
 Sa.Partitional.PostgreSql.ITableBuilder
-Sa.LimSection<T>.HasEnd.get -> bool
-Sa.LimSection<T>.HasEnd.init -> void
+Sa.Section<T>
+Sa.Section<T>.Start.get -> T
+Sa.Section<T>.Start.init -> void
+virtual Sa.Section<T>.EqualityContract.get -> System.Type!
+Sa.Partitional.PostgreSql.ConversionBackupMode.Keep = 0 -> Sa.Partitional.PostgreSql.ConversionBackupMode
+override Sa.Section<T>.ToString() -> string!
+virtual Sa.Section<T>.PrintMembers(System.Text.StringBuilder! builder) -> bool
+static Sa.Section<T>.operator !=(Sa.Section<T>? left, Sa.Section<T>? right) -> bool
+static Sa.Section<T>.operator ==(Sa.Section<T>? left, Sa.Section<T>? right) -> bool
+override Sa.Section<T>.GetHashCode() -> int
+override Sa.Section<T>.Equals(object? obj) -> bool
+virtual Sa.Section<T>.Equals(Sa.Section<T>? other) -> bool
+virtual Sa.Section<T>.<Clone>$() -> Sa.Section<T>!
+Sa.Section<T>.Section(Sa.Section<T>! original) -> void
+Sa.Section<T>.Deconstruct(out T Start, out T End) -> void
+Sa.Partitional.PostgreSql.ConversionBackupMode.Drop = 1 -> Sa.Partitional.PostgreSql.ConversionBackupMode
+Sa.Section<T>.End.get -> T
+Sa.Section<T>.End.init -> void
+Sa.Partitional.PostgreSql.Migration.MigrationJobConstance
+const Sa.Partitional.PostgreSql.Migration.MigrationJobConstance.MigrationDefaultJobName = "Migration job" -> string!
+static readonly Sa.Partitional.PostgreSql.Migration.MigrationJobConstance.MigrationJobId -> System.Guid
+Sa.HalfSection<T>.End.get -> T?
+Sa.HalfSection<T>.Start.get -> T
+Sa.HalfSection<T>.Start.init -> void
+Sa.HalfSection<T>.End.init -> void
+Sa.HalfSection<T>.HasEnd.get -> bool
+Sa.HalfSection<T>.HasEnd.init -> void
 Sa.HalfSection<T>
 virtual Sa.HalfSection<T>.EqualityContract.get -> System.Type!
 override Sa.HalfSection<T>.ToString() -> string!
@@ -36,41 +51,44 @@ virtual Sa.HalfSection<T>.Equals(Sa.HalfSection<T>? other) -> bool
 virtual Sa.HalfSection<T>.<Clone>$() -> Sa.HalfSection<T>!
 Sa.HalfSection<T>.HalfSection(Sa.HalfSection<T>! original) -> void
 Sa.HalfSection<T>.Deconstruct(out T Start, out T? End, out bool HasEnd) -> void
-Sa.HalfSection<T>.Start.get -> T
-Sa.HalfSection<T>.Start.init -> void
-Sa.HalfSection<T>.End.get -> T?
-Sa.HalfSection<T>.End.init -> void
-Sa.HalfSection<T>.HasEnd.get -> bool
-Sa.HalfSection<T>.HasEnd.init -> void
-Sa.Partitional.PostgreSql.PartCacheSettings
-Sa.Partitional.PostgreSql.PartCacheSettings.PartCacheSettings() -> void
+Sa.Partitional.PostgreSql.RangeKeyType.UnixSeconds = 0 -> Sa.Partitional.PostgreSql.RangeKeyType
+Sa.Partitional.PostgreSql.RangeKeyType.TimestampTz = 1 -> Sa.Partitional.PostgreSql.RangeKeyType
+Sa.Partitional.PostgreSql.RangeKeyType.Date = 3 -> Sa.Partitional.PostgreSql.RangeKeyType
+Sa.Partitional.PostgreSql.IPartTableMigrationSupport
+Sa.Partitional.PostgreSql.RangeKeyType.Timestamp = 2 -> Sa.Partitional.PostgreSql.RangeKeyType
+Sa.Partitional.PostgreSql.IPartitionManager
+Sa.Partitional.PostgreSql.RangeKeyType
+Sa.Partitional.PostgreSql.IMigrationService
+Sa.LimSection<T>.HasEnd.get -> bool
+Sa.LimSection<T>.HasEnd.init -> void
+Sa.LimSection<T>
+override Sa.LimSection<T>.EqualityContract.get -> System.Type!
 Sa.Partitional.PostgreSql.PartCleanupMode
+override Sa.LimSection<T>.ToString() -> string!
+override Sa.LimSection<T>.PrintMembers(System.Text.StringBuilder! builder) -> bool
+static Sa.LimSection<T>.operator !=(Sa.LimSection<T>? left, Sa.LimSection<T>? right) -> bool
+static Sa.LimSection<T>.operator ==(Sa.LimSection<T>? left, Sa.LimSection<T>? right) -> bool
+override Sa.LimSection<T>.GetHashCode() -> int
+override Sa.LimSection<T>.Equals(object? obj) -> bool
+override sealed Sa.LimSection<T>.Equals(Sa.Section<T>? other) -> bool
+virtual Sa.LimSection<T>.Equals(Sa.LimSection<T>? other) -> bool
 Sa.Partitional.PostgreSql.PartCleanupMode.Drop = 0 -> Sa.Partitional.PostgreSql.PartCleanupMode
-Sa.Partitional.PostgreSql.PartCleanupMode.Archive = 1 -> Sa.Partitional.PostgreSql.PartCleanupMode
-Sa.Section<T>
-virtual Sa.Section<T>.EqualityContract.get -> System.Type!
-override Sa.Section<T>.ToString() -> string!
-virtual Sa.Section<T>.PrintMembers(System.Text.StringBuilder! builder) -> bool
-static Sa.Section<T>.operator !=(Sa.Section<T>? left, Sa.Section<T>? right) -> bool
-static Sa.Section<T>.operator ==(Sa.Section<T>? left, Sa.Section<T>? right) -> bool
-override Sa.Section<T>.GetHashCode() -> int
-override Sa.Section<T>.Equals(object? obj) -> bool
-virtual Sa.Section<T>.Equals(Sa.Section<T>? other) -> bool
-virtual Sa.Section<T>.<Clone>$() -> Sa.Section<T>!
-Sa.Section<T>.Section(Sa.Section<T>! original) -> void
-Sa.Section<T>.Deconstruct(out T Start, out T End) -> void
-Sa.Section<T>.Start.get -> T
-Sa.Section<T>.Start.init -> void
-Sa.Section<T>.End.get -> T
-Sa.Section<T>.End.init -> void
-Sa.Partitional.PostgreSql.IPartConfiguration
+override Sa.LimSection<T>.<Clone>$() -> Sa.LimSection<T>!
+Sa.LimSection<T>.LimSection(Sa.LimSection<T>! original) -> void
+Sa.LimSection<T>.Deconstruct(out T Start, out T End, out bool HasEnd) -> void
 Sa.Partitional.PostgreSql.PartCleanupScheduleSettings
 Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.PartCleanupScheduleSettings() -> void
+Sa.Partitional.PostgreSql.PartCacheSettings
+Sa.Partitional.PostgreSql.PartCacheSettings.PartCacheSettings() -> void
+Sa.Partitional.PostgreSql.PartCleanupMode.Archive = 1 -> Sa.Partitional.PostgreSql.PartCleanupMode
+Sa.RangeExtensions
+Sa.Partitional.PostgreSql.MigrationScheduleSettings
+Sa.Partitional.PostgreSql.MigrationScheduleSettings.MigrationScheduleSettings() -> void
+Sa.Partitional.PostgreSql.ITableSettings
+Sa.Partitional.PostgreSql.ITableSettingsStorage
 Sa.Partitional.PostgreSql.Enumeration<T>
 virtual Sa.Partitional.PostgreSql.Enumeration<T>.EqualityContract.get -> System.Type!
 virtual Sa.Partitional.PostgreSql.Enumeration<T>.PrintMembers(System.Text.StringBuilder! builder) -> bool
-Sa.Partitional.PostgreSql.Enumeration<T>.Id.get -> int
-Sa.Partitional.PostgreSql.Enumeration<T>.Id.init -> void
 ~static Sa.Partitional.PostgreSql.Enumeration<T>.operator !=(Sa.Partitional.PostgreSql.Enumeration<T>? left, Sa.Partitional.PostgreSql.Enumeration<T>? right) -> bool
 ~static Sa.Partitional.PostgreSql.Enumeration<T>.operator ==(Sa.Partitional.PostgreSql.Enumeration<T>? left, Sa.Partitional.PostgreSql.Enumeration<T>? right) -> bool
 override Sa.Partitional.PostgreSql.Enumeration<T>.GetHashCode() -> int
@@ -79,103 +97,97 @@ override Sa.Partitional.PostgreSql.Enumeration<T>.Equals(object? obj) -> bool
 ~virtual Sa.Partitional.PostgreSql.Enumeration<T>.<Clone>$() -> Sa.Partitional.PostgreSql.Enumeration<T>!
 ~Sa.Partitional.PostgreSql.Enumeration<T>.Enumeration(Sa.Partitional.PostgreSql.Enumeration<T>! original) -> void
 Sa.Partitional.PostgreSql.Enumeration<T>.Deconstruct(out int Id, out string! Name) -> void
+Sa.Partitional.PostgreSql.Enumeration<T>.Id.get -> int
+Sa.Partitional.PostgreSql.Enumeration<T>.Id.init -> void
 Sa.Partitional.PostgreSql.Enumeration<T>.Name.get -> string!
+Sa.Partitional.PostgreSql.TableRootMode
+Sa.Partitional.PostgreSql.TableRootMode.Adopt = 1 -> Sa.Partitional.PostgreSql.TableRootMode
+Sa.Partitional.PostgreSql.TableRootMode.Create = 0 -> Sa.Partitional.PostgreSql.TableRootMode
 Sa.Partitional.PostgreSql.Enumeration<T>.Name.init -> void
-Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings>
-Sa.Partitional.PostgreSql.ConversionBackupMode.Keep = 0 -> Sa.Partitional.PostgreSql.ConversionBackupMode
-Sa.Partitional.PostgreSql.ConversionBackupMode.Drop = 1 -> Sa.Partitional.PostgreSql.ConversionBackupMode
-Sa.Partitional.PostgreSql.IPartitionManager
-Sa.RangeExtensions
-Sa.Partitional.PostgreSql.MigrationScheduleSettings
-Sa.Partitional.PostgreSql.MigrationScheduleSettings.MigrationScheduleSettings() -> void
-Sa.Partitional.PostgreSql.IMigrationService
-Sa.Partitional.PostgreSql.Enumeration
-static readonly Sa.Partitional.PostgreSql.Migration.MigrationJobConstance.MigrationJobId -> System.Guid
-Sa.Partitional.PostgreSql.Migration.MigrationJobConstance
-const Sa.Partitional.PostgreSql.Migration.MigrationJobConstance.MigrationDefaultJobName = "Migration job" -> string!
-Sa.Partitional.PostgreSql.ConversionBackupMode
-const Sa.Partitional.PostgreSql.Part.RootId = "root" -> string!
-Sa.Partitional.PostgreSql.Part.PartBy.get -> Sa.Partitional.PostgreSql.PartByRange
-Sa.Partitional.PostgreSql.Part.PartBy.init -> void
-static readonly Sa.Partitional.PostgreSql.Part.Root -> Sa.Partitional.PostgreSql.Part!
-Sa.Partitional.PostgreSql.PartByRange
-Sa.Partitional.PostgreSql.PartByRange.Day = 0 -> Sa.Partitional.PostgreSql.PartByRange
-Sa.Partitional.PostgreSql.PartByRange.Month = 1 -> Sa.Partitional.PostgreSql.PartByRange
-Sa.Partitional.PostgreSql.PartByRange.Year = 2 -> Sa.Partitional.PostgreSql.PartByRange
-Sa.Partitional.PostgreSql.Part
-override Sa.Partitional.PostgreSql.Part.ToString() -> string!
-static Sa.Partitional.PostgreSql.Part.operator !=(Sa.Partitional.PostgreSql.Part? left, Sa.Partitional.PostgreSql.Part? right) -> bool
-static Sa.Partitional.PostgreSql.Part.operator ==(Sa.Partitional.PostgreSql.Part? left, Sa.Partitional.PostgreSql.Part? right) -> bool
-override Sa.Partitional.PostgreSql.Part.GetHashCode() -> int
-override Sa.Partitional.PostgreSql.Part.Equals(object? obj) -> bool
-override sealed Sa.Partitional.PostgreSql.Part.Equals(Sa.Partitional.PostgreSql.Enumeration<Sa.Partitional.PostgreSql.Part!>? other) -> bool
-Sa.Partitional.PostgreSql.Part.Equals(Sa.Partitional.PostgreSql.Part? other) -> bool
-override Sa.Partitional.PostgreSql.Part.<Clone>$() -> Sa.Partitional.PostgreSql.Part!
-Sa.Partitional.PostgreSql.Part.Deconstruct(out string! Name, out Sa.Partitional.PostgreSql.PartByRange PartBy) -> void
-Sa.Partitional.PostgreSql.PartByRangeInfo
-override Sa.Partitional.PostgreSql.PartByRangeInfo.ToString() -> string!
-static Sa.Partitional.PostgreSql.PartByRangeInfo.operator !=(Sa.Partitional.PostgreSql.PartByRangeInfo? left, Sa.Partitional.PostgreSql.PartByRangeInfo? right) -> bool
-static Sa.Partitional.PostgreSql.PartByRangeInfo.operator ==(Sa.Partitional.PostgreSql.PartByRangeInfo? left, Sa.Partitional.PostgreSql.PartByRangeInfo? right) -> bool
-override Sa.Partitional.PostgreSql.PartByRangeInfo.GetHashCode() -> int
-override Sa.Partitional.PostgreSql.PartByRangeInfo.Equals(object? obj) -> bool
-Sa.Partitional.PostgreSql.PartByRangeInfo.Equals(Sa.Partitional.PostgreSql.PartByRangeInfo? other) -> bool
-Sa.Partitional.PostgreSql.PartByRangeInfo.<Clone>$() -> Sa.Partitional.PostgreSql.PartByRangeInfo!
-Sa.Partitional.PostgreSql.PartByRangeInfo.PartByRangeInfo() -> void
-Sa.Partitional.PostgreSql.IPartRepository
-Sa.Partitional.PostgreSql.RangeKeyType
-Sa.Partitional.PostgreSql.RangeKeyType.UnixSeconds = 0 -> Sa.Partitional.PostgreSql.RangeKeyType
-Sa.Partitional.PostgreSql.RangeKeyType.TimestampTz = 1 -> Sa.Partitional.PostgreSql.RangeKeyType
-Sa.Partitional.PostgreSql.RangeKeyType.Timestamp = 2 -> Sa.Partitional.PostgreSql.RangeKeyType
-Sa.Partitional.PostgreSql.RangeKeyType.Date = 3 -> Sa.Partitional.PostgreSql.RangeKeyType
-Sa.Partitional.PostgreSql.IPartTableMigrationSupport
-Sa.Partitional.PostgreSql.StrOrNum
-virtual Sa.Partitional.PostgreSql.StrOrNum.EqualityContract.get -> System.Type!
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr
-override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.EqualityContract.get -> System.Type!
-override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.PrintMembers(System.Text.StringBuilder! builder) -> bool
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Item.get -> string!
-static Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.operator !=(Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? left, Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? right) -> bool
-static Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.operator ==(Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? left, Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? right) -> bool
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Item.init -> void
-override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.GetHashCode() -> int
-override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Equals(object? obj) -> bool
-override sealed Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Equals(Sa.Partitional.PostgreSql.StrOrNum? other) -> bool
-virtual Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Equals(Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? other) -> bool
-Sa.Partitional.PostgreSql.PartitionNameContext
-override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.<Clone>$() -> Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr!
-Sa.Partitional.PostgreSql.PartitionNameContext.PartitionNameContext() -> void
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.ChoiceStr(Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr! original) -> void
-~override Sa.Partitional.PostgreSql.PartitionNameContext.ToString() -> string
-static Sa.Partitional.PostgreSql.PartitionNameContext.operator !=(Sa.Partitional.PostgreSql.PartitionNameContext left, Sa.Partitional.PostgreSql.PartitionNameContext right) -> bool
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Deconstruct(out string! Item) -> void
-static Sa.Partitional.PostgreSql.PartitionNameContext.operator ==(Sa.Partitional.PostgreSql.PartitionNameContext left, Sa.Partitional.PostgreSql.PartitionNameContext right) -> bool
-override Sa.Partitional.PostgreSql.PartitionNameContext.GetHashCode() -> int
-~override Sa.Partitional.PostgreSql.PartitionNameContext.Equals(object obj) -> bool
-Sa.Partitional.PostgreSql.PartitionNameContext.Equals(Sa.Partitional.PostgreSql.PartitionNameContext other) -> bool
-Sa.Partitional.PostgreSql.PartitionNameContext.Deconstruct(out string! RootTableName, out string! Separator, out System.Collections.Generic.IReadOnlyList<Sa.Partitional.PostgreSql.StrOrNum!>! Values, out string? RangeSuffix, out bool IsDefaultPartition, out string! IdealName, out int IdealBytes) -> void
 Sa.Partitional.PostgreSql.PartitionNameContext.RootTableName.get -> string!
 Sa.Partitional.PostgreSql.PartitionNameContext.RootTableName.init -> void
 Sa.Partitional.PostgreSql.PartitionNameContext.Separator.get -> string!
 Sa.Partitional.PostgreSql.PartitionNameContext.Separator.init -> void
 Sa.Partitional.PostgreSql.PartitionNameContext.Values.get -> System.Collections.Generic.IReadOnlyList<Sa.Partitional.PostgreSql.StrOrNum!>!
-Sa.Partitional.PostgreSql.PartitionNameContext.RangeSuffix.get -> string?
 Sa.Partitional.PostgreSql.PartitionNameContext.Values.init -> void
-Sa.Partitional.PostgreSql.PartitionNameContext.RangeSuffix.init -> void
 Sa.Partitional.PostgreSql.PartitionNameContext.IsDefaultPartition.get -> bool
+Sa.Partitional.PostgreSql.PartitionNameContext.RangeSuffix.get -> string?
+Sa.Partitional.PostgreSql.PartitionNameContext.RangeSuffix.init -> void
 Sa.Partitional.PostgreSql.PartitionNameContext.IsDefaultPartition.init -> void
-Sa.Partitional.PostgreSql.PartitionNameContext.IdealBytes.get -> int
 Sa.Partitional.PostgreSql.PartitionNameContext.IdealName.get -> string!
+Sa.Partitional.PostgreSql.PartitionNameContext.IdealBytes.get -> int
+const Sa.Partitional.PostgreSql.PartitionNameContext.MaxIdentifierBytes = 63 -> int
 Sa.Partitional.PostgreSql.PartitionNameContext.IdealName.init -> void
 Sa.Partitional.PostgreSql.PartitionNameContext.IdealBytes.init -> void
+Sa.Partitional.PostgreSql.PartitionNameContext
+Sa.Partitional.PostgreSql.PartitionNameContext.PartitionNameContext() -> void
+~override Sa.Partitional.PostgreSql.PartitionNameContext.ToString() -> string
+static Sa.Partitional.PostgreSql.PartitionNameContext.operator !=(Sa.Partitional.PostgreSql.PartitionNameContext left, Sa.Partitional.PostgreSql.PartitionNameContext right) -> bool
+static Sa.Partitional.PostgreSql.PartitionNameContext.operator ==(Sa.Partitional.PostgreSql.PartitionNameContext left, Sa.Partitional.PostgreSql.PartitionNameContext right) -> bool
+override Sa.Partitional.PostgreSql.PartitionNameContext.GetHashCode() -> int
+~override Sa.Partitional.PostgreSql.PartitionNameContext.Equals(object obj) -> bool
+Sa.Partitional.PostgreSql.PartitionNameContext.Equals(Sa.Partitional.PostgreSql.PartitionNameContext other) -> bool
+Sa.Partitional.PostgreSql.PartitionNameContext.Deconstruct(out string! RootTableName, out string! Separator, out System.Collections.Generic.IReadOnlyList<Sa.Partitional.PostgreSql.StrOrNum!>! Values, out string? RangeSuffix, out bool IsDefaultPartition, out string! IdealName, out int IdealBytes) -> void
+Sa.Partitional.PostgreSql.PgPartBy
+static Sa.Partitional.PostgreSql.PgPartBy.operator !=(Sa.Partitional.PostgreSql.PgPartBy? left, Sa.Partitional.PostgreSql.PgPartBy? right) -> bool
+static Sa.Partitional.PostgreSql.PgPartBy.operator ==(Sa.Partitional.PostgreSql.PgPartBy? left, Sa.Partitional.PostgreSql.PgPartBy? right) -> bool
+override Sa.Partitional.PostgreSql.PgPartBy.GetHashCode() -> int
+override Sa.Partitional.PostgreSql.PgPartBy.Equals(object? obj) -> bool
+override sealed Sa.Partitional.PostgreSql.PgPartBy.Equals(Sa.Partitional.PostgreSql.Enumeration<Sa.Partitional.PostgreSql.PgPartBy!>? other) -> bool
+Sa.Partitional.PostgreSql.PgPartBy.Equals(Sa.Partitional.PostgreSql.PgPartBy? other) -> bool
+override Sa.Partitional.PostgreSql.PgPartBy.<Clone>$() -> Sa.Partitional.PostgreSql.PgPartBy!
+Sa.Partitional.PostgreSql.PgPartBy.Deconstruct(out Sa.Partitional.PostgreSql.PartByRange PartByRange, out System.Func<System.DateTimeOffset, Sa.LimSection<System.DateTimeOffset>!>! GetRange, out System.Func<System.DateTimeOffset, string!>! Fmt, out System.Func<string!, System.DateTimeOffset?>! ParseFmt) -> void
+Sa.Partitional.PostgreSql.PgPartBy.GetRange.get -> System.Func<System.DateTimeOffset, Sa.LimSection<System.DateTimeOffset>!>!
+Sa.Partitional.PostgreSql.PgPartBy.GetRange.init -> void
+Sa.Partitional.PostgreSql.PgPartBy.PartByRange.get -> Sa.Partitional.PostgreSql.PartByRange
+static readonly Sa.Partitional.PostgreSql.PgPartBy.Day -> Sa.Partitional.PostgreSql.PgPartBy!
+Sa.Partitional.PostgreSql.PgPartBy.ParseFmt.get -> System.Func<string!, System.DateTimeOffset?>!
+static readonly Sa.Partitional.PostgreSql.PgPartBy.Month -> Sa.Partitional.PostgreSql.PgPartBy!
+Sa.Partitional.PostgreSql.PgPartBy.PartByRange.init -> void
+Sa.Partitional.PostgreSql.PgPartBy.ParseFmt.init -> void
+Sa.Partitional.PostgreSql.PgPartBy.Fmt.get -> System.Func<System.DateTimeOffset, string!>!
+Sa.Partitional.PostgreSql.PgPartBy.Fmt.init -> void
+static readonly Sa.Partitional.PostgreSql.PgPartBy.Year -> Sa.Partitional.PostgreSql.PgPartBy!
+Sa.Partitional.PostgreSql.Enumeration
+Sa.Partitional.PostgreSql.Part
+override Sa.Partitional.PostgreSql.Part.ToString() -> string!
+static Sa.Partitional.PostgreSql.Part.operator !=(Sa.Partitional.PostgreSql.Part? left, Sa.Partitional.PostgreSql.Part? right) -> bool
+static Sa.Partitional.PostgreSql.Part.operator ==(Sa.Partitional.PostgreSql.Part? left, Sa.Partitional.PostgreSql.Part? right) -> bool
+override Sa.Partitional.PostgreSql.Part.GetHashCode() -> int
+static readonly Sa.Partitional.PostgreSql.Part.Root -> Sa.Partitional.PostgreSql.Part!
+Sa.Partitional.PostgreSql.Part.PartBy.get -> Sa.Partitional.PostgreSql.PartByRange
+override Sa.Partitional.PostgreSql.Part.Equals(object? obj) -> bool
+Sa.Partitional.PostgreSql.Part.PartBy.init -> void
+const Sa.Partitional.PostgreSql.Part.RootId = "root" -> string!
+override sealed Sa.Partitional.PostgreSql.Part.Equals(Sa.Partitional.PostgreSql.Enumeration<Sa.Partitional.PostgreSql.Part!>? other) -> bool
+Sa.Partitional.PostgreSql.Part.Equals(Sa.Partitional.PostgreSql.Part? other) -> bool
+override Sa.Partitional.PostgreSql.Part.<Clone>$() -> Sa.Partitional.PostgreSql.Part!
+Sa.Partitional.PostgreSql.Part.Deconstruct(out string! Name, out Sa.Partitional.PostgreSql.PartByRange PartBy) -> void
+Sa.Partitional.PostgreSql.PartByRange.Day = 0 -> Sa.Partitional.PostgreSql.PartByRange
+Sa.Partitional.PostgreSql.PartByRange
+Sa.Partitional.PostgreSql.PartByRange.Year = 2 -> Sa.Partitional.PostgreSql.PartByRange
+Sa.Partitional.PostgreSql.Setup
+Sa.Partitional.PostgreSql.StrOrNum
+virtual Sa.Partitional.PostgreSql.StrOrNum.EqualityContract.get -> System.Type!
+Sa.Partitional.PostgreSql.PartByRangeInfo
 virtual Sa.Partitional.PostgreSql.StrOrNum.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override Sa.Partitional.PostgreSql.PartByRangeInfo.ToString() -> string!
 static Sa.Partitional.PostgreSql.StrOrNum.operator !=(Sa.Partitional.PostgreSql.StrOrNum? left, Sa.Partitional.PostgreSql.StrOrNum? right) -> bool
+static Sa.Partitional.PostgreSql.PartByRangeInfo.operator !=(Sa.Partitional.PostgreSql.PartByRangeInfo? left, Sa.Partitional.PostgreSql.PartByRangeInfo? right) -> bool
 static Sa.Partitional.PostgreSql.StrOrNum.operator ==(Sa.Partitional.PostgreSql.StrOrNum? left, Sa.Partitional.PostgreSql.StrOrNum? right) -> bool
-const Sa.Partitional.PostgreSql.PartitionNameContext.MaxIdentifierBytes = 63 -> int
+static Sa.Partitional.PostgreSql.PartByRangeInfo.operator ==(Sa.Partitional.PostgreSql.PartByRangeInfo? left, Sa.Partitional.PostgreSql.PartByRangeInfo? right) -> bool
+override Sa.Partitional.PostgreSql.PartByRangeInfo.GetHashCode() -> int
 override Sa.Partitional.PostgreSql.StrOrNum.GetHashCode() -> int
+override Sa.Partitional.PostgreSql.PartByRangeInfo.Equals(object? obj) -> bool
+Sa.Partitional.PostgreSql.PartByRangeInfo.Equals(Sa.Partitional.PostgreSql.PartByRangeInfo? other) -> bool
 override Sa.Partitional.PostgreSql.StrOrNum.Equals(object? obj) -> bool
+Sa.Partitional.PostgreSql.PartByRangeInfo.<Clone>$() -> Sa.Partitional.PostgreSql.PartByRangeInfo!
 virtual Sa.Partitional.PostgreSql.StrOrNum.Equals(Sa.Partitional.PostgreSql.StrOrNum? other) -> bool
+Sa.Partitional.PostgreSql.PartByRangeInfo.PartByRangeInfo() -> void
 abstract Sa.Partitional.PostgreSql.StrOrNum.<Clone>$() -> Sa.Partitional.PostgreSql.StrOrNum!
 Sa.Partitional.PostgreSql.StrOrNum.StrOrNum(Sa.Partitional.PostgreSql.StrOrNum! original) -> void
+Sa.Partitional.PostgreSql.PartByRange.Month = 1 -> Sa.Partitional.PostgreSql.PartByRange
+Sa.Partitional.PostgreSql.IPartRepository
 Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum
 override Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.EqualityContract.get -> System.Type!
 override Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.PrintMembers(System.Text.StringBuilder! builder) -> bool
@@ -187,151 +199,111 @@ override sealed Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.Equals(Sa.Partition
 virtual Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.Equals(Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum? other) -> bool
 override Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.<Clone>$() -> Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum!
 Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.ChoiceNum(Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum! original) -> void
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.Deconstruct(out long Item) -> void
-Sa.Partitional.PostgreSql.PgPartBy.GetRange.get -> System.Func<System.DateTimeOffset, Sa.LimSection<System.DateTimeOffset>!>!
-Sa.Partitional.PostgreSql.PgPartBy.Fmt.get -> System.Func<System.DateTimeOffset, string!>!
-Sa.Partitional.PostgreSql.PgPartBy.GetRange.init -> void
-Sa.Partitional.PostgreSql.PgPartBy.Fmt.init -> void
-Sa.Partitional.PostgreSql.PgPartBy.ParseFmt.get -> System.Func<string!, System.DateTimeOffset?>!
-Sa.Partitional.PostgreSql.PgPartBy.ParseFmt.init -> void
-Sa.Partitional.PostgreSql.PgPartBy
-static readonly Sa.Partitional.PostgreSql.PgPartBy.Day -> Sa.Partitional.PostgreSql.PgPartBy!
-static readonly Sa.Partitional.PostgreSql.PgPartBy.Month -> Sa.Partitional.PostgreSql.PgPartBy!
-static Sa.Partitional.PostgreSql.PgPartBy.operator !=(Sa.Partitional.PostgreSql.PgPartBy? left, Sa.Partitional.PostgreSql.PgPartBy? right) -> bool
-static Sa.Partitional.PostgreSql.PgPartBy.operator ==(Sa.Partitional.PostgreSql.PgPartBy? left, Sa.Partitional.PostgreSql.PgPartBy? right) -> bool
-override Sa.Partitional.PostgreSql.PgPartBy.GetHashCode() -> int
-override Sa.Partitional.PostgreSql.PgPartBy.Equals(object? obj) -> bool
-override sealed Sa.Partitional.PostgreSql.PgPartBy.Equals(Sa.Partitional.PostgreSql.Enumeration<Sa.Partitional.PostgreSql.PgPartBy!>? other) -> bool
-Sa.Partitional.PostgreSql.PgPartBy.Equals(Sa.Partitional.PostgreSql.PgPartBy? other) -> bool
-override Sa.Partitional.PostgreSql.PgPartBy.<Clone>$() -> Sa.Partitional.PostgreSql.PgPartBy!
-Sa.Partitional.PostgreSql.PgPartBy.Deconstruct(out Sa.Partitional.PostgreSql.PartByRange PartByRange, out System.Func<System.DateTimeOffset, Sa.LimSection<System.DateTimeOffset>!>! GetRange, out System.Func<System.DateTimeOffset, string!>! Fmt, out System.Func<string!, System.DateTimeOffset?>! ParseFmt) -> void
-static readonly Sa.Partitional.PostgreSql.PgPartBy.Year -> Sa.Partitional.PostgreSql.PgPartBy!
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.Item.get -> long
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.Item.init -> void
-Sa.Partitional.PostgreSql.ITableSettings
-Sa.Partitional.PostgreSql.PgPartBy.PartByRange.get -> Sa.Partitional.PostgreSql.PartByRange
-Sa.Partitional.PostgreSql.PgPartBy.PartByRange.init -> void
-Sa.Partitional.PostgreSql.ITableSettingsStorage
-Sa.Partitional.PostgreSql.TableRootMode
-Sa.Partitional.PostgreSql.TableRootMode.Create = 0 -> Sa.Partitional.PostgreSql.TableRootMode
-Sa.Partitional.PostgreSql.TableRootMode.Adopt = 1 -> Sa.Partitional.PostgreSql.TableRootMode
-Sa.Partitional.PostgreSql.Setup
+Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.ChoiceNum() -> void
+Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr
+override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.EqualityContract.get -> System.Type!
+override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.PrintMembers(System.Text.StringBuilder! builder) -> bool
+static Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.operator !=(Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? left, Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? right) -> bool
+static Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.operator ==(Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? left, Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? right) -> bool
+override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.GetHashCode() -> int
+override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Equals(object? obj) -> bool
+override sealed Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Equals(Sa.Partitional.PostgreSql.StrOrNum? other) -> bool
+virtual Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Equals(Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr? other) -> bool
+override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.<Clone>$() -> Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr!
+Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.ChoiceStr(Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr! original) -> void
+Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.ChoiceStr() -> void
 Sa.Section<T>.Section(T Start, T End) -> void
 Sa.LimSection<T>.LimSection(T Start, T End, bool HasEnd = false) -> void
+Sa.HalfSection<T>.HalfSection(T Start, T? End, bool HasEnd = false) -> void
 static Sa.RangeExtensions.RangeTo<T>(Sa.Section<T>! range, bool hasEnd) -> Sa.LimSection<T>!
 static Sa.RangeExtensions.RangeTo<T>(this T from, T to) -> Sa.Section<T>!
-Sa.HalfSection<T>.HalfSection(T Start, T? End, bool HasEnd = false) -> void
 static Sa.RangeExtensions.RangeTo<T>(this T from, System.Func<T, T>! to) -> Sa.Section<T>!
+Sa.Partitional.PostgreSql.PartCacheSettings.CachedFromDate.set -> void
+Sa.Partitional.PostgreSql.PartCacheSettings.CacheTtl.set -> void
+Sa.Partitional.PostgreSql.PartCacheSettings.CacheTtl.get -> System.TimeSpan
+Sa.Partitional.PostgreSql.PartCacheSettings.CachedFromDate.get -> System.TimeSpan
 static Sa.RangeExtensions.RangeTo<T>(this T from, T to, bool hasEnd) -> Sa.LimSection<T>!
 static Sa.RangeExtensions.RangeTo<T>(this T from, System.Func<T, T>! to, bool hasEnd) -> Sa.LimSection<T>!
-static Sa.RangeExtensions.IsPositive<T>(this Sa.Section<T>! range) -> bool
 static Sa.RangeExtensions.IsPositive<T>(this Sa.LimSection<T>! range) -> bool
+static Sa.RangeExtensions.IsPositive<T>(this Sa.Section<T>! range) -> bool
 static Sa.RangeExtensions.Reverse<T>(this Sa.Section<T>! range) -> Sa.Section<T>!
-Sa.Partitional.PostgreSql.PartCacheSettings.CachedFromDate.set -> void
-Sa.Partitional.PostgreSql.PartCacheSettings.CachedFromDate.get -> System.TimeSpan
-Sa.Partitional.PostgreSql.PartCacheSettings.CacheTtl.get -> System.TimeSpan
-Sa.Partitional.PostgreSql.PartCacheSettings.CacheTtl.set -> void
-Sa.Partitional.PostgreSql.PartCacheSettings.Validate() -> void
+static Sa.RangeExtensions.Reverse<T>(this Sa.LimSection<T>! range) -> Sa.LimSection<T>!
 static Sa.Partitional.PostgreSql.Enumeration.GetAll<T>() -> System.Collections.Generic.IEnumerable<T!>!
 static Sa.Partitional.PostgreSql.Enumeration.DiffId<T>(T! first, T! second) -> int
+static Sa.Partitional.PostgreSql.Enumeration.FromId<T>(int id) -> T!
 Sa.Partitional.PostgreSql.StrOrNum.Match<TResult>(System.Func<string!, TResult>! onChoiceStr, System.Func<long, TResult>! onChoiceNum) -> TResult
 static Sa.Partitional.PostgreSql.StrOrNum.implicit operator Sa.Partitional.PostgreSql.StrOrNum!(string! item) -> Sa.Partitional.PostgreSql.StrOrNum!
-static Sa.Partitional.PostgreSql.Enumeration.FromId<T>(int id) -> T!
-static Sa.Partitional.PostgreSql.Enumeration.FromName<T>(string! name) -> T!
 static Sa.Partitional.PostgreSql.StrOrNum.implicit operator Sa.Partitional.PostgreSql.StrOrNum!(int item) -> Sa.Partitional.PostgreSql.StrOrNum!
-static Sa.Partitional.PostgreSql.Enumeration.TryFromName<T>(string? name, out T! item) -> bool
-static Sa.Partitional.PostgreSql.StrOrNum.implicit operator Sa.Partitional.PostgreSql.StrOrNum!(long item) -> Sa.Partitional.PostgreSql.StrOrNum!
-static Sa.Partitional.PostgreSql.StrOrNum.implicit operator Sa.Partitional.PostgreSql.StrOrNum!(short item) -> Sa.Partitional.PostgreSql.StrOrNum!
-static Sa.Partitional.PostgreSql.StrOrNum.explicit operator string!(Sa.Partitional.PostgreSql.StrOrNum! choice) -> string!
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.ChoiceStr(string! Item) -> void
-static Sa.Partitional.PostgreSql.Enumeration.TryFromId<T>(int id, out T! item) -> bool
-static Sa.RangeExtensions.Reverse<T>(this Sa.LimSection<T>! range) -> Sa.LimSection<T>!
-override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.ToString() -> string!
 static Sa.RangeExtensions.Normalize<T>(this Sa.Section<T>! range) -> Sa.Section<T>!
-static Sa.Partitional.PostgreSql.StrOrNum.explicit operator long(Sa.Partitional.PostgreSql.StrOrNum! choice) -> long
+static Sa.Partitional.PostgreSql.StrOrNum.implicit operator Sa.Partitional.PostgreSql.StrOrNum!(long item) -> Sa.Partitional.PostgreSql.StrOrNum!
 static Sa.RangeExtensions.Normalize<T>(this Sa.LimSection<T>! range) -> Sa.LimSection<T>!
-Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.ChoiceNum(long Item) -> void
-static Sa.Partitional.PostgreSql.StrOrNum.explicit operator int(Sa.Partitional.PostgreSql.StrOrNum! choice) -> int
-static Sa.Partitional.PostgreSql.StrOrNum.explicit operator short(Sa.Partitional.PostgreSql.StrOrNum! choice) -> short
-override Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.ToString() -> string!
 static Sa.RangeExtensions.InRange<T>(this Sa.Section<T>! range, T value) -> bool
-override Sa.Partitional.PostgreSql.StrOrNum.ToString() -> string!
+static Sa.Partitional.PostgreSql.Enumeration.FromName<T>(string! name) -> T!
 static Sa.RangeExtensions.InRange<T>(this Sa.LimSection<T>! range, T value) -> bool
-Sa.Partitional.PostgreSql.Enumeration<T>.Enumeration(int Id, string! Name) -> void
-override Sa.Partitional.PostgreSql.StrOrNumConverter.Read(ref System.Text.Json.Utf8JsonReader reader, System.Type! typeToConvert, System.Text.Json.JsonSerializerOptions! options) -> Sa.Partitional.PostgreSql.StrOrNum!
+Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Item.get -> string!
+static Sa.Partitional.PostgreSql.Enumeration.TryFromName<T>(string? name, out T! item) -> bool
 Sa.Partitional.PostgreSql.IPartCleanupService.CleanAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
-override Sa.Partitional.PostgreSql.StrOrNumConverter.Write(System.Text.Json.Utf8JsonWriter! writer, Sa.Partitional.PostgreSql.StrOrNum! value, System.Text.Json.JsonSerializerOptions! options) -> void
-Sa.Partitional.PostgreSql.StrOrNum.ToFmtString() -> string!
 Sa.Partitional.PostgreSql.IPartCleanupService.CleanAsync(System.DateTimeOffset toDate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
-Sa.Partitional.PostgreSql.Enumeration<T>.CompareTo(T? other) -> int
-static Sa.RangeExtensions.FindEmptyIntervals<T>(this Sa.Section<T>! range, System.Collections.Generic.IEnumerable<Sa.Section<T>!>! busyIntervals) -> System.Collections.Generic.List<Sa.Section<T>!>!
-static Sa.Partitional.PostgreSql.Enumeration<T>.operator <(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
-static Sa.Partitional.PostgreSql.Enumeration<T>.operator <=(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
-static Sa.Partitional.PostgreSql.Enumeration<T>.operator >(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.AsBackgroundJob.get -> bool
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.DropPartsAfterRetention.get -> System.TimeSpan
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.AsBackgroundJob.set -> void
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.DropPartsAfterRetention.set -> void
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.CleanupMode.get -> Sa.Partitional.PostgreSql.PartCleanupMode
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.CleanupMode.set -> void
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ArchiveSchemaName.get -> string!
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ArchiveSchemaName.set -> void
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ArchiveCollisionMode.get -> Sa.Partitional.PostgreSql.ArchiveCollisionMode
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ArchiveCollisionMode.set -> void
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ExecutionInterval.get -> System.TimeSpan
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ExecutionInterval.set -> void
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.InitialDelay.get -> System.TimeSpan
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.InitialDelay.set -> void
+Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.Item.init -> void
+Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.Item.get -> long
+Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.Item.init -> void
+static Sa.Partitional.PostgreSql.Enumeration.TryFromId<T>(int id, out T! item) -> bool
+override Sa.Partitional.PostgreSql.StrOrNum.ChoiceNum.ToString() -> string!
+override Sa.Partitional.PostgreSql.StrOrNum.ChoiceStr.ToString() -> string!
 Sa.Partitional.PostgreSql.IMigrationTreeBuilder.Node(Sa.Partitional.PostgreSql.StrOrNum! value, System.Action<Sa.Partitional.PostgreSql.IMigrationTreeBuilder!>! children) -> Sa.Partitional.PostgreSql.IMigrationTreeBuilder!
 Sa.Partitional.PostgreSql.IMigrationTreeBuilder.Branch(params Sa.Partitional.PostgreSql.StrOrNum![]! values) -> Sa.Partitional.PostgreSql.IMigrationTreeBuilder!
-static Sa.Partitional.PostgreSql.StrOrNum.FromFmtStr(string? fmtInput) -> Sa.Partitional.PostgreSql.StrOrNum!
-static Sa.Partitional.PostgreSql.Enumeration<T>.operator >=(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.PruneEmptyListParts.get -> bool
-override Sa.Partitional.PostgreSql.Enumeration<T>.ToString() -> string!
-static Sa.Partitional.PostgreSql.StrOrNum.TryFromFmtStr(string? fmtInput, out Sa.Partitional.PostgreSql.StrOrNum? result) -> bool
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.PruneEmptyListParts.set -> void
-Sa.Partitional.PostgreSql.ISettingsBuilder.DefaultSchema.get -> string!
-Sa.Partitional.PostgreSql.ISettingsBuilder.AddSchema(System.Action<Sa.Partitional.PostgreSql.ISchemaBuilder!>! schemaBuilder) -> Sa.Partitional.PostgreSql.ISettingsBuilder!
-Sa.Partitional.PostgreSql.ISettingsBuilder.AddSchema(string! schemaName, System.Action<Sa.Partitional.PostgreSql.ISchemaBuilder!>! schemaBuilder) -> Sa.Partitional.PostgreSql.ISettingsBuilder!
-Sa.Partitional.PostgreSql.ISettingsBuilder.Build() -> Sa.Partitional.PostgreSql.ITableSettingsStorage!
-Sa.Partitional.PostgreSql.ITableBuilder.AddFields(params string![]! sqlFields) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.PartByRange(Sa.Partitional.PostgreSql.PgPartBy! partBy, string? timestampFieldName = null) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.TimestampAs(string! timestampFieldName) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.WithRangeKey(Sa.Partitional.PostgreSql.RangeKeyType rangeKeyType) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.PartByList(params string![]! fieldNames) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.WithPartSeparator(string! partSeparator) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.WithLongPartitionName(System.Func<Sa.Partitional.PostgreSql.PartitionNameContext, string!>! factory) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.WithFillFactor(int fillFactor) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.WithDefaultPartition() -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.AddPostSql(System.Func<string!>! postSql) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.AddConstraintPkSql(System.Func<string!>! pkSql) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.Build() -> Sa.Partitional.PostgreSql.ITableSettings!
-Sa.Partitional.PostgreSql.ITableBuilder.WithConversionBackup(Sa.Partitional.PostgreSql.ConversionBackupMode mode) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.AddMigration(Sa.Partitional.PostgreSql.IPartTableMigrationSupport! migrationSupport) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.WithPartTablePostfix(string! postfix) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.AddMigration(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.Task<Sa.Partitional.PostgreSql.StrOrNum![]![]!>!>! getPartValues) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.AddMigration(Sa.Partitional.PostgreSql.StrOrNum![]! branch) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.ITableBuilder.AddMigration(params Sa.Partitional.PostgreSql.StrOrNum![]![]! branches) -> Sa.Partitional.PostgreSql.ITableBuilder!
-static Sa.RangeExtensions.FindIntersections<T>(this Sa.Section<T>! self, Sa.Section<T>! other) -> Sa.Section<T>?
-Sa.Partitional.PostgreSql.IPartitionManager.MigrateAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Partitional.PostgreSql.IPartitionManager.MigrateAsync(System.DateTimeOffset[]! dates, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Partitional.PostgreSql.ITableBuilder.AddMigrationChildren(Sa.Partitional.PostgreSql.StrOrNum! parent, params Sa.Partitional.PostgreSql.StrOrNum![]! children) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.IPartitionManager.EnsurePartsAsync(string! tableName, System.DateTimeOffset periodStart, Sa.Partitional.PostgreSql.StrOrNum![]! partValues, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-Sa.Partitional.PostgreSql.ITableBuilder.AddMigrationTree(System.Action<Sa.Partitional.PostgreSql.IMigrationTreeBuilder!>! tree) -> Sa.Partitional.PostgreSql.ITableBuilder!
-Sa.Partitional.PostgreSql.IMigrationService.OnMigrated.get -> System.Threading.CancellationToken
-Sa.Partitional.PostgreSql.IMigrationService.MigrateAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Partitional.PostgreSql.IMigrationService.MigrateAsync(System.DateTimeOffset[]! dates, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-static Sa.Partitional.PostgreSql.StrOrNum.StrToLong(System.ReadOnlySpan<char> str) -> long?
+Sa.Partitional.PostgreSql.ISchemaBuilder.CreateTable(string! tableName) -> Sa.Partitional.PostgreSql.ITableBuilder!
 Sa.Partitional.PostgreSql.ISchemaBuilder.AddTable(string! tableName, params string![]! sqlFields) -> Sa.Partitional.PostgreSql.ITableBuilder!
 Sa.Partitional.PostgreSql.ISchemaBuilder.AdoptTable(string! tableName, params string![]! sqlFields) -> Sa.Partitional.PostgreSql.ITableBuilder!
 Sa.Partitional.PostgreSql.ISchemaBuilder.Build() -> Sa.Partitional.PostgreSql.ITableSettings![]!
-Sa.Partitional.PostgreSql.IPartConfiguration.AddPartTables(System.Action<System.IServiceProvider!, Sa.Partitional.PostgreSql.ISettingsBuilder!>! configure) -> Sa.Partitional.PostgreSql.IPartConfiguration!
-Sa.Partitional.PostgreSql.IPartConfiguration.AddPartCleanupSchedule(System.Action<Sa.Partitional.PostgreSql.IPartSettingsBuilder<Sa.Partitional.PostgreSql.PartCleanupScheduleSettings!>!>? configure = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
-Sa.Partitional.PostgreSql.IPartConfiguration.AddPartMigrationSchedule(System.Action<Sa.Partitional.PostgreSql.IPartSettingsBuilder<Sa.Partitional.PostgreSql.MigrationScheduleSettings!>!>? configure = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
-Sa.Partitional.PostgreSql.IPartConfiguration.AddPartCache(System.Action<Sa.Partitional.PostgreSql.IPartSettingsBuilder<Sa.Partitional.PostgreSql.PartCacheSettings!>!>? configure = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
+Sa.Partitional.PostgreSql.ISettingsBuilder.DefaultSchema.get -> string!
+Sa.Partitional.PostgreSql.ISettingsBuilder.AddSchema(string! schemaName, System.Action<Sa.Partitional.PostgreSql.ISchemaBuilder!>! schemaBuilder) -> Sa.Partitional.PostgreSql.ISettingsBuilder!
+Sa.Partitional.PostgreSql.ISettingsBuilder.AddSchema(System.Action<Sa.Partitional.PostgreSql.ISchemaBuilder!>! schemaBuilder) -> Sa.Partitional.PostgreSql.ISettingsBuilder!
+Sa.Partitional.PostgreSql.ISettingsBuilder.Build() -> Sa.Partitional.PostgreSql.ITableSettingsStorage!
+Sa.Partitional.PostgreSql.ITableBuilder.AddFields(params string![]! sqlFields) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.PartByList(params string![]! fieldNames) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.PartByRange(Sa.Partitional.PostgreSql.PgPartBy! partBy, string? timestampFieldName = null) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.WithRangeKey(Sa.Partitional.PostgreSql.RangeKeyType rangeKeyType) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.TimestampAs(string! timestampFieldName) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.WithLongPartitionName(System.Func<Sa.Partitional.PostgreSql.PartitionNameContext, string!>! factory) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.WithFillFactor(int fillFactor) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.WithPartTablePostfix(string! postfix) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.WithDefaultPartition() -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.AddPostSql(System.Func<string!>! postSql) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.Build() -> Sa.Partitional.PostgreSql.ITableSettings!
+Sa.Partitional.PostgreSql.ITableBuilder.AddMigration(Sa.Partitional.PostgreSql.IPartTableMigrationSupport! migrationSupport) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.WithConversionBackup(Sa.Partitional.PostgreSql.ConversionBackupMode mode) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.AddMigration(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.Task<Sa.Partitional.PostgreSql.StrOrNum![]![]!>!>! getPartValues) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.AddMigration(Sa.Partitional.PostgreSql.StrOrNum![]! branch) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.AddMigration(params Sa.Partitional.PostgreSql.StrOrNum![]![]! branches) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.WithPartSeparator(string! partSeparator) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.ITableBuilder.AddConstraintPkSql(System.Func<string!>! pkSql) -> Sa.Partitional.PostgreSql.ITableBuilder!
+Sa.Partitional.PostgreSql.PartCacheSettings.Validate() -> void
+Sa.Partitional.PostgreSql.ITableBuilder.AddMigrationChildren(Sa.Partitional.PostgreSql.StrOrNum! parent, params Sa.Partitional.PostgreSql.StrOrNum![]! children) -> Sa.Partitional.PostgreSql.ITableBuilder!
+static Sa.RangeExtensions.FindEmptyIntervals<T>(this Sa.Section<T>! range, System.Collections.Generic.IEnumerable<Sa.Section<T>!>! busyIntervals) -> System.Collections.Generic.List<Sa.Section<T>!>!
+Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings>.FromConfiguration(string! sectionPath) -> Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings!>!
+Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings>.Configure(System.Action<System.IServiceProvider!, TSettings!>! configure) -> Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings!>!
+Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings>.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<TSettings!>!>! configureSettings) -> Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings!>!
+override Sa.Partitional.PostgreSql.StrOrNumConverter.Read(ref System.Text.Json.Utf8JsonReader reader, System.Type! typeToConvert, System.Text.Json.JsonSerializerOptions! options) -> Sa.Partitional.PostgreSql.StrOrNum!
+Sa.Partitional.PostgreSql.IPartitionManager.MigrateAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Partitional.PostgreSql.IPartitionManager.MigrateAsync(System.DateTimeOffset[]! dates, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Partitional.PostgreSql.IPartitionManager.EnsurePartsAsync(string! tableName, System.DateTimeOffset periodStart, Sa.Partitional.PostgreSql.StrOrNum![]! partValues, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override Sa.Partitional.PostgreSql.StrOrNumConverter.Write(System.Text.Json.Utf8JsonWriter! writer, Sa.Partitional.PostgreSql.StrOrNum! value, System.Text.Json.JsonSerializerOptions! options) -> void
+Sa.Partitional.PostgreSql.IMigrationService.OnMigrated.get -> System.Threading.CancellationToken
+Sa.Partitional.PostgreSql.IMigrationService.MigrateAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Partitional.PostgreSql.IMigrationService.MigrateAsync(System.DateTimeOffset[]! dates, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+static Sa.Partitional.PostgreSql.StrOrNum.implicit operator Sa.Partitional.PostgreSql.StrOrNum!(short item) -> Sa.Partitional.PostgreSql.StrOrNum!
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.AsBackgroundJob.get -> bool
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.AsBackgroundJob.set -> void
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.DropPartsAfterRetention.get -> System.TimeSpan
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.CleanupMode.get -> Sa.Partitional.PostgreSql.PartCleanupMode
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.CleanupMode.set -> void
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.DropPartsAfterRetention.set -> void
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ArchiveSchemaName.get -> string!
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ArchiveSchemaName.set -> void
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ArchiveCollisionMode.set -> void
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ExecutionInterval.get -> System.TimeSpan
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.ForwardDays.get -> int
-Sa.Partitional.PostgreSql.IPartConfiguration.AddDataSource(System.Action<Sa.Data.PostgreSql.IDataSourceBuilder!>? configure = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
-Sa.Partitional.PostgreSql.ISchemaBuilder.CreateTable(string! tableName) -> Sa.Partitional.PostgreSql.ITableBuilder!
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.ForwardDays.set -> void
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.AsBackgroundJob.get -> bool
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.AsBackgroundJob.set -> void
@@ -340,78 +312,104 @@ Sa.Partitional.PostgreSql.MigrationScheduleSettings.MigrationJobName.get -> stri
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.ExecutionInterval.get -> System.TimeSpan
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.ExecutionInterval.set -> void
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.WaitMigrationTimeout.get -> System.TimeSpan
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ArchiveCollisionMode.get -> Sa.Partitional.PostgreSql.ArchiveCollisionMode
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.WaitMigrationTimeout.set -> void
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.RunTimeout.get -> System.TimeSpan
+static Sa.Partitional.PostgreSql.StrOrNum.explicit operator string!(Sa.Partitional.PostgreSql.StrOrNum! choice) -> string!
+static Sa.RangeExtensions.FindIntersections<T>(this Sa.Section<T>! self, Sa.Section<T>! other) -> Sa.Section<T>?
 Sa.Partitional.PostgreSql.MigrationScheduleSettings.RunTimeout.set -> void
-Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.Validate() -> void
-static Sa.RangeExtensions.MergeIntervals<T>(this Sa.Section<T>! self, System.Collections.Generic.IEnumerable<Sa.Section<T>!>! intervals) -> System.Collections.Generic.List<Sa.Section<T>!>!
-Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings>.FromConfiguration(string! sectionPath) -> Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings!>!
-Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings>.Configure(System.Action<System.IServiceProvider!, TSettings!>! configure) -> Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings!>!
-Sa.Partitional.PostgreSql.Part.Part(string! Name, Sa.Partitional.PostgreSql.PartByRange PartBy) -> void
-Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings>.Options(System.Action<Microsoft.Extensions.Options.OptionsBuilder<TSettings!>!>! configureSettings) -> Sa.Partitional.PostgreSql.IPartSettingsBuilder<TSettings!>!
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.ExecutionInterval.set -> void
 Sa.Partitional.PostgreSql.IMigrationService.WaitMigrationAsync(System.TimeSpan timeout, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.InitialDelay.get -> System.TimeSpan
+Sa.Partitional.PostgreSql.IPartConfiguration.AddPartTables(System.Action<System.IServiceProvider!, Sa.Partitional.PostgreSql.ISettingsBuilder!>! configure) -> Sa.Partitional.PostgreSql.IPartConfiguration!
+Sa.Partitional.PostgreSql.IPartConfiguration.AddPartCache(System.Action<Sa.Partitional.PostgreSql.IPartSettingsBuilder<Sa.Partitional.PostgreSql.PartCacheSettings!>!>? configure = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
+Sa.Partitional.PostgreSql.IPartConfiguration.AddPartCleanupSchedule(System.Action<Sa.Partitional.PostgreSql.IPartSettingsBuilder<Sa.Partitional.PostgreSql.PartCleanupScheduleSettings!>!>? configure = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
+Sa.Partitional.PostgreSql.IPartConfiguration.AddDataSource(System.Action<Sa.Data.PostgreSql.IDataSourceBuilder!>? configure = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
 Sa.Partitional.PostgreSql.PartByRangeInfo.Id.get -> string!
-Sa.Partitional.PostgreSql.PartByRangeInfo.Id.init -> void
-Sa.Partitional.PostgreSql.PartByRangeInfo.RootTableName.init -> void
-Sa.Partitional.PostgreSql.PartByRangeInfo.RootTableName.get -> string!
-Sa.Partitional.PostgreSql.PartByRangeInfo.PartValues.get -> System.Collections.Generic.IReadOnlyList<Sa.Partitional.PostgreSql.StrOrNum!>!
-Sa.Partitional.PostgreSql.PartByRangeInfo.PartValues.init -> void
-Sa.Partitional.PostgreSql.PartByRangeInfo.PartBy.get -> Sa.Partitional.PostgreSql.PgPartBy!
-Sa.Partitional.PostgreSql.PartByRangeInfo.FromDate.get -> System.DateTimeOffset
-Sa.Partitional.PostgreSql.PartByRangeInfo.PartBy.init -> void
-Sa.Partitional.PostgreSql.PartByRangeInfo.FromDate.init -> void
+Sa.Partitional.PostgreSql.IPartConfiguration.AddPartMigrationSchedule(System.Action<Sa.Partitional.PostgreSql.IPartSettingsBuilder<Sa.Partitional.PostgreSql.MigrationScheduleSettings!>!>? configure = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
+Sa.Partitional.PostgreSql.ITableBuilder.AddMigrationTree(System.Action<Sa.Partitional.PostgreSql.IMigrationTreeBuilder!>! tree) -> Sa.Partitional.PostgreSql.ITableBuilder!
 Sa.Partitional.PostgreSql.IPartRepository.CreatePartAsync(string! tableName, System.DateTimeOffset periodStart, Sa.Partitional.PostgreSql.StrOrNum![]! partValues, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Partitional.PostgreSql.IPartRepository.MigrateAsync(System.DateTimeOffset[]! dates, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
 Sa.Partitional.PostgreSql.IPartRepository.MigrateAsync(System.DateTimeOffset[]! dates, System.Func<string!, System.Threading.Tasks.Task<Sa.Partitional.PostgreSql.StrOrNum![]![]!>!>! resolve, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
 Sa.Partitional.PostgreSql.IPartRepository.GetPartsFromDate(string! tableName, System.DateTimeOffset fromDate, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<Sa.Partitional.PostgreSql.PartByRangeInfo!>!>!
+Sa.Partitional.PostgreSql.IPartRepository.MigrateAsync(System.DateTimeOffset[]! dates, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Sa.Partitional.PostgreSql.IPartRepository.GetPartsToDate(string! tableName, System.DateTimeOffset toDate, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<Sa.Partitional.PostgreSql.PartByRangeInfo!>!>!
 Sa.Partitional.PostgreSql.IPartRepository.DropPartsToDateAsync(string! tableName, System.DateTimeOffset toDate, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
 Sa.Partitional.PostgreSql.IPartRepository.ArchivePartsToDateAsync(string! tableName, System.DateTimeOffset toDate, string! archiveSchemaName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
 Sa.Partitional.PostgreSql.IPartRepository.PruneEmptyListPartsAsync(string! tableName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Partitional.PostgreSql.IPartRepository.ArchivePartsToDateAsync(string! tableName, System.DateTimeOffset toDate, string! archiveSchemaName, Sa.Partitional.PostgreSql.ArchiveCollisionMode collisionMode, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Sa.Partitional.PostgreSql.IPartRepository.GetPartsToDate(string! tableName, System.DateTimeOffset toDate, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<Sa.Partitional.PostgreSql.PartByRangeInfo!>!>!
-Sa.Partitional.PostgreSql.MigrationScheduleSettings.Validate() -> void
-static Sa.RangeExtensions.MergeIntervals<T>(System.Collections.Generic.IEnumerable<Sa.Section<T>!>! intervals) -> System.Collections.Generic.List<Sa.Section<T>!>!
-static Sa.RangeExtensions.Enumerate<T>(this Sa.Section<T>! self, System.Func<T?, T>! next) -> System.Collections.Generic.IEnumerable<T>!
+static Sa.RangeExtensions.MergeIntervals<T>(this Sa.Section<T>! self, System.Collections.Generic.IEnumerable<Sa.Section<T>!>! intervals) -> System.Collections.Generic.List<Sa.Section<T>!>!
 Sa.Partitional.PostgreSql.PartitionNameContext.PartitionNameContext(string! RootTableName, string! Separator, System.Collections.Generic.IReadOnlyList<Sa.Partitional.PostgreSql.StrOrNum!>! Values, string? RangeSuffix, bool IsDefaultPartition, string! IdealName, int IdealBytes) -> void
-static Sa.RangeExtensions.SplitInterval<T>(this Sa.Section<T>! self, params T[]! points) -> System.Collections.Generic.List<Sa.Section<T>!>!
-Sa.Partitional.PostgreSql.PartitionNameContext.ExcessBytes.get -> int
-Sa.Partitional.PostgreSql.ITableSettings.DatabaseSchemaName.get -> string!
+Sa.Partitional.PostgreSql.IPartRepository.ArchivePartsToDateAsync(string! tableName, System.DateTimeOffset toDate, string! archiveSchemaName, Sa.Partitional.PostgreSql.ArchiveCollisionMode collisionMode, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
 Sa.Partitional.PostgreSql.IPartTableMigrationSupport.GetPartsAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Sa.Partitional.PostgreSql.StrOrNum![]![]!>!
+Sa.Partitional.PostgreSql.ITableSettings.FullName.get -> string!
+Sa.Partitional.PostgreSql.ITableSettings.DatabaseSchemaName.get -> string!
+Sa.Partitional.PostgreSql.ITableSettings.RootMode.get -> Sa.Partitional.PostgreSql.TableRootMode
 Sa.Partitional.PostgreSql.ITableSettings.ConversionBackup.get -> Sa.Partitional.PostgreSql.ConversionBackupMode
 Sa.Partitional.PostgreSql.ITableSettings.DatabaseTableName.get -> string!
 Sa.Partitional.PostgreSql.ITableSettings.IdFieldName.get -> string!
 Sa.Partitional.PostgreSql.ITableSettings.Fields.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Sa.Partitional.PostgreSql.ITableSettings.RangeKeyType.get -> Sa.Partitional.PostgreSql.RangeKeyType
 Sa.Partitional.PostgreSql.ITableSettings.PartByListFieldNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Sa.Partitional.PostgreSql.ITableSettings.LongPartitionName.get -> System.Func<Sa.Partitional.PostgreSql.PartitionNameContext, string!>?
+Sa.Partitional.PostgreSql.ITableSettings.PartByRangeFieldName.get -> string!
+Sa.Partitional.PostgreSql.ITableSettings.RangeKeyType.get -> Sa.Partitional.PostgreSql.RangeKeyType
 Sa.Partitional.PostgreSql.ITableSettings.PartBy.get -> Sa.Partitional.PostgreSql.PgPartBy!
 Sa.Partitional.PostgreSql.ITableSettings.Migration.get -> Sa.Partitional.PostgreSql.IPartTableMigrationSupport!
-Sa.Partitional.PostgreSql.ITableSettings.SqlPartSeparator.get -> string!
-Sa.Partitional.PostgreSql.ITableSettings.PostRootSql.get -> System.Func<string!>?
-Sa.Partitional.PostgreSql.ITableSettings.PartByRangeFieldName.get -> string!
 Sa.Partitional.PostgreSql.ITableSettings.ConstraintPkSql.get -> System.Func<string!>?
+Sa.Partitional.PostgreSql.ITableSettings.PostRootSql.get -> System.Func<string!>?
 Sa.Partitional.PostgreSql.ITableSettings.FillFactor.get -> int?
+Sa.Partitional.PostgreSql.ITableSettings.LongPartitionName.get -> System.Func<Sa.Partitional.PostgreSql.PartitionNameContext, string!>?
 Sa.Partitional.PostgreSql.ITableSettings.PartTablePostfix.get -> string!
-Sa.Partitional.PostgreSql.ITableSettingsStorage.Schemas.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
-Sa.Partitional.PostgreSql.ITableSettings.DefaultPartition.get -> bool
+Sa.Partitional.PostgreSql.ITableSettings.SqlPartSeparator.get -> string!
 Sa.Partitional.PostgreSql.ITableSettingsStorage.Tables.get -> System.Collections.Generic.IReadOnlyCollection<Sa.Partitional.PostgreSql.ITableSettings!>!
-Sa.Partitional.PostgreSql.ITableSettings.FullName.get -> string!
-Sa.Partitional.PostgreSql.ITableSettings.RootMode.get -> Sa.Partitional.PostgreSql.TableRootMode
-Sa.Partitional.PostgreSql.PgPartBy.PgPartBy(Sa.Partitional.PostgreSql.PartByRange PartByRange, System.Func<System.DateTimeOffset, Sa.LimSection<System.DateTimeOffset>!>! GetRange, System.Func<System.DateTimeOffset, string!>! Fmt, System.Func<string!, System.DateTimeOffset?>! ParseFmt) -> void
-static Sa.RangeExtensions.SplitInterval<T>(this Sa.Section<T>! self, System.Collections.Generic.IEnumerable<T>! points) -> System.Collections.Generic.List<Sa.Section<T>!>!
+Sa.Partitional.PostgreSql.ITableSettingsStorage.Schemas.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+Sa.Partitional.PostgreSql.PartitionNameContext.ExcessBytes.get -> int
+Sa.Partitional.PostgreSql.Enumeration<T>.Enumeration(int Id, string! Name) -> void
+Sa.Partitional.PostgreSql.ITableSettings.DefaultPartition.get -> bool
+Sa.Partitional.PostgreSql.MigrationScheduleSettings.Validate() -> void
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.InitialDelay.set -> void
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.PruneEmptyListParts.set -> void
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.PruneEmptyListParts.get -> bool
+static Sa.Partitional.PostgreSql.StrOrNum.explicit operator long(Sa.Partitional.PostgreSql.StrOrNum! choice) -> long
+Sa.Partitional.PostgreSql.Part.Part(string! Name, Sa.Partitional.PostgreSql.PartByRange PartBy) -> void
+Sa.Partitional.PostgreSql.PartByRangeInfo.RootTableName.get -> string!
+Sa.Partitional.PostgreSql.PartByRangeInfo.PartValues.get -> System.Collections.Generic.IReadOnlyList<Sa.Partitional.PostgreSql.StrOrNum!>!
+Sa.Partitional.PostgreSql.PartByRangeInfo.RootTableName.init -> void
+Sa.Partitional.PostgreSql.PartByRangeInfo.Id.init -> void
+Sa.Partitional.PostgreSql.PartByRangeInfo.PartValues.init -> void
+Sa.Partitional.PostgreSql.PartByRangeInfo.PartBy.init -> void
+Sa.Partitional.PostgreSql.PartByRangeInfo.PartBy.get -> Sa.Partitional.PostgreSql.PgPartBy!
+Sa.Partitional.PostgreSql.PartByRangeInfo.FromDate.get -> System.DateTimeOffset
+Sa.Partitional.PostgreSql.PartByRangeInfo.FromDate.init -> void
 static Sa.Partitional.PostgreSql.Setup.AddSaPartitional(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<System.IServiceProvider!, Sa.Partitional.PostgreSql.ISettingsBuilder!>! configure, bool? asBackgroundJob = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
+static Sa.Partitional.PostgreSql.StrOrNum.explicit operator int(Sa.Partitional.PostgreSql.StrOrNum! choice) -> int
+static Sa.RangeExtensions.MergeIntervals<T>(System.Collections.Generic.IEnumerable<Sa.Section<T>!>! intervals) -> System.Collections.Generic.List<Sa.Section<T>!>!
+Sa.Partitional.PostgreSql.PgPartBy.PgPartBy(Sa.Partitional.PostgreSql.PartByRange PartByRange, System.Func<System.DateTimeOffset, Sa.LimSection<System.DateTimeOffset>!>! GetRange, System.Func<System.DateTimeOffset, string!>! Fmt, System.Func<string!, System.DateTimeOffset?>! ParseFmt) -> void
 static Sa.Partitional.PostgreSql.PgPartBy.FromRange(Sa.Partitional.PostgreSql.PartByRange range) -> Sa.Partitional.PostgreSql.PgPartBy!
-static Sa.Partitional.PostgreSql.Setup.AddSaPartitional(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! key, System.Action<System.IServiceProvider!, Sa.Partitional.PostgreSql.ISettingsBuilder!>! configure, bool? asBackgroundJob = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
 static Sa.Partitional.PostgreSql.PgPartBy.FromPartName(string? part) -> Sa.Partitional.PostgreSql.PgPartBy!
-static Sa.RangeExtensions.SplitInterval<T>(this Sa.Section<T>! self, System.Func<T?, T>! next) -> System.Collections.Generic.List<Sa.Section<T>!>!
 override Sa.Partitional.PostgreSql.PgPartBy.ToString() -> string!
+Sa.Partitional.PostgreSql.PartCleanupScheduleSettings.Validate() -> void
+static Sa.RangeExtensions.Enumerate<T>(this Sa.Section<T>! self, System.Func<T?, T>! next) -> System.Collections.Generic.IEnumerable<T>!
+static Sa.RangeExtensions.SplitInterval<T>(this Sa.Section<T>! self, params T[]! points) -> System.Collections.Generic.List<Sa.Section<T>!>!
+static Sa.Partitional.PostgreSql.Setup.AddSaPartitional(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! key, System.Action<System.IServiceProvider!, Sa.Partitional.PostgreSql.ISettingsBuilder!>! configure, bool? asBackgroundJob = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!
+static Sa.RangeExtensions.SplitInterval<T>(this Sa.Section<T>! self, System.Collections.Generic.IEnumerable<T>! points) -> System.Collections.Generic.List<Sa.Section<T>!>!
+Sa.Partitional.PostgreSql.Enumeration<T>.CompareTo(T? other) -> int
+static Sa.RangeExtensions.SplitInterval<T>(this Sa.Section<T>! self, System.Func<T?, T>! next) -> System.Collections.Generic.List<Sa.Section<T>!>!
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator <(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator <=(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator >(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
 static Sa.RangeExtensions.IsIntervalIncluded<T>(this Sa.Section<T>! self, Sa.Section<T>! other) -> bool
 static Sa.RangeExtensions.IsPoint<T>(this Sa.Section<T>! self) -> bool
-static Sa.RangeExtensions.IsEmpty<T>(this Sa.Section<T>! self) -> bool
 static Sa.RangeExtensions.IsEmpty<T>(this Sa.LimSection<T>! self) -> bool
+static Sa.RangeExtensions.IsEmpty<T>(this Sa.Section<T>! self) -> bool
 static Sa.RangeExtensions.IsEmpty<T>(this Sa.HalfSection<T>! self) -> bool
-static Sa.RangeExtensions.GetLength(this Sa.Section<System.DateTime>! range) -> System.TimeSpan
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator >=(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
+override Sa.Partitional.PostgreSql.Enumeration<T>.ToString() -> string!
 static Sa.RangeExtensions.GetLength(this Sa.Section<int>! range) -> int
 static Sa.RangeExtensions.GetLength(this Sa.Section<long>! range) -> long
+static Sa.RangeExtensions.GetLength(this Sa.Section<System.DateTime>! range) -> System.TimeSpan
 static Sa.RangeExtensions.GetLength(this Sa.Section<float>! range) -> float
 static Sa.RangeExtensions.GetLength(this Sa.Section<double>! range) -> double
+static Sa.Partitional.PostgreSql.StrOrNum.explicit operator short(Sa.Partitional.PostgreSql.StrOrNum! choice) -> short
+override Sa.Partitional.PostgreSql.StrOrNum.ToString() -> string!
+Sa.Partitional.PostgreSql.StrOrNum.ToFmtString() -> string!
+static Sa.Partitional.PostgreSql.StrOrNum.FromFmtStr(string? fmtInput) -> Sa.Partitional.PostgreSql.StrOrNum!
+static Sa.Partitional.PostgreSql.StrOrNum.TryFromFmtStr(string? fmtInput, out Sa.Partitional.PostgreSql.StrOrNum? result) -> bool
+static Sa.Partitional.PostgreSql.StrOrNum.StrToLong(System.ReadOnlySpan<char> str) -> long?
