@@ -16,27 +16,27 @@ public class SectionTests
     [InlineData(1, 0, true)]    // развёрнутая — ни одного значения не содержит
     public void IsEmpty_PlainSection_OrderedSectionIsNotEmpty(int start, int end, bool expected)
     {
-        Assert.Equal(expected, new Section<int>(start, end).IsEmpty());
+        Assert.Equal(expected, new Section<int> { Start = start, End = end }.IsEmpty());
     }
 
     [Fact]
     public void IsEmpty_PlainSection_InvertedIsEmpty()
     {
-        Assert.True(new Section<int>(10, 0).IsEmpty());
+        Assert.True(new Section<int> { Start = 10, End = 0 }.IsEmpty());
     }
 
     [Fact]
     public void IsEmpty_PlainSection_DefaultValuesAreNotEmpty()
     {
-        // Раньше ровно этот случай возвращал true: new Section<int>(0, 0) == Section<int>.Empty.
-        Assert.False(new Section<int>(0, 0).IsEmpty());
-        Assert.False(new Section<int>(default, default).IsEmpty());
+        // Раньше ровно этот случай возвращал true: new Section<int> { Start = 0, End = 0 } == Section<int>.Empty.
+        Assert.False(new Section<int> { Start = 0, End = 0 }.IsEmpty());
+        Assert.False(new Section<int> { Start = default, End = default }.IsEmpty());
     }
 
     [Fact]
     public void IsEmpty_TimeSpanSection_ZeroWidthSectionIsNotEmpty()
     {
-        var section = new Section<TimeSpan>(TimeSpan.Zero, TimeSpan.Zero);
+        var section = new Section<TimeSpan> { Start = TimeSpan.Zero, End = TimeSpan.Zero };
         Assert.False(section.IsEmpty());
     }
 
@@ -44,10 +44,10 @@ public class SectionTests
     public void IsEmpty_LimSection_ExclusiveEqualBoundsAreEmpty()
     {
         // (0, 0) не содержит ни одного значения, [0, 0] содержит точку 0.
-        Assert.True(new LimSection<int>(0, 0, HasEnd: false).IsEmpty());
-        Assert.False(new LimSection<int>(0, 0, HasEnd: true).IsEmpty());
-        Assert.False(new LimSection<int>(0, 1, HasEnd: false).IsEmpty());
-        Assert.True(new LimSection<int>(5, 1).IsEmpty());
+        Assert.True(new LimSection<int> { Start = 0, End = 0, HasEnd = false }.IsEmpty());
+        Assert.False(new LimSection<int> { Start = 0, End = 0, HasEnd = true }.IsEmpty());
+        Assert.False(new LimSection<int> { Start = 0, End = 1, HasEnd = false }.IsEmpty());
+        Assert.True(new LimSection<int> { Start = 5, End = 1 }.IsEmpty());
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class SectionTests
     {
         foreach (var (start, end) in new[] { (0, 0), (0, 5), (5, 0), (-3, 7) })
         {
-            var section = new Section<int>(start, end);
+            var section = new Section<int> { Start = start, End = end };
             var containsNoValue = !Enumerable.Range(start, Math.Max(0, end - start + 1)).Any(section.InRange);
 
             Assert.Equal(containsNoValue, section.IsEmpty());
@@ -75,7 +75,7 @@ public class SectionTests
     public void IsEmpty_RecordEquality_NoLongerCollidesWithSentinel()
     {
         // То, из-за чего исходный IsEmpty врал: (0, 0) и (default, default) — один и тот же объект.
-        Assert.Equal(new Section<int>(0, 0), new Section<int>(default, default));
+        Assert.Equal(new Section<int> { Start = 0, End = 0 }, new Section<int> { Start = default, End = default });
     }
 
     #region MergeIntervals
@@ -93,9 +93,9 @@ public class SectionTests
     [Fact]
     public void MergeIntervals_SingleInterval_ReturnsItUnchanged()
     {
-        var result = RangeExtensions.MergeIntervals([new Section<int>(10, 20)]);
+        var result = RangeExtensions.MergeIntervals([new Section<int> { Start = 10, End = 20 }]);
 
-        Assert.Equal([new Section<int>(10, 20)], result);
+        Assert.Equal([new Section<int> { Start = 10, End = 20 }], result);
     }
 
     [Fact]
@@ -103,28 +103,28 @@ public class SectionTests
     {
         var result = RangeExtensions.MergeIntervals(
         [
-            new Section<int>(30, 40),
-            new Section<int>(10, 20),
-            new Section<int>(15, 35),
+            new Section<int> { Start = 30, End = 40 },
+            new Section<int> { Start = 10, End = 20 },
+            new Section<int> { Start = 15, End = 35 },
         ]);
 
-        Assert.Equal([new Section<int>(10, 40)], result);
+        Assert.Equal([new Section<int> { Start = 10, End = 40 }], result);
     }
 
     [Fact]
     public void MergeIntervals_TouchingSections_AreMerged()
     {
-        var result = RangeExtensions.MergeIntervals([new Section<int>(10, 20), new Section<int>(20, 30)]);
+        var result = RangeExtensions.MergeIntervals([new Section<int> { Start = 10, End = 20 }, new Section<int> { Start = 20, End = 30 }]);
 
-        Assert.Equal([new Section<int>(10, 30)], result);
+        Assert.Equal([new Section<int> { Start = 10, End = 30 }], result);
     }
 
     [Fact]
     public void MergeIntervals_DisjointSections_AreKeptSeparate()
     {
-        var result = RangeExtensions.MergeIntervals([new Section<int>(10, 20), new Section<int>(30, 40)]);
+        var result = RangeExtensions.MergeIntervals([new Section<int> { Start = 10, End = 20 }, new Section<int> { Start = 30, End = 40 }]);
 
-        Assert.Equal([new Section<int>(10, 20), new Section<int>(30, 40)], result);
+        Assert.Equal([new Section<int> { Start = 10, End = 20 }, new Section<int> { Start = 30, End = 40 }], result);
     }
 
     [Fact]
@@ -133,9 +133,9 @@ public class SectionTests
         // Раньше цикл начинался с первого элемента, то есть currentInterval сравнивался сам с
         // собой. У развёрнутого первого отрезка сравнение не выполнялось, и в результат
         // попадал он дважды.
-        var result = RangeExtensions.MergeIntervals([new Section<int>(20, 10), new Section<int>(30, 40)]);
+        var result = RangeExtensions.MergeIntervals([new Section<int> { Start = 20, End = 10 }, new Section<int> { Start = 30, End = 40 }]);
 
-        Assert.Equal([new Section<int>(20, 10), new Section<int>(30, 40)], result);
+        Assert.Equal([new Section<int> { Start = 20, End = 10 }, new Section<int> { Start = 30, End = 40 }], result);
     }
 
     #endregion
@@ -145,9 +145,9 @@ public class SectionTests
     [Fact]
     public void FindEmptyIntervals_EntireRangeFree_ReturnsWholeRange()
     {
-        var result = new Section<int>(10, 100).FindEmptyIntervals([]);
+        var result = new Section<int> { Start = 10, End = 100 }.FindEmptyIntervals([]);
 
-        Assert.Equal([new Section<int>(10, 100)], result);
+        Assert.Equal([new Section<int> { Start = 10, End = 100 }], result);
     }
 
     [Fact]
@@ -155,9 +155,9 @@ public class SectionTests
     {
         // Раньше currentStart получал конец каждого занятого отрезка безусловно, поэтому граница
         // уезжала назад и ответ начинался левее запроса: [10,100] минус [0,5] давало [5,100].
-        var result = new Section<int>(10, 100).FindEmptyIntervals([new Section<int>(0, 5)]);
+        var result = new Section<int> { Start = 10, End = 100 }.FindEmptyIntervals([new Section<int> { Start = 0, End = 5 }]);
 
-        Assert.Equal([new Section<int>(10, 100)], result);
+        Assert.Equal([new Section<int> { Start = 10, End = 100 }], result);
     }
 
     [Fact]
@@ -165,65 +165,65 @@ public class SectionTests
     {
         // Раньше: currentStart = 300, 100 > 300 ложно, и возвращался пустой список —
         // хотя весь диапазон был свободен.
-        var result = new Section<int>(10, 100).FindEmptyIntervals([new Section<int>(200, 300)]);
+        var result = new Section<int> { Start = 10, End = 100 }.FindEmptyIntervals([new Section<int> { Start = 200, End = 300 }]);
 
-        Assert.Equal([new Section<int>(10, 100)], result);
+        Assert.Equal([new Section<int> { Start = 10, End = 100 }], result);
     }
 
     [Fact]
     public void FindEmptyIntervals_BusySectionInTheMiddle_SplitsRange()
     {
-        var result = new Section<int>(10, 100).FindEmptyIntervals([new Section<int>(20, 30)]);
+        var result = new Section<int> { Start = 10, End = 100 }.FindEmptyIntervals([new Section<int> { Start = 20, End = 30 }]);
 
-        Assert.Equal([new Section<int>(10, 20), new Section<int>(30, 100)], result);
+        Assert.Equal([new Section<int> { Start = 10, End = 20 }, new Section<int> { Start = 30, End = 100 }], result);
     }
 
     [Fact]
     public void FindEmptyIntervals_BusySectionCoversRange_ReturnsEmpty()
     {
-        Assert.Empty(new Section<int>(10, 100).FindEmptyIntervals([new Section<int>(10, 100)]));
-        Assert.Empty(new Section<int>(10, 100).FindEmptyIntervals([new Section<int>(0, 200)]));
+        Assert.Empty(new Section<int> { Start = 10, End = 100 }.FindEmptyIntervals([new Section<int> { Start = 10, End = 100 }]));
+        Assert.Empty(new Section<int> { Start = 10, End = 100 }.FindEmptyIntervals([new Section<int> { Start = 0, End = 200 }]));
     }
 
     [Fact]
     public void FindEmptyIntervals_UnsortedOverlappingBusy_SectionsAreMerged()
     {
-        var result = new Section<int>(10, 100).FindEmptyIntervals(
+        var result = new Section<int> { Start = 10, End = 100 }.FindEmptyIntervals(
         [
-            new Section<int>(60, 70),
-            new Section<int>(0, 20),
-            new Section<int>(15, 30),
-            new Section<int>(200, 300),
+            new Section<int> { Start = 60, End = 70 },
+            new Section<int> { Start = 0, End = 20 },
+            new Section<int> { Start = 15, End = 30 },
+            new Section<int> { Start = 200, End = 300 },
         ]);
 
-        Assert.Equal([new Section<int>(30, 60), new Section<int>(70, 100)], result);
+        Assert.Equal([new Section<int> { Start = 30, End = 60 }, new Section<int> { Start = 70, End = 100 }], result);
     }
 
     [Fact]
     public void FindEmptyIntervals_AdjacentBusySections_DoNotProduceZeroWidthGaps()
     {
-        var result = new Section<int>(10, 100).FindEmptyIntervals(
+        var result = new Section<int> { Start = 10, End = 100 }.FindEmptyIntervals(
         [
-            new Section<int>(20, 30),
-            new Section<int>(30, 40),
+            new Section<int> { Start = 20, End = 30 },
+            new Section<int> { Start = 30, End = 40 },
         ]);
 
-        Assert.Equal([new Section<int>(10, 20), new Section<int>(40, 100)], result);
+        Assert.Equal([new Section<int> { Start = 10, End = 20 }, new Section<int> { Start = 40, End = 100 }], result);
         Assert.All(result, s => Assert.False(s.IsPoint()));
     }
 
     [Fact]
     public void FindEmptyIntervals_DegenerateRange_ReturnsEmpty()
     {
-        Assert.Empty(new Section<int>(10, 10).FindEmptyIntervals([]));
-        Assert.Empty(new Section<int>(10, 10).FindEmptyIntervals([new Section<int>(10, 10)]));
+        Assert.Empty(new Section<int> { Start = 10, End = 10 }.FindEmptyIntervals([]));
+        Assert.Empty(new Section<int> { Start = 10, End = 10 }.FindEmptyIntervals([new Section<int> { Start = 10, End = 10 }]));
     }
 
     [Fact]
     public void FindEmptyIntervals_InvertedRange_ReturnsEmpty()
     {
-        Assert.Empty(new Section<int>(100, 10).FindEmptyIntervals([]));
-        Assert.Empty(new Section<int>(100, 10).FindEmptyIntervals([new Section<int>(50, 60)]));
+        Assert.Empty(new Section<int> { Start = 100, End = 10 }.FindEmptyIntervals([]));
+        Assert.Empty(new Section<int> { Start = 100, End = 10 }.FindEmptyIntervals([new Section<int> { Start = 50, End = 60 }]));
     }
 
     #endregion
@@ -233,9 +233,9 @@ public class SectionTests
     [Fact]
     public void FindIntersections_Overlapping_ReturnsOverlap()
     {
-        var result = new Section<int>(10, 30).FindIntersections(new Section<int>(20, 40));
+        var result = new Section<int> { Start = 10, End = 30 }.FindIntersections(new Section<int> { Start = 20, End = 40 });
 
-        Assert.Equal(new Section<int>(20, 30), result);
+        Assert.Equal(new Section<int> { Start = 20, End = 30 }, result);
         Assert.False(result!.IsPoint());
     }
 
@@ -245,9 +245,9 @@ public class SectionTests
         // Section<T> — закрытый отрезок (InRange включает обе границы), поэтому касание
         // концом есть пересечение, и оно вырождается в точку. Это не дефект, а контракт:
         // пустой результат — только null, а касание от перекрытия отличает IsPoint.
-        var result = new Section<int>(10, 20).FindIntersections(new Section<int>(20, 30));
+        var result = new Section<int> { Start = 10, End = 20 }.FindIntersections(new Section<int> { Start = 20, End = 30 });
 
-        Assert.Equal(new Section<int>(20, 20), result);
+        Assert.Equal(new Section<int> { Start = 20, End = 20 }, result);
         Assert.True(result!.IsPoint());
         Assert.False(result!.IsEmpty());
     }
@@ -257,7 +257,7 @@ public class SectionTests
     [InlineData(0, 5)]     // слева
     public void FindIntersections_Disjoint_ReturnsNull(int otherStart, int otherEnd)
     {
-        var result = new Section<int>(10, 20).FindIntersections(new Section<int>(otherStart, otherEnd));
+        var result = new Section<int> { Start = 10, End = 20 }.FindIntersections(new Section<int> { Start = otherStart, End = otherEnd });
 
         Assert.Null(result);
     }
@@ -265,16 +265,16 @@ public class SectionTests
     [Fact]
     public void FindIntersections_Contained_ReturnsTheInnerSection()
     {
-        var result = new Section<int>(0, 100).FindIntersections(new Section<int>(20, 30));
+        var result = new Section<int> { Start = 0, End = 100 }.FindIntersections(new Section<int> { Start = 20, End = 30 });
 
-        Assert.Equal(new Section<int>(20, 30), result);
+        Assert.Equal(new Section<int> { Start = 20, End = 30 }, result);
     }
 
     [Fact]
     public void FindIntersections_IsCommutative()
     {
-        var a = new Section<int>(10, 30);
-        var b = new Section<int>(20, 40);
+        var a = new Section<int> { Start = 10, End = 30 };
+        var b = new Section<int> { Start = 20, End = 40 };
 
         Assert.Equal(a.FindIntersections(b), b.FindIntersections(a));
     }

@@ -8,7 +8,14 @@ namespace Sa;
 /// </summary>
 /// <typeparam name="T"></typeparam>
 [DebuggerStepThrough]
-public record Section<T>(T Start, T End) where T : IComparable<T>;
+public record Section<T> where T : IComparable<T>
+{
+    /// <summary>The start of the interval.</summary>
+    public required T Start { get; init; }
+
+    /// <summary>The end of the interval.</summary>
+    public required T End { get; init; }
+}
 
 /// <summary>
 /// line with lim end
@@ -17,8 +24,11 @@ public record Section<T>(T Start, T End) where T : IComparable<T>;
 /// <typeparam name="T"></typeparam>
 
 [DebuggerStepThrough]
-public record LimSection<T>(T Start, T End, bool HasEnd = false)
-    : Section<T>(Start, End) where T : IComparable<T>;
+public record LimSection<T> : Section<T> where T : IComparable<T>
+{
+    /// <summary>Whether <see cref="Section{T}.End"/> is included.</summary>
+    public bool HasEnd { get; init; }
+}
 
 /// <summary>
 /// half-line or ray
@@ -43,15 +53,15 @@ public record HalfSection<T>
 public static class RangeExtensions
 {
     /// <summary>Converts a section to <see cref="LimSection{T}"/>, choosing whether the end is inclusive.</summary>
-    public static LimSection<T> RangeTo<T>(Section<T> range, bool hasEnd) where T : IComparable<T> => new(range.Start, range.End, hasEnd);
+    public static LimSection<T> RangeTo<T>(Section<T> range, bool hasEnd) where T : IComparable<T> => new() { Start = range.Start, End = range.End, HasEnd = hasEnd };
     /// <summary>Creates a section from <paramref name="from"/> to <paramref name="to"/>.</summary>
-    public static Section<T> RangeTo<T>(this T from, T to) where T : IComparable<T> => new(from, to);
+    public static Section<T> RangeTo<T>(this T from, T to) where T : IComparable<T> => new() { Start = from, End = to };
     /// <summary>Creates a section from <paramref name="from"/> to the value produced by <paramref name="to"/>.</summary>
-    public static Section<T> RangeTo<T>(this T from, Func<T, T> to) where T : IComparable<T> => new(from, to(from));
+    public static Section<T> RangeTo<T>(this T from, Func<T, T> to) where T : IComparable<T> => new() { Start = from, End = to(from) };
     /// <summary>Creates a limited section from <paramref name="from"/> to <paramref name="to"/>.</summary>
-    public static LimSection<T> RangeTo<T>(this T from, T to, bool hasEnd) where T : IComparable<T> => new(from, to, hasEnd);
+    public static LimSection<T> RangeTo<T>(this T from, T to, bool hasEnd) where T : IComparable<T> => new() { Start = from, End = to, HasEnd = hasEnd };
     /// <summary>Creates a limited section from <paramref name="from"/> to the value produced by <paramref name="to"/>.</summary>
-    public static LimSection<T> RangeTo<T>(this T from, Func<T, T> to, bool hasEnd) where T : IComparable<T> => new(from, to(from), hasEnd);
+    public static LimSection<T> RangeTo<T>(this T from, Func<T, T> to, bool hasEnd) where T : IComparable<T> => new() { Start = from, End = to(from), HasEnd = hasEnd };
     /// <summary>Whether the section is ordered (start is not greater than end).</summary>
     public static bool IsPositive<T>(this Section<T> range) where T : IComparable<T> => range.Start.CompareTo(range.End) <= 0;
     /// <summary>Whether the limited section is ordered (start is not greater than end).</summary>
@@ -112,7 +122,7 @@ public static class RangeExtensions
 
             if (interval.Start.CompareTo(currentStart) > 0)
             {
-                emptyIntervals.Add(new Section<T>(currentStart, interval.Start));
+                emptyIntervals.Add(new Section<T> { Start = currentStart, End = interval.Start });
             }
 
             // Отрезок может кончиться раньше currentStart, если перекрывает предыдущий:
@@ -125,7 +135,7 @@ public static class RangeExtensions
 
         if (range.End.CompareTo(currentStart) > 0)
         {
-            emptyIntervals.Add(new Section<T>(currentStart, range.End));
+            emptyIntervals.Add(new Section<T> { Start = currentStart, End = range.End });
         }
 
         return emptyIntervals;
@@ -148,7 +158,7 @@ public static class RangeExtensions
         {
             T start = self.Start.CompareTo(other.Start) >= 0 ? self.Start : other.Start;
             T end = self.End.CompareTo(other.End) < 0 ? self.End : other.End;
-            return new Section<T>(start, end);
+            return new Section<T> { Start = start, End = end };
         }
 
         return null;
@@ -200,7 +210,7 @@ public static class RangeExtensions
                     ? currentInterval.End
                     : interval.End;
 
-                currentInterval = new Section<T>(currentInterval.Start, currentEnd);
+                currentInterval = new Section<T> { Start = currentInterval.Start, End = currentEnd };
             }
             else
             {
