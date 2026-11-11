@@ -7,8 +7,6 @@ namespace Sa;
 /// экземпляр с конкретным началом и окончанием
 /// </summary>
 /// <typeparam name="T"></typeparam>
-/// <param name="Start">начало</param>
-/// <param name="End">конец</param>
 [DebuggerStepThrough]
 public record Section<T>(T Start, T End) where T : IComparable<T>;
 
@@ -17,9 +15,6 @@ public record Section<T>(T Start, T End) where T : IComparable<T>;
 /// экземпляр с конкретным началом, окончанием и указанием включен ли конец в диапазон
 /// </summary>
 /// <typeparam name="T"></typeparam>
-/// <param name="Start">начало</param>
-/// <param name="End">конец</param>
-/// <param name="HasEnd">Indicates whether the value at the end of the range is included</param>
 
 [DebuggerStepThrough]
 public record LimSection<T>(T Start, T End, bool HasEnd = false)
@@ -30,11 +25,18 @@ public record LimSection<T>(T Start, T End, bool HasEnd = false)
 /// экземпляр с конкретным началом, возможным окончанием и указанием включен ли конец в диапазон
 /// </summary>
 /// <typeparam name="T"></typeparam>
-/// <param name="Start">начало</param>
-/// <param name="End">конец или бесконечность</param>
-/// <param name="HasEnd">Indicates whether the value at the end of the range is included</param>
 [DebuggerStepThrough]
-public record HalfSection<T>(T Start, T? End, bool HasEnd = false);
+public record HalfSection<T>
+{
+    /// <summary>The start of the interval.</summary>
+    public required T Start { get; init; }
+
+    /// <summary>The end of the interval, or <see langword="null"/> for an open-ended range.</summary>
+    public T? End { get; init; }
+
+    /// <summary>Whether <see cref="End"/> is included.</summary>
+    public bool HasEnd { get; init; }
+}
 
 /// <summary>Builds and transforms <see cref="Section{T}"/> and <see cref="LimSection{T}"/> values.</summary>
 [DebuggerStepThrough]

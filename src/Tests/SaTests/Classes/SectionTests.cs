@@ -54,9 +54,9 @@ public class SectionTests
     public void IsEmpty_HalfSection_UnboundedEndIsNotEmpty()
     {
         // End == null означает бесконечность, а не пустоту.
-        Assert.False(new HalfSection<string>("a", null).IsEmpty());
-        Assert.False(new HalfSection<string>("a", "z").IsEmpty());
-        Assert.True(new HalfSection<string>("z", "a").IsEmpty());
+        Assert.False(new HalfSection<string> { Start = "a", End = null }.IsEmpty());
+        Assert.False(new HalfSection<string> { Start = "a", End = "z" }.IsEmpty());
+        Assert.True(new HalfSection<string> { Start = "z", End = "a" }.IsEmpty());
     }
 
     [Fact]
