@@ -6,11 +6,15 @@ namespace Sa.Media;
 /// <summary>
 /// A time interval with an inclusive start and end.
 /// </summary>
-/// <param name="From">The start of the interval.</param>
-/// <param name="To">The end of the interval, or <see cref="TimeSpan.MaxValue"/> for an open-ended range.</param>
 [DebuggerDisplay("[{From.TotalMilliseconds}, {To.TotalMilliseconds}]")]
-public sealed record TimeRange(TimeSpan From, TimeSpan To)
+public sealed record TimeRange
 {
+    /// <summary>The start of the interval.</summary>
+    public TimeSpan From { get; init; }
+
+    /// <summary>The end of the interval, or <see cref="TimeSpan.MaxValue"/> for an open-ended range.</summary>
+    public TimeSpan To { get; init; }
+
     /// <summary>
     /// Gets a value indicating whether the range has a finite end.
     /// </summary>
@@ -70,7 +74,7 @@ public sealed record TimeRange(TimeSpan From, TimeSpan To)
     /// <param name="duration">The length of the range.</param>
     /// <returns>The resulting range.</returns>
     public static TimeRange RangeFromDuration(TimeSpan from, TimeSpan duration)
-        => new(from, from + duration);
+        => new() { From = from, To = from + duration };
 
     /// <summary>
     /// Creates a range with the given start and end.
@@ -79,7 +83,7 @@ public sealed record TimeRange(TimeSpan From, TimeSpan To)
     /// <param name="end">The end of the range.</param>
     /// <returns>The resulting range.</returns>
     public static TimeRange Create(TimeSpan from, TimeSpan end)
-        => new(from, end);
+        => new() { From = from, To = end };
 
     /// <summary>
     /// Creates a range from millisecond bounds.
@@ -88,8 +92,11 @@ public sealed record TimeRange(TimeSpan From, TimeSpan To)
     /// <param name="end">The end of the range in milliseconds.</param>
     /// <returns>The resulting range.</returns>
     public static TimeRange Ms(long from, long end)
-        => new(TimeSpan.FromMilliseconds(from),
-            TimeSpan.MaxValue.TotalMilliseconds > end ? TimeSpan.FromMilliseconds(end) : TimeSpan.MaxValue);
+        => new()
+        {
+            From = TimeSpan.FromMilliseconds(from),
+            To = TimeSpan.MaxValue.TotalMilliseconds > end ? TimeSpan.FromMilliseconds(end) : TimeSpan.MaxValue,
+        };
 
     /// <summary>
     /// Creates a range from second bounds.
@@ -109,6 +116,6 @@ public sealed record TimeRange(TimeSpan From, TimeSpan To)
                 ? TimeSpan.FromSeconds(toSeconds.Value)
                 : TimeSpan.MaxValue;
 
-        return new(from, to);
+        return new() { From = from, To = to };
     }
 }
