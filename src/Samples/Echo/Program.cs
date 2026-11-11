@@ -16,9 +16,7 @@ string outputPath = Path.GetRandomFileName() + ".wav";
 
 try
 {
-    await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(
-        InputPath: wavPath,
-        OutputPath: outputPath), CancellationToken.None);
+    await CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions { InputPath = wavPath, OutputPath = outputPath }, CancellationToken.None);
 
     Console.WriteLine($"Wrote suppressed output: {outputPath}");
     Console.WriteLine($"Output size: {new FileInfo(outputPath).Length} bytes");
