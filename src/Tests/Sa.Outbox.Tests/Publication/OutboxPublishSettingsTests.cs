@@ -98,6 +98,6 @@ public class OutboxPublishSettingsTests
         var settings = new OutboxPublishSettings();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => settings.WithMaxBatchSize(batchSize));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new OutboxPublishSettings(batchSize));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new OutboxPublishSettings { MaxBatchSize = batchSize });
     }
 }

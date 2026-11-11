@@ -48,7 +48,7 @@ internal static class Program
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 1024),
+            new OutboxPublishSettings { MaxBatchSize = 1024 },
             metadata);
 
         var messages = new RefPayload[1024];

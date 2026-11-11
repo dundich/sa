@@ -21,7 +21,7 @@ public class OutboxMessagePublisherTests
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 16),
+            new OutboxPublishSettings { MaxBatchSize = 16 },
             new MetadataConfiguration());
 
         ulong sent = await publisher.Publish(
@@ -43,7 +43,7 @@ public class OutboxMessagePublisherTests
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 2),
+            new OutboxPublishSettings { MaxBatchSize = 2 },
             new MetadataConfiguration());
 
         ulong sent = await publisher.Publish(["a", "b", "c"], tenantId: 1, context: null, TestToken);
@@ -59,7 +59,7 @@ public class OutboxMessagePublisherTests
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 16),
+            new OutboxPublishSettings { MaxBatchSize = 16 },
             new MetadataConfiguration());
 
         ulong sent = await publisher.Publish(["a", "b"], tenantId: 5, context: null, TestToken);
@@ -77,7 +77,7 @@ public class OutboxMessagePublisherTests
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 16),
+            new OutboxPublishSettings { MaxBatchSize = 16 },
             new MetadataConfiguration());
 
         await publisher.Publish(["a", "b"], tenantId: 1, context: null, TestToken);
@@ -93,7 +93,7 @@ public class OutboxMessagePublisherTests
         IOutboxMessagePublisher publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 16),
+            new OutboxPublishSettings { MaxBatchSize = 16 },
             new MetadataConfiguration());
 
         // The 3-argument overload is a default interface method; it must delegate to the
@@ -113,7 +113,7 @@ public class OutboxMessagePublisherTests
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 16),
+            new OutboxPublishSettings { MaxBatchSize = 16 },
             new MetadataConfiguration(),
             new FakeRegistry("Redis", OutboxProviderCapabilities.TenantDetection));
 
@@ -131,7 +131,7 @@ public class OutboxMessagePublisherTests
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 16),
+            new OutboxPublishSettings { MaxBatchSize = 16 },
             new MetadataConfiguration(),
             new FakeRegistry("PostgreSql", OutboxProviderCapabilities.PublishContext));
 
@@ -148,7 +148,7 @@ public class OutboxMessagePublisherTests
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 16),
+            new OutboxPublishSettings { MaxBatchSize = 16 },
             new MetadataConfiguration(),
             new FakeRegistry("Redis", OutboxProviderCapabilities.None));
 

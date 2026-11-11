@@ -20,14 +20,7 @@ namespace Sa.Outbox.Publication;
 /// </remarks>
 public sealed record OutboxPublishSettings
 {
-    private int _maxBatchSize;
-
-    /// <summary>Creates settings with the given publish chunk size (default 256).</summary>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown when <paramref name="MaxBatchSize"/> is not greater than zero.
-    /// </exception>
-    public OutboxPublishSettings(int MaxBatchSize = 256)
-        => this.MaxBatchSize = MaxBatchSize;
+    private int _maxBatchSize = 256;
 
     /// <summary>The number of messages written per publish transaction.</summary>
     /// <exception cref="ArgumentOutOfRangeException">

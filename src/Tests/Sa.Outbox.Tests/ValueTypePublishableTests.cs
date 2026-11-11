@@ -32,7 +32,7 @@ public class ValueTypePublishableTests
         IOutboxMessagePublisher publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 16),
+            new OutboxPublishSettings { MaxBatchSize = 16 },
             metadata);
 
         StructMessage[] messages =
