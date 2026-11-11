@@ -31,7 +31,7 @@
 - **Upsert-семантика** — `ON CONFLICT DO UPDATE` прозрачно обрабатывает повторные загрузки
 - **Запланированная миграция** — фоновое задание заранее создаёт будущие партиции
 - **Фоновая очистка** — удаляет старые партиции за пределами периода удержания
-- **Обработка не-seekable потоков** — буферизует не-seekable потоки через `RecyclableMemoryStreamManager`
+- **Обработка не-seekable потоков** — буферизует не-seekable потоки во внутреннем пуле буфера
 - **Таймстамп в File ID** — включает Unix-секунды для разрешения range-партиций
 
 ---
@@ -191,7 +191,7 @@ Console.WriteLine(result.FileId);
 ### Загрузка не-seekable потока
 
 ```csharp
-// Не-seekable потоки автоматически буферизуются в RecyclableMemoryStreamManager
+// Не-seekable потоки автоматически буферизуются во внутреннем пуле буфера
 await using var nonSeekable = CreateNonSeekableStream();
 
 var result = await storage.UploadAsync(
@@ -371,7 +371,6 @@ keyed-модуле партиционирования и на keyed `IFileStorag
 | `IFileStorage` (keyed по ключу регистрации) | Сам провайдер (singleton на ключ) |
 | `IFileStorage` (безымянный) | По одному alias на регистрацию — их hybrid-контейнер собирает в failover-цепочку |
 | `PostgresFileStorageOptions` (именованы по ключу регистрации) | Живые опции хранилища; читаются через `IOptionsMonitor<...>.Get(key)` |
-| `RecyclableMemoryStreamManager` | Буферизация не-seekable потоков (singleton, общий) |
 | `IPartitionManager` (keyed) | Обслуживание партиций этого хранилища, из `Sa.Partitional.PostgreSql` |
 | `TimeProvider` | По умолчанию `TimeProvider.System`; свой экземпляр влияет на `UploadedAt` |
 
@@ -383,7 +382,6 @@ keyed-модуле партиционирования и на keyed `IFileStorag
 |-------|-----------|
 | `Sa.Data.PostgreSql` | Npgsql клиент (`IPgDataSource`) |
 | `Sa.Partitional.PostgreSql` | Управление партициями (`IPartitionManager`) |
-| `Microsoft.IO.RecyclableMemoryStream` | Эффективная буферизация памяти для не-seekable потоков |
 
 ---
 

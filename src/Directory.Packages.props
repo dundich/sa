@@ -29,7 +29,6 @@
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="StackExchange.Redis" Version="3.4.31" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="$(MicrosoftExtensionsResilienceVersion)" />
-    <PackageVersion Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
   </ItemGroup>
 
   <!--

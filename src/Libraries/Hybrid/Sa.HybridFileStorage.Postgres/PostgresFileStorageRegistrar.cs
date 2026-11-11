@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using Microsoft.IO;
 using Sa.Data.PostgreSql;
 using Sa.HybridFileStorage.Domain;
 using Sa.Partitional.PostgreSql;
@@ -109,16 +108,13 @@ internal static class PostgresFileStorageRegistrar
         Func<IServiceProvider, PostgresFileStorageOptions> readOptions =
             sp => sp.GetRequiredService<IOptionsMonitor<PostgresFileStorageOptions>>().Get(optionsName);
 
-        // 1. RecyclableMemoryStreamManager (singleton, shared across all instances)
-        services.TryAddSingleton<RecyclableMemoryStreamManager>();
-
-        // 2. TimeProvider (singleton, shared)
+        // 1. TimeProvider (singleton, shared)
         services.TryAddSingleton(TimeProvider.System);
 
-        // 3. Resolve the schema once per registration, so the DDL and the storage cannot disagree.
+        // 2. Resolve the schema once per registration, so the DDL and the storage cannot disagree.
         PostgresFileStorageSchema.Register(services, key, moduleKey, sp => readOptions(sp).SchemaName);
 
-        // 4. The keyed partitional module: one table declaration, one migration schedule and one
+        // 3. The keyed partitional module: one table declaration, one migration schedule and one
         //    cleanup schedule — the storage's own retention. The data source is the module's named
         //    one when the chain configures it (AddDataSource), the shared default one otherwise.
         IPartConfiguration partConfig = services.AddSaPartitional(moduleKey, (sp, partBuilder) =>
@@ -156,7 +152,7 @@ internal static class PostgresFileStorageRegistrar
             opts.DropPartsAfterRetention = TimeSpan.FromDays(readOptions(sp).ExpireDays);
         }));
 
-        // 5. Register the keyed IFileStorage — resolvable by key — and alias it as an unkeyed
+        // 4. Register the keyed IFileStorage — resolvable by key — and alias it as an unkeyed
         //    IFileStorage, which is what the hybrid container collects via
         //    sp.GetServices<IFileStorage>() and orders into the failover chain.
         services.AddKeyedSingleton<IFileStorage>(key, CreateStorage);
@@ -180,7 +176,6 @@ internal static class PostgresFileStorageRegistrar
             return new PostgresFileStorage(
                 dataSource: dataSource,
                 partManager: sp.GetRequiredKeyedService<IPartitionManager>(moduleKey),
-                streamManager: sp.GetRequiredService<RecyclableMemoryStreamManager>(),
                 options: options with { SchemaName = sp.GetRequiredKeyedService<PostgresFileStorageSchema>(key).Value },
                 timeProvider: sp.GetRequiredService<TimeProvider>());
         }

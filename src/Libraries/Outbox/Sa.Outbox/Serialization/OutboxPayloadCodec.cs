@@ -1,5 +1,3 @@
-using Microsoft.IO;
-
 namespace Sa.Outbox.Serialization;
 
 /// <summary>
@@ -7,7 +5,7 @@ namespace Sa.Outbox.Serialization;
 /// payload as a self-contained byte array (a Redis stream entry, a broker message, a BLOB column).
 /// </summary>
 /// <remarks>
-/// Serialization goes through a pooled <see cref="RecyclableMemoryStream"/> and is then copied into
+/// Serialization goes through a pooled <see cref="PooledMemoryStream"/> and is then copied into
 /// an exact-size array: the array is what the provider hands to its transport, so it must not be a
 /// slice of a pooled buffer that another thread may reuse in the meantime. A provider that streams
 /// the payload straight into its own writer (the PostgreSQL <c>COPY</c> path) should do that itself
@@ -15,12 +13,10 @@ namespace Sa.Outbox.Serialization;
 /// </remarks>
 public static class OutboxPayloadCodec
 {
-    private static readonly RecyclableMemoryStreamManager _streamManager = new();
-
     /// <summary>Serializes <paramref name="value"/> into a new exact-size byte array.</summary>
     public static byte[] Serialize<T>(IOutboxMessageSerializer serializer, T value)
     {
-        using MemoryStream stream = _streamManager.GetStream();
+        using PooledMemoryStream stream = new();
         serializer.Serialize(stream, value);
         return stream.ToArray();
     }

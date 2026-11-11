@@ -32,7 +32,7 @@ PostgreSQL-backed file storage provider for `Sa.HybridFileStorage`. Stores files
 - **Upsert semantics** — `ON CONFLICT DO UPDATE` handles re-uploads transparently
 - **Scheduled migrations** — background job pre-creates future partitions
 - **Background cleanup** — drops old partitions beyond retention period
-- **Non-seekable stream handling** — buffers unseekable streams into `RecyclableMemoryStreamManager`
+- **Non-seekable stream handling** — buffers unseekable streams into an internal pooled stream
 - **Timestamp in File ID** — includes Unix seconds for range partition resolution
 
 ---
@@ -213,7 +213,7 @@ Console.WriteLine(result.FileId);
 ### Upload Non-Seekable Stream
 
 ```csharp
-// Non-seekable streams are automatically buffered into RecyclableMemoryStreamManager
+// Non-seekable streams are automatically buffered into an internal pooled stream
 await using var nonSeekable = CreateNonSeekableStream();
 
 var result = await storage.UploadAsync(
@@ -394,7 +394,6 @@ partitional module and the keyed `IFileStorage`.
 | `IFileStorage` (keyed by registration key) | The provider itself (singleton per key) |
 | `IFileStorage` (unkeyed) | One alias per registration — what the hybrid container orders into the failover chain |
 | `PostgresFileStorageOptions` (named by the registration key) | The storage's live options; read via `IOptionsMonitor<...>.Get(key)` |
-| `RecyclableMemoryStreamManager` | Buffering for non-seekable streams (singleton, shared) |
 | `IPartitionManager` (keyed) | This storage's partition maintenance, from `Sa.Partitional.PostgreSql` |
 | `TimeProvider` | Defaults to `TimeProvider.System`; register your own to control `UploadedAt` |
 
@@ -406,7 +405,6 @@ partitional module and the keyed `IFileStorage`.
 |---------|---------|
 | `Sa.Data.PostgreSql` | Npgsql client (`IPgDataSource`) |
 | `Sa.Partitional.PostgreSql` | Declarative partition management (`IPartitionManager`) |
-| `Microsoft.IO.RecyclableMemoryStream` | Efficient memory buffering for non-seekable streams |
 
 ---
 

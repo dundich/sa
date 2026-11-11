@@ -1,4 +1,3 @@
-using Microsoft.IO;
 using Npgsql;
 using NpgsqlTypes;
 using Sa.Data.PostgreSql;
@@ -16,7 +15,6 @@ namespace Sa.Outbox.PostgreSql.Commands;
 internal sealed class BulkInsertMsgCommand(
     IPgDataSource dataSource
     , SqlOutboxBuilder sql
-    , RecyclableMemoryStreamManager streamManager
     , IOutboxMessageSerializer serializer
     , IOutboxIdGenerator idGenerator
     , IOutboxTypeResolver hashResolver
@@ -165,7 +163,7 @@ internal sealed class BulkInsertMsgCommand(
         // place — only Length rewinds, the buffer and capacity are reused — and then written as a
         // single Bytea value. The old code called streamManager.GetStream() per message, wrapping
         // every payload in a fresh stream object just to hand it to the Bytea writer.
-        using RecyclableMemoryStream stream = streamManager.GetStream();
+        using PooledMemoryStream stream = new();
 
         OutboxPartInfo partInfo = batch.PartInfo;
 
@@ -181,7 +179,7 @@ internal sealed class BulkInsertMsgCommand(
         string payloadId,
         TMessage payload,
         OutboxPartInfo partInfo,
-        RecyclableMemoryStream stream)
+        PooledMemoryStream stream)
     {
         Guid id = idGenerator.GenId(partInfo.CreatedAt);
 
@@ -206,7 +204,7 @@ internal sealed class BulkInsertMsgCommand(
         writer.Write(partInfo.CreatedAt.ToUnixTimeSeconds(), NpgsqlDbType.Bigint);
     }
 
-    private int WritePayload<TMessage>(RecyclableMemoryStream stream, TMessage? payload)
+    private int WritePayload<TMessage>(PooledMemoryStream stream, TMessage? payload)
     {
         stream.SetLength(0); // rewind in place — the pooled buffer carries over to the next payload
         serializer.Serialize(stream, payload);

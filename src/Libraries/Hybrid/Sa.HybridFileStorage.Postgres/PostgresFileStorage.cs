@@ -1,4 +1,3 @@
-using Microsoft.IO;
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.HybridFileStorage.Domain;
@@ -16,7 +15,6 @@ namespace Sa.HybridFileStorage.Postgres;
 internal sealed class PostgresFileStorage(
     IPgDataSource dataSource,
     IPartitionManager partManager,
-    RecyclableMemoryStreamManager streamManager,
     PostgresFileStorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
@@ -173,11 +171,11 @@ internal sealed class PostgresFileStorage(
                 nameof(metadata));
         }
 
-        // If stream isn't seekable, copy into a recyclable MemoryStream first. Npgsql writes a
+        // If stream isn't seekable, copy into a pooled PooledMemoryStream first. Npgsql writes a
         // Stream parameter from its *current* position, so the buffer has to be rewound before it
         // is handed over — otherwise the copy (left at the end) was stored as an empty `data`.
         // The whole block sits in the try: a failure while buffering (the size guard, a read error)
-        // must still return the buffer to the manager.
+        // must still return the buffer to the pool.
         Stream ms = fileStream;
         bool ownsMs = false;
 
@@ -185,7 +183,7 @@ internal sealed class PostgresFileStorage(
         {
             if (!fileStream.CanSeek)
             {
-                ms = streamManager.GetStream();
+                ms = new PooledMemoryStream();
                 ownsMs = true;
 
                 await CopyToBufferAsync(fileStream, ms, maxBytes, cancellationToken).ConfigureAwait(false);
