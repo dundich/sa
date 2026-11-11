@@ -104,11 +104,13 @@ internal sealed partial class FFProbeExecutor(
         }
     }
 
-    static MediaMetadata ToMetadata(FFProbeMetaDataInfo? metaDataInfo) => new(
-        Duration: metaDataInfo?.Format?.Duration.StrToDouble(),
-        FormatName: metaDataInfo?.Format?.FormatName,
-        BitRate: metaDataInfo?.Format?.BitRate.StrToInt(),
-        Size: metaDataInfo?.Format?.Size.StrToLong());
+    static MediaMetadata ToMetadata(FFProbeMetaDataInfo? metaDataInfo) => new()
+    {
+        Duration = metaDataInfo?.Format?.Duration.StrToDouble(),
+        FormatName = metaDataInfo?.Format?.FormatName,
+        BitRate = metaDataInfo?.Format?.BitRate.StrToInt(),
+        Size = metaDataInfo?.Format?.Size.StrToLong(),
+    };
 
 
     private static partial class Log
