@@ -99,11 +99,13 @@ internal static class Setup
         // is declared; lock extension is honoured through ExtendDelivery.
         services.AddOutboxProvider(
             providerKey,
-            new OutboxProviderDescriptor(
-                "Redis",
-                OutboxProviderCapabilities.TenantDetection
+            new OutboxProviderDescriptor
+            {
+                Name = "Redis",
+                Capabilities = OutboxProviderCapabilities.TenantDetection
                 | OutboxProviderCapabilities.LockExtension,
-                Version: typeof(Setup).Assembly.GetName().Version?.ToString()),
+                Version = typeof(Setup).Assembly.GetName().Version?.ToString(),
+            },
             provider => provider
                 .WithBulkWriter(sp => new OutboxBulkWriter(
                     sp.GetRequiredKeyedService<PublishMessagesCommand>(providerKey)))

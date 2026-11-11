@@ -164,7 +164,17 @@ internal static class Levenshtein
 
     public static class Matcher
     {
-        public record MatchResult<T>(T TargetObject, double Similarity, string? TargetString);
+        public record MatchResult<T>
+        {
+            /// <summary>The matched object.</summary>
+            public required T TargetObject { get; init; }
+
+            /// <summary>Similarity score in the range 0..1.</summary>
+            public double Similarity { get; init; }
+
+            /// <summary>The string the object was compared by, when it was read.</summary>
+            public string? TargetString { get; init; }
+        }
 
         public static IEnumerable<MatchResult<T>> FindMatches<T>(
             string? source,
@@ -188,7 +198,7 @@ internal static class Levenshtein
 
                 if (similarity >= similarityThreshold)
                 {
-                    yield return (new MatchResult<T>(target, similarity, targetString));
+                    yield return new MatchResult<T> { TargetObject = target, Similarity = similarity, TargetString = targetString };
                 }
             }
         }

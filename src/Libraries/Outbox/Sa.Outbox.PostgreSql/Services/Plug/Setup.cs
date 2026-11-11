@@ -55,13 +55,15 @@ internal static class Setup
         // applied through lock_expires_on.
         services.AddOutboxProvider(
             providerKey,
-            new OutboxProviderDescriptor(
-                "PostgreSql",
-                OutboxProviderCapabilities.PublishContext
+            new OutboxProviderDescriptor
+            {
+                Name = "PostgreSql",
+                Capabilities = OutboxProviderCapabilities.PublishContext
                 | OutboxProviderCapabilities.TenantDetection
                 | OutboxProviderCapabilities.LockExtension
                 | OutboxProviderCapabilities.Postponement,
-                Version: typeof(Setup).Assembly.GetName().Version?.ToString()),
+                Version = typeof(Setup).Assembly.GetName().Version?.ToString(),
+            },
             provider => provider
                 .WithBulkWriter(sp => new OutboxBulkWriter(
                     sp.GetRequiredKeyedService<IBulkInsertMsgCommand>(providerKey),

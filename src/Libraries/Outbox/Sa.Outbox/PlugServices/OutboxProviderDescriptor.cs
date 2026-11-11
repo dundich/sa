@@ -17,17 +17,17 @@ namespace Sa.Outbox.PlugServices;
 /// registrations would use, which is why it must not be a type name.
 /// </para>
 /// </remarks>
-/// <param name="Name">The stable provider name, for example <c>PostgreSql</c>. Must not be blank.</param>
-/// <param name="Capabilities">Optional capabilities the storage really provides.</param>
-/// <param name="Version">
-/// Informational version for logs and diagnostics. When omitted,
-/// <c>AddOutboxProvider</c> fills it from the bulk writer's assembly.
-/// </param>
-public sealed record OutboxProviderDescriptor(
-    string Name,
-    OutboxProviderCapabilities Capabilities = OutboxProviderCapabilities.None,
-    string? Version = null)
+public sealed record OutboxProviderDescriptor
 {
+    /// <summary>The stable provider name, for example <c>PostgreSql</c>.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Optional capabilities the storage really provides.</summary>
+    public OutboxProviderCapabilities Capabilities { get; init; } = OutboxProviderCapabilities.None;
+
+    /// <summary>Informational version for logs and diagnostics.</summary>
+    public string? Version { get; init; }
+
     /// <summary>Whether every capability of <paramref name="capability"/> is declared.</summary>
     /// <param name="capability">The capability (or a mask of capabilities) to test.</param>
     /// <returns><see langword="true"/> when all requested flags are present.</returns>

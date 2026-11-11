@@ -273,9 +273,9 @@ public class LevenshteinTests
             // Arrange
             var matches = new List<Levenshtein.Matcher.MatchResult<TestItem1>>
             {
-                new(new TestItem1("test1", 1), 0.5, "test1"),
-                new(new TestItem1("test2", 2), 0.9, "test2"),
-                new(new TestItem1("test3", 3), 0.7, "test3")
+                new() { TargetObject = new TestItem1("test1", 1), Similarity = 0.5, TargetString = "test1" },
+                new() { TargetObject = new TestItem1("test2", 2), Similarity = 0.9, TargetString = "test2" },
+                new() { TargetObject = new TestItem1("test3", 3), Similarity = 0.7, TargetString = "test3" }
             };
 
             // Act

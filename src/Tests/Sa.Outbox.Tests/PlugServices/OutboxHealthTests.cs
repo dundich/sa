@@ -20,7 +20,7 @@ public class OutboxHealthTests
         {
             services.AddSingleton(new OutboxProviderRegistration(
                 key,
-                new OutboxProviderDescriptor($"Provider:{key}"),
+                new OutboxProviderDescriptor { Name = $"Provider:{key}" },
                 HasDeliveryManager: true,
                 HasTenantDetector: false));
 

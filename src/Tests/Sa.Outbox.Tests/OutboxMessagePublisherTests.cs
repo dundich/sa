@@ -158,7 +158,7 @@ public class OutboxMessagePublisherTests
     private sealed class FakeRegistry(string name, OutboxProviderCapabilities capabilities)
         : IOutboxProviderRegistry
     {
-        public OutboxProviderDescriptor Descriptor { get; } = new(name, capabilities);
+        public OutboxProviderDescriptor Descriptor { get; } = new() { Name = name, Capabilities = capabilities };
     }
 
     private sealed class CapturingBulkWriter : IOutboxBulkWriter

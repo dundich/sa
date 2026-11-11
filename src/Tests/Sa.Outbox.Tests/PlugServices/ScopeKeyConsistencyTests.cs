@@ -65,7 +65,7 @@ public class ScopeKeyConsistencyTests
     private static void AddProvider(IServiceCollection services, string providerKey)
         => services.AddOutboxProvider(
             providerKey,
-            new OutboxProviderDescriptor("Test"),
+            new OutboxProviderDescriptor { Name = "Test" },
             provider => provider
                 .WithBulkWriter<FakeWriter>()
                 .WithDeliveryManager<FakeDeliveryManager>());
