@@ -37,9 +37,10 @@ dotnet run --project Samples/Configuration.Web
 ## Что Демонстрирует Этот Пример
 
 1. **Управление Секретами** — плейсхолдеры `{{sa_secret}}` в `appsettings.json` разрешаются из цепочки хранилищ: переменные окружения → аргументы CLI → файл `secrets.txt`.
-2. **Динамическая Конфигурация из PostgreSQL** — настройки приложения (`theme`, `language`, `notifications`) хранятся в таблице БД и отражаются внутри приложения без перезапуска.
-3. **Разбор Аргументов Командной Строки** — класс `Arguments` подключается через `AddSaConfiguration()` для переопределения секретов из CLI.
-4. **Без ORM** — ни EF Core, ни миграций. Только чистый Npgsql с `CREATE TABLE IF NOT EXISTS`.
+2. **Динамическая Конфигурация из PostgreSQL** — общие настройки (`s3_url`, `theme`, `language`, `notifications`) хранятся в таблице `setting` и отражаются внутри приложения без перезапуска.
+3. **Настройки клиентов** — общие значения лежат в `setting`, переопределения каждого клиента — в `client_settings` с разбиением по `client_id`; `GET /settings/{client}` накладывает их поверх ядра, а фоновая служба не регистрируется. Известного клиента можно ещё и внедрить по ключу (`GET /settings/acme`).
+4. **Разбор Аргументов Командной Строки** — класс `Arguments` подключается через `AddSaConfiguration()` для переопределения секретов из CLI.
+5. **Без ORM** — ни EF Core, ни миграций. Только чистый Npgsql с `CREATE TABLE IF NOT EXISTS`.
 
 ---
 
@@ -88,13 +89,8 @@ sa_secret= "ТОП СЕКРЕТ!"
 ```csharp
 var builder = WebApplication.CreateSlimBuilder(args);
 
-// Статический слой: хост уже добавил appsettings/env/args. Sa добавляет pass секретов и
-// клиентский оверлей.
-builder.Configuration.AddSaConfiguration(sa =>
-{
-    sa.UseSecrets();
-    sa.UseClients();
-});
+// Статический слой: хост уже добавил appsettings/env/args. Sa добавляет pass секретов.
+builder.Configuration.AddSaConfiguration(sa => sa.UseSecrets());
 
 const string PG_KEY = "sa:pg:connection";
 string connectionString = builder.Configuration[PG_KEY]
@@ -102,105 +98,171 @@ string connectionString = builder.Configuration[PG_KEY]
 
 using var ds = IPgDataSource.Create(connectionString);
 
-// Одна таблица для всего: client_id NULL — базовые значения, непустой client_id — переопределения
-// этого клиента.
+// Две таблицы: `setting` хранит общие значения ядра, `client_settings` — переопределения
+// клиентов с разбиением по client_id. Имена ключей в обеих таблицах одинаковые.
 ds.ExecuteScalar("""
-    CREATE TABLE IF NOT EXISTS settings (
-        client_id TEXT,
-        key       TEXT NOT NULL,
-        value     TEXT NOT NULL
+    CREATE TABLE IF NOT EXISTS setting (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
     );
 
-    CREATE UNIQUE INDEX IF NOT EXISTS settings_client_key
-        ON settings ((COALESCE(client_id, '')), key);
+    INSERT INTO setting (key, value) VALUES
+        ('s3_url',        'A'),
+        ('theme',         'dark'),
+        ('language',      'en'),
+        ('notifications', 'enabled')
+    ON CONFLICT DO NOTHING;
 
-    INSERT INTO settings (client_id, key, value) VALUES
-        (NULL,   'theme',         'dark'),
-        (NULL,   'language',      'en'),
-        (NULL,   'notifications', 'enabled'),
+    CREATE TABLE IF NOT EXISTS client_settings (
+        client_id TEXT NOT NULL,
+        key       TEXT NOT NULL,
+        value     TEXT NOT NULL,
+        PRIMARY KEY (client_id, key)
+    );
+
+    INSERT INTO client_settings (client_id, key, value) VALUES
+        ('acme', 's3_url',        'B1'),
         ('acme', 'theme',         'light'),
         ('acme', 'notifications', 'disabled'),
+        ('beta', 's3_url',        'C'),
         ('beta', 'language',      'de')
     ON CONFLICT DO NOTHING;
 """, null).Wait();
 
-// Динамический слой: пул приложения, поэтому второй пул не открывается, а явная стратегия
-// делает значения доступными сразу.
+// Динамический слой: значения ядра приходят из `setting`, через пул приложения.
 builder.Configuration.AddSaPostgreSqlConfiguration(
     PgConfigurationConnection.DataSource(ds),
-    new PostgreSqlConfigurationOptions(
-        // Порядок колонок — часть контракта: client, key, value.
-        SelectSql: "SELECT client_id, key, value FROM settings")
+    new PostgreSqlConfigurationOptions
     {
-        ClientColumn = "client_id",
+        SelectSql = "SELECT key, value FROM setting",
     });
 
-// Runtime: обновление по требованию (фонового таймера по умолчанию нет) и keyed IConfiguration
-// на каждого клиента.
-builder.Services.AddSaConfigurationRuntime(builder.Configuration, runtime =>
+// Клиентский слой: один запрос возвращает строки всех клиентов, реестр группирует их по
+// client_id и строит корень на клиента. Ключи хранятся как есть — без префикса.
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
 {
-    runtime.KeyedClientConfigurations = true;
+    clients.Add<IPgDataSource>(static (dataSource, cancellationToken) =>
+        ReadClientSettingsAsync(dataSource, cancellationToken));
 });
+
+builder.Services.AddSingleton(ds);
+
+// Известного клиента можно внедрить по ключу: конструктор сервиса получает корень acme.
+builder.Services.AddSingleton<AcmeStorage>();
+
+// Runtime: обновление по требованию (фонового таймера по умолчанию нет). Один
+// ReloadDynamicAsync обновляет и ядро, и корни клиентов.
+builder.Services.AddSaConfigurationRuntime(builder.Configuration);
 
 var app = builder.Build();
 
 var settingsApi = app.MapGroup("/settings");
 
-// Базовые значения + клиенты, объявленные в переопределениях.
-settingsApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
+// Базовые (ядерные) значения и клиенты, которые вернул провайдер.
+settingsApi.MapGet("/", (IConfiguration configuration, IClientConfigurations clients) => new Settings[] {
     new (Key: PG_KEY, Value: MaskPassword(configuration[PG_KEY])),
+    new (Key: "s3_url", Value: configuration["s3_url"]),
     new (Key: "theme", Value: configuration["theme"]),
     new (Key: "language", Value: configuration["language"]),
     new (Key: "notifications", Value: configuration["notifications"]),
     new (Key: "secret", Value: configuration["secret"]),
-    new (Key: "clients", Value: string.Join(", ", configuration.GetClientNames()))
+    new (Key: "clients", Value: string.Join(", ", clients.Clients))
 });
 
-// Один клиент: его переопределения поверх базовых значений. Неизвестный клиент читает базу.
-settingsApi.MapGet("/{client}", (string client, IConfiguration configuration) =>
+// Один клиент: его корень поверх значений ядра. Неизвестный клиент читает только ядро.
+settingsApi.MapGet("/{client}", (string client, IClientConfigurations clients) =>
 {
-    IConfiguration view = configuration.ForClient(client);
+    IConfiguration clientConfiguration = clients.GetClient(client);
+
     return new Settings[] {
-        new (Key: "theme", Value: view["theme"]),
-        new (Key: "language", Value: view["language"]),
-        new (Key: "notifications", Value: view["notifications"]),
+        new (Key: "s3_url", Value: clientConfiguration["s3_url"]),
+        new (Key: "theme", Value: clientConfiguration["theme"]),
+        new (Key: "language", Value: clientConfiguration["language"]),
+        new (Key: "notifications", Value: clientConfiguration["notifications"]),
+        new (Key: "secret", Value: clientConfiguration["secret"]),
     };
 });
 
-// Обновляем только динамический слой: файлы на диске не перечитываются.
+// Keyed-инъекция для известного клиента: корень клиента приходит через конструктор, обработчик
+// не обращается к реестру. `/settings/acme` — литеральный маршрут, поэтому он выигрывает у
+// `/settings/{client}`.
+settingsApi.MapGet("/acme", (AcmeStorage acme) => new Settings[] {
+    new (Key: "s3_url", Value: acme.S3Url),
+    new (Key: "theme", Value: acme.Theme),
+    new (Key: "language", Value: acme.Language),
+    new (Key: "notifications", Value: acme.Notifications),
+});
+
+// Обновляем только динамический слой: файлы на диске не перечитываются. Провайдеры клиентов
+// перечитываются тем же вызовом.
 settingsApi.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
 {
     await reloader.ReloadDynamicAsync();
     return Results.Ok();
 });
+
+// Провайдер клиентов: плоские строки (client_id, key, value), прочитанные одним запросом.
+static async ValueTask<IReadOnlyList<ClientSetting>> ReadClientSettingsAsync(
+    IPgDataSource dataSource,
+    CancellationToken cancellationToken)
+{
+    List<ClientSetting> rows = [];
+
+    await dataSource.ExecuteReaderAsync(
+        "SELECT client_id, key, value FROM client_settings",
+        (reader, _) => rows.Add(new ClientSetting(
+            reader.GetString(0), reader.GetString(1), reader.GetString(2))),
+        initCommand: null,
+        cancellationToken);
+
+    return rows;
+}
+
+public static class DemoClients
+{
+    public const string Acme = "acme";
+}
+
+// Известный клиент, который резолвится из контейнера по ключу: конструктор получает собственный
+// корень acme, уже наложенный поверх значений ядра.
+public sealed class AcmeStorage([FromKeyedServices(DemoClients.Acme)] IConfiguration configuration)
+{
+    public string? S3Url => configuration["s3_url"];
+    public string? Theme => configuration["theme"];
+    public string? Language => configuration["language"];
+    public string? Notifications => configuration["notifications"];
+}
 ```
 
 ### Ожидаемые ответы
 
-`GET /settings` — базовые значения и найденные клиенты:
+`GET /settings` — значения ядра и клиенты, которые вернул провайдер:
 
 ```json
 [
   { "key": "sa:pg:connection", "value": "Username=postgres;Password=***;Host=localhost;Port=5432;Database=postgres;Pooling=True;Search Path=public;Command Timeout=180" },
-  { "key": "theme",             "value": "dark" },
-  { "key": "language",          "value": "en" },
-  { "key": "notifications",     "value": "enabled" },
-  { "key": "secret",            "value": "ENCRYPTED DEMO SECRET" },
-  { "key": "clients",           "value": "acme, beta" }
+  { "key": "s3_url",           "value": "A" },
+  { "key": "theme",            "value": "dark" },
+  { "key": "language",         "value": "en" },
+  { "key": "notifications",    "value": "enabled" },
+  { "key": "secret",           "value": "ENCRYPTED DEMO SECRET" },
+  { "key": "clients",          "value": "acme, beta" }
 ]
 ```
 
-`GET /settings/acme` — оверлей (меняется только то, что перекрывает acme):
+`GET /settings/acme` — литеральный маршрут: корень acme внедрён в `AcmeStorage` по ключу.
+Меняются только существующие строки, и этот маршрут отдаёт лишь четыре поля, которые читает сервис:
 
 ```json
 [
-  { "key": "theme",             "value": "light" },
-  { "key": "language",          "value": "en" },
-  { "key": "notifications",     "value": "disabled" }
+  { "key": "s3_url",        "value": "B1" },
+  { "key": "theme",         "value": "light" },
+  { "key": "language",      "value": "en" },
+  { "key": "notifications", "value": "disabled" }
 ]
 ```
 
-`GET /settings/beta` — `"language": "de"`, остальное из базы.
+`GET /settings/beta` — маршрут `{client}`: `s3_url` = `C`, `language` = `de`, остальное из ядра.
 
 Пароль маскируется: `NpgsqlConnectionStringBuilder` нормализует ключевые слова, поэтому в выводе
 `Username=…` / `Search Path=…`, а не `User ID=…` / `SearchPath=…` из `secrets.txt`. Это
@@ -212,8 +274,8 @@ settingsApi.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
 
 | Пакет | Назначение |
 |-------|-----------|
-| `Sa.Configuration` | Управление секретами, разбор аргументов CLI |
-| `Sa.Configuration.PostgreSql` | Динамическая конфигурация из PostgreSQL |
+| `Sa.Configuration` | Управление секретами, настройки клиентов, разбор аргументов CLI |
+| `Sa.Configuration.PostgreSql` | Динамическая конфигурация из PostgreSQL, включая настройки клиентов |
 | `Sa.Data.PostgreSql` | Обёртка клиента Npgsql |
 | `Npgsql` | `NpgsqlConnectionStringBuilder` для маскирования пароля; приходит транзитивно, но сэмпл использует его напрямую |
 | `Microsoft.AspNetCore.OpenApi` | Поддержка OpenAPI (только для разработки) |

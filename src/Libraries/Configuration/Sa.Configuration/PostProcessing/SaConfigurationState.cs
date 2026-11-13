@@ -37,12 +37,6 @@ internal sealed class SaConfigurationState
     /// <summary>Custom transforms, applied after the built-in ones in registration order.</summary>
     public List<ISaConfigurationTransform> Transforms { get; } = [];
 
-    /// <summary>
-    /// Section that holds per-client overrides. When set, the key aliases apply inside every
-    /// client prefix as well. <see langword="null"/> keeps aliases global only.
-    /// </summary>
-    public string? ClientsSectionPath { get; set; }
-
     /// <summary>The single command-line source this configuration owns, if any.</summary>
     public ArgumentsConfigurationSource? CommandLineSource { get; set; }
 
@@ -155,7 +149,7 @@ internal sealed class SaConfigurationState
             transforms.Add(new SecretSubstitutionTransform(GetSecrets));
 
         if (Aliases.Count > 0)
-            transforms.Add(new KeyAliasTransform(Aliases, CanonicalValueWins, ClientsSectionPath));
+            transforms.Add(new KeyAliasTransform(Aliases, CanonicalValueWins));
 
         transforms.AddRange(Transforms);
         return transforms;

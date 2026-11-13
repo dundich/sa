@@ -9,12 +9,8 @@ var builder = WebApplication.CreateSlimBuilder(args);
 
 // Static layer: appsettings.json / appsettings.{env}.json / environment variables / command-line
 // arguments are registered by the host already. Sa adds the secret pass ({{placeholder}} + key
-// aliases) and the per-client overlay.
-builder.Configuration.AddSaConfiguration(sa =>
-{
-    sa.UseSecrets();
-    sa.UseClients();
-});
+// aliases).
+builder.Configuration.AddSaConfiguration(sa => sa.UseSecrets());
 
 const string PG_KEY = "sa:pg:connection";
 
@@ -23,47 +19,62 @@ string connectionString = builder.Configuration[PG_KEY]
 
 using var ds = IPgDataSource.Create(connectionString);
 
-// One table for everything: client_id NULL holds the base values, a non-null client_id holds that
-// client's overrides. One query returns all of it, so a client added to the table is visible after a
-// reload without a restart.
+// Two tables: `setting` holds the shared core values, `client_settings` holds the clients'
+// overrides split by client_id. The key names are the same in both tables.
 ds.ExecuteScalarAsync("""
-    CREATE TABLE IF NOT EXISTS settings (
-        client_id TEXT,
-        key       TEXT NOT NULL,
-        value     TEXT NOT NULL
+    CREATE TABLE IF NOT EXISTS setting (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
     );
 
-    CREATE UNIQUE INDEX IF NOT EXISTS settings_client_key
-        ON settings ((COALESCE(client_id, '')), key);
+    INSERT INTO setting (key, value) VALUES
+        ('s3_url',        'A'),
+        ('theme',         'dark'),
+        ('language',      'en'),
+        ('notifications', 'enabled')
+    ON CONFLICT DO NOTHING;
 
-    INSERT INTO settings (client_id, key, value) VALUES
-        (NULL,   'theme',         'dark'),
-        (NULL,   'language',      'en'),
-        (NULL,   'notifications', 'enabled'),
+    CREATE TABLE IF NOT EXISTS client_settings (
+        client_id TEXT NOT NULL,
+        key       TEXT NOT NULL,
+        value     TEXT NOT NULL,
+        PRIMARY KEY (client_id, key)
+    );
+
+    INSERT INTO client_settings (client_id, key, value) VALUES
+        ('acme', 's3_url',        'B1'),
         ('acme', 'theme',         'light'),
         ('acme', 'notifications', 'disabled'),
+        ('beta', 's3_url',        'C'),
         ('beta', 'language',      'de')
     ON CONFLICT DO NOTHING;
 """, null).Wait();
 
-// Dynamic layer: the explicit data source keeps a single connection pool for the whole application
-// and needs no late-bound resolution, so the values are available immediately.
+// Dynamic layer: the core values come from `setting`. The explicit data source keeps a single
+// connection pool for the whole application and needs no late-bound resolution.
 builder.Configuration.AddSaPostgreSqlConfiguration(
     PgConfigurationConnection.DataSource(ds),
-    // The provider takes the columns in this order: client, key, value.
     new PostgreSqlConfigurationOptions
     {
-        SelectSql = "SELECT client_id, key, value FROM settings",
-        ClientColumn = "client_id",
-        ClientsSection = ClientConfiguration.DefaultSectionPath,
+        SelectSql = "SELECT key, value FROM setting",
     });
 
-// Runtime: reload on demand (no background timer unless DynamicReload is switched on) and a keyed
-// IConfiguration per client.
-builder.Services.AddSaConfigurationRuntime(builder.Configuration, runtime =>
+// Client layer: one query returns every client's rows, the registry groups them by client_id and
+// builds a root per client. Keys are stored verbatim — no prefix.
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
 {
-    runtime.KeyedClientConfigurations = true;
+    clients.Add<IPgDataSource>(static (dataSource, cancellationToken) =>
+        ReadClientSettingsAsync(dataSource, cancellationToken));
 });
+
+builder.Services.AddSingleton(ds);
+
+// A known client can be injected by key: the service constructor receives acme's own root.
+builder.Services.AddSingleton<AcmeStorage>();
+
+// Runtime: reload on demand (no background timer unless DynamicReload is switched on). One
+// ReloadDynamicAsync refreshes the core and the client roots.
+builder.Services.AddSaConfigurationRuntime(builder.Configuration);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -80,22 +91,24 @@ static string MaskPassword(string? connectionString) => connectionString is null
     ? string.Empty
     : new NpgsqlConnectionStringBuilder(connectionString) { Password = "***" }.ConnectionString;
 
-// Base values and the list of clients declared by the overrides.
-settingsApi.MapGet("/", (IConfiguration configuration) => new Settings[] {
+// Base (core) values and the discovered clients.
+settingsApi.MapGet("/", (IConfiguration configuration, IClientConfigurations clients) => new Settings[] {
     new (Key: PG_KEY, Value: MaskPassword(configuration[PG_KEY])),
+    new (Key: "s3_url", Value: configuration["s3_url"]),
     new (Key: "theme", Value: configuration["theme"]),
     new (Key: "language", Value: configuration["language"]),
     new (Key: "notifications", Value: configuration["notifications"]),
     new (Key: "secret", Value: configuration["secret"]),
-    new (Key: "clients", Value: string.Join(", ", configuration.GetClientNames()))
+    new (Key: "clients", Value: string.Join(", ", clients.Clients))
 }).WithName("GetSettings");
 
-// One client: its overrides laid over the base values. An unknown client simply reads the base.
-settingsApi.MapGet("/{client}", (string client, IConfiguration configuration) =>
+// One client: its own root laid over the core values. An unknown client reads the core only.
+settingsApi.MapGet("/{client}", (string client, IClientConfigurations clients) =>
 {
-    IConfiguration clientConfiguration = configuration.ForClient(client);
+    IConfiguration clientConfiguration = clients.GetClient(client);
 
     return new Settings[] {
+        new (Key: "s3_url", Value: clientConfiguration["s3_url"]),
         new (Key: "theme", Value: clientConfiguration["theme"]),
         new (Key: "language", Value: clientConfiguration["language"]),
         new (Key: "notifications", Value: clientConfiguration["notifications"]),
@@ -103,7 +116,18 @@ settingsApi.MapGet("/{client}", (string client, IConfiguration configuration) =>
     };
 }).WithName("GetClientSettings");
 
-// Manual refresh of the dynamic layer only: files on disk are not re-read.
+// Keyed injection for a known client: the client's root arrives through the constructor, so the
+// handler never touches the registry. `/settings/acme` is a literal route, so it wins over
+// `/settings/{client}`.
+settingsApi.MapGet("/acme", (AcmeStorage acme) => new Settings[] {
+    new (Key: "s3_url", Value: acme.S3Url),
+    new (Key: "theme", Value: acme.Theme),
+    new (Key: "language", Value: acme.Language),
+    new (Key: "notifications", Value: acme.Notifications),
+}).WithName("GetAcmeSettingsFromKeyedService");
+
+// Manual refresh of the dynamic layer only: files on disk are not re-read. The client providers
+// are re-read in the same call.
 settingsApi.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
 {
     await reloader.ReloadDynamicAsync();
@@ -112,7 +136,47 @@ settingsApi.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
 
 app.Run();
 
+static async ValueTask<IReadOnlyList<ClientSetting>> ReadClientSettingsAsync(
+    IPgDataSource dataSource,
+    CancellationToken cancellationToken)
+{
+    List<ClientSetting> rows = [];
+
+    await dataSource.ExecuteReaderAsync(
+        "SELECT client_id, key, value FROM client_settings",
+        (reader, _) => rows.Add(new ClientSetting(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2))),
+        initCommand: null,
+        cancellationToken);
+
+    return rows;
+}
+
 public sealed record Settings(string Key, string? Value);
+
+/// <summary>Client ids used by the sample.</summary>
+public static class DemoClients
+{
+    /// <summary>The known client resolved by key.</summary>
+    public const string Acme = "acme";
+}
+
+/// <summary>
+/// A known client resolved from the container by key: the constructor receives acme's own root,
+/// already laid over the core values.
+/// </summary>
+public sealed class AcmeStorage([FromKeyedServices(DemoClients.Acme)] IConfiguration configuration)
+{
+    public string? S3Url => configuration["s3_url"];
+
+    public string? Theme => configuration["theme"];
+
+    public string? Language => configuration["language"];
+
+    public string? Notifications => configuration["notifications"];
+}
 
 [JsonSerializable(typeof(Settings[]))]
 internal sealed partial class AppJsonSerializerContext : JsonSerializerContext

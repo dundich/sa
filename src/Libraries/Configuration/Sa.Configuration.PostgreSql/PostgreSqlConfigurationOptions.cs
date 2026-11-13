@@ -13,8 +13,8 @@ namespace Sa.Configuration.PostgreSql;
 public sealed record PostgreSqlConfigurationOptions
 {
     /// <summary>
-    /// Query returning two columns, <c>(key, value)</c>, or three columns, <c>(client, key, value)</c>
-    /// when <see cref="ClientColumn"/> is set.
+    /// Query returning exactly two columns, <c>(key, value)</c>. For a client overlay, read the rows
+    /// with a client provider (filter by <c>client_id</c>) rather than mapping a prefix here.
     /// </summary>
     public required string SelectSql { get; init; }
 
@@ -74,38 +74,6 @@ public sealed record PostgreSqlConfigurationOptions
     public bool LastWins { get; init; } = true;
 
     /// <summary>
-    /// Constant client name. When set, every key returned by the query is stored under
-    /// <c>{ClientsSection}:{Client}:{key}</c>, so the source contributes a client overlay instead of
-    /// base values. Use it when the query is already filtered by client
-    /// (<c>WHERE client_id = @client_id</c>) and you want that source to be readable through
-    /// <c>IConfiguration</c> with a client key.
-    /// </summary>
-    /// <remarks>
-    /// Mutually exclusive with <see cref="ClientColumn"/>. When both are absent, keys are stored
-    /// verbatim — the normal base layer.
-    /// </remarks>
-    public string? Client { get; init; }
-
-    /// <summary>
-    /// Column that carries the client name, for a query that returns all clients at once as
-    /// <c>(client, key, value)</c>. Rows with a <see langword="null"/> or empty client are stored
-    /// as base values; the rest go under <c>{ClientsSection}:{client}:{key}</c>, which is what makes
-    /// several clients coexist in one configuration.
-    /// </summary>
-    /// <remarks>
-    /// A single query is the only shape that supports clients appearing at runtime: a per-client
-    /// filtered query would need one source (and one pool) per client and could not see a new one
-    /// before a restart.
-    /// </remarks>
-    public string? ClientColumn { get; init; }
-
-    /// <summary>
-    /// Section that holds per-client overrides. Defaults to <c>sa:clients</c>, the value the rest of
-    /// Sa uses.
-    /// </summary>
-    public string ClientsSection { get; init; } = "sa:clients";
-
-    /// <summary>
     /// Overridden because the compiler-generated record <c>ToString</c> would inline
     /// <see cref="Parameters"/> — and therefore their values, which routinely carry connection
     /// secrets — into every log line and exception message.
@@ -118,10 +86,7 @@ public sealed record PostgreSqlConfigurationOptions
          + $"{nameof(MedianFirstRetryDelay)} = {MedianFirstRetryDelay}, "
          + $"{nameof(SkipEmptyValues)} = {SkipEmptyValues}, "
          + $"{nameof(DoubleUnderscoreAsSeparator)} = {DoubleUnderscoreAsSeparator}, "
-         + $"{nameof(LastWins)} = {LastWins}, "
-         + $"{nameof(Client)} = {Client ?? "<none>"}, "
-         + $"{nameof(ClientColumn)} = {ClientColumn ?? "<none>"}, "
-         + $"{nameof(ClientsSection)} = {ClientsSection} }}";
+         + $"{nameof(LastWins)} = {LastWins} }}";
 
     /// <summary>
     /// Fails fast at registration time, so a misconfigured source fails while the host is
@@ -133,21 +98,5 @@ public sealed record PostgreSqlConfigurationOptions
 
         ArgumentOutOfRangeException.ThrowIfNegative(MaxAttempts);
         ArgumentOutOfRangeException.ThrowIfNegative(MedianFirstRetryDelay);
-
-        ArgumentException.ThrowIfNullOrWhiteSpace(ClientsSection);
-
-        if (Client is not null)
-            ArgumentException.ThrowIfNullOrWhiteSpace(Client);
-
-        if (ClientColumn is not null)
-            ArgumentException.ThrowIfNullOrWhiteSpace(ClientColumn);
-
-        if (Client is not null && ClientColumn is not null)
-        {
-            throw new ArgumentException(
-                $"{nameof(Client)} and {nameof(ClientColumn)} are mutually exclusive: "
-                + "use Client for a per-client filtered query, or ClientColumn for one query that "
-                + "returns every client.");
-        }
     }
 }

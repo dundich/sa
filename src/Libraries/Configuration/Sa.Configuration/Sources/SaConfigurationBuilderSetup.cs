@@ -10,7 +10,8 @@ public static class SaConfigurationBuilderSetup
 {
     /// <summary>
     /// Configures the Sa configuration pipeline fluently: static sources first, dynamic sources
-    /// (overriding the static values) after them, then the secret/alias pass and the clients.
+    /// (overriding the static values) after them, then the secret/alias pass. Clients are registered
+    /// separately with <c>AddSaClientConfigurations</c>.
     /// </summary>
     /// <example>
     /// <code>
@@ -19,7 +20,6 @@ public static class SaConfigurationBuilderSetup
     ///     sa.UseStandardSources();
     ///     sa.UseSecrets();
     ///     sa.UseDynamic(pgSource);
-    ///     sa.UseClients();
     /// });
     /// </code>
     /// </example>

@@ -4,14 +4,16 @@ using Npgsql;
 using Sa.Configuration;
 using Sa.Configuration.Clients;
 using Sa.Configuration.PostgreSql;
+using Sa.Configuration.SecretStore;
 using Sa.Data.PostgreSql;
 using Sa.Data.PostgreSql.Fixture;
 
 namespace Sa.Configuration.PostgreSqlTests;
 
 /// <summary>
-/// The client mapping of the PostgreSQL source: a three-column query that returns every client at
-/// once, the constant-client form for a filtered query, and the late-bound data source.
+/// The client strategy against PostgreSQL: the shared values live in <c>setting</c>, every client's
+/// overrides live in <c>client_settings</c> filtered by <c>client_id</c>, and the core configuration
+/// stays untouched by the client roots.
 /// </summary>
 [Trait("Category", "Local")]
 public sealed class ClientConfigurationMappingTests(ClientConfigurationMappingTests.Fixture fixture)
@@ -23,39 +25,36 @@ public sealed class ClientConfigurationMappingTests(ClientConfigurationMappingTe
         {
             await base.InitializeAsync();
 
-            using var connection = new NpgsqlConnection(ConnectionString);
+            await using var connection = new NpgsqlConnection(ConnectionString);
             await connection.OpenAsync();
 
-            using var command = new NpgsqlCommand("""
-                CREATE TABLE IF NOT EXISTS client_settings (
-                    client_id TEXT,
-                    key       TEXT NOT NULL,
-                    value     TEXT NOT NULL
-                );
-
-                CREATE UNIQUE INDEX IF NOT EXISTS client_settings_key
-                    ON client_settings ((COALESCE(client_id, '')), key);
-
-                INSERT INTO client_settings (client_id, key, value) VALUES
-                    (NULL,   'theme',    'dark'),
-                    (NULL,   'language', 'en'),
-                    ('acme', 'theme',    'light'),
-                    ('beta', 'language', 'de')
-                ON CONFLICT DO NOTHING;
-
-                -- A table with no client column at all: the client is spelled into the key,
-                -- env-style, so the separator alias has to produce the overlay.
-                CREATE TABLE IF NOT EXISTS env_style_settings (
+            await using var command = new NpgsqlCommand("""
+                CREATE TABLE IF NOT EXISTS setting (
                     key   TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
 
-                INSERT INTO env_style_settings (key, value) VALUES
-                    ('theme',                      'dark'),
-                    ('language',                   'en'),
-                    ('sa__clients__acme__theme',   'light'),
-                    ('sa__clients__beta__api_key', 'k-123'),
-                    ('single_underscore_key',      'single_underscore_value')
+                INSERT INTO setting (key, value) VALUES
+                    ('s3_url',   'A'),
+                    ('theme',    'dark'),
+                    ('language', 'en'),
+                    ('auth_base_url', 'https://core.example.com')
+                ON CONFLICT DO NOTHING;
+
+                CREATE TABLE IF NOT EXISTS client_settings (
+                    client_id TEXT NOT NULL,
+                    key       TEXT NOT NULL,
+                    value     TEXT NOT NULL,
+                    PRIMARY KEY (client_id, key)
+                );
+
+                INSERT INTO client_settings (client_id, key, value) VALUES
+                    ('client1', 's3_url', 'B1'),
+                    ('client1', 'theme',  'light'),
+                    ('client2', 's3_url', 'C'),
+                    ('client2', 'language', 'de'),
+                    ('client3', 's3_url', '{{zz_client_pw}}'),
+                    ('client3', 'auth_base_url', 'https://client3.example.com')
                 ON CONFLICT DO NOTHING;
                 """, connection);
 
@@ -63,144 +62,209 @@ public sealed class ClientConfigurationMappingTests(ClientConfigurationMappingTe
         }
     }
 
-    private const string AllClientsSql = "SELECT client_id, key, value FROM client_settings";
+    /// <summary>
+    /// The provider: one query returns rows for every client, exactly the flat shape the registry
+    /// groups by <c>client_id</c>.
+    /// </summary>
+    private sealed class PgClientSettingsReader(IPgDataSource dataSource)
+    {
+        public async ValueTask<IReadOnlyList<ClientSetting>> LoadAsync(
+            CancellationToken cancellationToken = default)
+        {
+            List<ClientSetting> rows = [];
 
-    [Fact]
-    public void ClientColumn_MapsRowsToTheClientOverlay()
+            await dataSource.ExecuteReaderAsync(
+                "SELECT client_id, key, value FROM client_settings",
+                (reader, _) => rows.Add(new ClientSetting(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2))),
+                initCommand: null,
+                cancellationToken);
+
+            return rows;
+        }
+    }
+
+    private const string CoreSql = "SELECT key, value FROM setting";
+
+    private IConfiguration Core()
     {
         var builder = new ConfigurationBuilder();
         builder.AddSaPostgreSqlConfiguration(
             fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions { SelectSql = AllClientsSql, ClientColumn = "client_id" });
+            new PostgreSqlConfigurationOptions { SelectSql = CoreSql });
 
-        IConfigurationRoot configuration = builder.Build();
+        return builder.Build();
+    }
 
-        // Rows with a NULL client stay base values…
-        Assert.Equal("dark", configuration["theme"]);
-        Assert.Equal("en", configuration["language"]);
+    private ServiceProvider Clients(IConfiguration core)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(fixture.DataSource);
+        services.AddSingleton<PgClientSettingsReader>();
 
-        // …and the rest land under sa:clients:{client}:{key}.
-        Assert.Equal("light", configuration["sa:clients:acme:theme"]);
-        Assert.Equal("de", configuration["sa:clients:beta:language"]);
+        services.AddSaClientConfigurations(core, clients =>
+            clients.Add<PgClientSettingsReader>((reader, ct) => reader.LoadAsync(ct)));
 
-        Assert.Equal(["acme", "beta"], configuration.GetClientNames().Order());
-        Assert.Equal("light", configuration.ForClient("acme")["theme"]);
-        Assert.Equal("en", configuration.ForClient("acme")["language"]);
-        Assert.Equal("de", configuration.ForClient("beta")["language"]);
-        Assert.Equal("dark", configuration.ForClient("beta")["theme"]);
+        return services.BuildServiceProvider();
     }
 
     [Fact]
-    public void SeparatorAlias_BuildsTheClientOverlay_WithoutAClientColumn()
+    public void ClientRows_GoThroughTheSamePassAsTheCore()
     {
-        // No client column at all: the client is spelled into the key, env-style (`__`).
-        // Normalization runs before the client prefix is applied, so the separator alias alone
-        // has to produce sa:clients:{client}:{key}.
         var builder = new ConfigurationBuilder();
         builder.AddSaPostgreSqlConfiguration(
             fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM env_style_settings", DoubleUnderscoreAsSeparator = true, });
+            new PostgreSqlConfigurationOptions { SelectSql = CoreSql });
 
-        IConfigurationRoot configuration = builder.Build();
+        builder.AddSaConfiguration(new SecretOptions
+        {
+            Args = [],
+            LoadDotEnv = false,
+            Encryption = new SecretEncryptionOptions { Enabled = false },
+            Resolution = new SecretResolutionOptions
+            {
+                Resolver = key => key == "zz_client_pw" ? "s3cr3t" : null,
+            },
+            KeyAliases = new KeyAliasOptions
+            {
+                KeyAliases = { ["sa:scope:api:auth:base_url"] = "auth_base_url" },
+            },
+        });
 
-        // Both spellings answer for the same setting…
-        Assert.Equal("light", configuration["sa:clients:acme:theme"]);
-        Assert.Equal("light", configuration["sa__clients__acme__theme"]);
+        IConfigurationRoot core = builder.Build();
 
-        // …the clients are discovered from the normalized keys…
-        Assert.Equal(["acme", "beta"], configuration.GetClientNames().Order());
+        var services = new ServiceCollection();
+        services.AddSingleton(fixture.DataSource);
+        services.AddSingleton<PgClientSettingsReader>();
+        services.AddSaConfigurationRuntime(builder);
+        services.AddSaClientConfigurations(core, clients =>
+            clients.Add<PgClientSettingsReader>((reader, ct) => reader.LoadAsync(ct)));
 
-        // …and the overlay falls back to the base layer where the client has no override.
-        Assert.Equal("light", configuration.ForClient("acme")["theme"]);
-        Assert.Equal("en", configuration.ForClient("acme")["language"]);
-        Assert.Equal("k-123", configuration.ForClient("beta")["api_key"]);
+        using ServiceProvider provider = services.BuildServiceProvider();
 
-        // A single underscore is data, not a separator: `api_key` survives intact.
-        Assert.Equal("single_underscore_value", configuration["single_underscore_key"]);
+        // The reloader attaches the registry — and the transform chain — to the core's pass.
+        _ = provider.GetRequiredService<ISaConfigurationReloader>();
+        IClientConfigurations clients = provider.GetRequiredService<IClientConfigurations>();
+
+        IConfiguration client3 = clients.GetClient("client3");
+
+        // The secret stored in the table is substituted by the same chain the core uses…
+        Assert.Equal("s3cr3t", client3["s3_url"]);
+
+        // …and the flat alias key in the table fills the canonical path for this client only.
+        Assert.Equal("https://client3.example.com", client3["sa:scope:api:auth:base_url"]);
+        Assert.Equal("https://core.example.com", core["sa:scope:api:auth:base_url"]);
+
+        // The core table is untouched.
+        Assert.Equal("A", core["s3_url"]);
     }
 
     [Fact]
-    public void ConstantClient_MapsAFilteredQueryToThatClient()
+    public void CoreAndClients_ComeFromSeparateTables()
     {
-        var builder = new ConfigurationBuilder();
-        builder.AddSaPostgreSqlConfiguration(
-            fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM client_settings WHERE client_id = @client_id", Parameters = [new NpgsqlParameter("client_id", "acme")], Client = "acme" });
+        IConfiguration core = Core();
 
-        IConfigurationRoot configuration = builder.Build();
+        using ServiceProvider provider = Clients(core);
+        IClientConfigurations clients = provider.GetRequiredService<IClientConfigurations>();
 
-        Assert.Equal("light", configuration["sa:clients:acme:theme"]);
-        Assert.Equal("light", configuration.ForClient("acme")["theme"]);
+        // The core table supplies the shared values.
+        Assert.Equal("A", core["s3_url"]);
+        Assert.Equal("dark", core["theme"]);
+        Assert.Equal("en", core["language"]);
 
-        // A filtered source contributes only its own client: nothing leaks into the base layer.
-        Assert.Null(configuration["theme"]);
-        Assert.Equal(["acme"], configuration.GetClientNames());
+        // Every client has its own root with the same key names.
+        Assert.Equal("B1", clients.GetClient("client1")["s3_url"]);
+        Assert.Equal("C", clients.GetClient("client2")["s3_url"]);
+
+        // The client value differs from the core value, and the core is not mutated.
+        Assert.NotEqual(core["s3_url"], clients.GetClient("client1")["s3_url"]);
+        Assert.Equal("A", core["s3_url"]);
+
+        // A key the client does not override falls back to the core value.
+        Assert.Equal("light", clients.GetClient("client1")["theme"]);
+        Assert.Equal("en", clients.GetClient("client1")["language"]);
+        Assert.Equal("de", clients.GetClient("client2")["language"]);
+        Assert.Equal("dark", clients.GetClient("client2")["theme"]);
+    }
+
+    [Fact]
+    public void Clients_AreDiscoveredFromTheRows()
+    {
+        IConfiguration core = Core();
+
+        using ServiceProvider provider = Clients(core);
+        IClientConfigurations clients = provider.GetRequiredService<IClientConfigurations>();
+
+        Assert.Contains("client1", clients.Clients);
+        Assert.Contains("client2", clients.Clients);
+        Assert.True(clients.TryGet("client1", out _));
+        Assert.False(clients.TryGet("unknown", out _));
+        Assert.Equal("A", clients.GetClient("unknown")["s3_url"]);
+    }
+
+    [Fact]
+    public void KeyedConfiguration_ResolvesAClientById()
+    {
+        IConfiguration core = Core();
+
+        using ServiceProvider provider = Clients(core);
+
+        Assert.Equal("B1", provider.GetRequiredKeyedService<IConfiguration>("client1")["s3_url"]);
+        Assert.Equal("C", provider.GetRequiredKeyedService<IConfiguration>("client2")["s3_url"]);
+        Assert.Equal("A", provider.GetRequiredKeyedService<IConfiguration>("unknown")["s3_url"]);
     }
 
     [Fact]
     public async Task DynamicReload_SeesAClientAddedAfterStartup()
     {
-        using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken);
 
-        var builder = new ConfigurationBuilder();
-        builder.AddSaPostgreSqlConfiguration(
-            fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions { SelectSql = AllClientsSql, ClientColumn = "client_id" });
+        IConfiguration core = Core();
 
-        IConfigurationRoot configuration = builder.Build();
-        Assert.DoesNotContain("gamma", configuration.GetClientNames());
+        using ServiceProvider provider = Clients(core);
+        IClientConfigurations clients = provider.GetRequiredService<IClientConfigurations>();
 
-        using (var insert = new NpgsqlCommand(
-            "INSERT INTO client_settings (client_id, key, value) VALUES ('gamma', 'theme', 'sea') ON CONFLICT DO NOTHING;",
+        Assert.DoesNotContain("gamma", clients.Clients);
+
+        await using (var insert = new NpgsqlCommand(
+            "INSERT INTO client_settings (client_id, key, value) VALUES ('gamma', 's3_url', 'D') ON CONFLICT DO NOTHING;",
             connection))
         {
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        await SaConfigurationRuntime.GetOrAdd(builder)
-            .ReloadDynamicAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await clients.ReloadAsync(TestContext.Current.CancellationToken);
 
-        // One query returns every client, so a new one needs no restart and no second source.
-        Assert.Contains("gamma", configuration.GetClientNames());
-        Assert.Equal("sea", configuration.ForClient("gamma")["theme"]);
+            Assert.Contains("gamma", clients.Clients);
+            Assert.Equal("D", clients.GetClient("gamma")["s3_url"]);
+            Assert.Equal("en", clients.GetClient("gamma")["language"]);
+        }
+        finally
+        {
+            // The fixture database is shared by the class, so the extra client must not leak into
+            // the other tests.
+            await using var delete = new NpgsqlCommand(
+                "DELETE FROM client_settings WHERE client_id = 'gamma';",
+                connection);
+
+            await delete.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
     }
 
     [Fact]
-    public async Task FromServices_IsLateBound_AndResolvesAfterTheHostIsBuilt()
+    public void MissingRow_DelegatesToTheCoreValue()
     {
-        var builder = new ConfigurationBuilder();
-        builder.AddSaConfiguration(_ => { });
-        builder.AddSaPostgreSqlConfiguration(
-            new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM client_settings WHERE client_id IS NULL" });
+        IConfiguration core = Core();
 
-        IConfigurationRoot configuration = builder.Build();
+        using ServiceProvider provider = Clients(core);
+        IClientConfigurations clients = provider.GetRequiredService<IClientConfigurations>();
 
-        // Registration time: no container yet, so the late-bound layer contributes nothing.
-        Assert.Null(configuration["theme"]);
-
-        var services = new ServiceCollection();
-        services.AddSingleton(fixture.DataSource);          // the application's own pool
-        services.AddSaConfigurationRuntime(builder);
-
-        await using ServiceProvider provider = services.BuildServiceProvider();
-        await provider.GetRequiredService<ISaConfigurationReloader>()
-            .EnsureInitializedAsync(TestContext.Current.CancellationToken);
-
-        Assert.Equal("dark", configuration["theme"]);
-        Assert.Equal("en", configuration["language"]);
-    }
-
-    [Fact]
-    public void ClientColumn_MustBeTheFirstColumn()
-    {
-        var builder = new ConfigurationBuilder();
-        builder.AddSaPostgreSqlConfiguration(
-            fixture.ConnectionString,
-            new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value, client_id FROM client_settings", ClientColumn = "client_id" });
-
-        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
-
-        Assert.Contains("first column", exception.Message);
+        // client2 has no theme row; the core value is used rather than an empty string.
+        Assert.Equal("dark", clients.GetClient("client2")["theme"]);
     }
 }

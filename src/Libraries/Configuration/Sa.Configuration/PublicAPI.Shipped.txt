@@ -1,14 +1,10 @@
 #nullable enable
 Sa.Configuration.ISaDynamicConfigurationSource
-Sa.Configuration.Clients.IClientConfigurationFactory
 Sa.Configuration.PostProcessing.ISaConfigurationTransform
 Sa.Configuration.ISaAsyncConfigurationProvider
 Sa.Configuration.PostProcessing.ISaConfigurationView
 Sa.Configuration.ISaConfigurationReloader
 Sa.Configuration.ISaReloadableConfigurationProvider
-Sa.Configuration.Clients.ClientConfigurationExtensions
-Sa.Configuration.Clients.ClientConfigurationFactory
-const Sa.Configuration.Clients.ClientConfiguration.DefaultSectionPath = "sa:clients" -> string!
 Sa.Configuration.SaDynamicInitialLoad.Hosted = 1 -> Sa.Configuration.SaDynamicInitialLoad
 Sa.Configuration.SaDynamicInitialLoad.Explicit = 0 -> Sa.Configuration.SaDynamicInitialLoad
 Sa.Configuration.SaDynamicInitialLoad.Background = 2 -> Sa.Configuration.SaDynamicInitialLoad
@@ -108,37 +104,25 @@ override Sa.Configuration.SecretStore.SecretMiss.GetHashCode() -> int
 ~override Sa.Configuration.SecretStore.SecretMiss.Equals(object obj) -> bool
 Sa.Configuration.SecretStore.SecretMiss.Equals(Sa.Configuration.SecretStore.SecretMiss other) -> bool
 Sa.Configuration.SecretStore.SecretMiss.Deconstruct(out string! Key, out bool IsOptional) -> void
-static Sa.Configuration.Clients.ClientConfigurationExtensions.ForClient(this Microsoft.Extensions.Configuration.IConfiguration! configuration, string! client, string! sectionPath = "sa:clients") -> Microsoft.Extensions.Configuration.IConfiguration!
 Sa.Configuration.Sources.SaConfigurationBuilder.Runtime.get -> Sa.Configuration.SaConfigurationRuntime!
 static Sa.Configuration.Sources.SaConfigurationBuilder.Create(Microsoft.Extensions.Configuration.IConfigurationBuilder! builder) -> Sa.Configuration.Sources.SaConfigurationBuilder!
 Sa.Configuration.Sources.SaConfigurationBuilder.Use(Microsoft.Extensions.Configuration.IConfigurationSource! source) -> Sa.Configuration.Sources.SaConfigurationBuilder!
-static Sa.Configuration.Clients.ClientConfigurationExtensions.GetClientNames(this Microsoft.Extensions.Configuration.IConfiguration! configuration, string! sectionPath = "sa:clients") -> System.Collections.Generic.IReadOnlyList<string!>!
 static Sa.Configuration.SaConfigurationBuilderSetup.AddSaConfiguration(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, System.Action<Sa.Configuration.Sources.SaConfigurationBuilder!>! configure) -> Sa.Configuration.Sources.SaConfigurationBuilder!
 static Sa.Configuration.CommandLine.Setup.AddSaCommandLine(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, string![]? args = null) -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
 Sa.Configuration.PostProcessing.SecretSubstitutionTransform.SecretSubstitutionTransform(Sa.Configuration.SecretStore.ISecretService! secretService) -> void
 Sa.Configuration.Sources.SaConfigurationBuilder.UseDynamic(Sa.Configuration.ISaDynamicConfigurationSource! source) -> Sa.Configuration.Sources.SaConfigurationBuilder!
 Sa.Configuration.Sources.SaConfigurationBuilder.Use(Microsoft.Extensions.Configuration.IConfigurationSource! source, Sa.Configuration.SaConfigurationLayer layer) -> Sa.Configuration.Sources.SaConfigurationBuilder!
 Sa.Configuration.Sources.SaConfigurationBuilder.Builder.get -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
-Sa.Configuration.Clients.IClientConfigurationFactory.SectionPath.get -> string!
-Sa.Configuration.Clients.IClientConfigurationFactory.Clients.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Sa.Configuration.Clients.IClientConfigurationFactory.GetClient(string! client) -> Microsoft.Extensions.Configuration.IConfiguration!
 Sa.Configuration.PostProcessing.ISaConfigurationTransform.Apply(Sa.Configuration.PostProcessing.ISaConfigurationView! configuration) -> System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, string?>>!
 Sa.Configuration.PostProcessing.ISaConfigurationView.TryGetValue(string! key, out string? value) -> bool
-Sa.Configuration.Clients.IClientConfigurationFactory.TryGetClient(string! client, out Microsoft.Extensions.Configuration.IConfiguration! configuration) -> bool
 Sa.Configuration.PostProcessing.ISaConfigurationView.Values.get -> System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, string?>>!
 Sa.Configuration.PostProcessing.KeyAliasTransform.KeyAliasTransform(Sa.Configuration.SecretStore.KeyAliasOptions! options) -> void
-Sa.Configuration.Clients.ClientConfiguration.ClientConfiguration(Microsoft.Extensions.Configuration.IConfiguration! root, string! client, string! sectionPath = "sa:clients") -> void
-Sa.Configuration.PostProcessing.KeyAliasTransform.KeyAliasTransform(Sa.Configuration.SecretStore.KeyAliasOptions! options, string? clientsSectionPath) -> void
-static Sa.Configuration.Clients.ClientConfigurationExtensions.AddSaClientConfiguration(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! sectionPath = "sa:clients") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.Configuration.Clients.ClientConfiguration.Key.get -> string!
 Sa.Configuration.Clients.ClientConfiguration.Path.get -> string!
 Sa.Configuration.Clients.ClientConfiguration.Value.get -> string?
 Sa.Configuration.Clients.ClientConfiguration.Value.set -> void
-Sa.Configuration.Clients.ClientConfigurationFactory.ClientConfigurationFactory(Microsoft.Extensions.Configuration.IConfiguration! configuration, string! sectionPath = "sa:clients") -> void
-Sa.Configuration.Clients.ClientConfigurationFactory.SectionPath.get -> string!
 Sa.Configuration.CommandLine.Arguments.Arguments(params string![]! args) -> void
 static Sa.Configuration.CommandLine.Arguments.CreateDefault(string![]? args = null) -> Sa.Configuration.CommandLine.Arguments!
-Sa.Configuration.Clients.ClientConfigurationFactory.Clients.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Sa.Configuration.CommandLine.Arguments.this[string! param].get -> string?
 Sa.Configuration.CommandLine.Arguments.Parameters.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string?>!
 Sa.Configuration.ISaAsyncConfigurationProvider.LoadAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -148,24 +132,16 @@ Sa.Configuration.ISaConfigurationReloader.ReloadDynamic() -> void
 Sa.Configuration.ISaConfigurationReloader.ReloadDynamicAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Sa.Configuration.ISaConfigurationReloader.EnsureInitializedAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Sa.Configuration.Clients.ClientConfiguration.this[string! key].get -> string?
-Sa.Configuration.Clients.ClientConfigurationFactory.GetClient(string! client) -> Microsoft.Extensions.Configuration.IConfiguration!
-Sa.Configuration.Clients.ClientConfigurationFactory.TryGetClient(string! client, out Microsoft.Extensions.Configuration.IConfiguration! configuration) -> bool
 Sa.Configuration.Clients.ClientConfiguration.this[string! key].set -> void
 Sa.Configuration.Clients.ClientConfiguration.GetSection(string! key) -> Microsoft.Extensions.Configuration.IConfigurationSection!
-Sa.Configuration.SaConfigurationRuntimeOptions.ClientsSectionPath.set -> void
-Sa.Configuration.SaConfigurationRuntimeOptions.KeyedClientConfigurations.get -> bool
-Sa.Configuration.SaConfigurationRuntimeOptions.KeyedClientConfigurations.set -> void
 Sa.Configuration.SaConfigurationRuntimeOptions.InitialLoad.get -> Sa.Configuration.SaDynamicInitialLoad
 Sa.Configuration.SaConfigurationRuntimeOptions.InitialLoad.set -> void
 Sa.Configuration.SaConfigurationRuntimeOptions.DynamicReload.get -> bool
-Sa.Configuration.SaConfigurationRuntimeOptions.ClientsSectionPath.get -> string!
 Sa.Configuration.SaConfigurationRuntimeOptions.DynamicReloadInterval.get -> System.TimeSpan
 Sa.Configuration.SaConfigurationRuntimeOptions.DynamicReloadInterval.set -> void
 Sa.Configuration.SaConfigurationRuntimeOptions.DynamicReload.set -> void
 Sa.Configuration.SaConfigurationRuntimeOptions.DynamicReloadInitialDelay.get -> System.TimeSpan?
 Sa.Configuration.SaConfigurationRuntimeOptions.DynamicReloadInitialDelay.set -> void
-Sa.Configuration.SaConfigurationRuntime.ClientsSectionPath.get -> string!
-Sa.Configuration.SaConfigurationRuntime.ClientsSectionPath.set -> void
 Sa.Configuration.SecretStore.Stores.InMemorySecretStore.InMemorySecretStore(System.Collections.Generic.Dictionary<string!, string?>? secrets = null) -> void
 Sa.Configuration.SecretStore.Stores.InMemorySecretStore.GetSecret(string! key) -> string?
 static Sa.Configuration.SaConfigurationRuntime.GetOrAdd(Microsoft.Extensions.Configuration.IConfigurationBuilder! builder) -> Sa.Configuration.SaConfigurationRuntime!
@@ -229,7 +205,6 @@ Sa.Configuration.SecretStore.Stores.FileSecretStore.FileSecretStore(string! path
 Sa.Configuration.SecretStore.SecretResolutionOptions.Resolver.init -> void
 Sa.Configuration.SecretStore.SecretResolutionOptions.OnUnresolvedSecret.get -> System.Action<Sa.Configuration.SecretStore.SecretMiss>?
 Sa.Configuration.SecretStore.SecretResolutionOptions.OnUnresolvedSecret.init -> void
-Sa.Configuration.Sources.SaConfigurationBuilder.UseClients(string! sectionPath = "sa:clients") -> Sa.Configuration.Sources.SaConfigurationBuilder!
 Sa.Configuration.SecretStore.SecretResolutionOptions.Resolver.get -> System.Func<string!, string?>?
 Sa.Configuration.SecretStore.SecretOptions.Encryption.get -> Sa.Configuration.SecretStore.SecretEncryptionOptions?
 Sa.Configuration.SecretStore.SecretOptions.Encryption.init -> void
@@ -247,7 +222,6 @@ Sa.Configuration.Clients.ClientConfiguration.GetEnumerator() -> System.Collectio
 Sa.Configuration.SecretStore.SecretOptions.SecretOptions(string? fileName, string![]? args = null, string? environmentName = null) -> void
 static Sa.Configuration.SaConfigurationRuntimeSetup.AddSaConfigurationRuntime(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfigurationBuilder! configuration, System.Action<Sa.Configuration.SaConfigurationRuntimeOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.Configuration.SecretStore.Secrets.Secrets(params Sa.Configuration.SecretStore.ISecretStore![]! stores) -> void
-static Sa.Configuration.SaConfigurationRuntimeSetup.AddSaConfigurationRuntimeWithClients(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfigurationBuilder! configuration, System.Action<Sa.Configuration.SaConfigurationRuntimeOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Sa.Configuration.SecretStore.Secrets.Secrets(Sa.Configuration.SecretStore.SecretResolutionOptions? resolution, params Sa.Configuration.SecretStore.ISecretStore![]! stores) -> void
 static Sa.Configuration.Setup.AddSaConfigurationTransform(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, Sa.Configuration.PostProcessing.ISaConfigurationTransform! transform) -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
 Sa.Configuration.SecretStore.Secrets.PopulateSecrets(string? inputString, bool returnNullIfSecretNotFound = false) -> string?

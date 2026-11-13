@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Configuration;
+using Sa.Configuration.Clients;
+using Sa.Configuration.PostProcessing;
 
 namespace Sa.Configuration;
 
@@ -30,10 +32,14 @@ public sealed class SaConfigurationRuntime : ISaConfigurationReloader, IDisposab
     {
     }
 
+    /// <summary>Registry of the per-client overlays, when one is registered.</summary>
+    internal IClientConfigurations? ClientConfigurations { get; private set; }
+
     /// <summary>
-    /// Path of the section that holds per-client overrides, <c>sa:clients</c> by default.
+    /// Builds the transforms the core pass runs. The client overlays reuse the same chain, so a
+    /// client's own rows are rewritten by the same alias and placeholder rules as the core.
     /// </summary>
-    public string ClientsSectionPath { get; set; } = Clients.ClientConfiguration.DefaultSectionPath;
+    internal Func<IReadOnlyList<ISaConfigurationTransform>>? PostProcessingTransforms { get; set; }
 
     /// <inheritdoc/>
     public int DynamicSourceCount
@@ -111,6 +117,11 @@ public sealed class SaConfigurationRuntime : ISaConfigurationReloader, IDisposab
             // from the previous values.
             foreach (IConfigurationProvider provider in Snapshot(_postProcessing))
                 await ReloadProviderAsync(provider, cancellationToken).ConfigureAwait(false);
+
+            // Clients are separate roots, not providers of this root: they are refreshed after the
+            // core so their views never combine a stale client value with a fresh core one.
+            if (ClientConfigurations is { } clients)
+                await clients.ReloadAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -139,6 +150,22 @@ public sealed class SaConfigurationRuntime : ISaConfigurationReloader, IDisposab
         }
 
         await ReloadDynamicAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Attaches the client registry so <see cref="ISaConfigurationReloader.ReloadDynamicAsync"/>
+    /// also refreshes the client overlays.
+    /// </summary>
+    public void AttachClientConfigurations(IClientConfigurations clients)
+    {
+        ArgumentNullException.ThrowIfNull(clients);
+
+        ClientConfigurations = clients;
+
+        // The registry rewrites every overlay through the same chain the core pass runs. The
+        // transforms are resolved on demand, so the order of the two attachments does not matter.
+        if (clients is ClientConfigurations registry)
+            registry.SetTransforms(() => PostProcessingTransforms?.Invoke() ?? []);
     }
 
     internal void RegisterDynamicProvider(IConfigurationProvider provider)

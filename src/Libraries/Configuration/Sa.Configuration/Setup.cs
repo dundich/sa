@@ -123,6 +123,10 @@ public static class Setup
 
     private static void EnsurePostProcessing(IConfigurationBuilder builder, SaConfigurationState state)
     {
+        // The client overlays reuse the transform chain of the core pass, so the runtime that owns
+        // the pass is the single place both layers read it from.
+        SaConfigurationRuntime.GetOrAdd(builder).PostProcessingTransforms = state.BuildTransforms;
+
         if (state.PostProcessingSource is null)
         {
             state.PostProcessingSource = new SaPostProcessingConfigurationSource(

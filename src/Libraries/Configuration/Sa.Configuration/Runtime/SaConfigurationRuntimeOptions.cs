@@ -31,17 +31,6 @@ public enum SaDynamicInitialLoad
 public sealed class SaConfigurationRuntimeOptions
 {
     /// <summary>
-    /// Section that holds per-client overrides. Defaults to <see cref="Clients.ClientConfiguration.DefaultSectionPath"/>.
-    /// </summary>
-    public string ClientsSectionPath { get; set; } = Clients.ClientConfiguration.DefaultSectionPath;
-
-    /// <summary>
-    /// Registers a keyed <see cref="Microsoft.Extensions.Configuration.IConfiguration"/> per client
-    /// (resolvable with any key) plus <see cref="Clients.IClientConfigurationFactory"/>.
-    /// </summary>
-    public bool KeyedClientConfigurations { get; set; }
-
-    /// <summary>
     /// When to perform the first dynamic load. Defaults to <see cref="SaDynamicInitialLoad.Explicit"/>.
     /// </summary>
     public SaDynamicInitialLoad InitialLoad { get; set; } = SaDynamicInitialLoad.Explicit;

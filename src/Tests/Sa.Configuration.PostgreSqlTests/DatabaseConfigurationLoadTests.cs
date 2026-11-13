@@ -358,16 +358,6 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     }
 
     [Fact]
-    public void AddSaPostgreSqlConfiguration_Throws_OnClientAndClientColumnTogether()
-    {
-        var builder = new ConfigurationBuilder();
-        Assert.Throws<ArgumentException>(
-            () => builder.AddSaPostgreSqlConfiguration(
-                fixture.ConnectionString,
-                new PostgreSqlConfigurationOptions { SelectSql = SelectSql, Client = "acme", ClientColumn = "client_id" }));
-    }
-
-    [Fact]
     public void AddSaPostgreSqlConfiguration_UsesSharedDataSource_WithoutAnyConnectionString()
     {
         using var dataSource = DataSource(failuresBeforeSuccess: 0);

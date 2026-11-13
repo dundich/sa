@@ -6,7 +6,7 @@
 
 1. **Собирает стек слоёв** — статические источники (appsettings, переменные окружения, аргументы, секреты) и динамические (БД) в одном детерминированном порядке, с builder'ом под две стратегии.
 2. **Подставляет секреты в конфигурацию** — вместо того чтобы хардкодить пароли и ключи, вы пишете в конфиге `{{sa_pg_password}}`, а пакет сам подставляет настоящее значение из файла, переменной окружения или аргумента командной строки.
-3. **Накладывает клиентские настройки** — значения `sa:clients:{client}:{key}` ложатся поверх общих, а конфигурация каждого клиента доступна как keyed `IConfiguration`.
+3. **Накладывает клиентские настройки** — у каждого клиента свой корень конфигурации с теми же именами ключей, положенный поверх общих значений, и доступ к нему — как к keyed `IConfiguration`.
 4. **Перезагружает только динамический слой** — `ISaConfigurationReloader` обновляет источники БД (и производные значения) без перечитывания файлов, и не регистрирует фоновую службу, пока её не попросят.
 5. **Разбирает аргументы командной строки** — `--key value`, `--key=value`, `-flag` и т.д.
 
@@ -40,7 +40,7 @@
   - [Мелочи](#мелочи)
   - [Шпаргалка](#шпаргалка)
 - [Совместная работа с Sa.Configuration.PostgreSql](#совместная-работа-с-saconfigurationpostgresql)
-- [Клиенты (keyed-конфигурация)](#клиенты-keyed-конфигурация)
+- [Клиенты (ядро + оверлеи клиентов)](#клиенты-ядро--оверлеи-клиентов)
 - [Обновление динамического слоя](#обновление-динамического-слоя)
 - [Полный пример DI](#полный-пример-di)
 - [Аргументы командной строки](#аргументы-командной-строки)
@@ -59,7 +59,7 @@
 - **Алиасы ключей** — [Алиасы ключей](#алиасы-ключей): можно связать «плоское» имя настройки (например, `auth_base_url` из PHP-мира) с вложенным C#-путём (`sa:scope:api:auth:base_url`). Работает поверх всех источников сразу.
 - **Шифрование** — зашифрованные файлы `secrets*.pub` (AES-256-GCM) можно коммитить в репозиторий. Ключи шифрования — обычные или `base64:`. Поддерживаются клиенты, среды, `.env`, Unicode. См. [Зашифрованные секреты](#зашифрованные-секреты).
 - **Builder слоёв** — `AddSaConfiguration(sa => ...)` собирает статические и динамические источники в фиксированном порядке. См. [Слои и builder](#слои-и-builder).
-- **Клиентский оверлей** — `sa:clients:{client}:{key}` в любом источнике, keyed `IConfiguration` на клиента и фабрика для имён, известных только в рантайме. См. [Клиенты](#клиенты-keyed-конфигурация).
+- **Конфигурация клиентов** — ядро хранит общие ключи, каждый клиент получает свой корень с теми же именами ключей, собранный из плоских строк провайдеров, и доступен как keyed `IConfiguration`. См. [Клиенты](#клиенты-ядро--оверлеи-клиентов).
 - **Обновление динамики** — перечитываются только источники БД, а алиасы и плейсхолдеры пересчитываются от свежих значений. По умолчанию без таймера. См. [Обновление динамического слоя](#обновление-динамического-слоя).
 
 ---
@@ -85,18 +85,14 @@ builder.Configuration.AddSaConfiguration(sa =>
 ```
 
 ```csharp
-// Стратегия 2 — статика + динамика + клиенты.
+// Стратегия 2 — статика + динамика ядра. Клиенты регистрируются отдельно (см. «Клиенты»).
 builder.Configuration.AddSaConfiguration(sa =>
 {
     sa.UseStandardSources();                                                // статика
     sa.UseSecrets();                                                        // {{…}} + алиасы
     sa.UseDynamic(new DatabaseConfigurationSource(                          // динамика, перекрывает статику
-        new PostgreSqlConfigurationOptions("SELECT client_id, key, value FROM settings")
-        {
-            ClientColumn = "client_id",
-        },
+        new PostgreSqlConfigurationOptions("SELECT key, value FROM setting"),
         PgConfigurationConnection.FromServices()));
-    sa.UseClients();                                                        // sa:clients:{client}:{key}
 });
 ```
 
@@ -105,7 +101,6 @@ builder.Configuration.AddSaConfiguration(sa =>
 | `UseStandardSources(...)` | `appsettings.json`, `appsettings.{env}.json`, переменные окружения, аргументы. **Идемпотентен**: в ASP.NET Core / generic host хост уже добавил их, и метод ничего не делает. |
 | `UseSecrets(...)` | прежний конвейер секретов: плейсхолдеры, алиасы, источник аргументов. |
 | `UseDynamic(source)` | источник, значения которого меняются в рантайме; ставится после статических. |
-| `UseClients(path = "sa:clients")` | клиентский оверлей, включая разрешение алиасов внутри каждого клиентского префикса. |
 | `Use(source)` | любой `IConfigurationSource` — для источников без отдельного метода. |
 | `Finalize()` | переносит pass в конец (нужно, только если источники добавляются напрямую в `sa.Builder`). |
 
@@ -462,279 +457,222 @@ builder.Configuration.AddSaPostgreSqlConfiguration(
 ```
 
 Алиасы из слоя секретов применяются поверх значений из БД, а слой БД перекрывает статику (он
-зарегистрирован позже). Формы запросов, `ClientColumn` и детали обновления — в README пакета.
+зарегистрирован позже). Формы запросов и детали обновления — в README пакета.
 
 ---
 
-## Клиенты (keyed-конфигурация)
+## Клиенты (ядро + оверлеи клиентов)
 
-Базовые значения общие, клиент перекрывает только то, что ему нужно. Конвенция — один префикс
-ключа `sa:clients:{client}:{key}`, поэтому данные клиента могут лежать в **любом** источнике:
-JSON, переменные окружения, аргументы командной строки или БД. Ни отдельного провайдера, ни
-второго пула.
+Ядро конфигурации хранит общие, фиксированные ключи. Клиент ничего не префиксует: у него **свой
+корень конфигурации** с **теми же именами ключей**, положенный поверх общих значений. Чтение
+клиента сначала берёт его собственное значение, а если его нет — падает на значение ядра.
 
 ```text
-theme                          ← базовое значение, если у клиента нет переопределения
-sa:clients:acme:theme          ← переопределение для "acme"
-sa:clients:beta:theme          ← переопределение для "beta"
+ядро ("s3_url" = "A")                     ← общее значение
+client1 ("s3_url" = "B1")                 ← отдельный корень, то же имя ключа
+client2 ("s3_url" = "C")                  ← отдельный корень, то же имя ключа
+
+cf["s3_url"]                             → "A"
+clients.GetClient("client1")["s3_url"]   → "B1"
+clients.GetClient("client2")["s3_url"]   → "C"
 ```
 
-### Статика: несколько клиентов в `appsettings.json`
+Префикса `sa:clients:{client}:{key}` и общего словаря нет: корни клиентов независимы, поэтому
+значения одного клиента не могут протечь ни в ядро, ни в другого клиента. Имена ключей — это
+конвенция, а не схема: клиент может завести ключи, которых в ядре нет.
+
+### Данные: таблица ядра + `client_settings`
+
+Каноническая форма — две таблицы. Общие значения лежат в `setting`, переопределения клиентов — в
+`client_settings` с разбиением по `client_id`:
+
+```sql
+CREATE TABLE setting (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+INSERT INTO setting (key, value) VALUES
+    ('s3_url',   'A'),
+    ('theme',    'dark'),
+    ('language', 'en');
+
+CREATE TABLE client_settings (
+    client_id TEXT NOT NULL,
+    key       TEXT NOT NULL,
+    value     TEXT NOT NULL,
+    PRIMARY KEY (client_id, key)
+);
+
+INSERT INTO client_settings (client_id, key, value) VALUES
+    ('client1', 's3_url', 'B1'),
+    ('client1', 'theme',  'light'),
+    ('client2', 's3_url', 'C'),
+    ('client2', 'language', 'de');
+```
+
+### Регистрация: провайдеры, возвращающие плоские строки
+
+Провайдер — это колбэк, зарегистрированный через `clients.Add<T1[,T2[,T3]]>(...)`. Его параметры
+(от одного до трёх, плюс `CancellationToken`) достаются из контейнера в момент чтения данных, а
+возвращает он плоские строки `(client_id, key, value)` сразу по **всем** клиентам. Реестр
+группирует строки по `client_id` и строит по корню на клиента, так что провайдер ничего не знает
+про корни клиентов, сплиттеры и префиксы — он просто отдаёт строки.
+
+```csharp
+using Sa.Configuration.Clients;
+
+builder.Services.AddSingleton<IClientSettingsStore, PgClientSettingsStore>();
+
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+{
+    // До трёх зависимостей приходят из DI; колбэк возвращает строки по всем клиентам.
+    clients.Add<IClientSettingsStore>(
+        (store, cancellationToken) => store.LoadAllAsync(cancellationToken));
+});
+```
+
+Тип строки — `ClientSetting(clientId, key, value)`, ровно та форма, которую возвращает запрос:
+
+```csharp
+public async ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct)
+{
+    List<ClientSetting> rows = [];
+
+    await dataSource.ExecuteReaderAsync(
+        "SELECT client_id, key, value FROM client_settings",
+        (reader, _) => rows.Add(new ClientSetting(
+            reader.GetString(0), reader.GetString(1), reader.GetString(2))),
+        initCommand: null,
+        ct);
+
+    return rows;
+}
+```
+
+Клиента не нужно объявлять отдельно: он существует, как только хоть один провайдер вернул для него
+строку. Провайдеры вызываются лениво при первом обращении и снова при `ReloadAsync()` /
+`ReloadDynamicAsync()`, поэтому новая строка в `client_settings` становится доступной без рестарта.
+
+Провайдеров можно зарегистрировать несколько — их строки объединяются по клиенту; при совпадении
+ключа побеждает строка, пришедшая позже:
+
+```csharp
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+{
+    clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
+
+    clients.Add<IDefaultsStore, ILogger<Clients>>(
+        (defaults, logger, ct) => defaults.LoadAsync(logger, ct));
+});
+```
+
+### Клиенты из секции конфигурации (без базы)
+
+Если клиенты уже лежат в статической конфигурации, `UseConfiguration` регистрирует такой же
+провайдер поверх секции. Дочерние элементы секции — это id клиентов; ключи внутри секции клиента
+называются так же, как в ядре, и читаются **без** префикса секции.
 
 ```json
 {
+  "s3_url": "A",
   "theme": "dark",
   "language": "en",
-  "sa": {
-    "clients": {
-      "acme": { "theme": "light" },
-      "beta": { "language": "de", "theme": "dark" }
-    }
+
+  "clients": {
+    "acme": { "s3_url": "B1", "theme": "light" },
+    "beta": { "s3_url": "C", "language": "de" }
   }
 }
 ```
 
-Те же данные через другие статические источники:
-
-```bash
-# переменные окружения: __ — это разделитель ":"
-export SA__CLIENTS__ACME__THEME=light
-
-# командная строка
-./app --sa__clients__beta__language=de
+```csharp
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+    clients.UseConfiguration(builder.Configuration));
 ```
 
-### Динамика: SQL, который возвращает всех клиентов сразу
+`clients.Clients` → `["acme", "beta"]`; `clients.GetClient("acme")["s3_url"]` → `"B1"`;
+`clients.GetClient("acme")["language"]` → `"en"` (значение ядра). Реестр «живой»: клиент,
+добавленный в секцию, появляется после reload, а значения существующих клиентов перечитываются при
+каждом `ReloadDynamicAsync()`.
 
-```sql
--- Один запрос, один пул, все клиенты. client_id IS NULL — базовые значения.
-SELECT client_id, key, value FROM settings;
-```
+Другая раскладка — меняется только путь секции:
 
 ```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    PgConfigurationConnection.FromServices(),
-    new PostgreSqlConfigurationOptions("SELECT client_id, key, value FROM settings")
-    {
-        ClientColumn = "client_id",                 // первая колонка: client, key, value
-        ClientsSection = "sa:clients",              // значение по умолчанию, показано явно
-    });
-```
-
-### Клиент без отдельной колонки: вычисляем из ключа
-
-Физической колонки клиента может не быть вовсе — например, в старой таблице клиент просто
-вклеен в ключ конкатенацией (`acme.theme` — «клиент» + `.` + «настройка»). `ClientColumn`
-работает и так: клиента достаточно вычислить в запросе и вернуть **первой** колонкой. Строки
-без разделителя остаются базовыми значениями — для них клиент `NULL`.
-
-```sql
--- Ключ — конкатенация «клиент.настройка»; отдельной колонки client_id в таблице нет.
--- Строка без точки → базовая: client NULL, key — вся строка целиком.
-SELECT CASE WHEN strpos(key, '.') = 0 THEN NULL
-            ELSE split_part(key, '.', 1) END          AS client_id,
-       CASE WHEN strpos(key, '.') = 0 THEN key
-            ELSE substr(key, strpos(key, '.') + 1) END AS key,
-       value
-FROM legacy_settings;
-```
-
-```sql
-INSERT INTO legacy_settings (key, value) VALUES
-    ('theme',         'dark'),    -- → базовое theme
-    ('language',      'en'),      -- → базовое language
-    ('acme.theme',    'light'),   -- → sa:clients:acme:theme
-    ('beta.language', 'de');      -- → sa:clients:beta:language
-```
-
-```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    PgConfigurationConnection.FromServices(),
-    new PostgreSqlConfigurationOptions(
-        """
-        SELECT CASE WHEN strpos(key, '.') = 0 THEN NULL ELSE split_part(key, '.', 1) END AS client_id,
-               CASE WHEN strpos(key, '.') = 0 THEN key ELSE substr(key, strpos(key, '.') + 1) END AS key,
-               value
-        FROM legacy_settings
-        """)
-    {
-        ClientColumn = "client_id",                 // по-прежнему первая колонка
-    });
-```
-
-Имя `client_id` здесь — просто метка: совпадать с физической колонкой не требуется. Важен только
-порядок — клиент, затем `key`, затем `value`.
-
-Обратный случай тоже решается в запросе: если физической колонки `key` нет, а ключ — это
-конкатенация нескольких колонок, склейте их в SQL, сохранив форму `client, key, value`:
-
-```sql
-SELECT client_id, section || ':' || name AS key, value FROM settings;
-```
-
-### Ключи в стиле ENV: `__` как разделитель
-
-Если таблица заполняется из тех же мест, что и переменные окружения, ключи в ней пишутся «плоско» —
-с `__` вместо `:`. Тогда ни резать строки в SQL, ни задавать `ClientColumn` не нужно: включите
-`DoubleUnderscoreAsSeparator`, и источник прочитает `__` как разделитель ещё до раскладки по
-клиентам, поэтому клиентский префикс соберётся сам.
-
-```sql
--- Отдельной колонки клиента нет, ключ хранится плоско — с `__` вместо `:`.
-SELECT key, value FROM legacy_settings;
-```
-
-```sql
-INSERT INTO legacy_settings (key, value) VALUES
-    ('sa__pg__host',             'db-host'),                 -- → sa:pg:host
-    ('sa__pg__port',             '5432'),                    -- → sa:pg:port
-    ('sa__clients__acme__theme', 'light'),                   -- → sa:clients:acme:theme
-    ('single_underscore_key',    'single_underscore_value'); -- одиночный `_` — данные
-```
-
-```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    PgConfigurationConnection.FromServices(),
-    new PostgreSqlConfigurationOptions("SELECT key, value FROM legacy_settings")
-    {
-        DoubleUnderscoreAsSeparator = true,         // sa__pg__host ≡ sa:pg:host
-    });
-```
-
-```csharp
-using Sa.Configuration.Clients;
-
-configuration["sa:pg:host"];                    // "db-host"
-configuration["sa__pg__host"];                  // "db-host" — обе записи взаимозаменяемы
-configuration.GetSection("sa:pg")["host"];      // "db-host" — путь стал настоящей иерархией
-configuration.ForClient("acme")["theme"];       // "light" — клиентский слой собрался сам
-```
-
-Одиночное `_` остаётся частью имени (`single_underscore_key`). Замена выполняется до разрешения
-дублей, поэтому `sa__pg__host` и `sa:pg:host` — одна настройка, и победителя между ними выбирает
-`LastWins`. Если `__` в ключе — легитимная часть имени, а не разделитель, опцию включать нельзя:
-при `false` ключ хранится и читается как есть.
-
-Приём сочетается с вычисляемым клиентом: разрежьте ключ по первому `__`, а остаток оставьте как
-есть — `DoubleUnderscoreAsSeparator` доведёт его до `:` (строка `acme__database__host` станет
-`sa:clients:acme:database:host`).
-
-Заранее отфильтрованный запрос тоже работает — константа `Client` говорит источнику, какой
-префикс использовать:
-
-```sql
-SELECT key, value FROM settings WHERE client_id = @client_id;
-```
-
-```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    connectionString,
-    new PostgreSqlConfigurationOptions(
-        "SELECT key, value FROM settings WHERE client_id = @client_id",
-        new NpgsqlParameter("client_id", "acme"))
-    {
-        Client = "acme",                            // → sa:clients:acme:{key}
-    });
-```
-
-Предпочтителен единый запрос: только он позволяет новому клиенту появиться после reload без
-рестарта (фильтрованный запрос требует отдельного источника на клиента, зафиксированного при
-сборке).
-
-### Чтение клиента: вычисляемые ключи
-
-Ключ клиента — обычный путь конфигурации, поэтому его можно вычислять, а не хардкодить. Это та же
-форма, которую даёт `ClientColumn` в SQL:
-
-```csharp
-using Sa.Configuration.Clients;
-
-// Единственное место, которое знает конвенцию — без разбросанных литералов "sa:clients:…".
-static string ClientKey(string client, string setting)
-    => $"{ClientConfiguration.DefaultSectionPath}:{client}:{setting}";
-
-string? acmeTheme = configuration[ClientKey("acme", "theme")];   // "light"
-string? betaTheme = configuration[ClientKey("beta", "theme")];   // null: у beta нет переопределения
-```
-
-Обычно удобнее оверлей, потому что он сам добавляет фолбэк на базовое значение:
-
-```csharp
-IConfiguration acme = configuration.ForClient("acme");
-
-acme["theme"];          // "light"  — переопределение
-acme["language"];       // "en"     — базовое значение
-acme["database:host"];  // секции работают как обычно: дочерний ключ клиента выигрывает
-```
-
-А если и имена настроек динамические — вычисляются обе части:
-
-```csharp
-string[] settings = ["theme", "language", "notifications"];
-
-foreach (string client in configuration.GetClientNames())
+clients.UseConfiguration(builder.Configuration, new ConfigurationClientSourceOptions
 {
-    IConfiguration view = configuration.ForClient(client);
+    SectionPath = "tenants",        // tenants:acme:s3_url, tenants:beta:s3_url, …
+});
+```
 
-    foreach (string setting in settings)
-    {
-        // view[setting] — оверлей; вычисленный ключ читает «сырое» значение с префиксом.
-        string? value = view[setting];
-        string raw = ClientKey(client, setting);
+`UseConfiguration` — такой же провайдер, как остальные, поэтому его можно сочетать с
+`clients.Add<T>(...)`; строки всех провайдеров объединяются по клиенту.
 
-        Console.WriteLine($"{client}:{setting} = {value ?? "(нет)"} (raw {raw})");
-    }
+### Варианты регистрации в DI
+
+| Форма | Когда использовать |
+|---|---|
+| `clients.Add<T1>((t1, ct) => rows)` | провайдеру нужен один сервис DI, возвращает строки по всем клиентам |
+| `clients.Add<T1, T2>((t1, t2, ct) => rows)` | два сервиса (например, хранилище и логгер) |
+| `clients.Add<T1, T2, T3>((t1, t2, t3, ct) => rows)` | три сервиса |
+| `clients.UseConfiguration(configuration)` | клиенты и их значения лежат в секции конфигурации (`clients:{id}:{key}`), база не нужна |
+| `AttachAsync(client, source)` | клиент появляется в рантайме (плагин, тенант, поднятый вручную, тест) |
+| `clients.Configure(o => …)` | настроить `ThrowForUnknownClient` / `EagerLoad` |
+
+### Чтение
+
+```csharp
+public sealed class SettingsEndpoints(IConfiguration core, IClientConfigurations clients)
+{
+    public string CoreS3Url => core["s3_url"]!;                              // "A"
+    public string Client1S3Url => clients.GetClient("client1")["s3_url"]!;   // "B1"
+    public string Client2S3Url => clients.GetClient("client2")["s3_url"]!;   // "C"
+
+    public IReadOnlyCollection<string> Known => clients.Clients;              // из провайдеров + добавленные
 }
 ```
 
 Правила:
 
-- значение клиента выигрывает у базового по тому же пути; если у клиента значения нет — берётся
-  базовое (оно никогда не выдумывается);
-- клиенты не видят друг друга, а сама секция переопределений скрыта из клиентского представления;
-- неизвестный клиент просто читает базовые значения — `ForClient` для него не бросает исключение.
-  `IClientConfigurationFactory.TryFor` сообщает, объявлен ли клиент на самом деле;
-- `GetClientNames()` / `IClientConfigurationFactory.Clients` пересчитываются при каждом чтении,
-  поэтому клиент, добавленный в БД, появляется после `ReloadDynamicAsync()`.
+- значение клиента выигрывает у значения ядра по тому же ключу; если у клиента значения нет —
+  берётся значение ядра, и оно никогда не выдумывается;
+- клиент видит только свой корень плюс ядро — никогда значения другого клиента; у секционного
+  провайдера секция клиентов — это метаданные оверлея, и она скрыта из каждого представления,
+  поэтому один клиент не прочитает строки другого через фолбэк на ядро;
+- пустая строка (`value` пустой или из пробелов) отбрасывается при чтении строк и делегирует значение
+  ядра — `ClientConfigurationOptions.SkipEmptyValues` (по умолчанию включён) повторяет правило слоя
+  ядра; `false` делает пустую строку явным собственным значением. Пустое значение, полученное
+  преобразованием, записывается после чтения строк и всегда остаётся локальным у клиента;
+- неизвестный клиент читает значения ядра; `TryGet` сообщает, известен ли он на самом деле, и не
+  бросает исключений даже при `ThrowForUnknownClient` (бросает только `GetClient`);
+- `Clients` — объединение id, которые вернули провайдеры, и клиентов, добавленных в рантайме; поэтому
+  клиент, добавленный в БД, появляется после `ReloadDynamicAsync()`;
+- **строки переписываются тем же проходом, что и ядро** — значения клиента тоже проходят цепочку
+  преобразований: секреты `{{placeholder}}` подставляются, а алиасы ключей раскрываются внутри
+  собственных строк клиента (источник алиаса ищется сначала у клиента, потом в ядре). Производное
+  значение, которое лишь повторяет ядро, в оверлей не копируется — клиент продолжает читать ядро
+  «живьём». Нераскрытое значение (отсутствующий секрет) читается у клиента как пустая строка, а
+  не как значение ядра и не как литеральный `{{…}}`. Исключение — секционный провайдер
+  (`UseConfiguration`): проход ядра обнуляет нераскрытый плейсхолдер **до** чтения секции, поэтому
+  такая строка до реестра не доходит и клиент берёт значение ядра;
+- ключи используют каноническую запись с `:`: `sa__pg__host` в строке — та же настройка, что
+  `sa:pg:host`.
 
-### Dependency injection
+Секции работают поверх обоих корней:
 
 ```csharp
-builder.Services.AddSaConfigurationRuntime(builder.Configuration, runtime =>
-{
-    runtime.KeyedClientConfigurations = true;     // keyed IConfiguration + IClientConfigurationFactory
-});
+IConfiguration db = clients.GetClient("client1").GetSection("db");
+db["host"]; // значение client1, если оно есть, иначе значение ядра
 ```
 
-Имя известно на этапе компиляции — keyed-инъекция:
+### Алиасы и плейсхолдеры внутри оверлея клиента
 
-```csharp
-app.MapGet("/acme/theme", ([FromKeyedServices("acme")] IConfiguration acme) => acme["theme"]);
-```
-
-Имя известно только в рантайме — keyed-резолв или фабрика:
-
-```csharp
-app.MapGet("/settings/{client}", (string client, HttpContext http) =>
-    http.RequestServices.GetRequiredKeyedService<IConfiguration>(client)["theme"]);
-
-// Все клиенты, найденные по переопределениям:
-app.MapGet("/settings", (IClientConfigurationFactory clients) =>
-    clients.Clients.Select(id => new { Client = id, Theme = clients.For(id)["theme"] }));
-```
-
-`For`/`ForClient` возвращает тонкое «живое» представление: кэшируется только префикс, никогда —
-значение, поэтому reload виден сразу, а один экземпляр безопасен для всех запросов.
-
-### Алиасы внутри клиентского префикса
-
-`UseClients()` учит pass алиасов работать по клиентам, поэтому клиент может держать настройки под
-теми «плоскими» именами, которые приняты в его системе:
+Строки клиента проходят тот же проход, что и ядро, поэтому клиент может держать свои настройки под
+теми плоскими именами, которые использует его собственная система:
 
 ```csharp
 builder.Configuration.AddSaConfiguration(sa =>
 {
-    sa.UseClients();
     sa.UseSecrets(new SecretOptions
     {
         KeyAliases = new KeyAliasOptions
@@ -743,14 +681,96 @@ builder.Configuration.AddSaConfiguration(sa =>
         },
     });
 });
+
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+    clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct)));
 ```
 
 ```text
-sa:clients:acme:auth_base_url                      → sa:clients:acme:sa:scope:api:auth:base_url
+ядро:    auth_base_url = https://core.example.com   → sa:scope:api:auth:base_url = https://core.example.com
+client1: auth_base_url = https://acme.example.com   → sa:scope:api:auth:base_url = https://acme.example.com
+client2: (такой строки нет)                         → https://core.example.com, читается «живьём» из ядра
+
+client1: api_token = {{acme_token}}                 → подставленный секрет, никогда литерал
 ```
 
-Значения никогда не пересекают границу префикса: базовый алиас оставляет базовое значение, каждый
-клиент разрешает своё, и «плоский» ключ одного клиента не утечёт ни в другого клиента, ни в базу.
+Источник алиаса ищется сначала у клиента, потом в ядре; значение клиента не пересекает границу ни в
+ядро, ни в другого клиента. Производное значение, которое лишь повторяет ядро, в оверлей не
+копируется, поэтому изменение в ядре видно без перезагрузки строк клиента.
+
+### Keyed-инъекция
+
+Когда id клиента известен на этапе компиляции, его конфигурация достаётся по ключу — обработчик
+или конструктор получает собственный корень клиента напрямую.
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;   // [FromKeyedServices]
+
+public static class Clients
+{
+    public const string Acme = "acme";
+    public const string Beta = "beta";
+}
+
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+    clients.UseConfiguration(builder.Configuration));
+
+// Minimal API: известный клиент приходит из контейнера, в теле обработчика нет обращения к реестру.
+app.MapGet("/acme/settings", ([FromKeyedServices(Clients.Acme)] IConfiguration acme) => new
+{
+    S3Url = acme["s3_url"],        // "B1"
+    Theme = acme["theme"],         // "light"
+    Language = acme["language"],   // "en" — фолбэк на ядро
+});
+
+// Обычный сервис: та же keyed-инъекция в конструкторе.
+public sealed class AcmeStorage([FromKeyedServices(Clients.Acme)] IConfiguration configuration)
+{
+    public string S3Url => configuration["s3_url"]!;
+}
+
+// Код, у которого есть IServiceProvider (фабрика, стартовая задача):
+IConfiguration beta = app.Services.GetRequiredKeyedService<IConfiguration>(Clients.Beta);
+beta["s3_url"];                    // "C"
+```
+
+Ключ — это id клиента из `client_settings.client_id` (или дочерний ключ секции), сравнение
+регистронезависимое. Инъекция выполняется при каждом разрешении — клиент, добавленный или
+обновлённый позже, виден на следующем запросе без перерегистрации.
+
+Имя, известное только в рантайме, ключом на этапе компиляции быть не может, поэтому передаём id и
+спрашиваем реестр:
+
+```csharp
+app.MapGet("/settings/{client}", (string client, IClientConfigurations clients) =>
+    new { Client = client, S3Url = clients.GetClient(client)["s3_url"] });
+```
+
+Keyed-регистрация использует `KeyedService.AnyKey`, поэтому `GetRequiredKeyedService<IConfiguration>(id)`
+работает для имени, которое существует только в рантайме. Перечисление keyed-сервисов не
+перечисляет клиентов — для этого есть `IClientConfigurations.Clients`.
+
+### Подключение и удаление в рантайме
+
+```csharp
+await clients.AttachAsync("acme", new MemoryConfigurationSource
+{
+    InitialData = new Dictionary<string, string?> { ["s3_url"] = "B1" },
+});
+
+await clients.RemoveAsync("acme");   // представление снова падает на значения ядра
+```
+
+`AttachAsync` заменяет существующий оверлей того же клиента и освобождает заменённый. `RemoveAsync`
+возвращает `false` и ничего не меняет для клиента, которого по-прежнему отдаёт провайдер: его оверлей
+всё равно был бы собран заново при следующем обращении, поэтому вызов честно сообщает, что удалять
+было нечего. Удалить можно только вложение, добавленное в рантайме.
+
+Представления, возвращённые `GetClient`, «живые»: при каждом обращении они спрашивают у реестра
+текущий корень, поэтому attach/remove/reload виден через ссылку, полученную раньше — в том числе для
+клиента, неизвестного в момент получения ссылки. То же верно для change-токена: `GetReloadToken()`
+представления композитит ядро, оверлей и реестр, поэтому колбэк срабатывает и на attach/remove, а не
+только на перезагрузке. Реестр потокобезопасен.
 
 ---
 
@@ -797,7 +817,8 @@ builder.Services.AddSaConfigurationRuntime(builder.Configuration, o =>
 
 ## Полный пример DI
 
-Статика + динамика + два клиента, один пул соединений и никакой фоновой службы без явной просьбы:
+Статика + динамика ядра + два клиента, один пул соединений и никакой фоновой службы без явной
+просьбы:
 
 ```csharp
 using Sa.Configuration;
@@ -807,38 +828,49 @@ using Sa.Configuration.PostgreSql;
 var builder = WebApplication.CreateBuilder(args);
 
 // Статика: хост уже добавил appsettings/env/args, поэтому UseStandardSources здесь ничего не делает.
-// Динамический источник читает через пул, зарегистрированный ниже.
+// Динамический источник читает общие значения через пул, зарегистрированный ниже.
 builder.Configuration.AddSaConfiguration(sa =>
 {
     sa.UseSecrets();                                   // {{placeholder}} + алиасы ключей
     sa.UseDynamic(new DatabaseConfigurationSource(
-        new PostgreSqlConfigurationOptions("SELECT client_id, key, value FROM settings")
-        {
-            ClientColumn = "client_id",
-        },
+        new PostgreSqlConfigurationOptions("SELECT key, value FROM setting"),
         PgConfigurationConnection.FromServices("orders")));
-    sa.UseClients();
 });
 
 builder.Services.AddSaPostgreSqlDataSource("orders", b => b.FromConfiguration("Postgres"));
+builder.Services.AddSingleton<IClientSettingsStore, PgClientSettingsStore>();
+
+// Каждый клиент получает свой корень; ключи хранятся как есть, без префикса. Провайдер достаёт
+// хранилище из DI и возвращает строки `(client_id, key, value)` сразу по всем клиентам.
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+{
+    clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
+});
+
 builder.Services.AddSaConfigurationRuntime(builder.Configuration, runtime =>
 {
-    runtime.KeyedClientConfigurations = true;
     runtime.InitialLoad = SaDynamicInitialLoad.Hosted;   // до первого запроса
 });
 
 var app = builder.Build();
 
-app.MapGet("/settings", (IConfiguration configuration) => new
+app.MapGet("/settings", (IConfiguration configuration, IClientConfigurations clients) => new
 {
-    Theme = configuration["theme"],                     // базовое значение
-    Clients = configuration.GetClientNames(),           // ["acme", "beta"]
+    Theme = configuration["theme"],                     // значение ядра
+    S3Url = configuration["s3_url"],                    // значение ядра
+    Clients = clients.Clients,                          // ["acme", "beta"]
 });
 
-app.MapGet("/settings/{client}", (string client, IConfiguration configuration) =>
+app.MapGet("/settings/{client}", (string client, IClientConfigurations clients) =>
 {
-    IConfiguration view = configuration.ForClient(client);
-    return new { Client = client, Theme = view["theme"], Language = view["language"] };
+    IConfiguration view = clients.GetClient(client);
+    return new
+    {
+        Client = client,
+        Theme = view["theme"],
+        S3Url = view["s3_url"],
+        Language = view["language"],
+    };
 });
 
 app.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
@@ -847,20 +879,61 @@ app.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
 app.Run();
 ```
 
-Пример данных `settings`:
+Провайдер за `clients.Add<IClientSettingsStore>(...)` — один запрос, плоские строки, группировку
+делает реестр:
 
-```sql
-CREATE TABLE settings (client_id TEXT, key TEXT NOT NULL, value TEXT NOT NULL);
+```csharp
+public interface IClientSettingsStore
+{
+    ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct);
+}
 
-INSERT INTO settings (client_id, key, value) VALUES
-    (NULL,   'theme',    'dark'),   -- базовое значение для всех
-    (NULL,   'language', 'en'),
-    ('acme', 'theme',    'light'),  -- acme перекрывает только тему
-    ('beta', 'language', 'de');     -- beta перекрывает только язык
+public sealed class PgClientSettingsStore(IPgDataSource dataSource) : IClientSettingsStore
+{
+    public async ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct)
+    {
+        List<ClientSetting> rows = [];
+
+        await dataSource.ExecuteReaderAsync(
+            "SELECT client_id, key, value FROM client_settings",
+            (reader, _) => rows.Add(new ClientSetting(
+                reader.GetString(0), reader.GetString(1), reader.GetString(2))),
+            initCommand: null,
+            ct);
+
+        return rows;
+    }
+}
 ```
 
-`GET /settings` → базовые `dark`/`en`; `GET /settings/acme` → `light`/`en`;
-`GET /settings/beta` → `dark`/`de`; `GET /settings/unknown` → `dark`/`en`.
+Пример данных — таблица ядра и таблица клиентов:
+
+```sql
+CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+INSERT INTO setting (key, value) VALUES
+    ('s3_url',   'A'),      -- значение ядра для всех клиентов
+    ('theme',    'dark'),
+    ('language', 'en');
+
+CREATE TABLE client_settings (
+    client_id TEXT NOT NULL,
+    key       TEXT NOT NULL,
+    value     TEXT NOT NULL,
+    PRIMARY KEY (client_id, key)
+);
+
+INSERT INTO client_settings (client_id, key, value) VALUES
+    ('acme', 's3_url',   'B1'),   -- acme перекрывает только s3_url
+    ('acme', 'theme',    'light'),
+    ('beta', 's3_url',   'C'),    -- у beta своё значение
+    ('beta', 'language', 'de');
+```
+
+`GET /settings` → `s3_url` = `A`, `theme` = `dark`, `language` = `en`;
+`GET /settings/acme` → `B1` / `light` / `en`;
+`GET /settings/beta` → `C` / `dark` / `de`;
+`GET /settings/unknown` → `A` / `dark` / `en`.
 
 ---
 

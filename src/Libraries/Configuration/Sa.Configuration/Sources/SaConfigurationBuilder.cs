@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Configuration.Json;
-using Sa.Configuration.Clients;
 using Sa.Configuration.CommandLine;
 using Sa.Configuration.SecretStore;
 
@@ -191,20 +190,6 @@ public sealed class SaConfigurationBuilder
     public SaConfigurationBuilder UseSecrets(SecretOptions? options = null)
     {
         _builder.AddSaConfiguration(options);
-        return this;
-    }
-
-    /// <summary>
-    /// Enables the per-client overlay (<c>sa:clients:{client}:{key}</c>) and teaches the alias pass
-    /// to resolve aliases inside each client's prefix as well.
-    /// </summary>
-    public SaConfigurationBuilder UseClients(string sectionPath = ClientConfiguration.DefaultSectionPath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sectionPath);
-
-        _state.ClientsSectionPath = sectionPath;
-        Runtime.ClientsSectionPath = sectionPath;
-
         return this;
     }
 

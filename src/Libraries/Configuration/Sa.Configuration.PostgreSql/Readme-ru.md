@@ -34,7 +34,7 @@
 - **`__` как `:` (опционально)** — если включить `DoubleUnderscoreAsSeparator = true`, двойное подчёркивание в ключе читается как разделитель конфигурации. Тогда `sa__pg__host` и `sa:pg:host` — одна и та же настройка. Это та же конвенция, что использует `AddEnvironmentVariables()`. По умолчанию выключено: ключи хранятся как есть.
 - **Контроль над слоями** — вы сами решаете, будут ли пустые и `NULL` значения перекрывать источники с меньшим приоритетом или делегировать им.
 - **Стратегии подключения** — собственный пул, общий `IPgDataSource` или источник приложения из DI (`FromServices`, по умолчанию). Строка подключения не нужна, если у приложения она уже есть.
-- **Клиенты одним запросом** — трёхколоночный запрос `(client, key, value)` раскладывает строки в `sa:clients:{client}:{key}`, поэтому все клиенты доступны сразу, а новый появляется после reload без рестарта.
+- **Клиенты** — настройки клиентов с разбиением по `client_id` возвращаются плоскими строками и группируются в отдельный оверлей каждого клиента; новый клиент появляется после reload без рестарта.
 - **Динамика по умолчанию** — источник реализует `ISaDynamicConfigurationSource`, и `ISaConfigurationReloader` перезагружает его (вместе с pass'ом алиасов/плейсхолдеров), не перечитывая файлы.
 
 ---
@@ -135,6 +135,11 @@ builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOp
 ));
 ```
 
+Колонки читаются по позиции: запрос должен вернуть **ровно две** колонки, `(key, value)`. Всё
+остальное — ошибка на старте, в том числе трёхколоночная форма `(client, key, value)`, которую
+принимало удалённое клиентское маппирование: при чтении как `(key, value)` одна колонка беззвучно
+сдвинулась бы в другую.
+
 ---
 
 ## Стратегии подключения
@@ -184,58 +189,98 @@ await app.Services.GetRequiredService<ISaConfigurationReloader>()
 
 ## Клиенты
 
-Дайте запросу колонку клиента — и один результат обслужит всех: строки с `NULL` в этой колонке
-становятся общими базовыми значениями, остальные раскладываются в `sa:clients:{client}:{key}`.
+Ядро конфигурации читает общие значения; каждый клиент читает свои переопределения из такой же
+таблицы с фильтром по своему client_id. Имена ключей в обеих таблицах **одинаковые** — префикса и
+общего словаря нет, поэтому значения одного клиента не могут протечь ни в ядро, ни в другого
+клиента.
+
+### Таблицы: `setting` + `client_settings`
 
 ```sql
-CREATE TABLE settings (
-    client_id TEXT,
-    key       TEXT NOT NULL,
-    value     TEXT NOT NULL
+CREATE TABLE setting (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
-INSERT INTO settings (client_id, key, value) VALUES
-    (NULL,   'theme',    'dark'),    -- базовое значение для всех
-    (NULL,   'language', 'en'),
-    ('acme', 'theme',    'light'),   -- acme перекрывает только тему
-    ('beta', 'language', 'de');      -- beta перекрывает только язык
+INSERT INTO setting (key, value) VALUES
+    ('s3_url',   'A'),
+    ('theme',    'dark'),
+    ('language', 'en');
+
+CREATE TABLE client_settings (
+    client_id TEXT NOT NULL,
+    key       TEXT NOT NULL,
+    value     TEXT NOT NULL,
+    PRIMARY KEY (client_id, key)
+);
+
+INSERT INTO client_settings (client_id, key, value) VALUES
+    ('client1', 's3_url', 'B1'),
+    ('client1', 'theme',  'light'),
+    ('client2', 's3_url', 'C'),
+    ('client2', 'language', 'de');
 ```
+
+### Ядро: один запрос, две колонки
 
 ```csharp
 builder.Configuration.AddSaPostgreSqlConfiguration(
     PgConfigurationConnection.FromServices(),
-    new PostgreSqlConfigurationOptions("SELECT client_id, key, value FROM settings")
-    {
-        ClientColumn = "client_id",      // обязательно первая колонка
-    });
+    new PostgreSqlConfigurationOptions("SELECT key, value FROM setting"));
 ```
+
+### Клиенты: один запрос, плоские строки
+
+Клиентский слой — обычный провайдер: сервис достаёт источник данных, выполняет один запрос,
+возвращающий `(client_id, key, value)` сразу по **всем** клиентам, а реестр группирует строки по
+`client_id` и строит по корню на клиента. Шага discovery и запроса на каждого клиента нет.
 
 ```csharp
 using Sa.Configuration.Clients;
+using Sa.Data.PostgreSql;
 
-configuration.GetClientNames();                     // ["acme", "beta"]
-configuration.ForClient("acme")["theme"];           // "light"
-configuration.ForClient("acme")["language"];        // "en" — базовое значение
-configuration["sa:clients:acme:theme"];             // "light" — «сырой» ключ с префиксом
+public sealed class PgClientSettingsStore(IPgDataSource dataSource)
+{
+    public async ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct)
+    {
+        List<ClientSetting> rows = [];
+
+        await dataSource.ExecuteReaderAsync(
+            "SELECT client_id, key, value FROM client_settings",
+            (reader, _) => rows.Add(new ClientSetting(
+                reader.GetString(0), reader.GetString(1), reader.GetString(2))),
+            initCommand: null,
+            ct);
+
+        return rows;
+    }
+}
+
+builder.Services.AddSingleton<PgClientSettingsStore>();
+
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+{
+    // Одна зависимость из DI (плюс токен) → строки по всем клиентам.
+    clients.Add<PgClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
+});
 ```
-
-Отфильтрованный запрос тоже работает — константа `Client` задаёт префикс:
 
 ```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    connectionString,
-    new PostgreSqlConfigurationOptions(
-        "SELECT key, value FROM settings WHERE client_id = @client_id",
-        new NpgsqlParameter("client_id", "acme"))
-    {
-        Client = "acme",
-    });
+IConfiguration core = app.Configuration;
+
+core["s3_url"];                                       // "A"
+clients.GetClient("client1")["s3_url"];               // "B1"
+clients.GetClient("client2")["s3_url"];               // "C"
+clients.GetClient("client1")["language"];             // "en" — фолбэк на ядро
+clients.Clients;                                      // ["client1", "client2"]
 ```
 
-Предпочтителен единый запрос: отфильтрованный источник фиксируется при сборке, и новый клиент в БД
-потребовал бы рестарта. С `ClientColumn` `ReloadDynamicAsync()` подхватит нового клиента сразу.
-Оверлей, вычисляемые ключи, алиасы и keyed DI — в
-[Sa.Configuration](../Sa.Configuration/Readme-ru.md#клиенты-keyed-конфигурация).
+Хранилище вызывается лениво при первом обращении и снова при каждом `ReloadDynamicAsync()`, поэтому
+строка, вставленная в `client_settings`, появляется без рестарта. Отдельный пул или другая база —
+это просто другой источник данных, который резолвит хранилище.
+
+Правила наложения, keyed-инъекция и подключение/удаление в рантайме — в
+[Sa.Configuration](../Sa.Configuration/Readme-ru.md#клиенты-ядро--оверлеи-клиентов).
 
 ---
 
@@ -273,9 +318,6 @@ builder.Services.AddSaConfigurationRuntime(builder.Configuration, o =>
 
 | Опция | По умолчанию | Значение |
 |-------|--------------|----------|
-| `Client` | `null` | Постоянное имя клиента: все ключи сохраняются под `{ClientsSection}:{Client}:{key}`. Для запроса, уже отфильтрованного по клиенту. Несовместимо с `ClientColumn` |
-| `ClientColumn` | `null` | Колонка с именем клиента (`client, key, value`). Строки с `NULL`/пустым клиентом остаются базовыми значениями |
-| `ClientsSection` | `"sa:clients"` | Секция, под которой хранятся клиентские переопределения |
 | `MaxAttempts` | `3` | Общее число попыток загрузки, включая первую. `0` и `1` означают одну попытку |
 | `MedianFirstRetryDelay` | `530` | Медианная задержка первого повтора в мс; каждая задержка джиттерится. Первый повтор всегда мгновенный |
 | `SkipEmptyValues` | `true` | Отбрасывать строки, у которых **значение** `NULL` или пустое. Подробнее — в разделе *Слои*. Пустые **ключи** отбрасываются независимо от этой настройки |
@@ -364,7 +406,7 @@ INSERT INTO app_settings (key, value) VALUES
 - `Microsoft.Extensions.Configuration`
 - `Npgsql` (`NpgsqlParameter` входит в публичный API)
 - `Sa.Data.PostgreSql` (обёртка Npgsql с `PgRetryStrategy` и `IPgDataSource`)
-- `Sa.Configuration` (маркер динамического источника, runtime/reloader и клиентский оверлей)
+- `Sa.Configuration` (маркер динамического источника, runtime/reloader и реестр клиентских конфигураций)
 
 ---
 

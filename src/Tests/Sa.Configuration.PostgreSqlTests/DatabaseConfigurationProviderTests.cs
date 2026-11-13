@@ -198,4 +198,38 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
         Assert.Null(configuration["stale_key"]);
         Assert.Equal("normal_value", configuration["NormalKey"]);
     }
+
+    [Fact]
+    public void Load_Throws_WhenTheQueryReturnsThreeColumns()
+    {
+        // A three-column query is the shape the removed client mapping used to accept. Reading it as
+        // (key, value) would silently shift the key into the client id, so the shape fails loudly.
+        var builder = new ConfigurationBuilder();
+        var options = new PostgreSqlConfigurationOptions
+        {
+            SelectSql = "SELECT 'client', key, value FROM config_provider_test",
+        };
+
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("exactly two columns", exception.Message);
+    }
+
+    [Fact]
+    public void Load_Throws_WhenTheQueryReturnsOneColumn()
+    {
+        var builder = new ConfigurationBuilder();
+        var options = new PostgreSqlConfigurationOptions
+        {
+            SelectSql = "SELECT key FROM config_provider_test",
+        };
+
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("exactly two columns", exception.Message);
+    }
 }

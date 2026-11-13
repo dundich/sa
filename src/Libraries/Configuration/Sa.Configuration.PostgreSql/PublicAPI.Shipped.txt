@@ -41,13 +41,7 @@ Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.DoubleUnderscoreAsSep
 Sa.Configuration.PostgreSql.DatabaseConfigurationSource.DatabaseConfigurationSource(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options) -> void
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.LastWins.get -> bool
 Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.LastWins.init -> void
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Client.get -> string?
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientColumn.get -> string?
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.Client.init -> void
 static Sa.Configuration.PostgreSql.Setup.AddSaPostgreSqlConfiguration(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, Sa.Configuration.PostgreSql.PgConfigurationConnection! connection, Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options) -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientsSection.get -> string!
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientColumn.init -> void
-Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions.ClientsSection.init -> void
 Sa.Configuration.PostgreSql.DatabaseConfigurationSource.DatabaseConfigurationSource(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options, string! connectionString) -> void
 static Sa.Configuration.PostgreSql.Setup.AddSaPostgreSqlConfiguration(this Microsoft.Extensions.Configuration.IConfigurationBuilder! builder, string! connectionString, Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options) -> Microsoft.Extensions.Configuration.IConfigurationBuilder!
 Sa.Configuration.PostgreSql.DatabaseConfigurationSource.DatabaseConfigurationSource(Sa.Configuration.PostgreSql.PostgreSqlConfigurationOptions! options, Sa.Data.PostgreSql.IPgDataSource! dataSource) -> void

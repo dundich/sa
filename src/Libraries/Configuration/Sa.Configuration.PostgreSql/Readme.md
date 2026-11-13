@@ -41,7 +41,7 @@ dotnet add package Sa.Configuration.PostgreSql
 - **`__` as `:` (optional)** — with `DoubleUnderscoreAsSeparator = true`, a double underscore in a key is read as the configuration separator, so `sa__pg__host` and `sa:pg:host` are the same setting. This is the same convention already used by `AddEnvironmentVariables()`. Disabled by default — keys are stored as-is.
 - **Layer control** — decide whether empty and `NULL` values delegate to lower-priority sources or override them.
 - **Connection strategies** — a private pool, a shared `IPgDataSource`, or the application's own data source resolved from DI (`FromServices`, the default). No connection string is required when the application already has one.
-- **Clients in one query** — a three-column `(client, key, value)` query maps rows to `sa:clients:{client}:{key}`, so every client is available at once and a new one appears after a reload without a restart.
+- **Clients** — per-client settings split by `client_id` are returned as flat rows, grouped into each client's own overlay; a new client appears after a reload without a restart.
 - **Dynamic by default** — the source implements `ISaDynamicConfigurationSource`; `ISaConfigurationReloader` reloads it (and the alias/placeholder pass) without re-reading the files.
 
 ---
@@ -142,6 +142,10 @@ builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOp
 ));
 ```
 
+The result set is positional: the query must return **exactly two** columns, `(key, value)`. Anything
+else is a startup error, including the three-column `(client, key, value)` shape the removed client
+mapping used to accept — reading it as `(key, value)` would silently shift one column into the other.
+
 ---
 
 ## Connection strategies
@@ -191,58 +195,98 @@ source into an empty layer instead of a failed start.
 
 ## Clients
 
-Give the query a client column and one result set serves every client: rows with `NULL` in that
-column are the shared base values, the rest land under `sa:clients:{client}:{key}`.
+The core configuration reads the shared values; each client reads its own overrides from the same
+kind of table, filtered by its client id. Keys carry the **same names** in both tables — there is no
+prefix and no shared dictionary, so one client's values can never leak into the core or into another
+client.
+
+### Tables: `setting` + `client_settings`
 
 ```sql
-CREATE TABLE settings (
-    client_id TEXT,
-    key       TEXT NOT NULL,
-    value     TEXT NOT NULL
+CREATE TABLE setting (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
-INSERT INTO settings (client_id, key, value) VALUES
-    (NULL,   'theme',    'dark'),    -- base value for everyone
-    (NULL,   'language', 'en'),
-    ('acme', 'theme',    'light'),   -- acme overrides only the theme
-    ('beta', 'language', 'de');      -- beta overrides only the language
+INSERT INTO setting (key, value) VALUES
+    ('s3_url',   'A'),
+    ('theme',    'dark'),
+    ('language', 'en');
+
+CREATE TABLE client_settings (
+    client_id TEXT NOT NULL,
+    key       TEXT NOT NULL,
+    value     TEXT NOT NULL,
+    PRIMARY KEY (client_id, key)
+);
+
+INSERT INTO client_settings (client_id, key, value) VALUES
+    ('client1', 's3_url', 'B1'),
+    ('client1', 'theme',  'light'),
+    ('client2', 's3_url', 'C'),
+    ('client2', 'language', 'de');
 ```
+
+### Core: one query, two columns
 
 ```csharp
 builder.Configuration.AddSaPostgreSqlConfiguration(
     PgConfigurationConnection.FromServices(),
-    new PostgreSqlConfigurationOptions("SELECT client_id, key, value FROM settings")
-    {
-        ClientColumn = "client_id",      // must be the first column
-    });
+    new PostgreSqlConfigurationOptions("SELECT key, value FROM setting"));
 ```
+
+### Clients: one query, flat rows
+
+The client layer is an ordinary provider: a service resolves the data source, runs one query that
+returns `(client_id, key, value)` for **every** client, and the registry groups the rows by
+`client_id` and builds one root per client. There is no discovery step and no per-client query.
 
 ```csharp
 using Sa.Configuration.Clients;
+using Sa.Data.PostgreSql;
 
-configuration.GetClientNames();                     // ["acme", "beta"]
-configuration.ForClient("acme")["theme"];           // "light"
-configuration.ForClient("acme")["language"];        // "en" — base value
-configuration["sa:clients:acme:theme"];             // "light" — the raw prefixed key
+public sealed class PgClientSettingsStore(IPgDataSource dataSource)
+{
+    public async ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct)
+    {
+        List<ClientSetting> rows = [];
+
+        await dataSource.ExecuteReaderAsync(
+            "SELECT client_id, key, value FROM client_settings",
+            (reader, _) => rows.Add(new ClientSetting(
+                reader.GetString(0), reader.GetString(1), reader.GetString(2))),
+            initCommand: null,
+            ct);
+
+        return rows;
+    }
+}
+
+builder.Services.AddSingleton<PgClientSettingsStore>();
+
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+{
+    // One DI dependency (plus the token) → rows for all clients.
+    clients.Add<PgClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
+});
 ```
-
-A filtered query works too — the constant client name tells the source which prefix to use:
 
 ```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    connectionString,
-    new PostgreSqlConfigurationOptions(
-        "SELECT key, value FROM settings WHERE client_id = @client_id",
-        new NpgsqlParameter("client_id", "acme"))
-    {
-        Client = "acme",
-    });
+IConfiguration core = app.Configuration;
+
+core["s3_url"];                                       // "A"
+clients.GetClient("client1")["s3_url"];               // "B1"
+clients.GetClient("client2")["s3_url"];               // "C"
+clients.GetClient("client1")["language"];             // "en" — core fallback
+clients.Clients;                                      // ["client1", "client2"]
 ```
 
-Prefer the single query: a filtered source is fixed at build time, so a client added to the database
-would need a restart. With `ClientColumn`, `ReloadDynamicAsync()` picks up the new client at once.
-See [Sa.Configuration](../Sa.Configuration/Readme.md#clients-keyed-configuration) for the overlay,
-computed keys, aliases and keyed DI.
+The store is called lazily on the first access and again on every `ReloadDynamicAsync()`, so a row
+inserted into `client_settings` appears without a restart. A dedicated pool or another database is
+just a different data source registered for the store to resolve.
+
+See [Sa.Configuration](../Sa.Configuration/Readme.md#clients-core--per-client-overlays) for the
+overlay rules, keyed injection and runtime attach/remove.
 
 ---
 
@@ -280,9 +324,6 @@ builder.Services.AddSaConfigurationRuntime(builder.Configuration, o =>
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `Client` | `null` | Constant client name: stores every key under `{ClientsSection}:{Client}:{key}`. For a query already filtered by client. Mutually exclusive with `ClientColumn` |
-| `ClientColumn` | `null` | Column that carries the client name (`client, key, value`). Rows with a `NULL`/empty client stay base values |
-| `ClientsSection` | `"sa:clients"` | Section the client overrides are stored under |
 | `MaxAttempts` | `3` | Total number of load attempts, including the first one. `0` and `1` mean a single attempt |
 | `MedianFirstRetryDelay` | `530` | Median delay of the first retry in ms; each delay is jittered. The first retry is always immediate |
 | `SkipEmptyValues` | `true` | Skip rows whose **value** is `NULL` or empty. See *Layers* below. Empty **keys** are skipped regardless of this setting |

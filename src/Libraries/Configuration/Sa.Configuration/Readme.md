@@ -6,7 +6,7 @@ A .NET package that assembles and extends configuration:
 
 1. **Builds the layer stack** — static sources (appsettings, environment variables, arguments, secrets) and dynamic ones (a database) in one deterministic order, with a builder for the two strategies.
 2. **Substitutes secrets into configuration** — instead of hardcoding passwords and keys, you write `{{sa_pg_password}}` in the config, and the package fills in the real value from a file, an environment variable, or a command-line argument.
-3. **Overlays per-client settings** — `sa:clients:{client}:{key}` values are laid over the shared ones, and every client is addressable as a keyed `IConfiguration`.
+3. **Overlays per-client settings** — every client has its own configuration root with the same key names, laid over the shared values, and is addressable as a keyed `IConfiguration`.
 4. **Reloads only the dynamic layer** — `ISaConfigurationReloader` refreshes the database sources (and the values derived from them) without re-reading the files, and registers no background service unless you ask for one.
 5. **Parses command-line arguments** — `--key value`, `--key=value`, `-flag`, and so on.
 
@@ -47,7 +47,7 @@ dotnet add package Sa.Configuration
   - [Details](#details)
   - [Cheat sheet](#cheat-sheet)
 - [Use with Sa.Configuration.PostgreSql](#use-with-saconfigurationpostgresql)
-- [Clients (keyed configuration)](#clients-keyed-configuration)
+- [Clients (core + per-client overlays)](#clients-core--per-client-overlays)
 - [Dynamic reload](#dynamic-reload)
 - [Full DI example](#full-di-example)
 - [Command-line arguments](#command-line-arguments)
@@ -66,7 +66,7 @@ dotnet add package Sa.Configuration
 - **Key aliases** — [Key aliases](#key-aliases): you can link a "flat" setting name (say, `auth_base_url` from the PHP world) to a nested C# path (`sa:scope:api:auth:base_url`). Works across all sources at once.
 - **Encryption** — encrypted `secrets*.pub` files (AES-256-GCM) can be committed to the repo. Encryption keys are plain or `base64:`. Clients, environments, `.env`, and Unicode are supported. See [Encrypted secrets](#encrypted-secrets).
 - **Layer builder** — `AddSaConfiguration(sa => ...)` assembles static and dynamic sources in a fixed order. See [Layers and the builder](#layers-and-the-builder).
-- **Per-client overlay** — `sa:clients:{client}:{key}` in any source, a keyed `IConfiguration` per client, and a factory for names known only at runtime. See [Clients](#clients-keyed-configuration).
+- **Per-client configuration** — the core holds the shared keys, every client gets its own root with the same key names, built from the flat rows the providers return and reachable as a keyed `IConfiguration`. See [Clients](#clients-core--per-client-overlays).
 - **Dynamic reload** — only the database sources are refreshed, and the aliases/placeholders are recomputed from the fresh values. No timer by default. See [Dynamic reload](#dynamic-reload).
 
 ---
@@ -92,18 +92,14 @@ builder.Configuration.AddSaConfiguration(sa =>
 ```
 
 ```csharp
-// Strategy 2 — static + dynamic + clients.
+// Strategy 2 — static + dynamic core. Clients are registered separately (see Clients below).
 builder.Configuration.AddSaConfiguration(sa =>
 {
     sa.UseStandardSources();                                                // static
     sa.UseSecrets();                                                        // {{…}} + aliases
     sa.UseDynamic(new DatabaseConfigurationSource(                          // dynamic, overrides static
-        new PostgreSqlConfigurationOptions("SELECT client_id, key, value FROM settings")
-        {
-            ClientColumn = "client_id",
-        },
+        new PostgreSqlConfigurationOptions("SELECT key, value FROM setting"),
         PgConfigurationConnection.FromServices()));
-    sa.UseClients();                                                        // sa:clients:{client}:{key}
 });
 ```
 
@@ -112,7 +108,6 @@ builder.Configuration.AddSaConfiguration(sa =>
 | `UseStandardSources(...)` | `appsettings.json`, `appsettings.{env}.json`, environment variables, arguments. **Idempotent**: in ASP.NET Core / generic host the host already added them, so the method is a no-op there. |
 | `UseSecrets(...)` | the existing secret pipeline: placeholders, key aliases, the command-line source. |
 | `UseDynamic(source)` | a source whose values change at runtime; placed after the static ones. |
-| `UseClients(path = "sa:clients")` | the per-client overlay, including alias resolution inside each client prefix. |
 | `Use(source)` | any `IConfigurationSource`, for the few sources without a dedicated method. |
 | `Finalize()` | moves the pass after everything (needed only when sources are added to `sa.Builder` directly). |
 
@@ -467,179 +462,222 @@ builder.Configuration.AddSaPostgreSqlConfiguration(
 ```
 
 Aliases declared in the secret layer apply on top of the database values, and the database layer
-overrides the static one (it is registered later). See the package README for the query shapes,
-`ClientColumn`, and the reload details.
+overrides the static one (it is registered later). See the package README for the query shapes and
+the reload details.
 
 ---
 
-## Clients (keyed configuration)
+## Clients (core + per-client overlays)
 
-Base values are shared; a client overrides only what it needs. The convention is one key prefix —
-`sa:clients:{client}:{key}` — so client data can live in **any** source: JSON, environment
-variables, command-line arguments or a database. No extra provider, no extra pool.
+The core configuration keeps the shared, fixed set of keys. A client does not prefix anything: it
+gets its **own configuration root** with the **same key names**, laid over the core values. Reading a
+client resolves its own value first and falls back to the core one.
 
 ```text
-theme                          ← base value, used when the client has no override
-sa:clients:acme:theme          ← override for "acme"
-sa:clients:beta:theme          ← override for "beta"
+core ("s3_url" = "A")                 ← shared value
+client1 ("s3_url" = "B1")             ← separate root, same key name
+client2 ("s3_url" = "C")              ← separate root, same key name
+
+cf["s3_url"]      → "A"
+clients.GetClient("client1")["s3_url"] → "B1"
+clients.GetClient("client2")["s3_url"] → "C"
 ```
 
-### Static data: several clients in `appsettings.json`
+There is no `sa:clients:{client}:{key}` prefix and no shared dictionary: the client roots are
+independent, so one client's values can never leak into the core or into another client. Key names
+are a convention, not a schema — a client may introduce keys the core does not have.
 
-```json
-{
-  "theme": "dark",
-  "language": "en",
-  "sa": {
-    "clients": {
-      "acme": { "theme": "light" },
-      "beta": { "language": "de", "theme": "dark" }
-    }
-  }
-}
-```
+### Data: core table + `client_settings`
 
-The same data through the other static sources:
-
-```bash
-# environment variables: __ is the ":" separator
-export SA__CLIENTS__ACME__THEME=light
-
-# command line
-./app --sa__clients__beta__language=de
-```
-
-### Dynamic data: SQL that returns every client at once
+The canonical shape is two tables. The shared values live in `setting`; each client's overrides live
+in `client_settings`, split by `client_id`:
 
 ```sql
--- One query, one connection pool, every client. client_id NULL holds the base values.
-SELECT client_id, key, value FROM settings;
+CREATE TABLE setting (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+INSERT INTO setting (key, value) VALUES
+    ('s3_url',   'A'),
+    ('theme',    'dark'),
+    ('language', 'en');
+
+CREATE TABLE client_settings (
+    client_id TEXT NOT NULL,
+    key       TEXT NOT NULL,
+    value     TEXT NOT NULL,
+    PRIMARY KEY (client_id, key)
+);
+
+INSERT INTO client_settings (client_id, key, value) VALUES
+    ('client1', 's3_url', 'B1'),
+    ('client1', 'theme',  'light'),
+    ('client2', 's3_url', 'C'),
+    ('client2', 'language', 'de');
 ```
 
-```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    PgConfigurationConnection.FromServices(),
-    new PostgreSqlConfigurationOptions("SELECT client_id, key, value FROM settings")
-    {
-        ClientColumn = "client_id",                 // first column: client, key, value
-        ClientsSection = "sa:clients",              // the default; kept explicit here
-    });
-```
+### Registration: providers returning flat rows
 
-A pre-filtered query works too — the constant client tells the source which prefix to use:
-
-```sql
-SELECT key, value FROM settings WHERE client_id = @client_id;
-```
-
-```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    connectionString,
-    new PostgreSqlConfigurationOptions(
-        "SELECT key, value FROM settings WHERE client_id = @client_id",
-        new NpgsqlParameter("client_id", "acme"))
-    {
-        Client = "acme",                            // → sa:clients:acme:{key}
-    });
-```
-
-Prefer the single query: it is the only shape where a new client appears after a reload without a
-restart (a filtered query needs one source per client, fixed at build time).
-
-### Reading a client: computed keys
-
-A client key is an ordinary configuration path, so it can be computed instead of hardcoded. This is
-the same shape the SQL `ClientColumn` produces:
+A provider is a callback registered with `clients.Add<T1[,T2[,T3]]>(...)`. Its one to three
+parameters are resolved from the container when the rows are read (plus a `CancellationToken`), and
+it returns flat `(client_id, key, value)` rows for **every** client at once. The registry groups the
+rows by `client_id` and builds one root per client, so a provider knows nothing about client roots,
+splitters or prefixes — it just returns rows.
 
 ```csharp
 using Sa.Configuration.Clients;
 
-// One place that knows the convention — no scattered "sa:clients:…" literals.
-static string ClientKey(string client, string setting)
-    => $"{ClientConfiguration.DefaultSectionPath}:{client}:{setting}";
+builder.Services.AddSingleton<IClientSettingsStore, PgClientSettingsStore>();
 
-string? acmeTheme = configuration[ClientKey("acme", "theme")];   // "light"
-string? betaTheme = configuration[ClientKey("beta", "theme")];   // null: beta has no override
-```
-
-The overlay is usually more convenient, because it adds the fallback to the base value:
-
-```csharp
-IConfiguration acme = configuration.ForClient("acme");
-
-acme["theme"];          // "light"  — the override
-acme["language"];       // "en"     — the base value
-acme["database:host"];  // sections work as usual: acme's child wins over the base child
-```
-
-And when the setting names are dynamic as well, compute both parts:
-
-```csharp
-string[] settings = ["theme", "language", "notifications"];
-
-foreach (string client in configuration.GetClientNames())
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
 {
-    IConfiguration view = configuration.ForClient(client);
+    // Up to three dependencies come from DI; the callback returns rows for all clients.
+    clients.Add<IClientSettingsStore>(
+        (store, cancellationToken) => store.LoadAllAsync(cancellationToken));
+});
+```
 
-    foreach (string setting in settings)
-    {
-        // view[setting] is the overlay; the computed key reads the raw prefixed value.
-        string? value = view[setting];
-        string raw = ClientKey(client, setting);
+The row type is `ClientSetting(clientId, key, value)` — exactly the shape a query returns:
 
-        Console.WriteLine($"{client}:{setting} = {value ?? "(absent)"} (raw {raw})");
-    }
+```csharp
+public async ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct)
+{
+    List<ClientSetting> rows = [];
+
+    await dataSource.ExecuteReaderAsync(
+        "SELECT client_id, key, value FROM client_settings",
+        (reader, _) => rows.Add(new ClientSetting(
+            reader.GetString(0), reader.GetString(1), reader.GetString(2))),
+        initCommand: null,
+        ct);
+
+    return rows;
+}
+```
+
+A client needs no separate declaration: it exists as soon as any provider returns a row for it. The
+providers are called lazily on first access and again on `ReloadAsync()` /
+`ReloadDynamicAsync()`, so a new row in `client_settings` becomes addressable without a restart.
+
+Several providers can be registered and are merged per client; a later row for the same client and
+key wins:
+
+```csharp
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+{
+    clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
+
+    clients.Add<IDefaultsStore, ILogger<Clients>>(
+        (defaults, logger, ct) => defaults.LoadAsync(logger, ct));
+});
+```
+
+### Clients from a configuration section (no database)
+
+When the clients are already in static configuration, `UseConfiguration` registers the same kind of
+provider over a section. The children of the section are the client ids; the keys inside a client's
+section use the same names as the core configuration and are read **without** the section prefix.
+
+```json
+{
+  "s3_url": "A",
+  "theme": "dark",
+  "language": "en",
+
+  "clients": {
+    "acme": { "s3_url": "B1", "theme": "light" },
+    "beta": { "s3_url": "C", "language": "de" }
+  }
+}
+```
+
+```csharp
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+    clients.UseConfiguration(builder.Configuration));
+```
+
+`clients.Clients` → `["acme", "beta"]`; `clients.GetClient("acme")["s3_url"]` → `"B1"`;
+`clients.GetClient("acme")["language"]` → `"en"` (the core value). The registry is live: a client
+added to the section appears after a reload, and existing client values are re-read on every
+`ReloadDynamicAsync()`.
+
+A different layout — only the section path changes:
+
+```csharp
+clients.UseConfiguration(builder.Configuration, new ConfigurationClientSourceOptions
+{
+    SectionPath = "tenants",        // tenants:acme:s3_url, tenants:beta:s3_url, …
+});
+```
+
+`UseConfiguration` is a provider like any other, so it can be combined with `clients.Add<T>(...)`;
+the rows from all providers are merged per client.
+
+### DI variants
+
+| Shape | When to use |
+|---|---|
+| `clients.Add<T1>((t1, ct) => rows)` | the provider needs one DI service and returns all clients' rows |
+| `clients.Add<T1, T2>((t1, t2, ct) => rows)` | two services (a store and a logger, say) |
+| `clients.Add<T1, T2, T3>((t1, t2, t3, ct) => rows)` | three services |
+| `clients.UseConfiguration(configuration)` | the clients and their values live in a configuration section (`clients:{id}:{key}`), no database involved |
+| `AttachAsync(client, source)` | a client appears at runtime (a plugin, a manually provisioned tenant, a test) |
+| `clients.Configure(o => …)` | adjust `ThrowForUnknownClient` / `EagerLoad` |
+
+### Reading
+
+```csharp
+public sealed class SettingsEndpoints(IConfiguration core, IClientConfigurations clients)
+{
+    public string CoreS3Url => core["s3_url"]!;                       // "A"
+    public string Client1S3Url => clients.GetClient("client1")["s3_url"]!; // "B1"
+    public string Client2S3Url => clients.GetClient("client2")["s3_url"]!; // "C"
+
+    public IReadOnlyCollection<string> Known => clients.Clients;       // from providers + attached
 }
 ```
 
 Rules:
 
-- a client value wins over the base value of the same path; a missing client value falls back to the
-  base one (it is never invented);
-- clients never see each other, and the overrides section itself is hidden from a client view;
-- an unknown client simply reads the base values — `ForClient` never throws for it.
-  `IClientConfigurationFactory.TryFor` reports whether the client is actually declared;
-- `GetClientNames()` / `IClientConfigurationFactory.Clients` are recomputed on every read, so a client
-  added to the database appears after `ReloadDynamicAsync()`.
+- a client value wins over the core value of the same key; a missing client value falls back to the
+  core one and is never invented;
+- a client sees only its own root plus the core — never another client's values; with the
+  section-based provider the clients section is meta-data of the overlay and is hidden from every
+  view, so one client cannot read another client's rows through the core fallback;
+- a blank row (a `value` that is empty or whitespace) is dropped while the rows are read and
+  delegates to the core value — `ClientConfigurationOptions.SkipEmptyValues`, on by default, mirrors
+  the core database layer; set it to `false` to make a blank an explicit value of its own. A blank a
+  transform produced is written after the rows are read and always stays local to the client;
+- an unknown client reads the core values; `TryGet` reports whether it is actually known and never
+  throws, not even with `ThrowForUnknownClient` (only `GetClient` does);
+- `Clients` is the union of the ids the providers returned and the runtime attachments, so a client
+  added to the database appears after `ReloadDynamicAsync()`;
+- **rows are rewritten by the same pass as the core** — a client's values go through the transform
+  chain too, so `{{placeholder}}` secrets are substituted and key aliases are resolved inside the
+  client's own rows (alias sources are read from the client first, the core second). A derived value
+  that only mirrors the core is not copied into the overlay, so the client keeps reading the core
+  live. A row the pass cannot resolve (a missing secret) reads as a blank for that client, not as
+  the core value and not as the literal `{{…}}`. The section-based provider (`UseConfiguration`) is
+  the exception: the core pass blanks an unresolved placeholder **before** the section is read, so
+  that row never reaches the registry and the client falls back to the core value;
+- keys use the canonical `:` spelling: `sa__pg__host` in a row is the same setting as `sa:pg:host`.
 
-### Dependency injection
+Sections work across both roots:
 
 ```csharp
-builder.Services.AddSaConfigurationRuntime(builder.Configuration, runtime =>
-{
-    runtime.KeyedClientConfigurations = true;     // keyed IConfiguration + IClientConfigurationFactory
-});
+IConfiguration db = clients.GetClient("client1").GetSection("db");
+db["host"]; // client1's value when present, otherwise the core value
 ```
 
-A compile-time name — keyed injection:
+### Aliases and placeholders inside a client overlay
 
-```csharp
-app.MapGet("/acme/theme", ([FromKeyedServices("acme")] IConfiguration acme) => acme["theme"]);
-```
-
-A name known only at runtime — keyed resolution or the factory:
-
-```csharp
-app.MapGet("/settings/{client}", (string client, HttpContext http) =>
-    http.RequestServices.GetRequiredKeyedService<IConfiguration>(client)["theme"]);
-
-// Every client, discovered from the overrides:
-app.MapGet("/settings", (IClientConfigurationFactory clients) =>
-    clients.Clients.Select(id => new { Client = id, Theme = clients.For(id)["theme"] }));
-```
-
-`For`/`ForClient` returns a thin, live view: only the prefix is cached, never a value, so a reload is
-visible immediately and one instance is safe for every request.
-
-### Aliases inside a client prefix
-
-`UseClients()` teaches the alias pass to work per client, so a client can keep its settings under
+A client's rows go through the same pass as the core, so a client can keep its settings under
 whatever flat names its own system uses:
 
 ```csharp
 builder.Configuration.AddSaConfiguration(sa =>
 {
-    sa.UseClients();
     sa.UseSecrets(new SecretOptions
     {
         KeyAliases = new KeyAliasOptions
@@ -648,14 +686,95 @@ builder.Configuration.AddSaConfiguration(sa =>
         },
     });
 });
+
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+    clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct)));
 ```
 
 ```text
-sa:clients:acme:auth_base_url                      → sa:clients:acme:sa:scope:api:auth:base_url
+core:    auth_base_url = https://core.example.com   → sa:scope:api:auth:base_url = https://core.example.com
+client1: auth_base_url = https://acme.example.com   → sa:scope:api:auth:base_url = https://acme.example.com
+client2: (no such row)                              → https://core.example.com, read live from the core
+
+client1: api_token = {{acme_token}}                 → the resolved secret, never the literal
 ```
 
-Values never cross the prefix boundary: the base alias keeps the base value, each client resolves
-its own, and one client's flat key cannot leak into another client or into the base configuration.
+The alias source is looked up in the client first and in the core second, and a client's value never
+crosses into the core or into another client. A derived value that only mirrors the core is not
+copied into the overlay, so a change in the core is visible without reloading the client rows.
+
+### Keyed injection
+
+When the client id is known at compile time, resolve its configuration by key — the handler or
+constructor receives the client's own root directly.
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;   // [FromKeyedServices]
+
+public static class Clients
+{
+    public const string Acme = "acme";
+    public const string Beta = "beta";
+}
+
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+    clients.UseConfiguration(builder.Configuration));
+
+// Minimal API: the known client comes from the container, no registry lookup in the body.
+app.MapGet("/acme/settings", ([FromKeyedServices(Clients.Acme)] IConfiguration acme) => new
+{
+    S3Url = acme["s3_url"],        // "B1"
+    Theme = acme["theme"],         // "light"
+    Language = acme["language"],   // "en" — core fallback
+});
+
+// A regular service: the same keyed injection in the constructor.
+public sealed class AcmeStorage([FromKeyedServices(Clients.Acme)] IConfiguration configuration)
+{
+    public string S3Url => configuration["s3_url"]!;
+}
+
+// Code that holds an IServiceProvider (a factory, a startup task):
+IConfiguration beta = app.Services.GetRequiredKeyedService<IConfiguration>(Clients.Beta);
+beta["s3_url"];                    // "C"
+```
+
+The key is the client id used in `client_settings.client_id` (or the section's child key) and is
+matched case-insensitively. Injection is per resolution — a client attached or refreshed later is
+visible on the next request without re-registering anything.
+
+A name known only at runtime cannot be a compile-time key, so pass the id and ask the registry:
+
+```csharp
+app.MapGet("/settings/{client}", (string client, IClientConfigurations clients) =>
+    new { Client = client, S3Url = clients.GetClient(client)["s3_url"] });
+```
+
+The keyed registration uses `KeyedService.AnyKey`, so `GetRequiredKeyedService<IConfiguration>(id)`
+works for a name that only exists at runtime. Enumerating keyed services does not enumerate clients —
+use `IClientConfigurations.Clients` for that.
+
+### Runtime attach and removal
+
+```csharp
+await clients.AttachAsync("acme", new MemoryConfigurationSource
+{
+    InitialData = new Dictionary<string, string?> { ["s3_url"] = "B1" },
+});
+
+await clients.RemoveAsync("acme");   // the view falls back to the core again
+```
+
+`AttachAsync` replaces an existing overlay of the same client and disposes the replaced one.
+`RemoveAsync` returns `false` and changes nothing for a client a provider still reports — its overlay
+would be rebuilt on the next access, so the call reports that there was nothing to remove. Only a
+runtime attachment can be removed.
+
+Views returned by `GetClient` are live: they ask the registry for the current root on every access,
+so an attach/remove/reload is visible through a reference obtained earlier — including a view of a
+client that was unknown when the reference was obtained. The same goes for the change token:
+`GetReloadToken()` on a view composes the core, the overlay and the registry, so a callback fires on
+an attach or a remove as well, not only on a reload. The registry is thread-safe.
 
 ---
 
@@ -702,7 +821,7 @@ failed periodic reload is logged while the previous snapshot stays in effect.
 
 ## Full DI example
 
-Static + dynamic + two clients, with one connection pool and no background service unless asked:
+Static + dynamic core + two clients, with one connection pool and no background service unless asked:
 
 ```csharp
 using Sa.Configuration;
@@ -712,38 +831,49 @@ using Sa.Configuration.PostgreSql;
 var builder = WebApplication.CreateBuilder(args);
 
 // Static: the host already added appsettings/env/args, so UseStandardSources is a no-op here.
-// The dynamic source reads through the pool registered below.
+// The dynamic source reads the shared values through the pool registered below.
 builder.Configuration.AddSaConfiguration(sa =>
 {
     sa.UseSecrets();                                   // {{placeholder}} + key aliases
     sa.UseDynamic(new DatabaseConfigurationSource(
-        new PostgreSqlConfigurationOptions("SELECT client_id, key, value FROM settings")
-        {
-            ClientColumn = "client_id",
-        },
+        new PostgreSqlConfigurationOptions("SELECT key, value FROM setting"),
         PgConfigurationConnection.FromServices("orders")));
-    sa.UseClients();
 });
 
 builder.Services.AddSaPostgreSqlDataSource("orders", b => b.FromConfiguration("Postgres"));
+builder.Services.AddSingleton<IClientSettingsStore, PgClientSettingsStore>();
+
+// Every client gets its own root; keys are stored verbatim, no prefix. The provider resolves its
+// store from DI and returns `(client_id, key, value)` rows for all clients at once.
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+{
+    clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
+});
+
 builder.Services.AddSaConfigurationRuntime(builder.Configuration, runtime =>
 {
-    runtime.KeyedClientConfigurations = true;
     runtime.InitialLoad = SaDynamicInitialLoad.Hosted;   // before the first request
 });
 
 var app = builder.Build();
 
-app.MapGet("/settings", (IConfiguration configuration) => new
+app.MapGet("/settings", (IConfiguration configuration, IClientConfigurations clients) => new
 {
-    Theme = configuration["theme"],                     // base value
-    Clients = configuration.GetClientNames(),           // ["acme", "beta"]
+    Theme = configuration["theme"],                     // core value
+    S3Url = configuration["s3_url"],                    // core value
+    Clients = clients.Clients,                          // ["acme", "beta"]
 });
 
-app.MapGet("/settings/{client}", (string client, IConfiguration configuration) =>
+app.MapGet("/settings/{client}", (string client, IClientConfigurations clients) =>
 {
-    IConfiguration view = configuration.ForClient(client);
-    return new { Client = client, Theme = view["theme"], Language = view["language"] };
+    IConfiguration view = clients.GetClient(client);
+    return new
+    {
+        Client = client,
+        Theme = view["theme"],
+        S3Url = view["s3_url"],
+        Language = view["language"],
+    };
 });
 
 app.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
@@ -752,20 +882,61 @@ app.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
 app.Run();
 ```
 
-`settings` sample data:
+The provider behind `clients.Add<IClientSettingsStore>(...)` — one query, flat rows, grouped by the
+registry:
 
-```sql
-CREATE TABLE settings (client_id TEXT, key TEXT NOT NULL, value TEXT NOT NULL);
+```csharp
+public interface IClientSettingsStore
+{
+    ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct);
+}
 
-INSERT INTO settings (client_id, key, value) VALUES
-    (NULL,   'theme',    'dark'),   -- base value for everyone
-    (NULL,   'language', 'en'),
-    ('acme', 'theme',    'light'),  -- acme overrides only the theme
-    ('beta', 'language', 'de');     -- beta overrides only the language
+public sealed class PgClientSettingsStore(IPgDataSource dataSource) : IClientSettingsStore
+{
+    public async ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct)
+    {
+        List<ClientSetting> rows = [];
+
+        await dataSource.ExecuteReaderAsync(
+            "SELECT client_id, key, value FROM client_settings",
+            (reader, _) => rows.Add(new ClientSetting(
+                reader.GetString(0), reader.GetString(1), reader.GetString(2))),
+            initCommand: null,
+            ct);
+
+        return rows;
+    }
+}
 ```
 
-`GET /settings` → base `dark`/`en`; `GET /settings/acme` → `light`/`en`;
-`GET /settings/beta` → `dark`/`de`; `GET /settings/unknown` → `dark`/`en`.
+Sample data — the core table and the per-client table:
+
+```sql
+CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+INSERT INTO setting (key, value) VALUES
+    ('s3_url',   'A'),      -- core value for every client
+    ('theme',    'dark'),
+    ('language', 'en');
+
+CREATE TABLE client_settings (
+    client_id TEXT NOT NULL,
+    key       TEXT NOT NULL,
+    value     TEXT NOT NULL,
+    PRIMARY KEY (client_id, key)
+);
+
+INSERT INTO client_settings (client_id, key, value) VALUES
+    ('acme', 's3_url',   'B1'),   -- acme overrides only its s3_url
+    ('acme', 'theme',    'light'),
+    ('beta', 's3_url',   'C'),    -- beta has its own value too
+    ('beta', 'language', 'de');
+```
+
+`GET /settings` → `s3_url` = `A`, `theme` = `dark`, `language` = `en`;
+`GET /settings/acme` → `B1` / `light` / `en`;
+`GET /settings/beta` → `C` / `dark` / `de`;
+`GET /settings/unknown` → `A` / `dark` / `en`.
 
 ## Command-line arguments
 

@@ -1,1 +1,65 @@
 #nullable enable
+Sa.Configuration.Clients.ClientConfigurationOptions
+Sa.Configuration.Clients.ClientConfigurationOptions.ClientConfigurationOptions() -> void
+Sa.Configuration.Clients.IClientConfigurations
+Sa.Configuration.Clients.ClientConfigurationSetup
+Sa.Configuration.Clients.SaClientConfigurationRegistration
+Sa.Configuration.Clients.SaClientConfigurationRegistration.SaClientConfigurationRegistration() -> void
+Sa.Configuration.Clients.ClientConfigurations
+Sa.Configuration.Clients.ClientConfigurationOptions.EagerLoad.get -> bool
+Sa.Configuration.Clients.ClientConfigurationOptions.EagerLoad.set -> void
+Sa.Configuration.Clients.ClientConfigurationOptions.ThrowForUnknownClient.get -> bool
+Sa.Configuration.Clients.ClientConfigurationOptions.ThrowForUnknownClient.set -> void
+Sa.Configuration.Clients.ClientConfigurationOptions.SkipEmptyValues.get -> bool
+Sa.Configuration.Clients.ClientConfigurationOptions.SkipEmptyValues.set -> void
+Sa.Configuration.Clients.ClientConfiguration.ClientConfiguration(Microsoft.Extensions.Configuration.IConfiguration! core, Microsoft.Extensions.Configuration.IConfiguration? overlay) -> void
+Sa.Configuration.Clients.ClientConfigurations.ClientConfigurations(Microsoft.Extensions.Configuration.IConfiguration! core) -> void
+Sa.Configuration.Clients.IClientConfigurations.Clients.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+Sa.Configuration.Clients.IClientConfigurations.GetClient(string! client) -> Microsoft.Extensions.Configuration.IConfiguration!
+Sa.Configuration.Clients.IClientConfigurations.AttachAsync(string! client, Microsoft.Extensions.Configuration.IConfigurationSource! source, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Sa.Configuration.Clients.IClientConfigurations.RemoveAsync(string! client, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+Sa.Configuration.Clients.IClientConfigurations.GetReloadToken() -> Microsoft.Extensions.Primitives.IChangeToken!
+Sa.Configuration.Clients.IClientConfigurations.TryGet(string! client, out Microsoft.Extensions.Configuration.IConfiguration! configuration) -> bool
+static Sa.Configuration.Clients.ClientConfigurationSetup.AddSaClientConfigurations(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration, System.Action<Sa.Configuration.Clients.SaClientConfigurationRegistration!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Sa.Configuration.Clients.IClientConfigurations.ReloadAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Sa.Configuration.Clients.ClientConfigurations.Clients.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+Sa.Configuration.Clients.SaClientConfigurationRegistration.Configure(System.Action<Sa.Configuration.Clients.ClientConfigurationOptions!>! configure) -> Sa.Configuration.Clients.SaClientConfigurationRegistration!
+Sa.Configuration.Clients.ClientConfigurations.GetClient(string! client) -> Microsoft.Extensions.Configuration.IConfiguration!
+Sa.Configuration.Clients.ClientConfigurations.TryGet(string! client, out Microsoft.Extensions.Configuration.IConfiguration! configuration) -> bool
+Sa.Configuration.Clients.ClientConfigurations.AttachAsync(string! client, Microsoft.Extensions.Configuration.IConfigurationSource! source, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Sa.Configuration.Clients.ClientConfigurations.RemoveAsync(string! client, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+Sa.Configuration.Clients.ClientConfigurations.ReloadAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Sa.Configuration.SaConfigurationRuntime.AttachClientConfigurations(Sa.Configuration.Clients.IClientConfigurations! clients) -> void
+Sa.Configuration.Clients.ClientConfigurations.GetReloadToken() -> Microsoft.Extensions.Primitives.IChangeToken!
+Sa.Configuration.Clients.ClientConfigurations.Dispose() -> void
+Sa.Configuration.Clients.ConfigurationClientSetup
+Sa.Configuration.Clients.ConfigurationClientSourceOptions
+override Sa.Configuration.Clients.ConfigurationClientSourceOptions.ToString() -> string!
+static Sa.Configuration.Clients.ConfigurationClientSourceOptions.operator !=(Sa.Configuration.Clients.ConfigurationClientSourceOptions? left, Sa.Configuration.Clients.ConfigurationClientSourceOptions? right) -> bool
+static Sa.Configuration.Clients.ConfigurationClientSourceOptions.operator ==(Sa.Configuration.Clients.ConfigurationClientSourceOptions? left, Sa.Configuration.Clients.ConfigurationClientSourceOptions? right) -> bool
+override Sa.Configuration.Clients.ConfigurationClientSourceOptions.GetHashCode() -> int
+override Sa.Configuration.Clients.ConfigurationClientSourceOptions.Equals(object? obj) -> bool
+Sa.Configuration.Clients.ConfigurationClientSourceOptions.Equals(Sa.Configuration.Clients.ConfigurationClientSourceOptions? other) -> bool
+Sa.Configuration.Clients.ConfigurationClientSourceOptions.<Clone>$() -> Sa.Configuration.Clients.ConfigurationClientSourceOptions!
+Sa.Configuration.Clients.ConfigurationClientSourceOptions.ConfigurationClientSourceOptions() -> void
+Sa.Configuration.Clients.ConfigurationClientSourceOptions.SectionPath.get -> string!
+Sa.Configuration.Clients.ConfigurationClientSourceOptions.SectionPath.init -> void
+static Sa.Configuration.Clients.ConfigurationClientSetup.UseConfiguration(this Sa.Configuration.Clients.SaClientConfigurationRegistration! registration, Microsoft.Extensions.Configuration.IConfiguration! configuration, Sa.Configuration.Clients.ConfigurationClientSourceOptions? options = null) -> Sa.Configuration.Clients.SaClientConfigurationRegistration!
+Sa.Configuration.Clients.ClientSetting
+override Sa.Configuration.Clients.ClientSetting.ToString() -> string!
+static Sa.Configuration.Clients.ClientSetting.operator !=(Sa.Configuration.Clients.ClientSetting? left, Sa.Configuration.Clients.ClientSetting? right) -> bool
+static Sa.Configuration.Clients.ClientSetting.operator ==(Sa.Configuration.Clients.ClientSetting? left, Sa.Configuration.Clients.ClientSetting? right) -> bool
+override Sa.Configuration.Clients.ClientSetting.GetHashCode() -> int
+override Sa.Configuration.Clients.ClientSetting.Equals(object? obj) -> bool
+Sa.Configuration.Clients.ClientSetting.Equals(Sa.Configuration.Clients.ClientSetting? other) -> bool
+Sa.Configuration.Clients.ClientSetting.<Clone>$() -> Sa.Configuration.Clients.ClientSetting!
+Sa.Configuration.Clients.ClientSetting.ClientSetting(string! clientId, string! key, string! value) -> void
+Sa.Configuration.Clients.ClientSetting.ClientId.get -> string!
+Sa.Configuration.Clients.ClientSetting.ClientId.init -> void
+Sa.Configuration.Clients.ClientSetting.Value.get -> string!
+Sa.Configuration.Clients.ClientSetting.Key.get -> string!
+Sa.Configuration.Clients.ClientSetting.Key.init -> void
+Sa.Configuration.Clients.ClientSetting.Value.init -> void
+Sa.Configuration.Clients.SaClientConfigurationRegistration.Add<T1>(System.Func<T1, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Sa.Configuration.Clients.ClientSetting!>!>>! load) -> Sa.Configuration.Clients.SaClientConfigurationRegistration!
+Sa.Configuration.Clients.SaClientConfigurationRegistration.Add<T1, T2>(System.Func<T1, T2, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Sa.Configuration.Clients.ClientSetting!>!>>! load) -> Sa.Configuration.Clients.SaClientConfigurationRegistration!
+Sa.Configuration.Clients.SaClientConfigurationRegistration.Add<T1, T2, T3>(System.Func<T1, T2, T3, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Sa.Configuration.Clients.ClientSetting!>!>>! load) -> Sa.Configuration.Clients.SaClientConfigurationRegistration!

@@ -47,38 +47,22 @@ public static class SaConfigurationRuntimeSetup
         SaConfigurationRuntimeOptions options = new();
         configure?.Invoke(options);
 
-        if (!string.IsNullOrWhiteSpace(options.ClientsSectionPath))
-            runtime.ClientsSectionPath = options.ClientsSectionPath;
-
         services.TryAddSingleton(runtime);
         services.TryAddSingleton<ISaConfigurationReloader>(sp =>
         {
             runtime.AttachServices(sp);
+
+            // A client registry registered through AddSaClientConfigurations is driven by the same
+            // reloader, so one ReloadDynamicAsync refreshes the core and every client overlay.
+            if (sp.GetService<IClientConfigurations>() is { } clients)
+                runtime.AttachClientConfigurations(clients);
+
             return runtime;
         });
-
-        if (options.KeyedClientConfigurations)
-            services.AddSaClientConfiguration(runtime.ClientsSectionPath);
 
         if (options.DynamicReload || options.InitialLoad != SaDynamicInitialLoad.Explicit)
             services.AddSingleton<IHostedService>(sp => new SaConfigurationHostedService(sp, options));
 
         return services;
     }
-
-    /// <summary>
-    /// Registers the runtime and a key-addressable <see cref="IConfiguration"/> per client.
-    /// </summary>
-    /// <remarks>
-    /// Shorthand for <c>AddSaConfigurationRuntime(..., o => o.KeyedClientConfigurations = true)</c>.
-    /// </remarks>
-    public static IServiceCollection AddSaConfigurationRuntimeWithClients(
-        this IServiceCollection services,
-        IConfigurationBuilder configuration,
-        Action<SaConfigurationRuntimeOptions>? configure = null)
-        => services.AddSaConfigurationRuntime(configuration, options =>
-        {
-            options.KeyedClientConfigurations = true;
-            configure?.Invoke(options);
-        });
 }

@@ -203,52 +203,24 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, ISaAs
         Dictionary<string, string?> newData,
         CancellationToken cancellationToken)
     {
-        string? clientColumn = _options.ClientColumn;
-        int clientOrdinal = -1;
-
         return await dataSource
             .ExecuteReaderAsync(
                 _options.SelectSql,
                 (reader, index) =>
                 {
-                    if (index == 0)
+                    // The shape is part of the contract: a third column (the removed client column)
+                    // would silently shift the key and the value, so it fails loudly instead.
+                    if (index == 0 && reader.FieldCount != 2)
                     {
-                        int required = clientColumn is null ? 2 : 3;
-
-                        if (reader.FieldCount < required)
-                        {
-                            throw new InvalidOperationException(
-                                clientColumn is null
-                                    ? $"The configuration query must return two columns (key, value), but it returned {reader.FieldCount}."
-                                    : $"The configuration query must return three columns (client, key, value) when {nameof(PostgreSqlConfigurationOptions.ClientColumn)} is set, but it returned {reader.FieldCount}.");
-                        }
-
-                        if (clientColumn is not null)
-                        {
-                            clientOrdinal = FindOrdinal(reader, clientColumn);
-
-                            if (clientOrdinal < 0)
-                            {
-                                throw new InvalidOperationException(
-                                    $"The configuration query does not return the client column '{clientColumn}'.");
-                            }
-
-                            if (clientOrdinal > 0)
-                            {
-                                throw new InvalidOperationException(
-                                    $"The client column must be the first column of the configuration query, but '{clientColumn}' is at position {clientOrdinal}.");
-                            }
-                        }
+                        throw new InvalidOperationException(
+                            $"The configuration query must return exactly two columns (key, value), but it returned {reader.FieldCount}.");
                     }
 
-                    int keyOrdinal = clientColumn is null ? 0 : 1;
-                    int valueOrdinal = clientColumn is null ? 1 : 2;
-
-                    if (reader.IsDBNull(keyOrdinal))
+                    if (reader.IsDBNull(0))
                         return;
 
                     // Trim() returns the same instance when there is nothing to trim.
-                    string key = reader.GetString(keyOrdinal).Trim();
+                    string key = reader.GetString(0).Trim();
                     if (key.Length == 0)
                         return;
 
@@ -257,20 +229,7 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, ISaAs
                     if (_options.DoubleUnderscoreAsSeparator)
                         key = ConfigurationKey.Normalize(key);
 
-                    string? client = _options.Client;
-
-                    if (clientOrdinal >= 0)
-                    {
-                        client = reader.IsDBNull(clientOrdinal) ? null : reader.GetString(clientOrdinal).Trim();
-
-                        if (client is { Length: 0 })
-                            client = null;
-                    }
-
-                    if (client is not null)
-                        key = $"{_options.ClientsSection}:{client}:{key}";
-
-                    string? value = reader.IsDBNull(valueOrdinal) ? null : reader.GetString(valueOrdinal);
+                    string? value = reader.IsDBNull(1) ? null : reader.GetString(1);
 
                     if (_options.SkipEmptyValues && string.IsNullOrWhiteSpace(value))
                         return;
@@ -293,16 +252,5 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, ISaAs
                 },
                 cancellationToken)
             .ConfigureAwait(false);
-    }
-
-    private static int FindOrdinal(NpgsqlDataReader reader, string column)
-    {
-        for (int i = 0; i < reader.FieldCount; i++)
-        {
-            if (string.Equals(reader.GetName(i), column, StringComparison.OrdinalIgnoreCase))
-                return i;
-        }
-
-        return -1;
     }
 }
