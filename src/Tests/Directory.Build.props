@@ -3,7 +3,7 @@
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
 
   <PropertyGroup>
-    <!-- xUnit v3 test projects are executables; the MTP driver is selected via src/global.json. -->
+    <!-- xUnit v3 test projects are executables; the MTP driver is selected via the repository-root global.json. -->
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
