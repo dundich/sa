@@ -12,20 +12,14 @@ two things at once:
 
 It is deliberately **not** a production provider — see [Limitations](#limitations). For the pipeline
 it plugs into, see [`../Delivery/Readme.md`](../Delivery/Readme.md); for the contracts themselves,
-<<<<<<< HEAD
-[`../PlugServices/Readme.md`](../PlugServices/Readme.md).
-=======
+
 [`../PlugServices/Readme.md`](../PlugServices/Readme.md). To build your own provider from this
 example, follow [`../PlugServices/ProviderGuide.md`](../PlugServices/ProviderGuide.md).
->>>>>>> sdd
 
 ## Contents
 
 - [Quick start](#quick-start)
-<<<<<<< HEAD
-=======
 - [Step-by-step registration](#step-by-step-registration)
->>>>>>> sdd
 - [File map](#file-map)
 - [Behaviour](#behaviour)
 - [Cancellation and retries](#cancellation-and-retries)
@@ -45,8 +39,6 @@ services.AddSaOutboxUsingInMemory(
 `configureOutbox` also registers the core. A disabled provider (`Enabled = false`) registers nothing:
 no store, no contracts, no schedule.
 
-<<<<<<< HEAD
-=======
 ## Step-by-step registration
 
 A runnable end-to-end version of these steps is
