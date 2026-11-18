@@ -18,7 +18,7 @@ public sealed class ScheduleSetupTests(ScheduleSetupTests.Fixture fixture)
 
         class SomeJob : IJob
         {
-            public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+            public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             {
                 Counter.Inc();
                 await Task.Delay(10, cancellationToken);
@@ -46,7 +46,7 @@ public sealed class ScheduleSetupTests(ScheduleSetupTests.Fixture fixture)
     [Fact]
     public async Task Check_ExecuteCounterJob()
     {
-        int started = await Sub.Start(CancellationToken.None);
+        int started = await Sub.StartAsync(CancellationToken.None);
 
         Assert.Equal(1, started);
 

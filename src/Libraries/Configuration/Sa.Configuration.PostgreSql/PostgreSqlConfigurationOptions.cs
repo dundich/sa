@@ -1,26 +1,35 @@
-namespace Sa.Configuration.PostgreSql;
 
 using Npgsql;
 
+namespace Sa.Configuration.PostgreSql;
 /// <summary>
 /// Options for the PostgreSQL-backed configuration source.
 /// </summary>
-/// <param name="ConnectionString">
-/// Npgsql connection string. Ignored when the source is registered with a pre-built
-/// <see cref="Sa.Data.PostgreSql.IPgDataSource"/> — pass an empty string in that case.
-/// </param>
-/// <param name="SelectSql">Query returning exactly two columns: <c>(text key, text value)</c>.</param>
-/// <param name="Parameters">Named parameters for <paramref name="SelectSql"/>. Cloned per load.</param>
-public sealed record PostgreSqlConfigurationOptions(
-    string ConnectionString,
-    string SelectSql,
-    params IReadOnlyCollection<NpgsqlParameter> Parameters)
+/// <remarks>
+/// The connection itself is not part of the options: pass it with
+/// <see cref="PgConfigurationConnection"/> (<c>ConnectionString</c>, <c>DataSource</c> or
+/// <c>FromServices</c>). This keeps "where the data comes from" and "what to read" independent.
+/// </remarks>
+public sealed record PostgreSqlConfigurationOptions
 {
     /// <summary>
-    /// Total load attempts, including the first. Defaults to 3, i.e. one attempt plus two
-    /// retries. Only transient Npgsql failures (network errors, <c>08xxx</c> SQLSTATEs and
-    /// similar) are retried; a permanent error fails on the first attempt regardless of this
-    /// value. <c>0</c> and <c>1</c> both mean a single attempt.
+    /// Query returning exactly two columns, <c>(key, value)</c>. For a client overlay, read the rows
+    /// with a client provider (filter by <c>client_id</c>) rather than mapping a prefix here.
+    /// </summary>
+    public required string SelectSql { get; init; }
+
+    /// <summary>Named parameters for <see cref="SelectSql"/>. Cloned per load.</summary>
+    public IReadOnlyCollection<NpgsqlParameter> Parameters { get; init; } = [];
+
+    /// <summary>Returns a copy carrying <paramref name="parameters"/> for <see cref="SelectSql"/>.</summary>
+    /// <param name="parameters">Named parameters, in any order; each is cloned per load.</param>
+    public PostgreSqlConfigurationOptions WithParameters(params NpgsqlParameter[] parameters)
+        => this with { Parameters = parameters };
+
+    /// <summary>
+    /// Total load attempts, including the first. Defaults to 3. Only transient Npgsql failures
+    /// (network errors, <c>08xxx</c> SQLSTATEs and similar) are retried; a permanent error fails on
+    /// the first attempt regardless of this value. <c>0</c> and <c>1</c> both mean a single attempt.
     /// </summary>
     public int MaxAttempts { get; init; } = 3;
 
@@ -66,44 +75,25 @@ public sealed record PostgreSqlConfigurationOptions(
 
     /// <summary>
     /// Overridden because the compiler-generated record <c>ToString</c> would inline
-    /// <see cref="Parameters"/> — and therefore their values, which routinely carry
-    /// connection secrets — into every log line and exception message. The connection string's
-    /// password is redacted for the same reason.
+    /// <see cref="Parameters"/> — and therefore their values, which routinely carry connection
+    /// secrets — into every log line and exception message.
     /// </summary>
     public override string ToString()
         => $"{nameof(PostgreSqlConfigurationOptions)} {{ "
-         + $"{nameof(ConnectionString)} = {RedactedConnectionString()}, "
          + $"{nameof(SelectSql)} = {SelectSql}, "
-         + $"{nameof(Parameters)} = [{Parameters.Count} item(s)], "
+         + $"{nameof(Parameters)} = [{Parameters?.Count ?? 0} item(s)], "
          + $"{nameof(MaxAttempts)} = {MaxAttempts}, "
          + $"{nameof(MedianFirstRetryDelay)} = {MedianFirstRetryDelay}, "
          + $"{nameof(SkipEmptyValues)} = {SkipEmptyValues}, "
          + $"{nameof(DoubleUnderscoreAsSeparator)} = {DoubleUnderscoreAsSeparator}, "
          + $"{nameof(LastWins)} = {LastWins} }}";
 
-    private string RedactedConnectionString()
-    {
-        try
-        {
-            return new NpgsqlConnectionStringBuilder(ConnectionString) { Password = "***" }.ConnectionString;
-        }
-        catch
-        {
-            // A malformed connection string is exactly the case where echoing it verbatim
-            // is most dangerous, so it is never rendered.
-            return "<unparseable>";
-        }
-    }
-
     /// <summary>
     /// Fails fast at registration time, so a misconfigured source fails while the host is
     /// still building rather than inside the first — retried — load at runtime.
     /// </summary>
-    internal void Validate(bool requireConnectionString = true)
+    internal void Validate()
     {
-        if (requireConnectionString)
-            ArgumentException.ThrowIfNullOrWhiteSpace(ConnectionString);
-
         ArgumentException.ThrowIfNullOrWhiteSpace(SelectSql);
 
         ArgumentOutOfRangeException.ThrowIfNegative(MaxAttempts);

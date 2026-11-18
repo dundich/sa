@@ -60,14 +60,14 @@ public class SqlSmokeTests(SqlSmokeTests.Fixture fixture) : IClassFixture<SqlSmo
 
     /// <summary>Number of partitions attached to the given root (quoted, schema-qualified).</summary>
     private Task<long> Children(string quotedRoot, CancellationToken ct)
-        => fixture.DataSource.ExecuteScalarTyped<long>(
+        => fixture.DataSource.ExecuteScalarTypedAsync<long>(
             "SELECT count(*) FROM pg_inherits WHERE inhparent = to_regclass(@root)",
             [new NpgsqlParameter<string>("root", quotedRoot)],
             ct);
 
     /// <summary>Whether a (quoted, schema-qualified) relation exists.</summary>
     private Task<bool> Exists(string quotedName, CancellationToken ct)
-        => fixture.DataSource.ExecuteScalarTyped<bool>(
+        => fixture.DataSource.ExecuteScalarTypedAsync<bool>(
             "SELECT to_regclass(@name) IS NOT NULL",
             [new NpgsqlParameter<string>("name", quotedName)],
             ct);
@@ -102,9 +102,9 @@ public class SqlSmokeTests(SqlSmokeTests.Fixture fixture) : IClassFixture<SqlSmo
 
         long before = await Children(root, ct);
 
-        await Parts.CreatePart("smoke", Day, [value], ct);
+        await Parts.CreatePartAsync("smoke", Day, [value], ct);
         // Idempotent: the DDL is CREATE TABLE IF NOT EXISTS, so a second call must not add a sibling.
-        await Parts.CreatePart("smoke", Day, [value], ct);
+        await Parts.CreatePartAsync("smoke", Day, [value], ct);
 
         Assert.Equal(before + 1, await Children(root, ct));
     }
@@ -117,8 +117,8 @@ public class SqlSmokeTests(SqlSmokeTests.Fixture fixture) : IClassFixture<SqlSmo
 
         long before = await Children(root, ct);
 
-        await Parts.CreatePart("sm\"oke", Day, ["v"], ct);
-        await Parts.CreatePart("sm\"oke", Day, ["v"], ct);
+        await Parts.CreatePartAsync("sm\"oke", Day, ["v"], ct);
+        await Parts.CreatePartAsync("sm\"oke", Day, ["v"], ct);
 
         Assert.Equal(before + 1, await Children(root, ct));
 
@@ -138,11 +138,11 @@ public class SqlSmokeTests(SqlSmokeTests.Fixture fixture) : IClassFixture<SqlSmo
         DateTimeOffset oldDay = Day.AddDays(-30);
         string quotedLeaf = $"\"public\".\"sm\"\"oke__drop-me__{DaySuffix(oldDay)}\"";
 
-        await Parts.CreatePart("sm\"oke", oldDay, ["drop-me"], ct);
+        await Parts.CreatePartAsync("sm\"oke", oldDay, ["drop-me"], ct);
         Assert.True(await Exists(quotedLeaf, ct), "the partition under test was not created");
 
         // Drops the leaf (its name is read back from the cache table) and its cache row.
-        int dropped = await Parts.DropPartsToDate("sm\"oke", oldDay.AddDays(1), ct);
+        int dropped = await Parts.DropPartsToDateAsync("sm\"oke", oldDay.AddDays(1), ct);
 
         Assert.Equal(1, dropped);
         Assert.False(await Exists(quotedLeaf, ct), "the partition survived its DROP");
@@ -158,7 +158,7 @@ public class SqlSmokeTests(SqlSmokeTests.Fixture fixture) : IClassFixture<SqlSmo
         CancellationToken ct = TestContext.Current.CancellationToken;
         const string root = "\"sc\"\"h\".\"t\"";
 
-        await Parts.CreatePart("sc\"h.t", Day, ["v"], ct);
+        await Parts.CreatePartAsync("sc\"h.t", Day, ["v"], ct);
 
         Assert.Equal(1L, await Children(root, ct));
     }

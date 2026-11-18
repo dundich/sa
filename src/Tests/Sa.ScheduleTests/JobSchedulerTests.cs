@@ -18,7 +18,7 @@ public class JobSchedulerTests
 
         var tasks = Enumerable.Range(0, 10).Select(_ =>
             Task.Run(async () => results.Add(
-                await scheduler.Start(TestContext.Current.CancellationToken))
+                await scheduler.StartAsync(TestContext.Current.CancellationToken))
             ));
 
         await Task.WhenAll(tasks);
@@ -38,14 +38,14 @@ public class JobSchedulerTests
 
         var scheduler = new JobScheduler(settings, new HangingRunner(), i => new TestJobController(i));
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(scheduler.IsStarted);
 
         // Let the reader take the (hanging) work into flight before we stop.
         await Task.Delay(100, TestContext.Current.CancellationToken);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         sw.Stop();
 
         // Stop must give up after the configured shutdown timeout (300ms),
@@ -70,11 +70,11 @@ public class JobSchedulerTests
 
         var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(scheduler.IsStarted);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         sw.Stop();
 
         // The runner completes immediately, so Stop must not wait out the
@@ -92,13 +92,13 @@ public class JobSchedulerTests
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
         var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         Assert.True(scheduler.IsStarted);
 
         var tasks = Enumerable.Range(0, 10).Select(_ =>
         Task.Run(async () =>
-            await scheduler.Stop()
+            await scheduler.StopAsync()
         ));
 
         await Task.WhenAll(tasks);
@@ -115,7 +115,7 @@ public class JobSchedulerTests
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
         var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         Assert.True(scheduler.IsStarted);
 
@@ -139,7 +139,7 @@ public class JobSchedulerTests
 
         var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         Assert.True(scheduler.IsStarted);
 
@@ -162,7 +162,7 @@ public class JobSchedulerTests
 
         Assert.False(scheduler.IsStarted);
 
-        var started = await scheduler.Start(TestContext.Current.CancellationToken);
+        var started = await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(started);
         Assert.True(scheduler.IsStarted);
     }
@@ -178,11 +178,11 @@ public class JobSchedulerTests
 
         var scheduler = new JobScheduler(settings, new HangingRunner(), i => new TestJobController(i));
 
-        Assert.True(await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.True(await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         // Let the reader take the hanging item into flight, then stop past the timeout.
         await Task.Delay(100, TestContext.Current.CancellationToken);
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         Assert.False(scheduler.IsStarted);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -190,7 +190,7 @@ public class JobSchedulerTests
         // WaitAsync keeps the failure fast on a regression: an unbounded Start would
         // otherwise hang the whole suite instead of failing this one test.
         bool started = await scheduler
-            .Start(TestContext.Current.CancellationToken)
+            .StartAsync(TestContext.Current.CancellationToken)
             .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         sw.Stop();
@@ -220,18 +220,18 @@ public class JobSchedulerTests
         var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        bool started = await scheduler.Start(cts.Token);
+        bool started = await scheduler.StartAsync(cts.Token);
 
         Assert.False(started);
         Assert.False(scheduler.IsStarted);
 
         // Regression: a failed start must not leave the scheduler locked in
         // "started" state — a subsequent start with a fresh token succeeds.
-        bool restarted = await scheduler.Start(TestContext.Current.CancellationToken);
+        bool restarted = await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(restarted);
         Assert.True(scheduler.IsStarted);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         Assert.False(scheduler.IsStarted);
     }
 
@@ -274,7 +274,7 @@ public class JobSchedulerTests
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
         var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(scheduler.IsStarted);
 
         // While running, the token waits for the next stop and must not be
@@ -282,7 +282,7 @@ public class JobSchedulerTests
         var token = scheduler.StartChangeToken();
         Assert.False(token.HasChanged);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.True(token.HasChanged);
 
@@ -296,8 +296,8 @@ public class JobSchedulerTests
         var settings = JobSettings.Create<TestJob>(Guid.NewGuid());
         var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
-        await scheduler.Stop();
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
+        await scheduler.StopAsync();
         Assert.False(scheduler.IsStarted);
 
         // Previously this returned the already-cancelled (already-fired) source
@@ -322,7 +322,7 @@ public class JobSchedulerTests
         // closes after its single iteration.
         var scheduler = new JobScheduler(settings, new FinishedRunner(), i => new TestJobController(i));
 
-        Assert.True(await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.True(await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         // No error happened, yet the job must stop itself — IsStarted must not
         // be left stuck true over a dead job.
@@ -331,7 +331,7 @@ public class JobSchedulerTests
 
         // "stop permanently": the RunOnce is consumed, so a later Start is
         // refused instead of silently re-running the job.
-        Assert.False(await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.False(await scheduler.StartAsync(TestContext.Current.CancellationToken));
         Assert.False(scheduler.IsStarted);
 
         await scheduler.DisposeAsync();
@@ -349,7 +349,7 @@ public class JobSchedulerTests
 
         // Start #1: the reader picks the item and parks on the gate — the queue
         // is now busy with an item that cannot finish until the gate is released.
-        Assert.True(await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.True(await scheduler.StartAsync(TestContext.Current.CancellationToken));
         await runner.Started;
         Assert.True(scheduler.IsStarted);
 
@@ -357,7 +357,7 @@ public class JobSchedulerTests
         // nothing can drain the queue while the gate is closed. This also proves
         // the queue really is busy before we build on that below.
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await scheduler.Stop();
+        await scheduler.StopAsync();
         sw.Stop();
         Assert.True(sw.Elapsed >= TimeSpan.FromMilliseconds(1500),
             $"Stop returned immediately ({sw.ElapsedMilliseconds}ms) — the queue was not busy");
@@ -367,13 +367,13 @@ public class JobSchedulerTests
         // flight — it cannot finish before the gate is released, so by the time
         // Stop() runs below the start is guaranteed to be in flight.
         using var startCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var startTask = scheduler.Start(startCts.Token);
+        var startTask = scheduler.StartAsync(startCts.Token);
         Assert.False(startTask.IsCompleted,
             "Start #2 must wait for the in-flight item — it was not in flight");
 
         // Stop lands while Start is still starting. It must not be lost: the
         // in-flight start must see it and cancel itself.
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         runner.Release();
 
@@ -396,7 +396,7 @@ public class JobSchedulerTests
 
         var scheduler = new JobScheduler(settings, new TestJobRunner(), i => new TestJobController(i));
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(scheduler.IsStarted);
         Assert.Equal(5, scheduler.ConcurrencyLimit);
 
@@ -418,7 +418,7 @@ public class JobSchedulerTests
 
         // The first start may report true (the fault landed after the slots were
         // spawned) or false (it landed during startup) — neither may consume the run.
-        _ = await scheduler.Start(TestContext.Current.CancellationToken);
+        _ = await scheduler.StartAsync(TestContext.Current.CancellationToken);
         await WaitForConditionAsync(() => runner.Attempts >= 1 && !scheduler.IsStarted);
 
         Assert.False(scheduler.IsStarted);
@@ -431,7 +431,7 @@ public class JobSchedulerTests
 
         await WaitForConditionAsync(() =>
         {
-            _ = scheduler.Start(TestContext.Current.CancellationToken);
+            _ = scheduler.StartAsync(TestContext.Current.CancellationToken);
             return runner.Attempts > attemptsBefore;
         });
 
@@ -450,7 +450,7 @@ public class JobSchedulerTests
 
         using var cts = new CancellationTokenSource();
 
-        Assert.True(await scheduler.Start(cts.Token));
+        Assert.True(await scheduler.StartAsync(cts.Token));
         Assert.True(scheduler.IsStarted);
 
         await cts.CancelAsync();
@@ -468,7 +468,7 @@ public class JobSchedulerTests
         // The same contract as above, but on the losing side of a startup race: the caller's token
         // can be cancelled after Start() returned and before a reader picked the slot up. The queue
         // then drops the item at its own cancellation gate *without* invoking the processor
-        // (SaWorkQueue.ExecuteItemAsync throws before Execute and reports the item as Aborted), so no
+        // (SaWorkChannel.ExecuteItemAsync throws before Execute and reports the item as Aborted), so no
         // slot ever observes the cancellation. The scheduler has to reflect the stop from the stop
         // token itself; relying on a running slot left IsStarted true over a dead job forever.
         //
@@ -482,7 +482,7 @@ public class JobSchedulerTests
 
             using var cts = new CancellationTokenSource();
 
-            Assert.True(await scheduler.Start(cts.Token));
+            Assert.True(await scheduler.StartAsync(cts.Token));
             await cts.CancelAsync();
 
             await WaitForConditionAsync(() => !scheduler.IsStarted);
@@ -503,7 +503,7 @@ public class JobSchedulerTests
 
         public int Calls => Volatile.Read(ref _calls);
 
-        public async Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        public async Task<JobRunResult> RunAsync(IJobController controller, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _calls);
 
@@ -535,7 +535,7 @@ public class JobSchedulerTests
 
         Assert.Equal(Sa.Utils.WorkQueue.SaWorkPoolState.Paused, ReaderPoolOf(scheduler).PoolState);
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         await WaitForConditionAsync(() =>
             ReaderPoolOf(scheduler).PoolState == Sa.Utils.WorkQueue.SaWorkPoolState.Active);
@@ -545,13 +545,13 @@ public class JobSchedulerTests
     }
 
 
-    private static Sa.Utils.WorkQueue.ISaWorkQueue<IJobController> ReaderPoolOf(JobScheduler scheduler)
+    private static Sa.Utils.WorkQueue.ISaWorkChannel<IJobController> ReaderPoolOf(JobScheduler scheduler)
     {
         var field = typeof(JobScheduler).GetField(
             "_queue",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
 
-        return (Sa.Utils.WorkQueue.ISaWorkQueue<IJobController>)field.GetValue(scheduler)!;
+        return (Sa.Utils.WorkQueue.ISaWorkChannel<IJobController>)field.GetValue(scheduler)!;
     }
 
 
@@ -572,14 +572,14 @@ public class JobSchedulerTests
 
     class TestJob : IJob
     {
-        public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken);
     }
 
 
     class TestJobRunner : IJobRunner
     {
-        public Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        public Task<JobRunResult> RunAsync(IJobController controller, CancellationToken cancellationToken)
             => Task.FromResult(JobRunResult.Stopped);
     }
 
@@ -592,7 +592,7 @@ public class JobSchedulerTests
         private static readonly Task<JobRunResult> Never =
             new TaskCompletionSource<JobRunResult>(TaskCreationOptions.RunContinuationsAsynchronously).Task;
 
-        public Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        public Task<JobRunResult> RunAsync(IJobController controller, CancellationToken cancellationToken)
             => Never;
     }
 
@@ -601,7 +601,7 @@ public class JobSchedulerTests
     // when a RunOnce gate closes or an unsatisfiable schedule ends the loop.
     class FinishedRunner : IJobRunner
     {
-        public Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        public Task<JobRunResult> RunAsync(IJobController controller, CancellationToken cancellationToken)
             => Task.FromResult(JobRunResult.Finished);
     }
 
@@ -615,7 +615,7 @@ public class JobSchedulerTests
 
         public int Attempts => Volatile.Read(ref _attempts);
 
-        public Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        public Task<JobRunResult> RunAsync(IJobController controller, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _attempts);
             return Task.FromResult(JobRunResult.Faulted);
@@ -627,7 +627,7 @@ public class JobSchedulerTests
     // job that ends because the caller's own token was cancelled (no Stop() call).
     class TokenWaitingRunner : IJobRunner
     {
-        public async Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        public async Task<JobRunResult> RunAsync(IJobController controller, CancellationToken cancellationToken)
         {
             try
             {
@@ -658,7 +658,7 @@ public class JobSchedulerTests
 
         public void Release() => _gate.TrySetResult();
 
-        public async Task<JobRunResult> Run(IJobController controller, CancellationToken cancellationToken)
+        public async Task<JobRunResult> RunAsync(IJobController controller, CancellationToken cancellationToken)
         {
             _started.TrySetResult();
             await _gate.Task;
@@ -675,12 +675,12 @@ public class JobSchedulerTests
 
         public int Index => index;
 
-        public ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken)
+        public ValueTask<CanJobExecuteResult> CanExecuteAsync(CancellationToken cancellationToken)
         {
             return ValueTask.FromResult(CanJobExecuteResult.Ok);
         }
 
-        public Task Execute(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ExecuteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public void ExecutionCompleted()
         {
@@ -712,11 +712,11 @@ public class JobSchedulerTests
             //
         }
 
-        public ValueTask WaitIfPaused(CancellationToken cancellationToken)
+        public ValueTask WaitIfPausedAsync(CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
         }
 
-        public ValueTask WaitToRun(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        public ValueTask WaitToRunAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
     }
 }

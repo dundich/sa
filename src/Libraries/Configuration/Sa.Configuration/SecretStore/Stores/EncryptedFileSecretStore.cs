@@ -51,6 +51,7 @@ public sealed class EncryptedFileSecretStore : ISecretStore
         _secrets = SecretFileParser.Parse(plaintextContent.Split('\n'));
     }
 
+    /// <inheritdoc />
     public string? GetSecret(string key)
     {
         _secrets.TryGetValue(key, out var value);

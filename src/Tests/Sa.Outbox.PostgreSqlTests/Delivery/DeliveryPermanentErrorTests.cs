@@ -25,7 +25,7 @@ public sealed class RecordingPgPoisonHandler : IPgOutboxPoisonHandler
         Result = PgOutboxPoisonAction.Default;
     }
 
-    public ValueTask<PgOutboxPoisonAction> Handle(PgOutboxPoisonMessage message, CancellationToken cancellationToken)
+    public ValueTask<PgOutboxPoisonAction> HandleAsync(PgOutboxPoisonMessage message, CancellationToken cancellationToken)
     {
         _messages.Enqueue(message);
         return ValueTask.FromResult(Result);
@@ -44,7 +44,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     class TestMessageConsumer : IConsumer<TestMessage>
     {
         private static readonly TestException s_err = new("test permanent error");
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -53,7 +53,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
             await Task.Delay(100, cancellationToken);
             foreach (var msg in messages.Span)
             {
-                msg.Error(s_err, "test");
+                msg.Fail(s_err, "test");
             }
         }
     }
@@ -114,7 +114,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
         Assert.Equal(2, result);
 
         var sql = $"select count(*) from {_tableSettings.Error.TableName}";
-        int errCount = await fixture.DataSource.ExecuteReaderFirst<int>(sql, TestContext.Current.CancellationToken);
+        int errCount = await fixture.DataSource.ExecuteReaderFirstAsync<int>(sql, TestContext.Current.CancellationToken);
 
         // One row, not two: both messages carry the same exception instance, so they de-duplicate.
         Assert.Equal(1, errCount);
@@ -175,7 +175,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     }
 
     private Task<DeliveryStatusCode> TaskStatusAsync(string payloadId) =>
-        fixture.DataSource.ExecuteReaderFirst<DeliveryStatusCode>(
+        fixture.DataSource.ExecuteReaderFirstAsync<DeliveryStatusCode>(
             $"""
             SELECT {_tableSettings.TaskQueue.Fields.DeliveryStatusCode}
             FROM {_tableSettings.TaskQueue.TableName}
@@ -185,7 +185,7 @@ public class DeliveryPermanentErrorTests(DeliveryPermanentErrorTests.Fixture fix
     // COALESCE because the data source has no Nullable<T> reader support, and 0 unambiguously means
     // "no error id" (ids are sequence-generated and start at 1).
     private Task<long> TaskErrorIdAsync(string payloadId) =>
-        fixture.DataSource.ExecuteReaderFirst<long>(
+        fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"""
             SELECT COALESCE({_tableSettings.TaskQueue.Fields.ErrorId}, 0)
             FROM {_tableSettings.TaskQueue.TableName}

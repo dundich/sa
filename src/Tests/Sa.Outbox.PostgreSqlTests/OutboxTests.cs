@@ -20,7 +20,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
     {
         static int s_Counter = 0;
 
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
@@ -77,7 +77,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
 
         // start cron schedules
         var scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        int i = await scheduler.Start(CancellationToken.None);
+        int i = await scheduler.StartAsync(CancellationToken.None);
         Assert.True(i > 0);
 
         // start delivery message
@@ -103,7 +103,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
             await Task.Delay(300, TestContext.Current.CancellationToken);
         }
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.True(SomeMessageConsumer.Counter > 0);
     }
@@ -111,7 +111,7 @@ public class OutBoxTests(OutBoxTests.Fixture fixture) : IClassFixture<OutBoxTest
     private async Task Migrate()
     {
         var migrationService = ServiceProvider.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
-        bool r = await migrationService.WaitMigration(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        bool r = await migrationService.WaitMigrationAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.True(r, "none migration");
     }
 }

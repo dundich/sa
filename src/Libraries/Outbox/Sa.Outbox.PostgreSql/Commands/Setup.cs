@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using Microsoft.IO;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Configuration;
@@ -16,9 +15,6 @@ internal static class Setup
 {
     public static IServiceCollection AddOutboxCommands(this IServiceCollection services, string providerKey)
     {
-        // Stateless and provider-independent: shared by every provider in the container.
-        services.TryAddSingleton<RecyclableMemoryStreamManager>();
-
         // The reader caches column ordinals from the provider's table settings, so it is keyed
         // like the rest of the storage chain.
         services.TryAddKeyedSingleton<NpgsqlOutboxReader>(providerKey, (sp, _) =>
@@ -27,7 +23,6 @@ internal static class Setup
         services.TryAddKeyedSingleton<IBulkInsertMsgCommand>(providerKey, (sp, _) => new BulkInsertMsgCommand(
             PgDataSourceResolver.Resolve(sp, providerKey),
             sp.GetRequiredKeyedService<SqlOutboxBuilder>(providerKey),
-            sp.GetRequiredService<RecyclableMemoryStreamManager>(),
             sp.GetRequiredKeyedService<IOutboxMessageSerializer>(providerKey),
             sp.GetRequiredService<IOutboxIdGenerator>(),
             sp.GetRequiredKeyedService<IOutboxTypeResolver>(providerKey)));

@@ -138,6 +138,11 @@ public interface IJobBuilder
         => WithTimeZone(TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
 
 
+    /// <summary>
+    /// Sets the maximum number of concurrently running instances of the job.
+    /// </summary>
+    /// <param name="limit">The maximum concurrency.</param>
+    /// <returns>The current builder instance.</returns>
     IJobBuilder WithConcurrencyLimit(int limit);
 
     /// <summary>
@@ -148,7 +153,7 @@ public interface IJobBuilder
     IJobBuilder WithMaxConcurrency(int limit);
 
     /// <summary>
-    /// Sets the maximum time <see cref="IJobScheduler.Stop"/> waits for
+    /// Sets the maximum time <see cref="IJobScheduler.StopAsync"/> waits for
     /// running iterations to finish before giving up.
     /// Also bounds the queue's own wait for readers during shutdown/force-cancel.
     /// </summary>

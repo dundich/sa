@@ -6,17 +6,36 @@ namespace Sa.HybridFileStorage;
 /// Thread-safe container for multiple <see cref="IFileStorage"/> providers.
 /// Uses copy-on-write semantics to allow safe enumeration during concurrent mutations.
 /// </summary>
-internal sealed class HybridFileStorageContainer(
-    IEnumerable<IFileStorage> storages,
-    StorageTypeOrdering? ordering = null) : IHybridFileStorageContainer
+internal sealed class HybridFileStorageContainer : IDisposable
 {
     private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
-    private readonly List<IFileStorage> _storages = [.. storages];
-    private readonly StorageTypeOrdering _ordering = ordering ?? StorageTypeOrdering.Empty;
 
-    /// <inheritdoc/>
+    private readonly List<IFileStorage> _storages;
+    private readonly StorageTypeOrdering _ordering;
+
+    // One configuration wrapper for the lifetime of the container: AddStorage hands the same
+    // instance back on every call, as its contract promises.
+    private readonly HybridFileStorageContainerConfiguration _configuration;
+
+    public HybridFileStorageContainer(
+        IEnumerable<IFileStorage> storages,
+        StorageTypeOrdering? ordering = null)
+    {
+        ArgumentNullException.ThrowIfNull(storages);
+
+        _storages = [.. storages];
+        _ordering = ordering ?? StorageTypeOrdering.Empty;
+        _configuration = new HybridFileStorageContainerConfiguration(AddStorage);
+    }
+
+    /// <summary>
+    /// Adds a storage and returns the container's configuration for continued chaining. Adding a
+    /// storage that is already present (by reference) is a no-op.
+    /// </summary>
     public HybridFileStorageContainerConfiguration AddStorage(IFileStorage storage)
     {
+        ArgumentNullException.ThrowIfNull(storage);
+
         _lock.EnterWriteLock();
         try
         {
@@ -30,10 +49,12 @@ internal sealed class HybridFileStorageContainer(
             _lock.ExitWriteLock();
         }
 
-        return new HybridFileStorageContainerConfiguration(AddStorage);
+        return _configuration;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets a snapshot of the registered storages in registration order.
+    /// </summary>
     public IEnumerable<IFileStorage> Storages
     {
         get
@@ -74,4 +95,7 @@ internal sealed class HybridFileStorageContainer(
     /// <param name="candidates">The candidates in registration order.</param>
     public IEnumerable<IFileStorage> OrderCandidates(string? basket, IEnumerable<IFileStorage> candidates)
         => _ordering.Apply(basket, candidates);
+
+    /// <summary>Releases the reader/writer lock.</summary>
+    public void Dispose() => _lock.Dispose();
 }

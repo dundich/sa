@@ -4,11 +4,11 @@ namespace Sa.Data.TempFolder;
 /// Payload handed to <see cref="TempFolderOptions.OnFreeSpaceReached"/> when the free space of the
 /// volume holding a temp-folder root crosses <see cref="TempFolderOptions.MinFreeSpace"/>.
 /// </summary>
-/// <param name="Name">The registration key (keyed-service name) of the temp folder instance.</param>
-/// <param name="RootPath">The root directory whose volume was probed.</param>
-/// <param name="AvailableFreeSpace">Free space in bytes on that volume at the moment of the transition.</param>
-/// <param name="MinFreeSpace">The configured limit in bytes.</param>
-/// <param name="Reached">
+/// <param name="name">The registration key (keyed-service name) of the temp folder instance.</param>
+/// <param name="rootPath">The root directory whose volume was probed.</param>
+/// <param name="availableFreeSpace">Free space in bytes on that volume at the moment of the transition.</param>
+/// <param name="minFreeSpace">The configured limit in bytes.</param>
+/// <param name="reached">
 /// <see langword="true"/> on the transition into "the limit is reached" (available space dropped
 /// to or below <see cref="TempFolderOptions.MinFreeSpace"/>),
 /// <see langword="false"/> on the transition back into "above the limit". The event is

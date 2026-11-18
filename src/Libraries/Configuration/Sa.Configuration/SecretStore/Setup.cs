@@ -3,6 +3,9 @@ using Sa.Configuration.PostProcessing;
 
 namespace Sa.Configuration.SecretStore;
 
+/// <summary>
+/// Registers the post-secrets-processing configuration source.
+/// </summary>
 public static class Setup
 {
     /// <summary>
@@ -17,6 +20,10 @@ public static class Setup
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> or
     /// <paramref name="secretService"/> is null.</exception>
     /// <exception cref="ArgumentException">A mapping key or alias is blank.</exception>
+    /// <param name="builder">The configuration builder to extend.</param>
+    /// <param name="secretService">The service used to resolve <c>{{key}}</c> placeholders.</param>
+    /// <param name="keyAliasOptions">Optional explicit key aliases applied after substitution.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
     public static IConfigurationBuilder AddSaPostSecretProcessing(
         this IConfigurationBuilder builder,
         ISecretService secretService,

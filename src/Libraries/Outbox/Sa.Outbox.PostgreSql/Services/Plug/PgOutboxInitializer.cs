@@ -14,7 +14,7 @@ internal sealed class PgOutboxInitializer(IPgDataSource dataSource) : IOutboxPro
         // The warm-up is shared by every consumer group, so it is not tied to one caller's token;
         // the data source's own command timeout bounds it.
         int result = await dataSource
-            .ExecuteScalarTyped<int>("SELECT 1", initCommand: null, CancellationToken.None)
+            .ExecuteScalarTypedAsync<int>("SELECT 1", initCommand: null, CancellationToken.None)
             .ConfigureAwait(false);
 
         if (result != 1)

@@ -1,5 +1,5 @@
-using System.Security;
 using Microsoft.Extensions.Logging;
+using System.Security;
 
 namespace Sa.Data.TempFolder;
 
@@ -34,7 +34,7 @@ namespace Sa.Data.TempFolder;
 /// are caught and logged; they never break the scan.
 /// </para>
 /// </remarks>
-internal sealed class VolumeScanner
+internal sealed partial class VolumeScanner : IDisposable
 {
     private const int CancellationCheckInterval = 256;
 
@@ -148,7 +148,7 @@ internal sealed class VolumeScanner
         {
             // The walk failed mid-tree: report zero for this pass and leave the cache unwritten,
             // so the next scan retries instead of pinning a partial sum.
-            _logger.LogDebug(ex, "Temp folder '{Name}': partial walk of {Dir} discarded.", _name, dir);
+            Log.PartialWalkDiscarded(_logger, ex, _name, dir);
             return 0;
         }
 
@@ -317,15 +317,11 @@ internal sealed class VolumeScanner
 
         if (transitionedTo)
         {
-            _logger.LogWarning(
-                "Temp folder '{Name}' volume {Total} bytes exceeds the limit {Max} bytes (root {Root}).",
-                _name, total, options.MaxTotalSize, _rootPath);
+            Log.VolumeExceedsLimit(_logger, _name, total, options.MaxTotalSize, _rootPath);
         }
         else
         {
-            _logger.LogInformation(
-                "Temp folder '{Name}' volume {Total} bytes is back under the limit {Max} bytes (root {Root}).",
-                _name, total, options.MaxTotalSize, _rootPath);
+            Log.VolumeBackUnderLimit(_logger, _name, total, options.MaxTotalSize, _rootPath);
         }
 
         var handler = options.OnVolumeExceeded;
@@ -340,7 +336,7 @@ internal sealed class VolumeScanner
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Temp folder '{Name}' OnVolumeExceeded handler threw.", _name);
+            Log.VolumeHandlerFailed(_logger, ex, _name);
         }
     }
 
@@ -411,4 +407,22 @@ internal sealed class VolumeScanner
     };
 
     private readonly record struct CachedFolder(DateTimeOffset Stamp, long Size);
+
+    /// <summary>Releases the scan semaphore.</summary>
+    public void Dispose() => _scanGate.Dispose();
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 3301, Level = LogLevel.Debug, Message = "Temp folder '{Name}': partial walk of {Dir} discarded.")]
+        public static partial void PartialWalkDiscarded(ILogger logger, Exception exception, string name, string dir);
+
+        [LoggerMessage(EventId = 3302, Level = LogLevel.Warning, Message = "Temp folder '{Name}' volume {Total} bytes exceeds the limit {Max} bytes (root {Root}).")]
+        public static partial void VolumeExceedsLimit(ILogger logger, string name, long total, long max, string root);
+
+        [LoggerMessage(EventId = 3303, Level = LogLevel.Information, Message = "Temp folder '{Name}' volume {Total} bytes is back under the limit {Max} bytes (root {Root}).")]
+        public static partial void VolumeBackUnderLimit(ILogger logger, string name, long total, long max, string root);
+
+        [LoggerMessage(EventId = 3304, Level = LogLevel.Warning, Message = "Temp folder '{Name}' OnVolumeExceeded handler threw.")]
+        public static partial void VolumeHandlerFailed(ILogger logger, Exception exception, string name);
+    }
 }

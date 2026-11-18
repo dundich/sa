@@ -209,7 +209,7 @@ public class KeyAliasesTests
             KeyAliases = new Dictionary<string, string>
             {
                 // The canonical side is spelled with `__` for its `:` separators (the `base_url` segment
-        // keeps its single data underscore); the alias side is the flat PHP key.
+                // keeps its single data underscore); the alias side is the flat PHP key.
                 ["sa__scope__api__auth__base_url"] = "auth_base_url",
             },
         }));

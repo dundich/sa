@@ -2,7 +2,7 @@ using Sa.Extensions;
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 
-namespace Sa.Classes;
+namespace Sa;
 
 /// <summary>
 /// Provides retry strategy helpers: constant, linear, exponential, and decorrelated jitter back-off.
@@ -22,9 +22,9 @@ internal static class Retry
     /// Delays: 0 ms (fast-first), 500 ms, 500 ms, 500 ms …
     /// </example>
     [DebuggerStepThrough]
-    public static ValueTask<T> Constant<I, T>(
-        Func<I, CancellationToken, ValueTask<T>> fun,
-        I input,
+    public static ValueTask<T> Constant<TInput, T>(
+        Func<TInput, CancellationToken, ValueTask<T>> fun,
+        TInput input,
         int retryCount = 3,
         int waitTime = 500,
         Func<Exception, int, bool>? shouldRetry = null,
@@ -65,9 +65,9 @@ internal static class Retry
     /// Delays: 0 ms (fast-first), 100 ms, 200 ms, 400 ms …
     /// </example>
     [DebuggerStepThrough]
-    public static ValueTask<T> Exponential<I, T>(
-        Func<I, CancellationToken, ValueTask<T>> fun,
-        I input,
+    public static ValueTask<T> Exponential<TInput, T>(
+        Func<TInput, CancellationToken, ValueTask<T>> fun,
+        TInput input,
         int retryCount = 3,
         int initialDelay = 100,
         double factor = 2.0,
@@ -110,9 +110,9 @@ internal static class Retry
     /// Delays: 0 ms (fast-first), 100 ms, 200 ms, 300 ms …
     /// </example>
     [DebuggerStepThrough]
-    public static ValueTask<T> Linear<I, T>(
-        Func<I, CancellationToken, ValueTask<T>> fun,
-        I input,
+    public static ValueTask<T> Linear<TInput, T>(
+        Func<TInput, CancellationToken, ValueTask<T>> fun,
+        TInput input,
         int retryCount = 3,
         int initialDelay = 100,
         double factor = 1.0,
@@ -155,9 +155,9 @@ internal static class Retry
     /// Delays: 0 ms (fast-first), ~530 ms, ~1455 ms, ~3060 ms …
     /// </example>
     [DebuggerStepThrough]
-    public static ValueTask<T> Jitter<I, T>(
-        Func<I, CancellationToken, ValueTask<T>> fun,
-        I input,
+    public static ValueTask<T> Jitter<TInput, T>(
+        Func<TInput, CancellationToken, ValueTask<T>> fun,
+        TInput input,
         int retryCount = 3,
         int medianFirstRetryDelay = 530,
         Func<Exception, int, bool>? shouldRetry = null,
@@ -196,17 +196,20 @@ internal static class Retry
     /// Retries <paramref name="fun"/> by awaiting each delay in <paramref name="timeSpans"/> on failure.
     /// </summary>
     /// <param name="timeSpans">Sequence of delays produced by a Quartz generator.</param>
+    /// <param name="fun">The operation to run; receives the current input and the cancellation token.</param>
+    /// <param name="input">The input passed to <paramref name="fun"/> on every attempt.</param>
     /// <param name="shouldRetry">
     /// Returns <see langword="true"/> to retry after the caught exception. When <see langword="null"/>,
     /// critical exceptions are re-thrown immediately while transient ones are retried.
     /// </param>
+    /// <param name="cancellationToken">Token that stops the retry loop.</param>
     [DebuggerStepThrough]
 #pragma warning disable S3776
-    public static async ValueTask<T> WaitAndRetry<I, T>(
+    public static async ValueTask<T> WaitAndRetry<TInput, T>(
 #pragma warning restore S3776
        IEnumerable<TimeSpan> timeSpans,
-       Func<I, CancellationToken, ValueTask<T>> fun,
-       I input,
+       Func<TInput, CancellationToken, ValueTask<T>> fun,
+       TInput input,
        Func<Exception, int, bool>? shouldRetry = null,
        CancellationToken cancellationToken = default)
     {
@@ -360,7 +363,7 @@ internal static class Retry
     /// <see cref="AccessViolationException"/>, which made an access violation non-retriable
     /// here and retriable in <c>Sa.Outbox</c>, <c>Sa.Schedule</c> and
     /// <c>Sa.Outbox.PostgreSql</c>, which all use <c>IsCritical</c>.
-    /// <see cref="ExceptionExtensions.cs"/> must therefore be link-included wherever this file is.
+    /// <c>ExceptionExtensions.cs</c> must therefore be link-included wherever this file is.
     /// </remarks>
     [DebuggerStepThrough]
     public static bool IsFatal(Exception ex) => ex.IsCritical();
@@ -371,7 +374,7 @@ internal static class Retry
 
     /// <summary>
     /// Generates <see cref="TimeSpan"/> sequences for various retry back-off strategies.
-    /// The first element is always <see cref="TimeSpan.Zero"/> when <paramref name="fastFirst"/> is <see langword="true"/>,
+    /// The first element is always <see cref="TimeSpan.Zero"/> when <c>fastFirst</c> is <see langword="true"/>,
     /// enabling an immediate second attempt with zero wait.
     /// </summary>
     public static class Quartz

@@ -18,7 +18,7 @@ public sealed class WorkQueueDrainTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             await Gate.Task.WaitAsync(ct);
             Interlocked.Increment(ref _processed);
@@ -31,7 +31,7 @@ public sealed class WorkQueueDrainTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             // Deliberately ignores ct: a processor that never observes
             // cancellation must not corrupt the queue's work accounting.
@@ -47,15 +47,15 @@ public sealed class WorkQueueDrainTests
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
         using var cts = new CancellationTokenSource();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
 
-        await queue.Enqueue(1, TestToken);      // picked up by the reader, blocked on the gate
+        await queue.EnqueueAsync(1, TestToken);      // picked up by the reader, blocked on the gate
         await Task.Delay(50, TestToken);
-        await queue.Enqueue(2, cts.Token);      // remains in the channel
+        await queue.EnqueueAsync(2, cts.Token);      // remains in the channel
         cts.Cancel();                           // the caller aborts the still-queued item
 
         await queue.ShutdownAsync();
@@ -78,13 +78,13 @@ public sealed class WorkQueueDrainTests
     public async Task Shutdown_StuckReader_KeepsIsIdleFalseUntilItemFinishes()
     {
         var processor = new NonCooperativeGateProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(1)
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(300)));
 
-        await queue.Enqueue(1, CancellationToken.None);
+        await queue.EnqueueAsync(1, CancellationToken.None);
         await Task.Delay(50, TestToken); // reader blocks on the gate and ignores the shutdown
 
         await queue.ShutdownAsync(); // the bounded reader wait times out; shutdown still completes
@@ -115,8 +115,8 @@ public sealed class WorkQueueDrainTests
         var processor = new GateProcessor();
         var dropped = new ConcurrentDictionary<int, string>();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithStatusCallback((item, status, ex) =>
@@ -127,11 +127,11 @@ public sealed class WorkQueueDrainTests
                     }
                 }));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await Task.Delay(50, TestToken); // item 1 in flight, blocked on the gate
         for (var i = 2; i <= 5; i++)
         {
-            await queue.Enqueue(i, TestToken); // items 2..5 stay in the channel
+            await queue.EnqueueAsync(i, TestToken); // items 2..5 stay in the channel
         }
 
         await queue.ForceCancelReadersAsync(ct: TestToken);
@@ -164,24 +164,24 @@ public sealed class WorkQueueDrainTests
         var processor = new GateProcessor();
         var statuses = new ConcurrentDictionary<int, SaWorkStatus>();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithShutdownTimeout(TimeSpan.FromMilliseconds(300))
                 .WithStatusCallback((item, status, _) => statuses[item] = status));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await Task.Delay(50, TestToken); // item 1 in flight, blocked on the gate
         for (var i = 2; i <= 5; i++)
         {
-            await queue.Enqueue(i, TestToken); // items 2..5 stay in the channel
+            await queue.EnqueueAsync(i, TestToken); // items 2..5 stay in the channel
         }
 
         // The public API offers no way to register a callback on the shutdown
         // CTS itself, so the fault is injected through the private field:
         // ShutdownAsync's CancelAsync must see the throwing callback.
-        var cts = (CancellationTokenSource)typeof(SaWorkQueue<int>)
+        var cts = (CancellationTokenSource)typeof(SaWorkChannel<int>)
             .GetField("_shutdownCts", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(queue)!;
         cts.Token.Register(() => throw new InvalidOperationException("boom"));

@@ -8,9 +8,9 @@ using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.Publication;
-using Sa.Outbox.Serialization;
 using Sa.Outbox.Redis;
 using Sa.Outbox.Redis.Configuration;
+using Sa.Outbox.Serialization;
 using StackExchange.Redis;
 using Testcontainers.Redis;
 
@@ -54,7 +54,7 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
 
     internal sealed class PgConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -64,7 +64,7 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
 
     internal sealed class RedisConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -133,11 +133,11 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
         IServiceProvider sp = fixture.ServiceProvider;
         IOutboxPublisherResolver resolver = sp.GetRequiredService<IOutboxPublisherResolver>();
 
-        Assert.NotSame(resolver.For(PgKey), resolver.For(RedisKey));
+        Assert.NotSame(resolver.GetPublisher(PgKey), resolver.GetPublisher(RedisKey));
 
         // Distinct tenants keep the two provider storages independent within the shared container.
-        Assert.Equal(1UL, await resolver.For(PgKey).PublishSingle(new TestMessage("pg-1"), tenantId: 11, TestToken));
-        Assert.Equal(1UL, await resolver.For(RedisKey).PublishSingle(new TestMessage("redis-1"), tenantId: 12, TestToken));
+        Assert.Equal(1UL, await resolver.GetPublisher(PgKey).PublishSingle(new TestMessage("pg-1"), tenantId: 11, TestToken));
+        Assert.Equal(1UL, await resolver.GetPublisher(RedisKey).PublishSingle(new TestMessage("redis-1"), tenantId: 12, TestToken));
 
         Assert.Equal(1L, await CountPostgresMessages("pg-1"));
         Assert.Equal(0L, await CountPostgresMessages("redis-1"));
@@ -198,8 +198,8 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
     {
         var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();
 
-        Assert.Equal(PgKey, manager.Get(new OutboxGroupKey(PgKey, "mixed_pg_group"))?.ProviderKey);
-        Assert.Equal(RedisKey, manager.Get(new OutboxGroupKey(RedisKey, "mixed_redis_group"))?.ProviderKey);
+        Assert.Equal(PgKey, manager.GetSettings(new OutboxGroupKey(PgKey, "mixed_pg_group"))?.ProviderKey);
+        Assert.Equal(RedisKey, manager.GetSettings(new OutboxGroupKey(RedisKey, "mixed_redis_group"))?.ProviderKey);
     }
 
     private async Task<long> CountPostgresMessages(string payloadId)
@@ -209,7 +209,7 @@ public class MixedProvidersTests(MixedProvidersTests.Fixture fixture)
             WHERE msg_payload_id = @id
             """;
 
-        return await fixture.DataSource.ExecuteScalarTyped<long>(
+        return await fixture.DataSource.ExecuteScalarTypedAsync<long>(
             sql,
             [new NpgsqlParameter("id", payloadId)],
             TestToken);

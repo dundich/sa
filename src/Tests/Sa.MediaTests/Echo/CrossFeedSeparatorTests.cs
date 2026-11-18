@@ -24,7 +24,7 @@ public sealed class CrossFeedSeparatorTests
         string output = directory.Combine("separated.wav");
 
         await CrossFeedSeparator.ExecuteAsync(
-            new AudioSeparationOptions(InputPath: input, OutputPath: output, Processing: mode),
+            new AudioSeparationOptions { InputPath = input, OutputPath = output, Processing = mode },
             TestContext.Current.CancellationToken);
 
         await AssertSeparatedAsync(input, output, minimumPeak, TestContext.Current.CancellationToken);
@@ -38,10 +38,7 @@ public sealed class CrossFeedSeparatorTests
         string output = directory.Combine("separated_aggressive.wav");
 
         await CrossFeedSeparator.ExecuteAsync(
-            new AudioSeparationOptions(
-                InputPath: input,
-                OutputPath: output,
-                Processing: CrossFeedSeparator.ProcessingMode.Aggressive),
+            new AudioSeparationOptions { InputPath = input, OutputPath = output, Processing = CrossFeedSeparator.ProcessingMode.Aggressive },
             TestContext.Current.CancellationToken);
 
         await AssertSeparatedAsync(input, output, minimumPeak: 0.9, TestContext.Current.CancellationToken);
@@ -56,14 +53,11 @@ public sealed class CrossFeedSeparatorTests
         string inMemoryOutput = directory.Combine("in_memory.wav");
 
         await CrossFeedSeparator.ExecuteAsync(
-            new AudioSeparationOptions(InputPath: input, OutputPath: autoOutput),
+            new AudioSeparationOptions { InputPath = input, OutputPath = autoOutput },
             TestContext.Current.CancellationToken);
 
         await CrossFeedSeparator.ExecuteAsync(
-            new AudioSeparationOptions(
-                InputPath: input,
-                OutputPath: inMemoryOutput,
-                Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed),
+            new AudioSeparationOptions { InputPath = input, OutputPath = inMemoryOutput, Processing = CrossFeedSeparator.ProcessingMode.MaximumSpeed },
             TestContext.Current.CancellationToken);
 
         // 6 секунд заведомо ниже порога in-memory, поэтому Auto обязан пойти тем же путём.
@@ -82,10 +76,7 @@ public sealed class CrossFeedSeparatorTests
         try
         {
             await CrossFeedSeparator.ExecuteAsync(
-                new AudioSeparationOptions(
-                    InputPath: input,
-                    OutputPath: null,
-                    Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed),
+                new AudioSeparationOptions { InputPath = input, OutputPath = null, Processing = CrossFeedSeparator.ProcessingMode.MaximumSpeed },
                 TestContext.Current.CancellationToken);
 
             Assert.True(File.Exists(expected), $"Ожидался файл {expected}");
@@ -108,10 +99,7 @@ public sealed class CrossFeedSeparatorTests
         string output = directory.Combine("separated_streaming.wav");
 
         await CrossFeedSeparator.ExecuteAsync(
-            new AudioSeparationOptions(
-                InputPath: input,
-                OutputPath: output,
-                Processing: CrossFeedSeparator.ProcessingMode.Aggressive),
+            new AudioSeparationOptions { InputPath = input, OutputPath = output, Processing = CrossFeedSeparator.ProcessingMode.Aggressive },
             TestContext.Current.CancellationToken);
 
         await AssertSeparatedAsync(input, output, minimumPeak: 0.9, TestContext.Current.CancellationToken);
@@ -126,17 +114,11 @@ public sealed class CrossFeedSeparatorTests
         string streaming = directory.Combine("streaming.wav");
 
         await CrossFeedSeparator.ExecuteAsync(
-            new AudioSeparationOptions(
-                InputPath: input,
-                OutputPath: inMemory,
-                Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed),
+            new AudioSeparationOptions { InputPath = input, OutputPath = inMemory, Processing = CrossFeedSeparator.ProcessingMode.MaximumSpeed },
             TestContext.Current.CancellationToken);
 
         await CrossFeedSeparator.ExecuteAsync(
-            new AudioSeparationOptions(
-                InputPath: input,
-                OutputPath: streaming,
-                Processing: CrossFeedSeparator.ProcessingMode.MinimumMemory),
+            new AudioSeparationOptions { InputPath = input, OutputPath = streaming, Processing = CrossFeedSeparator.ProcessingMode.MinimumMemory },
             TestContext.Current.CancellationToken);
 
         // Оценка α/β не должна зависеть от того, in-memory она считается или потоково:

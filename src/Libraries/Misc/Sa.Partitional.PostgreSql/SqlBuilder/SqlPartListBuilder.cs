@@ -1,4 +1,3 @@
-using Sa.Partitional.PostgreSql.Classes;
 using System.Text;
 
 namespace Sa.Partitional.PostgreSql.SqlBuilder;

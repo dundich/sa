@@ -316,11 +316,12 @@ public sealed class SetupBucketClientTests
         using var provider = services.BuildServiceProvider();
         var monitor = provider.GetRequiredService<IOptionsMonitor<HttpStandardResilienceOptions>>();
 
-        // The pipeline name is derived from the client name by AddStandardResilienceHandler; probe
-        // both spellings so a mismatch shows up as a value diff rather than a silent pass.
-        Assert.NotNull(Setup.ResiliencePipelineName);
+        // The pipeline name is derived from the client name by AddStandardResilienceHandler; the
+        // registration marker keeps it for this client instead of a process-wide static.
+        var registration = provider.GetRequiredService<S3BucketClientRegistration>();
+        Assert.NotNull(registration.ResiliencePipelineName);
 
-        var actual = monitor.Get(Setup.ResiliencePipelineName).TotalRequestTimeout.Timeout;
+        var actual = monitor.Get(registration.ResiliencePipelineName!).TotalRequestTimeout.Timeout;
 
         Assert.Equal(timeout, actual);
     }

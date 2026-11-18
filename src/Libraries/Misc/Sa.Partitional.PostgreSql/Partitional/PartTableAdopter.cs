@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Sa.Data.PostgreSql;
-using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.SqlBuilder;
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -19,7 +18,7 @@ internal interface IPartTableAdopter
     /// Tables in <see cref="TableRootMode.Create"/> are ignored; adopted tables are converted exactly
     /// once per process.
     /// </summary>
-    Task EnsureAdopted(string tableName, CancellationToken cancellationToken);
+    Task EnsureAdoptedAsync(string tableName, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -53,15 +52,13 @@ internal sealed partial class PartTableAdopter(
     /// </remarks>
     private const int MaxPartitionsPerConversion = 1000;
 
-    private const int MaxIdentifierBytes = 63;
-
     /// <summary>Tables already converted by this process, keyed by full name.</summary>
     private readonly ConcurrentDictionary<string, bool> _adopted = new(StringComparer.Ordinal);
 
     /// <summary>One gate per table so concurrent callers share a single conversion.</summary>
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new(StringComparer.Ordinal);
 
-    public async Task EnsureAdopted(string tableName, CancellationToken cancellationToken)
+    public async Task EnsureAdoptedAsync(string tableName, CancellationToken cancellationToken)
     {
         ISqlTableBuilder? builder = sqlBuilder[tableName];
 
@@ -77,7 +74,7 @@ internal sealed partial class PartTableAdopter(
         {
             if (_adopted.ContainsKey(key)) return;
 
-            await Adopt(builder, cancellationToken).ConfigureAwait(false);
+            await AdoptAsync(builder, cancellationToken).ConfigureAwait(false);
             _adopted[key] = true;
         }
         finally
@@ -86,13 +83,13 @@ internal sealed partial class PartTableAdopter(
         }
     }
 
-    private async Task Adopt(ISqlTableBuilder builder, CancellationToken cancellationToken)
+    private async Task AdoptAsync(ISqlTableBuilder builder, CancellationToken cancellationToken)
     {
         ITableSettings settings = builder.Settings;
         string qualifiedTable = SqlTemplate.QualifiedName(settings.DatabaseSchemaName, settings.DatabaseTableName);
         string qualifiedCache = CacheTableName(settings);
 
-        TableState state = await ReadState(qualifiedTable, qualifiedCache, null, cancellationToken).ConfigureAwait(false);
+        TableState state = await ReadStateAsync(qualifiedTable, qualifiedCache, null, cancellationToken).ConfigureAwait(false);
 
         if (!state.Exists)
         {
@@ -112,7 +109,7 @@ internal sealed partial class PartTableAdopter(
                     + "partitions; partition ownership cannot be shared.");
             }
 
-            await VerifyColumns(settings, qualifiedTable, null, cancellationToken).ConfigureAwait(false);
+            await VerifyColumnsAsync(settings, qualifiedTable, null, cancellationToken).ConfigureAwait(false);
             LogAlreadyAdopted(settings.FullName);
             return;
         }
@@ -124,10 +121,10 @@ internal sealed partial class PartTableAdopter(
                 + "AdoptTable supports ordinary, non-partitioned tables only.");
         }
 
-        await ConvertToPartitioned(builder, qualifiedTable, qualifiedCache, cancellationToken).ConfigureAwait(false);
+        await ConvertToPartitionedAsync(builder, qualifiedTable, qualifiedCache, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task ConvertToPartitioned(
+    private async Task ConvertToPartitionedAsync(
         ISqlTableBuilder builder,
         string qualifiedTable,
         string qualifiedCache,
@@ -135,13 +132,13 @@ internal sealed partial class PartTableAdopter(
     {
         ITableSettings settings = builder.Settings;
 
-        await using PgTransaction tx = await dataSource.BeginTransaction(cancellationToken).ConfigureAwait(false);
+        await using PgTransaction tx = await dataSource.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-        await Execute(tx, "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0));",
+        await ExecuteAsync(tx, "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0));",
             [new NpgsqlParameter<string>("key", settings.FullName)], cancellationToken).ConfigureAwait(false);
 
         // Re-read under the lock: another host may have converted the table while this one waited.
-        TableState state = await ReadState(qualifiedTable, qualifiedCache, tx, cancellationToken).ConfigureAwait(false);
+        TableState state = await ReadStateAsync(qualifiedTable, qualifiedCache, tx, cancellationToken).ConfigureAwait(false);
 
         if (state.IsPartitioned && state.CacheExists)
         {
@@ -160,34 +157,34 @@ internal sealed partial class PartTableAdopter(
         // Incoming foreign keys and dependent views follow the renamed table, so they would silently
         // keep pointing at the backup. Refusing the conversion is the only outcome that does not
         // split the application between two tables.
-        await EnsureNoDependents(tx, settings, qualifiedTable, cancellationToken).ConfigureAwait(false);
+        await EnsureNoDependentsAsync(tx, settings, qualifiedTable, cancellationToken).ConfigureAwait(false);
 
-        string backupBare = await BackupName(tx, settings, cancellationToken).ConfigureAwait(false);
+        string backupBare = await BackupNameAsync(tx, settings, cancellationToken).ConfigureAwait(false);
         string qualifiedBackup = SqlTemplate.QualifiedName(settings.DatabaseSchemaName, backupBare);
 
         LogConverting(settings.FullName, qualifiedBackup);
 
-        await Execute(tx,
+        await ExecuteAsync(tx,
             $"ALTER TABLE {qualifiedTable} RENAME TO {SqlTemplate.QuoteIdentifier(backupBare)};",
             [], cancellationToken).ConfigureAwait(false);
 
         // The root DDL is the one normally emitted by Create mode: schema, root table, primary key,
         // optional DEFAULT partition and post-SQL hook.
-        await Execute(tx, builder.CreateRootSql(), [], cancellationToken).ConfigureAwait(false);
-        await Execute(tx, builder.CreateCacheSql(), [], cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(tx, builder.CreateRootSql(), [], cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(tx, builder.CreateCacheSql(), [], cancellationToken).ConfigureAwait(false);
 
-        int partitions = await CreatePartitionsForExistingRows(
+        int partitions = await CreatePartitionsForExistingRowsAsync(
             tx, builder, qualifiedBackup, cancellationToken).ConfigureAwait(false);
 
-        await CopyRows(tx, settings, qualifiedTable, qualifiedBackup, cancellationToken).ConfigureAwait(false);
+        await CopyRowsAsync(tx, settings, qualifiedTable, qualifiedBackup, cancellationToken).ConfigureAwait(false);
 
-        await ResetIdentity(tx, settings, qualifiedTable, cancellationToken).ConfigureAwait(false);
+        await ResetIdentityAsync(tx, settings, qualifiedTable, cancellationToken).ConfigureAwait(false);
 
         if (settings.ConversionBackup == ConversionBackupMode.Drop)
         {
             // Counts have already been verified at this point; dropping the original inside the same
             // transaction still rolls back with it if the commit fails.
-            await Execute(tx, $"DROP TABLE {qualifiedBackup};", [], cancellationToken).ConfigureAwait(false);
+            await ExecuteAsync(tx, $"DROP TABLE {qualifiedBackup};", [], cancellationToken).ConfigureAwait(false);
         }
 
         await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -206,7 +203,7 @@ internal sealed partial class PartTableAdopter(
     /// Creates the partitions that cover the rows currently held by the backup table. List levels are
     /// resolved from the data itself when the configuration does not declare migration values.
     /// </summary>
-    private async Task<int> CreatePartitionsForExistingRows(
+    private async Task<int> CreatePartitionsForExistingRowsAsync(
         PgTransaction tx,
         ISqlTableBuilder builder,
         string qualifiedBackup,
@@ -214,7 +211,7 @@ internal sealed partial class PartTableAdopter(
     {
         ITableSettings settings = builder.Settings;
 
-        SourceColumns columns = await ReadColumns(tx, qualifiedBackup, cancellationToken).ConfigureAwait(false);
+        SourceColumns columns = await ReadColumnsAsync(tx, qualifiedBackup, cancellationToken).ConfigureAwait(false);
 
         if (!columns.Types.TryGetValue(settings.PartByRangeFieldName, out string? rangeType)
             || !IsRangeTypeCompatible(settings.RangeKeyType, rangeType))
@@ -225,12 +222,12 @@ internal sealed partial class PartTableAdopter(
                 + $"does not match the configured range key '{settings.RangeKeyType}'.");
         }
 
-        (DateTimeOffset? min, DateTimeOffset? max) = await ReadRangeBounds(tx, settings, qualifiedBackup, cancellationToken).ConfigureAwait(false);
+        (DateTimeOffset? min, DateTimeOffset? max) = await ReadRangeBoundsAsync(tx, settings, qualifiedBackup, cancellationToken).ConfigureAwait(false);
 
         // An empty table has no range to cover; the cache table created above is the adoption marker.
         if (min is null || max is null) return 0;
 
-        List<StrOrNum[]> partValues = settings.PartByListFieldNames.Length == 0
+        List<StrOrNum[]> partValues = settings.PartByListFieldNames.Count == 0
             ? [[]]
             : await ReadListValues(tx, settings, qualifiedBackup, cancellationToken).ConfigureAwait(false);
 
@@ -249,8 +246,9 @@ internal sealed partial class PartTableAdopter(
         {
             foreach (DateTimeOffset date in dates)
             {
-                string sql = builder.CreateSql(date, values);
-                await Execute(tx, sql, [], cancellationToken).ConfigureAwait(false);
+                // Root and cache table were created above; per-partition batches must not repeat them.
+                string sql = builder.CreatePartSql(date, values);
+                await ExecuteAsync(tx, sql, [], cancellationToken).ConfigureAwait(false);
                 created++;
             }
         }
@@ -267,15 +265,16 @@ internal sealed partial class PartTableAdopter(
 
         while (cursor < end)
         {
-            dates.Add(cursor);
-
-            if (dates.Count > MaxPartitionsPerConversion)
+            // Checked before the add, so the limit is the number of partitions actually created.
+            if (dates.Count >= MaxPartitionsPerConversion)
             {
                 throw new InvalidOperationException(
                     $"Table '{settings.FullName}' holds data covering more than {MaxPartitionsPerConversion} "
                     + "partitions. Check that the range partition column holds Unix seconds, not "
                     + "milliseconds, or reduce the data set before adopting the table.");
             }
+
+            dates.Add(cursor);
 
             cursor = settings.PartBy.GetRange(cursor).End;
         }
@@ -287,14 +286,14 @@ internal sealed partial class PartTableAdopter(
     /// Copies every row from the renamed original table into the partitioned root. The column list is
     /// explicit: an implicit <c>SELECT *</c> would silently rely on physical column order.
     /// </summary>
-    private async Task CopyRows(
+    private async Task CopyRowsAsync(
         PgTransaction tx,
         ITableSettings settings,
         string qualifiedTable,
         string qualifiedBackup,
         CancellationToken cancellationToken)
     {
-        SourceColumns source = await ReadColumns(tx, qualifiedBackup, cancellationToken).ConfigureAwait(false);
+        SourceColumns source = await ReadColumnsAsync(tx, qualifiedBackup, cancellationToken).ConfigureAwait(false);
 
         string[] target = settings.Fields
             .Select(field => SqlFieldName.Extract(field).ToString())
@@ -324,12 +323,12 @@ internal sealed partial class PartTableAdopter(
         // for a table without one is at best noise and is rejected by older servers.
         string overriding = source.HasAlwaysIdentity ? " OVERRIDING SYSTEM VALUE" : string.Empty;
 
-        await Execute(tx,
+        await ExecuteAsync(tx,
             $"INSERT INTO {qualifiedTable} ({columns}){overriding} SELECT {columns} FROM {qualifiedBackup};",
             [], cancellationToken).ConfigureAwait(false);
 
-        long backupRows = await ScalarLong(tx, $"SELECT count(*) FROM {qualifiedBackup};", [], cancellationToken).ConfigureAwait(false);
-        long rootRows = await ScalarLong(tx, $"SELECT count(*) FROM {qualifiedTable};", [], cancellationToken).ConfigureAwait(false);
+        long backupRows = await ScalarLongAsync(tx, $"SELECT count(*) FROM {qualifiedBackup};", [], cancellationToken).ConfigureAwait(false);
+        long rootRows = await ScalarLongAsync(tx, $"SELECT count(*) FROM {qualifiedTable};", [], cancellationToken).ConfigureAwait(false);
 
         if (backupRows != rootRows)
         {
@@ -345,7 +344,7 @@ internal sealed partial class PartTableAdopter(
     /// Moves the identity/serial sequence past the copied identifiers, so the next INSERT does not
     /// collide with existing rows.
     /// </summary>
-    private async Task ResetIdentity(
+    private static async Task ResetIdentityAsync(
         PgTransaction tx,
         ITableSettings settings,
         string qualifiedTable,
@@ -353,7 +352,7 @@ internal sealed partial class PartTableAdopter(
     {
         string qualifiedName = SqlTemplate.QualifiedName(settings.DatabaseSchemaName, settings.DatabaseTableName);
 
-        string? sequence = await ScalarString(tx,
+        string? sequence = await ScalarStringAsync(tx,
             "SELECT pg_get_serial_sequence(@table, @column);",
             [
                 new NpgsqlParameter<string>("table", qualifiedName),
@@ -363,13 +362,13 @@ internal sealed partial class PartTableAdopter(
 
         if (sequence is null) return;
 
-        long? maxId = await ScalarLongNullable(tx,
+        long? maxId = await ScalarLongNullableAsync(tx,
             $"SELECT max({SqlTemplate.QuoteIdentifier(settings.IdFieldName)}) FROM {qualifiedTable};",
             [], cancellationToken).ConfigureAwait(false);
 
         if (maxId is null) return;
 
-        await Execute(tx, "SELECT setval(@sequence::regclass, @value);",
+        await ExecuteAsync(tx, "SELECT setval(@sequence::regclass, @value);",
             [
                 new NpgsqlParameter<string>("sequence", sequence),
                 new NpgsqlParameter<long>("value", maxId.Value),
@@ -377,7 +376,7 @@ internal sealed partial class PartTableAdopter(
             cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<TableState> ReadState(
+    private async Task<TableState> ReadStateAsync(
         string qualifiedTable,
         string qualifiedCache,
         PgTransaction? tx,
@@ -403,13 +402,13 @@ SELECT COALESCE((SELECT relkind::text FROM pg_class WHERE oid = to_regclass(@tab
     /// Verifies that an already partitioned root still exposes every declared column and that the
     /// range column matches the configured range key type.
     /// </summary>
-    private async Task VerifyColumns(
+    private async Task VerifyColumnsAsync(
         ITableSettings settings,
         string qualifiedTable,
         PgTransaction? tx,
         CancellationToken cancellationToken)
     {
-        SourceColumns columns = await ReadColumns(tx, qualifiedTable, cancellationToken).ConfigureAwait(false);
+        SourceColumns columns = await ReadColumnsAsync(tx, qualifiedTable, cancellationToken).ConfigureAwait(false);
 
         foreach (string field in settings.Fields)
         {
@@ -432,7 +431,7 @@ SELECT COALESCE((SELECT relkind::text FROM pg_class WHERE oid = to_regclass(@tab
         }
     }
 
-    private async Task<(DateTimeOffset? Min, DateTimeOffset? Max)> ReadRangeBounds(
+    private async Task<(DateTimeOffset? Min, DateTimeOffset? Max)> ReadRangeBoundsAsync(
         PgTransaction tx,
         ITableSettings settings,
         string qualifiedBackup,
@@ -498,7 +497,7 @@ SELECT COALESCE((SELECT relkind::text FROM pg_class WHERE oid = to_regclass(@tab
             $"SELECT DISTINCT {columns} FROM {qualifiedBackup};",
             reader =>
             {
-                StrOrNum[] values = new StrOrNum[settings.PartByListFieldNames.Length];
+                StrOrNum[] values = new StrOrNum[settings.PartByListFieldNames.Count];
 
                 for (int i = 0; i < values.Length; i++)
                 {
@@ -510,7 +509,7 @@ SELECT COALESCE((SELECT relkind::text FROM pg_class WHERE oid = to_regclass(@tab
             [], cancellationToken).ConfigureAwait(false);
 
         return rows
-            .GroupBy(row => string.Join("|", row.Select(value => value.ToFmtString())), StringComparer.Ordinal)
+            .GroupBy(row => row, StrOrNumArrayComparer.Instance)
             .Select(group => group.First())
             .ToList();
     }
@@ -536,7 +535,7 @@ SELECT COALESCE((SELECT relkind::text FROM pg_class WHERE oid = to_regclass(@tab
     /// Reads the column names (in table order) and their formatted types, plus whether the table has
     /// a <c>GENERATED ALWAYS AS IDENTITY</c> column.
     /// </summary>
-    private async Task<SourceColumns> ReadColumns(
+    private async Task<SourceColumns> ReadColumnsAsync(
         PgTransaction? tx,
         string qualifiedTable,
         CancellationToken cancellationToken)
@@ -567,7 +566,7 @@ ORDER BY a.attnum;
     /// Rejects a conversion that would leave incoming foreign keys or dependent views attached to
     /// the renamed backup table.
     /// </summary>
-    private async Task EnsureNoDependents(
+    private async Task EnsureNoDependentsAsync(
         PgTransaction tx,
         ITableSettings settings,
         string qualifiedTable,
@@ -609,25 +608,26 @@ WHERE d.refobjid = to_regclass(@table)
             + "around the conversion.");
     }
 
-    private async Task<string> BackupName(
+    private static async Task<string> BackupNameAsync(
         PgTransaction tx,
         ITableSettings settings,
         CancellationToken cancellationToken)
     {
         string baseName = $"{settings.DatabaseTableName}{settings.SqlPartSeparator}backup$";
-        string candidate = TrimIdentifier(baseName);
+        string candidate = SqlTemplate.TrimIdentifier(baseName);
 
         for (int i = 1; ; i++)
         {
             string qualified = SqlTemplate.QualifiedName(settings.DatabaseSchemaName, candidate);
 
-            bool exists = await ScalarBool(tx, "SELECT to_regclass(@name) IS NOT NULL;",
+            bool exists = await ScalarBoolAsync(tx, "SELECT to_regclass(@name) IS NOT NULL;",
                 [new NpgsqlParameter<string>("name", qualified)], cancellationToken).ConfigureAwait(false);
 
             if (!exists) return candidate;
 
             string suffix = $"_{i.ToString(CultureInfo.InvariantCulture)}";
-            candidate = TrimIdentifier(baseName, MaxIdentifierBytes - Encoding.UTF8.GetByteCount(suffix)) + suffix;
+            candidate = SqlTemplate.TrimIdentifier(
+                baseName, SqlTemplate.MaxIdentifierBytes - Encoding.UTF8.GetByteCount(suffix)) + suffix;
         }
     }
 
@@ -635,25 +635,6 @@ WHERE d.refobjid = to_regclass(@table)
         => SqlTemplate.QualifiedName(
             settings.DatabaseSchemaName,
             $"{settings.DatabaseTableName}{settings.SqlPartSeparator}{settings.PartTablePostfix}");
-
-    private static string TrimIdentifier(string value, int maxBytes = MaxIdentifierBytes)
-    {
-        if (Encoding.UTF8.GetByteCount(value) <= maxBytes) return value;
-
-        StringBuilder builder = new();
-        int bytes = 0;
-
-        foreach (Rune rune in value.EnumerateRunes())
-        {
-            int runeBytes = rune.Utf8SequenceLength;
-            if (bytes + runeBytes > maxBytes) break;
-
-            builder.Append(rune.ToString());
-            bytes += runeBytes;
-        }
-
-        return builder.ToString();
-    }
 
     /// <summary>
     /// Reports whether a PostgreSQL column type can serve as the configured range key.
@@ -683,7 +664,7 @@ WHERE d.refobjid = to_regclass(@table)
 
     private static string Join(string[] values) => values.Length == 0 ? "<none>" : string.Join(", ", values);
 
-    private async Task<int> Execute(
+    private static async Task<int> ExecuteAsync(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
@@ -706,7 +687,7 @@ WHERE d.refobjid = to_regclass(@table)
     {
         if (tx is null)
         {
-            return await dataSource.ExecuteReaderList(sql, read, parameters, cancellationToken).ConfigureAwait(false);
+            return await dataSource.ExecuteReaderListAsync(sql, read, parameters, cancellationToken).ConfigureAwait(false);
         }
 
         await using NpgsqlCommand command = tx.Connection.CreateCommand();
@@ -725,47 +706,47 @@ WHERE d.refobjid = to_regclass(@table)
         return rows;
     }
 
-    private async Task<long> ScalarLong(
+    private static async Task<long> ScalarLongAsync(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
         CancellationToken cancellationToken)
     {
-        object? value = await Scalar(tx, sql, parameters, cancellationToken).ConfigureAwait(false);
+        object? value = await ScalarAsync(tx, sql, parameters, cancellationToken).ConfigureAwait(false);
         return Convert.ToInt64(value, CultureInfo.InvariantCulture);
     }
 
-    private async Task<long?> ScalarLongNullable(
+    private static async Task<long?> ScalarLongNullableAsync(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
         CancellationToken cancellationToken)
     {
-        object? value = await Scalar(tx, sql, parameters, cancellationToken).ConfigureAwait(false);
+        object? value = await ScalarAsync(tx, sql, parameters, cancellationToken).ConfigureAwait(false);
         return value is null or DBNull ? null : Convert.ToInt64(value, CultureInfo.InvariantCulture);
     }
 
-    private async Task<string?> ScalarString(
+    private static async Task<string?> ScalarStringAsync(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
         CancellationToken cancellationToken)
     {
-        object? value = await Scalar(tx, sql, parameters, cancellationToken).ConfigureAwait(false);
+        object? value = await ScalarAsync(tx, sql, parameters, cancellationToken).ConfigureAwait(false);
         return value is null or DBNull ? null : (string)value;
     }
 
-    private async Task<bool> ScalarBool(
+    private static async Task<bool> ScalarBoolAsync(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,
         CancellationToken cancellationToken)
     {
-        object? value = await Scalar(tx, sql, parameters, cancellationToken).ConfigureAwait(false);
+        object? value = await ScalarAsync(tx, sql, parameters, cancellationToken).ConfigureAwait(false);
         return value is not null and not DBNull && (bool)value;
     }
 
-    private async Task<object?> Scalar(
+    private static async Task<object?> ScalarAsync(
         PgTransaction tx,
         string sql,
         NpgsqlParameter[] parameters,

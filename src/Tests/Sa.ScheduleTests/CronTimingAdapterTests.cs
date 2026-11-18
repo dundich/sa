@@ -119,7 +119,7 @@ public sealed class CronTimingAdapterTests
 
     private sealed class NoopJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 }

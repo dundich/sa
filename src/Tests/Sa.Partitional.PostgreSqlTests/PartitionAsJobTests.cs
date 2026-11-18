@@ -29,9 +29,9 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture)
                     // Партиционирование по country и city (если не задан PartByRange то по дням)
                     .PartByList("country", "city")
                     // Миграция партиций каждого тенанта по city
-                    .AddMigration("RU", ["Moscow", "Samara"])
-                    .AddMigration("USA", ["Alabama", "New York"])
-                    .AddMigration("FR", ["Paris", "Lyon", "Bordeaux"]);
+                    .AddMigrationChildren("RU", "Moscow", "Samara")
+                    .AddMigrationChildren("USA", "Alabama", "New York")
+                    .AddMigrationChildren("FR", "Paris", "Lyon", "Bordeaux");
 
                 });
             }
@@ -54,8 +54,8 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture)
     {
         Console.WriteLine(fixture.ConnectionString);
 
-        int i =  await fixture.ServiceProvider
-            .GetRequiredService<IScheduler>().Start(CancellationToken.None);
+        int i = await fixture.ServiceProvider
+            .GetRequiredService<IScheduler>().StartAsync(CancellationToken.None);
         Assert.True(i > 0);
 
         await Task.Delay(800, TestContext.Current.CancellationToken);

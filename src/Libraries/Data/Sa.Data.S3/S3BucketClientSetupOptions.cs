@@ -33,6 +33,13 @@ public class S3BucketClientSetupOptions : S3BucketSettings
     /// Установите в <c>TimeSpan.FromHours(2)</c> для периодического пересоздания handler и
     /// освобождения устаревших соединений.
     /// </summary>
+    /// <remarks>
+    /// Значение применяется к именованному <c>HttpClient</c> фабрики. Сам
+    /// <see cref="IS3BucketClient"/> в DI — синглтон и держит один <c>HttpClient</c>, поэтому
+    /// пересоздание handler'а происходит только у клиентов, полученных из
+    /// <c>IHttpClientFactory</c> напрямую; для готового соединения пересоздание даёт
+    /// <see cref="ConnectionPoolLifetime"/>.
+    /// </remarks>
     public TimeSpan HandlerLifetime { get; set; } = Timeout.InfiniteTimeSpan;
 
     /// <summary>
@@ -41,21 +48,23 @@ public class S3BucketClientSetupOptions : S3BucketSettings
     /// </summary>
     public virtual void Normalize()
     {
-        AccessKey = AccessKey.Trim();
-        SecretKey = SecretKey.Trim();
-        Bucket = Bucket.Trim();
-        Region = Region.Trim();
-        Service = Service.Trim();
+        // Конфигурация может дать null (например, "AccessKey": null в JSON): без этого проверка
+        // ниже падала бы NullReferenceException вместо ValidationException с именем опции.
+        AccessKey = (AccessKey ?? string.Empty).Trim();
+        SecretKey = (SecretKey ?? string.Empty).Trim();
+        Bucket = (Bucket ?? string.Empty).Trim();
+        Region = (Region ?? string.Empty).Trim();
+        Service = (Service ?? string.Empty).Trim();
 
-        // Пробелы вокруг адреса делают Uri.TryCreate капризным, а треугольный слешш в конце
-        // не должен считаться частью цели: «http://host:9000/» и «http://host:9000» — один и тот
-        // же эндпоинт. Схему и authority приводим к нижнему регистру, хвостовой слешш срезаем.
-        // Пустое значение не трогаем — его корректно отчитает Validate(), сообщив, какая опция
-        // не задана, вместо UrlEx без указания причины.
+        // Пробелы вокруг адреса делают Uri.TryCreate капризным, а хвостовой слеш не должен
+        // считаться частью цели: «http://host:9000/» и «http://host:9000» — один и тот же
+        // эндпоинт. Схему и authority приводим к нижнему регистру, query и fragment отбрасываем
+        // (у эндпоинта их быть не может), хвостовой слеш срезаем. Пустое значение не трогаем —
+        // его корректно отчитает Validate(), сообщив, какая опция не задана.
         if (!string.IsNullOrWhiteSpace(Endpoint))
         {
             Endpoint = Uri.TryCreate(Endpoint.Trim(), UriKind.Absolute, out Uri? endpoint)
-                ? $"{endpoint.Scheme.ToLowerInvariant()}://{endpoint.Authority}{endpoint.PathAndQuery.TrimEnd('/')}"
+                ? $"{endpoint.Scheme.ToLowerInvariant()}://{endpoint.Authority}{endpoint.AbsolutePath.TrimEnd('/')}"
                 : Endpoint.Trim();
         }
     }
@@ -66,31 +75,14 @@ public class S3BucketClientSetupOptions : S3BucketSettings
     /// </summary>
     /// <exception cref="ValidationException">Выбрасывается, если настройки некорректны.</exception>
     /// <remarks>
-    /// Проверка <see cref="Endpoint"/> особенно важна: значение попадает в <c>new Uri(...)</c> внутри
-    /// клиента, и без неё неверный адрес всплыл бы как голый <see cref="UriFormatException"/> без
-    /// указания, какая опция виновата. Явные проверки вместо <c>ValidateDataAnnotations()</c>: тот
-    /// помечен <c>RequiresUnreferencedCode</c> (IL2026) и ломает Native AOT.
+    /// Идентификация бакета и эндпоинта проверяется базовым <see cref="S3BucketSettings.Validate"/>;
+    /// здесь добавляются транспортные значения. Явные проверки вместо
+    /// <c>ValidateDataAnnotations()</c>: тот помечен <c>RequiresUnreferencedCode</c> (IL2026) и
+    /// ломает Native AOT.
     /// </remarks>
-    public virtual void Validate()
+    public override void Validate()
     {
-        if (string.IsNullOrWhiteSpace(Endpoint))
-        {
-            throw new ValidationException($"{GetType().Name}:{nameof(Endpoint)} cannot be empty.");
-        }
-
-        if (!Uri.TryCreate(Endpoint, UriKind.Absolute, out Uri? endpoint)
-            || (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
-        {
-            throw new ValidationException(
-                $"{GetType().Name}:{nameof(Endpoint)} must be an absolute http or https URL, " +
-                $"but was '{Endpoint}'.");
-        }
-
-        RequireText(AccessKey, nameof(AccessKey));
-        RequireText(SecretKey, nameof(SecretKey));
-        RequireText(Bucket, nameof(Bucket));
-        RequireText(Region, nameof(Region));
-        RequireText(Service, nameof(Service));
+        base.Validate();
 
         if (TotalRequestTimeout <= TimeSpan.Zero)
         {
@@ -114,14 +106,6 @@ public class S3BucketClientSetupOptions : S3BucketSettings
             throw new ValidationException(
                 $"{GetType().Name}:{nameof(HandlerLifetime)} must be positive or " +
                 $"{nameof(Timeout)}.{nameof(Timeout.InfiniteTimeSpan)}, but was {HandlerLifetime}.");
-        }
-
-        void RequireText(string value, string name)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                throw new ValidationException($"{GetType().Name}:{name} cannot be empty.");
-            }
         }
     }
 }

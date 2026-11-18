@@ -64,6 +64,19 @@ internal sealed class SaConfigurationState
     }
 
     /// <summary>
+    /// Returns the state stored on <paramref name="builder"/>, or <see langword="null"/> when the
+    /// post-processing pipeline was never registered.
+    /// </summary>
+    public static SaConfigurationState? Find(IConfigurationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        return builder.Properties.TryGetValue(PropertyKey, out object? value)
+            ? value as SaConfigurationState
+            : null;
+    }
+
+    /// <summary>
     /// Applies a registration: merges its aliases into the accumulated map and makes its secret
     /// options the ones the single pass will use (the last registration wins).
     /// </summary>

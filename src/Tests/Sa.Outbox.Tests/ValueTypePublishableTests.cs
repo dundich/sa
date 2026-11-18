@@ -1,7 +1,7 @@
-using System.Globalization;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.Publication;
+using System.Globalization;
 
 namespace Sa.Outbox.Tests;
 
@@ -32,7 +32,7 @@ public class ValueTypePublishableTests
         IOutboxMessagePublisher publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 16),
+            new OutboxPublishSettings { MaxBatchSize = 16 },
             metadata);
 
         StructMessage[] messages =

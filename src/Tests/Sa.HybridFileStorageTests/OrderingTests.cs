@@ -21,8 +21,8 @@ public sealed class OrderingTests
         // The in-memory provider registered through the pipeline is added when the hybrid
         // registration runs — its position in the chain is the position of that call.
         var services = new ServiceCollection()
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("svc-first"))
-            .AddSaHybridFileStorage(b => b.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("pipeline-second")));
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "svc-first" })
+            .AddSaHybridFileStorage(b => b.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "pipeline-second" }));
 
         using var provider = services.BuildServiceProvider();
         var hybrid = provider.GetRequiredService<IHybridFileStorage>();
@@ -36,9 +36,9 @@ public sealed class OrderingTests
     public void Storages_ConfigureStorageAddsGoAfterTheServiceCollectionOnes()
     {
         var services = new ServiceCollection()
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("di-first"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "di-first" })
             .AddSaHybridFileStorage(b => b.ConfigureStorage((_, c) =>
-                c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions("configured-second")))));
+                c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "configured-second" }))));
 
         using var provider = services.BuildServiceProvider();
         var hybrid = provider.GetRequiredService<IHybridFileStorage>();
@@ -52,8 +52,8 @@ public sealed class OrderingTests
     public void Storages_PipelineInMemory_TakesThePositionOfTheAddSaHybridFileStorageCall()
     {
         var services = new ServiceCollection()
-            .AddSaHybridFileStorage(b => b.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("pipeline-first")))
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("svc-second"));
+            .AddSaHybridFileStorage(b => b.AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "pipeline-first" }))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "svc-second" });
 
         using var provider = services.BuildServiceProvider();
         var hybrid = provider.GetRequiredService<IHybridFileStorage>();
@@ -213,7 +213,7 @@ public sealed class OrderingTests
         FakeFileStorage fake,
         Action<IHybridFileStorageConfiguration> configure)
         => new ServiceCollection()
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("share"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "share" })
             .AddSaHybridFileStorage(b =>
             {
                 b.ConfigureStorage((_, c) => c.AddStorage(fake));

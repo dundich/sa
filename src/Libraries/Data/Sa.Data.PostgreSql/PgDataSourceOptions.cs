@@ -11,14 +11,14 @@ namespace Sa.Data.PostgreSql;
 /// <para>
 /// Единственная настройка — <see cref="ConnectionString"/>. Пулинг, таймауты и <c>Search Path</c>
 /// задаются внутри самой строки. Если строка пуста, data source строится из уже зарегистрированного в
-/// DI <see cref="NpgsqlDataSource"/> — то есть переиспользует его pool, а не создаёт второй.
+/// DI <see cref="Npgsql.NpgsqlDataSource"/> — то есть переиспользует его pool, а не создаёт второй.
 /// </para>
 /// </remarks>
 public class PgDataSourceOptions
 {
     /// <summary>
     /// Строка подключения PostgreSQL. Пустая строка — фолбэк на зарегистрированный
-    /// <see cref="NpgsqlDataSource"/>.
+    /// <see cref="Npgsql.NpgsqlDataSource"/>.
     /// </summary>
     public string ConnectionString { get; set; } = string.Empty;
 

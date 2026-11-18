@@ -55,8 +55,10 @@ internal sealed class BinaryPipeReader(PipeReader reader)
         Position += skipped;
 
         if (skipped < count)
+        {
             throw new InvalidDataException(
                 $"Unexpected end of WAV file: expected {count} more byte(s), got {skipped}");
+        }
     }
 
     /// <summary>
@@ -66,8 +68,10 @@ internal sealed class BinaryPipeReader(PipeReader reader)
     private static void EnsureAvailable(ReadResult result, int count)
     {
         if (result.Buffer.Length < count)
+        {
             throw new InvalidDataException(
                 $"Unexpected end of WAV file: expected {count} byte(s), got {result.Buffer.Length}");
+        }
     }
 
     private static uint ReadUInt32Little(ReadOnlySequence<byte> seq)

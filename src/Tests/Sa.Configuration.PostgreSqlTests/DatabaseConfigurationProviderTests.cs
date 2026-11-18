@@ -53,11 +53,9 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
     {
         // Arrange
         var builder = new ConfigurationBuilder();
-        var options = new PostgreSqlConfigurationOptions(
-            fixture.ConnectionString,
-            "SELECT key, value FROM config_provider_test WHERE key = 'nonexistent_row'");
+        var options = new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM config_provider_test WHERE key = 'nonexistent_row'" };
 
-        builder.AddSaPostgreSqlConfiguration(options);
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 
         // Act
         var configuration = builder.Build();
@@ -71,11 +69,9 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
     {
         // Arrange
         var builder = new ConfigurationBuilder();
-        var options = new PostgreSqlConfigurationOptions(
-            fixture.ConnectionString,
-            "SELECT key, value FROM config_provider_test");
+        var options = new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM config_provider_test" };
 
-        builder.AddSaPostgreSqlConfiguration(options);
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 
         // Act
         var configuration = builder.Build();
@@ -91,11 +87,9 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
     {
         // Arrange
         var builder = new ConfigurationBuilder();
-        var options = new PostgreSqlConfigurationOptions(
-            fixture.ConnectionString,
-            "SELECT key, value FROM config_provider_test WHERE key = 'EmptyValueKey'");
+        var options = new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM config_provider_test WHERE key = 'EmptyValueKey'" };
 
-        builder.AddSaPostgreSqlConfiguration(options);
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 
         // Act
         var configuration = builder.Build();
@@ -109,11 +103,9 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
     {
         // Arrange
         var builder = new ConfigurationBuilder();
-        var options = new PostgreSqlConfigurationOptions(
-            fixture.ConnectionString,
-            "SELECT key, value FROM config_provider_test WHERE key = 'NullValueKey'");
+        var options = new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM config_provider_test WHERE key = 'NullValueKey'" };
 
-        builder.AddSaPostgreSqlConfiguration(options);
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 
         // Act
         var configuration = builder.Build();
@@ -129,12 +121,11 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
         // the same convention AddEnvironmentVariables() applies to environment variables.
         // The alias is opt-in, so it must be switched on explicitly.
         var builder = new ConfigurationBuilder();
-        var options = new PostgreSqlConfigurationOptions(
-            fixture.ConnectionString,
-            "SELECT key, value FROM config_provider_test WHERE key LIKE 'sa%' OR key = 'single_underscore_key'")
-        with { DoubleUnderscoreAsSeparator = true };
+        var options = new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM config_provider_test WHERE key LIKE 'sa%' OR key = 'single_underscore_key'" }
+        with
+        { DoubleUnderscoreAsSeparator = true };
 
-        builder.AddSaPostgreSqlConfiguration(options);
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 
         // Act
         var configuration = builder.Build();
@@ -159,12 +150,11 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
     {
         // With the alias off, a key that legitimately contains __ is stored verbatim.
         var builder = new ConfigurationBuilder();
-        var options = new PostgreSqlConfigurationOptions(
-            fixture.ConnectionString,
-            "SELECT key, value FROM config_provider_test WHERE key IN ('literal__double', 'sa__pg__host')")
-        with { DoubleUnderscoreAsSeparator = false };
+        var options = new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM config_provider_test WHERE key IN ('literal__double', 'sa__pg__host')" }
+        with
+        { DoubleUnderscoreAsSeparator = false };
 
-        builder.AddSaPostgreSqlConfiguration(options);
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 
         // Act
         var configuration = builder.Build();
@@ -189,11 +179,9 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
         await seed.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
 
         var builder = new ConfigurationBuilder();
-        var options = new PostgreSqlConfigurationOptions(
-            fixture.ConnectionString,
-            "SELECT key, value FROM config_provider_test");
+        var options = new PostgreSqlConfigurationOptions { SelectSql = "SELECT key, value FROM config_provider_test" };
 
-        builder.AddSaPostgreSqlConfiguration(options);
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
 
         var configuration = builder.Build();
 
@@ -209,5 +197,39 @@ public sealed class DatabaseConfigurationProviderTests(DatabaseConfigurationProv
         // Assert: the stale row no longer lingers, surviving rows are intact
         Assert.Null(configuration["stale_key"]);
         Assert.Equal("normal_value", configuration["NormalKey"]);
+    }
+
+    [Fact]
+    public void Load_Throws_WhenTheQueryReturnsThreeColumns()
+    {
+        // A three-column query is the shape the removed client mapping used to accept. Reading it as
+        // (key, value) would silently shift the key into the client id, so the shape fails loudly.
+        var builder = new ConfigurationBuilder();
+        var options = new PostgreSqlConfigurationOptions
+        {
+            SelectSql = "SELECT 'client', key, value FROM config_provider_test",
+        };
+
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("exactly two columns", exception.Message);
+    }
+
+    [Fact]
+    public void Load_Throws_WhenTheQueryReturnsOneColumn()
+    {
+        var builder = new ConfigurationBuilder();
+        var options = new PostgreSqlConfigurationOptions
+        {
+            SelectSql = "SELECT key FROM config_provider_test",
+        };
+
+        builder.AddSaPostgreSqlConfiguration(fixture.ConnectionString, options);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("exactly two columns", exception.Message);
     }
 }

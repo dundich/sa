@@ -36,7 +36,7 @@ public sealed class ScheduleFaultTests : IAsyncDisposable
         // Start may report true (the slots spawned, then the fault landed) or false
         // (the fault landed while starting) — both are fine. What must never happen
         // is a scheduler that reports a running job that is dead.
-        _ = await _scheduler.Start(TestContext.Current.CancellationToken);
+        _ = await _scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         await WaitForAsync(() =>
             Volatile.Read(ref ExplodingJob.Attempts) >= 1 && !_job.IsStarted);
@@ -44,7 +44,7 @@ public sealed class ScheduleFaultTests : IAsyncDisposable
         Assert.False(_job.IsStarted, "IsStarted stayed true over a job that never started");
 
         // Teardown must stay safe after a failed start.
-        await _scheduler.Stop();
+        await _scheduler.StopAsync();
 
         Assert.False(_job.IsStarted);
     }
@@ -74,7 +74,7 @@ public sealed class ScheduleFaultTests : IAsyncDisposable
             throw new InvalidOperationException("job constructor failed");
         }
 
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 }

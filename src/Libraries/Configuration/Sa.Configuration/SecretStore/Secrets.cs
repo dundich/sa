@@ -1,7 +1,7 @@
-using System.Text;
 using Microsoft.Extensions.Hosting;
 using Sa.Configuration.SecretStore.Engine;
 using Sa.Configuration.SecretStore.Stores;
+using System.Text;
 
 namespace Sa.Configuration.SecretStore;
 
@@ -9,21 +9,48 @@ namespace Sa.Configuration.SecretStore;
 /// <summary>
 /// The Secrets class simplifies the management of sensitive information in your application
 /// </summary>
-public sealed class Secrets(params ISecretStore[] stores) : ISecretService
+public sealed class Secrets : ISecretService
 {
+    /// <summary>Default name of the plain secrets file.</summary>
     public const string DefaultFileName = "secrets.txt";
+
+    /// <summary>Default name of the encrypted secrets file.</summary>
     public const string EncryptedFileName = "secrets.pub";
 
     private const string DecryptionKeyVariable = "SA_SECRETS_DECRYPTION_KEY";
     private const string DecryptionKeyFileVariable = "SA_SECRETS_DECRYPTION_KEY_FILE";
     private const string ClientVariable = "SA_SECRETS_DECRYPTION_CLIENT";
 
-    private readonly ChainedSecrets _chain = new(stores);
+    private readonly ChainedSecrets _chain;
 
+    /// <summary>
+    /// Creates a service over an explicit store chain.
+    /// </summary>
+    /// <param name="stores">Stores in LIFO priority — the last one wins.</param>
+    public Secrets(params ISecretStore[] stores)
+        : this(null, stores)
+    {
+    }
+
+    /// <summary>
+    /// Creates a service over an explicit store chain with dynamic resolution and diagnostics.
+    /// </summary>
+    /// <param name="resolution">
+    /// Resolver and miss callback; <see langword="null"/> means no dynamic resolution.
+    /// </param>
+    /// <param name="stores">Stores in LIFO priority — the last one wins.</param>
+    public Secrets(SecretResolutionOptions? resolution, params ISecretStore[] stores)
+        => _chain = new ChainedSecrets(stores, resolution);
+
+    /// <inheritdoc />
     public string? PopulateSecrets(string? inputString, bool returnNullIfSecretNotFound = false)
         => _chain.PopulateSecrets(inputString, returnNullIfSecretNotFound);
 
-
+    /// <summary>
+    /// Creates the default store chain from the supplied options.
+    /// </summary>
+    /// <param name="options">The options; <see langword="null"/> uses default options.</param>
+    /// <returns>A service over the composed store chain.</returns>
     public static Secrets CreateDefault(SecretOptions? options = null)
     {
         options ??= new();
@@ -73,17 +100,27 @@ public sealed class Secrets(params ISecretStore[] stores) : ISecretService
         chain.Add(new EnvironmentVariableSecretStore());
         chain.Add(new CommandLineArgsSecretStore(args));
 
-        return new([.. chain]);
+        return new(options.Resolution, [.. chain]);
     }
 
+    /// <summary>
+    /// Appends a store to the chain, giving it the highest priority.
+    /// </summary>
+    /// <param name="store">The store to add.</param>
+    /// <returns>The same instance, to allow chaining.</returns>
     public Secrets AddStore(ISecretStore store)
     {
         _chain.AddStore(store);
         return this;
     }
 
+    /// <inheritdoc />
     public string? GetSecret(string key) => _chain.GetSecret(key);
 
+    /// <summary>
+    /// Resolves the current environment name from the well-known environment variables.
+    /// </summary>
+    /// <returns>The environment name, or <c>Production</c> when none is set.</returns>
     public static string GetEnvironmentName() =>
         Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
             ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
@@ -144,7 +181,7 @@ public sealed class Secrets(params ISecretStore[] stores) : ISecretService
         }
     }
 
-    private static IReadOnlyList<string> ResolveClients(
+    private static List<string> ResolveClients(
         SecretEncryptionOptions encryption,
         DotEnvSecretStore? dotEnv,
         DotEnvSecretStore? dotEnvEnvironment)

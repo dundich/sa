@@ -82,7 +82,7 @@ internal sealed class FileSystemStorage(
         string relativePath = string.Concat(
             Basket,
             "/",
-            metadata.TenantId.ToString(),
+            metadata.TenantId.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "/",
             filename.Replace(Path.DirectorySeparatorChar, '/'));
 
@@ -90,11 +90,13 @@ internal sealed class FileSystemStorage(
             .WriteAsync(fileStream, relativePath, cancellationToken)
             .ConfigureAwait(false);
 
-        return new StorageResult(
-            FileId: string.Concat(_schemePrefix, relativePath),
-            AbsoluteUrl: absolutePath,
-            StorageType: _storageType,
-            UploadedAt: _timeProvider.GetUtcNow());
+        return new StorageResult
+        {
+            FileId = string.Concat(_schemePrefix, relativePath),
+            AbsoluteUrl = absolutePath,
+            StorageType = _storageType,
+            UploadedAt = _timeProvider.GetUtcNow(),
+        };
     }
 
     public Task<bool> DownloadAsync(
@@ -194,7 +196,7 @@ internal sealed class FileSystemStorage(
         if (!CanProcess(fileId))
             return Task.FromResult<FileMetadata?>(null);
 
-        if (!FileIdParser.TryParse(fileId, out _, out var tenantId, out _, out var fileName))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithoutTimestamp, out _, out var tenantId, out _, out var fileName))
             return Task.FromResult<FileMetadata?>(null);
 
         var metadata = new FileMetadata

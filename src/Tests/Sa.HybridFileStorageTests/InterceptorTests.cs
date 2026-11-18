@@ -28,8 +28,8 @@ public sealed class InterceptorTests : IAsyncLifetime
         var interceptor = new CountingDownloadInterceptor(() => downloadBlocked = true);
 
         var services = new ServiceCollection()
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("shared_basket"))
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("shared_basket"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared_basket" })
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared_basket" })
             .AddSaHybridFileStorage(b => b.ConfigureInterceptors((_, c) =>
                 c.AddDownloadInterceptor(interceptor)));
 
@@ -124,12 +124,12 @@ public sealed class InterceptorTests : IAsyncLifetime
             .AddSaFileSystemFileStorage("fs-interceptor", b => b
                 .Options(ob => ob.Configure(x => x.Basket = "shared_basket"))
                 .TempFolder(tb => tb.Options(ob => ob.Configure(x => x.RootPath = "interceptor_test"))))
-            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions("shared_basket"))
+            .AddSaInMemoryFileStorage(new InMemoryFileStorageOptions { Basket = "shared_basket" })
             .AddSaHybridFileStorage(b => b.ConfigureInterceptors((_, c) =>
                 c.AddUploadInterceptor(interceptor)));
 
         using var provider = services.BuildServiceProvider();
-         var storage = provider.GetRequiredService<IHybridFileStorage>();
+        var storage = provider.GetRequiredService<IHybridFileStorage>();
 
         // Act — upload blocked for filesystem by interceptor, should fall back to InMemory
         var input = new UploadFileInput { FileName = "blocked.txt", TenantId = 1 };

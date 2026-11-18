@@ -1,10 +1,10 @@
-using Sa.Classes;
+using Sa;
 using Sa.Extensions;
 using System.Text;
 
-namespace SaTests;
-
 using Xunit;
+
+namespace SaTests;
 
 public class StringExtensionsTests
 {

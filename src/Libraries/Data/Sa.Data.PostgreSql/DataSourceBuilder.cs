@@ -5,7 +5,8 @@ namespace Sa.Data.PostgreSql;
 /// <summary>
 /// Default <see cref="IDataSourceBuilder"/>: records the two configuring intents — the
 /// configuration section and the <c>Options(...)</c> pipeline actions — so
-/// <see cref="Setup.AddSaPostgreSqlDataSource"/> can replay them in its fixed slot.
+/// <see cref="Setup.AddSaPostgreSqlDataSource(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Action{Sa.Data.PostgreSql.IDataSourceBuilder})"/>
+/// can replay them in its fixed slot.
 /// </summary>
 internal sealed class DataSourceBuilder : IDataSourceBuilder
 {

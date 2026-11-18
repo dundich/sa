@@ -1,7 +1,6 @@
 using Npgsql;
 using Sa.Partitional.PostgreSql;
 using Sa.Partitional.PostgreSql.Cache;
-using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSqlTests.Cache;
 
@@ -37,11 +36,11 @@ public class PartCacheFaultTests
         PartCache cache = CreateCache(repository);
 
         // 1st call: the only cached task faults — the caller gets the original exception.
-        await Assert.ThrowsAsync<PostgresException>(() => cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<PostgresException>(() => cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
 
         // 2nd call (same table/date/partValues): the faulted entry is evicted and
         // re-queried — before the fix this rethrew the stale 57014 forever.
-        bool actual = await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
+        bool actual = await cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
 
         Assert.True(actual);
         Assert.Equal(2, repository.GetPartsFromDateCalls);
@@ -59,13 +58,57 @@ public class PartCacheFaultTests
 
         // 1st EnsureCache: InCache faults and the exception propagates —
         // CreatePart must not be attempted on the broken path.
-        await Assert.ThrowsAsync<PostgresException>(() => cache.EnsureCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<PostgresException>(() => cache.EnsureCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
         Assert.Equal(0, repository.CreatePartCalls);
 
         // 2nd EnsureCache: cache recovers and the partition is created exactly once.
-        await cache.EnsureCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
+        await cache.EnsureCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, repository.CreatePartCalls);
+    }
+
+    [Fact]
+    public async Task EnsureCache_BackdatedDate_DoesNotRerunTheDdlWithinTheTtl()
+    {
+        FakePartRepository repository = new();
+
+        // The snapshot window never reaches the backdated date, so `InCache` can only answer "absent".
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo>()));
+
+        PartCache cache = CreateCache(repository);
+        DateTimeOffset backdated = FixedNow.AddDays(-30);
+
+        await cache.EnsureCacheAsync(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+        Assert.Equal(1, repository.CreatePartCalls);
+
+        // Before the fix each of these drove a full DDL pass (and a snapshot flush) again.
+        await cache.EnsureCacheAsync(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+        await cache.EnsureCacheAsync(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, repository.CreatePartCalls);
+        Assert.Equal(1, repository.GetPartsFromDateCalls);
+    }
+
+    [Fact]
+    public async Task EnsureCache_AfterTheJobsFlushTheCache_ReChecksTheBackdatedPartition()
+    {
+        FakePartRepository repository = new();
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo>()));
+        repository.EnqueueGetParts(_ => Task.FromResult(new List<PartByRangeInfo>()));
+
+        PartCache cache = CreateCache(repository);
+        DateTimeOffset backdated = FixedNow.AddDays(-30);
+
+        await cache.EnsureCacheAsync(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+        Assert.Equal(1, repository.CreatePartCalls);
+
+        // A migration or cleanup run calls this after changing partitions behind the cache's back;
+        // the "already ensured" memory must not survive it.
+        await cache.RemoveCacheAsync();
+
+        await cache.EnsureCacheAsync(Table, backdated, PartValues, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, repository.CreatePartCalls);
     }
 
     [Fact]
@@ -77,12 +120,12 @@ public class PartCacheFaultTests
         PartCache cache = CreateCache(repository);
 
         // 42P01 is swallowed: an empty (successful) result is cached, not the failure.
-        bool actual = await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
+        bool actual = await cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
 
         Assert.False(actual);
 
         // The successful empty list must remain cached: no re-query on the 2nd call (regression check).
-        actual = await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
+        actual = await cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
 
         Assert.False(actual);
         Assert.Equal(1, repository.GetPartsFromDateCalls);
@@ -97,7 +140,7 @@ public class PartCacheFaultTests
         PartCache cache = CreateCache(repository);
 
         // 3F000 is swallowed as well: returns false without throwing.
-        bool actual = await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
+        bool actual = await cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
 
         Assert.False(actual);
         Assert.Equal(1, repository.GetPartsFromDateCalls);
@@ -114,7 +157,7 @@ public class PartCacheFaultTests
 
         PartCache cache = CreateCache(repository);
 
-        await Assert.ThrowsAsync<PostgresException>(() => cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<PostgresException>(() => cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
         Assert.Equal(1, repository.GetPartsFromDateCalls);
 
         // Phase 2 (8 parallel callers): every caller sees the faulted entry and must
@@ -124,7 +167,7 @@ public class PartCacheFaultTests
         Task<bool>[] tasks =
         [
             ..Enumerable.Range(0, 8)
-                .Select(_ => cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken))
+                .Select(_ => cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken))
         ];
 
         bool[] results = await Task.WhenAll(tasks);
@@ -152,7 +195,7 @@ public class PartCacheFaultTests
         using CancellationTokenSource cts = new();
 
         // 1st caller starts the shared load and then gives up on it.
-        Task<bool> abandoned = cache.InCache(Table, ExpectedFrom, PartValues, cts.Token);
+        Task<bool> abandoned = cache.InCacheAsync(Table, ExpectedFrom, PartValues, cts.Token);
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandoned);
@@ -161,7 +204,7 @@ public class PartCacheFaultTests
         // The load runs on its own token, so it is still pending rather than cancelled: the entry
         // must survive. Before the fix the caller's token was handed to the cached task, which
         // left a cancelled task in the cache that every later caller replayed.
-        Task<bool> second = cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
+        Task<bool> second = cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken);
 
         gate.SetResult();
 
@@ -188,7 +231,7 @@ public class PartCacheFaultTests
         Task<bool>[] tasks =
         [
             .. Enumerable.Range(0, 16)
-                .Select(_ => cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken))
+                .Select(_ => cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken))
         ];
 
         gate.SetResult();
@@ -209,19 +252,19 @@ public class PartCacheFaultTests
         MutableTimeProvider clock = new(FixedNow);
         PartCache cache = new(repository, new FakeSqlBuilder(), Settings, clock);
 
-        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.True(await cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
         Assert.Equal(1, repository.GetPartsFromDateCalls);
 
         // Just inside the TTL: the snapshot is reused.
         clock.Advance(Settings.CacheTtl - TimeSpan.FromSeconds(1));
 
-        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.True(await cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
         Assert.Equal(1, repository.GetPartsFromDateCalls);
 
         // Past the TTL: the next read re-queries.
         clock.Advance(TimeSpan.FromSeconds(2));
 
-        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.True(await cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
         Assert.Equal(2, repository.GetPartsFromDateCalls);
     }
 
@@ -234,14 +277,14 @@ public class PartCacheFaultTests
 
         PartCache cache = CreateCache(repository);
 
-        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.True(await cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
         Assert.Equal(1, repository.GetPartsFromDateCalls);
 
         // This is what the migration and cleanup jobs call after they have changed partitions
         // behind the cache's back.
-        await cache.RemoveCache();
+        await cache.RemoveCacheAsync();
 
-        Assert.True(await cache.InCache(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
+        Assert.True(await cache.InCacheAsync(Table, ExpectedFrom, PartValues, TestContext.Current.CancellationToken));
         Assert.Equal(2, repository.GetPartsFromDateCalls);
     }
 
@@ -249,12 +292,14 @@ public class PartCacheFaultTests
         => new(repository, new FakeSqlBuilder(), Settings, new FixedTimeProvider(FixedNow));
 
     private static PartByRangeInfo MatchingPart(FakePartRepository repository)
-        => new(
-            Id: $"{Table}_y2026m09d24",
-            RootTableName: Table,
-            PartValues: PartValues,
-            PartBy: PgPartBy.Day,
-            FromDate: repository.LastFrom ?? ExpectedFrom);
+        => new()
+        {
+            Id = $"{Table}_y2026m09d24",
+            RootTableName = Table,
+            PartValues = PartValues,
+            PartBy = PgPartBy.Day,
+            FromDate = repository.LastFrom ?? ExpectedFrom,
+        };
 
     /// <summary>
     /// Fixed clock so the cache window start (<c>(now - CachedFromDate).StartOfDay()</c>)
@@ -299,25 +344,31 @@ internal sealed class FakePartRepository : IPartRepository
         return await _getPartsFromDateBehaviors.Dequeue()(cancellationToken).ConfigureAwait(false);
     }
 
-    public Task<int> CreatePart(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
+    public Task<int> CreatePartAsync(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken cancellationToken = default)
     {
         CreatePartCalls++;
         return Task.FromResult(1);
     }
 
-    public Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
+    public Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
         => Task.FromResult(0);
 
-    public Task<int> Migrate(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve, CancellationToken cancellationToken = default)
+    public Task<int> MigrateAsync(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve, CancellationToken cancellationToken = default)
         => Task.FromResult(0);
 
     public Task<List<PartByRangeInfo>> GetPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
         => Task.FromResult(new List<PartByRangeInfo>());
 
-    public Task<int> DropPartsToDate(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
+    public Task<int> DropPartsToDateAsync(string tableName, DateTimeOffset toDate, CancellationToken cancellationToken = default)
         => Task.FromResult(0);
 
-    public Task<int> ArchivePartsToDate(string tableName, DateTimeOffset toDate, string archiveSchemaName, CancellationToken cancellationToken = default)
+    public Task<int> ArchivePartsToDateAsync(string tableName, DateTimeOffset toDate, string archiveSchemaName, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    public Task<int> ArchivePartsToDateAsync(string tableName, DateTimeOffset toDate, string archiveSchemaName, ArchiveCollisionMode collisionMode, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    public Task<int> PruneEmptyListPartsAsync(string tableName, CancellationToken cancellationToken = default)
         => Task.FromResult(0);
 }
 
@@ -329,7 +380,7 @@ internal sealed class FakeSqlBuilder : ISqlBuilder
 
     public IReadOnlyCollection<ISqlTableBuilder> Tables { get; } = Array.Empty<ISqlTableBuilder>();
 
-    public IAsyncEnumerable<string> MigrateSql(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve)
+    public IAsyncEnumerable<MigrateBatch> MigrateSql(DateTimeOffset[] dates, Func<string, Task<StrOrNum[][]>> resolve)
         => throw new NotImplementedException();
 
     public string SelectPartsFromDateSql(string tableName)
@@ -352,6 +403,8 @@ internal sealed class FakeSqlTableBuilder : ISqlTableBuilder
     public string SelectPartsToDate => string.Empty;
 
     public string CreateSql(DateTimeOffset date, params StrOrNum[] partValues) => string.Empty;
+
+    public string CreatePartSql(DateTimeOffset date, StrOrNum[] partValues) => string.Empty;
 
     public string CreateRootSql() => string.Empty;
 

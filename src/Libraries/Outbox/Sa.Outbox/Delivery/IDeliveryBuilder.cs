@@ -97,7 +97,7 @@ public partial interface IDeliveryBuilder
     ) where TConsumer : class, IConsumer<TMessage>;
 
     /// <summary>
-    /// Sets the default naming strategy used to derive consumer group names when no explicit <paramref name="consumerGroupId"/> is provided.
+    /// Sets the default naming strategy used to derive consumer group names when no explicit <c>consumerGroupId</c> is provided.
     /// </summary>
     /// <param name="strategy">The naming strategy implementation to use.</param>
     /// <returns>The delivery builder instance.</returns>

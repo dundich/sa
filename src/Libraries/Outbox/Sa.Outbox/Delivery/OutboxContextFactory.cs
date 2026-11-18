@@ -14,7 +14,7 @@ internal sealed class OutboxContextFactory(TimeProvider? timeProvider = null) : 
         return context;
     }
 
-    public void Return<TMessage>(IOutboxContextOperations<TMessage> context)
+    public void ReturnToPool<TMessage>(IOutboxContextOperations<TMessage> context)
     {
         // A custom factory may return its own context type; only ours can be pooled.
         if (context is OutboxContext<TMessage> owned)
@@ -30,12 +30,12 @@ internal sealed class OutboxContextFactory(TimeProvider? timeProvider = null) : 
     /// </summary>
     private static class ContextPool<TMessage>
     {
-        private static readonly ConcurrentBag<OutboxContext<TMessage>> Items = new();
+        private static readonly ConcurrentBag<OutboxContext<TMessage>> _items = new();
         private static int _count;
 
         public static OutboxContext<TMessage> Rent()
         {
-            if (Items.TryTake(out OutboxContext<TMessage>? context))
+            if (_items.TryTake(out OutboxContext<TMessage>? context))
             {
                 Interlocked.Decrement(ref _count);
                 return context;
@@ -52,7 +52,7 @@ internal sealed class OutboxContextFactory(TimeProvider? timeProvider = null) : 
 
             if (Interlocked.Increment(ref _count) <= MaxPooledPerType)
             {
-                Items.Add(context);
+                _items.Add(context);
             }
             else
             {

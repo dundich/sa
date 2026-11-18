@@ -1,8 +1,8 @@
+using Microsoft.Extensions.Options;
 using System.Buffers;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Security;
-using Microsoft.Extensions.Options;
 
 namespace Sa.Data.TempFolder;
 
@@ -82,7 +82,7 @@ public static class PathGuard
                 return $"'{c}'";
             }
 
-            var category = Char.GetUnicodeCategory(c);
+            var category = char.GetUnicodeCategory(c);
             if (category is UnicodeCategory.Format
                 or UnicodeCategory.Control
                 or UnicodeCategory.LineSeparator
@@ -172,7 +172,7 @@ public static class PathGuard
     /// <summary>
     /// Determines whether <paramref name="candidate"/> is the root itself or lives under it.
     /// </summary>
-    /// <param name="rootPath">The instance root; normalised with <see cref="Path.GetFullPath"/>.</param>
+    /// <param name="rootPath">The instance root; normalised with <see cref="Path.GetFullPath(string)"/>.</param>
     /// <param name="candidate">A fully or partially qualified path to test.</param>
     /// <returns><see langword="true"/> when the candidate is inside the root.</returns>
     public static bool IsInside(string rootPath, string candidate)

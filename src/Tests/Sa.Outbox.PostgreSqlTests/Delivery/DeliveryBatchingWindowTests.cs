@@ -9,7 +9,7 @@ public class DeliveryBatchingWindowTests(DeliveryBatchingWindowTests.Fixture fix
 {
     class TestMessageConsumer : IConsumer<TestMessage>
     {
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

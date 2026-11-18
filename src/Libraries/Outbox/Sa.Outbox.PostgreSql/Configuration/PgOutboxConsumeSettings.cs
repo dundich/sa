@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using Sa.Outbox.PostgreSql.Services;
+using System.Collections.Concurrent;
 
 namespace Sa.Outbox.PostgreSql.Configuration;
 
@@ -36,6 +36,10 @@ public sealed class PgOutboxConsumeSettings
         return this;
     }
 
+    /// <summary>Sets the earliest message timestamp the consumer group reads for one group.</summary>
+    /// <param name="consumerGroupId">The consumer group id.</param>
+    /// <param name="offset">The earliest <c>msg_created_at</c> to read.</param>
+    /// <returns>The same settings instance for chaining.</returns>
     public PgOutboxConsumeSettings WithMinOffset(string consumerGroupId, DateTimeOffset offset)
     {
         _dateFloors[consumerGroupId] = offset;

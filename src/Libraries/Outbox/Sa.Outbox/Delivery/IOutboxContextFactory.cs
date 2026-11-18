@@ -24,7 +24,7 @@ public interface IOutboxContextFactory
     /// (or its <see cref="IOutboxContext.PartInfo"/> view) after <c>Consume</c> returns.
     /// The default implementation is a no-op, so a factory that does not pool remains correct.
     /// </remarks>
-    void Return<TMessage>(IOutboxContextOperations<TMessage> context)
+    void ReturnToPool<TMessage>(IOutboxContextOperations<TMessage> context)
     {
     }
 }

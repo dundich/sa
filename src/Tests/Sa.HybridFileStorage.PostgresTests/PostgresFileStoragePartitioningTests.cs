@@ -34,7 +34,7 @@ public sealed class PostgresFileStoragePartitioningTests(
 
         // The whole partition tree under the root: the list levels and the date leaves. With
         // PartByRange.Month a leaf is named `...__yYYYYmm`; a daily leaf would end in `dDD`.
-        List<string> partitions = await fixture.DataSource.ExecuteReaderList(
+        List<string> partitions = await fixture.DataSource.ExecuteReaderListAsync(
             """
             WITH RECURSIVE tree AS (
                 SELECT c.oid, c.relname

@@ -4,16 +4,24 @@
 
 A dynamic configuration source for .NET that loads settings from PostgreSQL. Changes in the database are applied to the running application without a restart — just call `Reload()` on `IConfigurationRoot`.
 
+## Installation
+
+```bash
+dotnet add package Sa.Configuration.PostgreSql
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [Features](#features)
 - [Quick start](#quick-start)
 - [Key separators](#key-separators)
 - [Key aliases](#key-aliases)
+- [Connection strategies](#connection-strategies)
 - [Parameterized queries](#parameterized-queries)
-- [Reusing the application connection pool](#reusing-the-application-connection-pool)
+- [Clients](#clients)
 - [Live configuration updates](#live-configuration-updates)
 - [Options](#options)
 - [Load behavior](#load-behavior)
@@ -24,7 +32,7 @@ A dynamic configuration source for .NET that loads settings from PostgreSQL. Cha
 
 ## Features
 
-- **Live configuration** — values are stored in the database and can be changed at runtime.
+- **Live configuration** — values are stored in the database and can be changed at runtime, and the source is reloaded with `ISaConfigurationReloader.ReloadDynamicAsync()` (see [Sa.Configuration](../Sa.Configuration/Readme.md#dynamic-reload)).
 - **Parameterized SQL queries** — supports `@named_parameters` via `NpgsqlParameter`. Parameters are cloned on every load, so a single options instance can be reused.
 - **Automatic retries** — transient Npgsql errors (network failures, SQLSTATE `08xxx`) are retried with decorrelated jitter back-off.
 - **One connection pool, not a new one on every reload** — the pool is created once and reused by all `Reload()` calls.
@@ -32,6 +40,9 @@ A dynamic configuration source for .NET that loads settings from PostgreSQL. Cha
 - **Key/value trimming** — whitespace is automatically trimmed from both keys and values.
 - **`__` as `:` (optional)** — with `DoubleUnderscoreAsSeparator = true`, a double underscore in a key is read as the configuration separator, so `sa__pg__host` and `sa:pg:host` are the same setting. This is the same convention already used by `AddEnvironmentVariables()`. Disabled by default — keys are stored as-is.
 - **Layer control** — decide whether empty and `NULL` values delegate to lower-priority sources or override them.
+- **Connection strategies** — a private pool, a shared `IPgDataSource`, or the application's own data source resolved from DI (`FromServices`, the default). No connection string is required when the application already has one.
+- **Clients** — per-client settings split by `client_id` are returned as flat rows, grouped into each client's own overlay; a new client appears after a reload without a restart.
+- **Dynamic by default** — the source implements `ISaDynamicConfigurationSource`; `ISaConfigurationReloader` reloads it (and the alias/placeholder pass) without re-reading the files.
 
 ---
 
@@ -42,10 +53,10 @@ using Sa.Configuration.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
-    ConnectionString: "Host=localhost;Database=myapp;Username=app;Password=secret",
-    SelectSql: "SELECT key, value FROM app_settings"
-));
+// The connection strategy says where the data comes from; the options say what to read.
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    PgConfigurationConnection.ConnectionString("Host=localhost;Database=myapp;Username=app;Password=secret"),
+    new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings"));
 
 var app = builder.Build();
 
@@ -54,7 +65,13 @@ var theme = app.Configuration["theme"];          // → "dark"
 var lang  = app.Configuration["language"];       // → "en"
 ```
 
-Options are validated when the source is registered, so an empty connection string or an empty query fails during host build rather than on the first load.
+The short form `AddSaPostgreSqlConfiguration(options)` uses
+`PgConfigurationConnection.FromServices()`: the application's already registered `IPgDataSource`
+(or `NpgsqlDataSource`) is reused, so no second pool is created.
+
+Options are validated when the source is registered, so a blank query fails during host build rather
+than on the first load. The connection is validated by its own strategy (`ConnectionString(...)`
+parses it eagerly, `DataSource(...)` rejects `null`).
 
 ---
 
@@ -125,25 +142,151 @@ builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOp
 ));
 ```
 
+The result set is positional: the query must return **exactly two** columns, `(key, value)`. Anything
+else is a startup error, including the three-column `(client, key, value)` shape the removed client
+mapping used to accept — reading it as `(key, value)` would silently shift one column into the other.
+
 ---
 
-## Reusing the application connection pool
+## Connection strategies
 
-By default, the source owns its own data source. If you want to use one shared pool for the whole application, create it explicitly and pass it to the configuration source:
+`PgConfigurationConnection` has three forms — the same "where the data comes from" question the rest
+of `Sa.Data.PostgreSql` answers:
+
+| Strategy | Ownership | When the connection is available |
+|----------|-----------|----------------------------------|
+| `ConnectionString("…")` | the source creates and disposes its own pool | immediately, at registration |
+| `DataSource(IPgDataSource)` | the caller keeps ownership | immediately, at registration |
+| `FromServices("key"?)` — **default** | the application's pool (`PgDataSourceResolver`: keyed `IPgDataSource` → default `IPgDataSource` → `NpgsqlDataSource`) | from the first runtime initialization |
+
+Sharing the application's pool:
 
 ```csharp
 IPgDataSource appDataSource = IPgDataSource.Create(connectionString);
 
 builder.Configuration.AddSaPostgreSqlConfiguration(
-    new PostgreSqlConfigurationOptions(
-        ConnectionString: string.Empty,   // ignored: the connection comes from the data source
-        SelectSql: "SELECT key, value FROM app_settings"),
-    appDataSource);
+    appDataSource,
+    new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings"));
 ```
 
-If the application already registers `IPgDataSource` via `AddSaPostgreSqlDataSource` (`b => b.Options(o => o.Configure(x => x.ConnectionString = ...))`), get that instance and pass it to the configuration source — then both paths use the same connection pool.
+Or let the source take the registered one — nothing is created and nothing is disposed:
 
-The provider never disposes a data source it did not create — ownership of `appDataSource` remains yours. Its own source is disposed when `IConfigurationRoot` is disposed.
+```csharp
+builder.Services.AddSaPostgreSqlDataSource(b => b.FromConfiguration("Postgres"));
+
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings"));
+
+builder.Services.AddSaConfigurationRuntime(builder.Configuration);
+
+var app = builder.Build();
+await app.Services.GetRequiredService<ISaConfigurationReloader>()
+    .EnsureInitializedAsync(app.Lifetime.ApplicationStopping);
+```
+
+`FromServices` is **late-bound**: configuration is assembled before the container exists, so the data
+source is resolved during the first runtime initialization (explicitly, or by the hosted hook — see
+`SaDynamicInitialLoad`). Until then the database layer contributes no keys, so a source in that mode
+should be initialized before the first request. Use `ConnectionString`/`DataSource` when the values
+are needed while the service collection is still being built. `AsOptional()` turns an unresolvable
+source into an empty layer instead of a failed start.
+
+---
+
+## Clients
+
+The core configuration reads the shared values; each client reads its own overrides from the same
+kind of table, filtered by its client id. Keys carry the **same names** in both tables — there is no
+prefix and no shared dictionary, so one client's values can never leak into the core or into another
+client.
+
+### Tables: `setting` + `client_settings`
+
+```sql
+CREATE TABLE setting (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+INSERT INTO setting (key, value) VALUES
+    ('s3_url',   'A'),
+    ('theme',    'dark'),
+    ('language', 'en');
+
+CREATE TABLE client_settings (
+    client_id TEXT NOT NULL,
+    key       TEXT NOT NULL,
+    value     TEXT NOT NULL,
+    PRIMARY KEY (client_id, key)
+);
+
+INSERT INTO client_settings (client_id, key, value) VALUES
+    ('client1', 's3_url', 'B1'),
+    ('client1', 'theme',  'light'),
+    ('client2', 's3_url', 'C'),
+    ('client2', 'language', 'de');
+```
+
+### Core: one query, two columns
+
+```csharp
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    PgConfigurationConnection.FromServices(),
+    new PostgreSqlConfigurationOptions("SELECT key, value FROM setting"));
+```
+
+### Clients: one query, flat rows
+
+The client layer is an ordinary provider: a service resolves the data source, runs one query that
+returns `(client_id, key, value)` for **every** client, and the registry groups the rows by
+`client_id` and builds one root per client. There is no discovery step and no per-client query.
+
+```csharp
+using Sa.Configuration.Clients;
+using Sa.Data.PostgreSql;
+
+public sealed class PgClientSettingsStore(IPgDataSource dataSource)
+{
+    public async ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct)
+    {
+        List<ClientSetting> rows = [];
+
+        await dataSource.ExecuteReaderAsync(
+            "SELECT client_id, key, value FROM client_settings",
+            (reader, _) => rows.Add(new ClientSetting(
+                reader.GetString(0), reader.GetString(1), reader.GetString(2))),
+            initCommand: null,
+            ct);
+
+        return rows;
+    }
+}
+
+builder.Services.AddSingleton<PgClientSettingsStore>();
+
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+{
+    // One DI dependency (plus the token) → rows for all clients.
+    clients.Add<PgClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
+});
+```
+
+```csharp
+IConfiguration core = app.Configuration;
+
+core["s3_url"];                                       // "A"
+clients.GetClient("client1")["s3_url"];               // "B1"
+clients.GetClient("client2")["s3_url"];               // "C"
+clients.GetClient("client1")["language"];             // "en" — core fallback
+clients.Clients;                                      // ["client1", "client2"]
+```
+
+The store is called lazily on the first access and again on every `ReloadDynamicAsync()`, so a row
+inserted into `client_settings` appears without a restart. A dedicated pool or another database is
+just a different data source registered for the store to resolve.
+
+See [Sa.Configuration](../Sa.Configuration/Readme.md#clients-core--per-client-overlays) for the
+overlay rules, keyed injection and runtime attach/remove.
 
 ---
 
@@ -152,11 +295,23 @@ The provider never disposes a data source it did not create — ownership of `ap
 When rows in the `app_settings` table are changed, the application can pick up the new values:
 
 ```csharp
-// After changing rows in the database:
-((IConfigurationRoot)app.Configuration).Reload();
+// Refresh the database layer only — files on disk are not re-read, and the aliases/placeholders
+// are recomputed from the fresh values:
+await app.Services.GetRequiredService<ISaConfigurationReloader>()
+    .ReloadDynamicAsync(cancellationToken);
 
-// From a timer or BackgroundService, without blocking the thread:
-await provider.LoadAsync(cancellationToken);
+// Full reload, as before (every provider, including the files):
+((IConfigurationRoot)app.Configuration).Reload();
+```
+
+Periodic polling is opt-in and registers exactly one hosted service:
+
+```csharp
+builder.Services.AddSaConfigurationRuntime(builder.Configuration, o =>
+{
+    o.DynamicReload = true;
+    o.DynamicReloadInterval = TimeSpan.FromSeconds(15);
+});
 ```
 
 `Reload()` replaces the entire key set: rows removed from the database disappear from the configuration, and new ones appear. A **failed** load leaves the previous snapshot in place — a transient database problem never wipes out a working configuration.
@@ -176,19 +331,19 @@ await provider.LoadAsync(cancellationToken);
 | `LastWins` | `true` | For duplicate keys, the last row wins. `false` — the first one |
 
 ```csharp
-builder.Configuration.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions(
-    ConnectionString: "...",
-    SelectSql: "SELECT key, value FROM app_settings") with
-{
-    MaxAttempts = 5,
-    MedianFirstRetryDelay = 200,
-    SkipEmptyValues = false,
-    DoubleUnderscoreAsSeparator = true,
-    LastWins = true,
-});
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    PgConfigurationConnection.ConnectionString("..."),
+    new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings") with
+    {
+        MaxAttempts = 5,
+        MedianFirstRetryDelay = 200,
+        SkipEmptyValues = false,
+        DoubleUnderscoreAsSeparator = true,
+        LastWins = true,
+    });
 ```
 
-`ToString()` is overridden on options: parameter values are counted but not printed, and the password in the connection string is masked — so options are safe to interpolate into logs.
+`ToString()` is overridden on options and on the connection strategy: parameter values are counted but never printed, and a connection string's password is masked — so both are safe to interpolate into logs.
 
 ---
 
@@ -257,6 +412,7 @@ INSERT INTO app_settings (key, value) VALUES
 - `Microsoft.Extensions.Configuration`
 - `Npgsql` (`NpgsqlParameter` is part of the public API)
 - `Sa.Data.PostgreSql` (Npgsql wrapper with `PgRetryStrategy` and `IPgDataSource`)
+- `Sa.Configuration` (the dynamic-source marker, the runtime/reloader and the per-client overlay)
 
 ---
 

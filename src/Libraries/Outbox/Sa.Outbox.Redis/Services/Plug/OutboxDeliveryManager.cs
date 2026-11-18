@@ -1,4 +1,3 @@
-using Sa.Outbox.Delivery;
 using Sa.Outbox.PlugServices;
 
 namespace Sa.Outbox.Redis.Services.Plug;
@@ -25,7 +24,7 @@ internal sealed class OutboxDeliveryManager(
         CancellationToken cancellationToken)
             => finishCommand.ExecuteAsync(messages, filter, cancellationToken);
 
-    public Task<int> ExtendDelivery(
+    public Task<int> ExtendDeliveryAsync(
         TimeSpan lockExpiration,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)

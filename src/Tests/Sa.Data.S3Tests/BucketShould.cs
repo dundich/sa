@@ -13,11 +13,11 @@ public class BucketShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
 
 
     [Fact]
-    public async Task CreateBucket()
+    public async Task CreateBucketAsync()
     {
         var bucket = "new";
         using var client = CloneClient(bucket);
-        var bucketCreateResult = await client.CreateBucket(CancellationToken);
+        var bucketCreateResult = await client.CreateBucketAsync(CancellationToken);
         Assert.True(bucketCreateResult);
     }
 
@@ -29,7 +29,7 @@ public class BucketShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
 
         using var client = CloneClient(bucket);
 
-        var bucketExistsResult = await client.IsBucketExists(CancellationToken);
+        var bucketExistsResult = await client.IsBucketExistsAsync(CancellationToken);
 
         Assert.False(bucketExistsResult);
     }
@@ -41,13 +41,13 @@ public class BucketShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
 
         using var client = CloneClient(backet);
 
-        var bucketExistsResult = await client.CreateBucket(CancellationToken);
+        var bucketExistsResult = await client.CreateBucketAsync(CancellationToken);
 
         Assert.True(bucketExistsResult);
 
         using var client2 = CloneClient(backet);
 
-        bucketExistsResult = await client2.CreateBucket(CancellationToken);
+        bucketExistsResult = await client2.CreateBucketAsync(CancellationToken);
 
         Assert.False(bucketExistsResult);
     }
@@ -59,9 +59,63 @@ public class BucketShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
 
         using var client = CloneClient(backet);
 
-        var result = await client.DeleteBucket(CancellationToken);
+        var result = await client.DeleteBucketAsync(CancellationToken);
 
         Assert.False(result);
+    }
+
+    [Fact]
+    public async Task NotThrowIfForceDeleteNotExistsBucket()
+    {
+        // force-путь начинается с листинга, который на отсутствующем бакете отвечает 404. Контракт
+        // должен совпадать с обычным удалением: false, а не HttpRequestException.
+        using var client = CloneClient("force-absent");
+
+        Assert.False(await client.DeleteBucketAsync(forceDelete: true, CancellationToken));
+    }
+
+    [Fact]
+    public async Task ForceDeleteBucketWithObjects()
+    {
+        using var client = CloneClient("force-small");
+
+        Assert.True(await client.CreateBucketAsync(CancellationToken));
+
+        for (var i = 0; i < 5; i++)
+        {
+            Assert.True(await client.UploadFileAsync($"f{i}.bin", "application/octet-stream", [1], CancellationToken));
+        }
+
+        Assert.True(await client.DeleteBucketAsync(forceDelete: true, CancellationToken));
+        Assert.False(await client.IsBucketExistsAsync(CancellationToken));
+    }
+
+    [Fact]
+    public async Task ListAndForceDeleteMoreThanOneThousandObjects()
+    {
+        // Две регрессии сразу: ListObjectsV2 отдаёт не больше 1000 ключей за ответ (раньше вторая
+        // страница молча пропадала), а очистка удаляла по одному объекту за запрос.
+        const int count = 1005;
+        using var client = CloneClient("force-many");
+
+        Assert.True(await client.CreateBucketAsync(CancellationToken));
+
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, count),
+            new ParallelOptions { MaxDegreeOfParallelism = 16 },
+            async (index, token) =>
+                Assert.True(await client.UploadFileAsync($"k{index:D4}.bin", "application/octet-stream", [1], token)));
+
+        var listed = 0;
+        await foreach (var _ in client.List(null, CancellationToken))
+        {
+            listed++;
+        }
+
+        Assert.Equal(count, listed);
+
+        Assert.True(await client.DeleteBucketAsync(forceDelete: true, CancellationToken));
+        Assert.False(await client.IsBucketExistsAsync(CancellationToken));
     }
 
     [Fact]
@@ -70,10 +124,10 @@ public class BucketShould(S3BucketClientFixture fixture) : IClassFixture<S3Bucke
         string backet = "del";
 
         using var client = CloneClient(backet);
-        var result = await client.CreateBucket(CancellationToken);
+        var result = await client.CreateBucketAsync(CancellationToken);
         Assert.True(result);
 
-        var bucketDeleteResult = await client.DeleteBucket(CancellationToken);
+        var bucketDeleteResult = await client.DeleteBucketAsync(CancellationToken);
 
         Assert.True(bucketDeleteResult);
     }

@@ -67,7 +67,7 @@ internal sealed class DeliveryLifetimeInvoker(IServiceProvider serviceProvider) 
         ReadOnlyMemory<IOutboxContextOperations<TMessage>> messages,
         CancellationToken cancellationToken)
     {
-        await consumer.Consume(settings, filter, messages, cancellationToken).ConfigureAwait(false);
+        await consumer.ConsumeAsync(settings, filter, messages, cancellationToken).ConfigureAwait(false);
     }
 
     private IConsumer<TMessage> GetOrCreateSingletonConsumer<TMessage>(OutboxConsumerSettings settings)

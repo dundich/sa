@@ -7,12 +7,12 @@ namespace Sa.Outbox.PostgreSql.Configuration;
 /// The PostgreSQL implementation of <see cref="IDeliveryGroupOptionsProvider"/>: applies the
 /// provider-wide polling defaults (<see cref="PgPollingSettings"/>), then binds a consumer group's
 /// <see cref="PgOutboxDeliveryOptions"/> from the <c>IConfiguration</c> section named by
-/// <paramref name="configurationKey"/>.
+/// <c>configurationKey</c>.
 /// </summary>
 /// <remarks>
 /// Registered (replacing the base no-op) by <c>AddSaOutboxUsingPostgreSql</c>. The
 /// <c>IConfiguration</c> is resolved once, at construction, as an optional service — a bare
-/// <see cref="IServiceCollection"/> with no configuration (e.g. some test fixtures) makes
+/// <c>IServiceCollection</c> with no configuration (e.g. some test fixtures) makes
 /// the provider a no-op instead of failing. When the <c>configurationKey</c> is empty or the
 /// section is absent nothing is bound from configuration, so the group is shaped by
 /// <see cref="OutboxDefaults"/>, the polling defaults and the user <c>configure</c> callback.

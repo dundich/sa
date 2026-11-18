@@ -1,21 +1,20 @@
 using Sa.Partitional.PostgreSql.Cache;
-using Sa.Partitional.PostgreSql.Classes;
 
 namespace Sa.Partitional.PostgreSql;
 
 
 internal sealed class PartitionManager(IPartCache cache, IMigrationService migrationService) : IPartitionManager
 {
-    public Task EnsureParts(
+    public Task EnsurePartsAsync(
         string tableName,
-        DateTimeOffset date,
+        DateTimeOffset periodStart,
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default)
-        => cache.EnsureCache(tableName, date, partValues, cancellationToken);
+        => cache.EnsureCacheAsync(tableName, periodStart, partValues, cancellationToken);
 
-    public Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
-        => migrationService.Migrate(dates, cancellationToken);
+    public Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
+        => migrationService.MigrateAsync(dates, cancellationToken);
 
-    public Task<int> Migrate(CancellationToken cancellationToken = default)
-        => migrationService.Migrate(cancellationToken);
+    public Task<int> MigrateAsync(CancellationToken cancellationToken = default)
+        => migrationService.MigrateAsync(cancellationToken);
 }

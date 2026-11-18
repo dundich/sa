@@ -20,7 +20,7 @@ public sealed class SchedulerTests
 
         var scheduler = CreateScheduler(restarted, refusing, stopped);
 
-        int count = await scheduler.Restart(TestContext.Current.CancellationToken);
+        int count = await scheduler.RestartAsync(TestContext.Current.CancellationToken);
 
         // Previously every previously-started job counted as "restarted" even when its
         // Start() returned false.
@@ -48,7 +48,7 @@ public sealed class SchedulerTests
 
         var scheduler = CreateScheduler(stopFails, startFails, healthy);
 
-        Assert.Equal(1, await scheduler.Restart(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.RestartAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(1, stopFails.StopCalls);
         Assert.Equal(0, stopFails.StartCalls);
@@ -66,7 +66,7 @@ public sealed class SchedulerTests
     {
         var scheduler = CreateScheduler(new StubJobScheduler { IsStarted = false });
 
-        Assert.Equal(0, await scheduler.Restart(TestContext.Current.CancellationToken));
+        Assert.Equal(0, await scheduler.RestartAsync(TestContext.Current.CancellationToken));
     }
 
     private static Scheduler CreateScheduler(params StubJobScheduler[] jobs)
@@ -81,7 +81,7 @@ public sealed class SchedulerTests
 
     private sealed class TestJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
@@ -121,7 +121,7 @@ public sealed class SchedulerTests
 
         public IChangeToken StartChangeToken() => new CancellationChangeToken(CancellationToken.None);
 
-        public Task<bool> Start(CancellationToken cancellationToken)
+        public Task<bool> StartAsync(CancellationToken cancellationToken)
         {
             StartCalls++;
 
@@ -134,7 +134,7 @@ public sealed class SchedulerTests
             return Task.FromResult(StartsAgain);
         }
 
-        public Task Stop()
+        public Task StopAsync()
         {
             StopCalls++;
 

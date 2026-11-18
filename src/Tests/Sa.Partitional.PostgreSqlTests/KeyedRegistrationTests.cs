@@ -195,6 +195,38 @@ public sealed class KeyedRegistrationTests
     // ---------- data source: named when configured, otherwise the default ----------
 
     [Fact]
+    public void DefaultSchema_IsTheFirstEntryOfAMultiEntrySearchPath()
+    {
+        // `Search Path` is a comma-separated list. Used verbatim, the module's tables would land in
+        // one schema literally named "tenant1, public".
+        ServiceCollection services = CreateServices(withDefaultDataSource: false);
+        services.AddSaPostgreSqlDataSource(
+            o => o.Options(ob => ob.Configure(x => x.ConnectionString = WithSearchPath("tenant1, public"))));
+
+        AddKeyedModule(services, "one", "t_one");
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        Assert.Equal("tenant1", sp.GetRequiredKeyedService<ISettingsBuilder>("one").DefaultSchema);
+        Assert.Equal("tenant1.t_one", sp.GetRequiredKeyedService<ISettingsBuilder>("one").Build().Tables.Single().FullName);
+    }
+
+    [Fact]
+    public void DefaultSchema_FoldsAnUnquotedSearchPathEntryLikePostgres()
+    {
+        ServiceCollection services = CreateServices(withDefaultDataSource: false);
+        services.AddSaPostgreSqlDataSource(
+            o => o.Options(ob => ob.Configure(x => x.ConnectionString = WithSearchPath("MySchema"))));
+
+        AddKeyedModule(services, "one", "t_one");
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        // PostgreSQL folds an unquoted identifier, so the effective schema is lowercase.
+        Assert.Equal("myschema", sp.GetRequiredKeyedService<ISettingsBuilder>("one").DefaultSchema);
+    }
+
+    [Fact]
     public void Register_KeyedModule_WithoutNamedDataSource_UsesTheDefaultDataSource()
     {
         ServiceCollection services = CreateServices(withDefaultDataSource: false);

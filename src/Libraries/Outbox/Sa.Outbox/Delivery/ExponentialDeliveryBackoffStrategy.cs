@@ -31,6 +31,9 @@ public sealed class ExponentialDeliveryBackoffStrategy : IDeliveryBackoffStrateg
         double jitterFactorMin = 0.5,
         double jitterFactorMax = 1.0)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(baseDelay, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxDelay, TimeSpan.Zero);
+
         _baseDelay = baseDelay == TimeSpan.Zero ? TimeSpan.FromSeconds(5) : baseDelay;
         _maxDelay = maxDelay == TimeSpan.Zero ? TimeSpan.FromMinutes(30) : maxDelay;
         _jitterFactorMin = Math.Clamp(jitterFactorMin, 0.0, 1.0);

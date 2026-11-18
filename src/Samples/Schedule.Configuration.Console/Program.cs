@@ -119,7 +119,7 @@ namespace Schedule.Configuration.Console
 {
     public sealed class HeartbeatJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             System.Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Heartbeat ran");
             return Task.CompletedTask;
@@ -128,7 +128,7 @@ namespace Schedule.Configuration.Console
 
     public sealed class SlowReportJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             // This line should never print — the job is disabled in appsettings.json.
             System.Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] SlowReport ran (unexpected — it is disabled in config)");
@@ -138,7 +138,7 @@ namespace Schedule.Configuration.Console
 
     public sealed class NightlyCleanupJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             System.Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] NightlyCleanup ran");
             return Task.CompletedTask;

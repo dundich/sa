@@ -11,7 +11,7 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
     public async Task ExecuteNonQueryTest()
     {
         const int expected = -1;
-        var actual = await fixture.DataSource.ExecuteNonQuery("SELECT 2", TestContext.Current.CancellationToken);
+        var actual = await fixture.DataSource.ExecuteNonQueryAsync("SELECT 2", TestContext.Current.CancellationToken);
         Assert.Equal(expected, actual);
     }
 
@@ -19,7 +19,7 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
     public async Task ExecuteNonQueryWithParamsTest()
     {
         const int expected = 1;
-        var actual = await fixture.DataSource.ExecuteNonQuery("""
+        var actual = await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS users (
                 name text,
                 age int
@@ -42,7 +42,7 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
         const int expected = 1;
         int actual = 0;
 
-        await fixture.DataSource.ExecuteReader("SELECT 1", (reader, i) => actual = reader.GetInt32(0), TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteReaderAsync("SELECT 1", (reader, i) => actual = reader.GetInt32(0), TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, actual);
     }
@@ -76,7 +76,7 @@ public class PgDataSourceTests(PgDataSourceFixture fixture) : IClassFixture<PgDa
         const int expected = 1;
         int actual = 0;
 
-        await dataSource.ExecuteReader("SELECT 1", (reader, i) => actual = reader.GetInt32(0), TestContext.Current.CancellationToken);
+        await dataSource.ExecuteReaderAsync("SELECT 1", (reader, i) => actual = reader.GetInt32(0), TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, actual);
     }

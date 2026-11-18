@@ -76,7 +76,7 @@ public static class Setup
     /// <see cref="IJobProperties.JobName"/> (<c>WithName(...)</c>), falling back to
     /// <c>typeof(Job).FullName</c> when no name was set — renaming a job in code silently detaches
     /// it from its configuration section. Sections whose key matches no registered job are
-    /// ignored. <see cref="ValidateOnStart()"/> turns an invalid configuration into an
+    /// ignored. <c>ValidateOnStart()</c> turns an invalid configuration into an
     /// <see cref="OptionsValidationException"/> at host start, and the same check also fires when
     /// <c>IOptions&lt;ScheduleOptions&gt;.Value</c> is first read (inside the construction of the
     /// schedule settings), so a bare <c>ServiceCollection</c> fails fast on the first scheduler
@@ -324,7 +324,7 @@ public static class Setup
 }
 
 /// <summary>
-/// Sentinel marker recording that <see cref="Setup.AddSaSchedule"/> was configured (with a
+/// Sentinel marker recording that <c>AddSaSchedule</c> was configured (with a
 /// builder whose <c>FromConfiguration(...)</c> or <c>Options(...)</c> was used) for a schedule,
 /// so a second *configuring* call for that schedule fails fast instead of silently stacking two
 /// <c>Configure</c> callbacks onto the same <see cref="ScheduleOptions"/> instance. Job-only

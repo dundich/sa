@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using Sa.Outbox.PostgreSql.Commands;
+using System.Collections.Concurrent;
 
 namespace Sa.Outbox.PostgreSqlTests.Commands;
 

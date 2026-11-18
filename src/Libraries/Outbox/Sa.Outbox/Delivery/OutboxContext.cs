@@ -115,7 +115,7 @@ internal sealed class OutboxContext<TMessage> : IOutboxContextOperations<TMessag
 
 
 
-    public void Error(Exception exception, string? message = null)
+    public void Fail(Exception exception, string? message = null)
         => ErrorWithCode(DeliveryStatusCode.Error, exception, message);
 
     public void Error501(Exception exception, string? message = null)
@@ -143,9 +143,9 @@ internal sealed class OutboxContext<TMessage> : IOutboxContextOperations<TMessag
     public void ErrorMaxAttempts()
     {
         SetDeliveryStatus(
-            DeliveryPermanentException.StatusCode,
-            Exception?.Message ?? DeliveryPermanentException.Message,
-            Exception ?? DeliveryPermanentException,
+            _deliveryPermanentException.StatusCode,
+            Exception?.Message ?? _deliveryPermanentException.Message,
+            Exception ?? _deliveryPermanentException,
             null);
     }
 
@@ -182,6 +182,6 @@ internal sealed class OutboxContext<TMessage> : IOutboxContextOperations<TMessag
     public DateTimeOffset GetUtcNow() => _timeProvider.GetUtcNow();
 
 
-    private readonly static DeliveryPermanentException DeliveryPermanentException
+    private readonly static DeliveryPermanentException _deliveryPermanentException
         = new("Maximum delivery attempts exceeded", statusCode: DeliveryStatusCode.MaximumAttemptsError);
 }

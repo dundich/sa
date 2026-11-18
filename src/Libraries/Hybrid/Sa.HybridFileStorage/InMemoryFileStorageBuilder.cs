@@ -5,7 +5,7 @@ namespace Sa.HybridFileStorage;
 /// <summary>
 /// Default <see cref="IInMemoryFileStorageBuilder"/>: records the two configuring intents —
 /// the configuration section and the <c>Options(...)</c> pipeline actions — so
-/// <see cref="Setup.AddSaInMemoryFileStorage"/> can replay them in its fixed slot.
+/// <c>AddSaInMemoryFileStorage</c> can replay them in its fixed slot.
 /// </summary>
 internal sealed class InMemoryFileStorageBuilder : IInMemoryFileStorageBuilder
 {

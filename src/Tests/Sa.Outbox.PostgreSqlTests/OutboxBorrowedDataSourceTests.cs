@@ -37,7 +37,7 @@ public sealed class OutboxBorrowedDataSourceTests(OutboxBorrowedDataSourceTests.
 
         public static int Counter => Volatile.Read(ref s_Counter);
 
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<BorrowedMessage>> messages,
@@ -91,7 +91,7 @@ public sealed class OutboxBorrowedDataSourceTests(OutboxBorrowedDataSourceTests.
     {
         IScheduler scheduler = ServiceProvider
             .GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        Assert.True(await scheduler.Start(CancellationToken.None) >= 1);
+        Assert.True(await scheduler.StartAsync(CancellationToken.None) >= 1);
 
         IOutboxMessagePublisher publisher =
             ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
@@ -107,7 +107,7 @@ public sealed class OutboxBorrowedDataSourceTests(OutboxBorrowedDataSourceTests.
         IMigrationService migration = ServiceProvider
             .GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
         Assert.True(
-            await migration.WaitMigration(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken),
+            await migration.WaitMigrationAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken),
             "migration did not run through the borrowed NpgsqlDataSource");
 
         // Delivery reads the queue and updates statuses through the borrowed pool.
@@ -117,7 +117,7 @@ public sealed class OutboxBorrowedDataSourceTests(OutboxBorrowedDataSourceTests.
             await Task.Delay(200, TestContext.Current.CancellationToken);
         }
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.Equal((int)total, BorrowedConsumer.Counter);
     }

@@ -13,7 +13,7 @@ internal sealed class PgOutboxHealth(IPgDataSource dataSource) : IOutboxProvider
         CancellationToken cancellationToken = default)
     {
         int result = await dataSource
-            .ExecuteScalarTyped<int>("SELECT 1", initCommand: null, cancellationToken)
+            .ExecuteScalarTypedAsync<int>("SELECT 1", initCommand: null, cancellationToken)
             .ConfigureAwait(false);
 
         return result == 1

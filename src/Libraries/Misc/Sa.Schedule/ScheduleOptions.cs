@@ -4,7 +4,7 @@ namespace Sa.Schedule;
 /// Scheduler settings served by the standard
 /// <c>Microsoft.Extensions.Options</c> pipeline: binding from a configuration section
 /// (<see cref="IScheduleBuilder.FromConfiguration"/> in
-/// <see cref="Setup.AddSaSchedule"/>) → validation.
+/// <c>AddSaSchedule</c>) → validation.
 /// </summary>
 /// <remarks>
 /// The only content is the <see cref="Jobs"/> dictionary: the key is the job name, the value

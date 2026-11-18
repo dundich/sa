@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 namespace Sa.HybridFileStorage;
 
 /// <summary>
-/// An in-memory implementation of <see cref="IFileStorage"/> that stores file data as byte arrays in a <see cref="ConcurrentDictionary{TKey, TValue"/>.
+/// An in-memory implementation of <see cref="IFileStorage"/> that stores file data as byte arrays in a <c>ConcurrentDictionary&lt;string, byte[]&gt;</c>.
 /// Suitable for testing, caching, or small-scale scenarios where persistence is not required.
 /// </summary>
 public sealed class InMemoryFileStorage(
@@ -21,6 +21,11 @@ public sealed class InMemoryFileStorage(
     public const string DefaultStorageType = "mem";
 
     private readonly ConcurrentDictionary<string, byte[]> _storage = [];
+
+    // Guards the read-check-write sequence of an upload and the remove-and-subtract of a delete,
+    // so the dictionary and _totalSizeBytes always agree. Reads (download, metadata) stay lock-free.
+    private readonly Lock _gate = new();
+
     private long _totalSizeBytes;
 
     /// <summary>
@@ -43,6 +48,10 @@ public sealed class InMemoryFileStorage(
     /// </summary>
     public const string SchemeSeparator = "://";
 
+    // The scheme prefix, separator included: a bare StartsWith("mem") would also claim ids of an
+    // unrelated scheme such as "memory://" (or a name like "member.txt").
+    private static readonly string SchemePrefix = $"{DefaultStorageType}{SchemeSeparator}";
+
     private void EnsureWritable()
     {
         if (IsReadOnly)
@@ -51,6 +60,11 @@ public sealed class InMemoryFileStorage(
         }
     }
 
+    /// <summary>Stores a copy of the stream under a new file id.</summary>
+    /// <param name="metadata">The upload metadata.</param>
+    /// <param name="fileStream">The content to store.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The stored file identity.</returns>
     public async Task<StorageResult> UploadAsync(
         UploadFileInput metadata,
         Stream fileStream,
@@ -65,28 +79,47 @@ public sealed class InMemoryFileStorage(
             .ConfigureAwait(false);
         byte[] fileData = memoryStream.ToArray();
 
-        // Check size limit before inserting
-        if (_options.MaxSizeBytes > 0)
-        {
-            long newSize = Interlocked.Add(ref _totalSizeBytes, fileData.Length);
-            if (newSize > _options.MaxSizeBytes)
-            {
-                // Rollback the addition and throw
-                Interlocked.Add(ref _totalSizeBytes, -fileData.Length);
-                throw new InvalidOperationException(
-                    $"In-memory storage size limit ({_options.MaxSizeBytes} bytes) exceeded.");
-            }
-        }
-
-        string path = Path.Combine(Basket, metadata.TenantId.ToString(), metadata.FileName).Replace('\\', '/');
+        string path = Path.Combine(Basket, metadata.TenantId.ToString(System.Globalization.CultureInfo.InvariantCulture), metadata.FileName).Replace('\\', '/');
         //"storageType://basket/tenant/filename"
         string fileId = $"{StorageType}{SchemeSeparator}{path}";
 
-        _storage[fileId] = fileData;
+        // Check the size limit and insert under one gate. A re-upload replaces the payload under
+        // the same file ID, so only the delta is charged: charging the full length again would
+        // make repeated uploads of one file trip the limit while a single file's worth of data is
+        // held. The gate makes the read-check-write sequence atomic, so two concurrent uploads of
+        // one file ID cannot both charge the full payload, and a concurrent delete cannot subtract
+        // a size this upload has already accounted for.
+        lock (_gate)
+        {
+            long delta = fileData.Length;
 
-        return new StorageResult(fileId, fileId, StorageType, _timeProvider.GetUtcNow());
+            if (_storage.TryGetValue(fileId, out byte[]? previous))
+            {
+                delta -= previous.LongLength;
+            }
+
+            long newSize = _totalSizeBytes + delta;
+
+            if (delta > 0 && _options.MaxSizeBytes > 0 && newSize > _options.MaxSizeBytes)
+            {
+                throw new InvalidOperationException(
+                    $"In-memory storage size limit ({_options.MaxSizeBytes} bytes) exceeded.");
+            }
+
+            _storage[fileId] = fileData;
+            _totalSizeBytes = newSize;
+        }
+
+        return new StorageResult
+        {
+            FileId = fileId,
+            AbsoluteUrl = fileId,
+            StorageType = StorageType,
+            UploadedAt = _timeProvider.GetUtcNow(),
+        };
     }
 
+    /// <inheritdoc />
     public async Task<bool> DownloadAsync(
         string fileId,
         Func<Stream, CancellationToken, Task> loadStream,
@@ -106,6 +139,7 @@ public sealed class InMemoryFileStorage(
         return false;
     }
 
+    /// <inheritdoc />
     public Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
     {
         EnsureWritable();
@@ -114,22 +148,31 @@ public sealed class InMemoryFileStorage(
         if (!CanProcess(fileId))
             return Task.FromResult(false);
 
-        if (_storage.TryRemove(fileId, out var fileData))
+        // Same gate as the upload: removing the payload and subtracting its size must be one step,
+        // and it must not interleave with a re-upload of the same ID.
+        lock (_gate)
         {
-            Interlocked.Add(ref _totalSizeBytes, -fileData.Length);
-            return Task.FromResult(true);
+            if (_storage.TryRemove(fileId, out var fileData))
+            {
+                _totalSizeBytes -= fileData.Length;
+                return Task.FromResult(true);
+            }
         }
 
         return Task.FromResult(false);
     }
 
-    public bool CanProcess(string fileId) => fileId.StartsWith(StorageType);
+    /// <inheritdoc />
+    public bool CanProcess(string? fileId)
+        => !string.IsNullOrEmpty(fileId)
+            && fileId.AsSpan().StartsWith(SchemePrefix.AsSpan(), StringComparison.Ordinal);
 
+    /// <inheritdoc />
     public async Task<FileMetadata?> GetMetadataAsync(string fileId, CancellationToken cancellationToken = default)
     {
         if (!_storage.ContainsKey(fileId)) return null;
 
-        if (!FileIdParser.TryParse(fileId, out var basket, out var tenantId, out _, out var fileName))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithoutTimestamp, out var basket, out var tenantId, out _, out var fileName))
             return null;
 
         var metadata = new FileMetadata

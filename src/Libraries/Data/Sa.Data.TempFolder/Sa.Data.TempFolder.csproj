@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<Title>Sa.Data.TempFolder</Title>
-		<Description>Temporary directory management: path-guarded subfolders, debounced activity marking, age-based cleanup and low-priority volume tracking (Sa.Data.TempFolder)</Description>
+		<Description>Temporary directory management: path-guarded subfolders, debounced activity marking, age-based cleanup and low-priority volume tracking</Description>
 		<PackageTags>temp temporary folder directory cleanup</PackageTags>
 	</PropertyGroup>
 

@@ -1,8 +1,8 @@
-namespace Sa.Outbox.Tests;
 
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Exceptions;
 
+namespace Sa.Outbox.Tests;
 /// <summary>
 /// Fake implementation of <see cref="IOutboxContextOperations{TMessage}"/> that accepts a payloadId parameter.
 /// </summary>
@@ -72,7 +72,7 @@ public sealed class FakeOutboxContext<TMessage>(
         _deliveryResult = new DeliveryStatus(DeliveryStatusCode.Warn, message ?? exception.Message, GetUtcNow());
     }
 
-    public void Error(Exception exception, string? message = null)
+    public void Fail(Exception exception, string? message = null)
         => SetError(DeliveryStatusCode.Error, exception, message);
 
     public void Error501(Exception exception, string? message = null)

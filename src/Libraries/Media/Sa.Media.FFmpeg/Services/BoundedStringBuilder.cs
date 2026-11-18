@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Sa.Media.FFmpeg.Services;
 
 /// <summary>

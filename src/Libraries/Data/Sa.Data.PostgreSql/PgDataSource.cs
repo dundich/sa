@@ -52,7 +52,7 @@ internal sealed class PgDataSource : IPgDataSource
 
     public string GetConnectionString() => _dataSource.ConnectionString;
 
-    public ValueTask<NpgsqlConnection> OpenDbConnection(CancellationToken cancellationToken)
+    public ValueTask<NpgsqlConnection> OpenDbConnectionAsync(CancellationToken cancellationToken)
         => _dataSource.OpenConnectionAsync(cancellationToken);
 
     private NpgsqlCommand RentCommand(string sql, NpgsqlConnection connection)
@@ -117,9 +117,9 @@ internal sealed class PgDataSource : IPgDataSource
         }
     }
 
-    public async ValueTask<PgTransaction> BeginTransaction(CancellationToken cancellationToken = default)
+    public async ValueTask<PgTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
     {
-        NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -132,12 +132,12 @@ internal sealed class PgDataSource : IPgDataSource
         }
     }
 
-    public async ValueTask<ulong> BeginBinaryImport(
+    public async ValueTask<ulong> BeginBinaryImportAsync(
         string sql,
         Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write,
         CancellationToken cancellationToken = default)
     {
-        await using NpgsqlConnection db = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection db = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using NpgsqlBinaryImporter writer = await db.BeginBinaryImportAsync(sql, cancellationToken).ConfigureAwait(false);
         ulong result = await write(writer, cancellationToken).ConfigureAwait(false);
         return result;
@@ -145,7 +145,7 @@ internal sealed class PgDataSource : IPgDataSource
 
     // ExecuteNonQuery
 
-    public async Task<int> ExecuteNonQuery(
+    public async Task<int> ExecuteNonQueryAsync(
         string sql,
         Action<NpgsqlCommand>? initCommand,
         CancellationToken cancellationToken = default)
@@ -153,20 +153,20 @@ internal sealed class PgDataSource : IPgDataSource
         // Not pooled: initCommand is free to mutate CommandTimeout/CommandType/result-type flags,
         // and those would leak into the next renter. The parameter-only overloads did not have a
         // caller-supplied mutator, so they are the ones that reuse a command.
-        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using NpgsqlCommand cmd = new(sql, connection);
         initCommand?.Invoke(cmd);
         return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<int> ExecuteNonQuery(
+    public async Task<int> ExecuteNonQueryAsync(
         string sql,
         IReadOnlyCollection<NpgsqlParameter> parameters,
         CancellationToken cancellationToken = default)
     {
         // Direct body rather than an Action<NpgsqlCommand> lambda: this overload is used by the
         // hot query paths, and the closure was allocated on every call only to run FillParams.
-        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         NpgsqlCommand cmd = RentCommand(sql, connection);
 
         try
@@ -180,18 +180,18 @@ internal sealed class PgDataSource : IPgDataSource
         }
     }
 
-    public Task<int> ExecuteNonQuery(string sql, CancellationToken cancellationToken = default)
-        => ExecuteNonQuery(sql, initCommand: null, cancellationToken);
+    public Task<int> ExecuteNonQueryAsync(string sql, CancellationToken cancellationToken = default)
+        => ExecuteNonQueryAsync(sql, initCommand: null, cancellationToken);
 
     // ExecuteScalar
 
-    public async Task<object?> ExecuteScalar(
+    public async Task<object?> ExecuteScalarAsync(
         string sql,
         Action<NpgsqlCommand>? initCommand,
         CancellationToken cancellationToken = default)
     {
-        // Not pooled — see ExecuteNonQuery(Action): the caller's mutator can leave state behind.
-        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        // Not pooled — see ExecuteNonQueryAsync(Action): the caller's mutator can leave state behind.
+        await using NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using NpgsqlCommand cmd = new(sql, connection);
         initCommand?.Invoke(cmd);
         return await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
@@ -200,35 +200,35 @@ internal sealed class PgDataSource : IPgDataSource
     /// <summary>
     /// Executes a scalar query with no parameters.
     /// </summary>
-    public Task<object?> ExecuteScalar(string sql, CancellationToken cancellationToken = default)
-        => ExecuteScalar(sql, initCommand: null, cancellationToken);
+    public Task<object?> ExecuteScalarAsync(string sql, CancellationToken cancellationToken = default)
+        => ExecuteScalarAsync(sql, initCommand: null, cancellationToken);
 
-    public async Task<T> ExecuteScalar<T>(
+    public async Task<T> ExecuteScalarAsync<T>(
         string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteScalar(sql, initCommand, cancellationToken).ConfigureAwait(false);
+        var result = await ExecuteScalarAsync(sql, initCommand, cancellationToken).ConfigureAwait(false);
         return (T)(result!);
     }
 
     /// <summary>
     /// Executes a typed scalar query.
     /// </summary>
-    public async Task<T> ExecuteScalarTyped<T>(
+    public async Task<T> ExecuteScalarTypedAsync<T>(
         string sql, Action<NpgsqlCommand>? initCommand = null, CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteScalar(sql, initCommand, cancellationToken).ConfigureAwait(false);
+        var result = await ExecuteScalarAsync(sql, initCommand, cancellationToken).ConfigureAwait(false);
         return ConvertScalar<T>(result);
     }
 
     /// <summary>
     /// Executes a typed scalar query with parameters.
     /// </summary>
-    public async Task<T> ExecuteScalarTyped<T>(
+    public async Task<T> ExecuteScalarTypedAsync<T>(
         string sql,
         IReadOnlyCollection<NpgsqlParameter> parameters,
         CancellationToken cancellationToken = default)
     {
-        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         NpgsqlCommand cmd = RentCommand(sql, connection);
 
         try
@@ -275,7 +275,7 @@ internal sealed class PgDataSource : IPgDataSource
 
     // ExecuteReader
 
-    public async Task<int> ExecuteReader(
+    public async Task<int> ExecuteReaderAsync(
         string sql,
         Action<NpgsqlDataReader, int> read,
         Action<NpgsqlCommand>? initCommand,
@@ -283,8 +283,8 @@ internal sealed class PgDataSource : IPgDataSource
     {
         int rowCount = 0;
 
-        // Not pooled — see ExecuteNonQuery(Action): the caller's mutator can leave state behind.
-        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        // Not pooled — see ExecuteNonQueryAsync(Action): the caller's mutator can leave state behind.
+        await using NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using NpgsqlCommand cmd = new(sql, connection);
         initCommand?.Invoke(cmd);
         await using NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -298,7 +298,7 @@ internal sealed class PgDataSource : IPgDataSource
         return rowCount;
     }
 
-    public async Task<int> ExecuteReader(
+    public async Task<int> ExecuteReaderAsync(
         string sql,
         Action<NpgsqlDataReader, int> read,
         IReadOnlyCollection<NpgsqlParameter> parameters,
@@ -306,7 +306,7 @@ internal sealed class PgDataSource : IPgDataSource
     {
         int rowCount = 0;
 
-        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         NpgsqlCommand cmd = RentCommand(sql, connection);
 
         try
@@ -328,16 +328,16 @@ internal sealed class PgDataSource : IPgDataSource
         }
     }
 
-    public Task<int> ExecuteReader(
+    public Task<int> ExecuteReaderAsync(
         string sql, Action<NpgsqlDataReader, int> read, CancellationToken cancellationToken = default)
-        => ExecuteReader(sql, read, initCommand: null, cancellationToken);
+        => ExecuteReaderAsync(sql, read, initCommand: null, cancellationToken);
 
     // ExecuteReaderList
 
-    public async Task<List<T>> ExecuteReaderList<T>(
+    public async Task<List<T>> ExecuteReaderListAsync<T>(
         string sql, Func<NpgsqlDataReader, T> read, CancellationToken cancellationToken = default)
     {
-        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         NpgsqlCommand cmd = RentCommand(sql, connection);
 
         try
@@ -361,13 +361,13 @@ internal sealed class PgDataSource : IPgDataSource
         }
     }
 
-    public async Task<List<T>> ExecuteReaderList<T>(
+    public async Task<List<T>> ExecuteReaderListAsync<T>(
         string sql,
         Func<NpgsqlDataReader, T> read,
         IReadOnlyCollection<NpgsqlParameter> parameters,
         CancellationToken cancellationToken = default)
     {
-        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         NpgsqlCommand cmd = RentCommand(sql, connection);
 
         try
@@ -390,10 +390,10 @@ internal sealed class PgDataSource : IPgDataSource
         }
     }
 
-    // ExecuteReaderFirst
+    // ExecuteReaderFirstAsync
 
-    /// <inheritdoc cref="IPgDataSource.ExecuteReaderFirst{T}(string, CancellationToken)"/>
-    public async Task<T> ExecuteReaderFirst<T>(
+    /// <inheritdoc cref="IPgDataSource.ExecuteReaderFirstAsync{T}(string, CancellationToken)"/>
+    public async Task<T> ExecuteReaderFirstAsync<T>(
         string sql,
         IReadOnlyCollection<NpgsqlParameter> parameters,
         CancellationToken cancellationToken = default)
@@ -402,7 +402,7 @@ internal sealed class PgDataSource : IPgDataSource
         // would silently become "last") and drains the whole result set before returning. Opening
         // the connection directly — the same primitive ExecuteReader uses — lets us ask the server
         // for a single row and read it exactly once.
-        await using NpgsqlConnection connection = await OpenDbConnection(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = await OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
         NpgsqlCommand cmd = RentCommand(sql, connection);
 
         try
@@ -424,16 +424,16 @@ internal sealed class PgDataSource : IPgDataSource
         }
     }
 
-    /// <inheritdoc cref="IPgDataSource.ExecuteReaderFirst{T}(string, CancellationToken)"/>
-    public Task<T> ExecuteReaderFirst<T>(string sql, CancellationToken cancellationToken = default)
-        => ExecuteReaderFirst<T>(sql, [], cancellationToken);
+    /// <inheritdoc cref="IPgDataSource.ExecuteReaderFirstAsync{T}(string, CancellationToken)"/>
+    public Task<T> ExecuteReaderFirstAsync<T>(string sql, CancellationToken cancellationToken = default)
+        => ExecuteReaderFirstAsync<T>(sql, [], cancellationToken);
 
     // Reads column 0 of the current row as T. The Nullable<T> wrapper is peeled off first so the
     // value is read as its underlying type and the runtime can unbox it back into T — a boxed Int32
     // unboxes to int/int? but not to long? or an enum?, so the exact underlying type matters.
     // Enums are boxed through Enum.ToObject for the same reason.
     //
-    // The type dispatch is built once per closed T, not per call: ExecuteReaderFirst is a scalar
+    // The type dispatch is built once per closed T, not per call: ExecuteReaderFirstAsync is a scalar
     // hot path, and Nullable.GetUnderlyingType/IsEnum/GetTypeCode were repeated on every query.
     private static T ReadCurrent<T>(NpgsqlDataReader reader) => ReadCurrentCache<T>.Reader(reader);
 

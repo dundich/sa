@@ -21,7 +21,7 @@ public sealed class CrossFeedSeparatorValidationTests
     public async Task Execute_emptyInputPath_throwsArgumentException()
     {
         await Assert.ThrowsAsync<ArgumentException>(
-            () => CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions(InputPath: ""), TestContext.Current.CancellationToken));
+            () => CrossFeedSeparator.ExecuteAsync(new AudioSeparationOptions { InputPath = "" }, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -29,9 +29,7 @@ public sealed class CrossFeedSeparatorValidationTests
     {
         await Assert.ThrowsAsync<FileNotFoundException>(
             () => CrossFeedSeparator.ExecuteAsync(
-                new AudioSeparationOptions(
-                    InputPath: MissingFile,
-                    Processing: CrossFeedSeparator.ProcessingMode.MaximumSpeed),
+                new AudioSeparationOptions { InputPath = MissingFile, Processing = CrossFeedSeparator.ProcessingMode.MaximumSpeed },
                 TestContext.Current.CancellationToken));
     }
 
@@ -43,9 +41,7 @@ public sealed class CrossFeedSeparatorValidationTests
         // Путь заведомо не существует: валидация аргументов обязана сработать раньше File.Exists.
         await Assert.ThrowsAsync<ArgumentException>(
             () => CrossFeedSeparator.ExecuteAsync(
-                new AudioSeparationOptions(
-                    InputPath: MissingFile,
-                    SpectralMaskPower: maskPower),
+                new AudioSeparationOptions { InputPath = MissingFile, SpectralMaskPower = maskPower },
                 TestContext.Current.CancellationToken));
     }
 
@@ -56,9 +52,7 @@ public sealed class CrossFeedSeparatorValidationTests
     {
         await Assert.ThrowsAsync<ArgumentException>(
             () => CrossFeedSeparator.ExecuteAsync(
-                new AudioSeparationOptions(
-                    InputPath: MissingFile,
-                    MaskFloor: maskFloor),
+                new AudioSeparationOptions { InputPath = MissingFile, MaskFloor = maskFloor },
                 TestContext.Current.CancellationToken));
     }
 
@@ -70,9 +64,7 @@ public sealed class CrossFeedSeparatorValidationTests
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => CrossFeedSeparator.ExecuteAsync(
-                new AudioSeparationOptions(
-                    InputPath: input,
-                    OutputPath: directory.Combine("out.wav")),
+                new AudioSeparationOptions { InputPath = input, OutputPath = directory.Combine("out.wav") },
                 TestContext.Current.CancellationToken));
 
         Assert.Contains("stereo", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -86,9 +78,7 @@ public sealed class CrossFeedSeparatorValidationTests
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => CrossFeedSeparator.ExecuteAsync(
-                new AudioSeparationOptions(
-                    InputPath: input,
-                    OutputPath: directory.Combine("out.wav")),
+                new AudioSeparationOptions { InputPath = input, OutputPath = directory.Combine("out.wav") },
                 TestContext.Current.CancellationToken));
 
         Assert.Contains("too short", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -103,10 +93,12 @@ public sealed class CrossFeedSeparatorValidationTests
         // +12 дБ — физический максимум утечки в синтетике, порог 120 дБ недостижим.
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => CrossFeedSeparator.ExecuteAsync(
-                new AudioSeparationOptions(
-                    InputPath: input,
-                    OutputPath: directory.Combine("out.wav"),
-                    DominanceThresholdDb: 120.0),
+                new AudioSeparationOptions
+                {
+                    InputPath = input,
+                    OutputPath = directory.Combine("out.wav"),
+                    DominanceThresholdDb = 120.0,
+                },
                 TestContext.Current.CancellationToken));
 
         Assert.Contains("single-speaker", exception.Message, StringComparison.OrdinalIgnoreCase);

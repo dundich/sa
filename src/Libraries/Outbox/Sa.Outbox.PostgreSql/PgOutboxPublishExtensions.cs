@@ -7,7 +7,7 @@ namespace Sa.Outbox.PostgreSql;
 /// Explicit entry points for publishing outbox messages inside a caller-controlled PostgreSQL
 /// transaction. The transaction is boxed into the opaque publish context that
 /// <see cref="Sa.Outbox.Publication.IOutboxMessagePublisher"/> carries, so the write runs in
-/// <paramref name="transaction"/> and only becomes visible when the caller commits it.
+/// <c>transaction</c> and only becomes visible when the caller commits it.
 /// </summary>
 public static class PgOutboxPublishExtensions
 {

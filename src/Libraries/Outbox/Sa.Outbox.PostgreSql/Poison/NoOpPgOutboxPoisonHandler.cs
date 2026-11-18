@@ -11,6 +11,6 @@ namespace Sa.Outbox.PostgreSql.Poison;
 /// </remarks>
 internal sealed class NoOpPgOutboxPoisonHandler : IPgOutboxPoisonHandler
 {
-    public ValueTask<PgOutboxPoisonAction> Handle(PgOutboxPoisonMessage message, CancellationToken cancellationToken)
+    public ValueTask<PgOutboxPoisonAction> HandleAsync(PgOutboxPoisonMessage message, CancellationToken cancellationToken)
         => ValueTask.FromResult(PgOutboxPoisonAction.Default);
 }

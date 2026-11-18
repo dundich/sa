@@ -4,11 +4,28 @@ internal sealed class SchemaBuilder(string schemaName) : ISchemaBuilder
 {
     public readonly Dictionary<string, TableBuilder> _tables = [];
 
+    /// <summary>
+    /// Returns the builder of <paramref name="tableName"/>, creating it on first use.
+    /// </summary>
+    /// <remarks>
+    /// The name is stored unquoted, exactly like <c>SettingsBuilder.AddSchema</c> stores the schema
+    /// and <see cref="TableBuilder.Build"/> stores the root table name. Without that, the same table
+    /// declared once as <c>"orders"</c> and once as <c>orders</c> produced two builders whose
+    /// <c>FullName</c> is identical, and the SQL builder failed on the duplicate dictionary key with
+    /// an error that named neither declaration.
+    /// </remarks>
     public ITableBuilder CreateTable(string tableName)
     {
-        if (_tables.TryGetValue(tableName, out TableBuilder? table)) return table;
-        TableBuilder builder = new(schemaName, tableName);
-        _tables[tableName] = builder;
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+
+        string name = tableName.Trim('"');
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        if (_tables.TryGetValue(name, out TableBuilder? table)) return table;
+
+        TableBuilder builder = new(schemaName, name);
+        _tables[name] = builder;
         return builder;
     }
 
@@ -17,11 +34,9 @@ internal sealed class SchemaBuilder(string schemaName) : ISchemaBuilder
 
     public ITableBuilder AdoptTable(string tableName, params string[] sqlFields)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
         ArgumentNullException.ThrowIfNull(sqlFields);
 
-        CreateTable(tableName);
-        TableBuilder builder = _tables[tableName];
+        TableBuilder builder = (TableBuilder)CreateTable(tableName);
         builder.DeclareAdopt(sqlFields);
         return builder;
     }

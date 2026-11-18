@@ -23,7 +23,7 @@ public sealed class OutboxIdleBackoffTests(OutboxIdleBackoffTests.Fixture fixtur
 
         public static void Reset() => Counter = 0;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -73,7 +73,7 @@ public sealed class OutboxIdleBackoffTests(OutboxIdleBackoffTests.Fixture fixtur
         var ct = TestContext.Current.CancellationToken;
 
         var scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        Assert.True(await scheduler.Start(ct) >= 1);
+        Assert.True(await scheduler.StartAsync(ct) >= 1);
 
         var registry = fixture.ServiceProvider.GetRequiredService<IOutboxIdleStateRegistry>();
         var state = registry.Get(new OutboxGroupKey(OutboxScope.DefaultKey, fixture.ConsumerSettings.ConsumerGroupId));
@@ -96,7 +96,7 @@ public sealed class OutboxIdleBackoffTests(OutboxIdleBackoffTests.Fixture fixtur
         Assert.Equal(baseInterval, state.CurrentInterval);
         Assert.Equal(0, state.ConsecutiveEmptyPolls);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     private static async Task WaitForAsync(Func<bool> condition, CancellationToken ct, int maxAttempts = 40)

@@ -24,8 +24,11 @@ internal static class JsonExtensions
 }
 
 
+/// <summary>Shared trimmer messages for the reflection-based JSON helpers.</summary>
 public static class JsonHttpResultTrimmerWarning
 {
+    /// <summary>Message used by <c>RequiresUnreferencedCode</c> on the JSON helpers.</summary>
     public const string SerializationUnreferencedCodeMessage = "JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext.";
+    /// <summary>Message used by <c>RequiresDynamicCode</c> on the JSON helpers.</summary>
     public const string SerializationRequiresDynamicCodeMessage = "JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation. Use the overload that takes a JsonTypeInfo or JsonSerializerContext.";
 }

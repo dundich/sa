@@ -34,10 +34,10 @@ public sealed class ScheduleHostTests
 
         public IReadOnlyCollection<IJobScheduler> Jobs => [];
 
-        public Task<int> Start(CancellationToken cancellationToken) => Task.FromResult(0);
+        public Task<int> StartAsync(CancellationToken cancellationToken) => Task.FromResult(0);
 
-        public Task<int> Restart(CancellationToken cancellationToken) => Task.FromResult(0);
+        public Task<int> RestartAsync(CancellationToken cancellationToken) => Task.FromResult(0);
 
-        public Task Stop() => _never.Task;
+        public Task StopAsync() => _never.Task;
     }
 }

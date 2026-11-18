@@ -7,9 +7,9 @@ internal sealed class InsertMsgTypeCommand(
     IPgDataSource dataSource,
     SqlOutboxBuilder template) : IInsertMsgTypeCommand
 {
-    public Task<int> Execute(long id, string typeName, CancellationToken cancellationToken)
+    public Task<int> ExecuteAsync(long id, string typeName, CancellationToken cancellationToken)
     {
-        return dataSource.ExecuteNonQuery(template.SqlInsertType
+        return dataSource.ExecuteNonQueryAsync(template.SqlInsertType
             , cmd => cmd
                 .AddParamTypeId(id)
                 .AddParamTypeName(typeName)

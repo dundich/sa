@@ -19,12 +19,12 @@ public interface IOutboxPublisherResolver
     /// <param name="providerKey">The provider key (equal to the outbox scope key).</param>
     /// <returns>The provider's publisher.</returns>
     /// <exception cref="InvalidOperationException">No provider is registered under that key.</exception>
-    IOutboxMessagePublisher For(string providerKey);
+    IOutboxMessagePublisher GetPublisher(string providerKey);
 }
 
 internal sealed class OutboxPublisherResolver(IServiceProvider services) : IOutboxPublisherResolver
 {
-    public IOutboxMessagePublisher For(string providerKey)
+    public IOutboxMessagePublisher GetPublisher(string providerKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(providerKey);
 

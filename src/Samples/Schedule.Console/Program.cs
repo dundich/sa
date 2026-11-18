@@ -46,17 +46,17 @@ if (isHostService)
 }
 else
 {
-    await controller.Start(cts.Token);
+    await controller.StartAsync(cts.Token);
 }
 
 _ = Task.Run(async () =>
 {
     await Task.Delay(5000);
-    await controller.Stop();
+    await controller.StopAsync();
     Console.WriteLine($"*** stopped & start after 2 sec");
 
     await Task.Delay(2000);
-    await controller.Start(cts.Token);
+    await controller.StartAsync(cts.Token);
 });
 
 _ = Task.Run(async () =>
@@ -79,7 +79,7 @@ namespace Schedule.Console
 {
     public class SomeJob(TimeProvider currentTime) : IJob
     {
-        public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
             if (context.NumIterations >= 4 && context.NumIterations < 6)
@@ -94,14 +94,14 @@ namespace Schedule.Console
 
     public class SomeInterceptor : IJobInterceptor
     {
-        public async Task OnHandle(
+        public async Task OnHandleAsync(
             IJobContext context,
-            Func<Task> next,
+            Func<Task> continuation,
             object? key,
             CancellationToken cancellationToken)
         {
             System.Console.WriteLine($"<beg>");
-            await next();
+            await continuation();
             System.Console.WriteLine($"<end>");
         }
     }

@@ -26,7 +26,7 @@ namespace Sa.Data.TempFolder;
 /// <see cref="DriveInfo"/> against the root's volume.
 /// </para>
 /// </remarks>
-internal sealed class FreeSpaceMonitor
+internal sealed partial class FreeSpaceMonitor
 {
     private readonly string _name;
     private readonly string _rootPath;
@@ -103,15 +103,11 @@ internal sealed class FreeSpaceMonitor
 
         if (transitionedTo)
         {
-            _logger.LogWarning(
-                "Temp folder '{Name}' free space {Available} bytes reached the limit {Min} bytes (root {Root}).",
-                _name, available, options.MinFreeSpace, _rootPath);
+            Log.FreeSpaceLimitReached(_logger, _name, available, options.MinFreeSpace, _rootPath);
         }
         else
         {
-            _logger.LogInformation(
-                "Temp folder '{Name}' free space {Available} bytes is back above the limit {Min} bytes (root {Root}).",
-                _name, available, options.MinFreeSpace, _rootPath);
+            Log.FreeSpaceLimitCleared(_logger, _name, available, options.MinFreeSpace, _rootPath);
         }
 
         var handler = options.OnFreeSpaceReached;
@@ -126,7 +122,7 @@ internal sealed class FreeSpaceMonitor
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Temp folder '{Name}' OnFreeSpaceReached handler threw.", _name);
+            Log.FreeSpaceHandlerFailed(_logger, ex, _name);
         }
     }
 
@@ -142,5 +138,17 @@ internal sealed class FreeSpaceMonitor
             : rootPath;
 
         return new DriveInfo(location).AvailableFreeSpace;
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 3101, Level = LogLevel.Warning, Message = "Temp folder '{Name}' free space {Available} bytes reached the limit {Min} bytes (root {Root}).")]
+        public static partial void FreeSpaceLimitReached(ILogger logger, string name, long available, long min, string root);
+
+        [LoggerMessage(EventId = 3102, Level = LogLevel.Information, Message = "Temp folder '{Name}' free space {Available} bytes is back above the limit {Min} bytes (root {Root}).")]
+        public static partial void FreeSpaceLimitCleared(ILogger logger, string name, long available, long min, string root);
+
+        [LoggerMessage(EventId = 3103, Level = LogLevel.Warning, Message = "Temp folder '{Name}' OnFreeSpaceReached handler threw.")]
+        public static partial void FreeSpaceHandlerFailed(ILogger logger, Exception exception, string name);
     }
 }

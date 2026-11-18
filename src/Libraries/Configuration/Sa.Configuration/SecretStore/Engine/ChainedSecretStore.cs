@@ -2,9 +2,9 @@ namespace Sa.Configuration.SecretStore.Engine;
 
 /// <summary>
 /// A chain of secret stores with LIFO priority: the store passed/added last has the highest priority.
-/// Thread-safe — <see cref="Add"/> swaps an immutable array snapshot via <see cref="Interlocked.Exchange"/>.
+/// Thread-safe — <see cref="Add"/> swaps an immutable array snapshot via <c>Interlocked.Exchange</c>.
 /// </summary>
-internal sealed class ChainedSecretStore(ISecretStore[] stores): ISecretStore
+internal sealed class ChainedSecretStore(ISecretStore[] stores) : ISecretStore
 {
     private volatile ISecretStore[] _stores = [.. stores.Reverse()];
 

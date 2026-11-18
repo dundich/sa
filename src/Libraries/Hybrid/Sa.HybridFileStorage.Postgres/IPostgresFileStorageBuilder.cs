@@ -4,7 +4,7 @@ namespace Sa.HybridFileStorage.Postgres;
 
 /// <summary>
 /// Collects the configuration of the PostgreSQL provider registered through
-/// <see cref="Setup.AddSaPostgreSqlFileStorage"/>: the standard options pipeline
+/// <c>AddSaPostgreSqlFileStorage</c>: the standard options pipeline
 /// (<c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>) and the configuration
 /// section, in one registration delegate.
 /// </summary>

@@ -1,33 +1,61 @@
 namespace Sa.Utils.WorkQueue;
 
 /// <summary>
-/// Immutable options for <see cref="SaWorkQueue{TInput}"/>.
+/// Immutable options for <see cref="SaWorkChannel{TInput}"/>.
 /// </summary>
 /// <remarks>
 /// The <c>With*</c> methods validate eagerly and are the preferred way to build options.
-/// The primary constructor is public, so its arguments bypass those guards: the queue
-/// constructor re-validates everything (<c>ConcurrencyLimit</c> must not be negative,
-/// <c>QueueCapacity</c> must be at least 1, <c>ShutdownTimeout</c> must be positive, and
-/// the four strategy enums must be defined values) and throws
+/// The properties can also be set directly through an object initializer, which bypasses
+/// those guards: the queue constructor re-validates everything (<c>ConcurrencyLimit</c> must
+/// not be negative, <c>QueueCapacity</c> must be at least 1, <c>ShutdownTimeout</c> must be
+/// positive, and the four strategy enums must be defined values) and throws
 /// <see cref="ArgumentOutOfRangeException"/> before creating the channel. Either way, an invalid
 /// value fails the same way.
 /// </remarks>
-public sealed record SaWorkQueueOptions<TInput>(
-    ISaWork<TInput> Processor,
-    int? QueueCapacity = null,
-    int? ConcurrencyLimit = null,
-    int? MaxConcurrency = null,
-    bool? SingleWriter = false,
-    SaEnqueueStrategy EnqueueStrategy = SaEnqueueStrategy.Wait,
-    SaReaderCancelMode ReaderCancelMode = SaReaderCancelMode.Hard,
-    SaReaderCancellationOrder ReaderCancellationOrder = SaReaderCancellationOrder.Lifo,
-    Func<TInput, Exception, SaExecutionErrorStrategy>? HandleItemFaulted = null,
-    Action<TInput, SaWorkStatus, Exception?>? StatusChanged = null,
-    Func<TInput, string>? GetItemDisplayName = null,
-    TimeSpan? ShutdownTimeout = null,
-    TimeProvider? TimeProvider = null,
-    SaProducerCancellationMode ProducerCancellation = SaProducerCancellationMode.Observe)
+public sealed record SaWorkQueueOptions<TInput>
 {
+    /// <summary>The processor that runs each accepted item.</summary>
+    public required ISaWork<TInput> Processor { get; init; }
+
+    /// <summary>Buffer capacity; <see langword="null"/> for the channel default.</summary>
+    public int? QueueCapacity { get; init; }
+
+    /// <summary>Parallel processors; <c>0</c> pauses processing; <see langword="null"/> for automatic.</summary>
+    public int? ConcurrencyLimit { get; init; }
+
+    /// <summary>Absolute maximum number of reader tasks; <c>0</c> defaults to the CPU count.</summary>
+    public int? MaxConcurrency { get; init; }
+
+    /// <summary>Whether the source is optimised for a single writer.</summary>
+    public bool? SingleWriter { get; init; } = false;
+
+    /// <summary>What an enqueue does when the buffer is full.</summary>
+    public SaEnqueueStrategy EnqueueStrategy { get; init; } = SaEnqueueStrategy.Wait;
+
+    /// <summary>How a removed reader treats its in-flight item.</summary>
+    public SaReaderCancelMode ReaderCancelMode { get; init; } = SaReaderCancelMode.Hard;
+
+    /// <summary>Which readers are cancelled first when the limit decreases.</summary>
+    public SaReaderCancellationOrder ReaderCancellationOrder { get; init; } = SaReaderCancellationOrder.Lifo;
+
+    /// <summary>Maps a processor failure to an execution strategy; unset shuts the queue down.</summary>
+    public Func<TInput, Exception, SaExecutionErrorStrategy>? HandleItemFaulted { get; init; }
+
+    /// <summary>Receives every status transition of a work item.</summary>
+    public Action<TInput, SaWorkStatus, Exception?>? StatusChanged { get; init; }
+
+    /// <summary>Renders an item for diagnostics.</summary>
+    public Func<TInput, string>? GetItemDisplayName { get; init; }
+
+    /// <summary>Maximum wait for readers during shutdown or force-cancel; defaults to 30 seconds.</summary>
+    public TimeSpan? ShutdownTimeout { get; init; }
+
+    /// <summary>Clock behind every bounded wait inside the queue.</summary>
+    public TimeProvider? TimeProvider { get; init; }
+
+    /// <summary>How producer cancellation is treated after an item is accepted.</summary>
+    public SaProducerCancellationMode ProducerCancellation { get; init; } = SaProducerCancellationMode.Observe;
+
     /// <summary>Creates a new options instance with the specified queue capacity.</summary>
     /// <param name="capacity">Must be at least 1.</param>
     public SaWorkQueueOptions<TInput> WithQueueCapacity(int capacity)
@@ -97,8 +125,8 @@ public sealed record SaWorkQueueOptions<TInput>(
     /// Sets the strategy applied when the queue buffer is full.
     /// </summary>
     /// <param name="strategy">
-    /// <see cref="SaEnqueueStrategy.Wait"/> (default) blocks <c>Enqueue</c> until space is available;
-    /// <see cref="SaEnqueueStrategy.Skip"/> drops the item and <c>Enqueue</c> returns <see langword="false"/>;
+    /// <see cref="SaEnqueueStrategy.Wait"/> (default) blocks <c>EnqueueAsync</c> until space is available;
+    /// <see cref="SaEnqueueStrategy.Skip"/> drops the item and <c>EnqueueAsync</c> returns <see langword="false"/>;
     /// <see cref="SaEnqueueStrategy.Throw"/> throws <see cref="SaWorkQueueFullException"/>.
     /// A stopped or disposed queue always throws regardless of the strategy.
     /// </param>
@@ -107,7 +135,7 @@ public sealed record SaWorkQueueOptions<TInput>(
 
     /// <summary>
     /// Sets whether an accepted item keeps observing the cancellation token its producer
-    /// passed to <c>Enqueue</c>.
+    /// passed to <c>EnqueueAsync</c>.
     /// </summary>
     /// <param name="mode">
     /// <see cref="SaProducerCancellationMode.Observe"/> (default) stores the token, so an
@@ -136,7 +164,7 @@ public sealed record SaWorkQueueOptions<TInput>(
     /// path — a reader that ignores cancellation, a force-cancel that never unwinds — is
     /// otherwise only reachable by sleeping through it. Point this at a controllable
     /// clock and those paths complete as soon as the test advances time.
-    /// </summary>
+    /// </param>
     /// <remarks>
     /// A production caller should leave this alone. It governs waits only, never the
     /// processors themselves, so a clock that jumps cannot corrupt a queue's state.
@@ -147,26 +175,26 @@ public sealed record SaWorkQueueOptions<TInput>(
         return this with { TimeProvider = timeProvider };
     }
 
+}
+
+/// <summary>Factory helpers for <see cref="SaWorkQueueOptions{TInput}"/>.</summary>
+public static class SaWorkQueueOptions
+{
     /// <summary>Creates options from a delegate that processes a single item.</summary>
+    /// <typeparam name="TInput">The item type.</typeparam>
     /// <param name="process">Async delegate that receives the item and a cancellation token.</param>
-    public static SaWorkQueueOptions<TInput> Create(Func<TInput, CancellationToken, Task> process)
+    public static SaWorkQueueOptions<TInput> Create<TInput>(Func<TInput, CancellationToken, Task> process)
     {
         ArgumentNullException.ThrowIfNull(process);
-        return new(new DelegatingWork(process));
+        return new() { Processor = new DelegatingWork<TInput>(process) };
     }
 
     /// <summary>Creates options from an <see cref="ISaWork{TInput}"/> processor.</summary>
-    public static SaWorkQueueOptions<TInput> Create(ISaWork<TInput> processor)
+    /// <typeparam name="TInput">The item type.</typeparam>
+    /// <param name="processor">The processor.</param>
+    public static SaWorkQueueOptions<TInput> Create<TInput>(ISaWork<TInput> processor)
     {
         ArgumentNullException.ThrowIfNull(processor);
-        return new(processor);
-    }
-
-    // Helper adapter from delegate to ISaWork
-    private sealed class DelegatingWork(Func<TInput, CancellationToken, Task> process) : ISaWork<TInput>
-    {
-        public Task Execute(TInput input, CancellationToken cancellationToken)
-            => process(input, cancellationToken);
+        return new() { Processor = processor };
     }
 }
-

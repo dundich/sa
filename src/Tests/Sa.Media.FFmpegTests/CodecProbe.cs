@@ -39,7 +39,7 @@ static class CodecProbe
 
     private static async Task CheckEncoder(string encoderName, CancellationToken token, bool skipWhenMissing)
     {
-        var codecs = await IFFMpegExecutor.Default.GetCodecs(token);
+        var codecs = await IFFMpegExecutor.Default.GetCodecsAsync(token);
 
         if (!Tokens(codecs).Contains(encoderName, StringComparer.Ordinal))
         {
@@ -75,12 +75,12 @@ static class CodecProbe
     {
         var executor = IFFMpegExecutor.Default;
 
-        var version = (await executor.GetVersion(token))
+        var version = (await executor.GetVersionAsync(token))
             .Split('\n')
             .FirstOrDefault(line => line.Contains("version", StringComparison.OrdinalIgnoreCase))
             ?.Trim() ?? "(version unknown)";
 
-        var external = string.Join(", ", Tokens(await executor.GetCodecs(token))
+        var external = string.Join(", ", Tokens(await executor.GetCodecsAsync(token))
             .Where(part => part.StartsWith("lib", StringComparison.Ordinal))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(part => part, StringComparer.Ordinal));

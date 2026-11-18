@@ -10,12 +10,12 @@ internal sealed class ExtendDeliveryCommand(
     , SqlOutboxBuilder sql
 ) : IExtendDeliveryCommand
 {
-    public async Task<int> Execute(TimeSpan lockExpiration, OutboxMessageFilter filter, CancellationToken cancellationToken)
+    public async Task<int> ExecuteAsync(TimeSpan lockExpiration, OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetHashCode(filter.PayloadType, cancellationToken);
+        long typeCode = await hashResolver.GetHashCodeAsync(filter.PayloadType, cancellationToken);
         var lockExpiresOn = filter.NowDate + lockExpiration;
 
-        return await dataSource.ExecuteNonQuery(sql.SqlExtendDelivery, cmd => cmd
+        return await dataSource.ExecuteNonQueryAsync(sql.SqlExtendDelivery, cmd => cmd
             .AddParamTenantId(filter.TenantId)
             .AddParamConsumerGroupId(filter.ConsumerGroupId)
             .AddParamFromDate(filter.FromDate)

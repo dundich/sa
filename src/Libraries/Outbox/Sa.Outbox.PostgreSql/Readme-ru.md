@@ -394,7 +394,7 @@ manager.Apply("cg_order_consumer", s => s with { MaxBatchSize = 64 });
 
 // Pause / Resume
 manager.Pause("cg_order_consumer");
-manager.Resume("cg_order_consumer");
+manager.Unpause("cg_order_consumer");
 
 // Подписка на изменения
 using var sub = manager.Subscribe("cg_order_consumer", updated =>
@@ -708,7 +708,7 @@ Publish(messages)
 | `msg.Created()` | Создан побочный ресурс | Статус записан, строка больше не арендуется |
 | `msg.Accepted()` | Принято в асинхронную обработку | Статус записан, строка больше не арендуется |
 | `msg.NoContent()` | Обработано, данных нет | Статус записан, строка больше не арендуется |
-| `msg.Error(ex)` | Неустранимая ошибка | Запись в `__error$`, без повтора |
+| `msg.Fail(ex)` | Неустранимая ошибка | Запись в `__error$`, без повтора |
 | `msg.Warn(ex)` | Временная проблема (сеть, таймаут) | Снова арендуется после окна батчинга |
 | `msg.Postpone(ts)` | Нужно подождать перед повтором | Повтор после `ts` |
 | `msg.Retry(ts, reason)` | Повтор с метаданными | Повтор с информацией о попытке |

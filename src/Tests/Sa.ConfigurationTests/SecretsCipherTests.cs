@@ -297,7 +297,7 @@ public class SecretsCipherTests
     {
         string encrypted = SecretsCipher.Encrypt("key=value", Passphrase, "lsr", "dev");
 
-        SecretsFileHeader header = SecretsCipher.ReadHeader(encrypted);
+        SecretsFileHeader header = SecretsCipher.ReadHeaderAsync(encrypted);
 
         Assert.Equal("pbkdf2-sha256", header.Kdf);
         Assert.Equal(SecretsCipher.DefaultIterations, header.Iterations);
@@ -311,7 +311,7 @@ public class SecretsCipherTests
         string rawKey = "base64:" + Convert.ToBase64String(new byte[32]);
         string encrypted = SecretsCipher.Encrypt("key=value", rawKey);
 
-        SecretsFileHeader header = SecretsCipher.ReadHeader(encrypted);
+        SecretsFileHeader header = SecretsCipher.ReadHeaderAsync(encrypted);
 
         Assert.Equal("none", header.Kdf);
         Assert.Equal(0, header.Iterations);

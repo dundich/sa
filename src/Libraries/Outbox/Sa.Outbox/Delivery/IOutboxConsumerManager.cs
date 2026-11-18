@@ -49,19 +49,19 @@ public interface IOutboxConsumerManager
     /// <summary>
     /// Retrieves the current immutable settings snapshot. Thread-safe.
     /// </summary>
-    OutboxConsumerSettings? Get(string consumerGroupId)
+    OutboxConsumerSettings? GetSettings(string consumerGroupId)
         => throw new NotSupportedException();
 
     /// <summary>Gets one provider's settings snapshot.</summary>
     /// <param name="key">The provider + group identity.</param>
     /// <returns>The snapshot, or <see langword="null"/> when the group is not registered.</returns>
-    OutboxConsumerSettings? Get(OutboxGroupKey key)
+    OutboxConsumerSettings? GetSettings(OutboxGroupKey key)
         => throw new NotSupportedException();
 
     /// <summary>
     /// Temporarily pauses a consumer group without losing any settings.
     /// Active deliveries complete their current batch, then stop polling.
-    /// Use <see cref="Resume"/> to restart processing.
+    /// Use <see cref="Unpause(OutboxGroupKey)"/> to restart processing.
     /// </summary>
     void Pause(string consumerGroupId)
         => Pause(new OutboxGroupKey(OutboxScope.DefaultKey, consumerGroupId));
@@ -74,12 +74,12 @@ public interface IOutboxConsumerManager
     /// <summary>
     /// Resumes a paused consumer group. Processing continues with the latest settings.
     /// </summary>
-    void Resume(string consumerGroupId)
-        => Resume(new OutboxGroupKey(OutboxScope.DefaultKey, consumerGroupId));
+    void Unpause(string consumerGroupId)
+        => Unpause(new OutboxGroupKey(OutboxScope.DefaultKey, consumerGroupId));
 
     /// <summary>Resumes one provider's consumer group.</summary>
     /// <param name="key">The provider + group identity.</param>
-    void Resume(OutboxGroupKey key)
+    void Unpause(OutboxGroupKey key)
         => throw new NotSupportedException();
 
     /// <summary>
@@ -107,7 +107,7 @@ public interface IOutboxConsumerManager
 
     /// <summary>
     /// Unregisters a consumer group — removes settings AND detaches external control.
-    /// Does NOT stop the underlying delivery job; use <see cref="Pause"/> for that.
+    /// Does NOT stop the underlying delivery job; use <see cref="Pause(OutboxGroupKey)"/> for that.
     /// </summary>
     void Unregister(string consumerGroupId)
         => Unregister(new OutboxGroupKey(OutboxScope.DefaultKey, consumerGroupId));

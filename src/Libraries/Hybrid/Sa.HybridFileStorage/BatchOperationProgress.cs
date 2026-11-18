@@ -11,5 +11,6 @@ public readonly record struct BatchOperationProgress(
     string? FileId = null,
     Exception? Error = null)
 {
+    /// <summary>Completed share of the batch, in the range 0-100.</summary>
     public double PercentComplete => Total == 0 ? 0 : (Completed * 100.0 / Total);
 }

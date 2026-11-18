@@ -39,7 +39,7 @@ public class DefaultAndKeyedConnectionTests(OutboxRedisFixture fixture) : IClass
         using ServiceProvider sp = services.BuildServiceProvider();
 
         IOutboxPublisherResolver resolver = sp.GetRequiredService<IOutboxPublisherResolver>();
-        await resolver.For("keyed-db").PublishSingle(new TestMessage("keyed-1"), tenantId: 2, TestToken);
+        await resolver.GetPublisher("keyed-db").PublishSingle(new TestMessage("keyed-1"), tenantId: 2, TestToken);
 
         using var inspector = await ConnectionMultiplexer.ConnectAsync(fixture.ConnectionString);
 

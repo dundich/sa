@@ -22,8 +22,8 @@ public class PartCleanupServiceTests(PartCleanupServiceTests.Fixture fixture) : 
                         "payload_id TEXT NOT NULL"
                     )
                     .PartByList("tenant_id", "city")
-                    .AddMigration(1, ["New York", "London"])
-                    .AddMigration(2, ["Moscow", "Kazan", "Yekaterinburg"])
+                    .AddMigrationChildren(1, "New York", "London")
+                    .AddMigrationChildren(2, "Moscow", "Kazan", "Yekaterinburg")
                     ;
 
                 });
@@ -44,7 +44,7 @@ public class PartCleanupServiceTests(PartCleanupServiceTests.Fixture fixture) : 
 
     private async Task MigrateTest()
     {
-        await GetPartRep().Migrate([DateTimeOffset.Now], CancellationToken.None);
+        await GetPartRep().MigrateAsync([DateTimeOffset.Now], CancellationToken.None);
     }
 
     [Fact()]
@@ -59,7 +59,7 @@ public class PartCleanupServiceTests(PartCleanupServiceTests.Fixture fixture) : 
 
         DateTimeOffset toDate = DateTimeOffset.UtcNow.AddDays(1);
 
-        int i = await Sub.Clean(toDate, CancellationToken.None);
+        int i = await Sub.CleanAsync(toDate, CancellationToken.None);
         Assert.Equal(5, i);
 
         int expected = list.Count - i;

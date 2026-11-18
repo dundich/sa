@@ -40,13 +40,13 @@ public class PartitionIndexTests(PartitionIndexTests.Fixture fixture) : IClassFi
         DateTimeOffset tomorrow = today.AddDays(1);
 
         // Act
-        int i = await Sub.Migrate([today, tomorrow], TestContext.Current.CancellationToken);
+        int i = await Sub.MigrateAsync([today, tomorrow], TestContext.Current.CancellationToken);
 
         Assert.Equal(2, i);
 
         long unixTime = today.ToUnixTimeSeconds();
 
-        i = await fixture.DataSource.ExecuteNonQuery(
+        i = await fixture.DataSource.ExecuteNonQueryAsync(
 $"""
 INSERT INTO test_61 
     (id,created_at)

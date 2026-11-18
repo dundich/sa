@@ -1,4 +1,3 @@
-using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql;
 
 namespace Sa.Partitional.PostgreSqlTests.Classes;
@@ -14,7 +13,7 @@ public class EnumerationTests
     {
         // The part_by column is read as a nullable string, and a NULL used to reach the dictionary,
         // where the caller expected a plain "no match" and got an ArgumentNullException instead.
-        Assert.False(Part.TryFromName(null, out Part? part));
+        Assert.False(Enumeration.TryFromName<Part>(null, out Part? part));
         Assert.Null(part);
     }
 
@@ -25,13 +24,13 @@ public class EnumerationTests
     [InlineData("DAY")]
     public void TryFromName_ReportsAnUnregisteredNameAsNotFound(string? name)
     {
-        Assert.False(Part.TryFromName(name, out _));
+        Assert.False(Enumeration.TryFromName<Part>(name, out _));
     }
 
     [Fact]
     public void TryFromName_FindsTheRegisteredVariant()
     {
-        Assert.True(Part.TryFromName(Part.RootId, out Part? root));
+        Assert.True(Enumeration.TryFromName<Part>(Part.RootId, out Part? root));
         Assert.Equal(Part.Root, root);
     }
 
@@ -39,7 +38,7 @@ public class EnumerationTests
     public void FromName_StillThrows_ForAnUnregisteredName()
     {
         // Only the Try* path learned to tolerate null: the strict counterpart keeps its contract.
-        Assert.Throws<InvalidOperationException>(() => Part.FromName("nonsense"));
+        Assert.Throws<InvalidOperationException>(() => Enumeration.FromName<Part>("nonsense"));
     }
 
     [Fact]
@@ -47,11 +46,11 @@ public class EnumerationTests
     {
         // string.GetHashCode() is randomised per process, so two parts with the same name could carry
         // different ids and stop matching each other.
-        Part first = new("day", PartByRange.Day);
-        Part second = new("day", PartByRange.Day);
+        Part first = new() { Id = Part.StableId("day"), Name = "day", PartBy = PartByRange.Day };
+        Part second = new() { Id = Part.StableId("day"), Name = "day", PartBy = PartByRange.Day };
 
         Assert.Equal(first.Id, second.Id);
-        Assert.Equal(0, Enumeration<Part>.DiffId(first, second));
+        Assert.Equal(0, Enumeration.DiffId(first, second));
     }
 
     [Fact]
@@ -66,7 +65,7 @@ public class EnumerationTests
     [Fact]
     public void Part_Id_IsDistinct_PerVariant()
     {
-        int[] ids = [.. new[] { "root", "day", "month", "year" }.Select(name => new Part(name, PartByRange.Day).Id)];
+        int[] ids = [.. new[] { "root", "day", "month", "year" }.Select(name => new Part { Id = Part.StableId(name), Name = name, PartBy = PartByRange.Day }.Id)];
 
         Assert.Equal(ids.Length, ids.Distinct().Count());
     }

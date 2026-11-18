@@ -339,9 +339,11 @@ public sealed class FilePathResolver : IFilePathResolver
 
         // No directory part: the file lives directly in the configured root.
         if (parts.Length == 0)
+        {
             return TryFindFile(ConfiguredPath, fileName) is { } root
                 ? (root, new Resolution(ResolvedPathType.Map, string.Empty, string.Empty))
                 : (null, s_none);
+        }
 
         // Walk outward, one trailing component at a time:
         //   i = n-1 → ConfiguredPath/<last part>

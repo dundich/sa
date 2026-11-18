@@ -19,7 +19,7 @@ public sealed class WorkQueueCancellationOrderTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public Task Execute(int input, CancellationToken ct)
+        public Task ExecuteAsync(int input, CancellationToken ct)
         {
             Interlocked.Increment(ref _processed);
             return Task.CompletedTask;
@@ -34,8 +34,8 @@ public sealed class WorkQueueCancellationOrderTests
     public async Task DecreaseAndRestore_OnlyRemovesRequestedReaders_WithoutThrowing(SaReaderCancellationOrder order)
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(4)
                 .WithMaxConcurrency(8)
                 .WithReaderCancellationOrder(order));
@@ -59,7 +59,7 @@ public sealed class WorkQueueCancellationOrderTests
         // limit is exactly what was requested, not a drifted value.
         for (var i = 1; i <= 8; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
@@ -75,8 +75,8 @@ public sealed class WorkQueueCancellationOrderTests
     public async Task DecreaseToOne_ThenRestore_QueueKeepsWorking(SaReaderCancellationOrder order)
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(5)
                 .WithMaxConcurrency(5)
                 .WithReaderCancellationOrder(order));
@@ -93,7 +93,7 @@ public sealed class WorkQueueCancellationOrderTests
 
         for (var i = 1; i <= 5; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
@@ -109,8 +109,8 @@ public sealed class WorkQueueCancellationOrderTests
         // size was wrong even when no exception was thrown. Verify the
         // effective pool through the reported limit across many random draws.
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(6)
                 .WithMaxConcurrency(6)
                 .WithReaderCancellationOrder(SaReaderCancellationOrder.Random));

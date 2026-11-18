@@ -50,7 +50,7 @@ internal sealed partial class JobController(
     public bool AbortedByError => _abortedByError;
 
 
-    public async ValueTask WaitToRun(CancellationToken cancellationToken)
+    public async ValueTask WaitToRunAsync(CancellationToken cancellationToken)
     {
         if (_disposed) return;
 
@@ -58,7 +58,7 @@ internal sealed partial class JobController(
             && settings.Properties.InitialDelay is { } delay
             && delay != TimeSpan.Zero)
         {
-            await JobDelay.Wait(delay, timeProvider, cancellationToken);
+            await JobDelay.WaitAsync(delay, timeProvider, cancellationToken);
         }
     }
 
@@ -91,7 +91,7 @@ internal sealed partial class JobController(
         }
     }
 
-    public async ValueTask WaitIfPaused(CancellationToken cancellationToken)
+    public async ValueTask WaitIfPausedAsync(CancellationToken cancellationToken)
     {
         // Fast path for the ordinary running iteration: no lock when the slot is not paused.
         // A Pause() that lands just after this check takes effect on the next iteration, which
@@ -186,7 +186,7 @@ internal sealed partial class JobController(
         _shutdownCts.Dispose();
     }
 
-    public async ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken)
+    public async ValueTask<CanJobExecuteResult> CanExecuteAsync(CancellationToken cancellationToken)
     {
         if (_abortedByError)
             return CanJobExecuteResult.Abort;
@@ -194,7 +194,9 @@ internal sealed partial class JobController(
         if (settings.Properties.IsRunOnce == true
             && _context.NumIterations > 0
             && !_retryOwed)
+        {
             return CanJobExecuteResult.Abort;
+        }
 
         if (_context.NumIterations == 0 && settings.Properties.Immediate == true)
         {
@@ -220,7 +222,7 @@ internal sealed partial class JobController(
 
             if (delay.TotalMilliseconds > 0)
             {
-                await JobDelay.Wait(delay, timeProvider, cancellationToken);
+                await JobDelay.WaitAsync(delay, timeProvider, cancellationToken);
             }
         }
 
@@ -242,14 +244,14 @@ internal sealed partial class JobController(
         }
     }
 
-    public Task Execute(CancellationToken cancellationToken)
+    public Task ExecuteAsync(CancellationToken cancellationToken)
     {
         _context.NumIterations++;
         _context.ExecuteAt = timeProvider.GetUtcNow();
 
         EnsureExecutor();
 
-        return _executor!.Execute(_context, cancellationToken);
+        return _executor!.ExecuteAsync(_context, cancellationToken);
     }
 
     public void ExecutionCompleted()

@@ -9,7 +9,7 @@ internal sealed record TableSettings(
     string FullName,
 
     string IdFieldName,
-    string[] Fields,
+    IReadOnlyList<string> Fields,
 
     PgPartBy PartBy,
     IPartTableMigrationSupport Migration,
@@ -17,8 +17,7 @@ internal sealed record TableSettings(
     string PartByRangeFieldName,
     RangeKeyType RangeKeyType,
     Func<PartitionNameContext, string>? LongPartitionName,
-    string[] PartByListFieldNames,
-    string PartitionByFieldName,
+    IReadOnlyList<string> PartByListFieldNames,
 
     TableRootMode RootMode,
     ConversionBackupMode ConversionBackup,

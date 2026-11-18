@@ -9,6 +9,7 @@ The `Secrets` class provides a unified way to manage and retrieve sensitive info
 - [Features](#features)
 - [Configuration Loading Order](#configuration-loading-order)
   - [Example](#example)
+- [Dynamic Resolution](#dynamic-resolution)
 - [Encrypted Secrets](#encrypted-secrets)
   - [File Format](#file-format)
   - [Configuration](#configuration)
@@ -28,6 +29,7 @@ The `Secrets` class provides a unified way to manage and retrieve sensitive info
     - Command-line Arguments: retrieve secrets from CLI arguments via `Arguments`.
 - **Placeholder Replacement**: populate strings with secret values using `{{key}}` placeholders, e.g., `"Database password: {{db_password}}"`.
 - **Optional Placeholders**: `{{?key}}` — if the secret is not found, the whole string becomes `null` instead of throwing.
+- **Dynamic Resolution**: `SecretOptions.Resolution.Resolver` is a last-chance callback invoked when no store has the key — for Vault, an HTTP call or a cache. `OnUnresolvedSecret` reports the key (never the value) for logging and metrics.
 - **Cycle Protection**: nested placeholders resolve up to a depth of 3; circular references throw `InvalidOperationException`.
 - **Value Normalization**: secret values are trimmed; surrounding quotes (`'`, `"`, `` ` ``) are stripped.
 
@@ -80,6 +82,32 @@ appsettings.json
     }
 }
 ```
+
+## Dynamic Resolution
+
+Stores are checked first. When every store misses, the optional `Resolver` callback gets a last chance — this is where Vault, an HTTP call or a cache belongs:
+
+```csharp
+SecretOptions options = new()
+{
+    Resolution = new SecretResolutionOptions
+    {
+        Resolver = key => vault.TryGet(key, out string? value) ? value : null,
+        OnUnresolvedSecret = miss => logger.LogWarning(
+            "Secret {Key} was not resolved (optional: {Optional})", miss.Key, miss.IsOptional),
+    },
+};
+```
+
+Resolution order for one placeholder:
+
+1. the store chain (LIFO — the last store wins);
+2. `Resolution.Resolver`;
+3. if the resolver returned `null`, the `?` marker in `{{?key}}` (or `returnNullIfSecretNotFound: true`) decides between `null` and an exception.
+
+`OnUnresolvedSecret` fires only during placeholder substitution, after the resolver has missed and before the `null`/exception decision; it receives the key and whether the miss is optional, never the secret value.
+
+> The configuration pipeline calls `PopulateSecrets(..., returnNullIfSecretNotFound: true)`, so an unresolved configuration placeholder becomes `null` and still reports through `OnUnresolvedSecret`. Direct calls are strict unless the placeholder is `{{?key}}` or the flag is set.
 
 ## Encrypted Secrets
 

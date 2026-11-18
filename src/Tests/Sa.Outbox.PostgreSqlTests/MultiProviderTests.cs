@@ -35,7 +35,7 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
 
     internal sealed class ConsumerA : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -45,7 +45,7 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
 
     internal sealed class ConsumerB : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -88,9 +88,9 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
     {
         IOutboxPublisherResolver resolver = fixture.ServiceProvider.GetRequiredService<IOutboxPublisherResolver>();
 
-        Assert.Equal(1UL, await resolver.For(ProviderA).PublishSingle(
+        Assert.Equal(1UL, await resolver.GetPublisher(ProviderA).PublishSingle(
             new TestMessage { PayloadId = "a-1" }, tenantId: 1, TestToken));
-        Assert.Equal(1UL, await resolver.For(ProviderB).PublishSingle(
+        Assert.Equal(1UL, await resolver.GetPublisher(ProviderB).PublishSingle(
             new TestMessage { PayloadId = "b-1" }, tenantId: 1, TestToken));
 
         Assert.Equal(1L, await CountMessages(SchemaA, "a-1"));
@@ -105,7 +105,7 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
         IServiceProvider sp = fixture.ServiceProvider;
         var resolver = sp.GetRequiredService<IOutboxPublisherResolver>();
 
-        Assert.NotSame(resolver.For(ProviderA), resolver.For(ProviderB));
+        Assert.NotSame(resolver.GetPublisher(ProviderA), resolver.GetPublisher(ProviderB));
 
         IOutboxProviderRegistry registryA =
             sp.GetRequiredKeyedService<IOutboxProviderRegistry>(ProviderA);
@@ -123,7 +123,7 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
         var resolver = fixture.ServiceProvider.GetRequiredService<IOutboxPublisherResolver>();
 
         InvalidOperationException error =
-            Assert.Throws<InvalidOperationException>(() => resolver.For("nope"));
+            Assert.Throws<InvalidOperationException>(() => resolver.GetPublisher("nope"));
 
         Assert.Contains("nope", error.Message, StringComparison.Ordinal);
     }
@@ -149,8 +149,8 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
         IOutboxPartitionalSupport a = sp.GetRequiredKeyedService<IOutboxPartitionalSupport>(ProviderA);
         IOutboxPartitionalSupport b = sp.GetRequiredKeyedService<IOutboxPartitionalSupport>(ProviderB);
 
-        Assert.Equal(new[] { 1 }, await a.GetTenantIds(TestToken));
-        Assert.Equal(new[] { 2, 3 }, await b.GetTenantIds(TestToken));
+        Assert.Equal(new[] { 1 }, await a.GetTenantIdsAsync(TestToken));
+        Assert.Equal(new[] { 2, 3 }, await b.GetTenantIdsAsync(TestToken));
     }
 
     [Fact]
@@ -158,12 +158,12 @@ public class MultiProviderTests(MultiProviderTests.Fixture fixture)
     {
         var manager = fixture.ServiceProvider.GetRequiredService<IOutboxConsumerManager>();
 
-        Assert.Equal(ProviderA, manager.Get("mp_a_group")?.ProviderKey);
-        Assert.Equal(ProviderB, manager.Get("mp_b_group")?.ProviderKey);
+        Assert.Equal(ProviderA, manager.GetSettings("mp_a_group")?.ProviderKey);
+        Assert.Equal(ProviderB, manager.GetSettings("mp_b_group")?.ProviderKey);
     }
 
     private async Task<long> CountMessages(string schema, string payloadId)
-        => await fixture.DataSource.ExecuteScalarTyped<long>(
+        => await fixture.DataSource.ExecuteScalarTypedAsync<long>(
             $"SELECT count(*) FROM {schema}.outbox__msg$ WHERE msg_payload_id = '{payloadId}'",
             initCommand: null,
             TestToken);

@@ -1,7 +1,5 @@
-using System.Text.RegularExpressions;
-using Sa.Classes;
 using Sa.Extensions;
-using Sa.Partitional.PostgreSql.Classes;
+using System.Text.RegularExpressions;
 
 namespace Sa.Partitional.PostgreSql;
 
@@ -9,47 +7,58 @@ namespace Sa.Partitional.PostgreSql;
 /// Encapsulates a PostgreSQL partitioning strategy (day / month / year) together with the functions
 /// needed to compute date ranges, format partition names, and parse them back.
 /// </summary>
-/// <param name="PartByRange">The underlying <see cref="PartByRange"/> enum value.</param>
-/// <param name="GetRange">Computes the inclusive-exclusive <see cref="LimSection{T}"/> for a given date.</param>
-/// <param name="Fmt">Formats a <see cref="DateTimeOffset"/> into a PostgreSQL-compatible partition name.</param>
-/// <param name="ParseFmt">Parses a partition name string back into a <see cref="DateTimeOffset"/>.</param>
-public sealed record PgPartBy(
-    PartByRange PartByRange
-    , Func<DateTimeOffset, LimSection<DateTimeOffset>> GetRange
-    , Func<DateTimeOffset, string> Fmt
-    , Func<string, DateTimeOffset?> ParseFmt
-) : Enumeration<PgPartBy>((int)PartByRange, PartByRange.ToString())
+public sealed record PgPartBy : Enumeration<PgPartBy>
 {
+    /// <summary>The underlying <see cref="PartByRange"/> enum value.</summary>
+    public required PartByRange PartByRange { get; init; }
+
+    /// <summary>Computes the inclusive-exclusive <see cref="LimSection{T}"/> for a given date.</summary>
+    public required Func<DateTimeOffset, LimSection<DateTimeOffset>> GetRange { get; init; }
+
+    /// <summary>Formats a <see cref="DateTimeOffset"/> into a PostgreSQL-compatible partition name.</summary>
+    public required Func<DateTimeOffset, string> Fmt { get; init; }
+
+    /// <summary>Parses a partition name string back into a <see cref="DateTimeOffset"/>.</summary>
+    public required Func<string, DateTimeOffset?> ParseFmt { get; init; }
 
     /// <summary>
     /// Day-based partitioning (<c>yYYYYmmDD</c>).
     /// </summary>
-    public static readonly PgPartBy Day = new(
-        PartByRange: PartByRange.Day
-        , GetRange: static date => date.ToUniversalTime().StartOfDay().RangeTo(date => date.AddDays(1), false)
-        , Fmt: static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}d{u.Day:00}")
-        , ParseFmt: static str => StrToDate(str, PartByRange.Day)
-    );
+    public static readonly PgPartBy Day = new()
+    {
+        Id = (int)PartByRange.Day,
+        Name = PartByRange.Day.ToString(),
+        PartByRange = PartByRange.Day,
+        GetRange = static date => date.ToUniversalTime().StartOfDay().RangeTo(date => date.AddDays(1), false),
+        Fmt = static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}d{u.Day:00}"),
+        ParseFmt = static str => StrToDate(str, PartByRange.Day),
+    };
 
     /// <summary>
     /// Month-based partitioning (<c>yYYYYmm</c>).
     /// </summary>
-    public static readonly PgPartBy Month = new(
-        PartByRange: PartByRange.Month
-        , GetRange: static date => date.ToUniversalTime().StartOfMonth().RangeTo(date => date.AddMonths(1), false)
-        , Fmt: static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}")
-        , ParseFmt: static str => StrToDate(str, PartByRange.Month)
-    );
+    public static readonly PgPartBy Month = new()
+    {
+        Id = (int)PartByRange.Month,
+        Name = PartByRange.Month.ToString(),
+        PartByRange = PartByRange.Month,
+        GetRange = static date => date.ToUniversalTime().StartOfMonth().RangeTo(date => date.AddMonths(1), false),
+        Fmt = static ts => UtcStamp(ts, static u => $"y{u.Year:0000}m{u.Month:00}"),
+        ParseFmt = static str => StrToDate(str, PartByRange.Month),
+    };
 
     /// <summary>
     /// Year-based partitioning (<c>yYYYY</c>).
     /// </summary>
-    public static readonly PgPartBy Year = new(
-        PartByRange: PartByRange.Year
-        , GetRange: static date => date.ToUniversalTime().StartOfYear().RangeTo(date => date.AddYears(1), false)
-        , Fmt: static ts => UtcStamp(ts, static u => $"y{u.Year:0000}")
-        , ParseFmt: static str => StrToDate(str, PartByRange.Year)
-    );
+    public static readonly PgPartBy Year = new()
+    {
+        Id = (int)PartByRange.Year,
+        Name = PartByRange.Year.ToString(),
+        PartByRange = PartByRange.Year,
+        GetRange = static date => date.ToUniversalTime().StartOfYear().RangeTo(date => date.AddYears(1), false),
+        Fmt = static ts => UtcStamp(ts, static u => $"y{u.Year:0000}"),
+        ParseFmt = static str => StrToDate(str, PartByRange.Year),
+    };
 
     /// <summary>
     /// Renders the partition name from a date's <b>UTC</b> calendar parts, matching the UTC range
@@ -70,24 +79,24 @@ public sealed record PgPartBy(
     /// <param name="range">The partitioning range to look up.</param>
     /// <returns>The matching <see cref="PgPartBy"/>, or <see cref="Day"/> as default.</returns>
     public static PgPartBy FromRange(PartByRange range)
-        => GetAll().FirstOrDefault(c => c.PartByRange == range) ?? Day;
+        => Enumeration.GetAll<PgPartBy>().FirstOrDefault(c => c.PartByRange == range) ?? Day;
 
     /// <summary>
     /// Resolves a <see cref="PgPartBy"/> instance from the value stored in the partition cache's
-    /// <c>part_by</c> column, i.e. from <see cref="Name"/> (<c>"Day"</c>, <c>"Month"</c>, <c>"Year"</c>).
+    /// <c>part_by</c> column, i.e. from <c>Name</c> (<c>"Day"</c>, <c>"Month"</c>, <c>"Year"</c>).
     /// </summary>
     /// <param name="part">The stored strategy name; <c>null</c> or an unknown name falls back to <see cref="Day"/>.</param>
     /// <returns>The corresponding <see cref="PgPartBy"/>.</returns>
     /// <remarks>
-    /// The lookup is by <see cref="Name"/> because that is what <c>SqlTemplate</c> writes into
-    /// <c>part_by</c>. It used to go through <see cref="Part.TryFromName"/>, whose registry holds
+    /// The lookup is by <c>Name</c> because that is what <c>SqlTemplate</c> writes into
+    /// <c>part_by</c>. It used to go through <c>Part.TryFromName</c>, whose registry holds
     /// the single entry <c>"root"</c>: every stored value therefore missed and resolved to
     /// <see cref="Part.Root"/>, i.e. to <see cref="Day"/>. A month- or year-partitioned table was
     /// then checked against a one-day range by <c>PartCache.InCache</c>, which never matched and
     /// re-ran the partition DDL on every call.
     /// </remarks>
     public static PgPartBy FromPartName(string? part)
-        => GetAll().FirstOrDefault(c => string.Equals(c.Name, part, StringComparison.Ordinal)) ?? Day;
+        => Enumeration.GetAll<PgPartBy>().FirstOrDefault(c => string.Equals(c.Name, part, StringComparison.Ordinal)) ?? Day;
 
     /// <summary>
     /// Returns the human-readable name of this partitioning strategy.

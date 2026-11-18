@@ -24,7 +24,7 @@ public sealed class WorkQueueForceCancelDrainTests
     public async Task ExpiredWait_KeepsTheBuffer_AndAReArmedPoolProcessesIt()
     {
         var clock = new ManualTimeProvider();
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
         var processor = new WedgedProcessor();
 
@@ -34,9 +34,9 @@ public sealed class WorkQueueForceCancelDrainTests
         {
             // Item 1 is taken by the single reader and wedges there; item 2 waits behind
             // it in the buffer. Everything below is about item 2.
-            _ = queue.Enqueue(1, TestToken);
+            _ = queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
-            var second = queue.Enqueue(2, TestToken);
+            var second = queue.EnqueueAsync(2, TestToken);
 
             var force = Task.Run(
                 () => queue.ForceCancelReadersAsync(TimeSpan.FromMinutes(5), TestToken),
@@ -102,7 +102,7 @@ public sealed class WorkQueueForceCancelDrainTests
     public async Task CancelledWait_KeepsTheBuffer_AndSaysSo()
     {
         var clock = new ManualTimeProvider();
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
         var processor = new WedgedProcessor();
 
@@ -110,9 +110,9 @@ public sealed class WorkQueueForceCancelDrainTests
 
         try
         {
-            _ = queue.Enqueue(1, TestToken);
+            _ = queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
-            _ = queue.Enqueue(2, TestToken);
+            _ = queue.EnqueueAsync(2, TestToken);
 
             using var cts = new CancellationTokenSource();
             var force = Task.Run(
@@ -144,19 +144,19 @@ public sealed class WorkQueueForceCancelDrainTests
     [Fact]
     public async Task WaitThatCompletes_StillDropsTheBuffer()
     {
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
         var processor = new ReleasableProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback(statuses.Record),
             logger);
 
-        _ = queue.Enqueue(1, TestToken);
+        _ = queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
-        _ = queue.Enqueue(2, TestToken);
+        _ = queue.EnqueueAsync(2, TestToken);
 
         var force = Task.Run(() => queue.ForceCancelReadersAsync(ct: TestToken), TestToken);
 
@@ -174,16 +174,16 @@ public sealed class WorkQueueForceCancelDrainTests
     [Fact]
     public async Task WaitForIdleAsync_OnADrainingQueue_StaysQuiet()
     {
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback(statuses.Record),
             logger);
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(queue.IsIdle());
@@ -197,13 +197,13 @@ public sealed class WorkQueueForceCancelDrainTests
     [Fact]
     public async Task WaitForIdleAsync_WhilePaused_SaysWhyItReturned()
     {
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
         var statuses = new StatusLog();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(async (_, _) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(async (_, _) =>
                 {
                     started.TrySetResult();
                     await gate.Task.ConfigureAwait(false);
@@ -212,8 +212,8 @@ public sealed class WorkQueueForceCancelDrainTests
                 .WithStatusCallback(statuses.Record),
             logger);
 
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
 
         // Дождаться, пока элемент 1 действительно окажется внутри процессора. Пауза отменяет
         // ридера, а элемент, уже вынутый из буфера, но ещё не дошедший до процессора,
@@ -253,8 +253,8 @@ public sealed class WorkQueueForceCancelDrainTests
         var statuses = new StatusLog();
         var processed = 0;
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) =>
                 {
                     Interlocked.Increment(ref processed);
                     return Task.CompletedTask;
@@ -270,7 +270,7 @@ public sealed class WorkQueueForceCancelDrainTests
 
         for (var i = 1; i <= 3; i++)
         {
-            await queue.Enqueue(i, TestToken);
+            await queue.EnqueueAsync(i, TestToken);
         }
 
         queue.ForceCancelReaders();
@@ -301,8 +301,8 @@ public sealed class WorkQueueForceCancelDrainTests
     {
         var statuses = new StatusLog();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1)
                 .WithMaxConcurrency(1)
                 .WithQueueCapacity(4)
@@ -310,8 +310,8 @@ public sealed class WorkQueueForceCancelDrainTests
 
         queue.ConcurrencyLimit = 0;
 
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
 
         await queue.ForceCancelReadersAsync(ct: TestToken);
 
@@ -327,13 +327,13 @@ public sealed class WorkQueueForceCancelDrainTests
         Assert.Equal(SaWorkStatus.Completed, statuses.Terminal(2));
     }
 
-    static SaWorkQueue<int> Build(
+    static SaWorkChannel<int> Build(
         WedgedProcessor processor,
         ManualTimeProvider clock,
-        RecordingLogger<SaWorkQueue<int>> logger,
+        RecordingLogger<SaWorkChannel<int>> logger,
         StatusLog statuses)
         => new(
-            SaWorkQueueOptions<int>.Create(processor)
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithTimeProvider(clock)
                 .WithStatusCallback(statuses.Record),
@@ -361,7 +361,7 @@ public sealed class WorkQueueForceCancelDrainTests
 
         public Task Entered => _entered.Task;
 
-        public async Task Execute(int input, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(int input, CancellationToken cancellationToken)
         {
             _entered.TrySetResult();
 

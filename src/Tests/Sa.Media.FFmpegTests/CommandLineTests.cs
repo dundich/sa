@@ -25,8 +25,10 @@ public sealed class CommandLineTests
         // артефактов предыдущих запусков (иначе «isOverwrite=false + файл есть» валит
         // тест, который в чистом каталоге прошёл бы).
         foreach (var file in new[] { Output, Path.Combine(Path.GetDirectoryName(Output)!, "out put.wav") })
+        {
             if (File.Exists(file))
                 File.Delete(file);
+        }
     }
 
     static (FFMpegExecutor Executor, RecordingProcessExecutor Process) CreateMpegExecutor()
@@ -51,7 +53,7 @@ public sealed class CommandLineTests
         // и ждёт ответа, которого не будет. Проявилось бы зависанием до таймаута.
         var (mpeg, process) = CreateMpegExecutor();
 
-        await mpeg.ConvertToMp3(Input, Output, cancellationToken: TestContext.Current.CancellationToken);
+        await mpeg.ConvertToMp3Async(Input, Output, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains("-nostdin", Args(process));
     }
@@ -61,7 +63,7 @@ public sealed class CommandLineTests
     {
         var (mpeg, process) = CreateMpegExecutor();
 
-        await mpeg.ConvertToMp3(Input, Output, isOverwrite: true, cancellationToken: TestContext.Current.CancellationToken);
+        await mpeg.ConvertToMp3Async(Input, Output, isOverwrite: true, cancellationToken: TestContext.Current.CancellationToken);
 
         var args = Args(process);
         Assert.Contains("-y", args);
@@ -75,7 +77,7 @@ public sealed class CommandLineTests
         // печатал вопрос в stdin и блокировался.
         var (mpeg, process) = CreateMpegExecutor();
 
-        await mpeg.ConvertToMp3(Input, Output, isOverwrite: false, cancellationToken: TestContext.Current.CancellationToken);
+        await mpeg.ConvertToMp3Async(Input, Output, isOverwrite: false, cancellationToken: TestContext.Current.CancellationToken);
 
         var args = Args(process);
         Assert.Contains("-n", args);
@@ -89,7 +91,7 @@ public sealed class CommandLineTests
         // оказаться не та дорожка — в зависимости от кодека исходника.
         var (mpeg, process) = CreateMpegExecutor();
 
-        await mpeg.ConvertToPcmS16Le(Input, Output, cancellationToken: TestContext.Current.CancellationToken);
+        await mpeg.ConvertToPcmS16LeAsync(Input, Output, cancellationToken: TestContext.Current.CancellationToken);
 
         var args = Args(process);
         Assert.Contains("-map", args);
@@ -102,7 +104,7 @@ public sealed class CommandLineTests
         var spaced = Path.Combine(Path.GetDirectoryName(Output)!, "out put.wav");
         var (mpeg, process) = CreateMpegExecutor();
 
-        await mpeg.ConvertToPcmS16Le(Input, spaced, cancellationToken: TestContext.Current.CancellationToken);
+        await mpeg.ConvertToPcmS16LeAsync(Input, spaced, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(spaced, Args(process));
     }
@@ -116,7 +118,7 @@ public sealed class CommandLineTests
         var raw = new FFRawExecutor(process, "/ffmpeg", TimeSpan.FromSeconds(30));
         var mpeg = new FFMpegExecutor(raw, writable);
 
-        await mpeg.ConvertToPcmS16Le(Input, "bare.wav", cancellationToken: TestContext.Current.CancellationToken);
+        await mpeg.ConvertToPcmS16LeAsync(Input, "bare.wav", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(Path.Combine(writable, "bare.wav"), Args(process).Last());
     }
@@ -128,7 +130,7 @@ public sealed class CommandLineTests
         var raw = new FFRawExecutor(process, "/ffmpeg", TimeSpan.FromSeconds(30));
         var mpeg = new FFMpegExecutor(raw, Path.GetTempPath());
 
-        await mpeg.ConvertToPcmS16Le(Input, Output, cancellationToken: TestContext.Current.CancellationToken);
+        await mpeg.ConvertToPcmS16LeAsync(Input, Output, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(Output, Args(process).Last());
     }
@@ -144,7 +146,7 @@ public sealed class CommandLineTests
         var (mpeg, process) = CreateMpegExecutor();
         using var input = new MemoryStream([1, 2, 3]);
 
-        await mpeg.ConvertToPcmS16LeRaw(input, format, (_, _) => Task.CompletedTask, cancellationToken: TestContext.Current.CancellationToken);
+        await mpeg.ConvertToPcmS16LeRawAsync(input, format, (_, _) => Task.CompletedTask, cancellationToken: TestContext.Current.CancellationToken);
 
         var args = Args(process);
         Assert.Contains("-f", args);
@@ -158,7 +160,7 @@ public sealed class CommandLineTests
         using var input = new MemoryStream([1, 2, 3]);
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => mpeg.ConvertToPcmS16LeRaw(input, "wav -i /etc/passwd", (_, _) => Task.CompletedTask, cancellationToken: TestContext.Current.CancellationToken));
+            () => mpeg.ConvertToPcmS16LeRawAsync(input, "wav -i /etc/passwd", (_, _) => Task.CompletedTask, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -167,7 +169,7 @@ public sealed class CommandLineTests
         var (mpeg, process) = CreateMpegExecutor();
         using var input = new MemoryStream([1, 2, 3]);
 
-        await mpeg.ConvertToPcmS16LeRaw(input, "wav", (_, _) => Task.CompletedTask, cancellationToken: TestContext.Current.CancellationToken);
+        await mpeg.ConvertToPcmS16LeRawAsync(input, "wav", (_, _) => Task.CompletedTask, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("pipe:1", Args(process).Last());
     }
@@ -182,7 +184,7 @@ public sealed class CommandLineTests
         process.StandardError = "No such file or directory";
 
         var ex = await Assert.ThrowsAsync<ProcessExecutionResultException>(
-            () => mpeg.ConvertToMp3(Input, Output, cancellationToken: TestContext.Current.CancellationToken));
+            () => mpeg.ConvertToMp3Async(Input, Output, cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Equal(1, ex.Result.ExitCode);
         Assert.Contains("No such file or directory", ex.Message);
@@ -195,7 +197,7 @@ public sealed class CommandLineTests
         var (mpeg, process) = CreateMpegExecutor();
 
         await Assert.ThrowsAsync<FileNotFoundException>(
-            () => mpeg.ConvertToMp3("./data/definitely-missing.wav", Output, cancellationToken: TestContext.Current.CancellationToken));
+            () => mpeg.ConvertToMp3Async("./data/definitely-missing.wav", Output, cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Empty(process.Commands);
     }
@@ -206,7 +208,7 @@ public sealed class CommandLineTests
         var (mpeg, process) = CreateMpegExecutor();
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => mpeg.ConvertToMp3(Input, Input, cancellationToken: TestContext.Current.CancellationToken));
+            () => mpeg.ConvertToMp3Async(Input, Input, cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Empty(process.Commands);
     }
@@ -219,7 +221,7 @@ public sealed class CommandLineTests
         var process = new RecordingProcessExecutor { StandardOutput = "channels=2\nsample_rate=48000\n" };
         var probe = CreateProbeExecutor(process);
 
-        var (channels, sampleRate) = await probe.GetChannelsAndSampleRate(
+        var (channels, sampleRate) = await probe.GetChannelsAndSampleRateAsync(
             Input, TestContext.Current.CancellationToken);
 
         var args = Args(process);
@@ -238,7 +240,7 @@ public sealed class CommandLineTests
         var probe = CreateProbeExecutor(process);
 
         var ex = await Assert.ThrowsAsync<ProcessExecutionResultException>(
-            () => probe.GetMetaInfo(Input, TestContext.Current.CancellationToken));
+            () => probe.GetMetaInfoAsync(Input, TestContext.Current.CancellationToken));
 
         Assert.Contains("moov atom not found", ex.Message);
     }
@@ -250,7 +252,7 @@ public sealed class CommandLineTests
         var probe = CreateProbeExecutor(process);
 
         await Assert.ThrowsAsync<ProcessExecutionException>(
-            () => probe.GetMetaInfo(Input, TestContext.Current.CancellationToken));
+            () => probe.GetMetaInfoAsync(Input, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -260,7 +262,7 @@ public sealed class CommandLineTests
         var probe = CreateProbeExecutor(process);
 
         await Assert.ThrowsAsync<FileNotFoundException>(
-            () => probe.GetMetaInfo("./data/definitely-missing.wav", TestContext.Current.CancellationToken));
+            () => probe.GetMetaInfoAsync("./data/definitely-missing.wav", TestContext.Current.CancellationToken));
 
         Assert.Empty(process.Commands);
     }

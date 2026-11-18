@@ -32,9 +32,9 @@ hostBuilder.Services
             // Partition by 'country' and 'city' (if PartByRange is not specified, defaults to daily)
             .PartByList("country", "city")
             // Migration of partitions for each tenant by city
-            .AddMigration("RU", ["Moscow", "Samara"])
-            .AddMigration("USA", ["Alabama", "New York"])
-            .AddMigration("FR", ["Paris", "Lyon", "Bordeaux"]);
+            .AddMigrationChildren("RU", "Moscow", "Samara")
+            .AddMigrationChildren("USA", "Alabama", "New York")
+            .AddMigrationChildren("FR", "Paris", "Lyon", "Bordeaux");
         });
 
 
@@ -68,14 +68,25 @@ namespace Partitional.ConsoleApp
     {
         public async Task ShouldRunTest(IPartitionManager partition)
         {
-            await partition.Migrate();
+            await partition.MigrateAsync();
             var parts = await repository.GetPartsToDate("customer", DateTime.Now.AddDays(3));
 
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation($"list of parts:{Environment.NewLine}{string.Join(Environment.NewLine, parts.Select(c => c.Id))}");
-                logger.LogInformation("Successfully: {Ok}", parts.Count > 0);
+#pragma warning disable CA1873 // The list is built only when the level is enabled.
+                SampleLog.PartsListed(logger, string.Join(Environment.NewLine, parts.Select(c => c.Id)));
+#pragma warning restore CA1873
             }
+            SampleLog.PartsLoaded(logger, parts.Count > 0);
         }
     }
+}
+
+internal static partial class SampleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "list of parts:\n{Parts}")]
+    public static partial void PartsListed(ILogger logger, string parts);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Successfully: {Ok}")]
+    public static partial void PartsLoaded(ILogger logger, bool ok);
 }

@@ -1,13 +1,12 @@
-using Microsoft.IO;
 using Npgsql;
 using NpgsqlTypes;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.IdGen;
-using Sa.Outbox.Serialization;
 using Sa.Outbox.PostgreSql.Services;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 using Sa.Outbox.PostgreSql.TypeResolve;
+using Sa.Outbox.Serialization;
 using System.Data;
 
 namespace Sa.Outbox.PostgreSql.Commands;
@@ -16,22 +15,21 @@ namespace Sa.Outbox.PostgreSql.Commands;
 internal sealed class BulkInsertMsgCommand(
     IPgDataSource dataSource
     , SqlOutboxBuilder sql
-    , RecyclableMemoryStreamManager streamManager
     , IOutboxMessageSerializer serializer
     , IOutboxIdGenerator idGenerator
     , IOutboxTypeResolver hashResolver
 ) : IBulkInsertMsgCommand
 {
-    public async ValueTask<ulong> Execute<TMessage>(
+    public async ValueTask<ulong> ExecuteAsync<TMessage>(
         OutboxMessageBatch<TMessage> batch,
         CancellationToken cancellationToken)
     {
-        long typeCode = await hashResolver.GetHashCode(typeof(TMessage).Name, cancellationToken);
+        long typeCode = await hashResolver.GetHashCodeAsync(typeof(TMessage).Name, cancellationToken);
 
         return await BulkWithRetry(batch, typeCode, cancellationToken);
     }
 
-    public async ValueTask<ulong> Execute<TMessage>(
+    public async ValueTask<ulong> ExecuteAsync<TMessage>(
         OutboxMessageBatch<TMessage> batch,
         NpgsqlTransaction transaction,
         CancellationToken cancellationToken)
@@ -40,9 +38,9 @@ internal sealed class BulkInsertMsgCommand(
 
         NpgsqlConnection connection = GetOpenConnection(transaction);
 
-        long typeCode = await hashResolver.GetHashCode(typeof(TMessage).Name, cancellationToken);
+        long typeCode = await hashResolver.GetHashCodeAsync(typeof(TMessage).Name, cancellationToken);
 
-        await LockPublishParts(
+        await LockPublishPartsAsync(
             [PgAdvisoryKeys.ForPart(batch.PartInfo.TenantId, batch.PartInfo.Part)],
             connection, transaction, cancellationToken);
 
@@ -60,7 +58,7 @@ internal sealed class BulkInsertMsgCommand(
     /// what keeps <c>msg_seq</c> order equal to commit order within a part — see
     /// <see cref="SqlOutboxBuilder.SqlLockPublishParts"/> for why the cursor needs that.
     /// </summary>
-    private async Task LockPublishParts(
+    private async Task LockPublishPartsAsync(
         int[] keys,
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -81,7 +79,7 @@ internal sealed class BulkInsertMsgCommand(
         int[] keys = [PgAdvisoryKeys.ForPart(batch.PartInfo.TenantId, batch.PartInfo.Part)];
 
         return await PgRetryStrategy.ExecuteWithRetry(
-            async t => await InsertUnderPartLock(
+            async t => await InsertUnderPartLockAsync(
                 keys,
                 async (writer, ct) =>
                 {
@@ -98,19 +96,19 @@ internal sealed class BulkInsertMsgCommand(
     /// statement would be released at the end of that statement's implicit transaction, i.e. before
     /// the COPY it is supposed to cover.
     /// </summary>
-    private async Task<ulong> InsertUnderPartLock(
+    private async Task<ulong> InsertUnderPartLockAsync(
         int[] keys,
         Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write,
         CancellationToken cancellationToken)
     {
-        await using NpgsqlConnection connection = await dataSource.OpenDbConnection(cancellationToken)
+        await using NpgsqlConnection connection = await dataSource.OpenDbConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
 
         await using NpgsqlTransaction transaction = await connection
             .BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        await LockPublishParts(keys, connection, transaction, cancellationToken).ConfigureAwait(false);
+        await LockPublishPartsAsync(keys, connection, transaction, cancellationToken).ConfigureAwait(false);
 
         ulong written;
 
@@ -165,7 +163,7 @@ internal sealed class BulkInsertMsgCommand(
         // place — only Length rewinds, the buffer and capacity are reused — and then written as a
         // single Bytea value. The old code called streamManager.GetStream() per message, wrapping
         // every payload in a fresh stream object just to hand it to the Bytea writer.
-        using RecyclableMemoryStream stream = streamManager.GetStream();
+        using PooledMemoryStream stream = new();
 
         OutboxPartInfo partInfo = batch.PartInfo;
 
@@ -181,7 +179,7 @@ internal sealed class BulkInsertMsgCommand(
         string payloadId,
         TMessage payload,
         OutboxPartInfo partInfo,
-        RecyclableMemoryStream stream)
+        PooledMemoryStream stream)
     {
         Guid id = idGenerator.GenId(partInfo.CreatedAt);
 
@@ -206,7 +204,7 @@ internal sealed class BulkInsertMsgCommand(
         writer.Write(partInfo.CreatedAt.ToUnixTimeSeconds(), NpgsqlDbType.Bigint);
     }
 
-    private int WritePayload<TMessage>(RecyclableMemoryStream stream, TMessage? payload)
+    private int WritePayload<TMessage>(PooledMemoryStream stream, TMessage? payload)
     {
         stream.SetLength(0); // rewind in place — the pooled buffer carries over to the next payload
         serializer.Serialize(stream, payload);

@@ -11,7 +11,7 @@ public sealed class WorkQueueEnqueueManyTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public Task Execute(int input, CancellationToken ct)
+        public Task ExecuteAsync(int input, CancellationToken ct)
         {
             Interlocked.Increment(ref _processed);
             return Task.CompletedTask;
@@ -24,7 +24,7 @@ public sealed class WorkQueueEnqueueManyTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             await Gate.Task.WaitAsync(ct);
             Interlocked.Increment(ref _processed);
@@ -45,12 +45,12 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Wait_Strategy_AllAccepted_WhenBufferHasRoom()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(5));
 
-        Assert.Equal(3, await queue.EnqueueMany([1, 2, 3], TestToken));
+        Assert.Equal(3, await queue.EnqueueManyAsync([1, 2, 3], TestToken));
 
         Assert.Equal(3, queue.QueueTasks);
         Assert.Equal(2, queue.AvailableCapacity);
@@ -65,13 +65,13 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Wait_Strategy_WaitsForSpace_ThenAcceptsAll()
     {
         var processor = new GateProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(1)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Wait));
 
-        var pending = queue.EnqueueMany([1, 2, 3], TestToken);
+        var pending = queue.EnqueueManyAsync([1, 2, 3], TestToken);
 
         // The reader holds item 1 on the gate, so the buffer holds at most one
         // more item: the batch must stall on the third until space frees up.
@@ -92,14 +92,14 @@ public sealed class WorkQueueEnqueueManyTests
     {
         var processor = new CountingProcessor();
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
 
-        Assert.Equal(2, await queue.EnqueueMany([1, 2, 3, 4], TestToken));
+        Assert.Equal(2, await queue.EnqueueManyAsync([1, 2, 3, 4], TestToken));
 
         Assert.Equal(2, queue.QueueTasks); // only the accepted items are counted
         Assert.Equal(0, queue.AvailableCapacity);
@@ -120,14 +120,14 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Throw_Strategy_PartialAcceptance_ThrowsWithBatchCounts()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Throw));
 
         var ex = await Record.ExceptionAsync(async () =>
-            await queue.EnqueueMany([1, 2, 3, 4], cancellationToken: CancellationToken.None));
+            await queue.EnqueueManyAsync([1, 2, 3, 4], cancellationToken: CancellationToken.None));
 
         Assert.NotNull(ex);
         Assert.IsType<SaWorkQueueFullException>(ex!);
@@ -153,12 +153,12 @@ public sealed class WorkQueueEnqueueManyTests
     {
         var processor = new CountingProcessor();
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
 
-        Assert.Equal(0, await queue.EnqueueMany([], TestToken));
+        Assert.Equal(0, await queue.EnqueueManyAsync([], TestToken));
 
         Assert.Equal(0, queue.QueueTasks);
         Assert.Empty(statuses);
@@ -172,19 +172,19 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Wait_Strategy_CancelledToken_ThrowsAndDoesNotCount()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(1));
 
-        Assert.True(await queue.Enqueue(1, TestToken)); // fill the only slot: the next write must wait
+        Assert.True(await queue.EnqueueAsync(1, TestToken)); // fill the only slot: the next write must wait
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         var ex = await Record.ExceptionAsync(async () =>
         {
-            await queue.EnqueueMany([2], cts.Token);
+            await queue.EnqueueManyAsync([2], cts.Token);
         });
 
         Assert.NotNull(ex);
@@ -203,12 +203,12 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Stopped_Queue_Throws()
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         queue.Shutdown();
@@ -216,7 +216,7 @@ public sealed class WorkQueueEnqueueManyTests
         // EnqueueMany is async: the exception is carried by the returned ValueTask.
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await queue.EnqueueMany([2], cancellationToken: CancellationToken.None);
+            await queue.EnqueueManyAsync([2], cancellationToken: CancellationToken.None);
         });
 
         queue.Dispose();
@@ -226,8 +226,8 @@ public sealed class WorkQueueEnqueueManyTests
     public async Task Disposed_Queue_Throws()
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2));
 
@@ -235,7 +235,7 @@ public sealed class WorkQueueEnqueueManyTests
 
         await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
         {
-            await queue.EnqueueMany([1], cancellationToken: CancellationToken.None);
+            await queue.EnqueueManyAsync([1], cancellationToken: CancellationToken.None);
         });
     }
 }

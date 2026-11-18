@@ -6,6 +6,9 @@ namespace Sa.Media.FFmpeg.Services;
 public sealed class ProcessExecutionException(int exitCode, string message, Exception? inner = null)
     : Exception(message, inner)
 {
+    /// <summary>
+    /// The non-zero exit code returned by the process.
+    /// </summary>
     public int ExitCode { get; } = exitCode;
 }
 
@@ -18,6 +21,7 @@ public sealed class ProcessExecutionResultException(ProcessExecutionResult resul
                 + (string.IsNullOrEmpty(commandLine) ? "" : $": {commandLine}")
                 + $"{Environment.NewLine}{result.StandardError}")
 {
+    /// <summary>Результат выполнения процесса, из которого извлечён код возврата и stderr.</summary>
     public ProcessExecutionResult Result { get; } = result;
 
     /// <summary>Команда, которая завершилась с ошибкой. Для диагностики и логирования.</summary>

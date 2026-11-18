@@ -4,10 +4,17 @@
 
 A .NET task scheduler — periodic and one-shot jobs, dynamic concurrency control, error recovery strategies, interceptors, and graceful shutdown.
 
+## Installation
+
+```bash
+dotnet add package Sa.Schedule
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [Multiple Schedules (Keyed)](#multiple-schedules-keyed)
@@ -427,7 +434,7 @@ public class Controller
     }
 
     public async Task StopAll()
-        => await _scheduler.Stop();
+        => await _scheduler.StopAsync();
 
     public void ChangeConcurrency(Guid jobId, int newLimit)
     {

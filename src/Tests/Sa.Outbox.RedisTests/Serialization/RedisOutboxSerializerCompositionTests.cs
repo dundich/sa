@@ -3,6 +3,8 @@ using Sa.Outbox.Redis;
 using Sa.Outbox.Serialization;
 using System.Text.Json;
 
+#pragma warning disable CS0618 // This file tests the legacy provider-local serializer alias.
+
 namespace Sa.Outbox.RedisTests.Serialization;
 
 /// <summary>

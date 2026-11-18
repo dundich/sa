@@ -1,4 +1,3 @@
-using Sa.Classes;
 using Sa.Configuration.SecretStore;
 
 namespace Sa.Configuration.PostProcessing;
@@ -29,6 +28,7 @@ public sealed class KeyAliasTransform : ISaConfigurationTransform
         ArgumentNullException.ThrowIfNull(options);
 
         options.Validate();
+
         _aliases = Normalize(options.KeyAliases);
         _canonicalValueWins = options.CanonicalValueWins;
     }
@@ -37,7 +37,9 @@ public sealed class KeyAliasTransform : ISaConfigurationTransform
     /// Creates the transform over an already normalized map, as accumulated by the configuration
     /// state across repeated registrations.
     /// </summary>
-    internal KeyAliasTransform(IReadOnlyDictionary<string, string> aliases, bool canonicalValueWins)
+    internal KeyAliasTransform(
+        IReadOnlyDictionary<string, string> aliases,
+        bool canonicalValueWins)
     {
         _aliases = aliases;
         _canonicalValueWins = canonicalValueWins;
@@ -48,6 +50,28 @@ public sealed class KeyAliasTransform : ISaConfigurationTransform
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
+        return Resolve(configuration);
+    }
+
+    /// <summary>
+    /// Normalizes a mapping into canonical spelling. The result is case-insensitive, so two
+    /// spellings of the same path collapse into one entry — the last one registered wins, which
+    /// mirrors how repeated registrations merge.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> Normalize(IDictionary<string, string> aliases)
+    {
+        Dictionary<string, string> result = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (KeyValuePair<string, string> mapping in aliases)
+        {
+            result[ConfigurationKey.Normalize(mapping.Key)] = ConfigurationKey.Normalize(mapping.Value);
+        }
+
+        return result;
+    }
+
+    private IEnumerable<KeyValuePair<string, string?>> Resolve(ISaConfigurationView configuration)
+    {
         foreach (KeyValuePair<string, string> mapping in _aliases)
         {
             string canonicalKey = mapping.Key;
@@ -68,22 +92,5 @@ public sealed class KeyAliasTransform : ISaConfigurationTransform
 
             yield return new(canonicalKey, aliasValue);
         }
-    }
-
-    /// <summary>
-    /// Normalizes a mapping into canonical spelling. The result is case-insensitive, so two
-    /// spellings of the same path collapse into one entry — the last one registered wins, which
-    /// mirrors how repeated registrations merge.
-    /// </summary>
-    internal static IReadOnlyDictionary<string, string> Normalize(IDictionary<string, string> aliases)
-    {
-        Dictionary<string, string> result = new(StringComparer.OrdinalIgnoreCase);
-
-        foreach (KeyValuePair<string, string> mapping in aliases)
-        {
-            result[ConfigurationKey.Normalize(mapping.Key)] = ConfigurationKey.Normalize(mapping.Value);
-        }
-
-        return result;
     }
 }

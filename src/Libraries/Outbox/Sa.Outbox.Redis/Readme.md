@@ -11,8 +11,15 @@ Redis's delivery counter — is the retry state.
 No Lua: every operation is one or a few ordinary Redis commands, pipelined where they do not depend
 on each other. Every command touches a single key, so the provider works on a Redis Cluster as is.
 
+## Installation
+
+```bash
+dotnet add package Sa.Outbox.Redis
+```
+
 ## Contents
 
+- [Installation](#installation)
 - [Keys](#keys)
 - [Quick start](#quick-start)
 - [Connection](#connection)
@@ -346,7 +353,7 @@ services
         r => r.WithConnectionString("billing"),
         outbox => outbox.WithDeliveries(d => d.AddDelivery<InvoiceConsumer, Invoice>("invoices")));
 
-var cache = sp.GetRequiredService<IOutboxPublisherResolver>().For("cache");
+var cache = sp.GetRequiredService<IOutboxPublisherResolver>().GetPublisher("cache");
 ```
 
 - Settings, named options, `IDatabase` and every command are per provider; `WithOutboxSettings` /

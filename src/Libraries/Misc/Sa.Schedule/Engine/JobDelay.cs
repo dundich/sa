@@ -7,7 +7,7 @@ namespace Sa.Schedule.Engine;
 /// <see cref="ArgumentOutOfRangeException"/>, so anything longer — a cron occurrence months
 /// out, <c>EveryDays(50)</c>, a long <c>InitialDelay</c> — is split into timer-sized chunks.
 /// The exception matters more than the wait: it would escape
-/// <see cref="IJobController.CanExecute"/>/WaitToRun, which run outside the runner's
+/// <see cref="IJobController.CanExecuteAsync"/>/WaitToRun, which run outside the runner's
 /// per-iteration try/catch, fault the queue item and take the slot down through the queue's
 /// faulted-item strategy — the job would die silently while <c>IsStarted</c> still reported
 /// <c>true</c>, bypassing the job's error policy entirely.
@@ -27,7 +27,7 @@ internal static class JobDelay
     /// Waits for <paramref name="delay"/>. Non-positive delays are a no-op;
     /// a cancelled token throws <see cref="OperationCanceledException"/> as usual.
     /// </summary>
-    public static Task Wait(TimeSpan delay, TimeProvider timeProvider, CancellationToken cancellationToken)
+    public static Task WaitAsync(TimeSpan delay, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
         if (delay <= TimeSpan.Zero) return Task.CompletedTask;
 

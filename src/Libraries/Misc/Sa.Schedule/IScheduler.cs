@@ -20,7 +20,7 @@ public interface IScheduler
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The number of jobs started.</returns>
-    Task<int> Start(CancellationToken cancellationToken);
+    Task<int> StartAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Restarts the jobs that are currently running.
@@ -30,14 +30,19 @@ public interface IScheduler
     /// The number of jobs that were actually stopped and started again. Stopped jobs —
     /// including ones stopped by an error action or a consumed RunOnce — are not restarted.
     /// </returns>
-    Task<int> Restart(CancellationToken cancellationToken);
+    Task<int> RestartAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Stops the scheduler.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task Stop();
+    Task StopAsync();
 
 
+    /// <summary>
+    /// Gets the scheduler of a registered job.
+    /// </summary>
+    /// <param name="jobId">The ID of the job.</param>
+    /// <returns>The job scheduler, or <see langword="null"/> when the job is not registered.</returns>
     IJobScheduler? GetSchedule(Guid jobId) => Jobs.FirstOrDefault(c => c.JobId == jobId);
 }

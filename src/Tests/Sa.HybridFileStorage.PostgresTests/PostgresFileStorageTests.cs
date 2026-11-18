@@ -33,7 +33,7 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
         Assert.NotEmpty(result.FileId);
         Assert.StartsWith("pg://share/1/", result.FileId);
 
-        object? v = await fixture.DataSource.ExecuteScalar("SELECT COUNT(*) FROM public.files WHERE id = @id",
+        object? v = await fixture.DataSource.ExecuteScalarAsync("SELECT COUNT(*) FROM public.files WHERE id = @id",
             cmd => cmd.Parameters.Add(new("id", result.FileId)), fixture.CancellationToken);
         var count = (long)v!;
 
@@ -62,7 +62,7 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
         Assert.True(result);
 
         object? v = await fixture.DataSource
-            .ExecuteScalar("SELECT COUNT(*) FROM public.files WHERE id = @id",
+            .ExecuteScalarAsync("SELECT COUNT(*) FROM public.files WHERE id = @id",
                 cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
         var count = (long)v!;
 
@@ -115,7 +115,9 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
                 new UploadFileInput { FileName = "bad\0name.txt", TenantId = 1 },
                 content, fixture.CancellationToken));
 
-        Assert.Equal(nameof(UploadFileInput.FileName), ex.ParamName);
+        // The guard lives in UploadAsync, so the argument it names is the method's own parameter
+        // (`metadata`), not the FileName property that carries the bad value (CA2208).
+        Assert.Equal("metadata", ex.ParamName);
     }
 
     [Fact]
@@ -240,11 +242,11 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
             new UploadFileInput { FileName = "nonseekable.txt", TenantId = 41 },
             nonSeekable, fixture.CancellationToken);
 
-        long size = await fixture.DataSource.ExecuteScalar<long>(
+        long size = await fixture.DataSource.ExecuteScalarAsync<long>(
             "SELECT size FROM public.files WHERE id = @id",
             cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
 
-        byte[] stored = await fixture.DataSource.ExecuteScalar<byte[]>(
+        byte[] stored = await fixture.DataSource.ExecuteScalarAsync<byte[]>(
             "SELECT data FROM public.files WHERE id = @id",
             cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
 
@@ -274,7 +276,7 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
 
         Assert.Equal(fileId1, fileId2);
 
-        long count = await fixture.DataSource.ExecuteScalar<long>(
+        long count = await fixture.DataSource.ExecuteScalarAsync<long>(
             "SELECT COUNT(*) FROM public.files WHERE id = @id",
             cmd => cmd.Parameters.Add(new("id", fileId1)), fixture.CancellationToken);
 

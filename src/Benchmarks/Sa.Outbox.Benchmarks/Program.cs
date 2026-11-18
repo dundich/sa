@@ -1,12 +1,12 @@
-using System.Diagnostics;
-using System.Globalization;
-using System.Runtime;
-using System.Runtime.InteropServices;
 using Sa.Outbox;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.Publication;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime;
+using System.Runtime.InteropServices;
 
 namespace Sa.Outbox.Benchmarks;
 
@@ -48,7 +48,7 @@ internal static class Program
         var publisher = new OutboxMessagePublisher(
             TimeProvider.System,
             writer,
-            new OutboxPublishSettings(MaxBatchSize: 1024),
+            new OutboxPublishSettings { MaxBatchSize = 1024 },
             metadata);
 
         var messages = new RefPayload[1024];
@@ -185,7 +185,7 @@ internal static class Program
 
         IOutboxContextOperations<TMessage> context = factory.Create(delivery);
         context.Ok();
-        factory.Return(context);
+        factory.ReturnToPool(context);
     }
 
     private static void MeasureSync(string name, int operations, Action body)

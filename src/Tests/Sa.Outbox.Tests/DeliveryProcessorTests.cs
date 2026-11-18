@@ -1,4 +1,4 @@
-using Sa.Classes;
+using Sa;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Partitional;
 
@@ -29,15 +29,28 @@ public class DeliveryProcessorTests
     private static OutboxConsumerSettings CreateSettings(
         int perTenantMaxDegreeOfParallelism = 1,
         int maxProcessingIterations = 1)
-        => new(
-            ConsumerGroupId: "test-group", AsSingleton: false,
-            Interval: TimeSpan.FromMinutes(1), InitialDelay: TimeSpan.Zero,
-            ConcurrencyLimit: 1, MaxConcurrency: 1, RetryCountOnError: 0,
-            MaxBatchSize: 16, MaxProcessingIterations: maxProcessingIterations, IterationDelay: TimeSpan.Zero,
-            LockDuration: TimeSpan.FromSeconds(10), LockRenewal: TimeSpan.FromSeconds(3),
-            LookbackInterval: TimeSpan.FromDays(7), MaxDeliveryAttempts: 3,
-            BatchingWindow: TimeSpan.FromSeconds(3), PerTenantTimeout: TimeSpan.Zero,
-            PerTenantMaxDegreeOfParallelism: perTenantMaxDegreeOfParallelism, Paused: false, Version: 0);
+        => new OutboxConsumerSettings
+        {
+            ConsumerGroupId = "test-group",
+            AsSingleton = false,
+            Interval = TimeSpan.FromMinutes(1),
+            InitialDelay = TimeSpan.Zero,
+            ConcurrencyLimit = 1,
+            MaxConcurrency = 1,
+            RetryCountOnError = 0,
+            MaxBatchSize = 16,
+            MaxProcessingIterations = maxProcessingIterations,
+            IterationDelay = TimeSpan.Zero,
+            LockDuration = TimeSpan.FromSeconds(10),
+            LockRenewal = TimeSpan.FromSeconds(3),
+            LookbackInterval = TimeSpan.FromDays(7),
+            MaxDeliveryAttempts = 3,
+            BatchingWindow = TimeSpan.FromSeconds(3),
+            PerTenantTimeout = TimeSpan.Zero,
+            PerTenantMaxDegreeOfParallelism = perTenantMaxDegreeOfParallelism,
+            Paused = false,
+            Version = 0
+        };
 
     private static DeliveryProcessor CreateProcessor(int[] tenantIds, Func<int, Task<int>> onProcess)
         => new(new FakeDeliveryTenant(onProcess), new FakeTenantProvider(tenantIds));
@@ -181,9 +194,9 @@ public class DeliveryProcessorTests
     // finds nothing here, which is a reliable way to waste an afternoon.
     private sealed class FakeTenantProvider(int[] tenantIds) : ITenantProvider
     {
-        public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken) => ValueTask.FromResult(tenantIds);
+        public ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken) => ValueTask.FromResult(tenantIds);
 
-        public ValueTask<int[]> GetTenantIds(string providerKey, CancellationToken cancellationToken)
+        public ValueTask<int[]> GetTenantIdsAsync(string providerKey, CancellationToken cancellationToken)
             => ValueTask.FromResult(tenantIds);
     }
 }

@@ -8,7 +8,7 @@ public class SaWorkQueueRecoveryTests
     {
         public int ProcessedCount;
 
-        public Task Execute(int input, CancellationToken _)
+        public Task ExecuteAsync(int input, CancellationToken _)
         {
             if (input == failOnValue) throw new InvalidOperationException("Simulated processing failure");
             Interlocked.Increment(ref ProcessedCount);
@@ -20,17 +20,18 @@ public class SaWorkQueueRecoveryTests
     public async Task ForceCancelReaders_ThenResetConcurrency_ReadersRecoverAndProcessItems()
     {
         // Arrange
-        var options = new SaWorkQueueOptions<int>(new TestProcessor())
+        var options = new SaWorkQueueOptions<int>
         {
+            Processor = new TestProcessor(),
             ConcurrencyLimit = 2,
             MaxConcurrency = 4
         };
 
-        using var queue = new SaWorkQueue<int>(options);
+        using var queue = new SaWorkChannel<int>(options);
 
         // Добавим несколько задач
-        await queue.Enqueue(1, TestToken);
-        await queue.Enqueue(2, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
+        await queue.EnqueueAsync(2, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.Equal(2, ((TestProcessor)options.Processor).ProcessedCount);
@@ -42,7 +43,7 @@ public class SaWorkQueueRecoveryTests
 
         queue.ConcurrencyLimit = 2;
 
-        await queue.Enqueue(3, TestToken);
+        await queue.EnqueueAsync(3, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, ((TestProcessor)options.Processor).ProcessedCount);
     }
@@ -53,20 +54,21 @@ public class SaWorkQueueRecoveryTests
         // Arrange
         var statuses = new List<SaWorkStatus>();
         var processor = new TestProcessor(failOnValue: -1);
-        var options = new SaWorkQueueOptions<int>(processor)
+        var options = new SaWorkQueueOptions<int>
         {
+            Processor = processor,
             ConcurrencyLimit = 1,
             StatusChanged = (item, status, ex) => statuses.Add(status),
             HandleItemFaulted = (_, __) => SaExecutionErrorStrategy.Continue
         };
-        using var queue = new SaWorkQueue<int>(options);
+        using var queue = new SaWorkChannel<int>(options);
 
         // Act
-        await queue.Enqueue(1, TestToken);          // OK
+        await queue.EnqueueAsync(1, TestToken);          // OK
 
-        await queue.Enqueue(-1, TestToken);         // Fail
+        await queue.EnqueueAsync(-1, TestToken);         // Fail
 
-        await queue.Enqueue(2, TestToken);          // OK после fail
+        await queue.EnqueueAsync(2, TestToken);          // OK после fail
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
@@ -87,22 +89,23 @@ public class SaWorkQueueRecoveryTests
         // Arrange
         var statuses = new List<SaWorkStatus>();
         var processor = new TestProcessor(failOnValue: -1);
-        var options = new SaWorkQueueOptions<int>(processor)
+        var options = new SaWorkQueueOptions<int>
         {
+            Processor = processor,
             ConcurrencyLimit = 2,
             StatusChanged = (item, status, ex) => statuses.Add(status),
             HandleItemFaulted = (_, __) => SaExecutionErrorStrategy.StopReader
         };
-        using var queue = new SaWorkQueue<int>(options);
+        using var queue = new SaWorkChannel<int>(options);
 
         // Act
-        await queue.Enqueue(1, TestToken);          // OK
+        await queue.EnqueueAsync(1, TestToken);          // OK
 
-        await queue.Enqueue(-1, TestToken);         // Fail
+        await queue.EnqueueAsync(-1, TestToken);         // Fail
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
-        await queue.Enqueue(1, TestToken);          // OK
+        await queue.EnqueueAsync(1, TestToken);          // OK
 
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
@@ -118,24 +121,25 @@ public class SaWorkQueueRecoveryTests
         // Arrange
         var statuses = new List<SaWorkStatus>();
         var processor = new TestProcessor(failOnValue: -1);
-        var options = new SaWorkQueueOptions<int>(processor)
+        var options = new SaWorkQueueOptions<int>
         {
+            Processor = processor,
             ConcurrencyLimit = 2,
             StatusChanged = (item, status, ex) => statuses.Add(status),
             HandleItemFaulted = (_, __) => SaExecutionErrorStrategy.ShutdownQueue
         };
 
-        using var queue = new SaWorkQueue<int>(options);
+        using var queue = new SaWorkChannel<int>(options);
 
         // Act
-        await queue.Enqueue(1, TestToken);          // OK
+        await queue.EnqueueAsync(1, TestToken);          // OK
 
-        await queue.Enqueue(-1, TestToken);         // Fail
+        await queue.EnqueueAsync(-1, TestToken);         // Fail
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
             await queue.WaitForIdleAsync(cancellationToken: TestToken);
-            await queue.Enqueue(2, cancellationToken: CancellationToken.None);
+            await queue.EnqueueAsync(2, cancellationToken: CancellationToken.None);
         });
 
         Assert.False(queue.IsEnabled);

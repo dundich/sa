@@ -35,27 +35,27 @@ public sealed class InterceptorOrderTests : IAsyncDisposable
 
     sealed class OuterInterceptor : IJobInterceptor
     {
-        public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
+        public async Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
         {
             Order.Add("outer-before");
-            await next();
+            await continuation();
             Order.Add("outer-after");
         }
     }
 
     sealed class InnerInterceptor : IJobInterceptor
     {
-        public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
+        public async Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
         {
             Order.Add("inner-before");
-            await next();
+            await continuation();
             Order.Add("inner-after");
         }
     }
 
     sealed class SomeJob : IJob
     {
-        public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             Order.Add("job");
             await Task.Delay(10, cancellationToken);
@@ -92,7 +92,7 @@ public sealed class InterceptorOrderTests : IAsyncDisposable
     {
         Order.Clear();
 
-        Assert.Equal(1, await _scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await _scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         // The job is RunOnce — wait for its single run to finish
         var deadline = DateTime.UtcNow.AddSeconds(10);
@@ -109,7 +109,7 @@ public sealed class InterceptorOrderTests : IAsyncDisposable
         string[] expected = ["outer-before", "inner-before", "job", "inner-after", "outer-after"];
         Assert.Equal(expected, Order.Entries);
 
-        await _scheduler.Stop();
+        await _scheduler.StopAsync();
     }
 
     public async ValueTask DisposeAsync()

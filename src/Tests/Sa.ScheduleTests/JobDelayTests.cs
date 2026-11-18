@@ -15,7 +15,7 @@ public sealed class JobDelayTests
     {
         var clock = new ManualTimeProvider();
 
-        Task wait = JobDelay.Wait(TimeSpan.FromMinutes(5), clock, TestContext.Current.CancellationToken);
+        Task wait = JobDelay.WaitAsync(TimeSpan.FromMinutes(5), clock, TestContext.Current.CancellationToken);
 
         // Nothing sleeps for real and the wait is not over until the provider's timer fires.
         Assert.False(wait.IsCompleted);
@@ -31,8 +31,8 @@ public sealed class JobDelayTests
     {
         var clock = new ManualTimeProvider();
 
-        await JobDelay.Wait(TimeSpan.Zero, clock, TestContext.Current.CancellationToken);
-        await JobDelay.Wait(TimeSpan.FromSeconds(-1), clock, TestContext.Current.CancellationToken);
+        await JobDelay.WaitAsync(TimeSpan.Zero, clock, TestContext.Current.CancellationToken);
+        await JobDelay.WaitAsync(TimeSpan.FromSeconds(-1), clock, TestContext.Current.CancellationToken);
 
         Assert.Empty(clock.Timers);
     }
@@ -43,7 +43,7 @@ public sealed class JobDelayTests
         var clock = new ManualTimeProvider();
         using var cts = new CancellationTokenSource();
 
-        Task wait = JobDelay.Wait(TimeSpan.FromMinutes(5), clock, cts.Token);
+        Task wait = JobDelay.WaitAsync(TimeSpan.FromMinutes(5), clock, cts.Token);
 
         await cts.CancelAsync();
 

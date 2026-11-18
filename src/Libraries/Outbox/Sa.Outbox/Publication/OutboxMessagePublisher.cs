@@ -26,7 +26,7 @@ internal sealed class OutboxMessagePublisher(
 
         EnsureContextSupported(context);
 
-        return await Send(messages, tenantId, context, cancellationToken);
+        return await SendAsync(messages, tenantId, context, cancellationToken);
     }
 
     public async ValueTask<ulong> PublishSingle<TMessage>(
@@ -81,7 +81,7 @@ internal sealed class OutboxMessagePublisher(
             "Publish without a context, or install a provider that declares the PublishContext capability.");
     }
 
-    private async ValueTask<ulong> Send<TMessage>(
+    private async ValueTask<ulong> SendAsync<TMessage>(
         IReadOnlyCollection<TMessage> messages,
         int tenantId,
         object? context,

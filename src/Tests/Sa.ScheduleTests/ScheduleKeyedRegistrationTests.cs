@@ -20,13 +20,13 @@ public sealed class ScheduleKeyedRegistrationTests
 
     private sealed class JobA : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
     private sealed class JobB : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
@@ -265,7 +265,7 @@ public sealed class ScheduleKeyedRegistrationTests
 
         AbortCounter.Clear();
 
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
         Assert.True(jobScheduler.IsStarted);
 
         var deadline = DateTime.UtcNow.AddSeconds(15);
@@ -280,7 +280,7 @@ public sealed class ScheduleKeyedRegistrationTests
         Assert.False(jobScheduler.IsStarted);
         Assert.True(AbortCounter.Total >= 2);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     [Fact]
@@ -336,13 +336,13 @@ public sealed class ScheduleKeyedRegistrationTests
 
     private sealed class RecordingInterceptor : IJobInterceptor
     {
-        public Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
-            => next();
+        public Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
+            => continuation();
     }
 
     private sealed class NoopJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
@@ -359,7 +359,7 @@ public sealed class ScheduleKeyedRegistrationTests
 
     private sealed class FailingJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             AbortCounter.Inc();
             throw new InvalidOperationException("always fails");
@@ -381,11 +381,11 @@ public sealed class ScheduleKeyedRegistrationTests
 
         public IReadOnlyCollection<IJobScheduler> Jobs { get; } = jobs;
 
-        public Task<int> Start(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
+        public Task<int> StartAsync(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
-        public Task<int> Restart(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
+        public Task<int> RestartAsync(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
-        public Task Stop() => Task.WhenAll(jobs.Select(job => job.Stop()));
+        public Task StopAsync() => Task.WhenAll(jobs.Select(job => job.StopAsync()));
     }
 
     private sealed class FakeJobScheduler(Guid jobId) : IJobScheduler
@@ -406,9 +406,9 @@ public sealed class ScheduleKeyedRegistrationTests
 
         public IChangeToken StartChangeToken() => new CancellationChangeToken(CancellationToken.None);
 
-        public Task<bool> Start(CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> StartAsync(CancellationToken cancellationToken) => Task.FromResult(true);
 
-        public Task Stop()
+        public Task StopAsync()
         {
             Interlocked.Increment(ref _stopCalls);
 

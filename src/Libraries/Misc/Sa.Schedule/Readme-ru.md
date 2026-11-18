@@ -427,7 +427,7 @@ public class Controller
     }
 
     public async Task StopAll()
-        => await _scheduler.Stop();
+        => await _scheduler.StopAsync();
 
     public void ChangeConcurrency(Guid jobId, int newLimit)
     {

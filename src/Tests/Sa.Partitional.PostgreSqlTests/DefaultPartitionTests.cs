@@ -28,7 +28,7 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
                     )
                     .PartByList("country", "city")
                     .PartByRange(PgPartBy.Day)
-                    .AddMigration("RU", "Moscow")
+                    .AddMigrationChildren("RU", "Moscow")
                     .WithDefaultPartition();
 
                     // No list columns: the root is range-partitioned, so the default catches dates
@@ -60,17 +60,17 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
     private static readonly DateTimeOffset NextDay = Day.AddDays(1);
 
     private async Task<long> Count(string table, CancellationToken ct)
-        => await fixture.DataSource.ExecuteScalarTyped<long>($"SELECT count(*) FROM {table};", cancellationToken: ct);
+        => await fixture.DataSource.ExecuteScalarTypedAsync<long>($"SELECT count(*) FROM {table};", cancellationToken: ct);
 
 
     [Fact]
     public async Task UnlistedListValue_LandsInTheRootDefault()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        await Sub.Migrate([Day], ct);
+        await Sub.MigrateAsync([Day], ct);
 
         // country = US has no list partition; it belongs to the root catch-all.
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.def_nested (id, country, city, created_at) VALUES (1, 'US', 'NY', {Day.ToUnixTimeSeconds()});", ct);
 
         Assert.Equal(1L, await Count("\"public\".\"def_nested__def$\"", ct));
@@ -80,11 +80,11 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
     public async Task RangeOnlyTable_OutOfRangeDate_LandsInTheDefault()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        await Sub.Migrate([Day], ct);
+        await Sub.MigrateAsync([Day], ct);
 
         // Only the current day was migrated; 2000 is outside every range.
         long year2000 = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.def_range (id, created_at) VALUES (1, {year2000});", ct);
 
         Assert.Equal(1L, await Count("\"public\".\"def_range__def$\"", ct));
@@ -96,15 +96,15 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
         CancellationToken ct = TestContext.Current.CancellationToken;
 
         // Day is migrated, NextDay is not: the row lands in the range-level default of RU/Moscow.
-        await Sub.Migrate([Day], ct);
-        await fixture.DataSource.ExecuteNonQuery(
+        await Sub.MigrateAsync([Day], ct);
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.def_nested (id, country, city, created_at) VALUES (1, 'RU', 'Moscow', {NextDay.ToUnixTimeSeconds()});", ct);
 
         Assert.Equal(1L, await Count("\"public\".\"def_nested__RU__Moscow__def$\"", ct));
 
         // Creating the NextDay leaf would be refused while the default still holds the row; the
         // migration pulls it out, creates the partition, and puts it back.
-        await Sub.Migrate([NextDay], ct);
+        await Sub.MigrateAsync([NextDay], ct);
 
         Assert.Equal(0L, await Count("\"public\".\"def_nested__RU__Moscow__def$\"", ct));
         Assert.Equal(1L, await Count($"\"public\".\"def_nested__RU__Moscow__{PgPartBy.Day.Fmt(NextDay)}\"", ct));
@@ -119,20 +119,20 @@ public class DefaultPartitionTests(DefaultPartitionTests.Fixture fixture)
         // A distinct date keeps the migration-driven tests independent: Migrate() migrates every
         // table in the shared fixture, so migrating NextDay here would pre-create the leaf the
         // sibling test relies on staying absent.
-        await Sub.Migrate([Day], ct);
+        await Sub.MigrateAsync([Day], ct);
         DateTimeOffset weekLater = Day.AddDays(7);
-        await fixture.DataSource.ExecuteNonQuery(
+        await fixture.DataSource.ExecuteNonQueryAsync(
             $"INSERT INTO public.def_always (created_at) VALUES ({weekLater.ToUnixTimeSeconds()});", ct);
 
         Assert.Equal(1L, await Count("\"public\".\"def_always__def$\"", ct));
 
         // The reconciliation puts the staged id back into a GENERATED ALWAYS AS IDENTITY column;
         // without the OVERRIDING clause PostgreSQL would refuse it (22014) and fail the migration.
-        await Sub.Migrate([weekLater], ct);
+        await Sub.MigrateAsync([weekLater], ct);
 
         Assert.Equal(0L, await Count("\"public\".\"def_always__def$\"", ct));
 
-        long leafId = await fixture.DataSource.ExecuteScalarTyped<long>(
+        long leafId = await fixture.DataSource.ExecuteScalarTypedAsync<long>(
             $"SELECT id FROM \"public\".\"def_always__{PgPartBy.Day.Fmt(weekLater)}\";", cancellationToken: ct);
         Assert.NotEqual(0, leafId);
     }

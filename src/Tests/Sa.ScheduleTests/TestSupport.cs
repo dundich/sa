@@ -14,12 +14,10 @@ namespace Sa.ScheduleTests;
 /// </summary>
 internal sealed class TrackingScopeFactory : IServiceScopeFactory
 {
-    private readonly IServiceCollection _services;
     private readonly ServiceProvider _provider;
 
     private TrackingScopeFactory(IServiceCollection services)
     {
-        _services = services;
         _provider = services.AddOptions().BuildServiceProvider();
     }
 

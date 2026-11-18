@@ -1,4 +1,3 @@
-using Sa.Outbox.Partitional;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.Redis.Configuration;
 using StackExchange.Redis;
@@ -19,7 +18,7 @@ internal sealed class OutboxTenantDetector(IDatabase database, RedisOutboxSettin
 {
     public bool CanDetect => true;
 
-    public async ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+    public async ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 

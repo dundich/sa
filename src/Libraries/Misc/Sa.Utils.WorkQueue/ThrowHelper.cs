@@ -1,7 +1,8 @@
-namespace Sa.Utils.WorkQueue;
 
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
+
+namespace Sa.Utils.WorkQueue;
 
 internal static class ThrowHelper
 {

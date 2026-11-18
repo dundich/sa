@@ -5,6 +5,9 @@ using Sa.Configuration.SecretStore;
 
 namespace Sa.Configuration;
 
+/// <summary>
+/// Registers the Sa configuration pipeline.
+/// </summary>
 public static class Setup
 {
     /// <summary>
@@ -39,8 +42,19 @@ public static class Setup
 
         if (state.CommandLineSource is null)
         {
-            state.CommandLineSource = new ArgumentsConfigurationSource { Args = state.Args };
-            builder.Add(state.CommandLineSource);
+            // A builder that already carries the argument source (UseStandardSources, or a second
+            // registration) keeps a single instance instead of stacking a second provider.
+            state.CommandLineSource = builder.Sources.OfType<ArgumentsConfigurationSource>().FirstOrDefault();
+
+            if (state.CommandLineSource is null)
+            {
+                state.CommandLineSource = new ArgumentsConfigurationSource { Args = state.Args };
+                builder.Add(state.CommandLineSource);
+            }
+            else if (state.Args is not null)
+            {
+                state.CommandLineSource.Args = state.Args;
+            }
         }
         else if (state.Args is not null)
         {
@@ -109,6 +123,10 @@ public static class Setup
 
     private static void EnsurePostProcessing(IConfigurationBuilder builder, SaConfigurationState state)
     {
+        // The client overlays reuse the transform chain of the core pass, so the runtime that owns
+        // the pass is the single place both layers read it from.
+        SaConfigurationRuntime.GetOrAdd(builder).PostProcessingTransforms = state.BuildTransforms;
+
         if (state.PostProcessingSource is null)
         {
             state.PostProcessingSource = new SaPostProcessingConfigurationSource(

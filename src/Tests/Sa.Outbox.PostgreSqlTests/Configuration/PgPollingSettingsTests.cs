@@ -255,6 +255,14 @@ public class PgPollingSettingsTests
     }
 
     [Fact]
+    public void Validate_TenantParallelismBelowMinusOne_Throws()
+    {
+        var polling = new PgPollingSettings { Enabled = true, PerTenantMaxDegreeOfParallelism = -2 };
+
+        Assert.Throws<InvalidOperationException>(polling.Validate);
+    }
+
+    [Fact]
     public void Validate_DisabledInstance_IsNeverRejected()
     {
         var polling = new PgPollingSettings

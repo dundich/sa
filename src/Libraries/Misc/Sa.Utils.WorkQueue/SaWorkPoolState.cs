@@ -2,10 +2,10 @@ namespace Sa.Utils.WorkQueue;
 
 /// <summary>
 /// The condition of a queue's reader pool, as reported by
-/// <see cref="ISaWorkQueue{TInput}.PoolState"/>.
+/// <see cref="ISaWorkChannel{TInput}.PoolState"/>.
 /// </summary>
 /// <remarks>
-/// It exists because <see cref="ISaWorkQueue{TInput}.ConcurrencyLimit"/> cannot answer
+/// It exists because <see cref="ISaWorkChannel{TInput}.ConcurrencyLimit"/> cannot answer
 /// the question on its own. A force-cancel releases the slots of the readers it stops,
 /// so the limit drops to <c>0</c> — the same number a deliberate pause produces. A count
 /// of live readers does not help either: it is <c>0</c> in both cases as well. Two
@@ -25,7 +25,7 @@ public enum SaWorkPoolState
     Active = 0,
 
     /// <summary>
-    /// The queue was paused on purpose: <see cref="ISaWorkQueue{TInput}.ConcurrencyLimit"/>
+    /// The queue was paused on purpose: <see cref="ISaWorkChannel{TInput}.ConcurrencyLimit"/>
     /// was set to <c>0</c> and nothing has raised it again.
     /// </summary>
     /// <remarks>
@@ -49,7 +49,7 @@ public enum SaWorkPoolState
     /// exists — it is indistinguishable from <see cref="Paused"/> by any number the queue
     /// used to publish. Items that arrive will be queued and nothing will take them.
     /// <para>
-    /// Setting <see cref="ISaWorkQueue{TInput}.ConcurrencyLimit"/> to a value above
+    /// Setting <see cref="ISaWorkChannel{TInput}.ConcurrencyLimit"/> to a value above
     /// <c>0</c> re-arms the pool and returns the queue to <see cref="Active"/>.
     /// </para>
     /// </remarks>

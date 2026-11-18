@@ -4,10 +4,17 @@
 
 Cross-platform .NET wrapper for FFmpeg (Windows x64, Linux x64) with **bundled fully static binaries** — works out of the box, no system-wide FFmpeg and no codec libraries required. Simplifies audio processing: metadata extraction, format conversion, channel split/join, and DI integration.
 
+## Installation
+
+```bash
+dotnet add package Sa.Media.FFmpeg
+```
+
 ---
 
 ## Contents
 
+- [Installation](#installation)
 - [Features](#features)
 - [Quick Start](#quick-start)
   - [Default instances (no setup required)](#default-instances-no-setup-required)

@@ -1,56 +1,82 @@
 using System.Diagnostics;
 
-namespace Sa.Classes;
+namespace Sa;
 
 /// <summary>
 /// line
 /// экземпляр с конкретным началом и окончанием
 /// </summary>
 /// <typeparam name="T"></typeparam>
-/// <param name="Start">начало</param>
-/// <param name="End">конец</param>
 [DebuggerStepThrough]
-public record Section<T>(T Start, T End) where T : IComparable<T>;
+public record Section<T> where T : IComparable<T>
+{
+    /// <summary>The start of the interval.</summary>
+    public required T Start { get; init; }
+
+    /// <summary>The end of the interval.</summary>
+    public required T End { get; init; }
+}
 
 /// <summary>
 /// line with lim end
 /// экземпляр с конкретным началом, окончанием и указанием включен ли конец в диапазон
 /// </summary>
 /// <typeparam name="T"></typeparam>
-/// <param name="Start">начало</param>
-/// <param name="End">конец</param>
-/// <param name="HasEnd">Indicates whether the value at the end of the range is included</param>
 
 [DebuggerStepThrough]
-public record LimSection<T>(T Start, T End, bool HasEnd = false)
-    : Section<T>(Start, End) where T : IComparable<T>;
+public record LimSection<T> : Section<T> where T : IComparable<T>
+{
+    /// <summary>Whether <see cref="Section{T}.End"/> is included.</summary>
+    public bool HasEnd { get; init; }
+}
 
 /// <summary>
 /// half-line or ray
 /// экземпляр с конкретным началом, возможным окончанием и указанием включен ли конец в диапазон
 /// </summary>
 /// <typeparam name="T"></typeparam>
-/// <param name="Start">начало</param>
-/// <param name="End">конец или бесконечность</param>
-/// <param name="HasEnd">Indicates whether the value at the end of the range is included</param>
 [DebuggerStepThrough]
-public record HalfSection<T>(T Start, T? End, bool HasEnd = false);
+public record HalfSection<T>
+{
+    /// <summary>The start of the interval.</summary>
+    public required T Start { get; init; }
 
+    /// <summary>The end of the interval, or <see langword="null"/> for an open-ended range.</summary>
+    public T? End { get; init; }
+
+    /// <summary>Whether <see cref="End"/> is included.</summary>
+    public bool HasEnd { get; init; }
+}
+
+/// <summary>Builds and transforms <see cref="Section{T}"/> and <see cref="LimSection{T}"/> values.</summary>
 [DebuggerStepThrough]
 public static class RangeExtensions
 {
-    public static LimSection<T> RangeTo<T>(Section<T> range, bool hasEnd) where T : IComparable<T> => new(range.Start, range.End, hasEnd);
-    public static Section<T> RangeTo<T>(this T from, T to) where T : IComparable<T> => new(from, to);
-    public static Section<T> RangeTo<T>(this T from, Func<T, T> to) where T : IComparable<T> => new(from, to(from));
-    public static LimSection<T> RangeTo<T>(this T from, T to, bool hasEnd) where T : IComparable<T> => new(from, to, hasEnd);
-    public static LimSection<T> RangeTo<T>(this T from, Func<T, T> to, bool hasEnd) where T : IComparable<T> => new(from, to(from), hasEnd);
+    /// <summary>Converts a section to <see cref="LimSection{T}"/>, choosing whether the end is inclusive.</summary>
+    public static LimSection<T> RangeTo<T>(Section<T> range, bool hasEnd) where T : IComparable<T> => new() { Start = range.Start, End = range.End, HasEnd = hasEnd };
+    /// <summary>Creates a section from <paramref name="from"/> to <paramref name="to"/>.</summary>
+    public static Section<T> RangeTo<T>(this T from, T to) where T : IComparable<T> => new() { Start = from, End = to };
+    /// <summary>Creates a section from <paramref name="from"/> to the value produced by <paramref name="to"/>.</summary>
+    public static Section<T> RangeTo<T>(this T from, Func<T, T> to) where T : IComparable<T> => new() { Start = from, End = to(from) };
+    /// <summary>Creates a limited section from <paramref name="from"/> to <paramref name="to"/>.</summary>
+    public static LimSection<T> RangeTo<T>(this T from, T to, bool hasEnd) where T : IComparable<T> => new() { Start = from, End = to, HasEnd = hasEnd };
+    /// <summary>Creates a limited section from <paramref name="from"/> to the value produced by <paramref name="to"/>.</summary>
+    public static LimSection<T> RangeTo<T>(this T from, Func<T, T> to, bool hasEnd) where T : IComparable<T> => new() { Start = from, End = to(from), HasEnd = hasEnd };
+    /// <summary>Whether the section is ordered (start is not greater than end).</summary>
     public static bool IsPositive<T>(this Section<T> range) where T : IComparable<T> => range.Start.CompareTo(range.End) <= 0;
+    /// <summary>Whether the limited section is ordered (start is not greater than end).</summary>
     public static bool IsPositive<T>(this LimSection<T> range) where T : IComparable<T> => range.Start.CompareTo(range.End) <= 0;
+    /// <summary>Returns the section with its bounds swapped.</summary>
     public static Section<T> Reverse<T>(this Section<T> range) where T : IComparable<T> => range.End.RangeTo(range.Start);
+    /// <summary>Returns the limited section with its bounds swapped.</summary>
     public static LimSection<T> Reverse<T>(this LimSection<T> range) where T : IComparable<T> => range.End.RangeTo(range.Start, range.HasEnd);
+    /// <summary>Returns the section in ascending order.</summary>
     public static Section<T> Normalize<T>(this Section<T> range) where T : IComparable<T> => range.IsPositive() ? range : Reverse(range);
+    /// <summary>Returns the limited section in ascending order.</summary>
     public static LimSection<T> Normalize<T>(this LimSection<T> range) where T : IComparable<T> => range.IsPositive() ? range : Reverse(range);
+    /// <summary>Whether <paramref name="value"/> lies within the section.</summary>
     public static bool InRange<T>(this Section<T> range, T value) where T : IComparable<T> => range.Start.CompareTo(value) <= 0 && (range.End.CompareTo(value) >= 0);
+    /// <summary>Whether <paramref name="value"/> lies within the limited section.</summary>
     public static bool InRange<T>(this LimSection<T> range, T value) where T : IComparable<T>
         => range.Start.CompareTo(value) <= 0 && (range.HasEnd ? range.End.CompareTo(value) >= 0 : range.End.CompareTo(value) > 0);
 
@@ -96,7 +122,7 @@ public static class RangeExtensions
 
             if (interval.Start.CompareTo(currentStart) > 0)
             {
-                emptyIntervals.Add(new Section<T>(currentStart, interval.Start));
+                emptyIntervals.Add(new Section<T> { Start = currentStart, End = interval.Start });
             }
 
             // Отрезок может кончиться раньше currentStart, если перекрывает предыдущий:
@@ -109,7 +135,7 @@ public static class RangeExtensions
 
         if (range.End.CompareTo(currentStart) > 0)
         {
-            emptyIntervals.Add(new Section<T>(currentStart, range.End));
+            emptyIntervals.Add(new Section<T> { Start = currentStart, End = range.End });
         }
 
         return emptyIntervals;
@@ -132,7 +158,7 @@ public static class RangeExtensions
         {
             T start = self.Start.CompareTo(other.Start) >= 0 ? self.Start : other.Start;
             T end = self.End.CompareTo(other.End) < 0 ? self.End : other.End;
-            return new Section<T>(start, end);
+            return new Section<T> { Start = start, End = end };
         }
 
         return null;
@@ -184,7 +210,7 @@ public static class RangeExtensions
                     ? currentInterval.End
                     : interval.End;
 
-                currentInterval = new Section<T>(currentInterval.Start, currentEnd);
+                currentInterval = new Section<T> { Start = currentInterval.Start, End = currentEnd };
             }
             else
             {
@@ -199,6 +225,7 @@ public static class RangeExtensions
     }
 
 
+    /// <summary>Enumerates the points of the section, advancing with <paramref name="next"/>.</summary>
     public static IEnumerable<T> Enumerate<T>(this Section<T> self, Func<T?, T> next)
         where T : IComparable<T>
     {
@@ -217,6 +244,7 @@ public static class RangeExtensions
     public static List<Section<T>> SplitInterval<T>(this Section<T> self, params T[] points)
         where T : IComparable<T> => SplitInterval(self, points.AsEnumerable());
 
+    /// <summary>Splits the section at the given points.</summary>
     public static List<Section<T>> SplitInterval<T>(this Section<T> self, IEnumerable<T> points)
       where T : IComparable<T>
     {
@@ -250,6 +278,7 @@ public static class RangeExtensions
     public static bool IsIntervalIncluded<T>(this Section<T> self, Section<T> other)
         where T : IComparable<T> => other.Start.CompareTo(self.Start) >= 0 && self.End.CompareTo(other.End) >= 0;
 
+    /// <summary>Whether the section is a single point (start equals end).</summary>
     public static bool IsPoint<T>(this Section<T> self) where T : IComparable<T> => self.Start.CompareTo(self.End) == 0;
 
     /// <summary>
@@ -283,9 +312,14 @@ public static class RangeExtensions
     public static bool IsEmpty<T>(this HalfSection<T> self) where T : IComparable<T>
         => self.End is not null && self.End.CompareTo(self.Start) < 0;
 
+    /// <summary>Length of a <see cref="DateTime"/> section in UTC.</summary>
     public static TimeSpan GetLength(this Section<DateTime> range) => range.End.ToUniversalTime() - range.Start.ToUniversalTime();
+    /// <summary>Length of an <see cref="int"/> section.</summary>
     public static int GetLength(this Section<int> range) => range.End - range.Start;
+    /// <summary>Length of a <see cref="long"/> section.</summary>
     public static long GetLength(this Section<long> range) => range.End - range.Start;
+    /// <summary>Length of a <see cref="float"/> section.</summary>
     public static float GetLength(this Section<float> range) => range.End - range.Start;
+    /// <summary>Length of a <see cref="double"/> section.</summary>
     public static double GetLength(this Section<double> range) => range.End - range.Start;
 }

@@ -5,7 +5,7 @@ namespace Sa.Data.TempFolder;
 /// <summary>
 /// Default <see cref="ITempFolderBuilder"/>: records the configuring intents — the configuration
 /// section, the <c>Options(...)</c> pipeline actions and the strategy overrides — so
-/// <see cref="Setup.AddSaTempFolder"/> can replay them in its fixed slot.
+/// <c>AddSaTempFolder</c> can replay them in its fixed slot.
 /// </summary>
 internal sealed class TempFolderBuilder : ITempFolderBuilder
 {

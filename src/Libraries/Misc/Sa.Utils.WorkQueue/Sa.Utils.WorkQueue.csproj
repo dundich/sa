@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <Description>WorkQueue wrapper for Channels</Description>
+        <Description>Bounded work queue on top of System.Threading.Channels</Description>
+        <PackageTags>queue channels concurrency backpressure</PackageTags>
     </PropertyGroup>
 
     <ItemGroup>

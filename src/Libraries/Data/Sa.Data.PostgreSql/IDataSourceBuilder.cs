@@ -4,7 +4,8 @@ namespace Sa.Data.PostgreSql;
 
 /// <summary>
 /// Collects the configuration of the PostgreSQL data source registered through
-/// <see cref="Setup.AddSaPostgreSqlDataSource"/>: the standard options pipeline
+/// <see cref="Setup.AddSaPostgreSqlDataSource(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Action{Sa.Data.PostgreSql.IDataSourceBuilder})"/>:
+/// the standard options pipeline
 /// (<c>Configure</c> / <c>PostConfigure</c> / <c>Validate</c>) and the configuration
 /// section, in one registration delegate.
 /// </summary>
@@ -15,7 +16,7 @@ namespace Sa.Data.PostgreSql;
 /// <see cref="Options"/> actions, so a <c>Configure</c> there always wins over
 /// configuration, wherever these calls sit in the callback. A callback makes the call a
 /// *configuring* one for the one-configuring-call-per-collection guard; bare calls stay
-/// repeatable (see <see cref="Setup.AddSaPostgreSqlDataSource"/>).
+/// repeatable (see <see cref="Setup.AddSaPostgreSqlDataSource(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Action{Sa.Data.PostgreSql.IDataSourceBuilder})"/>).
 /// </remarks>
 public interface IDataSourceBuilder
 {

@@ -1,6 +1,6 @@
+using Sa.Media.FFmpeg.Services;
 using System.Diagnostics;
 using System.Text;
-using Sa.Media.FFmpeg.Services;
 
 namespace Sa.Media.FFmpegTests.Fakes;
 
@@ -52,12 +52,16 @@ internal sealed class RecordingProcessExecutor : IProcessExecutor
             CreateOutputFileIfFileCommand(startInfo);
 
         if (outputDataReceived != null)
+        {
             foreach (var line in StandardOutput.Split('\n'))
                 outputDataReceived(line);
+        }
 
         if (errorDataReceived != null)
+        {
             foreach (var line in StandardError.Split('\n'))
                 errorDataReceived(line);
+        }
 
         return Task.FromResult(ExitCode);
     }
@@ -98,8 +102,10 @@ internal sealed class RecordingProcessExecutor : IProcessExecutor
         await onOutput(buffer, cancellationToken).ConfigureAwait(false);
 
         if (ExitCode != 0)
+        {
             throw new ProcessExecutionException(
                 ExitCode,
                 $"Process failed (exit={ExitCode}): {startInfo.Arguments}{Environment.NewLine}{StandardError}");
+        }
     }
 }

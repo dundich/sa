@@ -19,13 +19,13 @@ public sealed class JobErrorHandlerIntegrationTests : IAsyncDisposable
         // can consume errors before per-job handling kicks in
         var scheduler = _fixture.Sub;
 
-        int started = await scheduler.Start(TestContext.Current.CancellationToken);
+        int started = await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(started > 0);
 
         // Let it run and process normally
         await Task.Delay(350, TestContext.Current.CancellationToken);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     [Fact]
@@ -60,17 +60,17 @@ public sealed class JobErrorHandlerIntegrationTests : IAsyncDisposable
     {
         var scheduler = _fixture.Sub;
 
-        int started = await scheduler.Start(TestContext.Current.CancellationToken);
+        int started = await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(started > 0);
 
         await Task.Delay(250, TestContext.Current.CancellationToken);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     private sealed class TestJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.Delay(50, cancellationToken);
     }
 

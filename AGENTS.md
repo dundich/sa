@@ -12,6 +12,13 @@ A monorepo of independent **Native AOT** .NET libraries (`Sa.*`) for distributed
 
 ## Source file conventions
 - Text files are UTF-8 **without a BOM** and use **LF** line endings. `.editorconfig` (`charset = utf-8`, `end_of_line = lf`) and `.gitattributes` (`* text=auto eol=lf` plus per-extension rules) enforce this — do not commit CRLF or a BOM (a BOM breaks shell shebangs).
+- The **root** `.editorconfig` is the only one: a nested `*.editorconfig` sets its own `root = true` and silently overrides every rule above it. Do not add one.
+- C# style rules live in that same file and are enforced in the build (`EnforceCodeStyleInBuild` + `TreatWarningsAsErrors`). Private fields are `_camelCase` (static ones PascalCase), interfaces `I*`, type parameters `T*`. `dotnet format src/Sa.slnx --no-restore --verify-no-changes` must stay green.
+
+## Public API tracking
+- Every library carries `PublicAPI.Shipped.txt` / `PublicAPI.Unshipped.txt` (`Microsoft.CodeAnalysis.PublicApiAnalyzers`). A new or changed public member is **RS0016** until its signature is added to `PublicAPI.Unshipped.txt`; a removed one is **RS0017**.
+- The shipped list is the released surface: when a version is published, move its `Unshipped` entries into `Shipped`.
+- Packages are validated on `dotnet pack` (`EnablePackageValidation`). `PackageValidationBaselineVersion` is unset until the next published release; set it then so breaking changes fail the pack.
 
 ## Commands
 
@@ -21,7 +28,9 @@ A monorepo of independent **Native AOT** .NET libraries (`Sa.*`) for distributed
 |------|---------|
 | Build solution | `dotnet build src/Sa.slnx -c Release`  ·  or `./build-sh/do-build.sh` (clean+restore+build) |
 | Run **one** test project | `dotnet run --project src/Tests/<Name>`  |
+| Check formatting | `dotnet format src/Sa.slnx --no-restore --verify-no-changes` |
 | Run **all** tests | `dotnet test --max-parallel-test-modules 2 --solution src/Sa.slnx --no-build --no-restore` (any cwd)  ·  or `./build-sh/do-test.sh` (builds first, then caps parallelism) |
+| **Full gate** (all tests, as CI sees them) | `dotnet build src/Sa.slnx -c Debug --no-restore` **then** the all-tests command above — the build configuration and the run must match, see *The full gate must build the configuration it tests* |
 | CI-style test run (skip local-infra) | `dotnet test --solution src/Sa.slnx --filter "Category!=Local"` |
 
 Build/test helpers live in **`build-sh/`** (POSIX bash, `tasks.sh` holds the shared functions). Entry points: `do-build.sh`, `do-test.sh`, `do-package.sh`, `do-push-local.sh`, `do-push-prod.sh`, `do-fix-max-path-linux.sh`.
@@ -76,10 +85,23 @@ Raise both on CI / beefier machines. `--max-parallel-test-modules` is only honou
 ### ⚠️ Exit code 8 = "a module discovered no tests" — and why the fixtures must stay out of discovery
 On SDK 10.0.112 a full `dotnet test --solution Sa.slnx` used to end with `Test run summary: Failed!`, `error: 3`, exit code 8 (MTP: "the session discovered no tests") although **every** real test assembly reported `passed` and the summary's `failed:` was 0. Cause: the three fixture projects under `src/Tests/Fixtures/` (`Sa.Fixture`, `Sa.Data.PostgreSql.Fixture`, `Sa.Data.S3.Fixture`) were discovered as test modules and each reported `Zero tests ran`. Fixed by `<IsTestingPlatformApplication>false</IsTestingPlatformApplication>` (and `<IsTestProject>false</IsTestProject>`) in `src/Tests/Fixtures/Directory.Build.props` — fixtures are referenced *by* test projects, they are not test modules themselves. Do not drop that property, and do not "fix" the symptom with `TESTINGPLATFORM_EXITCODE_IGNORE=8` in CI: that would also swallow an empty *real* test assembly, i.e. a whole suite silently not running. If exit 8 ever reappears, look for a project that has no tests but is still being discovered. (The .NET 11 SDK no longer fails the whole run for a single empty module.)
 
+### ⚠️ The full gate must build the configuration it tests
+`dotnet test` defaults to **Debug**, and with `--no-build` it runs whatever binaries already sit in `src/artifacts/bin/<project>/debug`. A fix verified with `dotnet build -c Release` or `dotnet run -c Release --no-build` is therefore **not** in the bits the gate runs: it re-runs the old code, the same test fails on the same line, and the failure reads like a flaky test while it is a stale binary. A WorkQueue fix looked flaky for two consecutive 3111-test runs this way before the Debug rebuild.
+
+Gate recipe — build and test the same configuration:
+
+```bash
+dotnet build src/Sa.slnx -c Debug --no-restore
+MSBUILDDISABLENODEREUSE=1 dotnet test --max-parallel-test-modules 2 --solution src/Sa.slnx --no-build --no-restore
+```
+
+`-c Release` is equally fine as long as **both** commands use it (the runner then looks under `artifacts/bin/<project>/release`). A green gate ends with `exit=0` and `failed: 0`; exit code 2 means test failures. One skip is normal — `Sa.Data.TempFolderTests.CleanupTests.Cleanup_PrefixMatch_FollowsThePlatformCaseRule` is platform-case-rule dependent.
+
 ## MSBuild structure
 - Settings live in a `Directory.Build.props` hierarchy; projects do **not** import shared `.props` files manually:
-  - `src/Directory.Build.props` — universal: `net10.0`, `ImplicitUsings`, `Nullable`, analyzers, repo metadata, `ArtifactsPath=src/artifacts`, `IsPackable=false`, CI-only `ContinuousIntegrationBuild`.
-  - `src/Libraries/Directory.Build.props` — libraries: `IsPackable=true`, shared `<Version>`, `IsAotCompatible=true` (not `PublishAot`), `EnableConfigurationBindingGenerator=true`, SourceLink + snupkg, packed `NuGet.md`/`icon.png`, shared refs (Logging.Abstractions, DI, SourceLink). Set only `<Description>` (and an optional per-project `<Version>`) in a library `.csproj`.
+  - `src/Directory.Build.props` — universal: `net10.0`, `ImplicitUsings`, `Nullable`, analyzers (`AnalysisMode=Recommended`) with `TreatWarningsAsErrors=true`, repo metadata, `ArtifactsPath=src/artifacts`, `IsPackable=false`, CI-only `ContinuousIntegrationBuild`.
+    A warning is a build failure everywhere (libraries, tests, samples, benchmarks). Deliberate exceptions must be narrow and documented: a scoped `#pragma`/`SuppressMessage` with a written justification, or a `NoWarn` entry in `src/Tests/Directory.Build.props` for a rule that targets shipped API shape rather than test code.
+  - `src/Libraries/Directory.Build.props` — libraries: `IsPackable=true`, shared `<Version>`, `IsAotCompatible=true` (not `PublishAot`), `EnableConfigurationBindingGenerator=true`, `GenerateDocumentationFile=true` (XML docs ship in the package), SourceLink + snupkg, per-package `Readme.md` + shared `icon.png` packed, shared refs (Logging.Abstractions, DI, SourceLink). Set `<Description>` and `<PackageTags>` (and an optional per-project `<Version>`) in a library `.csproj`.
   - `src/Tests/Directory.Build.props` — test host: `OutputType=Exe`, `IsTestProject=true`, `xunit.v3`, MTP, `xunit.runner.json` copy, global `using Xunit`.
   - `src/Tests/Fixtures/Directory.Build.props` — `IsTestProject=false` + `IsTestingPlatformApplication=false` for fixture projects.
   - `src/Samples/Directory.Build.props` / `src/Benchmarks/Directory.Build.props` — executable, non-packable, not test modules.

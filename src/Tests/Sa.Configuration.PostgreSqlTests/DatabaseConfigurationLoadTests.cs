@@ -201,13 +201,13 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     }
 
     [Fact]
-    public void Dispose_ReleasesOwnedDataSource_ExactlyOnce()
+    public void Dispose_IsIdempotent_AndNeverClosesABorrowedDataSource()
     {
-        // Arrange
+        // Ownership moved to the source: only the ConnectionString strategy lets the source create
+        // (and therefore dispose) a pool. A source handed in by the caller is never closed.
         var dataSource = DataSource(failuresBeforeSuccess: 0);
 
-        var provider = new DatabaseConfigurationProvider(
-            Options(SelectSql), dataSource, ownsDataSource: true);
+        var provider = Provider(Options(SelectSql), dataSource, ownsSource: true);
         provider.Load();
 
         // Act
@@ -215,7 +215,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         provider.Dispose();
 
         // Assert
-        Assert.Equal(1, dataSource.DisposeCount);
+        Assert.Equal(0, dataSource.DisposeCount);
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         // Arrange
         var dataSource = DataSource(failuresBeforeSuccess: 0);
 
-        var provider = new DatabaseConfigurationProvider(Options(SelectSql), dataSource);
+        var provider = Provider(Options(SelectSql), dataSource);
         provider.Load();
 
         // Act
@@ -235,22 +235,21 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     }
 
     [Fact]
-    public void ConfigurationRoot_Disposes_OwnedDataSource()
+    public void ConfigurationRoot_DisposesTheProvider_WithoutClosingABorrowedDataSource()
     {
-        // Arrange — a source that builds an *owning* provider, so the pool has to be released
-        // by whoever disposes the configuration root.
+        // Arrange — a source that builds an *owning* provider. Ownership of a passed-in data source
+        // stays with the caller, so disposing the root must reach the provider without closing it.
         var dataSource = DataSource(failuresBeforeSuccess: 0);
         var builder = new ConfigurationBuilder();
         builder.Add(new FixedProviderSource(
-            new DatabaseConfigurationProvider(Options(SelectSql), dataSource, ownsDataSource: true)));
+            Provider(Options(SelectSql), dataSource, ownsSource: true)));
 
         // Act — IConfigurationRoot itself is not IDisposable; the concrete ConfigurationRoot is.
         var root = builder.Build();
-        Assert.Equal(0, dataSource.DisposeCount);
         ((IDisposable)root).Dispose();
 
-        // Assert — ConfigurationRoot must reach the provider's IDisposable.
-        Assert.Equal(1, dataSource.DisposeCount);
+        // Assert
+        Assert.Equal(0, dataSource.DisposeCount);
     }
 
     #endregion
@@ -263,7 +262,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     {
         // Arrange
         using var dataSource = DataSource(failuresBeforeSuccess: 0);
-        var provider = new DatabaseConfigurationProvider(Options(SelectSql), dataSource);
+        var provider = Provider(Options(SelectSql), dataSource);
 
         var fired = 0;
         using var registration = provider.GetReloadToken()
@@ -287,7 +286,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         await cts.CancelAsync();
 
         using var dataSource = DataSource(failuresBeforeSuccess: 0);
-        var provider = new DatabaseConfigurationProvider(Options(SelectSql), dataSource);
+        var provider = Provider(Options(SelectSql), dataSource);
 
         // Act — cancellation must stay observable as cancellation, not as a wrapped load failure.
         var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -319,11 +318,17 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     }
 
     [Fact]
-    public void AddSaPostgreSqlConfiguration_Throws_OnBlankConnectionString()
+    public void AddSaPostgreSqlConfiguration_Throws_OnNullConnection()
     {
         var builder = new ConfigurationBuilder();
-        Assert.Throws<ArgumentException>(
-            () => builder.AddSaPostgreSqlConfiguration(new PostgreSqlConfigurationOptions("  ", SelectSql)));
+        Assert.Throws<ArgumentNullException>(
+            () => builder.AddSaPostgreSqlConfiguration((PgConfigurationConnection)null!, Options(SelectSql)));
+    }
+
+    [Fact]
+    public void ConnectionString_Throws_OnBlankValue()
+    {
+        Assert.Throws<ArgumentException>(() => PgConfigurationConnection.ConnectionString("  "));
     }
 
     [Fact]
@@ -332,7 +337,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         var builder = new ConfigurationBuilder();
         Assert.Throws<ArgumentException>(
             () => builder.AddSaPostgreSqlConfiguration(
-                new PostgreSqlConfigurationOptions(fixture.ConnectionString, " ")));
+                fixture.ConnectionString, new PostgreSqlConfigurationOptions { SelectSql = " " }));
     }
 
     [Fact]
@@ -341,7 +346,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
         var builder = new ConfigurationBuilder();
         Assert.Throws<ArgumentOutOfRangeException>(
             () => builder.AddSaPostgreSqlConfiguration(
-                new PostgreSqlConfigurationOptions(fixture.ConnectionString, SelectSql) { MaxAttempts = -1 }));
+                fixture.ConnectionString, new PostgreSqlConfigurationOptions { SelectSql = SelectSql, MaxAttempts = -1 }));
     }
 
     [Fact]
@@ -349,40 +354,43 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     {
         var builder = new ConfigurationBuilder();
         Assert.Throws<ArgumentNullException>(
-            () => builder.AddSaPostgreSqlConfiguration(
-                new PostgreSqlConfigurationOptions(fixture.ConnectionString, SelectSql), null!));
+            () => builder.AddSaPostgreSqlConfiguration((IPgDataSource)null!, Options(SelectSql)));
     }
 
     [Fact]
-    public void AddSaPostgreSqlConfiguration_AllowsBlankConnectionString_WithSharedDataSource()
+    public void AddSaPostgreSqlConfiguration_UsesSharedDataSource_WithoutAnyConnectionString()
     {
-        // The data source carries the connection, so the connection string is irrelevant here.
         using var dataSource = DataSource(failuresBeforeSuccess: 0);
 
         var builder = new ConfigurationBuilder();
-        builder.AddSaPostgreSqlConfiguration(
-            new PostgreSqlConfigurationOptions(string.Empty, SingleRowSql), dataSource);
+        builder.AddSaPostgreSqlConfiguration(dataSource, Options(SingleRowSql));
 
         Assert.Equal("normal_value", builder.Build()["NormalKey"]);
     }
 
     [Fact]
-    public void ToString_RedactsSecrets()
+    public void ToString_RedactsParameters()
     {
-        // Neither parameter values nor the connection string's password may reach a log line
-        // through an interpolated options object.
-        var options = new PostgreSqlConfigurationOptions(
-            "Host=db;Database=app;Password=conn-secret",
-            SelectSql,
-            new NpgsqlParameter("pwd", "param-secret"));
+        // Parameter values routinely carry secrets, so they may never reach a log line.
+        var options = new PostgreSqlConfigurationOptions { SelectSql = SelectSql, Parameters = [new NpgsqlParameter("pwd", "param-secret")] };
 
         var text = options.ToString();
 
         Assert.DoesNotContain("param-secret", text);
+        Assert.Contains("1 item(s)", text);
+        Assert.Contains(nameof(PostgreSqlConfigurationOptions), text);
+    }
+
+    [Fact]
+    public void Connection_ToString_RedactsThePassword()
+    {
+        var connection = PgConfigurationConnection.ConnectionString(
+            "Host=db;Database=app;Password=conn-secret");
+
+        var text = connection.ToString();
+
         Assert.DoesNotContain("conn-secret", text);
         Assert.Contains("***", text);
-        Assert.Contains("Host=db", text);
-        Assert.Contains(nameof(PostgreSqlConfigurationOptions), text);
     }
 
     #endregion
@@ -504,12 +512,17 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
     #endregion
 
 
+    private static DatabaseConfigurationProvider Provider(
+        PostgreSqlConfigurationOptions options, IPgDataSource dataSource, bool ownsSource = false)
+        => new(new DatabaseConfigurationSource(options, dataSource), options, ownsSource);
+
     private FaultInjectingDataSource DataSource(int failuresBeforeSuccess, FailureKind failure = FailureKind.Transient)
         => new(IPgDataSource.Create(fixture.ConnectionString), failuresBeforeSuccess, failure);
 
     private PostgreSqlConfigurationOptions Options(string selectSql, int maxAttempts = 3)
-        => new(fixture.ConnectionString, selectSql)
+        => new()
         {
+            SelectSql = selectSql,
             // Keep the suite fast: the first retry is always immediate.
             MaxAttempts = maxAttempts,
             MedianFirstRetryDelay = 1,
@@ -548,7 +561,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
             forceFailure = true;
         }
 
-        public async Task<int> ExecuteReader(
+        public async Task<int> ExecuteReaderAsync(
             string sql,
             Action<NpgsqlDataReader, int> read,
             Action<NpgsqlCommand>? initCommand,
@@ -559,7 +572,7 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
             if (forceFailure || Attempts <= failuresBeforeSuccess)
                 throw failure == FailureKind.Transient ? ConnectionFailure() : UndefinedTableFailure();
 
-            return await inner.ExecuteReader(sql, read, initCommand, cancellationToken).ConfigureAwait(false);
+            return await inner.ExecuteReaderAsync(sql, read, initCommand, cancellationToken).ConfigureAwait(false);
         }
 
         public void Dispose() => DisposeCount++;
@@ -569,60 +582,60 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
 
         public string GetConnectionString() => inner.GetConnectionString();
 
-        public ValueTask<NpgsqlConnection> OpenDbConnection(CancellationToken cancellationToken)
-            => inner.OpenDbConnection(cancellationToken);
+        public ValueTask<NpgsqlConnection> OpenDbConnectionAsync(CancellationToken cancellationToken)
+            => inner.OpenDbConnectionAsync(cancellationToken);
 
-        public Task<int> ExecuteNonQuery(
+        public Task<int> ExecuteNonQueryAsync(
             string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
-            => inner.ExecuteNonQuery(sql, initCommand, cancellationToken);
+            => inner.ExecuteNonQueryAsync(sql, initCommand, cancellationToken);
 
-        public Task<object?> ExecuteScalar(
+        public Task<object?> ExecuteScalarAsync(
             string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalar(sql, initCommand, cancellationToken);
+            => inner.ExecuteScalarAsync(sql, initCommand, cancellationToken);
 
-        public ValueTask<ulong> BeginBinaryImport(
+        public ValueTask<ulong> BeginBinaryImportAsync(
             string sql,
             Func<NpgsqlBinaryImporter, CancellationToken, Task<ulong>> write,
             CancellationToken cancellationToken = default)
-            => inner.BeginBinaryImport(sql, write, cancellationToken);
+            => inner.BeginBinaryImportAsync(sql, write, cancellationToken);
 
-        public ValueTask<PgTransaction> BeginTransaction(CancellationToken cancellationToken = default)
-            => inner.BeginTransaction(cancellationToken);
+        public ValueTask<PgTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
+            => inner.BeginTransactionAsync(cancellationToken);
 
-        public Task<int> ExecuteNonQuery(
+        public Task<int> ExecuteNonQueryAsync(
             string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
-            => inner.ExecuteNonQuery(sql, parameters, cancellationToken);
+            => inner.ExecuteNonQueryAsync(sql, parameters, cancellationToken);
 
-        public Task<int> ExecuteNonQuery(string sql, CancellationToken cancellationToken = default)
-            => inner.ExecuteNonQuery(sql, cancellationToken);
+        public Task<int> ExecuteNonQueryAsync(string sql, CancellationToken cancellationToken = default)
+            => inner.ExecuteNonQueryAsync(sql, cancellationToken);
 
-        public Task<object?> ExecuteScalar(string sql, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalar(sql, cancellationToken);
+        public Task<object?> ExecuteScalarAsync(string sql, CancellationToken cancellationToken = default)
+            => inner.ExecuteScalarAsync(sql, cancellationToken);
 
-        public Task<T> ExecuteScalar<T>(
+        public Task<T> ExecuteScalarAsync<T>(
             string sql, Action<NpgsqlCommand>? initCommand, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalar<T>(sql, initCommand, cancellationToken);
+            => inner.ExecuteScalarAsync<T>(sql, initCommand, cancellationToken);
 
-        public Task<T> ExecuteScalarTyped<T>(
+        public Task<T> ExecuteScalarTypedAsync<T>(
             string sql, Action<NpgsqlCommand>? initCommand = null, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalarTyped<T>(sql, initCommand, cancellationToken);
+            => inner.ExecuteScalarTypedAsync<T>(sql, initCommand, cancellationToken);
 
-        public Task<T> ExecuteScalarTyped<T>(
+        public Task<T> ExecuteScalarTypedAsync<T>(
             string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
-            => inner.ExecuteScalarTyped<T>(sql, parameters, cancellationToken);
+            => inner.ExecuteScalarTypedAsync<T>(sql, parameters, cancellationToken);
 
         // The reader conveniences route through this double's own core ExecuteReader so the fault
         // injection above still observes the call.
-        public Task<int> ExecuteReader(
+        public Task<int> ExecuteReaderAsync(
             string sql, Action<NpgsqlDataReader, int> read, CancellationToken cancellationToken = default)
-            => ExecuteReader(sql, read, initCommand: null, cancellationToken);
+            => ExecuteReaderAsync(sql, read, initCommand: null, cancellationToken);
 
-        public Task<int> ExecuteReader(
+        public Task<int> ExecuteReaderAsync(
             string sql,
             Action<NpgsqlDataReader, int> read,
             IReadOnlyCollection<NpgsqlParameter> parameters,
             CancellationToken cancellationToken = default)
-            => ExecuteReader(
+            => ExecuteReaderAsync(
                 sql,
                 read,
                 cmd =>
@@ -631,31 +644,31 @@ public sealed class DatabaseConfigurationLoadTests(DatabaseConfigurationLoadTest
                 },
                 cancellationToken);
 
-        public async Task<List<T>> ExecuteReaderList<T>(
+        public async Task<List<T>> ExecuteReaderListAsync<T>(
             string sql, Func<NpgsqlDataReader, T> read, CancellationToken cancellationToken = default)
         {
             List<T> list = [];
-            await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), cancellationToken).ConfigureAwait(false);
+            await ExecuteReaderAsync(sql, (reader, _) => list.Add(read(reader)), cancellationToken).ConfigureAwait(false);
             return list;
         }
 
-        public async Task<List<T>> ExecuteReaderList<T>(
+        public async Task<List<T>> ExecuteReaderListAsync<T>(
             string sql,
             Func<NpgsqlDataReader, T> read,
             IReadOnlyCollection<NpgsqlParameter> parameters,
             CancellationToken cancellationToken = default)
         {
             List<T> list = [];
-            await ExecuteReader(sql, (reader, _) => list.Add(read(reader)), parameters, cancellationToken).ConfigureAwait(false);
+            await ExecuteReaderAsync(sql, (reader, _) => list.Add(read(reader)), parameters, cancellationToken).ConfigureAwait(false);
             return list;
         }
 
-        public Task<T> ExecuteReaderFirst<T>(string sql, CancellationToken cancellationToken = default)
-            => inner.ExecuteReaderFirst<T>(sql, cancellationToken);
+        public Task<T> ExecuteReaderFirstAsync<T>(string sql, CancellationToken cancellationToken = default)
+            => inner.ExecuteReaderFirstAsync<T>(sql, cancellationToken);
 
-        public Task<T> ExecuteReaderFirst<T>(
+        public Task<T> ExecuteReaderFirstAsync<T>(
             string sql, IReadOnlyCollection<NpgsqlParameter> parameters, CancellationToken cancellationToken = default)
-            => inner.ExecuteReaderFirst<T>(sql, parameters, cancellationToken);
+            => inner.ExecuteReaderFirstAsync<T>(sql, parameters, cancellationToken);
     }
 
     /// <summary>Hands a pre-built provider to the builder, so the test controls ownership.</summary>

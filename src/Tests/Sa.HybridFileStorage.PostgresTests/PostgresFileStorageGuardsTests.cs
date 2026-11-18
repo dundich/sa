@@ -104,7 +104,7 @@ public sealed class PostgresFileStorageGuardsTests(PostgresFileStorageGuardsTest
     {
         var upload = await Upload(fixture.Limited, "exact.bin", new byte[MaxBytes], seekable: true);
 
-        long size = await fixture.DataSource.ExecuteScalar<long>(
+        long size = await fixture.DataSource.ExecuteScalarAsync<long>(
             $"SELECT size FROM public.{LimitedKey} WHERE id = @id",
             cmd => cmd.Parameters.Add(new("id", upload.FileId)),
             fixture.CancellationToken);
@@ -127,7 +127,7 @@ public sealed class PostgresFileStorageGuardsTests(PostgresFileStorageGuardsTest
         Assert.Contains(
             nameof(PostgresFileStorageOptions.MaxUploadSizeBytes), ex.Message, StringComparison.Ordinal);
 
-        long count = await fixture.DataSource.ExecuteScalar<long>(
+        long count = await fixture.DataSource.ExecuteScalarAsync<long>(
             $"SELECT COUNT(*) FROM public.{LimitedKey} WHERE name = @name",
             cmd => cmd.Parameters.Add(new("name", "oversized.bin")),
             fixture.CancellationToken);

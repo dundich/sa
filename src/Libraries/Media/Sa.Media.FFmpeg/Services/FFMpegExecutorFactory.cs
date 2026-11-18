@@ -36,10 +36,12 @@ internal sealed class FFMpegExecutorFactory(
         var executablePath = mpegOptions?.ExecutablePath ?? _mpegLocator.FindFFmpegExecutablePath();
 
         if (!File.Exists(executablePath))
+        {
             throw new FileNotFoundException(
                 $"FFmpeg executable not found: '{executablePath}'. " +
                 "Check FFMpegOptions:ExecutablePath, or install FFmpeg system-wide.",
                 executablePath);
+        }
 
         return executablePath;
     }

@@ -13,6 +13,7 @@ using Sa.Outbox.PostgreSql.TypeResolve;
 
 namespace Sa.Outbox.PostgreSql;
 
+/// <summary>Registers the PostgreSQL-backed outbox provider.</summary>
 public static class Setup
 {
     /// <summary>

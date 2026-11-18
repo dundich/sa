@@ -120,7 +120,7 @@ public class HybridFileStorageTests(HybridFileStorageTests.Fixture fixture)
         ServiceCollection services = new();
         services.AddSaHybridFileStorage(b
             => b.ConfigureStorage((_, c)
-                => c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions(string.Empty, IsReadOnly: true)))));
+                => c.AddStorage(new InMemoryFileStorage(new InMemoryFileStorageOptions { Basket = string.Empty, IsReadOnly = true }))));
 
         using var sp = services.BuildServiceProvider();
 

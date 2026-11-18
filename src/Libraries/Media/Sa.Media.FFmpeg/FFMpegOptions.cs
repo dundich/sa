@@ -19,7 +19,7 @@ public sealed record FFMpegOptions
     /// Рядом с ним должен лежать ffprobe — иначе операции чтения метаданных упадут с
     /// FileNotFoundException на первой попытке.
     /// </summary>
-    public string? ExecutablePath { get; set; } = null;
+    public string? ExecutablePath { get; set; }
 
     /// <summary>
     /// Каталог для временных и выходных файлов по умолчанию. Нужен там, где текущий рабочий
@@ -27,7 +27,7 @@ public sealed record FFMpegOptions
     /// в системах, где CWD не задан. Создаётся, если отсутствует.
     /// <c>null</c> — использовать каталог по умолчанию вызывающего кода.
     /// </summary>
-    public string? WritableDirectory { get; set; } = null;
+    public string? WritableDirectory { get; set; }
 
     /// <summary>
     /// Таймаут выполнения команд, секунд. <c>null</c> или <c>0</c> — использовать

@@ -1,7 +1,6 @@
 using Npgsql;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
-using Sa.Outbox.PostgreSql.Services;
 
 namespace Sa.Outbox.PostgreSql.Services.Plug;
 
@@ -28,11 +27,11 @@ internal sealed class OutboxBulkWriter(
 
         // One part for the whole batch: the core publisher shares it, so there is nothing to
         // dedupe and no per-message wrapper to walk.
-        await partRepository.EnsureMsgParts([batch.PartInfo], cancellationToken);
+        await partRepository.EnsureMsgPartsAsync([batch.PartInfo], cancellationToken);
 
         return transaction is null
-            ? await bulkCmd.Execute(batch, cancellationToken)
-            : await bulkCmd.Execute(batch, transaction, cancellationToken);
+            ? await bulkCmd.ExecuteAsync(batch, cancellationToken)
+            : await bulkCmd.ExecuteAsync(batch, transaction, cancellationToken);
     }
 
     private static NpgsqlTransaction? ResolveTransaction(object? context)

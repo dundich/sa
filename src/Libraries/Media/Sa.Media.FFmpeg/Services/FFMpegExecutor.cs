@@ -25,25 +25,25 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
     // вовсе (битый бандл, noexec на каталоге, чужая платформа), метод возвращал пустую строку,
     // а вызывающий падал где-то дальше с невнятной ошибкой. Теперь причина видна сразу:
     // ProcessExecutionResultException несёт код возврата и хвост stderr.
-    public async Task<string> GetVersion(CancellationToken cancellationToken = default)
+    public async Task<string> GetVersionAsync(CancellationToken cancellationToken = default)
     {
         var result = await executor.ExecuteAsync("-version", throwOnError: true, cancellationToken: cancellationToken);
         return result.StandardOutput;
     }
 
-    public async Task<string> GetFormats(CancellationToken cancellationToken = default)
+    public async Task<string> GetFormatsAsync(CancellationToken cancellationToken = default)
     {
         var result = await executor.ExecuteAsync("-formats", throwOnError: true, cancellationToken: cancellationToken);
         return result.StandardOutput;
     }
 
-    public async Task<string> GetCodecs(CancellationToken cancellationToken = default)
+    public async Task<string> GetCodecsAsync(CancellationToken cancellationToken = default)
     {
         var result = await executor.ExecuteAsync("-codecs", throwOnError: true, cancellationToken: cancellationToken);
         return result.StandardOutput;
     }
 
-    public Task<string> ConvertToPcmS16Le(
+    public Task<string> ConvertToPcmS16LeAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -58,7 +58,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
                 .Wav().BuildFile(),
             timeout, cancellationToken);
 
-    public Task ConvertToPcmS16Le(
+    public Task ConvertToPcmS16LeAsync(
         Stream inputStream,
         string inputFormat,
         Func<Stream, CancellationToken, Task> onOutput,
@@ -73,7 +73,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
                 .Wav().ToString(),
             inputStream, onOutput, timeout, cancellationToken);
 
-    public Task<string> ConvertToMp3(
+    public Task<string> ConvertToMp3Async(
         string inputFileName,
         string outputFileName,
         bool isOverwrite = true,
@@ -85,7 +85,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
                 .Format("mp3").BuildFile(),
             timeout, cancellationToken);
 
-    public Task<string> ConvertToOgg(
+    public Task<string> ConvertToOggAsync(
         string inputFileName,
         string outputFileName,
         bool isLibopus = false,
@@ -97,13 +97,13 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
                 .Format("ogg").BuildFile(),
             timeout, cancellationToken);
 
-    public Task<string> ConvertToPcmS16LePreservingFormat(
+    public Task<string> ConvertToPcmS16LePreservingFormatAsync(
         string inputFileName,
         string outputFileName,
         bool isOverwrite = true,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
-        => ConvertToPcmS16Le(
+        => ConvertToPcmS16LeAsync(
             inputFileName,
             outputFileName,
             outputSampleRate: null,
@@ -112,7 +112,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
             timeout,
             cancellationToken);
 
-    public Task<string> ConvertToPcmS16LeRaw(
+    public Task<string> ConvertToPcmS16LeRawAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -127,7 +127,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
                 .Format("s16le").BuildFile(),
             timeout, cancellationToken);
 
-    public Task ConvertToPcmS16LeRaw(
+    public Task ConvertToPcmS16LeRawAsync(
         Stream inputStream,
         string inputFormat,
         Func<Stream, CancellationToken, Task> onOutput,
@@ -142,7 +142,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
                 .Format("s16le").ToString(),
             inputStream, onOutput, timeout, cancellationToken);
 
-    public Task<string> ConvertToPcmS32Le(
+    public Task<string> ConvertToPcmS32LeAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -157,7 +157,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
                 .Wav().BuildFile(),
             timeout, cancellationToken);
 
-    public Task<string> ConvertToPcmF32Le(
+    public Task<string> ConvertToPcmF32LeAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -172,7 +172,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
                 .Wav().BuildFile(),
             timeout, cancellationToken);
 
-    public Task<string> ConvertToPcmF32LeRaw(
+    public Task<string> ConvertToPcmF32LeRawAsync(
         string inputFileName,
         string outputFileName,
         int? outputSampleRate = 16000,
@@ -187,7 +187,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
                 .Format("f32le").BuildFile(),
             timeout, cancellationToken);
 
-    public Task ConvertToPcmF32LeRaw(
+    public Task ConvertToPcmF32LeRawAsync(
         Stream inputStream,
         string inputFormat,
         Func<Stream, CancellationToken, Task> onOutput,
@@ -228,9 +228,11 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
     {
         // Проверяем сами, потому что на это поведение FFmpeg код возврата не смотрит.
         if (!file.IsOverwrite && File.Exists(file.OutputFileName))
+        {
             throw new IOException(
                 $"Output file already exists and isOverwrite is false: '{file.OutputFileName}'. " +
                 "Pass isOverwrite: true to replace it.");
+        }
 
         var result = await executor.ExecuteAsync(
             file.Command,
@@ -239,10 +241,12 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!File.Exists(file.OutputFileName))
+        {
             throw new ProcessExecutionException(
                 0,
                 $"FFmpeg reported success but did not create '{file.OutputFileName}'. " +
                 $"Most likely the bundled build lacks the requested encoder.{Environment.NewLine}{result.StandardError}");
+        }
 
         return result.StandardError;
     }
@@ -277,10 +281,12 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
         var output = Path.GetFullPath(outputFileName);
 
         if (string.Equals(input, output, comparison))
+        {
             throw new ArgumentException(
                 $"Input and output must be different files, but both are '{input}'. " +
                 "FFmpeg would truncate the input before reading it.",
                 nameof(outputFileName));
+        }
 
         // Раньше несуществующий вход доходил до FFmpeg, который падал с exit code 1, а этот код
         // молча проглатывал ошибку. Проверяем здесь — с понятным сообщением.

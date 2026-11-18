@@ -12,12 +12,12 @@ public class PgDataSourceBinaryImportTests(PgDataSourceFixture fixture) : IClass
     [Fact()]
     public async Task BeginBinaryImport_ImportsRows()
     {
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS binary_import (id int, name text, active bool);
             DELETE FROM binary_import;
             """, TestContext.Current.CancellationToken);
 
-        var imported = await fixture.DataSource.BeginBinaryImport(
+        var imported = await fixture.DataSource.BeginBinaryImportAsync(
             "COPY binary_import (id, name, active) FROM STDIN BINARY",
             async (writer, ct) =>
             {
@@ -34,27 +34,27 @@ public class PgDataSourceBinaryImportTests(PgDataSourceFixture fixture) : IClass
 
         Assert.Equal(50UL, imported);
 
-        var count = (int)(long)(await fixture.DataSource.ExecuteScalar("SELECT COUNT(*) FROM binary_import", TestContext.Current.CancellationToken))!;
+        var count = (int)(long)(await fixture.DataSource.ExecuteScalarAsync("SELECT COUNT(*) FROM binary_import", TestContext.Current.CancellationToken))!;
         Assert.Equal(50, count);
 
         // verify data integrity
-        var first = await fixture.DataSource.ExecuteReaderFirst<string>(
+        var first = await fixture.DataSource.ExecuteReaderFirstAsync<string>(
             "SELECT name FROM binary_import ORDER BY id LIMIT 1",
             TestContext.Current.CancellationToken);
         Assert.Equal("item1", first);
 
-        await fixture.DataSource.ExecuteNonQuery("DROP TABLE IF EXISTS binary_import;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DROP TABLE IF EXISTS binary_import;", TestContext.Current.CancellationToken);
     }
 
     [Fact()]
     public async Task BeginBinaryImport_EmptyImport_ReturnsZero()
     {
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS binary_import_empty (id int);
             DELETE FROM binary_import_empty;
             """, TestContext.Current.CancellationToken);
 
-        var imported = await fixture.DataSource.BeginBinaryImport(
+        var imported = await fixture.DataSource.BeginBinaryImportAsync(
             "COPY binary_import_empty (id) FROM STDIN BINARY",
             async (writer, ct) =>
             {
@@ -64,13 +64,13 @@ public class PgDataSourceBinaryImportTests(PgDataSourceFixture fixture) : IClass
 
         Assert.Equal(0UL, imported);
 
-        await fixture.DataSource.ExecuteNonQuery("DROP TABLE IF EXISTS binary_import_empty;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DROP TABLE IF EXISTS binary_import_empty;", TestContext.Current.CancellationToken);
     }
 
     [Fact()]
     public async Task BeginBinaryImport_GuidAndTimestamp()
     {
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS binary_import_types (
                 guid_val uuid,
                 ts_val timestamptz,
@@ -84,7 +84,7 @@ public class PgDataSourceBinaryImportTests(PgDataSourceFixture fixture) : IClass
         var ts = new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero);
         var payload = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF };
 
-        var imported = await fixture.DataSource.BeginBinaryImport(
+        var imported = await fixture.DataSource.BeginBinaryImportAsync(
             "COPY binary_import_types (guid_val, ts_val, payload) FROM STDIN BINARY",
             async (writer, ct) =>
             {
@@ -104,16 +104,16 @@ public class PgDataSourceBinaryImportTests(PgDataSourceFixture fixture) : IClass
 
         Assert.Equal(2UL, imported);
 
-        var count = (int)(long)(await fixture.DataSource.ExecuteScalar("SELECT COUNT(*) FROM binary_import_types", TestContext.Current.CancellationToken))!;
+        var count = (int)(long)(await fixture.DataSource.ExecuteScalarAsync("SELECT COUNT(*) FROM binary_import_types", TestContext.Current.CancellationToken))!;
         Assert.Equal(2, count);
 
-        await fixture.DataSource.ExecuteNonQuery("DROP TABLE IF EXISTS binary_import_types;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DROP TABLE IF EXISTS binary_import_types;", TestContext.Current.CancellationToken);
     }
 
     [Fact()]
     public async Task BeginBinaryImport_LargeBatch()
     {
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS binary_import_large (seq int, data text);
             DELETE FROM binary_import_large;
             """, TestContext.Current.CancellationToken);
@@ -121,7 +121,7 @@ public class PgDataSourceBinaryImportTests(PgDataSourceFixture fixture) : IClass
         const int batchSize = 1000;
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var imported = await fixture.DataSource.BeginBinaryImport(
+        var imported = await fixture.DataSource.BeginBinaryImportAsync(
             "COPY binary_import_large (seq, data) FROM STDIN BINARY",
             async (writer, ct) =>
             {
@@ -140,6 +140,6 @@ public class PgDataSourceBinaryImportTests(PgDataSourceFixture fixture) : IClass
         Assert.Equal(batchSize, (int)imported);
         Assert.True(sw.ElapsedMilliseconds < 5000, $"Large batch took too long: {sw.ElapsedMilliseconds}ms");
 
-        await fixture.DataSource.ExecuteNonQuery("DROP TABLE IF EXISTS binary_import_large;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DROP TABLE IF EXISTS binary_import_large;", TestContext.Current.CancellationToken);
     }
 }

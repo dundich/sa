@@ -8,13 +8,13 @@ internal sealed class SelectTenantCommand(
     IPgDataSource dataSource,
     SqlOutboxBuilder sql) : ISelectTenantCommand
 {
-    public async Task<IReadOnlyCollection<int>> Execute(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<int>> ExecuteAsync(CancellationToken cancellationToken)
     {
         try
         {
             // SqlSelectTenant projects exactly one column, so its ordinal is always 0 —
             // no per-row GetOrdinal scan and no settings lookup are needed here.
-            return await dataSource.ExecuteReaderList(sql.SqlSelectTenant,
+            return await dataSource.ExecuteReaderListAsync(sql.SqlSelectTenant,
                 reader => reader.GetInt32(0),
                 cancellationToken);
         }

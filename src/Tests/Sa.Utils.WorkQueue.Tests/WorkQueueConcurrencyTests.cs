@@ -25,7 +25,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         public long CancelledCount => Interlocked.Read(ref _cancelledCount);
         public long TotalProcessed => CompletedCount + FailedCount + CancelledCount;
 
-        public async Task Execute(BlockingTaskModel model, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(BlockingTaskModel model, CancellationToken cancellationToken)
         {
             int current = Interlocked.Increment(ref _currentParallel);
             try
@@ -113,21 +113,22 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         _disposables.Clear();
     }
 
-    private SaWorkQueue<BlockingTaskModel> CreateQueue(
+    private SaWorkChannel<BlockingTaskModel> CreateQueue(
         TrackingWork work,
         int concurrencyLimit,
         int? queueCapacity = null,
         int? maxConcurrency = null)
     {
-        var options = new SaWorkQueueOptions<BlockingTaskModel>(
-            Processor: work,
-            ConcurrencyLimit: concurrencyLimit,
-            MaxConcurrency: maxConcurrency ?? concurrencyLimit * 2,
-            QueueCapacity: queueCapacity ?? 100,
-            StatusChanged: work.HandleChanges
-        );
+        var options = new SaWorkQueueOptions<BlockingTaskModel>
+        {
+            Processor = work,
+            ConcurrencyLimit = concurrencyLimit,
+            MaxConcurrency = maxConcurrency ?? concurrencyLimit * 2,
+            QueueCapacity = queueCapacity ?? 100,
+            StatusChanged = work.HandleChanges
+        };
 
-        var queue = new SaWorkQueue<BlockingTaskModel>(options);
+        var queue = new SaWorkChannel<BlockingTaskModel>(options);
         _disposables.Add(queue);
         return queue;
     }
@@ -148,7 +149,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model = new BlockingTaskModel();
             blockers.Add(model.AllowCompletion);
-            await queue.Enqueue(model, TestToken);
+            await queue.EnqueueAsync(model, TestToken);
         }
 
         await Task.Delay(200, TestToken);
@@ -179,7 +180,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         for (int i = 0; i < 5; i++)
         {
             var model = new BlockingTaskModel(Delay: TimeSpan.FromMilliseconds(10));
-            await queue.Enqueue(model, TestToken);
+            await queue.EnqueueAsync(model, TestToken);
             model.Unlock(); // Сразу разрешаем завершение
         }
 
@@ -211,7 +212,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model = new BlockingTaskModel(Id: $"P1-{i}");
             phase1Blockers.Add(model.AllowCompletion);
-            await queue.Enqueue(model, TestToken);
+            await queue.EnqueueAsync(model, TestToken);
         }
         await Task.Delay(150, TestToken);
 
@@ -225,7 +226,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model2 = new BlockingTaskModel(Id: $"P2-{i}");
             phase2Blockers.Add(model2.AllowCompletion);
-            await queue.Enqueue(model2, TestToken);
+            await queue.EnqueueAsync(model2, TestToken);
         }
         await Task.Delay(150, TestToken);
 
@@ -262,7 +263,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             blockers.Add(model.AllowCompletion);
             startedEvents.Add(startedTcs);
 
-            await queue.Enqueue(model, TestToken);
+            await queue.EnqueueAsync(model, TestToken);
         }
 
 
@@ -312,7 +313,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model = new BlockingTaskModel(Delay: TimeSpan.FromMilliseconds(20));
             blockers.Add(model.AllowCompletion);
-            await queue.Enqueue(model);
+            await queue.EnqueueAsync(model);
         });
 
         await Task.WhenAll(enqueueTasks);
@@ -347,7 +348,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
             {
                 var model = new BlockingTaskModel(Id: $"T-{i++}");
                 blockers.Enqueue(model.AllowCompletion);
-                await queue.Enqueue(model, cts.Token);
+                await queue.EnqueueAsync(model, cts.Token);
                 await Task.Delay(20, cts.Token);
             }
         }, cts.Token);
@@ -514,7 +515,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         // TrackingWork gates every item on its own completion signal, so the signal
         // has to come before the await — Enqueue only completes at the terminal status.
         var model = new BlockingTaskModel();
-        var processed = queue.Enqueue(model, TestToken);
+        var processed = queue.EnqueueAsync(model, TestToken);
         model.AllowCompletion.SetResult();
 
         await processed;
@@ -553,7 +554,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
 
             var model = new BlockingTaskModel(Id: $"T-{i:D3}");
             models.Add(model);
-            var t = queue.Enqueue(model, TestToken).AsTask();
+            var t = queue.EnqueueAsync(model, TestToken).AsTask();
 
             tasks.Add(t);
         }
@@ -586,7 +587,7 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         {
             var model = new BlockingTaskModel(Delay: TimeSpan.FromSeconds(20));
             model.Unlock();
-            return queue.Enqueue(model, cts.Token).AsTask();
+            return queue.EnqueueAsync(model, cts.Token).AsTask();
         });
 
         await Task.WhenAll(enqueueTasks);
@@ -605,6 +606,70 @@ public sealed class WorkQueueConcurrencyTests : IAsyncLifetime
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(work.TotalProcessed > 0);
+    }
+
+    /// <summary>
+    /// Two callers raising the limit at the same moment must not both create the same slot.
+    /// </summary>
+    /// <remarks>
+    /// The limit change used to decide the delta under <c>_readersSync</c> and register the
+    /// new readers after releasing it, so both callers read the same "readers I have" count
+    /// and both spawned replacements. The overshoot is bad on its own — it exceeds
+    /// <see cref="ISaWorkChannel{TInput}.MaxConcurrency"/>, which is documented as a ceiling —
+    /// but with <c>MaxConcurrency = 1</c> it also puts a second reader on a channel created
+    /// with <c>SingleReader = true</c>, which is a promise to <c>System.Threading.Channels</c>
+    /// rather than a hint.
+    /// <para>
+    /// The race window is between the unlock and the registration, so the test repeats it
+    /// and observes the consequence rather than the internals: both items are queued and
+    /// both are gated, so a second reader shows up as two concurrent executions.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ConcurrentLimitRaises_CannotExceedMaxConcurrency()
+    {
+        for (var iteration = 0; iteration < 50; iteration++)
+        {
+            var work = new TrackingWork((_, _) => Task.CompletedTask);
+
+            await using var queue = new SaWorkChannel<BlockingTaskModel>(
+                new SaWorkQueueOptions<BlockingTaskModel>
+                {
+                    Processor = work,
+                    ConcurrencyLimit = 0,
+                    MaxConcurrency = 1,
+                    QueueCapacity = 4,
+                    StatusChanged = work.HandleChanges
+                });
+
+            // Both fit in the buffer, so no producer parks: the pool is paused, not full.
+            var first = new BlockingTaskModel(Id: "first");
+            var second = new BlockingTaskModel(Id: "second");
+            await queue.EnqueueAsync(first, TestToken);
+            await queue.EnqueueAsync(second, TestToken);
+
+            using var barrier = new Barrier(2);
+            var raisers = new[]
+            {
+                Task.Run(() => { barrier.SignalAndWait(); queue.ConcurrencyLimit = 1; }, TestToken),
+                Task.Run(() => { barrier.SignalAndWait(); queue.ConcurrencyLimit = 1; }, TestToken),
+            };
+
+            await Task.WhenAll(raisers);
+
+            // Let a second reader — if one was spawned — pick up the second item.
+            await Task.Delay(20, TestToken);
+
+            var observed = work.MaxParallelObserved;
+
+            // Released before asserting: a wedged item would otherwise hold up the dispose.
+            first.Unlock();
+            second.Unlock();
+
+            Assert.True(observed <= 1,
+                $"iteration {iteration}: {observed} readers ran at once with MaxConcurrency = 1");
+            Assert.Equal(1, queue.ConcurrencyLimit);
+        }
     }
 
 }

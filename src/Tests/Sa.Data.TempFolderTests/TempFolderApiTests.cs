@@ -1,6 +1,6 @@
-using System.Security;
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Data.TempFolder;
+using System.Security;
 
 namespace Sa.Data.TempFolderTests;
 

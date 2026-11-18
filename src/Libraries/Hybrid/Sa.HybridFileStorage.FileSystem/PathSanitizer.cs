@@ -32,7 +32,7 @@ internal static class PathSanitizer
     }
 
     /// <summary>
-    /// Determines whether <paramref name="relativePath"/> is a name the complex path would return
+    /// Determines whether <paramref name="path"/> is a name the complex path would return
     /// unchanged: no separators, no leading/trailing whitespace (which the path trims), no character
     /// <c>Path.GetInvalidFileNameChars()</c> flags (which the path replaces with <c>'_'</c>), and not
     /// a <c>"."</c> / <c>".."</c> segment (which the path rejects).

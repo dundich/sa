@@ -7,5 +7,5 @@ internal interface ITenantProvider : ITenantSource
     /// </summary>
     /// <param name="providerKey">The provider key (outbox scope key).</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    ValueTask<int[]> GetTenantIds(string providerKey, CancellationToken cancellationToken);
+    ValueTask<int[]> GetTenantIdsAsync(string providerKey, CancellationToken cancellationToken);
 }

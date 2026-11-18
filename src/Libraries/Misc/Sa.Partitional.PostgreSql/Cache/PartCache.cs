@@ -1,6 +1,4 @@
-using Sa.Classes;
 using Sa.Extensions;
-using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.SqlBuilder;
 using System.Collections.Concurrent;
 
@@ -30,9 +28,26 @@ internal sealed class PartCache(
 
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new();
 
+    /// <summary>
+    /// Partitions this process has already ensured, with the deadline of that knowledge.
+    /// </summary>
+    /// <remarks>
+    /// The snapshot starts at <see cref="SnapshotFloor"/> and only widens by a partition period, so a
+    /// date older than the window is <i>never</i> in it: <see cref="InCacheAsync"/> keeps answering "not
+    /// there", and <c>EnsureParts</c> re-ran the whole (idempotent) DDL batch on every call. Backdated
+    /// writes are exactly the case where that matters, so an ensured partition is remembered here for
+    /// <see cref="PartCacheSettings.CacheTtl"/> - the same staleness the snapshot itself accepts.
+    /// The entries are dropped by <see cref="RemoveCacheAsync()"/>, which the migration and cleanup jobs
+    /// call after they changed partitions behind the cache's back.
+    /// </remarks>
+    private readonly ConcurrentDictionary<EnsuredKey, DateTimeOffset> _ensured = new();
+
+    /// <summary>Above this many markers, expired ones are swept on the next insert.</summary>
+    private const int EnsuredPruneThreshold = 4096;
+
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public async Task<bool> InCache(
+    public async Task<bool> InCacheAsync(
         string tableName,
         DateTimeOffset date,
         StrOrNum[] partValues,
@@ -50,8 +65,7 @@ internal sealed class PartCache(
         // SequenceEqual enumerator were allocated per EnsureParts even on a cache hit.
         foreach (PartByRangeInfo cached in list)
         {
-            if (cached.PartValues.Length == partValues.Length
-                && cached.PartValues.AsSpan().SequenceEqual(partValues)
+            if (SameValues(cached.PartValues, partValues)
                 && cached.PartBy.GetRange(cached.FromDate).InRange(date))
             {
                 return true;
@@ -59,6 +73,26 @@ internal sealed class PartCache(
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Compares a cached branch with the requested one element by element.
+    /// </summary>
+    /// <remarks>
+    /// A hand-written loop because the cached values are an <see cref="IReadOnlyList{T}"/> now (the
+    /// snapshot is read-only), and <c>AsSpan()</c> is not available on it - while this runs on every
+    /// <c>EnsureParts</c> call and must not allocate an enumerator.
+    /// </remarks>
+    private static bool SameValues(IReadOnlyList<StrOrNum> cached, StrOrNum[] requested)
+    {
+        if (cached.Count != requested.Length) return false;
+
+        for (int i = 0; i < requested.Length; i++)
+        {
+            if (!cached[i].Equals(requested[i])) return false;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -221,17 +255,35 @@ internal sealed class PartCache(
         return (_timeProvider.GetUtcNow() - lookback).StartOfDay();
     }
 
-    public async Task EnsureCache(
+    public async Task EnsureCacheAsync(
         string tableName,
         DateTimeOffset date,
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default)
     {
-        if (await InCache(tableName, date, partValues, cancellationToken).ConfigureAwait(false)) return;
+        ISqlTableBuilder? builder = sqlBuilder[tableName];
+        DateTimeOffset now = _timeProvider.GetUtcNow();
 
-        await repository.CreatePart(tableName, date, partValues, cancellationToken).ConfigureAwait(false);
+        EnsuredKey ensuredKey = EnsuredKeyOf(tableName, builder, date, partValues);
 
-        await RemoveCache(tableName, cancellationToken).ConfigureAwait(false);
+        if (_ensured.TryGetValue(ensuredKey, out DateTimeOffset expiresAt))
+        {
+            if (expiresAt > now) return;
+
+            _ensured.TryRemove(ensuredKey, out _);
+        }
+
+        if (await InCacheAsync(tableName, date, partValues, cancellationToken).ConfigureAwait(false))
+        {
+            Remember(ensuredKey, now);
+            return;
+        }
+
+        await repository.CreatePartAsync(tableName, date, partValues, cancellationToken).ConfigureAwait(false);
+
+        await RemoveCacheAsync(tableName, cancellationToken).ConfigureAwait(false);
+
+        Remember(ensuredKey, now);
 
         // The DDL just executed is `CREATE TABLE IF NOT EXISTS` for the leaf plus the cache row, so
         // when it returns the partition exists — re-reading the snapshot could only tell us whether
@@ -240,7 +292,37 @@ internal sealed class PartCache(
         // every backdated write, driving a full DDL pass and a cache flush on each call, forever.
     }
 
-    public Task RemoveCache(string tableName, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Identity of an ensured partition: its table, the <i>period</i> its date falls into (so every
+    /// day of a monthly partition is the same key) and its list values.
+    /// </summary>
+    private static EnsuredKey EnsuredKeyOf(
+        string tableName,
+        ISqlTableBuilder? builder,
+        DateTimeOffset date,
+        StrOrNum[] partValues)
+    {
+        PgPartBy partBy = builder?.PartBy ?? PgPartBy.Day;
+
+        return new EnsuredKey(
+            CacheKey(tableName, builder),
+            partBy.GetRange(date).Start.ToUnixTimeSeconds(),
+            SqlTemplate.StrOrNumsToFmtString(partValues));
+    }
+
+    private void Remember(EnsuredKey key, DateTimeOffset now)
+    {
+        _ensured[key] = now + settings.CacheTtl;
+
+        if (_ensured.Count <= EnsuredPruneThreshold) return;
+
+        foreach (KeyValuePair<EnsuredKey, DateTimeOffset> item in _ensured)
+        {
+            if (item.Value <= now) _ensured.TryRemove(item);
+        }
+    }
+
+    public Task RemoveCacheAsync(string tableName, CancellationToken cancellationToken = default)
     {
         ISqlTableBuilder? builder = sqlBuilder[tableName];
         if (_cache.TryRemove(CacheKey(tableName, builder), out CacheEntry? removed)) Discard(removed);
@@ -251,13 +333,21 @@ internal sealed class PartCache(
     /// Drops every cached snapshot. Used after a bulk change — a migration that created partitions,
     /// or a cleanup that dropped them — which happened behind the cache's back.
     /// </summary>
-    public Task RemoveCache()
+    public Task RemoveCacheAsync()
     {
         foreach (KeyValuePair<string, CacheEntry> item in _cache)
         {
             if (_cache.TryRemove(item)) Discard(item.Value);
         }
 
+        _ensured.Clear();
+
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Key of one "already ensured" partition. A record, not a joined string: the parts are compared
+    /// by value, so no separator inside a table name or a value can merge two different keys.
+    /// </summary>
+    private readonly record struct EnsuredKey(string Table, long PeriodStart, string Values);
 }

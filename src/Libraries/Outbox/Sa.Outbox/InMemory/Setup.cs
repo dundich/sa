@@ -69,12 +69,14 @@ public static class Setup
 
         return services.AddOutboxProvider(
             scopeKey,
-            new OutboxProviderDescriptor(
-                "InMemory",
-                OutboxProviderCapabilities.TenantDetection
+            new OutboxProviderDescriptor
+            {
+                Name = "InMemory",
+                Capabilities = OutboxProviderCapabilities.TenantDetection
                 | OutboxProviderCapabilities.LockExtension
                 | OutboxProviderCapabilities.Postponement,
-                Version: typeof(Setup).Assembly.GetName().Version?.ToString()),
+                Version = typeof(Setup).Assembly.GetName().Version?.ToString(),
+            },
             provider => provider
                 .WithBulkWriter(sp => new InMemoryOutboxBulkWriter(
                     sp.GetRequiredKeyedService<InMemoryOutboxStore>(scopeKey),

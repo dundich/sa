@@ -18,7 +18,7 @@ public partial class S3BucketClient
         return new HttpRequestMessage(method, new Uri(url, UriKind.Absolute));
     }
 
-    private Task<HttpResponseMessage> Send(HttpRequestMessage request, string payloadHash, CancellationToken ct)
+    private Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, string payloadHash, CancellationToken ct)
     {
         if (_disposed)
         {

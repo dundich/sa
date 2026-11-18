@@ -41,7 +41,7 @@ public sealed class ScheduleConcurrencyTests(ScheduleConcurrencyTests.Fixture fi
 
         class SomeJob : IJob
         {
-            public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+            public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             {
                 Counter.Inc(this);
                 await Task.Delay(10, cancellationToken);
@@ -77,7 +77,7 @@ public sealed class ScheduleConcurrencyTests(ScheduleConcurrencyTests.Fixture fi
     {
         Fixture.Reset();
 
-        int i = await Sub.Start(CancellationToken.None);
+        int i = await Sub.StartAsync(CancellationToken.None);
 
         Assert.NotEqual(0, i);
 

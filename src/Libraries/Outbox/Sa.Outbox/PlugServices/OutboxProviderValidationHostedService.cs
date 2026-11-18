@@ -71,7 +71,7 @@ internal sealed partial class OutboxProviderValidationHostedService(
                 providerKey,
                 registry.Descriptor.Name,
                 registry.Descriptor.Version ?? "unknown",
-                registry.Descriptor.Capabilities.ToString());
+                registry.Descriptor.Capabilities);
         }
 
         return Task.CompletedTask;
@@ -83,5 +83,5 @@ internal sealed partial class OutboxProviderValidationHostedService(
         EventId = 2102,
         Level = LogLevel.Information,
         Message = "Outbox storage provider '{ProviderKey}': {Provider} {Version} ({Capabilities})")]
-    static partial void LogProvider(ILogger logger, string providerKey, string provider, string version, string capabilities);
+    static partial void LogProvider(ILogger logger, string providerKey, string provider, string version, OutboxProviderCapabilities capabilities);
 }

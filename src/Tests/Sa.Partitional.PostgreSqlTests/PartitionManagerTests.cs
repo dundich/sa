@@ -23,9 +23,9 @@ public class PartitionManagerTests(PartitionManagerTests.Fixture fixture)
                     )
                     .WithPartSeparator("_")
                     .PartByList("tenant_id", "gender")
-                    .AddMigration(1, ["male", "female"])
-                    .AddMigration(2, "male")
-                    .AddMigration(2, "female")
+                    .AddMigrationChildren(1, "male", "female")
+                    .AddMigrationChildren(2, "male")
+                    .AddMigrationChildren(2, "female")
                     .PartByRange(PgPartBy.Day, "created_at")
                     ;
 
@@ -51,7 +51,7 @@ public class PartitionManagerTests(PartitionManagerTests.Fixture fixture)
     {
         Console.WriteLine(fixture.ConnectionString);
         // Act
-        int i = await Sub.Migrate(TestContext.Current.CancellationToken);
+        int i = await Sub.MigrateAsync(TestContext.Current.CancellationToken);
         Assert.True(i > 0);
     }
 
@@ -64,7 +64,7 @@ public class PartitionManagerTests(PartitionManagerTests.Fixture fixture)
         DateTimeOffset tomorrow = today.AddDays(1);
 
         // Act
-        int i = await Sub.Migrate([today, tomorrow], TestContext.Current.CancellationToken);
+        int i = await Sub.MigrateAsync([today, tomorrow], TestContext.Current.CancellationToken);
 
         Assert.NotEqual(0, i);
 

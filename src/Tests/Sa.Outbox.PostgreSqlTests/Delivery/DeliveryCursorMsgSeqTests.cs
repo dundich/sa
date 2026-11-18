@@ -29,7 +29,7 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
 
         public static void Reset() => Counter = 0;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -93,7 +93,7 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
         var ct = TestContext.Current.CancellationToken;
 
         var scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        Assert.True(await scheduler.Start(ct) >= 1);
+        Assert.True(await scheduler.StartAsync(ct) >= 1);
 
         var publisher = fixture.Publisher;
 
@@ -125,7 +125,7 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
         Assert.Equal((ulong)batchB.Length, sentB);
 
         await WaitForAsync(() => C2Consumer.Counter >= batchA.Length + batchB.Length, ct);
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         // The regression itself: with the old msg_id cursor batch B would never be seen.
         Assert.Equal(batchA.Length + batchB.Length, C2Consumer.Counter);
@@ -143,11 +143,11 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
         var tableSettings = fixture.TableSettings;
         var fields = tableSettings.Message.Fields;
 
-        var seqBySeq = await fixture.DataSource.ExecuteReaderList<long>(
+        var seqBySeq = await fixture.DataSource.ExecuteReaderListAsync<long>(
             $"SELECT {fields.MsgSeq} FROM {tableSettings.GetQualifiedMsgTableName()} WHERE {fields.TenantId} = {Fixture.TenantId} ORDER BY {fields.MsgSeq}",
             r => r.GetInt64(0), ct);
 
-        var seqById = await fixture.DataSource.ExecuteReaderList<long>(
+        var seqById = await fixture.DataSource.ExecuteReaderListAsync<long>(
             $"SELECT {fields.MsgSeq} FROM {tableSettings.GetQualifiedMsgTableName()} WHERE {fields.TenantId} = {Fixture.TenantId} ORDER BY {fields.MsgId}",
             r => r.GetInt64(0), ct);
 
@@ -157,7 +157,7 @@ public class DeliveryCursorMsgSeqTests(DeliveryCursorMsgSeqTests.Fixture fixture
         // Insertion order != id order — the ordering the msg_seq cursor is built on.
         Assert.NotEqual(seqBySeq, seqById);
 
-        long groupOffset = await fixture.DataSource.ExecuteReaderFirst<long>(
+        long groupOffset = await fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"SELECT {tableSettings.Offset.Fields.GroupOffsetSeq} FROM {tableSettings.GetQualifiedOffsetTableName()} WHERE {tableSettings.Offset.Fields.ConsumerGroup} = '{Fixture.GroupId}'",
             ct);
 
@@ -191,7 +191,7 @@ public class DeliveryMinOffsetFloorTests(DeliveryMinOffsetFloorTests.Fixture fix
 
         public static void Reset() => Counter = 0;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -263,13 +263,13 @@ public class DeliveryMinOffsetFloorTests(DeliveryMinOffsetFloorTests.Fixture fix
         Assert.Equal(1UL, sentM2);
 
         var scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        Assert.True(await scheduler.Start(ct) >= 1);
+        Assert.True(await scheduler.StartAsync(ct) >= 1);
 
         await WaitForAsync(() => FloorConsumer.Counter >= 1, ct);
 
         // Give the group a chance to (wrongly) deliver m1, then prove it never did.
         await Task.Delay(600, ct);
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.Equal(1, FloorConsumer.Counter);
 
@@ -277,14 +277,14 @@ public class DeliveryMinOffsetFloorTests(DeliveryMinOffsetFloorTests.Fixture fix
         var fields = tableSettings.Message.Fields;
 
         // m1 still exists in the msg table — it is below the floor by design, not lost.
-        long msgCount = await fixture.DataSource.ExecuteReaderFirst<long>(
+        long msgCount = await fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"SELECT COUNT(*) FROM {tableSettings.GetQualifiedMsgTableName()} WHERE {fields.TenantId} = {Fixture.TenantId}",
             ct);
         Assert.Equal(2, msgCount);
 
         // The cursor sits at m2's seq (2), not at 0 and not at m1's seq: the resolved exclusive
         // boundary (1) was consumed and advanced to the floor message itself.
-        long groupOffset = await fixture.DataSource.ExecuteReaderFirst<long>(
+        long groupOffset = await fixture.DataSource.ExecuteReaderFirstAsync<long>(
             $"SELECT {tableSettings.Offset.Fields.GroupOffsetSeq} FROM {tableSettings.GetQualifiedOffsetTableName()} WHERE {tableSettings.Offset.Fields.ConsumerGroup} = '{Fixture.GroupId}'",
             ct);
         Assert.Equal(2, groupOffset);

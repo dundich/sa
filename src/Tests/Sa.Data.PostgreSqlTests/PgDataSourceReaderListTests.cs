@@ -11,13 +11,13 @@ public class PgDataSourceReaderListTests(PgDataSourceFixture fixture) : IClassFi
     [Fact()]
     public async Task ExecuteReaderList_ReturnsAllRows()
     {
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS reader_list_test (id int, name text);
             DELETE FROM reader_list_test;
             INSERT INTO reader_list_test (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');
             """, TestContext.Current.CancellationToken);
 
-        var names = await fixture.DataSource.ExecuteReaderList<string>(
+        var names = await fixture.DataSource.ExecuteReaderListAsync<string>(
             "SELECT name FROM reader_list_test ORDER BY id",
             reader => reader.GetString(0),
             TestContext.Current.CancellationToken);
@@ -27,19 +27,19 @@ public class PgDataSourceReaderListTests(PgDataSourceFixture fixture) : IClassFi
         Assert.Contains("Bob", names);
         Assert.Contains("Charlie", names);
 
-        await fixture.DataSource.ExecuteNonQuery("DELETE FROM reader_list_test;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DELETE FROM reader_list_test;", TestContext.Current.CancellationToken);
     }
 
     [Fact()]
     public async Task ExecuteReaderList_WithParameters()
     {
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS reader_list_params (name text, active bool);
             DELETE FROM reader_list_params;
             INSERT INTO reader_list_params (name, active) VALUES ('Alice', true), ('Bob', false), ('Charlie', true);
             """, TestContext.Current.CancellationToken);
 
-        var activeNames = await fixture.DataSource.ExecuteReaderList<string>(
+        var activeNames = await fixture.DataSource.ExecuteReaderListAsync<string>(
             "SELECT name FROM reader_list_params WHERE active = @active ORDER BY name",
             reader => reader.GetString(0),
             [new NpgsqlParameter { ParameterName = "active", Value = true }],
@@ -49,37 +49,37 @@ public class PgDataSourceReaderListTests(PgDataSourceFixture fixture) : IClassFi
         Assert.Contains("Alice", activeNames);
         Assert.Contains("Charlie", activeNames);
 
-        await fixture.DataSource.ExecuteNonQuery("DELETE FROM reader_list_params;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DELETE FROM reader_list_params;", TestContext.Current.CancellationToken);
     }
 
     [Fact()]
     public async Task ExecuteReaderList_ReturnsEmpty_ForNoData()
     {
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS reader_list_empty (id int);
             DELETE FROM reader_list_empty;
             """, TestContext.Current.CancellationToken);
 
-        var result = await fixture.DataSource.ExecuteReaderList<int>(
+        var result = await fixture.DataSource.ExecuteReaderListAsync<int>(
             "SELECT id FROM reader_list_empty",
             reader => reader.GetInt32(0),
             TestContext.Current.CancellationToken);
 
         Assert.Empty(result);
 
-        await fixture.DataSource.ExecuteNonQuery("DROP TABLE IF EXISTS reader_list_empty;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DROP TABLE IF EXISTS reader_list_empty;", TestContext.Current.CancellationToken);
     }
 
     [Fact()]
     public async Task ExecuteReaderList_TupleProjection()
     {
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS reader_list_tuple (id int, name text);
             DELETE FROM reader_list_tuple;
             INSERT INTO reader_list_tuple (id, name) VALUES (1, 'First'), (2, 'Second');
             """, TestContext.Current.CancellationToken);
 
-        var tuples = await fixture.DataSource.ExecuteReaderList<(int Id, string Name)>(
+        var tuples = await fixture.DataSource.ExecuteReaderListAsync<(int Id, string Name)>(
             "SELECT id, name FROM reader_list_tuple ORDER BY id",
             reader => (reader.GetInt32(0), reader.GetString(1)),
             TestContext.Current.CancellationToken);
@@ -90,7 +90,7 @@ public class PgDataSourceReaderListTests(PgDataSourceFixture fixture) : IClassFi
         Assert.Equal(2, tuples[1].Id);
         Assert.Equal("Second", tuples[1].Name);
 
-        await fixture.DataSource.ExecuteNonQuery("DELETE FROM reader_list_tuple;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DELETE FROM reader_list_tuple;", TestContext.Current.CancellationToken);
     }
 
     [Fact()]
@@ -99,7 +99,7 @@ public class PgDataSourceReaderListTests(PgDataSourceFixture fixture) : IClassFi
         var guid1 = Guid.NewGuid();
         var guid2 = Guid.NewGuid();
 
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS reader_list_guid (guid_val uuid);
             DELETE FROM reader_list_guid;
             INSERT INTO reader_list_guid (guid_val) VALUES (@g1), (@g2);
@@ -108,7 +108,7 @@ public class PgDataSourceReaderListTests(PgDataSourceFixture fixture) : IClassFi
              new NpgsqlParameter { ParameterName = "g2", Value = guid2, NpgsqlDbType = NpgsqlDbType.Uuid }],
             TestContext.Current.CancellationToken);
 
-        var guids = await fixture.DataSource.ExecuteReaderList<Guid>(
+        var guids = await fixture.DataSource.ExecuteReaderListAsync<Guid>(
             "SELECT guid_val FROM reader_list_guid ORDER BY guid_val",
             reader => reader.GetFieldValue<Guid>(0),
             TestContext.Current.CancellationToken);
@@ -117,25 +117,25 @@ public class PgDataSourceReaderListTests(PgDataSourceFixture fixture) : IClassFi
         Assert.Contains(guid1, guids);
         Assert.Contains(guid2, guids);
 
-        await fixture.DataSource.ExecuteNonQuery("DROP TABLE IF EXISTS reader_list_guid;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DROP TABLE IF EXISTS reader_list_guid;", TestContext.Current.CancellationToken);
     }
 
     [Fact()]
     public async Task ExecuteReaderList_CountMatchesRowCount()
     {
-        await fixture.DataSource.ExecuteNonQuery("""
+        await fixture.DataSource.ExecuteNonQueryAsync("""
             CREATE TABLE IF NOT EXISTS reader_list_count (val int);
             DELETE FROM reader_list_count;
             INSERT INTO reader_list_count (val) SELECT generate_series(1, 100);
             """, TestContext.Current.CancellationToken);
 
-        var count = await fixture.DataSource.ExecuteReaderList<int>(
+        var count = await fixture.DataSource.ExecuteReaderListAsync<int>(
             "SELECT val FROM reader_list_count ORDER BY val",
             reader => reader.GetInt32(0),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(100, count.Count);
 
-        await fixture.DataSource.ExecuteNonQuery("DROP TABLE IF EXISTS reader_list_count;", TestContext.Current.CancellationToken);
+        await fixture.DataSource.ExecuteNonQueryAsync("DROP TABLE IF EXISTS reader_list_count;", TestContext.Current.CancellationToken);
     }
 }

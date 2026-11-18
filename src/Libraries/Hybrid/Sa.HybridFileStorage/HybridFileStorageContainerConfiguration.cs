@@ -18,7 +18,7 @@ public sealed class HybridFileStorageContainerConfiguration
     /// Adds a file storage provider to the hybrid file storage container.
     /// </summary>
     /// <param name="storage">The storage implementation to register.</param>
-    /// <returns>The same instance for chaining.</returns>
+    /// <returns>The configuration for continued chaining.</returns>
     public HybridFileStorageContainerConfiguration AddStorage(IFileStorage storage)
     {
         return _addStorage(storage);

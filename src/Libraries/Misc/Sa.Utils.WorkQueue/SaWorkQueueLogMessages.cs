@@ -1,6 +1,7 @@
-namespace Sa.Utils.WorkQueue;
 
 using Microsoft.Extensions.Logging;
+
+namespace Sa.Utils.WorkQueue;
 
 internal static partial class SaWorkQueueLogMessages
 {

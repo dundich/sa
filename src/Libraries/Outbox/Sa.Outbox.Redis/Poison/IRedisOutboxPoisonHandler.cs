@@ -24,5 +24,5 @@ public interface IRedisOutboxPoisonHandler
     /// <summary>Handles one poisoned message.</summary>
     /// <param name="message">The message and the reason it was poisoned.</param>
     /// <param name="cancellationToken">The cancellation token of the delivery cycle.</param>
-    ValueTask Handle(RedisOutboxPoisonMessage message, CancellationToken cancellationToken);
+    ValueTask HandleAsync(RedisOutboxPoisonMessage message, CancellationToken cancellationToken);
 }

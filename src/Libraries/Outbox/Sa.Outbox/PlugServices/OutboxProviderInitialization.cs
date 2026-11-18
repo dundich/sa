@@ -54,10 +54,10 @@ internal sealed class OutboxProviderInitialization(IServiceProvider services)
             return Task.CompletedTask;
         }
 
-        return Start(providerKey, initializer).WaitAsync(cancellationToken);
+        return StartAsync(providerKey, initializer).WaitAsync(cancellationToken);
     }
 
-    private Task Start(string providerKey, IOutboxProviderInitializer initializer)
+    private Task StartAsync(string providerKey, IOutboxProviderInitializer initializer)
     {
         while (true)
         {

@@ -27,5 +27,5 @@ public interface IPgOutboxPoisonHandler
     /// <param name="message">The message and the reason it was parked.</param>
     /// <param name="cancellationToken">The cancellation token of the delivery cycle.</param>
     /// <returns>What the provider should do after the handler returns.</returns>
-    ValueTask<PgOutboxPoisonAction> Handle(PgOutboxPoisonMessage message, CancellationToken cancellationToken);
+    ValueTask<PgOutboxPoisonAction> HandleAsync(PgOutboxPoisonMessage message, CancellationToken cancellationToken);
 }

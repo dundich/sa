@@ -8,7 +8,7 @@ public interface IDeliveryBatcher
     /// <summary>
     /// Calculates the optimal batch size given a maximum allowed size and a specific tenant ID.
     /// </summary>
-    ValueTask<int> CalculateBatchSize(
+    ValueTask<int> CalculateBatchSizeAsync(
         int maxBatchSize,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken);

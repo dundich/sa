@@ -10,7 +10,7 @@ namespace Sa.Utils.WorkQueue.Tests;
 /// A status callback has no logger of its own, so the exception handed to it is the
 /// only account of why an item stopped. These tests pin the three places where that
 /// account used to go missing: the cancellation statuses, the "queue stopped" error
-/// raised to a parked producer, and <see cref="ISaWorkQueue{TInput}.ShutdownError"/>.
+/// raised to a parked producer, and <see cref="ISaWorkChannel{TInput}.ShutdownError"/>.
 /// </remarks>
 public sealed class WorkQueueDiagnosticsTests
 {
@@ -25,8 +25,8 @@ public sealed class WorkQueueDiagnosticsTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var producerCts = new CancellationTokenSource();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(async (int input, CancellationToken ct) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(async (int input, CancellationToken ct) =>
             {
                 inProcessor.SetResult();
                 await release.Task.ConfigureAwait(false);
@@ -43,7 +43,7 @@ public sealed class WorkQueueDiagnosticsTests
                     if (status == SaWorkStatus.Aborted) reported = error;
                 }));
 
-        var enqueued = queue.Enqueue(1, producerCts.Token);
+        var enqueued = queue.EnqueueAsync(1, producerCts.Token);
 
         await inProcessor.Task.WaitAsync(TestToken);
         await producerCts.CancelAsync();
@@ -66,8 +66,8 @@ public sealed class WorkQueueDiagnosticsTests
         Exception? reported = null;
         var inProcessor = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(async (int input, CancellationToken ct) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(async (int input, CancellationToken ct) =>
             {
                 inProcessor.SetResult();
 
@@ -82,7 +82,7 @@ public sealed class WorkQueueDiagnosticsTests
                     if (status == SaWorkStatus.Cancelled) reported = error;
                 }));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
 
         await inProcessor.Task.WaitAsync(TestToken);
         await queue.ShutdownAsync();
@@ -95,15 +95,15 @@ public sealed class WorkQueueDiagnosticsTests
     {
         // Paused with capacity 1: the second producer parks in the channel's write
         // until shutdown completes the writer.
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((int input, CancellationToken ct) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((int input, CancellationToken ct) => Task.CompletedTask)
                 .WithConcurrencyLimit(0)
                 .WithMaxConcurrency(4)
                 .WithQueueCapacity(1));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
 
-        var parked = Task.Run(() => queue.Enqueue(2, TestToken).AsTask(), TestToken);
+        var parked = Task.Run(() => queue.EnqueueAsync(2, TestToken).AsTask(), TestToken);
 
         await Task.Delay(200, TestToken);
         Assert.False(parked.IsCompleted);
@@ -123,12 +123,12 @@ public sealed class WorkQueueDiagnosticsTests
     {
         var first = new InvalidOperationException("first failure");
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((int input, CancellationToken ct) => throw first)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((int input, CancellationToken ct) => throw first)
                 .WithConcurrencyLimit(1)
                 .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.ShutdownQueue));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.False(queue.IsEnabled);
@@ -149,8 +149,8 @@ public sealed class WorkQueueDiagnosticsTests
         var rootHandled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var laterHandled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(async (int input, CancellationToken _) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(async (int input, CancellationToken _) =>
             {
                 if (input == 0)
                 {
@@ -169,8 +169,8 @@ public sealed class WorkQueueDiagnosticsTests
                     return SaExecutionErrorStrategy.ShutdownQueue;
                 }));
 
-        await queue.Enqueue(0, TestToken);
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(0, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
 
         await rootHandled.Task.WaitAsync(TestToken);
         await WaitForShutdownErrorAsync(queue, TestToken);
@@ -180,26 +180,53 @@ public sealed class WorkQueueDiagnosticsTests
         releaseSecond.SetResult();
 
         await laterHandled.Task.WaitAsync(TestToken);
-        await WaitForShutdownErrorAsync(queue, TestToken);
+
+        // ShutdownError is recorded before ShutdownAsync flips the state, so waiting for the
+        // error alone still races IsEnabled: the recorded reason is visible while the readers
+        // are still being stopped.
+        await WaitForStoppedAsync(queue, TestToken);
 
         Assert.False(queue.IsEnabled);
         Assert.Same(root, queue.ShutdownError);
     }
 
     /// <summary>
-    /// Waits until <see cref="ISaWorkQueue{TInput}.ShutdownError"/> has been written.
+    /// Waits until <see cref="ISaWorkChannel{TInput}.ShutdownError"/> has been written.
     /// </summary>
     /// <remarks>
     /// The write happens just after <c>HandleItemFaulted</c> returns, on the reader's
     /// continuation, so a test that only synchronised on the callback would race it.
     /// </remarks>
     static async Task WaitForShutdownErrorAsync<TInput>(
-        ISaWorkQueue<TInput> queue,
+        ISaWorkChannel<TInput> queue,
         CancellationToken cancellationToken)
     {
         while (queue.ShutdownError is null)
         {
             await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Waits until the asynchronous shutdown has flipped the queue out of the active state.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ISaWorkChannel{TInput}.ShutdownError"/> is written before <c>ShutdownAsync</c>
+    /// runs — it records why the queue is going down, while the state flips once the readers have
+    /// stopped — so synchronising on the error alone still races
+    /// <see cref="ISaWorkChannel{TInput}.IsEnabled"/>. The bounded wait fails the test instead of
+    /// hanging it if the shutdown never completes.
+    /// </remarks>
+    static async Task WaitForStoppedAsync<TInput>(
+        ISaWorkChannel<TInput> queue,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+
+        while (queue.IsEnabled)
+        {
+            await Task.Delay(10, timeout.Token).ConfigureAwait(false);
         }
     }
 
@@ -228,13 +255,13 @@ public sealed class WorkQueueDiagnosticsTests
 
         services.AddSaWorkQueue<int>(b => b.WithProcess((_, _) => Task.CompletedTask));
 
-        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(ISaWorkQueue<int>));
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(ISaWorkChannel<int>));
         Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
 
         using var provider = services.BuildServiceProvider();
-        var queue = provider.GetRequiredService<ISaWorkQueue<int>>();
+        var queue = provider.GetRequiredService<ISaWorkChannel<int>>();
 
         // One resolution, one instance — the whole point of the singleton rule.
-        Assert.Same(queue, provider.GetRequiredService<ISaWorkQueue<int>>());
+        Assert.Same(queue, provider.GetRequiredService<ISaWorkChannel<int>>());
     }
 }

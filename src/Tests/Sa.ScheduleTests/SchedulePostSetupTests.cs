@@ -18,7 +18,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture)
 
         class SomeJob : IJob
         {
-            public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+            public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             {
                 Counter.Inc();
                 await Task.Delay(10, cancellationToken);
@@ -35,7 +35,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture)
                         .EveryTime(TimeSpan.FromMilliseconds(100))
                         .RunOnce()
                         .StartImmediate()
-                        //.WithMaxConcurrency(1)
+                    //.WithMaxConcurrency(1)
                     ;
 
                 });
@@ -49,7 +49,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture)
                         .EveryTime(TimeSpan.FromMilliseconds(100))
                         .RunOnce()
                         .StartImmediate()
-                        //.WithMaxConcurrency(1)
+                    //.WithMaxConcurrency(1)
                     ;
 
                 });
@@ -65,7 +65,7 @@ public class SchedulePostSetupTests(SchedulePostSetupTests.Fixture fixture)
     [Fact]
     public async Task Check_Executing_RunOnce_ForMultiJobs()
     {
-        int started = await Sub.Start(CancellationToken.None);
+        int started = await Sub.StartAsync(CancellationToken.None);
 
         Assert.Equal(2, started);
 

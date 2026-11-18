@@ -53,7 +53,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     class SomeMessageConsumer1 : IConsumer<SomeMessage1>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage1>> messages,
@@ -66,7 +66,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
     class SomeMessageConsumer2 : IConsumer<SomeMessage2>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage2>> messages,
@@ -128,7 +128,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
 
         // start cron schedules
         IScheduler scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        int i = await scheduler.Start(CancellationToken.None);
+        int i = await scheduler.StartAsync(CancellationToken.None);
         Assert.True(i > 0);
 
         // start delivery message
@@ -148,7 +148,7 @@ public class OutboxParallelMessagingTests(OutboxParallelMessagingTests.Fixture f
             await Task.Delay(300, TestContext.Current.CancellationToken);
         }
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.True(CommonCounter.Counter > 0);
     }

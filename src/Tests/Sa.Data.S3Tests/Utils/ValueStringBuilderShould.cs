@@ -38,4 +38,17 @@ public class ValueStringBuilderShould
         Assert.True(builder.Length > -1);
         builder.Dispose();
     }
+
+    [Fact]
+    public void FlushThenDisposeDoesNotReturnTheArrayTwice()
+    {
+        // Flush уже возвращает арендованный массив в пул; повторный Dispose из `using` не должен
+        // возвращать его ещё раз — иначе один буфер уходит двум арендаторам.
+        var builder = new ValueStringBuilder(stackalloc char[4]);
+        builder.Append("abcdef"); // гарантированно растёт и уходит в пул
+
+        Assert.Equal("abcdef", builder.Flush());
+        builder.Dispose();
+        Assert.Empty(builder.ToString());
+    }
 }

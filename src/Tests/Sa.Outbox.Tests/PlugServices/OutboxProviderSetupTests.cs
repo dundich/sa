@@ -18,7 +18,7 @@ public class OutboxProviderSetupTests
     private static OutboxProviderDescriptor Descriptor(
         OutboxProviderCapabilities capabilities = OutboxProviderCapabilities.None,
         string name = "TestProvider")
-        => new(name, capabilities);
+        => new() { Name = name, Capabilities = capabilities };
 
     #region Registration
 
@@ -75,7 +75,7 @@ public class OutboxProviderSetupTests
         var services = new ServiceCollection();
 
         services.AddOutboxProvider(
-            new OutboxProviderDescriptor("TestProvider", Version: "1.2.3"),
+            new OutboxProviderDescriptor { Name = "TestProvider", Version = "1.2.3" },
             provider => provider.WithBulkWriter<FakeWriter>());
 
         using ServiceProvider sp = services.BuildServiceProvider();
@@ -89,7 +89,7 @@ public class OutboxProviderSetupTests
         var services = new ServiceCollection();
 
         Assert.Throws<ArgumentException>(
-            () => services.AddOutboxProvider(new OutboxProviderDescriptor("  "), _ => { }));
+            () => services.AddOutboxProvider(new OutboxProviderDescriptor { Name = "  " }, _ => { }));
     }
 
     [Fact]
@@ -261,7 +261,7 @@ public class OutboxProviderSetupTests
 
     internal sealed class FakeConsumer : IConsumer<FakeMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<FakeMessage>> messages,
@@ -293,7 +293,7 @@ public class OutboxProviderSetupTests
             CancellationToken cancellationToken)
             => Task.FromResult(messages.Length);
 
-        public Task<int> ExtendDelivery(
+        public Task<int> ExtendDeliveryAsync(
             TimeSpan lockExpiration,
             OutboxMessageFilter filter,
             CancellationToken cancellationToken)
@@ -304,7 +304,7 @@ public class OutboxProviderSetupTests
     {
         public bool CanDetect => true;
 
-        public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+        public ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
             => new([1]);
     }
 

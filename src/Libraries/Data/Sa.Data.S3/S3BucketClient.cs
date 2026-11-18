@@ -1,7 +1,8 @@
+using Sa.Data.S3.Utils;
 using System.Diagnostics;
 using System.Net;
 using System.Runtime.CompilerServices;
-using Sa.Data.S3.Utils;
+using System.Xml;
 
 namespace Sa.Data.S3;
 
@@ -13,7 +14,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
 {
     internal const int DefaultPartSize = 5 * 1024 * 1024; // 5 Mb
 
-    private readonly IArrayPool _arrayPool = DefaultArrayPool.Instance;
+    private readonly IArrayPool _arrayPool;
 
     private readonly string _bucket;
     private readonly HttpClient _client;
@@ -29,27 +30,60 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
 
     private bool _disposed;
 
+    /// <summary>
+    /// Gets the name of the bucket the client works with.
+    /// </summary>
     public string Bucket { get; }
+
+    /// <summary>
+    /// Gets the S3 endpoint URI.
+    /// </summary>
     public Uri Endpoint { get; }
 
-    public S3BucketClient(HttpClient client, S3BucketSettings settings, TimeProvider? timeProvider = null)
+    /// <param name="client">HTTP-клиент. В DI-пути приходит из <c>IHttpClientFactory</c>; при
+    /// создании вручную владение переходит клиенту — <see cref="Dispose"/> его освободит.</param>
+    /// <param name="settings">Настройки подключения. Проверяются <see cref="S3BucketSettings.Validate"/>,
+    /// поэтому ручной путь получает ту же диагностику, что и конвейер опций.</param>
+    /// <param name="timeProvider">Источник времени для подписи; по умолчанию системный.</param>
+    /// <param name="arrayPool">Пул буферов; по умолчанию <see cref="DefaultArrayPool.Instance"/>.</param>
+    public S3BucketClient(
+        HttpClient client,
+        S3BucketSettings settings,
+        TimeProvider? timeProvider = null,
+        IArrayPool? arrayPool = null)
     {
-        Bucket = settings.Bucket ?? throw new ArgumentException(nameof(settings.Bucket));
-        Endpoint = new Uri(settings.Endpoint);
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        // Без DI конвейер опций не работает, поэтому здесь проверяется то же самое: иначе пустой
+        // Bucket уводит запросы в корень эндпоинта, а неверный Endpoint всплывает голым
+        // UriFormatException без указания опции.
+        settings.Validate();
+
+        Bucket = settings.Bucket;
+        Endpoint = new Uri(settings.Endpoint, UriKind.Absolute);
 
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _arrayPool = arrayPool ?? DefaultArrayPool.Instance;
 
-        _bucket = $"{Endpoint.AbsoluteUri}{Bucket.ToLowerInvariant()}";
+        // TrimEnd: у эндпоинта без пути AbsoluteUri уже заканчивается на '/', а у проксированного
+        // («https://host/s3») — нет. Без нормализации второго случая bucket приклеивался бы к
+        // последнему сегменту пути: «https://host/s3bucket».
+        _bucket = $"{Endpoint.AbsoluteUri.TrimEnd('/')}/{Bucket.ToLowerInvariant()}";
         _client = client;
-        _host = $"{Endpoint.Host}:{Endpoint.Port}";
+        // Порт по умолчанию не входит в Host: так его отправляет и подписывает presigned-url путь.
+        _host = Endpoint.IsDefaultPort ? Endpoint.Host : $"{Endpoint.Host}:{Endpoint.Port}";
         _useHttp2 = settings.UseHttp2;
 
         _urlMiddle = $"%2F{settings.Region}%2F{settings.Service}%2Faws4_request";
         _urlStart = $"?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential={settings.AccessKey}%2F";
 
-        _signature = new Signature(settings.Region, settings.Service, settings.SecretKey);
+        _signature = new Signature(settings.Region, settings.Service, settings.SecretKey, _arrayPool);
         _headBuilder = new HeadBuilder(settings.AccessKey, settings.Region, settings.Service);
     }
+
+    /// <summary>Пул буферов клиента — его же использует <see cref="S3Upload"/>.</summary>
+    internal IArrayPool ArrayPool => _arrayPool;
 
     /// <summary>
     /// Создаёт подписанную ссылку на файл без проверки наличия файла на сервере
@@ -59,16 +93,32 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <returns>Возвращает подписанную ссылку на файл</returns>
     public string BuildFileUrl(string fileName, TimeSpan expiration)
     {
+        // X-Amz-Expires — целое число секунд в диапазоне 1..604800; вне его сервер ответит 403,
+        // поэтому неверный аргумент отсекается здесь, а не посреди чужого запроса.
+        if (expiration < TimeSpan.FromSeconds(1) || expiration > TimeSpan.FromDays(7))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(expiration),
+                expiration,
+                "The presigned URL lifetime must be between 1 second and 7 days.");
+        }
+
         var now = _timeProvider.GetUtcNow();
         var url = BuildFileUrl(_bucket, fileName, now, expiration);
-        var signature = _signature.Calculate(url, now);
-
-        return $"{url}&X-Amz-Signature={signature}";
+        return BuildSignedFileUrl(url, now);
     }
 
+    /// <summary>
+    /// Создаёт ссылку на файл без подписи (только путь) — годится лишь для публично читаемого
+    /// бакета; для приватного используйте <see cref="BuildFileUrl(string, TimeSpan)"/> или
+    /// <see cref="GetFileUrlAsync"/>.
+    /// </summary>
     public string BuildFileUrl(string fileName) => UrlUtils.BuildFileUrl(_bucket, fileName);
 
-    public string BuildFileUrl(string bucket, string fileName, DateTimeOffset now, TimeSpan expires)
+    /// <summary>
+    /// Строит запрос presigned-ссылки: путь и query до подписи.
+    /// </summary>
+    internal string BuildFileUrl(string bucket, string fileName, DateTimeOffset now, TimeSpan expires)
     {
         var builder = new ValueStringBuilder(stackalloc char[512]);
 
@@ -83,24 +133,35 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
         builder.Append("&X-Amz-Date=");
         builder.Append(now, Signature.Iso8601DateTime);
         builder.Append("&X-Amz-Expires=");
-        builder.Append(expires.TotalSeconds);
+        builder.Append((int)expires.TotalSeconds);
 
         builder.Append("&X-Amz-SignedHeaders=host");
 
         return builder.Flush();
     }
 
-    public async Task DeleteFile(string fileName, CancellationToken ct)
+    private string BuildSignedFileUrl(string url, DateTimeOffset now)
+    {
+        var signature = _signature.Calculate(url, now);
+        return $"{url}&X-Amz-Signature={signature}";
+    }
+
+    /// <summary>
+    /// Deletes the given file from the bucket.
+    /// </summary>
+    /// <param name="fileName">The name of the file to delete.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    public async Task DeleteFileAsync(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Delete, fileName))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         if (response.StatusCode is not HttpStatusCode.NoContent)
         {
-            Errors.UnexpectedResult(response);
+            await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
         }
 
         response.Dispose();
@@ -113,44 +174,52 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="fileName">Название файла</param>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает объектное представление файла на сервере</returns>
-    public async Task<S3File> GetFile(string fileName, CancellationToken ct)
+    public async Task<S3File> GetFileAsync(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Get, fileName))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
-        switch (response.StatusCode)
+        // Not found is not an error: S3File wraps the response and reports Exists == false. The
+        // response must stay alive — disposing it here made S3File.Length/ContentType throw
+        // ObjectDisposedException, because both read response.Content.
+        if (response.StatusCode is HttpStatusCode.OK or HttpStatusCode.NotFound)
         {
-            case HttpStatusCode.OK:
-                return new S3File(response);
-            case HttpStatusCode.NotFound:
-                response.Dispose();
-                return new S3File(response);
-            default:
-                Errors.UnexpectedResult(response);
-                return new S3File(null!); // никогда не будет вызвано
+            return new S3File(response);
         }
+
+        await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
+        return null!; // Errors.UnexpectedResult всегда бросает
     }
 
-    public async Task<Stream> GetFileStream(string fileName, CancellationToken ct)
+    /// <summary>
+    /// Opens a stream over the contents of the given file.
+    /// </summary>
+    /// <param name="fileName">The name of the file to read.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <returns>The file contents, or <see cref="Stream.Null"/> when the file does not exist.</returns>
+    public async Task<Stream> GetFileStreamAsync(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Get, fileName))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         switch (response.StatusCode)
         {
             case HttpStatusCode.OK:
-                return await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                // S3Stream освобождает ответ вместе с потоком — иначе HttpResponseMessage
+                // переживал бы вызывающего и держал свои заголовки до сборки мусора.
+                return new S3Stream(response, stream);
             case HttpStatusCode.NotFound:
                 response.Dispose();
                 return Stream.Null;
             default:
-                Errors.UnexpectedResult(response);
+                await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
                 return Stream.Null;
         }
     }
@@ -162,19 +231,25 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="expiration">Время жизни ссылки</param>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает подписанную ссылку на файл</returns>
-    public async Task<string?> GetFileUrl(string fileName, TimeSpan expiration, CancellationToken ct)
+    public async Task<string?> GetFileUrlAsync(string fileName, TimeSpan expiration, CancellationToken ct)
     {
-        return await IsFileExists(fileName, ct).ConfigureAwait(false)
+        return await IsFileExistsAsync(fileName, ct).ConfigureAwait(false)
             ? BuildFileUrl(fileName, expiration)
             : null;
     }
 
-    public async Task<bool> IsFileExists(string fileName, CancellationToken ct)
+    /// <summary>
+    /// Checks whether the given file exists in the bucket.
+    /// </summary>
+    /// <param name="fileName">The name of the file to check.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <returns><see langword="true"/> when the file exists.</returns>
+    public async Task<bool> IsFileExistsAsync(string fileName, CancellationToken ct)
     {
         HttpResponseMessage response;
         using (var request = CreateRequest(HttpMethod.Head, fileName))
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         switch (response.StatusCode)
@@ -186,47 +261,83 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
                 response.Dispose();
                 return false;
             default:
-                Errors.UnexpectedResult(response);
+                await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
                 return false;
         }
     }
 
-    public async IAsyncEnumerable<string> List(string? prefix, [EnumeratorCancellation] CancellationToken ct)
+    /// <summary>
+    /// Перечисляет ключи бакета, автоматически продолжая страницы по
+    /// <c>NextContinuationToken</c>.
+    /// </summary>
+    /// <remarks>
+    /// ListObjectsV2 отдаёт не больше 1000 ключей за ответ, поэтому без цикла по токену всё, что
+    /// сверх первой страницы, молча пропадало — и <see cref="DeleteBucketAsync(bool, CancellationToken)"/>
+    /// не мог очистить большой бакет.
+    /// </remarks>
+    public async IAsyncEnumerable<string> List(
+        string? prefix,
+        [EnumeratorCancellation] CancellationToken ct)
     {
-        var url = string.IsNullOrEmpty(prefix)
-            ? $"{_bucket}?list-type=2"
-            : $"{_bucket}?list-type=2&prefix={UrlUtils.UrlEncodeName(prefix)}";
+        string? continuationToken = null;
 
-        HttpResponseMessage response;
-        using (var request = new HttpRequestMessage(HttpMethod.Get, url))
+        do
         {
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
-        }
+            var url = BuildListUrl(prefix, continuationToken);
 
-        if (response.StatusCode is HttpStatusCode.OK)
-        {
-            var responseStream = await response.Content
-                .ReadAsStreamAsync(ct)
-                .ConfigureAwait(false);
-
-            while (responseStream.CanRead)
+            HttpResponseMessage response;
+            using (var request = new HttpRequestMessage(HttpMethod.Get, url))
             {
-                var readString = XmlStreamReader.ReadString(responseStream, "Key");
-                if (string.IsNullOrEmpty(readString))
-                {
-                    break;
-                }
-
-                yield return readString;
+                response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
             }
 
-            await responseStream.DisposeAsync().ConfigureAwait(false);
-            response.Dispose();
+            if (response.StatusCode is not HttpStatusCode.OK)
+            {
+                await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
+                yield break;
+            }
 
-            yield break;
+            string? nextToken = null;
+
+            try
+            {
+                var responseStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+
+                await using (responseStream.ConfigureAwait(false))
+                {
+                    using var reader = XmlStreamReader.CreateReader(responseStream);
+
+                    while (await reader.ReadAsync().ConfigureAwait(false))
+                    {
+                        ct.ThrowIfCancellationRequested();
+
+                        if (reader.NodeType is not XmlNodeType.Element)
+                        {
+                            continue;
+                        }
+
+                        switch (reader.LocalName)
+                        {
+                            case "Key":
+                                yield return await reader.ReadElementContentAsStringAsync().ConfigureAwait(false);
+                                break;
+                            case "NextContinuationToken":
+                                nextToken = await reader.ReadElementContentAsStringAsync().ConfigureAwait(false);
+                                break;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                // Итератор может быть брошен раньше (break/FirstAsync/отмена) — ответ не должен
+                // переживать перечислитель, иначе соединение висит до сборки мусора.
+                response.Dispose();
+            }
+
+            continuationToken = string.IsNullOrEmpty(nextToken) ? null : nextToken;
         }
-
-        Errors.UnexpectedResult(response);
+        while (continuationToken is not null);
     }
 
     /// <summary>
@@ -236,7 +347,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="contentType">Тип загружаемого файла</param>
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Возвращает объект управления загрузкой</returns>
-    public async Task<S3Upload> UploadFile(string fileName, string contentType, CancellationToken ct)
+    public async Task<S3Upload> UploadFileAsync(string fileName, string contentType, CancellationToken ct)
     {
         return await MultipartStart(fileName, contentType, ct).ConfigureAwait(false);
     }
@@ -250,13 +361,16 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="ct">Токен отмены операции</param>
     /// <remarks>Если файл превышает 5 МБ, то будет применена Multipart-загрузка</remarks>
     /// <returns>Возвращает результат загрузки файла</returns>
-    public Task<bool> UploadFile(string fileName, string contentType, Stream data, CancellationToken ct)
+    public Task<bool> UploadFileAsync(string fileName, string contentType, Stream data, CancellationToken ct)
     {
         var length = data.TryGetLength();
 
-        return length is null or 0 or > DefaultPartSize
-            ? ExecuteMultipartUpload(fileName, contentType, data, ct)
-            : PutFile(fileName, contentType, data, ct);
+        // Пустой поток — обычный PUT нулевой длины, как и пустой массив: multipart из нуля частей
+        // завершить нельзя, поэтому раньше такой вызов создавал загрузку, прерывал её и возвращал
+        // false.
+        return length is { } known && known <= DefaultPartSize
+            ? PutFile(fileName, contentType, data, ct)
+            : ExecuteMultipartUpload(fileName, contentType, data, ct);
     }
 
     /// <summary>
@@ -268,7 +382,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
     /// <param name="ct">Токен отмены операции</param>
     /// <remarks>Если файл превышает 5 МБ, то будет применена Multipart-загрузка</remarks>
     /// <returns>Возвращает результат загрузки файла</returns>
-    public Task<bool> UploadFile(string fileName, string contentType, byte[] data, CancellationToken ct)
+    public Task<bool> UploadFileAsync(string fileName, string contentType, byte[] data, CancellationToken ct)
     {
         var length = data.Length;
 
@@ -283,36 +397,41 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
         Stream data,
         CancellationToken ct)
     {
-        var buffer = _arrayPool.Rent<byte>((int)data.Length); // размер точно есть
-        var dataSize = await data.ReadAsync(buffer, ct).ConfigureAwait(false);
+        // Размер известен: сюда попадают только seekable-потоки (TryGetLength вернул длину),
+        // иначе ветка была бы multipart.
+        var buffer = _arrayPool.Rent<byte>((int)data.Length);
 
-        var payloadHash = HashHelper.GetPayloadHash(buffer.AsSpan(0, dataSize));
-
-        HttpResponseMessage response;
-        using (var request = CreateRequest(HttpMethod.Put, fileName))
+        try
         {
-            using var content = new ByteArrayContent(buffer, 0, dataSize);
-            content.Headers.Add("content-type", contentType);
-            request.Content = content;
+            // ReadTo читает до заполнения буфера: один ReadAsync имеет право вернуть меньше
+            // запрошенного, и прежняя версия загружала молча усечённый объект.
+            var dataSize = await data.ReadToAsync(buffer, ct).ConfigureAwait(false);
 
-            try
+            var payloadHash = HashHelper.GetPayloadHash(buffer.AsSpan(0, dataSize));
+
+            HttpResponseMessage response;
+            using (var request = CreateRequest(HttpMethod.Put, fileName))
             {
-                response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+                using var content = new ByteArrayContent(buffer, 0, dataSize);
+                content.Headers.Add("content-type", contentType);
+                request.Content = content;
+
+                response = await SendAsync(request, payloadHash, ct).ConfigureAwait(false);
             }
-            finally
+
+            if (response.StatusCode == HttpStatusCode.OK)
             {
-                _arrayPool.Return(buffer);
+                response.Dispose();
+                return true;
             }
+
+            await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
+            return false;
         }
-
-        if (response.StatusCode == HttpStatusCode.OK)
+        finally
         {
-            response.Dispose();
-            return true;
+            _arrayPool.ReturnToPool(buffer);
         }
-
-        Errors.UnexpectedResult(response);
-        return false;
     }
 
     private async Task<bool> PutFile(
@@ -331,7 +450,7 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
             content.Headers.Add("content-type", contentType);
             request.Content = content;
 
-            response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, payloadHash, ct).ConfigureAwait(false);
         }
 
         if (response.StatusCode is HttpStatusCode.OK)
@@ -340,10 +459,36 @@ public sealed partial class S3BucketClient : IS3BucketClient, IDisposable
             return true;
         }
 
-        Errors.UnexpectedResult(response);
+        await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
         return false;
     }
 
+    private string BuildListUrl(string? prefix, string? continuationToken)
+    {
+        var builder = new ValueStringBuilder(stackalloc char[256]);
+        builder.Append(_bucket);
+        builder.Append("?list-type=2");
+
+        // Значения кодируются правилами query, а не пути: «/» в префиксе обязан стать «%2F»,
+        // иначе сервер посчитает другую каноническую строку и вернёт SignatureDoesNotMatch.
+        if (!string.IsNullOrEmpty(prefix))
+        {
+            builder.Append("&prefix=");
+            UrlUtils.AppendEncodedQueryValue(ref builder, prefix);
+        }
+
+        if (continuationToken is not null)
+        {
+            builder.Append("&continuation-token=");
+            UrlUtils.AppendEncodedQueryValue(ref builder, continuationToken);
+        }
+
+        return builder.Flush();
+    }
+
+    /// <summary>
+    /// Disposes the underlying HTTP client.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)

@@ -11,14 +11,12 @@ public partial class S3BucketClient
 {
     internal async Task<bool> MultipartAbort(string encodedFileName, string uploadId, CancellationToken ct)
     {
-        var url = $"{_bucket}/{encodedFileName}?uploadId={uploadId}";
-
         HttpResponseMessage? response = null;
-        using (var request = new HttpRequestMessage(HttpMethod.Delete, url))
+        using (var request = new HttpRequestMessage(HttpMethod.Delete, BuildMultipartUrl(encodedFileName, uploadId)))
         {
             try
             {
-                response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+                response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
             }
             catch
             {
@@ -61,7 +59,9 @@ public partial class S3BucketClient
 
             builder.Append("<Part>");
             builder.Append("<PartNumber>", i + 1, "</PartNumber>");
-            builder.Append("<ETag>", partTags[i], "</ETag>");
+            builder.Append("<ETag>");
+            StringUtils.AppendXmlEscaped(builder, partTags[i]);
+            builder.Append("</ETag>");
             builder.Append("</Part>");
         }
 
@@ -74,11 +74,11 @@ public partial class S3BucketClient
         HttpResponseMessage response;
         using (var request = new HttpRequestMessage(
                    HttpMethod.Post,
-                   $"{_bucket}/{encodedFileName}?uploadId={uploadId}"))
+                   BuildMultipartUrl(encodedFileName, uploadId)))
         {
             using var content = new StringContent(data, Encoding.UTF8);
             request.Content = content;
-            response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, payloadHash, ct).ConfigureAwait(false);
         }
 
         var result = response is { IsSuccessStatusCode: true, StatusCode: HttpStatusCode.OK };
@@ -92,20 +92,22 @@ public partial class S3BucketClient
         string uploadId,
         int partNumber,
         byte[] partData,
+        int offset,
         int partSize,
         CancellationToken ct)
     {
-        var payloadHash = HashHelper.GetPayloadHash(partData.AsSpan(0, partSize));
-        var url = $"{_bucket}/{encodedFileName}?partNumber={partNumber}&uploadId={uploadId}";
+        var payloadHash = HashHelper.GetPayloadHash(partData.AsSpan(offset, partSize));
+
+        var url = $"{_bucket}/{encodedFileName}?partNumber={partNumber}&uploadId={UrlUtils.EncodeQueryValue(uploadId)}";
 
         HttpResponseMessage response;
         using (var request = new HttpRequestMessage(HttpMethod.Put, url))
         {
-            using var content = new ByteArrayContent(partData, 0, partSize);
-            content.Headers.Add("content-length", partSize.ToString());
+            // Content-Length выводит сам ByteArrayContent — ручной заголовок был лишним.
+            using var content = new ByteArrayContent(partData, offset, partSize);
             request.Content = content;
 
-            response = await Send(request, payloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, payloadHash, ct).ConfigureAwait(false);
         }
 
         var result = response is { IsSuccessStatusCode: true, StatusCode: HttpStatusCode.OK }
@@ -122,14 +124,16 @@ public partial class S3BucketClient
         Stream data,
         CancellationToken ct)
     {
-        using var upload = await UploadFile(fileName, contentType, ct).ConfigureAwait(false);
+        // DisposeAsync прерывает незавершённую загрузку: забытый Abort иначе оставлял бы на сервере
+        // оплачиваемые неполные части.
+        await using var upload = await UploadFileAsync(fileName, contentType, ct).ConfigureAwait(false);
 
-        if (await upload.AddParts(data, ct).ConfigureAwait(false) && await upload.Complete(ct).ConfigureAwait(false))
+        if (await upload.AddPartsAsync(data, ct).ConfigureAwait(false) && await upload.CompleteAsync(ct).ConfigureAwait(false))
         {
             return true;
         }
 
-        await upload.Abort(ct).ConfigureAwait(false);
+        await upload.AbortAsync(ct).ConfigureAwait(false);
         return false;
     }
 
@@ -139,14 +143,14 @@ public partial class S3BucketClient
         byte[] data,
         CancellationToken ct)
     {
-        using var upload = await UploadFile(fileName, contentType, ct).ConfigureAwait(false);
+        await using var upload = await UploadFileAsync(fileName, contentType, ct).ConfigureAwait(false);
 
-        if (await upload.AddParts(data, ct).ConfigureAwait(false) && await upload.Complete(ct).ConfigureAwait(false))
+        if (await upload.AddPartsAsync(data, ct).ConfigureAwait(false) && await upload.CompleteAsync(ct).ConfigureAwait(false))
         {
             return true;
         }
 
-        await upload.Abort(ct).ConfigureAwait(false);
+        await upload.AbortAsync(ct).ConfigureAwait(false);
         return false;
     }
 
@@ -161,22 +165,34 @@ public partial class S3BucketClient
             content.Headers.Add("content-type", contentType);
             request.Content = content;
 
-            response = await Send(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
+            response = await SendAsync(request, HashHelper.EmptyPayloadHash, ct).ConfigureAwait(false);
         }
 
         if (response.StatusCode is HttpStatusCode.OK)
         {
             var responseStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            var uploadId = XmlStreamReader.ReadString(responseStream, "UploadId");
 
-            await responseStream.DisposeAsync().ConfigureAwait(false);
+            string uploadId;
+            await using (responseStream.ConfigureAwait(false))
+            {
+                uploadId = await XmlStreamReader.ReadStringAsync(responseStream, "UploadId", ct).ConfigureAwait(false);
+            }
+
             response.Dispose();
 
             return new S3Upload(this, fileName, encodedFileName, uploadId);
         }
 
-        Errors.UnexpectedResult(response);
+        await Errors.UnexpectedResultAsync(response, ct).ConfigureAwait(false);
 
-        return null;
+        return null!; // Errors.UnexpectedResult всегда бросает
     }
+
+    /// <summary>
+    /// URL multipart-операции. <paramref name="uploadId"/> кодируется как значение query: id —
+    /// opaque-строка (у AWS это base64 с <c>+</c>, <c>/</c> и <c>=</c>), и без кодирования сервер
+    /// видел бы другую строку, чем та, по которой мы посчитали подпись.
+    /// </summary>
+    private string BuildMultipartUrl(string encodedFileName, string uploadId)
+        => $"{_bucket}/{encodedFileName}?uploadId={UrlUtils.EncodeQueryValue(uploadId)}";
 }

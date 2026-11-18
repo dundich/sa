@@ -1,10 +1,10 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 
 namespace Sa.Utils.WorkQueue.Tests;
 
 /// <summary>
-/// What <see cref="ISaWorkQueue{TInput}.PoolState"/> reports, and the one case it
+/// What <see cref="ISaWorkChannel{TInput}.PoolState"/> reports, and the one case it
 /// was added for.
 /// </summary>
 /// <remarks>
@@ -21,8 +21,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public void PoolState_OnAFreshQueue_IsActive()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(2));
 
         Assert.True(queue.IsEnabled);
@@ -32,8 +32,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_AfterPausing_IsPaused_AndRaisingTheLimitRestoresIt()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(2)
                 .WithQueueCapacity(8));
 
@@ -49,7 +49,7 @@ public sealed class WorkQueuePoolStateTests
 
         // The pool really is back, not just relabelled: the item queued while paused is
         // picked up now, which is the difference between a pause and a dead pool.
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         Assert.True(queue.IsIdle());
@@ -64,18 +64,18 @@ public sealed class WorkQueuePoolStateTests
     {
         var processor = new GateProcessor();
 
-        using var cancelled = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var cancelled = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8));
 
-        using var paused = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var paused = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8));
 
         // Two queues, two ways of ending up with no readers.
-        await cancelled.Enqueue(1, TestToken);
+        await cancelled.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
         await cancelled.ForceCancelReadersAsync(ct: TestToken);
 
@@ -97,12 +97,12 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_AfterEveryReaderFaulted_IsNoReaders()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => throw new InvalidOperationException("boom"))
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => throw new InvalidOperationException("boom"))
                 .WithConcurrencyLimit(1)
                 .WithHandleItemFaulted((_, _) => SaExecutionErrorStrategy.StopReader));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
 
         // The reader is stopped from its own thread, so the pool drains a moment after the
         // item is done with; poll rather than assume the order.
@@ -114,8 +114,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_AfterShutdown_IsStopped()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1));
 
         await queue.ShutdownAsync();
@@ -139,8 +139,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task ConcurrencyLimit_AfterShutdown_KeepsTheLimitItWasStoppedAt()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(4)
                 .WithMaxConcurrency(4));
 
@@ -157,8 +157,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task ConcurrencyLimit_AfterDispose_KeepsTheLimitItWasStoppedAt()
     {
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(3)
                 .WithMaxConcurrency(3));
 
@@ -170,8 +170,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_AfterDispose_IsStopped()
     {
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1));
 
         // No using: the queue is disposed here, and disposing it again would be the only
@@ -194,8 +194,8 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_PausedThenStopped_IsStopped_AndNotPaused()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1));
 
         queue.ConcurrencyLimit = 0;
@@ -217,13 +217,13 @@ public sealed class WorkQueuePoolStateTests
     {
         var processor = new GateProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithMaxConcurrency(4));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
         await queue.ForceCancelReadersAsync(ct: TestToken);
 
@@ -233,7 +233,7 @@ public sealed class WorkQueuePoolStateTests
         // it, which is what makes this a test of recovery rather than of the state
         // change. The gate is opened first — the first item was interrupted by the
         // force-cancel, so the second is the only one that can ever finish.
-        var second = queue.Enqueue(2, TestToken);
+        var second = queue.EnqueueAsync(2, TestToken);
         processor.Gate.TrySetResult();
 
         queue.ConcurrencyLimit = 2;
@@ -261,10 +261,10 @@ public sealed class WorkQueuePoolStateTests
     [Fact]
     public async Task PoolState_NamesTheSameReasonThatWaitForIdleAsyncLogs()
     {
-        var logger = new RecordingLogger<SaWorkQueue<int>>();
+        var logger = new RecordingLogger<SaWorkChannel<int>>();
 
-        using var paused = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask)
+        using var paused = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8),
             logger);
@@ -277,11 +277,11 @@ public sealed class WorkQueuePoolStateTests
         // dead pool instead — a force-cancel that waited for its readers would have
         // drained the buffer on the way out, leaving nothing to be honest about.
         paused.ConcurrencyLimit = 0;
-        await paused.Enqueue(1, TestToken);
+        await paused.EnqueueAsync(1, TestToken);
 
         var faulted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var emptied = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => throw new InvalidOperationException("boom"))
+        using var emptied = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => throw new InvalidOperationException("boom"))
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(8)
                 .WithHandleItemFaulted((_, _) =>
@@ -291,12 +291,12 @@ public sealed class WorkQueuePoolStateTests
                 }),
             logger);
 
-        await emptied.Enqueue(1, TestToken);
+        await emptied.EnqueueAsync(1, TestToken);
         await faulted.Task.WaitAsync(TestToken);
         await WaitUntilAsync(() => emptied.PoolState == SaWorkPoolState.NoReaders, TestToken);
 
         // Nothing is left to take this one: that is the state being reported.
-        await emptied.Enqueue(2, TestToken);
+        await emptied.EnqueueAsync(2, TestToken);
 
         await paused.WaitForIdleAsync(cancellationToken: TestToken);
         await emptied.WaitForIdleAsync(cancellationToken: TestToken);
@@ -308,6 +308,89 @@ public sealed class WorkQueuePoolStateTests
         Assert.Equal(SaWorkPoolState.NoReaders, emptied.PoolState);
         Assert.True(logger.Contains(LogLevel.Warning, "NoReaders"),
             "a wait that gave up on an empty pool must say so");
+    }
+
+    /// <summary>
+    /// A wait that is already parked is released when the pool is paused — the answer must
+    /// not depend on whether the caller arrived before or after the pause.
+    /// </summary>
+    /// <remarks>
+    /// The wait loop parks on the idle signal, and that signal only fires when the pending
+    /// count reaches zero. A pause stops the readers without finishing the buffered items,
+    /// so nothing was ever going to wake the caller: it parked on a queue that
+    /// <see cref="ISaWorkChannel{TInput}.PoolState"/> was already describing as
+    /// <see cref="SaWorkPoolState.Paused"/>, which is one of the two states the wait is
+    /// documented to return on.
+    /// </remarks>
+    [Fact]
+    public async Task WaitForIdle_ParkedThenPaused_ReturnsWithThePauseAsTheReason()
+    {
+        var processor = new GateProcessor();
+
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
+                .WithConcurrencyLimit(1)
+                .WithQueueCapacity(8));
+
+        // One item in flight (held by the gate), two more in the buffer.
+        await queue.EnqueueAsync(1, TestToken);
+        await processor.Entered.WaitAsync(TestToken);
+        await queue.EnqueueAsync(2, TestToken);
+        await queue.EnqueueAsync(3, TestToken);
+
+        var waiting = queue.WaitForIdleAsync(cancellationToken: TestToken);
+
+        // Give the wait a chance to park: a pause before that point would be seen at entry
+        // and would make the test pass without exercising the wake-up.
+        await Task.Delay(100, TestToken);
+
+        queue.ConcurrencyLimit = 0;
+
+        await waiting.WaitAsync(TimeSpan.FromSeconds(10), TestToken);
+
+        // The buffer was not dropped by the pause, so the honest answer is "not idle" —
+        // the wait returned because no pool is left to drain it, not because it is empty.
+        Assert.Equal(SaWorkPoolState.Paused, queue.PoolState);
+        Assert.False(queue.IsIdle());
+    }
+
+    /// <summary>
+    /// The same release on the other documented path: a force-cancel whose bounded wait
+    /// expires keeps the buffer, so the wait must give up rather than park on it.
+    /// </summary>
+    [Fact]
+    public async Task WaitForIdle_ParkedThenForceCancelTimesOut_IsReleasedWithTheBufferKept()
+    {
+        var processor = new WedgedProcessor();
+
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
+                .WithConcurrencyLimit(1)
+                .WithQueueCapacity(8));
+
+        await queue.EnqueueAsync(1, TestToken);
+        await processor.Entered.WaitAsync(TestToken);
+        await queue.EnqueueAsync(2, TestToken);
+
+        var waiting = queue.WaitForIdleAsync(cancellationToken: TestToken);
+        await Task.Delay(100, TestToken);
+
+        try
+        {
+            // The wedged item ignores the token, so the wait expires and — unlike the
+            // synchronous variant — the buffer is kept rather than reported as dropped.
+            await Assert.ThrowsAsync<TimeoutException>(
+                () => queue.ForceCancelReadersAsync(TimeSpan.FromMilliseconds(50), TestToken));
+
+            await waiting.WaitAsync(TimeSpan.FromSeconds(10), TestToken);
+        }
+        finally
+        {
+            processor.Release();
+        }
+
+        Assert.Equal(SaWorkPoolState.NoReaders, queue.PoolState);
+        Assert.False(queue.IsIdle());
     }
 
     /// <summary>Polls a condition the code under test reaches on its own thread.</summary>
@@ -333,7 +416,7 @@ public sealed class WorkQueuePoolStateTests
 
         public Task Entered => EnteredSource.Task;
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             EnteredSource.TrySetResult();
 

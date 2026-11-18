@@ -96,7 +96,7 @@ public sealed class UseDefaultPartitionTests(UseDefaultPartitionTests.Fixture fi
         IMigrationService migration = fixture.ServiceProvider
             .GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
 
-        int executed = await migration.Migrate([Day], Token);
+        int executed = await migration.MigrateAsync([Day], Token);
         Assert.True(executed >= 0, $"migration reported an incomplete run (executed={executed})");
     }
 
@@ -108,7 +108,7 @@ public sealed class UseDefaultPartitionTests(UseDefaultPartitionTests.Fixture fi
     async Task InsertMsgAsync(int tenantId, string part, long createdAtSeconds)
     {
         string msg = TableSettings.GetQualifiedMsgTableName();
-        await DataSource.ExecuteNonQuery(
+        await DataSource.ExecuteNonQueryAsync(
             $"""
             INSERT INTO {msg}
               (msg_id, tenant_id, msg_part, msg_payload, msg_created_at)
@@ -120,7 +120,7 @@ public sealed class UseDefaultPartitionTests(UseDefaultPartitionTests.Fixture fi
     /// <summary>Counts the rows currently held by a single named (default) partition table.</summary>
     async Task<long> CountInAsync(string qualifiedPartition)
     {
-        return await DataSource.ExecuteScalarTyped<long>(
+        return await DataSource.ExecuteScalarTypedAsync<long>(
             $"""
             SELECT count(*) FROM {qualifiedPartition};
             """,
@@ -146,7 +146,7 @@ public sealed class UseDefaultPartitionTests(UseDefaultPartitionTests.Fixture fi
         foreach (string partition in expected)
         {
             // A missing table would throw; existence of each default is the point.
-            await DataSource.ExecuteNonQuery($"SELECT 1 FROM {partition} LIMIT 0;", Token);
+            await DataSource.ExecuteNonQueryAsync($"SELECT 1 FROM {partition} LIMIT 0;", Token);
         }
     }
 
@@ -188,7 +188,7 @@ public sealed class UseDefaultPartitionTests(UseDefaultPartitionTests.Fixture fi
 
     private sealed class NoopConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -245,10 +245,10 @@ public sealed class NoDefaultPartitionTests(NoDefaultPartitionTests.Fixture fixt
     {
         IMigrationService migration = fixture.ServiceProvider
             .GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
-        _ = await migration.Migrate([new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero)], Token);
+        _ = await migration.MigrateAsync([new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero)], Token);
 
         // No default partition anywhere in the schema.
-        long defaults = await DataSource.ExecuteScalarTyped<long>(
+        long defaults = await DataSource.ExecuteScalarTypedAsync<long>(
             $"""
             SELECT count(*)
             FROM pg_class c
@@ -262,7 +262,7 @@ public sealed class NoDefaultPartitionTests(NoDefaultPartitionTests.Fixture fixt
         // ... so a direct insert of a tenant that was never migrated is rejected.
         string msg = TableSettings.GetQualifiedMsgTableName();
         PostgresException ex = await Assert.ThrowsAsync<PostgresException>(
-            async () => await DataSource.ExecuteNonQuery(
+            async () => await DataSource.ExecuteNonQueryAsync(
                 $"""
                 INSERT INTO {msg}
                   (msg_id, tenant_id, msg_part, msg_payload, msg_created_at)
@@ -293,7 +293,7 @@ public sealed class NoDefaultPartitionTests(NoDefaultPartitionTests.Fixture fixt
     {
         string tmp = "cr_" + Guid.NewGuid().ToString("N")[..8];
 
-        await DataSource.ExecuteNonQuery(
+        await DataSource.ExecuteNonQueryAsync(
             $"""
             CREATE TABLE {tmp} (
                 id uuid NOT NULL,
@@ -307,7 +307,7 @@ public sealed class NoDefaultPartitionTests(NoDefaultPartitionTests.Fixture fixt
         try
         {
             // One partition for tenant 1 only — no default.
-            await DataSource.ExecuteNonQuery(
+            await DataSource.ExecuteNonQueryAsync(
                 $"""
                 CREATE TABLE {tmp}__1 PARTITION OF {tmp} FOR VALUES IN (1);
                 """,
@@ -315,7 +315,7 @@ public sealed class NoDefaultPartitionTests(NoDefaultPartitionTests.Fixture fixt
 
             try
             {
-                await DataSource.ExecuteNonQuery(
+                await DataSource.ExecuteNonQueryAsync(
                     $"""
                     INSERT INTO {tmp} (id, tenant_id, msg_part, created_at)
                     VALUES (gen_random_uuid(), 999, 'ghost', 0);
@@ -335,7 +335,7 @@ public sealed class NoDefaultPartitionTests(NoDefaultPartitionTests.Fixture fixt
         }
         finally
         {
-            _ = await DataSource.ExecuteNonQuery(
+            _ = await DataSource.ExecuteNonQueryAsync(
                 $"""
                 DROP TABLE IF EXISTS {tmp};
                 """,
@@ -347,7 +347,7 @@ public sealed class NoDefaultPartitionTests(NoDefaultPartitionTests.Fixture fixt
 
     private sealed class NoopConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

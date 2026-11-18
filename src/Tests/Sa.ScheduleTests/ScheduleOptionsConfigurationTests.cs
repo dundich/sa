@@ -19,13 +19,13 @@ public sealed class ScheduleOptionsConfigurationTests
 
     private sealed class Job1 : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
     private sealed class Job2 : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 

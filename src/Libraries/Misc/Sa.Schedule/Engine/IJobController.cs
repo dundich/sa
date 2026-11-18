@@ -31,11 +31,11 @@ internal interface IJobController
     void Resume();
 
 
-    ValueTask WaitToRun(CancellationToken cancellationToken);
-    ValueTask WaitIfPaused(CancellationToken cancellationToken);
-    ValueTask<CanJobExecuteResult> CanExecute(CancellationToken cancellationToken);
+    ValueTask WaitToRunAsync(CancellationToken cancellationToken);
+    ValueTask WaitIfPausedAsync(CancellationToken cancellationToken);
+    ValueTask<CanJobExecuteResult> CanExecuteAsync(CancellationToken cancellationToken);
 
-    Task Execute(CancellationToken cancellationToken);
+    Task ExecuteAsync(CancellationToken cancellationToken);
     void ExecutionCompleted();
     void ExecutionFailed(Exception exception);
 }

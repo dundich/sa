@@ -26,7 +26,7 @@ public class SecretsPostProcessingTests
                 new Dictionary<string, string?>
                 {
                     ["simple_value"] = "SimpleValue",
-                    ["empty_value"] = String.Empty
+                    ["empty_value"] = string.Empty
                 }));
 
         builder.AddSaPostSecretProcessing(store);

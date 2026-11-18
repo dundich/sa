@@ -10,26 +10,28 @@ public class OutboxConsumerManagerListenerTests
     private static CancellationToken TestToken => TestContext.Current.CancellationToken;
 
     private static OutboxConsumerSettings CreateSettings(string consumerGroupId)
-        => new(
-            ConsumerGroupId: consumerGroupId,
-            AsSingleton: false,
-            Interval: TimeSpan.FromSeconds(5),
-            InitialDelay: TimeSpan.Zero,
-            ConcurrencyLimit: 1,
-            MaxConcurrency: 1,
-            RetryCountOnError: 0,
-            MaxBatchSize: 16,
-            MaxProcessingIterations: -1,
-            IterationDelay: TimeSpan.Zero,
-            LockDuration: TimeSpan.FromSeconds(10),
-            LockRenewal: TimeSpan.FromSeconds(3),
-            LookbackInterval: TimeSpan.FromDays(7),
-            MaxDeliveryAttempts: 3,
-            BatchingWindow: TimeSpan.Zero,
-            PerTenantTimeout: TimeSpan.Zero,
-            PerTenantMaxDegreeOfParallelism: 1,
-            Paused: false,
-            Version: 0);
+        => new OutboxConsumerSettings
+        {
+            ConsumerGroupId = consumerGroupId,
+            AsSingleton = false,
+            Interval = TimeSpan.FromSeconds(5),
+            InitialDelay = TimeSpan.Zero,
+            ConcurrencyLimit = 1,
+            MaxConcurrency = 1,
+            RetryCountOnError = 0,
+            MaxBatchSize = 16,
+            MaxProcessingIterations = -1,
+            IterationDelay = TimeSpan.Zero,
+            LockDuration = TimeSpan.FromSeconds(10),
+            LockRenewal = TimeSpan.FromSeconds(3),
+            LookbackInterval = TimeSpan.FromDays(7),
+            MaxDeliveryAttempts = 3,
+            BatchingWindow = TimeSpan.Zero,
+            PerTenantTimeout = TimeSpan.Zero,
+            PerTenantMaxDegreeOfParallelism = 1,
+            Paused = false,
+            Version = 0
+        };
 
     [Fact]
     public async Task Apply_TransformCallsBackIntoManager_DoesNotDeadlock()
@@ -42,13 +44,13 @@ public class OutboxConsumerManagerListenerTests
         {
             // A transform that reads (or pauses) the manager used to hit the same non-reentrant
             // Lock that Apply itself was holding.
-            _ = manager.Get(group);
+            _ = manager.GetSettings(group);
             _ = manager.IsPaused(group);
             return s with { MaxBatchSize = 7 };
         }), TestToken);
 
         await apply.WaitAsync(TimeSpan.FromSeconds(5), TestToken);
-        Assert.Equal(7, manager.Get(group)!.MaxBatchSize);
+        Assert.Equal(7, manager.GetSettings(group)!.MaxBatchSize);
     }
 
     [Fact]

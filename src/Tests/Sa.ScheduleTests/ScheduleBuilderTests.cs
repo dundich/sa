@@ -58,7 +58,7 @@ public class ScheduleBuilderTests
         Assert.Single(provider.GetKeyedServices<FuncJob>(jobId));
 
         var scheduler = provider.GetRequiredService<IScheduler>();
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         await WaitForConditionAsync(() =>
             secondCalled && !scheduler.GetSchedule(jobId)!.IsStarted);
@@ -66,7 +66,7 @@ public class ScheduleBuilderTests
         Assert.False(firstCalled, "the first registration was not removed — its function ran");
         Assert.True(secondCalled);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     private static async Task WaitForConditionAsync(Func<bool> condition)
@@ -344,12 +344,12 @@ public class ScheduleBuilderTests
 
     sealed class TestJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     sealed class TestInterceptor : IJobInterceptor
     {
-        public Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken cancellationToken)
-            => next();
+        public Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken cancellationToken)
+            => continuation();
     }
 }

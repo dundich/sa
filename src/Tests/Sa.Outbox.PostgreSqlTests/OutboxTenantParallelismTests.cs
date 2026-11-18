@@ -26,7 +26,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
 
         public static int TotalProcessed = 0;
 
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,
@@ -141,7 +141,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         ParallelTestConsumer.Clear();
 
         var scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        int startedSchedules = await scheduler.Start(CancellationToken.None);
+        int startedSchedules = await scheduler.StartAsync(CancellationToken.None);
         Assert.True(startedSchedules >= 1);
 
         var publisher = ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
@@ -169,7 +169,7 @@ public class OutboxTenantParallelismTests(OutboxTenantParallelismTests.Fixture f
         }
 
         await Task.Delay(500, TestContext.Current.CancellationToken);
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
 
         Assert.Equal((int)totalPublished, ParallelTestConsumer.TotalProcessed);

@@ -6,7 +6,7 @@ namespace Sa.Outbox.Delivery;
 /// After <c>n</c> consecutive empty polls the wait is
 /// <c>min(maxInterval, baseInterval * multiplier^(n-1))</c>, multiplied by a random factor in
 /// <c>[1 - jitter, 1]</c> and clamped to <c>[baseInterval, maxInterval]</c>. The first empty poll
-/// therefore keeps <paramref name="multiplier"/> out of the ramp and still waits the base
+/// therefore keeps <c>multiplier</c> out of the ramp and still waits the base
 /// interval.
 /// </para>
 /// <para>

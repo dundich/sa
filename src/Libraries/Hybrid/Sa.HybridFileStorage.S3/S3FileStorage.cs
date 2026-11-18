@@ -1,4 +1,3 @@
-using Sa.Classes;
 using Sa.Data.S3;
 using Sa.HybridFileStorage.Domain;
 using System.Runtime.CompilerServices;
@@ -8,7 +7,7 @@ namespace Sa.HybridFileStorage.S3;
 internal sealed class S3FileStorage(
     IS3BucketClient client,
     S3FileStorageOptions options,
-    TimeProvider? timeProvider = null) : IFileStorage
+    TimeProvider? timeProvider = null) : IFileStorage, IDisposable
 {
     private const string SchemeSeparator = "://";
 
@@ -22,8 +21,13 @@ internal sealed class S3FileStorage(
     private readonly bool _isReadOnly = options.IsReadOnly;
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    // Async lazy initialization for bucket ensure — prevents concurrent CreateBucket calls
-    private volatile Task? _ensureBucketTask;
+    // One bucket initialization per storage, retried after a failure. A cached Task (the previous
+    // design) kept a faulted result — and the first caller's cancellation token — for the lifetime
+    // of the process, so a single transient S3 error or one cancelled first upload broke every
+    // later upload. The gate serializes the check and is released on failure, so the next upload
+    // simply tries again.
+    private readonly SemaphoreSlim _bucketGate = new(1, 1);
+    private volatile bool _bucketEnsured;
 
     public string StorageType => _storageType;
     public bool IsReadOnly => _isReadOnly;
@@ -51,7 +55,7 @@ internal sealed class S3FileStorage(
             return false;
 
         var filePath = GetFilePath(fileId);
-        await client.DeleteFile(filePath, cancellationToken).ConfigureAwait(false);
+        await client.DeleteFileAsync(filePath, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -65,7 +69,7 @@ internal sealed class S3FileStorage(
             return false;
 
         var filePath = GetFilePath(fileId);
-        using var stream = await client.GetFileStream(filePath, cancellationToken).ConfigureAwait(false);
+        using var stream = await client.GetFileStreamAsync(filePath, cancellationToken).ConfigureAwait(false);
         if (stream is null || stream == Stream.Null) return false;
 
         await loadStream(stream, cancellationToken).ConfigureAwait(false);
@@ -84,58 +88,61 @@ internal sealed class S3FileStorage(
         await EnsureBucketAsync(cancellationToken).ConfigureAwait(false);
 
         // Оптимизированная сборка пути без лишних аллокаций
-        var filePath = string.Concat(_pathPrefix, "/", metadata.TenantId.ToString(), "/", metadata.FileName);
+        var filePath = string.Concat(_pathPrefix, "/", metadata.TenantId.ToString(System.Globalization.CultureInfo.InvariantCulture), "/", metadata.FileName);
 
         var extension = Path.GetExtension(filePath);
         var contentType = MimeTypeMap.GetMimeType(extension);
 
-        await client.UploadFile(filePath, contentType, fileStream, cancellationToken).ConfigureAwait(false);
+        await client.UploadFileAsync(filePath, contentType, fileStream, cancellationToken).ConfigureAwait(false);
 
         var fileId = string.Concat(_schemePrefix, filePath);
 
-        return new StorageResult(
-            fileId,
-            client.BuildFileUrl(filePath),
-            _storageType,
-            _timeProvider.GetUtcNow());
+        return new StorageResult
+        {
+            FileId = fileId,
+            AbsoluteUrl = client.BuildFileUrl(filePath),
+            StorageType = _storageType,
+            UploadedAt = _timeProvider.GetUtcNow(),
+        };
     }
 
     private async Task EnsureBucketAsync(CancellationToken cancellationToken)
     {
-        // Fast path: if already ensured, skip entirely
-        var task = _ensureBucketTask;
-        if (task is not null)
+        // Fast path: already ensured, skip the gate entirely.
+        if (_bucketEnsured)
         {
-            await task.ConfigureAwait(false);
             return;
         }
 
-        // Slow path: create the task that will ensure the bucket
-        var createdTask = EnsureBucketCoreAsync(cancellationToken);
-
-        // CompareExchange ensures only one task survives — others will await the winner
-        var comparison = Interlocked.CompareExchange(ref _ensureBucketTask, createdTask, null);
-        if (comparison is not null)
+        await _bucketGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            // Another thread won the race — await its task and discard ours
-            await createdTask.ConfigureAwait(false);
-            await comparison.ConfigureAwait(false);
-            return;
-        }
+            // Another upload may have created the bucket while this one waited.
+            if (_bucketEnsured)
+            {
+                return;
+            }
 
-        // We won — execute and let callers await the result
-        await createdTask.ConfigureAwait(false);
+            if (!await client.IsBucketExistsAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await client.CreateBucketAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            _bucketEnsured = true;
+        }
+        finally
+        {
+            // Released on success and on failure: a failed attempt must not poison the storage.
+            _bucketGate.Release();
+        }
     }
 
-    private async Task EnsureBucketCoreAsync(CancellationToken cancellationToken)
-    {
-        if (await client.IsBucketExists(cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
-
-        await client.CreateBucket(cancellationToken).ConfigureAwait(false);
-    }
+    /// <summary>
+    /// Releases the bucket-initialization gate at container shutdown. A directly constructed
+    /// (non-DI) instance may be left undisposed: a <see cref="SemaphoreSlim"/> without a wait
+    /// handle allocates no OS resource.
+    /// </summary>
+    public void Dispose() => _bucketGate.Dispose();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string GetFilePath(string fileId)
@@ -157,7 +164,7 @@ internal sealed class S3FileStorage(
     {
         if (!CanProcess(fileId)) return null;
 
-        if (!FileIdParser.TryParse(fileId, out var basket, out var tenantId, out _, out var fileName))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithoutTimestamp, out var basket, out var tenantId, out _, out var fileName))
             return null;
 
         return new FileMetadata

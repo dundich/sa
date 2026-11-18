@@ -1,19 +1,23 @@
 using Microsoft.Extensions.Configuration;
 using Npgsql;
-using Sa.Classes;
 using Sa.Data.PostgreSql;
 
 namespace Sa.Configuration.PostgreSql;
 
-
 /// <summary>
 /// Configuration provider that loads settings from a PostgreSQL database.
 /// </summary>
-public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisposable
+/// <remarks>
+/// The provider owns no connection: it reads through the <see cref="DatabaseConfigurationSource"/>
+/// data source, which the source creates once (connection string), receives once (passed-in source)
+/// or resolves once from dependency injection (late-bound source). That is what lets the
+/// post-processing pass build a second provider over the same source without a second pool.
+/// </remarks>
+public sealed class DatabaseConfigurationProvider : ConfigurationProvider, ISaAsyncConfigurationProvider, ISaReloadableConfigurationProvider, IDisposable
 {
+    private readonly DatabaseConfigurationSource _source;
     private readonly PostgreSqlConfigurationOptions _options;
-    private readonly IPgDataSource _dataSource;
-    private readonly bool _ownsDataSource;
+    private readonly bool _ownsSource;
     private readonly NpgsqlParameter[] _parameters;
 
     /// <summary>
@@ -27,54 +31,35 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
     /// <summary>Makes <see cref="Dispose"/> idempotent.</summary>
     private int _disposed;
 
-
-    /// <summary>
-    /// Creates a provider owning a private data source (and therefore its connection pool),
-    /// built once and reused across every load — <see cref="Load"/> runs on each
-    /// <see cref="IConfigurationRoot.Reload"/>.
-    /// </summary>
-    public DatabaseConfigurationProvider(PostgreSqlConfigurationOptions options)
-        : this(Validate(options), ownsDataSource: true)
-    {
-    }
-
-    /// <summary>
-    /// Validated <paramref name="options"/> in, builds the owned data source out of it. Split out
-    /// so the connection string is validated exactly once before it reaches
-    /// <see cref="IPgDataSource.Create"/>.
-    /// </summary>
-    private DatabaseConfigurationProvider(PostgreSqlConfigurationOptions options, bool ownsDataSource)
-        : this(options, IPgDataSource.Create(options.ConnectionString), ownsDataSource)
-    {
-    }
-
-    /// <summary>
-    /// Creates a provider over an existing data source — typically the DI-registered
-    /// <see cref="IPgDataSource"/>, so the configuration source shares the application's
-    /// connection pool instead of owning a second one. The caller keeps ownership.
-    /// </summary>
     internal DatabaseConfigurationProvider(
+        DatabaseConfigurationSource source,
         PostgreSqlConfigurationOptions options,
-        IPgDataSource dataSource,
-        bool ownsDataSource = false)
+        bool ownsSource)
     {
+        ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(dataSource);
 
+        _source = source;
         _options = options;
-        _dataSource = dataSource;
-        _ownsDataSource = ownsDataSource;
+        _ownsSource = ownsSource;
         _parameters = [.. options.Parameters.Select(static p => (NpgsqlParameter)p.Clone())];
     }
-
 
     /// <summary>
     /// Loads configuration from PostgreSQL. Invoked by <see cref="ConfigurationProvider"/>
     /// on build and on every <see cref="IConfigurationRoot.Reload"/>; the base class offers no
     /// async contract here, so this blocks on <see cref="LoadAsync"/>.
     /// </summary>
+    /// <remarks>
+    /// Does nothing while a late-bound connection has not been resolved yet: the source contributes
+    /// no keys until the runtime initializes it, and reading an empty layer is preferable to failing
+    /// a host that never asked for the database.
+    /// </remarks>
     public override void Load()
     {
+        if (_source.GetDataSource() is null)
+            return;
+
         if (!TryBeginLoad())
             return;
 
@@ -99,6 +84,9 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
     /// </remarks>
     public async ValueTask LoadAsync(CancellationToken cancellationToken = default)
     {
+        if (_source.GetDataSource() is null)
+            return;
+
         if (!TryBeginLoad())
             return;
 
@@ -114,6 +102,16 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
     }
 
     /// <summary>
+    /// Synchronously reloads the provider and raises its reload token.
+    /// </summary>
+    /// <remarks>Used by <see cref="ISaConfigurationReloader"/> when it drives the refresh itself.</remarks>
+    public void Reload()
+    {
+        Load();
+        OnReload();
+    }
+
+    /// <summary>
     /// Answers for both spellings of a key: when <see cref="PostgreSqlConfigurationOptions.DoubleUnderscoreAsSeparator"/>
     /// is on, <c>configuration["sa__pg__host"]</c> finds the value stored as <c>sa:pg:host</c>.
     /// The alias already applies to keys read from the database; normalizing the requested key
@@ -122,11 +120,36 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
     public override bool TryGet(string key, out string? value)
         => base.TryGet(_options.DoubleUnderscoreAsSeparator ? ConfigurationKey.Normalize(key) : key, out value);
 
+    /// <summary>
+    /// Releases the source — and with it the connection pool — when this provider was the one that
+    /// created the source's data source. A data source passed in or resolved from dependency
+    /// injection is left alone; its owner disposes it.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ConfigurationProvider"/> is no longer <see cref="IDisposable"/> in .NET 10, so
+    /// this is implemented directly; <see cref="IConfigurationRoot"/> disposes the providers it
+    /// owns, so <see cref="ConfigurationRoot.Dispose"/> reaches it.
+    /// </remarks>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
+
+        if (_ownsSource)
+            _source.Dispose();
+    }
+
     private bool TryBeginLoad() => Interlocked.Exchange(ref _loading, 1) == 0;
     private void EndLoad() => Volatile.Write(ref _loading, 0);
 
     private async Task LoadCoreAsync(CancellationToken cancellationToken)
     {
+        IPgDataSource dataSource = _source.GetDataSource()
+            ?? throw new InvalidOperationException(
+                "The PostgreSQL configuration data source is not available. "
+                + "Use the ConnectionString/DataSource strategy, or initialize the late-bound source "
+                + "with ISaConfigurationReloader.EnsureInitializedAsync after the host is built.");
+
         // Built outside the retry loop and swapped in only on success, so a failed reload
         // leaves the previous snapshot serving reads instead of wiping the configuration.
         Dictionary<string, string?> newData = new(StringComparer.OrdinalIgnoreCase);
@@ -139,7 +162,16 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
             // the retried delegate — is what silently disabled retries before.
             await PgRetryStrategy
                 .ExecuteWithRetry(
-                    fun: async ct => await ReadAsync(newData, ct).ConfigureAwait(false),
+                    fun: async ct =>
+                    {
+                        // A failed attempt must not leak its partial rows into the retry.
+                        newData.Clear();
+
+                        return await ReadAsync(dataSource, newData, ct).ConfigureAwait(false);
+                    },
+                    // MaxAttempts already counts the first attempt: the retry sequence yields
+                    // exactly MaxAttempts delays (the first one is a zero-delay "fast first"),
+                    // so the helper runs exactly MaxAttempts attempts.
                     retryCount: _options.MaxAttempts,
                     medianFirstRetryDelay: _options.MedianFirstRetryDelay,
                     cancellationToken: cancellationToken)
@@ -166,17 +198,22 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
         Data = newData;
     }
 
-    private async Task<int> ReadAsync(Dictionary<string, string?> newData, CancellationToken cancellationToken)
+    private async Task<int> ReadAsync(
+        IPgDataSource dataSource,
+        Dictionary<string, string?> newData,
+        CancellationToken cancellationToken)
     {
-        return await _dataSource
-            .ExecuteReader(
+        return await dataSource
+            .ExecuteReaderAsync(
                 _options.SelectSql,
                 (reader, index) =>
                 {
-                    if (index == 0 && reader.FieldCount < 2)
+                    // The shape is part of the contract: a third column (the removed client column)
+                    // would silently shift the key and the value, so it fails loudly instead.
+                    if (index == 0 && reader.FieldCount != 2)
                     {
                         throw new InvalidOperationException(
-                            $"The configuration query must return two columns (key, value), but it returned {reader.FieldCount}.");
+                            $"The configuration query must return exactly two columns (key, value), but it returned {reader.FieldCount}.");
                     }
 
                     if (reader.IsDBNull(0))
@@ -215,30 +252,5 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
                 },
                 cancellationToken)
             .ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Disposes the owned data source — and with it the connection pool — if this provider owns
-    /// it. A data source passed in from the outside is left alone; its owner disposes it.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="ConfigurationProvider"/> is no longer <see cref="IDisposable"/> in .NET 10, so
-    /// this is implemented directly; <see cref="IConfigurationRoot"/> disposes the providers it
-    /// owns, so <see cref="ConfigurationRoot.Dispose"/> reaches it.
-    /// </remarks>
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) == 1)
-            return;
-
-        if (_ownsDataSource)
-            _dataSource.Dispose();
-    }
-
-    private static PostgreSqlConfigurationOptions Validate(PostgreSqlConfigurationOptions options)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        options.Validate();
-        return options;
     }
 }

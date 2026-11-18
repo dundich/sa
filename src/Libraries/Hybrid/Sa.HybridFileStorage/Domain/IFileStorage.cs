@@ -43,6 +43,7 @@ public interface IFileStorage
     /// Downloads a file from the storage by its ID.
     /// </summary>
     /// <param name="fileId">pg://share/1/1773210911/test.txt</param>
+    /// <param name="loadStream">Receives the downloaded content; awaited before the call returns.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The file stream.</returns>
     Task<bool> DownloadAsync(
@@ -59,7 +60,11 @@ public interface IFileStorage
     Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken);
 
 
+    /// <summary>Reads a file's metadata.</summary>
+    /// <param name="fileId">File ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The metadata, or <see langword="null"/> when the file does not exist.</returns>
     Task<FileMetadata?> GetMetadataAsync(
         string fileId,
-        CancellationToken cancellationToken = default); 
+        CancellationToken cancellationToken = default);
 }

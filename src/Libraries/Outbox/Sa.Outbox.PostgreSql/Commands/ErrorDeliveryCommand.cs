@@ -7,12 +7,12 @@ namespace Sa.Outbox.PostgreSql.Commands;
 
 internal sealed class ErrorDeliveryCommand(
     IPgDataSource dataSource,
-    SqlOutboxBuilder sqlTemplate): IErrorDeliveryCommand
+    SqlOutboxBuilder sqlTemplate) : IErrorDeliveryCommand
 {
 
     private readonly SqlCacheSplitter sqlCache = new(len => sqlTemplate.SqlError(len));
 
-    public async Task<IReadOnlyDictionary<Exception, ErrorInfo>> Execute(
+    public async Task<IReadOnlyDictionary<Exception, ErrorInfo>> ExecuteAsync(
         ReadOnlyMemory<IOutboxContext> messages,
         CancellationToken cancellationToken)
     {
@@ -34,7 +34,7 @@ internal sealed class ErrorDeliveryCommand(
 
         foreach ((string sql, int count) in sqlCache.GetSql(len))
         {
-            await dataSource.ExecuteNonQuery(sql,
+            await dataSource.ExecuteNonQueryAsync(sql,
                 cmd => Fill(cmd, errorArray, startIndex, count),
                 cancellationToken);
 
@@ -124,10 +124,12 @@ internal sealed class ErrorDeliveryCommand(
             // again in Fill, doubling the exception→text walk on the __error$ write path.
             string errorMessage = GetErrorMessage(message.Exception);
 
-            ErrorInfo info = new(
-                errorMessage.GetMurmurHash3(),
-                message.Exception.GetType().Name,
-                message.DeliveryResult.CreatedAt.StartOfDay());
+            ErrorInfo info = new()
+            {
+                ErrorId = errorMessage.GetMurmurHash3(),
+                TypeName = message.Exception.GetType().Name,
+                CreatedAt = message.DeliveryResult.CreatedAt.StartOfDay(),
+            };
 
             var key = new ErrorKey(info.ErrorId, info.CreatedAt);
 
@@ -146,10 +148,10 @@ internal sealed class ErrorDeliveryCommand(
     internal readonly record struct ErrorRow(Exception Exception, string ErrorMessage, ErrorInfo Info);
 
     /// <summary>
-/// Hash of the compact error text, for callers that do not have the text at hand (test pins).
-/// The production path computes the text once in <see cref="GroupByException"/> and hashes it
-/// directly — do not route production through this helper, it would compose the text twice (M5).
-/// </summary>
+    /// Hash of the compact error text, for callers that do not have the text at hand (test pins).
+    /// The production path computes the text once in <see cref="GroupByException"/> and hashes it
+    /// directly — do not route production through this helper, it would compose the text twice (M5).
+    /// </summary>
     internal static long GetErrorMessageHash(Exception exception)
     {
         // Hash the same compact representation used in GetErrorMessage so that

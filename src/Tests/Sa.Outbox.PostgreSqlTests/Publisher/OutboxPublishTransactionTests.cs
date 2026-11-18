@@ -9,7 +9,7 @@ namespace Sa.Outbox.PostgreSqlTests.Publisher;
 /// <summary>
 /// Verifies that published messages can be enlisted in a caller-controlled PostgreSQL transaction
 /// (an explicit <c>NpgsqlTransaction</c> or one opened via
-/// <see cref="IPgDataSource.BeginTransaction"/>), and that the same-database guard rejects foreign
+/// <see cref="IPgDataSource.BeginTransactionAsync"/>), and that the same-database guard rejects foreign
 /// transactions.
 /// </summary>
 public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture fixture)
@@ -28,7 +28,7 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
     [Fact]
     public async Task Publish_ExplicitTransaction_Commit_MakesRowsVisible()
     {
-        await using NpgsqlConnection conn = await DataSource.OpenDbConnection(Ct);
+        await using NpgsqlConnection conn = await DataSource.OpenDbConnectionAsync(Ct);
         await using NpgsqlTransaction tx = await conn.BeginTransactionAsync(Ct);
 
         ulong result = await Publisher.Publish([Msg(101)], tenantId: 101, tx, Ct);
@@ -43,7 +43,7 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
     [Fact]
     public async Task Publish_ExplicitTransaction_Rollback_LeavesNoRows()
     {
-        await using NpgsqlConnection conn = await DataSource.OpenDbConnection(Ct);
+        await using NpgsqlConnection conn = await DataSource.OpenDbConnectionAsync(Ct);
         await using NpgsqlTransaction tx = await conn.BeginTransactionAsync(Ct);
 
         await Publisher.Publish([Msg(102)], tenantId: 102, tx, Ct);
@@ -56,7 +56,7 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
     [Fact]
     public async Task Publish_DataSourceBeginTransaction_Commit_MakesRowsVisible()
     {
-        await using PgTransaction sqlTx = await DataSource.BeginTransaction(Ct);
+        await using PgTransaction sqlTx = await DataSource.BeginTransactionAsync(Ct);
 
         await Publisher.Publish([Msg(108)], tenantId: 108, sqlTx.Transaction, Ct);
 
@@ -68,7 +68,7 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
     [Fact]
     public async Task Publish_DataSourceBeginTransaction_DisposeWithoutCommit_RollsBack()
     {
-        await using (PgTransaction sqlTx = await DataSource.BeginTransaction(Ct))
+        await using (PgTransaction sqlTx = await DataSource.BeginTransactionAsync(Ct))
         {
             await Publisher.Publish([Msg(109)], tenantId: 109, sqlTx.Transaction, Ct);
         }
@@ -81,7 +81,7 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
     {
         const string otherDb = "sa_outbox_other";
 
-        await DataSource.ExecuteNonQuery($"CREATE DATABASE {otherDb}", Ct);
+        await DataSource.ExecuteNonQueryAsync($"CREATE DATABASE {otherDb}", Ct);
 
         var builder = new NpgsqlConnectionStringBuilder(fixture.ConnectionString)
         {
@@ -100,7 +100,7 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
     [Fact]
     public async Task PublishInTransaction_DataSourceTransaction_Commit_MakesRowsVisible()
     {
-        await using PgTransaction sqlTx = await DataSource.BeginTransaction(Ct);
+        await using PgTransaction sqlTx = await DataSource.BeginTransactionAsync(Ct);
 
         ulong result = await Publisher.PublishInTransaction([Msg(111)], tenantId: 111, sqlTx.Transaction, Ct);
 
@@ -114,7 +114,7 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
     [Fact]
     public async Task PublishInTransaction_NpgsqlTransaction_Rollback_LeavesNoRows()
     {
-        await using NpgsqlConnection conn = await DataSource.OpenDbConnection(Ct);
+        await using NpgsqlConnection conn = await DataSource.OpenDbConnectionAsync(Ct);
         await using NpgsqlTransaction tx = await conn.BeginTransactionAsync(Ct);
 
         await Publisher.PublishInTransaction([Msg(112)], tenantId: 112, tx, Ct);
@@ -127,7 +127,7 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
     [Fact]
     public async Task PublishSingleInTransaction_DataSourceTransaction_Commit_MakesTheRowVisible()
     {
-        await using PgTransaction sqlTx = await DataSource.BeginTransaction(Ct);
+        await using PgTransaction sqlTx = await DataSource.BeginTransactionAsync(Ct);
 
         ulong result = await Publisher.PublishSingleInTransaction(
             Msg(113), tenantId: 113, sqlTx.Transaction, Ct);
@@ -154,7 +154,7 @@ public class OutboxPublishTransactionTests(OutboxPublishTransactionTests.Fixture
             WHERE {OutboxFieldDefaults.TenantId} = @t
             """;
 
-        return await DataSource.ExecuteReaderFirst<int>(
+        return await DataSource.ExecuteReaderFirstAsync<int>(
             sql,
             [new NpgsqlParameter("t", tenantId)],
             Ct);

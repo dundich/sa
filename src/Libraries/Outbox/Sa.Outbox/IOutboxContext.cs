@@ -158,7 +158,7 @@ public interface IOutboxContextOperations<TMessage> : IOutboxContext<TMessage>
     /// </summary>
     /// <param name="exception">The exception that occurred during processing.</param>
     /// <param name="message">An optional message providing additional context.</param>
-    void Error(Exception exception, string? message = null);
+    void Fail(Exception exception, string? message = null);
 
     /// <summary>
     /// Marks the message processing as a 501 Not Implemented error.

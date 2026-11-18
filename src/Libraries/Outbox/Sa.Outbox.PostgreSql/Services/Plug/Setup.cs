@@ -3,9 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Data.PostgreSql;
 using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
-using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.Poison;
-using Sa.Outbox.PostgreSql.Services;
 
 namespace Sa.Outbox.PostgreSql.Services.Plug;
 
@@ -57,13 +55,15 @@ internal static class Setup
         // applied through lock_expires_on.
         services.AddOutboxProvider(
             providerKey,
-            new OutboxProviderDescriptor(
-                "PostgreSql",
-                OutboxProviderCapabilities.PublishContext
+            new OutboxProviderDescriptor
+            {
+                Name = "PostgreSql",
+                Capabilities = OutboxProviderCapabilities.PublishContext
                 | OutboxProviderCapabilities.TenantDetection
                 | OutboxProviderCapabilities.LockExtension
                 | OutboxProviderCapabilities.Postponement,
-                Version: typeof(Setup).Assembly.GetName().Version?.ToString()),
+                Version = typeof(Setup).Assembly.GetName().Version?.ToString(),
+            },
             provider => provider
                 .WithBulkWriter(sp => new OutboxBulkWriter(
                     sp.GetRequiredKeyedService<IBulkInsertMsgCommand>(providerKey),

@@ -4,6 +4,7 @@ using Sa.Outbox.PostgreSql.Configuration;
 
 namespace Sa.Outbox.PostgreSql.SqlBuilder;
 
+/// <summary>Registers the outbox SQL builder.</summary>
 public static class Setup
 {
     internal static IServiceCollection AddOutboxSqlBuilder(

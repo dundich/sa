@@ -11,7 +11,7 @@ namespace Sa.Outbox.PostgreSql.Configuration;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every property is nullable: <c>null</> means "not specified", in which case
+/// Every property is nullable: <c>null</c> means "not specified", in which case
 /// <see cref="ApplyTo(OutboxConsumerSettingsBuilder)"/> leaves that setting untouched so it
 /// keeps whatever value the <see cref="OutboxConsumerSettingsBuilder"/> already carries
 /// (<see cref="OutboxDefaults"/>, or an earlier override). Only non-null values are applied,
@@ -130,8 +130,8 @@ public sealed class PgOutboxDeliveryOptions
     /// or the section is absent, so an unconfigured group keeps the builder's existing values.
     /// </summary>
     /// <remarks>
-    /// Uses the instance <see cref="IConfigurationSection.Bind"/> (source-generated binder,
-    /// AOT-safe) rather than <see cref="ConfigurationBinder.Bind{T}"/> (reflection) — the same
+    /// Uses the instance <c>Bind</c> (source-generated binder,
+    /// AOT-safe) rather than <c>Bind&lt;T&gt;</c> (reflection) — the same
     /// choice the partitional PostgreSql settings make. A present-but-empty section binds every
     /// property to null, which <see cref="ApplyTo(OutboxConsumerSettingsBuilder)"/> treats as
     /// "apply nothing".

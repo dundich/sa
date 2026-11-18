@@ -1,4 +1,3 @@
-using Microsoft.IO;
 using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.HybridFileStorage.Domain;
@@ -6,6 +5,7 @@ using Sa.Partitional.PostgreSql;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Sa.HybridFileStorage.Postgres;
 
@@ -15,7 +15,6 @@ namespace Sa.HybridFileStorage.Postgres;
 internal sealed class PostgresFileStorage(
     IPgDataSource dataSource,
     IPartitionManager partManager,
-    RecyclableMemoryStreamManager streamManager,
     PostgresFileStorageOptions options,
     TimeProvider? timeProvider = null) : IFileStorage
 {
@@ -64,10 +63,15 @@ internal sealed class PostgresFileStorage(
     // The qualified name and the four statements are fixed for the lifetime of the instance, so they
     // are built once. (Field initializers cannot read another field, hence the static helper.)
     private readonly string _qualifiedTableName = Qualify(options);
-    private readonly string _insertSql = string.Format(InsertSql, Qualify(options));
-    private readonly string _deleteSql = string.Format(DeleteSql, Qualify(options));
-    private readonly string _selectSql = string.Format(SelectSql, Qualify(options));
-    private readonly string _selectMetadataSql = string.Format(SelectMetadataSql, Qualify(options));
+    private static readonly CompositeFormat InsertSqlFormat = CompositeFormat.Parse(InsertSql);
+    private static readonly CompositeFormat DeleteSqlFormat = CompositeFormat.Parse(DeleteSql);
+    private static readonly CompositeFormat SelectSqlFormat = CompositeFormat.Parse(SelectSql);
+    private static readonly CompositeFormat SelectMetadataSqlFormat = CompositeFormat.Parse(SelectMetadataSql);
+
+    private readonly string _insertSql = string.Format(System.Globalization.CultureInfo.InvariantCulture, InsertSqlFormat, Qualify(options));
+    private readonly string _deleteSql = string.Format(System.Globalization.CultureInfo.InvariantCulture, DeleteSqlFormat, Qualify(options));
+    private readonly string _selectSql = string.Format(System.Globalization.CultureInfo.InvariantCulture, SelectSqlFormat, Qualify(options));
+    private readonly string _selectMetadataSql = string.Format(System.Globalization.CultureInfo.InvariantCulture, SelectMetadataSqlFormat, Qualify(options));
 
     private readonly string _schemePrefix
         = $"{options.StorageType}{FileIdParser.SchemeSeparator}{options.Basket}/";
@@ -124,7 +128,7 @@ internal sealed class PostgresFileStorage(
             throw new ArgumentException(
                 $"FileName exceeds the maximum length of {PostgresFileStorageTable.NameMaxLength} " +
                 $"characters, but was {metadata.FileName.Length}.",
-                nameof(UploadFileInput.FileName));
+                nameof(metadata));
         }
 
         // PostgreSQL text cannot hold a NUL byte, and the name reaches both the `name` column and the
@@ -132,7 +136,7 @@ internal sealed class PostgresFileStorage(
         if (metadata.FileName.Contains('\0'))
         {
             throw new ArgumentException(
-                "FileName must not contain a NUL character.", nameof(UploadFileInput.FileName));
+                "FileName must not contain a NUL character.", nameof(metadata));
         }
 
         // A seekable stream knows its size up front, so an oversized upload is rejected before any
@@ -148,7 +152,7 @@ internal sealed class PostgresFileStorage(
         long createdAt = createdAtDay.ToUnixTimeSeconds();
 
 
-        await partManager.EnsureParts(
+        await partManager.EnsurePartsAsync(
             _qualifiedTableName,
             createdAtDay,
             [metadata.TenantId, _partName],
@@ -164,14 +168,14 @@ internal sealed class PostgresFileStorage(
             throw new ArgumentException(
                 $"The file extension exceeds the maximum length of " +
                 $"{PostgresFileStorageTable.FileExtMaxLength} characters, but was {fileExtension.Length}.",
-                nameof(UploadFileInput.FileName));
+                nameof(metadata));
         }
 
-        // If stream isn't seekable, copy into a recyclable MemoryStream first. Npgsql writes a
+        // If stream isn't seekable, copy into a pooled PooledMemoryStream first. Npgsql writes a
         // Stream parameter from its *current* position, so the buffer has to be rewound before it
         // is handed over — otherwise the copy (left at the end) was stored as an empty `data`.
         // The whole block sits in the try: a failure while buffering (the size guard, a read error)
-        // must still return the buffer to the manager.
+        // must still return the buffer to the pool.
         Stream ms = fileStream;
         bool ownsMs = false;
 
@@ -179,7 +183,7 @@ internal sealed class PostgresFileStorage(
         {
             if (!fileStream.CanSeek)
             {
-                ms = streamManager.GetStream();
+                ms = new PooledMemoryStream();
                 ownsMs = true;
 
                 await CopyToBufferAsync(fileStream, ms, maxBytes, cancellationToken).ConfigureAwait(false);
@@ -190,7 +194,7 @@ internal sealed class PostgresFileStorage(
                 ms.Position = 0;
             }
 
-            await dataSource.ExecuteNonQuery(_insertSql,
+            await dataSource.ExecuteNonQueryAsync(_insertSql,
             [
                   new NpgsqlParameter<string>("id", fileId)
                 , new NpgsqlParameter<string>("name", metadata.FileName)
@@ -214,7 +218,13 @@ internal sealed class PostgresFileStorage(
             }
         }
 
-        return new StorageResult(fileId, fileId, StorageType, _timeProvider.GetUtcNow());
+        return new StorageResult
+        {
+            FileId = fileId,
+            AbsoluteUrl = fileId,
+            StorageType = StorageType,
+            UploadedAt = _timeProvider.GetUtcNow(),
+        };
     }
 
     public async Task<bool> DeleteAsync(string fileId, CancellationToken cancellationToken)
@@ -227,7 +237,7 @@ internal sealed class PostgresFileStorage(
             return false;
 
 
-        if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithTimestamp, out _, out int tenantId, out long timestamp, out _))
         {
             return false;
         }
@@ -236,7 +246,7 @@ internal sealed class PostgresFileStorage(
 
         try
         {
-            rowsAffected = await dataSource.ExecuteNonQuery(_deleteSql,
+            rowsAffected = await dataSource.ExecuteNonQueryAsync(_deleteSql,
             [
                 new NpgsqlParameter<int>("tenant_id", tenantId),
                 new NpgsqlParameter<string>("basket", _partName),
@@ -266,7 +276,7 @@ internal sealed class PostgresFileStorage(
         if (!CanProcess(fileId))
             return false;
 
-        if (!FileIdParser.TryParse(fileId, out _, out int tenantId, out long timestamp, out _))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithTimestamp, out _, out int tenantId, out long timestamp, out _))
         {
             return false;
         }
@@ -277,7 +287,7 @@ internal sealed class PostgresFileStorage(
         // and a failure inside its callback would be unobservable. A row's bytea can only be
         // streamed while its reader is open, so the whole read has to be awaited in one place.
         await using NpgsqlConnection connection = await dataSource
-            .OpenDbConnection(cancellationToken).ConfigureAwait(false);
+            .OpenDbConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await using NpgsqlCommand cmd = new(_selectSql, connection);
 
@@ -324,7 +334,7 @@ internal sealed class PostgresFileStorage(
         if (!CanProcess(fileId))
             return null;
 
-        if (!FileIdParser.TryParse(fileId, out _, out var tenantId, out var timestamp, out _))
+        if (!FileIdParser.TryParse(fileId, FileIdFormat.WithTimestamp, out _, out var tenantId, out var timestamp, out _))
             return null;
 
         // A well-formed file ID is not a file — the row is. Parsing alone reported metadata for a
@@ -334,7 +344,7 @@ internal sealed class PostgresFileStorage(
 
         try
         {
-            rows = await dataSource.ExecuteReaderList(_selectMetadataSql,
+            rows = await dataSource.ExecuteReaderListAsync(_selectMetadataSql,
                 reader => new FileMetadata
                 {
                     Basket = _partName,

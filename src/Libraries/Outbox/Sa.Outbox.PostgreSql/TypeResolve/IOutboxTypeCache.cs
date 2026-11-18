@@ -6,7 +6,7 @@ internal interface IOutboxTypeCache
     /// <summary>
     /// Synchronous fast path: resolves the code from the already-loaded snapshot without
     /// starting a load or allocating a task. Returns <see langword="false"/> when the snapshot
-    /// is not ready yet, so the caller can fall back to <see cref="GetCode"/>.
+    /// is not ready yet, so the caller can fall back to <see cref="GetCodeAsync"/>.
     /// </summary>
     bool TryGetCode(string typeName, out long code);
 
@@ -21,9 +21,9 @@ internal interface IOutboxTypeCache
     /// The stored hash, or <c>null</c> when the type is not cached.
     /// <c>0</c> is a legal Murmur3 value and must not be used as a missing sentinel.
     /// </summary>
-    Task<long?> GetCode(string typeName, CancellationToken cancellationToken);
+    Task<long?> GetCodeAsync(string typeName, CancellationToken cancellationToken);
 
-    Task<string?> GetTypeName(long code, CancellationToken cancellationToken);
+    Task<string?> GetTypeNameAsync(long code, CancellationToken cancellationToken);
 
-    Task Reset(CancellationToken cancellationToken);
+    Task ResetAsync(CancellationToken cancellationToken);
 }

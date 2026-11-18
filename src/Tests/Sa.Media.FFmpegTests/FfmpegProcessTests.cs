@@ -64,7 +64,7 @@ public sealed class FfmpegProcessTests
             File.Copy(SourceWav, input, overwrite: true);
             var output = Path.Combine(WorkDir, $"out_{Path.GetFileNameWithoutExtension(name)}.wav");
 
-            await mpeg.ConvertToPcmS16Le(input, output, cancellationToken: CancellationToken);
+            await mpeg.ConvertToPcmS16LeAsync(input, output, cancellationToken: CancellationToken);
 
             Assert.True(File.Exists(output), $"No output produced for input named '{name}'.");
             Assert.True(new FileInfo(output).Length > 44, $"Output for '{name}' is empty.");
@@ -78,7 +78,7 @@ public sealed class FfmpegProcessTests
         var missing = Path.Combine(WorkDir, "нет-такого-файла.wav");
 
         await Assert.ThrowsAsync<FileNotFoundException>(
-            () => mpeg.ConvertToPcmS16Le(missing, Path.Combine(WorkDir, "o.wav"), cancellationToken: CancellationToken));
+            () => mpeg.ConvertToPcmS16LeAsync(missing, Path.Combine(WorkDir, "o.wav"), cancellationToken: CancellationToken));
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public sealed class FfmpegProcessTests
         var before = File.ReadAllBytes(output);
 
         await Assert.ThrowsAsync<IOException>(
-            () => mpeg.ConvertToPcmS16Le(input, output, isOverwrite: false, timeout: TimeSpan.FromSeconds(20), cancellationToken: CancellationToken));
+            () => mpeg.ConvertToPcmS16LeAsync(input, output, isOverwrite: false, timeout: TimeSpan.FromSeconds(20), cancellationToken: CancellationToken));
 
         // Файл остался нетронутым: не одно байт не переписано.
         Assert.Equal(before, File.ReadAllBytes(output));
@@ -116,7 +116,7 @@ public sealed class FfmpegProcessTests
         File.Copy(SourceWav, input, overwrite: true);
         File.WriteAllBytes(output, new byte[1024]);
 
-        await mpeg.ConvertToPcmS16Le(input, output, isOverwrite: true, cancellationToken: CancellationToken);
+        await mpeg.ConvertToPcmS16LeAsync(input, output, isOverwrite: true, cancellationToken: CancellationToken);
 
         Assert.NotEqual(1024, new FileInfo(output).Length);
     }
@@ -133,12 +133,12 @@ public sealed class FfmpegProcessTests
         var mpeg = IFFMpegExecutor.Default;
 
         var fromFile = Path.Combine(WorkDir, "determinism-file.wav");
-        await mpeg.ConvertToPcmS16Le(SourceWav, fromFile, cancellationToken: CancellationToken);
+        await mpeg.ConvertToPcmS16LeAsync(SourceWav, fromFile, cancellationToken: CancellationToken);
 
         var fromStream = new MemoryStream();
         await using (var input = File.OpenRead(SourceWav))
         {
-            await mpeg.ConvertToPcmS16Le(
+            await mpeg.ConvertToPcmS16LeAsync(
                 input,
                 "wav",
                 (stream, ct) => stream.CopyToAsync(fromStream, ct),
@@ -161,8 +161,8 @@ public sealed class FfmpegProcessTests
         var first = Path.Combine(WorkDir, "determinism-run1.wav");
         var second = Path.Combine(WorkDir, "determinism-run2.wav");
 
-        await mpeg.ConvertToPcmS16Le(SourceWav, first, cancellationToken: CancellationToken);
-        await mpeg.ConvertToPcmS16Le(SourceWav, second, cancellationToken: CancellationToken);
+        await mpeg.ConvertToPcmS16LeAsync(SourceWav, first, cancellationToken: CancellationToken);
+        await mpeg.ConvertToPcmS16LeAsync(SourceWav, second, cancellationToken: CancellationToken);
 
         Assert.Equal(File.ReadAllBytes(first), File.ReadAllBytes(second));
     }
@@ -204,7 +204,7 @@ public sealed class FfmpegProcessTests
         var mpeg = IFFMpegExecutor.Default;
         using var input = File.OpenRead(SourceWav);
 
-        await mpeg.ConvertToPcmS16Le(
+        await mpeg.ConvertToPcmS16LeAsync(
             input,
             "wav",
             (stream, ct) => stream.CopyToAsync(Stream.Null, ct),
@@ -216,7 +216,7 @@ public sealed class FfmpegProcessTests
         // вернуть его в начало обязанность вызывающего, как и для любого Read-стрима.
         input.Position = 0;
         var second = new MemoryStream();
-        await mpeg.ConvertToPcmS16Le(
+        await mpeg.ConvertToPcmS16LeAsync(
             input,
             "wav",
             (stream, ct) => stream.CopyToAsync(second, ct),
@@ -241,11 +241,11 @@ public sealed class FfmpegProcessTests
         var mpeg = IFFMpegExecutor.Default;
         var output = Path.Combine(WorkDir, "check.mp3");
 
-        await mpeg.ConvertToMp3(SourceWav, output, cancellationToken: CancellationToken);
+        await mpeg.ConvertToMp3Async(SourceWav, output, cancellationToken: CancellationToken);
 
         Assert.True(new FileInfo(output).Length > 1024);
 
-        var (channels, sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRate(output, CancellationToken);
+        var (channels, sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRateAsync(output, CancellationToken);
         Assert.Equal(2, channels);
         Assert.Equal(sampleRate, 16000);
     }

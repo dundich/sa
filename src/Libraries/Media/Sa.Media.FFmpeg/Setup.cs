@@ -6,6 +6,9 @@ using Sa.Media.FFmpeg.Services;
 
 namespace Sa.Media.FFmpeg;
 
+/// <summary>
+/// Registration helpers for the FFmpeg services.
+/// </summary>
 public static class Setup
 {
     /// <summary>

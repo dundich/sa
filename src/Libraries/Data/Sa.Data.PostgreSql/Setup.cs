@@ -6,12 +6,15 @@ using Npgsql;
 
 namespace Sa.Data.PostgreSql;
 
+/// <summary>
+/// Registration helpers for the PostgreSQL data source.
+/// </summary>
 public static class Setup
 {
     /// <summary>
     /// Registers the (unnamed) PostgreSQL data source on the standard options pipeline.
     /// This is the original, backward-compatible registration; see
-    /// <see cref="AddSaPostgreSqlDataSource(string, Action{IDataSourceBuilder}?)"/> for the keyed form.
+    /// <see cref="AddSaPostgreSqlDataSource(IServiceCollection, string, Action{IDataSourceBuilder})"/> for the keyed form.
     /// </summary>
     public static IServiceCollection AddSaPostgreSqlDataSource(this IServiceCollection services,
         Action<IDataSourceBuilder>? configure = null)
@@ -184,7 +187,7 @@ public static class Setup
     // Npgsql.
     // An empty connection string falls back to an NpgsqlDataSource registered with the SAME key
     // (sharing its connection pool); for the default key that is the unkeyed NpgsqlDataSource.
-    private static IPgDataSource CreateDataSource(IServiceProvider sp, string key)
+    private static PgDataSource CreateDataSource(IServiceProvider sp, string key)
     {
         var options = sp.GetRequiredService<IOptionsMonitor<PgDataSourceOptions>>().Get(key);
 
@@ -225,7 +228,7 @@ internal sealed class PgDataSourceNormalizer : IPostConfigureOptions<PgDataSourc
 }
 
 /// <summary>
-/// Sentinel recording that <see cref="Setup.AddSaPostgreSqlDataSource"/> was configured (a
+/// Sentinel recording that <see cref="Setup.AddSaPostgreSqlDataSource(IServiceCollection, string, Action{IDataSourceBuilder})"/> was configured (a
 /// <c>configure</c> callback — section via <see cref="IDataSourceBuilder.FromConfiguration"/> or
 /// settings via <see cref="IDataSourceBuilder.Options"/>) in this collection <b>for a given key</b>,
 /// so a second configuring call for the same key fails fast instead of silently stacking two

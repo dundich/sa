@@ -33,8 +33,8 @@ public class KeyedPartitionAsJobTests(KeyedPartitionAsJobTests.Fixture fixture)
                         "city TEXT NOT NULL")
                     .WithPartSeparator("_")
                     .PartByList("country", "city")
-                    .AddMigration("RU", ["Moscow", "Samara"])
-                    .AddMigration("USA", ["Alabama", "New York"]));
+                    .AddMigrationChildren("RU", "Moscow", "Samara")
+                    .AddMigrationChildren("USA", "Alabama", "New York"));
             }, asBackgroundJob: true);
         }
     }
@@ -47,7 +47,7 @@ public class KeyedPartitionAsJobTests(KeyedPartitionAsJobTests.Fixture fixture)
     {
         IScheduler scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(ModuleKey);
 
-        int started = await scheduler.Start(TestContext.Current.CancellationToken);
+        int started = await scheduler.StartAsync(TestContext.Current.CancellationToken);
         Assert.True(started > 0);
 
         await Task.Delay(800, TestContext.Current.CancellationToken);

@@ -34,9 +34,9 @@ internal sealed partial class OutboxDeliveryManager(
 
         if (cancellationToken.IsCancellationRequested || batchSize == 0) return 0;
 
-        await EnsureParts(filter, cancellationToken);
+        await EnsurePartsAsync(filter, cancellationToken);
 
-        var _ = await loader.LoadNewTasks(filter, batchSize, cancellationToken);
+        var _ = await loader.LoadNewTasksAsync(filter, batchSize, cancellationToken);
 
         // новых заданий может и не быть... продолжаем обработку старых
         return await startCmd.ExecuteFill(writeBuffer, lockDuration, filter, cancellationToken);
@@ -90,15 +90,15 @@ internal sealed partial class OutboxDeliveryManager(
 
         // Delivery-log and error-log partitions are independent DDL on different tables — run the
         // ensures concurrently instead of awaiting them in sequence (M6).
-        Task<int> ensureDelivery = partRepository.EnsureDeliveryParts(deliveryParts.Values, cancellationToken);
-        Task<int> ensureErrors = partRepository.EnsureErrorParts(errorDays, cancellationToken);
+        Task<int> ensureDelivery = partRepository.EnsureDeliveryPartsAsync(deliveryParts.Values, cancellationToken);
+        Task<int> ensureErrors = partRepository.EnsureErrorPartsAsync(errorDays, cancellationToken);
         await Task.WhenAll(ensureDelivery, ensureErrors).ConfigureAwait(false);
 
         IReadOnlyDictionary<Exception, ErrorInfo> errors = errorLogs is not { Count: > 0 }
             ? ReadOnlyDictionary<Exception, ErrorInfo>.Empty
-            : await errorCmd.Execute(errorLogs.ToArray(), cancellationToken).ConfigureAwait(false);
+            : await errorCmd.ExecuteAsync(errorLogs.ToArray(), cancellationToken).ConfigureAwait(false);
 
-        return await finishCmd.Execute(messages, errors, filter, cancellationToken).ConfigureAwait(false);
+        return await finishCmd.ExecuteAsync(messages, errors, filter, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -126,25 +126,27 @@ internal sealed partial class OutboxDeliveryManager(
                 payload = stream.ToArray();
             }
 
-            var message = new PgOutboxPoisonMessage(
-                OutboxId: context.OutboxId,
-                TaskId: context.DeliveryInfo.TaskId,
-                PayloadId: context.PayloadId,
-                PayloadType: typeof(TMessage).FullName ?? typeof(TMessage).Name,
-                ConsumerGroup: context.DeliveryInfo.PartInfo.Part,
-                TenantId: context.PartInfo.TenantId,
-                Part: context.PartInfo.Part,
-                Attempt: context.DeliveryInfo.Attempt + 1,
-                StatusCode: context.DeliveryResult.Code,
-                StatusMessage: context.DeliveryResult.Message,
-                Exception: context.Exception!,
-                Payload: payload);
+            var message = new PgOutboxPoisonMessage
+            {
+                OutboxId = context.OutboxId,
+                TaskId = context.DeliveryInfo.TaskId,
+                PayloadId = context.PayloadId,
+                PayloadType = typeof(TMessage).FullName ?? typeof(TMessage).Name,
+                ConsumerGroup = context.DeliveryInfo.PartInfo.Part,
+                TenantId = context.PartInfo.TenantId,
+                Part = context.PartInfo.Part,
+                Attempt = context.DeliveryInfo.Attempt + 1,
+                StatusCode = context.DeliveryResult.Code,
+                StatusMessage = context.DeliveryResult.Message,
+                Exception = context.Exception!,
+                Payload = payload
+            };
 
             PgOutboxPoisonAction action;
 
             try
             {
-                action = await poisonHandler.Handle(message, cancellationToken).ConfigureAwait(false);
+                action = await poisonHandler.HandleAsync(message, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -164,28 +166,28 @@ internal sealed partial class OutboxDeliveryManager(
                     break;
 
                 default:
-                    throw new ArgumentOutOfRangeException(
-                        nameof(action), action, "Unknown PostgreSQL Outbox poison action.");
+                    throw new InvalidOperationException(
+                        $"Unknown PostgreSQL Outbox poison action: {action}.");
             }
         }
 
         return persist;
     }
 
-    public Task<int> ExtendDelivery(
+    public Task<int> ExtendDeliveryAsync(
         TimeSpan lockExpiration,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken)
-            => extendCmd.Execute(lockExpiration, filter, cancellationToken);
+            => extendCmd.ExecuteAsync(lockExpiration, filter, cancellationToken);
 
-    private async Task EnsureParts(OutboxMessageFilter filter, CancellationToken cancellationToken)
+    private async Task EnsurePartsAsync(OutboxMessageFilter filter, CancellationToken cancellationToken)
     {
         // Message and task table partitions are independent DDL on different tables — run the two
         // ensures concurrently instead of awaiting them in sequence (M6).
-        Task<int> msgParts = partRepository.EnsureMsgParts(
+        Task<int> msgParts = partRepository.EnsureMsgPartsAsync(
             [new OutboxPartInfo(filter.TenantId, filter.Part, filter.NowDate)],
             cancellationToken);
-        Task<int> taskParts = partRepository.EnsureTaskParts(
+        Task<int> taskParts = partRepository.EnsureTaskPartsAsync(
             [new OutboxPartInfo(filter.TenantId, filter.ConsumerGroupId, filter.NowDate)],
             cancellationToken);
 

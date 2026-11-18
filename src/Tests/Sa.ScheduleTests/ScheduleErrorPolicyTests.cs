@@ -43,7 +43,7 @@ public sealed class ScheduleErrorPolicyTests
         await using var provider = services.BuildServiceProvider();
         var scheduler = provider.GetRequiredService<IScheduler>();
 
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         await WaitForAsync(() => Volatile.Read(ref handlerCalls) >= 1);
 
@@ -51,7 +51,7 @@ public sealed class ScheduleErrorPolicyTests
         // than being bypassed by an unresolvable handler.
         Assert.True(Volatile.Read(ref handlerCalls) >= 1);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     [Fact]
@@ -74,13 +74,13 @@ public sealed class ScheduleErrorPolicyTests
         await using var provider = services.BuildServiceProvider();
         var scheduler = provider.GetRequiredService<IScheduler>();
 
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         await WaitForAsync(() => lifetime.StopRequests > 0);
 
         Assert.True(lifetime.StopRequests > 0, "ThenCloseApplication never reached the lifetime");
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     [Fact]
@@ -109,14 +109,14 @@ public sealed class ScheduleErrorPolicyTests
         await using var provider = services.BuildServiceProvider();
         var scheduler = provider.GetRequiredService<IScheduler>();
 
-        Assert.Equal(1, await scheduler.Start(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await scheduler.StartAsync(TestContext.Current.CancellationToken));
 
         Exception error = await seen.Task.WaitAsync(
             TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         Assert.IsType<InvalidOperationException>(error);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
     }
 
     private static async Task WaitForAsync(Func<bool> condition)
@@ -134,7 +134,7 @@ public sealed class ScheduleErrorPolicyTests
 
     private sealed class FailingJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => throw new InvalidOperationException("boom");
     }
 

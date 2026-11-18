@@ -6,6 +6,7 @@ An AOT-compatible library for implementing the **Transactional Outbox** pattern 
 
 ## Contents
 
+- [Installation](#installation)
 - [What it actually looks like](#what-it-actually-looks-like) — the model compared with Redis Stream and Kafka
 - [Quick Start](#quick-start-5-minutes)
 - [Publishing inside a Caller Transaction](#publishing-inside-a-caller-transaction)
@@ -54,6 +55,12 @@ What a real broker has and this does not:
 - no global ordering: it exists only within `(tenant, part)`;
 - no retention by offset: retention drops whole daily partitions;
 - as a bus it works only inside one database — it is shared schema, not network transport.
+
+## Installation
+
+```bash
+dotnet add package Sa.Outbox.PostgreSql
+```
 
 ---
 
@@ -380,7 +387,7 @@ manager.Apply("cg_order_consumer", s => s with { MaxBatchSize = 64 });
 
 // Pause / Resume
 manager.Pause("cg_order_consumer");
-manager.Resume("cg_order_consumer");
+manager.Unpause("cg_order_consumer");
 
 // Subscribe to changes
 using var sub = manager.Subscribe("cg_order_consumer", updated =>
@@ -692,7 +699,7 @@ After processing each message, call exactly one method:
 | `msg.Created()` | Side-effect resource created | Status written, row is not rented again |
 | `msg.Accepted()` | Accepted for async processing | Status written, row is not rented again |
 | `msg.NoContent()` | Processed, no data to return | Status written, row is not rented again |
-| `msg.Error(ex)` | Unrecoverable failure | Logged to `__error$`, no retry |
+| `msg.Fail(ex)` | Unrecoverable failure | Logged to `__error$`, no retry |
 | `msg.Warn(ex)` | Transient issue (network, timeout) | Rented again after the batching window |
 | `msg.Postpone(ts)` | Need to wait before retry | Requeued after `ts` |
 | `msg.Retry(ts, reason)` | Retry with metadata | Requeued with attempt info |

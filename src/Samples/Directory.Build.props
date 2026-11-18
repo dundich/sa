@@ -7,6 +7,17 @@
     <IsPackable>false</IsPackable>
     <!-- Samples are applications, never test modules. -->
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+    <!--
+      Samples are top-level programs: the synthesized Program class and the request types it
+      exposes live in the global namespace by construction, so CA1050 does not apply.
+    -->
+    <NoWarn>$(NoWarn);CA1050</NoWarn>
+
+    <!--
+      IDE0005 (unnecessary usings) needs a generated documentation file to run on build.
+      These projects are not packed, so the rule is turned off instead of emitting XML docs.
+    -->
+    <NoWarn>$(NoWarn);IDE0005</NoWarn>
   </PropertyGroup>
 
 </Project>

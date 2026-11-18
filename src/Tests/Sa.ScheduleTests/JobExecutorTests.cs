@@ -41,7 +41,7 @@ public sealed class JobExecutorTests
         var executor = new JobExecutor(settings, new InterceptorSettings([]), factory);
 
         var context = new JobContext(settings);
-        await executor.Execute(context, TestContext.Current.CancellationToken);
+        await executor.ExecuteAsync(context, TestContext.Current.CancellationToken);
 
         Assert.True(RecordingJob.LastExecute);
 
@@ -67,7 +67,7 @@ public sealed class JobExecutorTests
         var executor = new JobExecutor(settings, interceptorSettings, factory);
 
         var context = new JobContext(settings);
-        await executor.Execute(context, TestContext.Current.CancellationToken);
+        await executor.ExecuteAsync(context, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, interceptor.Entered);
         Assert.Equal(1, interceptor.Exit);
@@ -102,7 +102,7 @@ public sealed class JobExecutorTests
         var executor = new JobExecutor(settings, interceptorSettings, factory);
 
         var context = new JobContext(settings);
-        await executor.Execute(context, TestContext.Current.CancellationToken);
+        await executor.ExecuteAsync(context, TestContext.Current.CancellationToken);
 
         // Each interceptor enters/exits exactly once per Execute; "first" is the
         // outermost wrapper, "second" the innermost.
@@ -184,7 +184,7 @@ public sealed class JobExecutorTests
     {
         public ExplodingJob() => throw new InvalidOperationException("job constructor failed");
 
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
@@ -192,7 +192,7 @@ public sealed class JobExecutorTests
     {
         public static bool LastExecute { get; set; }
 
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             LastExecute = true;
             Recorder.Add("job");
@@ -205,10 +205,10 @@ public sealed class JobExecutorTests
         public int Entered { get; private set; }
         public int Exit { get; private set; }
 
-        public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken ct)
+        public async Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken ct)
         {
             Entered++;
-            await next();
+            await continuation();
             Exit++;
         }
     }
@@ -220,11 +220,11 @@ public sealed class JobExecutorTests
         public int Entered { get; private set; }
         public int Exit { get; private set; }
 
-        public async Task OnHandle(IJobContext context, Func<Task> next, object? key, CancellationToken ct)
+        public async Task OnHandleAsync(IJobContext context, Func<Task> continuation, object? key, CancellationToken ct)
         {
             Entered++;
             Recorder.Add($"{_name}-in");
-            await next();
+            await continuation();
             Exit++;
             Recorder.Add($"{_name}-out");
         }

@@ -4,6 +4,9 @@ using System.Runtime.CompilerServices;
 
 namespace Sa.Data.PostgreSql;
 
+/// <summary>
+/// Low-allocation helpers for binding parameters to <see cref="NpgsqlCommand"/> instances.
+/// </summary>
 public static class DbCommandExtensions
 {
     /// <summary>
@@ -54,9 +57,19 @@ public static class DbCommandExtensions
     }
 }
 
+/// <summary>
+/// Supplies the parameter-name prefixes and the cache size used by <see cref="CachedParamNames{T}"/>.
+/// </summary>
 public interface INamePrefixProvider
 {
+    /// <summary>
+    /// Returns the parameter-name prefixes used by the provider.
+    /// </summary>
     static abstract string[] GetPrefixes();
+
+    /// <summary>
+    /// Gets the exclusive upper bound of cached parameter indexes.
+    /// </summary>
     static abstract int MaxIndex { get; }
 }
 

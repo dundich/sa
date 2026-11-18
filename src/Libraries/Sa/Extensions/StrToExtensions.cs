@@ -8,49 +8,49 @@ namespace Sa.Extensions;
 internal static class StrToExtensions
 {
     // ── bool ───────────────────────────────────────────────────────────────
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool? StrToBool(this string? str) => str is not null && bool.TryParse(str.AsSpan(), out var r) ? r : null;
 
     [DebuggerStepThrough]
     public static bool? StrToBool(this ReadOnlySpan<char> str) => bool.TryParse(str, out var r) ? r : null;
 
     // ── int ────────────────────────────────────────────────────────────────
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int? StrToInt(this string? str) => str is not null && int.TryParse(str.AsSpan(), CultureInfo.InvariantCulture, out var r) ? r : null;
 
     [DebuggerStepThrough]
     public static int? StrToInt(this ReadOnlySpan<char> str) => int.TryParse(str, CultureInfo.InvariantCulture, out var r) ? r : null;
 
     // ── short ──────────────────────────────────────────────────────────────
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static short? StrToShort(this string? str) => str is not null && short.TryParse(str.AsSpan(), CultureInfo.InvariantCulture, out var r) ? r : null;
 
     [DebuggerStepThrough]
     public static short? StrToShort(this ReadOnlySpan<char> str) => short.TryParse(str, CultureInfo.InvariantCulture, out var r) ? r : null;
 
     // ── ushort ─────────────────────────────────────────────────────────────
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ushort? StrToUShort(this string? str) => str is not null && ushort.TryParse(str.AsSpan(), CultureInfo.InvariantCulture, out var r) ? r : null;
 
     [DebuggerStepThrough]
     public static ushort? StrToUShort(this ReadOnlySpan<char> str) => ushort.TryParse(str, CultureInfo.InvariantCulture, out var r) ? r : null;
 
     // ── long ───────────────────────────────────────────────────────────────
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long? StrToLong(this string? str) => str is not null && long.TryParse(str.AsSpan(), CultureInfo.InvariantCulture, out var r) ? r : null;
 
     [DebuggerStepThrough]
     public static long? StrToLong(this ReadOnlySpan<char> str) => long.TryParse(str, CultureInfo.InvariantCulture, out var r) ? r : null;
 
     // ── ulong ──────────────────────────────────────────────────────────────
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ulong? StrToULong(this string? str) => str is not null && ulong.TryParse(str.AsSpan(), CultureInfo.InvariantCulture, out var r) ? r : null;
 
     [DebuggerStepThrough]
     public static ulong? StrToULong(this ReadOnlySpan<char> str) => ulong.TryParse(str, CultureInfo.InvariantCulture, out var r) ? r : null;
 
     // ── double ─────────────────────────────────────────────────────────────
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double? StrToDouble(this string? str) => str is not null && double.TryParse(str.AsSpan(), CultureInfo.InvariantCulture, out var r) ? r : null;
 
     [DebuggerStepThrough]
@@ -61,7 +61,7 @@ internal static class StrToExtensions
     public static byte[] StrToBytes(this string str, Encoding? encoding = null) => (encoding ?? Encoding.UTF8).GetBytes(str);
 
     // ── Guid ───────────────────────────────────────────────────────────────
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Guid? StrToGuid(this string? str) => str is not null && Guid.TryParse(str.AsSpan(), CultureInfo.InvariantCulture, out var r) ? r : null;
 
     [DebuggerStepThrough]
@@ -94,7 +94,7 @@ internal static class StrToExtensions
     }
 
     // ── DateTime ───────────────────────────────────────────────────────────
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static DateTime? StrToDate(this string? str, IFormatProvider? provider = null, DateTimeStyles style = DateTimeStyles.None)
         => str is not null ? ParseDate(str.AsSpan(), provider, style) : null;
 
@@ -102,7 +102,7 @@ internal static class StrToExtensions
     public static DateTime? StrToDate(this ReadOnlySpan<char> str, IFormatProvider? provider = null, DateTimeStyles style = DateTimeStyles.None)
         => ParseDate(str, provider, style);
 
-    [DebuggerStepThrough,MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static DateTime? ParseDate(ReadOnlySpan<char> str, IFormatProvider? provider, DateTimeStyles style)
         => DateTime.TryParseExact(
             str,

@@ -1,4 +1,4 @@
-using Sa.Classes;
+using Sa;
 using Sa.Outbox.Delivery;
 using Sa.Outbox.Metadata;
 using Sa.Outbox.PlugServices;
@@ -25,16 +25,28 @@ public sealed class DeliveryTenantTests
     private static OutboxConsumerSettings CreateSettings(
         TimeSpan? lockRenewal = null,
         TimeSpan? lockDuration = null)
-        => new(
-            ConsumerGroupId: "test-group", AsSingleton: false,
-            Interval: TimeSpan.FromMinutes(1), InitialDelay: TimeSpan.Zero,
-            ConcurrencyLimit: 1, MaxConcurrency: 1, RetryCountOnError: 0,
-            MaxBatchSize: 16, MaxProcessingIterations: 1, IterationDelay: TimeSpan.Zero,
-            LockDuration: lockDuration ?? TimeSpan.FromSeconds(10),
-            LockRenewal: lockRenewal ?? TimeSpan.FromMilliseconds(20),
-            LookbackInterval: TimeSpan.FromDays(7), MaxDeliveryAttempts: 3,
-            BatchingWindow: TimeSpan.Zero, PerTenantTimeout: TimeSpan.Zero,
-            PerTenantMaxDegreeOfParallelism: 1, Paused: false, Version: 0);
+        => new OutboxConsumerSettings
+        {
+            ConsumerGroupId = "test-group",
+            AsSingleton = false,
+            Interval = TimeSpan.FromMinutes(1),
+            InitialDelay = TimeSpan.Zero,
+            ConcurrencyLimit = 1,
+            MaxConcurrency = 1,
+            RetryCountOnError = 0,
+            MaxBatchSize = 16,
+            MaxProcessingIterations = 1,
+            IterationDelay = TimeSpan.Zero,
+            LockDuration = lockDuration ?? TimeSpan.FromSeconds(10),
+            LockRenewal = lockRenewal ?? TimeSpan.FromMilliseconds(20),
+            LookbackInterval = TimeSpan.FromDays(7),
+            MaxDeliveryAttempts = 3,
+            BatchingWindow = TimeSpan.Zero,
+            PerTenantTimeout = TimeSpan.Zero,
+            PerTenantMaxDegreeOfParallelism = 1,
+            Paused = false,
+            Version = 0
+        };
 
     private static DeliveryTenant CreateTenant(FakeManager manager, IDeliveryCourier courier)
         => new(
@@ -135,7 +147,7 @@ public sealed class DeliveryTenantTests
             return messages.Length;
         }
 
-        public Task<int> ExtendDelivery(
+        public Task<int> ExtendDeliveryAsync(
             TimeSpan lockExpiration,
             OutboxMessageFilter filter,
             CancellationToken cancellationToken)
@@ -160,7 +172,7 @@ public sealed class DeliveryTenantTests
 
     private sealed class FakeBatcher : IDeliveryBatcher
     {
-        public ValueTask<int> CalculateBatchSize(
+        public ValueTask<int> CalculateBatchSizeAsync(
             int maxBatchSize,
             OutboxMessageFilter filter,
             CancellationToken cancellationToken)

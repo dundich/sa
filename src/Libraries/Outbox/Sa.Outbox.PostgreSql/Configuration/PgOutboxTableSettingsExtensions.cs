@@ -1,5 +1,6 @@
 namespace Sa.Outbox.PostgreSql.Configuration;
 
+/// <summary>Fluent helpers for <see cref="PgOutboxTableSettings"/>.</summary>
 public static class PgOutboxTableSettingsExtensions
 {
     /// <summary>PostgreSQL truncates identifiers to 63 <b>bytes</b> (UTF-8), not to 63 characters.</summary>
@@ -23,9 +24,11 @@ public static class PgOutboxTableSettingsExtensions
 
         // PostgreSQL identifiers must not contain newline or backslash even inside quotes.
         if (identifier.IndexOfAny(['\n', '\r', '\\']) >= 0)
+        {
             throw new ArgumentException(
                 $"Identifier '{identifier}' contains characters that cannot be safely quoted.",
                 nameof(identifier));
+        }
 
         ValidateIdentifierLength(identifier);
 
@@ -47,9 +50,11 @@ public static class PgOutboxTableSettingsExtensions
             throw new ArgumentException("Identifier cannot be null or empty.", nameof(identifier));
 
         if (identifier.IndexOfAny(['\n', '\r', '\\']) >= 0)
+        {
             throw new ArgumentException(
                 $"Identifier '{identifier}' contains characters that cannot be safely quoted.",
                 nameof(identifier));
+        }
 
         return QuoteIdentifierCore(identifier);
     }

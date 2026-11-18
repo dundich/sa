@@ -1,5 +1,8 @@
 namespace Sa.Media.FFmpeg;
 
+/// <summary>
+/// Locates the FFmpeg and FFprobe executables used by the library.
+/// </summary>
 public interface IFFMpegLocator
 {
     /// <summary>

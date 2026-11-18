@@ -18,17 +18,18 @@ internal sealed class FilterFactory(IOutboxMessageMetadataProvider metadata)
         TimeSpan batchingWindow,
         string providerKey)
     {
-        return new OutboxMessageFilter(
-            TransactId: GenerateTransactId(),
-            ConsumerGroupId: consumerGroupId,
-            PayloadType: typeof(TMessage).Name,
-            TenantId: tenantId,
-            Part: metadata.GetMetadata<TMessage>().PartName,
-            FromDate: now.StartOfDay() - lookbackInterval,
-            ToDate: now - batchingWindow,
-            NowDate: now,
-            ProviderKey: providerKey
-        );
+        return new OutboxMessageFilter
+        {
+            TransactId = GenerateTransactId(),
+            ConsumerGroupId = consumerGroupId,
+            PayloadType = typeof(TMessage).Name,
+            TenantId = tenantId,
+            Part = metadata.GetMetadata<TMessage>().PartName,
+            FromDate = now.StartOfDay() - lookbackInterval,
+            ToDate = now - batchingWindow,
+            NowDate = now,
+            ProviderKey = providerKey
+        };
     }
 
     private static string GenerateTransactId()

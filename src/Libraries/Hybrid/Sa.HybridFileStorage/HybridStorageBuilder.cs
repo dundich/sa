@@ -14,7 +14,7 @@ internal sealed class HybridStorageBuilder(IServiceCollection services) : IHybri
     private string[]? _typeOrder;
     private readonly Dictionary<string, IEnumerable<string>> _basketTypeOrder = new(StringComparer.Ordinal);
     private string? _orderSectionPath;
-    private bool _logged = false;
+    private bool _logged;
 
     public IHybridFileStorageConfiguration ConfigureStorage(
         Action<IServiceProvider, HybridFileStorageContainerConfiguration> configure)

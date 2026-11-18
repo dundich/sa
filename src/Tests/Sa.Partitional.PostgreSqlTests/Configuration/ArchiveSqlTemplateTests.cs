@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sa.Fixture;
 using Sa.Partitional.PostgreSql;
-using Sa.Partitional.PostgreSql.Classes;
 using Sa.Partitional.PostgreSql.SqlBuilder;
 
 namespace Sa.Partitional.PostgreSqlTests.Configuration;
@@ -14,8 +13,6 @@ namespace Sa.Partitional.PostgreSqlTests.Configuration;
 /// </summary>
 public class ArchiveSqlTemplateTests(ArchiveSqlTemplateTests.Fixture fixture) : IClassFixture<ArchiveSqlTemplateTests.Fixture>
 {
-    private const string DaySuffix = "y2026m09d26";
-
     private static readonly DateTimeOffset FixedDate = new(2026, 9, 26, 0, 0, 0, TimeSpan.Zero);
 
     public class Fixture : SaFixture

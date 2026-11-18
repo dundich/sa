@@ -1,5 +1,5 @@
-using System.IO.Pipelines;
 using Sa.Media;
+using System.IO.Pipelines;
 
 namespace Sa.MediaTests;
 

@@ -24,7 +24,7 @@ public class DbCommandExtensionsTests(PgDataSourceFixture fixture) : IClassFixtu
     [Fact]
     public async Task AddParam_UsesTypedParameters_AndNullStaysUntyped()
     {
-        await using var connection = await fixture.DataSource.OpenDbConnection(TestToken);
+        await using var connection = await fixture.DataSource.OpenDbConnectionAsync(TestToken);
         await using var command = new NpgsqlCommand(
             "SELECT @v0::bigint, @v1::int, @v2::text, @v3::text", connection);
 

@@ -1,5 +1,5 @@
-using System.Security;
 using Sa.Data.TempFolder;
+using System.Security;
 
 namespace Sa.Data.TempFolderTests;
 

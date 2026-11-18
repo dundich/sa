@@ -33,7 +33,7 @@ public sealed class JobSchedulerDisposeTests
         public static void Begin() => Interlocked.Exchange(ref _begun, 1);
 
         // Set only when the iteration touched its DI scope successfully.
-        public static void Complete() => Interlocked.Exchange(ref _finished, 1);
+        public static void CompleteAsync() => Interlocked.Exchange(ref _finished, 1);
     }
 
     sealed class ProbeService
@@ -48,7 +48,7 @@ public sealed class JobSchedulerDisposeTests
     /// </summary>
     sealed class SlowScopeJob : IJob
     {
-        public async Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
         {
             Probe.Begin();
 
@@ -58,7 +58,7 @@ public sealed class JobSchedulerDisposeTests
 
             _ = context.ServiceProvider.GetRequiredService<ProbeService>();
 
-            Probe.Complete();
+            Probe.CompleteAsync();
         }
     }
 
@@ -68,7 +68,7 @@ public sealed class JobSchedulerDisposeTests
         Probe.Reset();
         var scheduler = CreateScheduler();
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         // Wait until the iteration is actually running before disposing.
         await WaitForConditionAsync(() => Probe.Begun);
@@ -86,7 +86,7 @@ public sealed class JobSchedulerDisposeTests
         Probe.Reset();
         var scheduler = CreateScheduler();
 
-        await scheduler.Start(TestContext.Current.CancellationToken);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         await WaitForConditionAsync(() => Probe.Begun);
 

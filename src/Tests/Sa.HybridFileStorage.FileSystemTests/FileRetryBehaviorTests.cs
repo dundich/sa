@@ -163,6 +163,33 @@ public sealed class FileRetryBehaviorTests : IAsyncLifetime
         // The configured basket, not the one re-parsed out of the ID.
         Assert.Equal(storage.Basket, metadata.Basket);
     }
+
+    [Fact]
+    public async Task GetMetadataAsync_NumericDirectoryInTheName_IsNotReadAsATimestamp()
+    {
+        // A filesystem name may contain a directory named with a number. The parser must read the
+        // whole path after the tenant as the name, not the Postgres `tenant/timestamp/name` shape.
+        var services = new ServiceCollection()
+            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddSingleton<ILoggerFactory, NullLoggerFactory>()
+            .AddFsStorage(_testDir);
+
+        using var provider = services.BuildServiceProvider();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        var uploadResult = await storage.UploadAsync(
+            new UploadFileInput { FileName = "2024/report.pdf", TenantId = 42 },
+            FixtureHelper.GetByteStream(),
+            _cts.Token);
+
+        // Act
+        var metadata = await storage.GetMetadataAsync(uploadResult.FileId, _cts.Token);
+
+        // Assert
+        Assert.NotNull(metadata);
+        Assert.Equal("2024/report.pdf", metadata.FileName);
+        Assert.Equal(42, metadata.TenantId);
+    }
 }
 
 // Helper extension

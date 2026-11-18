@@ -76,7 +76,7 @@ public sealed class MsgCursorIndexTests(MsgCursorIndexTests.Fixture fixture)
         IMigrationService migration = fixture.ServiceProvider
             .GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
 
-        int executed = await migration.Migrate([day], Token);
+        int executed = await migration.MigrateAsync([day], Token);
         Assert.True(executed >= 0, $"migration reported an incomplete run (executed={executed})");
     }
 
@@ -105,7 +105,7 @@ public sealed class MsgCursorIndexTests(MsgCursorIndexTests.Fixture fixture)
               JOIN pg_class c ON c.oid = t.relid;
             """;
 
-        List<(int, int)> rows = await DataSource.ExecuteReaderList(
+        List<(int, int)> rows = await DataSource.ExecuteReaderListAsync(
             sql, r => (r.GetInt32(0), r.GetInt32(1)), Token);
 
         return rows[0];
@@ -123,7 +123,7 @@ public sealed class MsgCursorIndexTests(MsgCursorIndexTests.Fixture fixture)
              ORDER BY c.relname;
             """;
 
-        List<string> rows = await DataSource.ExecuteReaderList(sql, r => r.GetString(0), Token);
+        List<string> rows = await DataSource.ExecuteReaderListAsync(sql, r => r.GetString(0), Token);
         return string.Join("\n", rows);
     }
 
@@ -133,7 +133,7 @@ public sealed class MsgCursorIndexTests(MsgCursorIndexTests.Fixture fixture)
         await MigrateAsync(Day);
 
         // 1) Root: the exact column list, in the order SqlLoadConsumerGroup predicates on it.
-        string rootDefinition = await DataSource.ExecuteReaderFirst<string>(
+        string rootDefinition = await DataSource.ExecuteReaderFirstAsync<string>(
             $"""
             SELECT pg_get_indexdef(i.indexrelid)
               FROM pg_index i
@@ -174,7 +174,7 @@ public sealed class MsgCursorIndexTests(MsgCursorIndexTests.Fixture fixture)
 
     private sealed class NoopConsumer : IConsumer<TestMessage>
     {
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<TestMessage>> messages,

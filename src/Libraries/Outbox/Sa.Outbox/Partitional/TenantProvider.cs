@@ -6,27 +6,27 @@ namespace Sa.Outbox.Partitional;
 
 internal sealed class TenantProvider(IOutboxStorage storage) : ITenantProvider
 {
-    public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
-        => GetTenantIds(OutboxScope.DefaultKey, cancellationToken);
+    public ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
+        => GetTenantIdsAsync(OutboxScope.DefaultKey, cancellationToken);
 
-    public ValueTask<int[]> GetTenantIds(string providerKey, CancellationToken cancellationToken)
+    public ValueTask<int[]> GetTenantIdsAsync(string providerKey, CancellationToken cancellationToken)
     {
         TenantSettings settings = storage.TenantSettings(providerKey);
 
         return settings.AutoDetect
-            ? GetFromPlugService(providerKey, cancellationToken)
-            : GetFromExternalSettings(settings, cancellationToken);
+            ? GetFromPlugServiceAsync(providerKey, cancellationToken)
+            : GetFromExternalSettingsAsync(settings, cancellationToken);
     }
 
-    private async ValueTask<int[]> GetFromPlugService(string providerKey, CancellationToken cancellationToken)
+    private async ValueTask<int[]> GetFromPlugServiceAsync(string providerKey, CancellationToken cancellationToken)
     {
         IOutboxTenantDetector? detector = storage.TenantDetector(providerKey);
         if (detector == null || !detector.CanDetect) return [];
 
-        return await detector.GetTenantIds(cancellationToken).ConfigureAwait(false);
+        return await detector.GetTenantIdsAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async ValueTask<int[]> GetFromExternalSettings(
+    private static async ValueTask<int[]> GetFromExternalSettingsAsync(
         TenantSettings settings,
         CancellationToken cancellationToken)
     {

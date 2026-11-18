@@ -77,7 +77,7 @@ public class ExponentialDeliveryBackoffStrategyTests
             maxDelay: TimeSpan.FromMinutes(30));
 
         var backoff0 = strategy.GetBackoff(0);
-        var backoff1 = strategy.GetBackoff(1);
+        _ = strategy.GetBackoff(1);
 
         // Both should fall in the same range (2.5s..5s)
         Assert.True(backoff0 >= TimeSpan.FromSeconds(2.4));
@@ -188,6 +188,20 @@ public class ExponentialDeliveryBackoffStrategyTests
         // Default base is 5s, so with jitter 0.5..1.0 → 2.5s..5s
         Assert.True(backoff >= TimeSpan.FromSeconds(2.4));
         Assert.True(backoff <= TimeSpan.FromSeconds(5.1));
+    }
+
+    [Fact]
+    public void Constructor_NegativeBaseDelay_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new ExponentialDeliveryBackoffStrategy(baseDelay: TimeSpan.FromSeconds(-1)));
+    }
+
+    [Fact]
+    public void Constructor_NegativeMaxDelay_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new ExponentialDeliveryBackoffStrategy(maxDelay: TimeSpan.FromSeconds(-1)));
     }
 
     [Fact]

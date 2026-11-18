@@ -18,7 +18,7 @@ public interface IFFProbeExecutor
     /// <param name="filePath">Path to the media file.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A tuple containing the number of channels and the sample rate (both may be null).</returns>
-    Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRate(
+    Task<(int? channels, int? sampleRate)> GetChannelsAndSampleRateAsync(
         string filePath,
         CancellationToken cancellationToken = default);
 
@@ -28,12 +28,12 @@ public interface IFFProbeExecutor
     /// <param name="filePath">Path to the media file.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A <see cref="MediaMetadata"/> object containing metadata.</returns>
-    Task<MediaMetadata> GetMetaInfo(string filePath, CancellationToken cancellationToken = default);
+    Task<MediaMetadata> GetMetaInfoAsync(string filePath, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Retrieves detailed metadata information about the media file.
     /// </summary>
-    Task<MediaMetadata> GetMetaInfo(Stream audioStream, string inputFormat, CancellationToken cancellationToken = default);
+    Task<MediaMetadata> GetMetaInfoAsync(Stream audioStream, string inputFormat, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the default implementation of the <see cref="IFFProbeExecutor"/> interface.

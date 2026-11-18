@@ -43,7 +43,7 @@ public interface IOutboxDeliveryManager
     /// that returns the requested count without having extended anything would hide a split brain.
     /// </para>
     /// </remarks>
-    Task<int> ExtendDelivery(
+    Task<int> ExtendDeliveryAsync(
         TimeSpan lockExpiration,
         OutboxMessageFilter filter,
         CancellationToken cancellationToken);

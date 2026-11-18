@@ -11,12 +11,12 @@ namespace Sa.Data.PostgreSql;
 /// <para>
 /// Resolution order:
 /// <list type="number">
-/// <item>the keyed <see cref="IPgDataSource"/> registered under <paramref name="key"/> (an explicit
+/// <item>the keyed <see cref="IPgDataSource"/> registered under <c>key</c> (an explicit
 /// <c>AddSaPostgreSqlDataSource(key, ...)</c>, or a chained <c>AddDataSource(...)</c>);</item>
 /// <item>the default (unkeyed) <see cref="IPgDataSource"/> — the shared source every keyed module
 /// falls back to when it does not pin one of its own;</item>
 /// <item>an <see cref="NpgsqlDataSource"/> already registered in the container — the keyed one under
-/// <paramref name="key"/> when present, the unkeyed one otherwise — wrapped into an
+/// <c>key</c> when present, the unkeyed one otherwise — wrapped into an
 /// <see cref="IPgDataSource"/> that <b>reuses its connection pool</b> and never disposes it.</item>
 /// </list>
 /// </para>

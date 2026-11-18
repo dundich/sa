@@ -20,10 +20,10 @@ public sealed class WorkQueueTimeoutTests
     [Fact]
     public void TimeProvider_DefaultsToTheSystemClock()
     {
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask));
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask));
 
-        var field = typeof(SaWorkQueue<int>)
+        var field = typeof(SaWorkChannel<int>)
             .GetField("_timeProvider", BindingFlags.Instance | BindingFlags.NonPublic);
 
         Assert.NotNull(field);
@@ -33,7 +33,7 @@ public sealed class WorkQueueTimeoutTests
     [Fact]
     public void WithTimeProvider_Null_Throws()
     {
-        var options = SaWorkQueueOptions<int>.Create((_, _) => Task.CompletedTask);
+        var options = SaWorkQueueOptions.Create<int>((_, _) => Task.CompletedTask);
 
         var ex = Assert.Throws<ArgumentNullException>(() => options.WithTimeProvider(null!));
 
@@ -47,7 +47,7 @@ public sealed class WorkQueueTimeoutTests
 
         await RunWithWedgedReaderAsync(clock, async (processor, queue) =>
         {
-            await queue.Enqueue(1, TestToken);
+            await queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
 
             var cancel = Task.Run(() => queue.ForceCancelReaders(), TestToken);
@@ -76,7 +76,7 @@ public sealed class WorkQueueTimeoutTests
 
         await RunWithWedgedReaderAsync(clock, async (processor, queue) =>
         {
-            await queue.Enqueue(1, TestToken);
+            await queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
 
             // An explicit timeout, so the 30-second default is not what is under test.
@@ -107,12 +107,12 @@ public sealed class WorkQueueTimeoutTests
         var clock = new ManualTimeProvider();
         var processor = new ReleasableProcessor();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithTimeProvider(clock));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await processor.Entered.WaitAsync(TestToken);
 
         var force = Task.Run(
@@ -135,7 +135,7 @@ public sealed class WorkQueueTimeoutTests
 
         await RunWithWedgedReaderAsync(clock, async (processor, queue) =>
         {
-            await queue.Enqueue(1, TestToken);
+            await queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
 
             var shutdown = Task.Run(() => queue.ShutdownAsync(), TestToken);
@@ -161,7 +161,7 @@ public sealed class WorkQueueTimeoutTests
 
         await RunWithWedgedReaderAsync(clock, async (processor, queue) =>
         {
-            await queue.Enqueue(1, TestToken);
+            await queue.EnqueueAsync(1, TestToken);
             await processor.Entered.WaitAsync(TestToken);
 
             var shutdown = Task.Run(() => queue.Shutdown(), TestToken);
@@ -192,11 +192,11 @@ public sealed class WorkQueueTimeoutTests
     /// </remarks>
     static async Task RunWithWedgedReaderAsync(
         ManualTimeProvider clock,
-        Func<WedgedProcessor, SaWorkQueue<int>, Task> body)
+        Func<WedgedProcessor, SaWorkChannel<int>, Task> body)
     {
         var processor = new WedgedProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithTimeProvider(clock));
 
@@ -235,7 +235,7 @@ public sealed class WorkQueueTimeoutTests
 
         public bool Left { get; private set; }
 
-        public async Task Execute(int input, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(int input, CancellationToken cancellationToken)
         {
             _entered.TrySetResult();
 

@@ -20,7 +20,7 @@ public class DeliveryLifetimeInvokerTests
 
         public int Calls;
 
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<MsgA>> messages,
@@ -34,7 +34,7 @@ public class DeliveryLifetimeInvokerTests
     private sealed class ConsumerB : IConsumer<MsgB>
     {
         public int Calls;
-        public ValueTask Consume(
+        public ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<MsgB>> messages,
@@ -52,15 +52,17 @@ public class DeliveryLifetimeInvokerTests
             .Build();
 
     private static OutboxMessageFilter FilterFor(string groupId) =>
-        new(
-            TransactId: "test",
-            ConsumerGroupId: groupId,
-            PayloadType: "test",
-            TenantId: 1,
-            Part: "test",
-            FromDate: DateTimeOffset.UnixEpoch,
-            ToDate: DateTimeOffset.UnixEpoch,
-            NowDate: DateTimeOffset.UnixEpoch);
+        new()
+        {
+            TransactId = "test",
+            ConsumerGroupId = groupId,
+            PayloadType = "test",
+            TenantId = 1,
+            Part = "test",
+            FromDate = DateTimeOffset.UnixEpoch,
+            ToDate = DateTimeOffset.UnixEpoch,
+            NowDate = DateTimeOffset.UnixEpoch,
+        };
 
     /// <summary>
     /// A consumer group id is only unique per message type, so two <c>TMessage</c> values may legally

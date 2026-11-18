@@ -4,11 +4,11 @@ namespace Sa.Data.TempFolder;
 /// Payload handed to <see cref="TempFolderOptions.OnVolumeExceeded"/> when the measured volume of a
 /// temp folder crosses <see cref="TempFolderOptions.MaxTotalSize"/>.
 /// </summary>
-/// <param name="Name">The registration key (keyed-service name) of the temp folder instance.</param>
-/// <param name="RootPath">The root directory the measurement covers.</param>
-/// <param name="TotalSize">Measured total size in bytes at the moment of the transition.</param>
-/// <param name="MaxTotalSize">The configured limit in bytes.</param>
-/// <param name="Exceeded">
+/// <param name="name">The registration key (keyed-service name) of the temp folder instance.</param>
+/// <param name="rootPath">The root directory the measurement covers.</param>
+/// <param name="totalSize">Measured total size in bytes at the moment of the transition.</param>
+/// <param name="maxTotalSize">The configured limit in bytes.</param>
+/// <param name="exceeded">
 /// <see langword="true"/> on the transition into "over the limit",
 /// <see langword="false"/> on the transition back into "within the limit". The event is
 /// edge-triggered: it never repeats while the state does not change.

@@ -1,9 +1,8 @@
-using System.Runtime.CompilerServices;
-using System.Security;
 using Microsoft.Extensions.Logging;
-using Sa.Classes;
 using Sa.Data.TempFolder.Cleanup;
 using Sa.Data.TempFolder.Naming;
+using System.Runtime.CompilerServices;
+using System.Security;
 
 namespace Sa.Data.TempFolder;
 
@@ -11,10 +10,10 @@ namespace Sa.Data.TempFolder;
 /// Default <see cref="ITempFolder"/>: path-guarded file operations under one root, debounced
 /// activity marking, age-based cleanup with retries (yielding to in-flight writes via
 /// <see cref="CleanupGate"/>), and an optional low-priority volume scan.
-/// One instance per registration; constructed by <see cref="Setup.AddSaTempFolder"/>'s keyed
+/// One instance per registration; constructed by <c>AddSaTempFolder</c>'s keyed
 /// factory from the registration's options snapshot and strategies.
 /// </summary>
-internal sealed class TempFolder : ITempFolder
+internal sealed partial class TempFolder : ITempFolder
 {
     private const int CopyBufferSize = 81920;
 
@@ -230,7 +229,7 @@ internal sealed class TempFolder : ITempFolder
         {
             // Deleted out-of-band between the check and the open — a vanished file reads as
             // "not found" instead of failing the caller.
-            _logger.LogDebug(ex, "Temp folder '{Name}': read of '{Path}' found no file.", Name, full);
+            Log.ReadNoFile(_logger, ex, Name, full);
             return false;
         }
 
@@ -319,7 +318,7 @@ internal sealed class TempFolder : ITempFolder
         {
             // The file (or its directory) vanished out-of-band between the check and the delete
             // — a vanished file reads as "not deleted" instead of failing the caller.
-            _logger.LogDebug(ex, "Temp folder '{Name}': delete of '{Path}' found no file.", Name, full);
+            Log.DeleteNoFile(_logger, ex, Name, full);
             return false;
         }
     }
@@ -377,7 +376,7 @@ internal sealed class TempFolder : ITempFolder
 
         if (_options.ReadOnly)
         {
-            _logger.LogDebug("Temp folder '{Name}' is read-only; cleanup pass ignored.", Name);
+            Log.CleanupSkippedReadOnly(_logger, Name);
             return 0;
         }
 
@@ -388,9 +387,7 @@ internal sealed class TempFolder : ITempFolder
             // not depend on the pass.
             if (_cleanupGate.IsBusy)
             {
-                _logger.LogDebug(
-                    "Temp folder '{Name}': volume scan before cleanup skipped — file activity or a pass is in progress.",
-                    Name);
+                Log.VolumeScanSkippedBusy(_logger, Name);
             }
             else
             {
@@ -405,7 +402,7 @@ internal sealed class TempFolder : ITempFolder
                 catch (Exception ex)
                 {
                     // Age-based cleanup does not depend on the measurement — never lose the pass to it.
-                    _logger.LogWarning(ex, "Temp folder '{Name}': volume scan before cleanup failed.", Name);
+                    Log.VolumeScanBeforeCleanupFailed(_logger, ex, Name);
                 }
             }
         }
@@ -415,7 +412,7 @@ internal sealed class TempFolder : ITempFolder
         // VolumeScanInterval = 0 the pre-cleanup scan is its only trigger).
         if (!_options.CleanupEnabled)
         {
-            _logger.LogDebug("Temp folder '{Name}': cleanup is disabled; pass ignored.", Name);
+            Log.CleanupDisabled(_logger, Name);
             return 0;
         }
 
@@ -427,9 +424,7 @@ internal sealed class TempFolder : ITempFolder
 
         if (pass is null)
         {
-            _logger.LogDebug(
-                "Temp folder '{Name}': cleanup pass cancelled — file activity or a marker walk is in progress.",
-                Name);
+            Log.CleanupPassCancelled(_logger, Name);
             return 0;
         }
 
@@ -454,7 +449,7 @@ internal sealed class TempFolder : ITempFolder
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Temp folder '{Name}': cleanup strategy failed; pass skipped.", Name);
+                Log.CleanupStrategyFailed(_logger, ex, Name);
                 return 0;
             }
 
@@ -470,9 +465,7 @@ internal sealed class TempFolder : ITempFolder
 
                 if (!PathGuard.IsInside(RootPath, path))
                 {
-                    _logger.LogWarning(
-                        "Temp folder '{Name}': cleanup strategy returned a path outside the root; skipped: {Path}",
-                        Name, path);
+                    Log.CleanupPathOutsideRoot(_logger, Name, path);
                     continue;
                 }
 
@@ -498,31 +491,21 @@ internal sealed class TempFolder : ITempFolder
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // An arriving read or write interrupted the pass — the expected outcome, not an error.
-            _logger.LogInformation(
-                "Temp folder '{Name}': cleanup pass cancelled by concurrent file activity " +
-                "({Deleted} deleted, {Skipped} skipped).",
-                Name, deleted, skipped);
+            Log.CleanupInterrupted(_logger, Name, deleted, skipped);
             return deleted;
         }
 
         if (skipped > 0)
         {
-            _logger.LogInformation(
-                "Temp folder '{Name}': cleanup pass deleted {Deleted} of {Candidates} candidate folders " +
-                "under {Root} and skipped {Skipped} just-written ones.",
-                Name, deleted, candidates.Count, RootPath, skipped);
+            Log.CleanupDeletedSome(_logger, Name, deleted, candidates.Count, RootPath, skipped);
         }
         else if (deleted > 0)
         {
-            _logger.LogInformation(
-                "Temp folder '{Name}': cleanup pass deleted {Deleted} of {Candidates} candidate folders under {Root}.",
-                Name, deleted, candidates.Count, RootPath);
+            Log.CleanupDeleted(_logger, Name, deleted, candidates.Count, RootPath);
         }
         else
         {
-            _logger.LogDebug(
-                "Temp folder '{Name}': cleanup pass deleted nothing ({Candidates} candidates under {Root}).",
-                Name, candidates.Count, RootPath);
+            Log.CleanupNothing(_logger, Name, candidates.Count, RootPath);
         }
 
         return deleted;
@@ -570,7 +553,7 @@ internal sealed class TempFolder : ITempFolder
         if (_options.ReadOnly)
         {
             // Read-only: no write / create / delete probes — the instance must not mutate anything.
-            _logger.LogDebug("Temp folder '{Name}' read-only root '{Root}' verified readable.", Name, RootPath);
+            Log.ReadOnlyRootVerified(_logger, Name, RootPath);
             return ValueTask.CompletedTask;
         }
 
@@ -601,14 +584,14 @@ internal sealed class TempFolder : ITempFolder
             }
             catch (Exception cleanupEx) when (cleanupEx is IOException or UnauthorizedAccessException)
             {
-                _logger.LogDebug(cleanupEx, "Temp folder '{Name}': probe cleanup failed.", Name);
+                Log.ProbeCleanupFailed(_logger, cleanupEx, Name);
             }
 
             throw new InvalidOperationException(
                 $"Temp folder '{Name}': root '{RootPath}' failed the write/create/delete access probe.", ex);
         }
 
-        _logger.LogDebug("Temp folder '{Name}' root '{Root}' verified readable and writable.", Name, RootPath);
+        Log.RootVerified(_logger, Name, RootPath);
         return ValueTask.CompletedTask;
     }
 
@@ -745,8 +728,7 @@ internal sealed class TempFolder : ITempFolder
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
         {
-            _logger.LogDebug(
-                ex, "Temp folder '{Name}': staged file '{Path}' could not be removed.", Name, stagingPath);
+            Log.StagedFileNotRemoved(_logger, ex, Name, stagingPath);
         }
     }
 
@@ -802,7 +784,7 @@ internal sealed class TempFolder : ITempFolder
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "Temp folder '{Name}': failed to delete '{Path}' after retries.", Name, path);
+            Log.DeleteFailed(_logger, ex, Name, path);
             return false;
         }
     }
@@ -830,5 +812,64 @@ internal sealed class TempFolder : ITempFolder
 
         _disposed = true;
         _debouncer.Dispose();
+        _cleanupGate.Dispose();
+        _volumeScanner.Dispose();
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 3001, Level = LogLevel.Debug, Message = "Temp folder '{Name}': read of '{Path}' found no file.")]
+        public static partial void ReadNoFile(ILogger logger, Exception exception, string name, string path);
+
+        [LoggerMessage(EventId = 3002, Level = LogLevel.Debug, Message = "Temp folder '{Name}': delete of '{Path}' found no file.")]
+        public static partial void DeleteNoFile(ILogger logger, Exception exception, string name, string path);
+
+        [LoggerMessage(EventId = 3003, Level = LogLevel.Debug, Message = "Temp folder '{Name}' is read-only; cleanup pass ignored.")]
+        public static partial void CleanupSkippedReadOnly(ILogger logger, string name);
+
+        [LoggerMessage(EventId = 3004, Level = LogLevel.Debug, Message = "Temp folder '{Name}': volume scan before cleanup skipped — file activity or a pass is in progress.")]
+        public static partial void VolumeScanSkippedBusy(ILogger logger, string name);
+
+        [LoggerMessage(EventId = 3005, Level = LogLevel.Warning, Message = "Temp folder '{Name}': volume scan before cleanup failed.")]
+        public static partial void VolumeScanBeforeCleanupFailed(ILogger logger, Exception exception, string name);
+
+        [LoggerMessage(EventId = 3006, Level = LogLevel.Debug, Message = "Temp folder '{Name}': cleanup is disabled; pass ignored.")]
+        public static partial void CleanupDisabled(ILogger logger, string name);
+
+        [LoggerMessage(EventId = 3007, Level = LogLevel.Debug, Message = "Temp folder '{Name}': cleanup pass cancelled — file activity or a marker walk is in progress.")]
+        public static partial void CleanupPassCancelled(ILogger logger, string name);
+
+        [LoggerMessage(EventId = 3008, Level = LogLevel.Warning, Message = "Temp folder '{Name}': cleanup strategy failed; pass skipped.")]
+        public static partial void CleanupStrategyFailed(ILogger logger, Exception exception, string name);
+
+        [LoggerMessage(EventId = 3009, Level = LogLevel.Warning, Message = "Temp folder '{Name}': cleanup strategy returned a path outside the root; skipped: {Path}")]
+        public static partial void CleanupPathOutsideRoot(ILogger logger, string name, string path);
+
+        [LoggerMessage(EventId = 3010, Level = LogLevel.Information, Message = "Temp folder '{Name}': cleanup pass cancelled by concurrent file activity ({Deleted} deleted, {Skipped} skipped).")]
+        public static partial void CleanupInterrupted(ILogger logger, string name, int deleted, int skipped);
+
+        [LoggerMessage(EventId = 3011, Level = LogLevel.Information, Message = "Temp folder '{Name}': cleanup pass deleted {Deleted} of {Candidates} candidate folders under {Root} and skipped {Skipped} just-written ones.")]
+        public static partial void CleanupDeletedSome(ILogger logger, string name, int deleted, int candidates, string root, int skipped);
+
+        [LoggerMessage(EventId = 3012, Level = LogLevel.Information, Message = "Temp folder '{Name}': cleanup pass deleted {Deleted} of {Candidates} candidate folders under {Root}.")]
+        public static partial void CleanupDeleted(ILogger logger, string name, int deleted, int candidates, string root);
+
+        [LoggerMessage(EventId = 3013, Level = LogLevel.Debug, Message = "Temp folder '{Name}': cleanup pass deleted nothing ({Candidates} candidates under {Root}).")]
+        public static partial void CleanupNothing(ILogger logger, string name, int candidates, string root);
+
+        [LoggerMessage(EventId = 3014, Level = LogLevel.Debug, Message = "Temp folder '{Name}' read-only root '{Root}' verified readable.")]
+        public static partial void ReadOnlyRootVerified(ILogger logger, string name, string root);
+
+        [LoggerMessage(EventId = 3015, Level = LogLevel.Debug, Message = "Temp folder '{Name}': probe cleanup failed.")]
+        public static partial void ProbeCleanupFailed(ILogger logger, Exception exception, string name);
+
+        [LoggerMessage(EventId = 3016, Level = LogLevel.Debug, Message = "Temp folder '{Name}' root '{Root}' verified readable and writable.")]
+        public static partial void RootVerified(ILogger logger, string name, string root);
+
+        [LoggerMessage(EventId = 3017, Level = LogLevel.Debug, Message = "Temp folder '{Name}': staged file '{Path}' could not be removed.")]
+        public static partial void StagedFileNotRemoved(ILogger logger, Exception exception, string name, string path);
+
+        [LoggerMessage(EventId = 3018, Level = LogLevel.Warning, Message = "Temp folder '{Name}': failed to delete '{Path}' after retries.")]
+        public static partial void DeleteFailed(ILogger logger, Exception exception, string name, string path);
     }
 }

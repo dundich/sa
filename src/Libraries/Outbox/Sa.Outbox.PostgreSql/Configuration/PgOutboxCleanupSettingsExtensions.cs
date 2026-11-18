@@ -1,5 +1,6 @@
 namespace Sa.Outbox.PostgreSql.Configuration;
 
+/// <summary>Fluent helpers for <see cref="PgOutboxCleanupSettings"/>.</summary>
 public static class PgOutboxCleanupSettingsExtensions
 {
     /// <summary>

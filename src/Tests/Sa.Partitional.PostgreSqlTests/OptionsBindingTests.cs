@@ -254,6 +254,19 @@ public sealed class OptionsBindingTests
     }
 
     [Fact]
+    public void ForwardDays_AboveTheBound_FailsValidation()
+    {
+        ServiceCollection services = NewServices();
+        AddModule(services).AddPartMigrationSchedule(b => b.Configure((_, s) => s.ForwardDays = 36500));
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        OptionsValidationException ex = Assert.Throws<OptionsValidationException>(
+            () => sp.GetRequiredService<MigrationScheduleSettings>());
+        Assert.Contains("ForwardDays", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InvalidSection_FailsValidateOnStart()
     {
         ServiceCollection services = NewServices(new Dictionary<string, string?>

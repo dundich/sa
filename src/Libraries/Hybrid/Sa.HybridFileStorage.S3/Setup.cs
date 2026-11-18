@@ -31,12 +31,13 @@ public static class Setup
     /// raw values) and then the caller's <c>Options(...)</c> <c>Configure</c> calls →
     /// <c>PostConfigure</c> (this method's normalisation) and then the caller's
     /// <c>Options(...)</c> <c>PostConfigure</c> calls → validation. Validation therefore sees the
-    /// normalised <see cref="S3BucketClientSetupOptions.Endpoint"/> and trimmed names, and
+    /// normalised <c>Endpoint</c> and trimmed names, and
     /// <c>ValidateOnStart()</c> turns an invalid configuration into an
-    /// <see cref="OptionsValidationException"/> at host start instead of a bare
+    /// <c>OptionsValidationException</c> at host start instead of a bare
     /// <see cref="UriFormatException"/> from inside the bucket client on the first upload.
+    /// </para>
     /// <para>
-    /// The bucket client is built from these very options (see <see cref="S3BucketClientSetupOptions"/>),
+    /// The bucket client is built from these very options (see <c>S3BucketClientSetupOptions</c>),
     /// so there is a single set of values from the configuration section all the way down to the HTTP
     /// pipeline. The client is keyed by this registration's name — its own endpoint, bucket,
     /// credentials, timeouts and pool lifetime — so two storages never share a client or an options

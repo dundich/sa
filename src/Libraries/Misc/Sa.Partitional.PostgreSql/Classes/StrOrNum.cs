@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Sa.Partitional.PostgreSql.Classes;
+namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
 /// A discriminated union that represents either a <see cref="ChoiceStr"/> (string) or a <see cref="ChoiceNum"/> (64-bit integer).
@@ -27,18 +27,30 @@ public abstract record StrOrNum
     /// <summary>
     /// String variant of the discriminated union.
     /// </summary>
-    /// <param name="Item">The string value.</param>
-    public record ChoiceStr(string Item) : StrOrNum
+    public record ChoiceStr : StrOrNum
     {
+        /// <summary>The string value.</summary>
+        public required string Item { get; init; }
+
+        /// <summary>
+        /// Returns the underlying string value.
+        /// </summary>
+        /// <returns>The string value.</returns>
         public override string ToString() => Item;
     }
 
     /// <summary>
     /// Numeric variant of the discriminated union.
     /// </summary>
-    /// <param name="Item">The <see cref="long"/> value.</param>
-    public record ChoiceNum(long Item) : StrOrNum
+    public record ChoiceNum : StrOrNum
     {
+        /// <summary>The <see cref="long"/> value.</summary>
+        public required long Item { get; init; }
+
+        /// <summary>
+        /// Returns the invariant-culture representation of the numeric value.
+        /// </summary>
+        /// <returns>The invariant-culture string value.</returns>
         // Invariant on purpose: the rendered value ends up in table names and SQL literals, and a
         // culture with a different negative sign (U+2212) or digits would corrupt both.
         public override string ToString() => Item.ToString(CultureInfo.InvariantCulture);
@@ -47,39 +59,39 @@ public abstract record StrOrNum
     /// <summary>
     /// Dispatches to either <paramref name="onChoiceStr"/> or <paramref name="onChoiceNum"/> depending on the active variant.
     /// </summary>
-    /// <typeparam name="U">The return type shared by both branches.</typeparam>
+    /// <typeparam name="TResult">The return type shared by both branches.</typeparam>
     /// <param name="onChoiceStr">Callback invoked when this is a <see cref="ChoiceStr"/>.</param>
     /// <param name="onChoiceNum">Callback invoked when this is a <see cref="ChoiceNum"/>.</param>
     /// <returns>The result of the invoked callback.</returns>
-    public U Match<U>(Func<string, U> onChoiceStr, Func<long, U> onChoiceNum)
+    public TResult Match<TResult>(Func<string, TResult> onChoiceStr, Func<long, TResult> onChoiceNum)
         => Match(onChoiceStr, onChoiceNum, this);
 
 
     /// <summary>
     /// Implicitly converts a <see cref="string"/> to a <see cref="StrOrNum"/> wrapping <see cref="ChoiceStr"/>.
     /// </summary>
-    public static implicit operator StrOrNum(string item) => new ChoiceStr(item);
+    public static implicit operator StrOrNum(string item) => new ChoiceStr { Item = item };
 
     /// <summary>
     /// Implicitly converts an <see cref="int"/> to a <see cref="StrOrNum"/> wrapping <see cref="ChoiceNum"/>.
     /// </summary>
-    public static implicit operator StrOrNum(int item) => new ChoiceNum(item);
+    public static implicit operator StrOrNum(int item) => new ChoiceNum { Item = item };
 
     /// <summary>
     /// Implicitly converts a <see cref="long"/> to a <see cref="StrOrNum"/> wrapping <see cref="ChoiceNum"/>.
     /// </summary>
-    public static implicit operator StrOrNum(long item) => new ChoiceNum(item);
+    public static implicit operator StrOrNum(long item) => new ChoiceNum { Item = item };
 
     /// <summary>
     /// Implicitly converts a <see cref="short"/> to a <see cref="StrOrNum"/> wrapping <see cref="ChoiceNum"/>.
     /// </summary>
-    public static implicit operator StrOrNum(short item) => new ChoiceNum(item);
+    public static implicit operator StrOrNum(short item) => new ChoiceNum { Item = item };
 
     /// <summary>
     /// Explicitly extracts the underlying <see cref="string"/> from a <see cref="ChoiceStr"/>,
     /// or parses a <see cref="ChoiceNum"/> back to its string representation.
     /// </summary>
-    public static explicit operator string(StrOrNum choice) => choice.Match(c1 => c1, c2 => c2.ToString());
+    public static explicit operator string(StrOrNum choice) => choice.Match(c1 => c1, c2 => c2.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     /// <summary>
     /// Explicitly extracts the underlying <see cref="long"/> from a <see cref="ChoiceNum"/>,
@@ -101,9 +113,9 @@ public abstract record StrOrNum
     /// <exception cref="OverflowException">The numeric value does not fit in a <see cref="short"/>.</exception>
     public static explicit operator short(StrOrNum choice) => choice.Match(c1 => StrToShort(c1) ?? 0, c2 => checked((short)c2));
 
-    private static U Match<U>(Func<string, U> onChoiceStr, Func<long, U> onChoiceNum, StrOrNum choice)
+    private static TResult Match<TResult>(Func<string, TResult> onChoiceStr, Func<long, TResult> onChoiceNum, StrOrNum choice)
     {
-        U result = choice switch
+        TResult result = choice switch
         {
             ChoiceStr c => onChoiceStr(c.Item),
             ChoiceNum c => onChoiceNum(c.Item),
@@ -142,7 +154,7 @@ public abstract record StrOrNum
     /// text, instead of silently becoming the number 0. Callers that need to detect the corruption
     /// use <see cref="TryFromFmtStr"/>.</remarks>
     public static StrOrNum FromFmtStr(string? fmtInput)
-        => TryFromFmtStr(fmtInput, out StrOrNum? result) ? result : new ChoiceStr(fmtInput ?? string.Empty);
+        => TryFromFmtStr(fmtInput, out StrOrNum? result) ? result : new ChoiceStr { Item = fmtInput ?? string.Empty };
 
     /// <summary>
     /// Strict counterpart of <see cref="FromFmtStr"/>: reports whether <paramref name="fmtInput"/>
@@ -159,7 +171,7 @@ public abstract record StrOrNum
 
         if (fmtInput.StartsWith("s:", StringComparison.Ordinal))
         {
-            result = new ChoiceStr(UnescapeFmt(fmtInput.AsSpan()[2..]));
+            result = new ChoiceStr { Item = UnescapeFmt(fmtInput.AsSpan()[2..]) };
             return true;
         }
 
@@ -167,11 +179,11 @@ public abstract record StrOrNum
         {
             if (StrToLong(fmtInput.AsSpan()[2..]) is not long num) return false;
 
-            result = new ChoiceNum(num);
+            result = new ChoiceNum { Item = num };
             return true;
         }
 
-        result = new ChoiceStr(fmtInput);
+        result = new ChoiceStr { Item = fmtInput };
         return true;
     }
 

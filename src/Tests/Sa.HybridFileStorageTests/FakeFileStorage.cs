@@ -35,7 +35,13 @@ internal sealed class FakeFileStorage(
     {
         UploadCount++;
         string fileId = $"{storageType}://{basket}/{metadata.TenantId}/{metadata.FileName}";
-        return Task.FromResult(new StorageResult(fileId, fileId, storageType, DateTimeOffset.UtcNow));
+        return Task.FromResult(new StorageResult
+        {
+            FileId = fileId,
+            AbsoluteUrl = fileId,
+            StorageType = storageType,
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
     }
 
     public async Task<bool> DownloadAsync(

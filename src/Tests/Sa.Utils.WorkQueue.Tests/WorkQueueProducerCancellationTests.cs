@@ -14,7 +14,7 @@ public sealed class WorkQueueProducerCancellationTests
 
     private sealed class CompletedProcessor : ISaWork<int>
     {
-        public Task Execute(int input, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ExecuteAsync(int input, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     /// <summary>Blocks until the test opens the gate and deliberately ignores the token.</summary>
@@ -26,7 +26,7 @@ public sealed class WorkQueueProducerCancellationTests
 
         public int Completed => Volatile.Read(ref _completed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             Entered.TrySetResult();
             await Gate.Task.ConfigureAwait(false);
@@ -37,12 +37,12 @@ public sealed class WorkQueueProducerCancellationTests
     /// <summary>Runs until the token it is given is cancelled.</summary>
     private sealed class InfiniteProcessor : ISaWork<int>
     {
-        public Task Execute(int input, CancellationToken ct)
+        public Task ExecuteAsync(int input, CancellationToken ct)
             => Task.Delay(Timeout.Infinite, ct);
     }
 
     private static SaWorkQueueOptions<int> Detached(ISaWork<int> processor, int concurrency = 1)
-        => SaWorkQueueOptions<int>.Create(processor)
+        => SaWorkQueueOptions.Create<int>(processor)
             .WithProducerCancellation(SaProducerCancellationMode.Detached)
             .WithConcurrencyLimit(concurrency);
 
@@ -53,12 +53,12 @@ public sealed class WorkQueueProducerCancellationTests
         var statuses = new ConcurrentBag<SaWorkStatus>();
 
         using var producerCts = new CancellationTokenSource();
-        using var queue = new SaWorkQueue<int>(
+        using var queue = new SaWorkChannel<int>(
             Detached(processor)
                 .WithQueueCapacity(4)
                 .WithStatusCallback((_, status, _) => statuses.Add(status)));
 
-        await queue.Enqueue(1, producerCts.Token);
+        await queue.EnqueueAsync(1, producerCts.Token);
         await processor.Entered.Task.WaitAsync(TestToken);
 
         await producerCts.CancelAsync();
@@ -77,8 +77,8 @@ public sealed class WorkQueueProducerCancellationTests
         var processed = new ConcurrentBag<int>();
 
         using var producerCts = new CancellationTokenSource();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create((int input, CancellationToken _) =>
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>((int input, CancellationToken _) =>
                 {
                     processed.Add(input);
                     return Task.CompletedTask;
@@ -87,7 +87,7 @@ public sealed class WorkQueueProducerCancellationTests
                 .WithConcurrencyLimit(0) // paused: the item stays in the buffer
                 .WithQueueCapacity(4));
 
-        await queue.Enqueue(1, producerCts.Token);
+        await queue.EnqueueAsync(1, producerCts.Token);
         await producerCts.CancelAsync();
 
         queue.ConcurrencyLimit = 1;
@@ -102,10 +102,10 @@ public sealed class WorkQueueProducerCancellationTests
         using var producerCts = new CancellationTokenSource();
         await producerCts.CancelAsync();
 
-        using var queue = new SaWorkQueue<int>(Detached(new CompletedProcessor()));
+        using var queue = new SaWorkChannel<int>(Detached(new CompletedProcessor()));
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            async () => await queue.Enqueue(1, producerCts.Token));
+            async () => await queue.EnqueueAsync(1, producerCts.Token));
 
         Assert.Equal(0, queue.QueueTasks);
     }
@@ -114,14 +114,14 @@ public sealed class WorkQueueProducerCancellationTests
     public async Task Detached_TokenStillCancelsTheWaitForBufferSpace()
     {
         using var producerCts = new CancellationTokenSource();
-        using var queue = new SaWorkQueue<int>(
+        using var queue = new SaWorkChannel<int>(
             Detached(new CompletedProcessor(), concurrency: 0)
                 .WithQueueCapacity(1)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Wait));
 
-        await queue.Enqueue(1, CancellationToken.None); // fills the only slot
+        await queue.EnqueueAsync(1, CancellationToken.None); // fills the only slot
 
-        var waiting = queue.Enqueue(2, producerCts.Token);
+        var waiting = queue.EnqueueAsync(2, producerCts.Token);
         await Task.Delay(50, TestToken); // parked in WriteAsync
         await producerCts.CancelAsync();
 
@@ -135,14 +135,14 @@ public sealed class WorkQueueProducerCancellationTests
     public async Task Detached_EnqueueMany_StopsWhenTokenIsCancelledMidBatch()
     {
         using var producerCts = new CancellationTokenSource();
-        using var queue = new SaWorkQueue<int>(
+        using var queue = new SaWorkChannel<int>(
             Detached(new CompletedProcessor(), concurrency: 0)
                 .WithQueueCapacity(8));
 
         var inputs = new CancellingSequence(producerCts, cancelBefore: 3);
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            async () => await queue.EnqueueMany(inputs, producerCts.Token));
+            async () => await queue.EnqueueManyAsync(inputs, producerCts.Token));
 
         // Items 1 and 2 were accepted; the check before item 3 stopped the batch.
         Assert.Equal(2, queue.QueueTasks);
@@ -152,13 +152,13 @@ public sealed class WorkQueueProducerCancellationTests
     public async Task Detached_QueueShutdown_StillCancelsTheItem()
     {
         var statuses = new ConcurrentBag<SaWorkStatus>();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(new InfiniteProcessor())
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(new InfiniteProcessor())
                 .WithProducerCancellation(SaProducerCancellationMode.Detached)
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback((_, status, _) => statuses.Add(status)));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await Task.Delay(50, TestToken);
 
         await queue.ShutdownAsync();
@@ -172,12 +172,12 @@ public sealed class WorkQueueProducerCancellationTests
         var statuses = new ConcurrentBag<SaWorkStatus>();
         using var producerCts = new CancellationTokenSource();
 
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(new InfiniteProcessor())
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(new InfiniteProcessor())
                 .WithConcurrencyLimit(1)
                 .WithStatusCallback((_, status, _) => statuses.Add(status)));
 
-        await queue.Enqueue(1, producerCts.Token);
+        await queue.EnqueueAsync(1, producerCts.Token);
         await Task.Delay(50, TestToken);
 
         await producerCts.CancelAsync();

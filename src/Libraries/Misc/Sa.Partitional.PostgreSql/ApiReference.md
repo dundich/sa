@@ -239,10 +239,28 @@ public interface IPartRepository
     /// Detaches every partition whose FromDate ≤ <paramref name="toDate"/> and moves it, under the
     /// same name, into <paramref name="archiveSchemaName"/> (created when missing). Its cache row is
     /// marked archived instead of being deleted, so a repeated run is a no-op. PostgreSQL 13+.
+    /// A name the archive already holds is left attached and logged.
     /// </summary>
     Task<int> ArchivePartsToDate(
         string tableName, DateTimeOffset toDate, string archiveSchemaName,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Same as above, but chooses the name-collision policy: <see cref="ArchiveCollisionMode.Fail"/>
+    /// (leave attached, log) or <see cref="ArchiveCollisionMode.RenameExisting"/> (move the older
+    /// archived copy and its indexes to {name}{sep}prev$N, then archive the new one).
+    /// </summary>
+    Task<int> ArchivePartsToDate(
+        string tableName, DateTimeOffset toDate, string archiveSchemaName,
+        ArchiveCollisionMode collisionMode,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Drops list-level partitions whose whole subtree is empty and whose value the table's migration
+    /// support does not declare. Opt-in via PartCleanupScheduleSettings.PruneEmptyListParts.
+    /// </summary>
+    Task<int> PruneEmptyListParts(
+        string tableName, CancellationToken cancellationToken = default);
 }
 ```
 

@@ -17,7 +17,7 @@ internal sealed partial class DropPoisonHandler(ILogger<DropPoisonHandler>? logg
 {
     private readonly ILogger _logger = logger ?? NullLogger<DropPoisonHandler>.Instance;
 
-    public ValueTask Handle(RedisOutboxPoisonMessage message, CancellationToken cancellationToken)
+    public ValueTask HandleAsync(RedisOutboxPoisonMessage message, CancellationToken cancellationToken)
     {
         LogDropped(
             _logger,

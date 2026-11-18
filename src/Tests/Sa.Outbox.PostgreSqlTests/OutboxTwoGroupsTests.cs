@@ -20,7 +20,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
     {
         public static int Counter;
 
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
@@ -35,7 +35,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
     {
         public static int Counter;
 
-        public async ValueTask Consume(
+        public async ValueTask ConsumeAsync(
             OutboxConsumerSettings settings,
             OutboxMessageFilter filter,
             ReadOnlyMemory<IOutboxContextOperations<SomeMessage>> messages,
@@ -95,7 +95,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
         SomeMessageConsumerGr2.Counter = 0;
 
         var scheduler = ServiceProvider.GetRequiredKeyedService<IScheduler>(OutboxScope.DefaultKey);
-        int startedSchedules = await scheduler.Start(CancellationToken.None);
+        int startedSchedules = await scheduler.StartAsync(CancellationToken.None);
         Assert.True(startedSchedules >= 2, "Ожидалось как минимум 2 расписания (по одному на группу)");
 
         var publisher = ServiceProvider.GetRequiredService<IOutboxMessagePublisher>();
@@ -120,7 +120,7 @@ public class OutboxTwoGroupsTests(OutboxTwoGroupsTests.Fixture fixture)
 
         await Task.Delay(200, TestContext.Current.CancellationToken);
 
-        await scheduler.Stop();
+        await scheduler.StopAsync();
 
         Assert.Equal((int)total, SomeMessageConsumerGr1.Counter);
         Assert.Equal((int)total, SomeMessageConsumerGr2.Counter);

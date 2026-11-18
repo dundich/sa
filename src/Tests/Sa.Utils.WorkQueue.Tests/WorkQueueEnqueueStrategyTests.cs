@@ -11,7 +11,7 @@ public sealed class WorkQueueEnqueueStrategyTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public Task Execute(int input, CancellationToken ct)
+        public Task ExecuteAsync(int input, CancellationToken ct)
         {
             Interlocked.Increment(ref _processed);
             return Task.CompletedTask;
@@ -24,7 +24,7 @@ public sealed class WorkQueueEnqueueStrategyTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public async Task Execute(int input, CancellationToken ct)
+        public async Task ExecuteAsync(int input, CancellationToken ct)
         {
             await Gate.Task.WaitAsync(ct);
             Interlocked.Increment(ref _processed);
@@ -44,7 +44,7 @@ public sealed class WorkQueueEnqueueStrategyTests
     [Fact]
     public void Default_Strategy_IsWait()
     {
-        var options = SaWorkQueueOptions<int>.Create(new CountingProcessor());
+        var options = SaWorkQueueOptions.Create<int>(new CountingProcessor());
         Assert.Equal(SaEnqueueStrategy.Wait, options.EnqueueStrategy);
     }
 
@@ -52,20 +52,20 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Wait_Strategy_BlocksWhenFull_ThenAccepts()
     {
         var processor = new GateProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(1)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Wait));
 
-        Assert.True(await queue.Enqueue(1, TestToken));
+        Assert.True(await queue.EnqueueAsync(1, TestToken));
 
         // Reader has picked the item up: the buffer is empty again.
         await WaitUntil(() => queue.AvailableCapacity == queue.QueueCapacity, TestToken);
 
-        Assert.True(await queue.Enqueue(2, TestToken)); // buffer: 1 = full
+        Assert.True(await queue.EnqueueAsync(2, TestToken)); // buffer: 1 = full
 
-        var pending = queue.Enqueue(3, TestToken); // buffer full -> blocks
+        var pending = queue.EnqueueAsync(3, TestToken); // buffer full -> blocks
         await Task.Delay(100, TestToken);
         Assert.False(pending.IsCompleted, "Wait strategy must block while the buffer is full");
 
@@ -81,15 +81,15 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Skip_Strategy_ReturnsFalseWhenFull_AndDoesNotCountDroppedItem()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip));
 
-        Assert.True(await queue.Enqueue(1, TestToken));
-        Assert.True(await queue.Enqueue(2, TestToken));
-        Assert.False(await queue.Enqueue(3, TestToken));
+        Assert.True(await queue.EnqueueAsync(1, TestToken));
+        Assert.True(await queue.EnqueueAsync(2, TestToken));
+        Assert.False(await queue.EnqueueAsync(3, TestToken));
 
         Assert.Equal(2, queue.QueueTasks); // dropped item is not counted
         Assert.Equal(0, queue.AvailableCapacity);
@@ -98,7 +98,7 @@ public sealed class WorkQueueEnqueueStrategyTests
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed);
 
-        Assert.True(await queue.Enqueue(3, TestToken)); // buffer free again
+        Assert.True(await queue.EnqueueAsync(3, TestToken)); // buffer free again
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
     }
@@ -107,21 +107,21 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Skip_Strategy_PausedAtRuntime_FillsThenSkips()
     {
         var processor = new GateProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip));
 
-        Assert.True(await queue.Enqueue(1, TestToken));
+        Assert.True(await queue.EnqueueAsync(1, TestToken));
 
         await WaitUntil(() => queue.AvailableCapacity == queue.QueueCapacity, TestToken); // reader holds item 1 on the gate
-        Assert.True(await queue.Enqueue(2, TestToken)); // buffer: 1
+        Assert.True(await queue.EnqueueAsync(2, TestToken)); // buffer: 1
 
         queue.ConcurrencyLimit = 0; // pause (hard cancel: item 1 is dropped)
 
-        Assert.True(await queue.Enqueue(3, TestToken)); // buffer: 2
-        Assert.False(await queue.Enqueue(4, TestToken)); // buffer full
+        Assert.True(await queue.EnqueueAsync(3, TestToken)); // buffer: 2
+        Assert.False(await queue.EnqueueAsync(4, TestToken)); // buffer full
 
         queue.ConcurrencyLimit = 1; // resume
         processor.Gate.TrySetResult();
@@ -134,25 +134,25 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Throw_Strategy_ThrowsWhenFull()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Throw));
 
-        Assert.True(await queue.Enqueue(1, TestToken));
-        Assert.True(await queue.Enqueue(2, TestToken));
+        Assert.True(await queue.EnqueueAsync(1, TestToken));
+        Assert.True(await queue.EnqueueAsync(2, TestToken));
 
         await Assert.ThrowsAsync<SaWorkQueueFullException>(async () =>
         {
-            await queue.Enqueue(3, cancellationToken: CancellationToken.None);
+            await queue.EnqueueAsync(3, cancellationToken: CancellationToken.None);
         });
 
         queue.ConcurrencyLimit = 1; // resume: readers drain the buffer
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(2, processor.Processed);
 
-        Assert.True(await queue.Enqueue(3, TestToken));
+        Assert.True(await queue.EnqueueAsync(3, TestToken));
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
         Assert.Equal(3, processor.Processed);
     }
@@ -162,16 +162,16 @@ public sealed class WorkQueueEnqueueStrategyTests
     {
         var processor = new CountingProcessor();
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Skip)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
 
-        Assert.True(await queue.Enqueue(1, TestToken));
-        Assert.True(await queue.Enqueue(2, TestToken));
-        Assert.False(await queue.Enqueue(3, TestToken)); // buffer full: dropped
+        Assert.True(await queue.EnqueueAsync(1, TestToken));
+        Assert.True(await queue.EnqueueAsync(2, TestToken));
+        Assert.False(await queue.EnqueueAsync(3, TestToken)); // buffer full: dropped
 
         Assert.Contains(statuses, s => s.Item == 3 && s.Status == SaWorkStatus.Skipped);
         Assert.DoesNotContain(statuses, s => s.Item == 3 && s.Status is SaWorkStatus.Running or SaWorkStatus.Completed);
@@ -188,18 +188,18 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Throw_Strategy_ExceptionCarriesQueueAndItemInfo()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Throw)
                 .WithItemDisplayName(item => $"order-{item}"));
 
-        Assert.True(await queue.Enqueue(1, TestToken));
-        Assert.True(await queue.Enqueue(2, TestToken));
+        Assert.True(await queue.EnqueueAsync(1, TestToken));
+        Assert.True(await queue.EnqueueAsync(2, TestToken));
 
         var ex = await Record.ExceptionAsync(async () =>
-            await queue.Enqueue(3, cancellationToken: CancellationToken.None));
+            await queue.EnqueueAsync(3, cancellationToken: CancellationToken.None));
 
         Assert.NotNull(ex);
         Assert.IsType<SaWorkQueueFullException>(ex!);
@@ -217,19 +217,19 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Throw_Strategy_FailedEnqueue_DoesNotCorruptTaskCount()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(SaEnqueueStrategy.Throw));
 
-        Assert.True(await queue.Enqueue(1, TestToken));
-        Assert.True(await queue.Enqueue(2, TestToken));
+        Assert.True(await queue.EnqueueAsync(1, TestToken));
+        Assert.True(await queue.EnqueueAsync(2, TestToken));
         Assert.Equal(2, queue.QueueTasks);
 
         await Assert.ThrowsAsync<SaWorkQueueFullException>(async () =>
         {
-            await queue.Enqueue(3, cancellationToken: CancellationToken.None);
+            await queue.EnqueueAsync(3, cancellationToken: CancellationToken.None);
         });
 
         // Regression: the failed enqueue must balance exactly the one active mark
@@ -250,13 +250,13 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Stopped_Queue_ThrowsInAllStrategies(SaEnqueueStrategy strategy)
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(strategy));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         queue.Shutdown();
@@ -265,7 +265,7 @@ public sealed class WorkQueueEnqueueStrategyTests
         // so it must be awaited to be observed.
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await queue.Enqueue(2, cancellationToken: CancellationToken.None);
+            await queue.EnqueueAsync(2, cancellationToken: CancellationToken.None);
         });
         queue.Dispose();
     }
@@ -277,8 +277,8 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task Disposed_Queue_ThrowsInAllStrategies(SaEnqueueStrategy strategy)
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2)
                 .WithEnqueueStrategy(strategy));
@@ -287,7 +287,7 @@ public sealed class WorkQueueEnqueueStrategyTests
 
         await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
         {
-            await queue.Enqueue(1, cancellationToken: CancellationToken.None);
+            await queue.EnqueueAsync(1, cancellationToken: CancellationToken.None);
         });
     }
 
@@ -295,20 +295,20 @@ public sealed class WorkQueueEnqueueStrategyTests
     public async Task AvailableCapacity_TracksBufferOccupancy()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(3));
 
         Assert.Equal(3, queue.AvailableCapacity);
 
-        Assert.True(await queue.Enqueue(1, TestToken));
+        Assert.True(await queue.EnqueueAsync(1, TestToken));
         Assert.Equal(2, queue.AvailableCapacity);
 
-        Assert.True(await queue.Enqueue(2, TestToken));
+        Assert.True(await queue.EnqueueAsync(2, TestToken));
         Assert.Equal(1, queue.AvailableCapacity);
 
-        Assert.True(await queue.Enqueue(3, TestToken));
+        Assert.True(await queue.EnqueueAsync(3, TestToken));
         Assert.Equal(0, queue.AvailableCapacity);
 
         queue.ConcurrencyLimit = 1; // readers drain the buffer

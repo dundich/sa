@@ -16,7 +16,7 @@ public sealed class FFProbeProcessorTests
     public async Task GetAudioChannelCount_ShouldBeWork(string testFilePath)
     {
         // Act
-        var (channels, sampleRate) = await Processor.GetChannelsAndSampleRate(testFilePath, cancellationToken: CancellationToken);
+        var (channels, sampleRate) = await Processor.GetChannelsAndSampleRateAsync(testFilePath, cancellationToken: CancellationToken);
         Assert.InRange(channels!.Value, 1, 2);
         Assert.True(sampleRate >= 8000);
     }
@@ -29,7 +29,7 @@ public sealed class FFProbeProcessorTests
     public async Task GetMetaInfo_CorrectlyReadsRealFile(string testFilePath)
     {
         // Act
-        var result = await Processor.GetMetaInfo(testFilePath, CancellationToken);
+        var result = await Processor.GetMetaInfoAsync(testFilePath, CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -49,7 +49,7 @@ public sealed class FFProbeProcessorTests
         var ext = Path.GetExtension(testFilePath).TrimStart('.');
         using var stream = File.OpenRead(testFilePath);
         // Act
-        var result = await Processor.GetMetaInfo(stream, ext, CancellationToken);
+        var result = await Processor.GetMetaInfoAsync(stream, ext, CancellationToken);
 
         Assert.Equal(ext, result.FormatName);
     }

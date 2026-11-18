@@ -26,7 +26,7 @@ public sealed class BatchOperationsTests : IAsyncLifetime
 
         // Register InMemory with "memory" basket
         services.AddSingleton<IFileStorage>(new InMemoryFileStorage(
-            new InMemoryFileStorageOptions("memory")));
+            new InMemoryFileStorageOptions { Basket = "memory" }));
 
         services.AddSaHybridFileStorage();
 

@@ -7,6 +7,9 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Sa.Outbox;
 
+/// <summary>
+/// Fluent configuration surface returned by <c>AddSaOutbox</c>.
+/// </summary>
 public interface IOutboxBuilder
 {
     /// <summary>

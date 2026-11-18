@@ -23,7 +23,7 @@ internal sealed class JobSnapshot(IJobContext context) : IJobSnapshot
 
     /// <summary>
     /// The message of the underlying error of the previous failure
-    /// (<see cref="JobException.InnerException"/>), if any.
+    /// (<see cref="Exception.InnerException"/>), if any.
     /// </summary>
     public string? LastErrorMessage { get; } = context.LastError?.InnerException?.Message;
 

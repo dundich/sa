@@ -131,7 +131,7 @@ public sealed class JobErrorHandlerTests
 
     sealed class NoopJob : IJob
     {
-        public Task Execute(IJobContext context, CancellationToken cancellationToken)
+        public Task ExecuteAsync(IJobContext context, CancellationToken cancellationToken)
             => Task.CompletedTask;
     }
 
@@ -150,11 +150,11 @@ public sealed class JobErrorHandlerTests
 
         public IReadOnlyCollection<IJobScheduler> Jobs { get; } = jobs;
 
-        public Task<int> Start(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
+        public Task<int> StartAsync(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
-        public Task<int> Restart(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
+        public Task<int> RestartAsync(CancellationToken cancellationToken) => Task.FromResult(jobs.Length);
 
-        public Task Stop() => Task.WhenAll(jobs.Select(job => job.Stop()));
+        public Task StopAsync() => Task.WhenAll(jobs.Select(job => job.StopAsync()));
     }
 
     private sealed class FakeJobScheduler(Guid jobId) : IJobScheduler
@@ -178,9 +178,9 @@ public sealed class JobErrorHandlerTests
 
         public IChangeToken StartChangeToken() => new CancellationChangeToken(CancellationToken.None);
 
-        public Task<bool> Start(CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> StartAsync(CancellationToken cancellationToken) => Task.FromResult(true);
 
-        public Task Stop()
+        public Task StopAsync()
         {
             Interlocked.Increment(ref _stopCalls);
 

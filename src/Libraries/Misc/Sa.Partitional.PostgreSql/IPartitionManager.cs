@@ -1,5 +1,3 @@
-using Sa.Partitional.PostgreSql.Classes;
-
 namespace Sa.Partitional.PostgreSql;
 
 /// <summary>
@@ -15,10 +13,10 @@ public interface IPartitionManager
     /// <returns>
     /// The number of DDL statements executed (the DDL is <c>IF NOT EXISTS</c>, so this is not the
     /// number of partitions created), or <c>-1</c> when the run did not complete — see
-    /// <see cref="IMigrationService.Migrate(CancellationToken)"/>. Callers must treat <c>-1</c> as
+    /// <see cref="IMigrationService.MigrateAsync(CancellationToken)"/>. Callers must treat <c>-1</c> as
     /// "not completed", never as a negative count.
     /// </returns>
-    Task<int> Migrate(CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Migrates partitions for specific dates.
@@ -28,9 +26,9 @@ public interface IPartitionManager
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>
     /// The number of DDL statements executed, or <c>-1</c> when the run did not complete — see
-    /// <see cref="IMigrationService.Migrate(DateTimeOffset[], CancellationToken)"/>.
+    /// <see cref="IMigrationService.MigrateAsync(DateTimeOffset[], CancellationToken)"/>.
     /// </returns>
-    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Ensures that the specified partition exists for a given table and date, creating it when it is
@@ -45,12 +43,12 @@ public interface IPartitionManager
     /// callers either ignore the result or reject a perfectly valid write.
     /// </remarks>
     /// <param name="tableName">The name of the table for which the partition is being ensured.</param>
-    /// <param name="date">The date associated with the partition.</param>
+    /// <param name="periodStart">The date associated with the partition.</param>
     /// <param name="partValues">An array of values that define the partitions (could be strings or numbers).</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    Task EnsureParts(
+    Task EnsurePartsAsync(
         string tableName,
-        DateTimeOffset date,
+        DateTimeOffset periodStart,
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default);
 }

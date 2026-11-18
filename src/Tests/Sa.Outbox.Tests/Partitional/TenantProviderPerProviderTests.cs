@@ -44,8 +44,8 @@ public class TenantProviderPerProviderTests
 
         var provider = sp.GetRequiredService<ITenantProvider>();
 
-        Assert.Equal(new[] { 1, 2 }, await provider.GetTenantIds("a", TestToken));
-        Assert.Equal(new[] { 9 }, await provider.GetTenantIds("b", TestToken));
+        Assert.Equal(new[] { 1, 2 }, await provider.GetTenantIdsAsync("a", TestToken));
+        Assert.Equal(new[] { 9 }, await provider.GetTenantIdsAsync("b", TestToken));
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class TenantProviderPerProviderTests
 
         var provider = sp.GetRequiredService<ITenantProvider>();
 
-        Assert.Equal(new[] { 9 }, await provider.GetTenantIds("any", TestToken));
+        Assert.Equal(new[] { 9 }, await provider.GetTenantIdsAsync("any", TestToken));
     }
 
     [Fact]
@@ -82,15 +82,15 @@ public class TenantProviderPerProviderTests
         using ServiceProvider sp = services.BuildServiceProvider();
         var provider = sp.GetRequiredService<ITenantProvider>();
 
-        Assert.Equal(new[] { 1, 2 }, await provider.GetTenantIds("a", TestToken));
-        Assert.Equal(new[] { 7 }, await provider.GetTenantIds("b", TestToken));
+        Assert.Equal(new[] { 1, 2 }, await provider.GetTenantIdsAsync("a", TestToken));
+        Assert.Equal(new[] { 7 }, await provider.GetTenantIdsAsync("b", TestToken));
     }
 
     private sealed class FakeDetector(params int[] detected) : IOutboxTenantDetector
     {
         public bool CanDetect => true;
 
-        public ValueTask<int[]> GetTenantIds(CancellationToken cancellationToken)
+        public ValueTask<int[]> GetTenantIdsAsync(CancellationToken cancellationToken)
             => ValueTask.FromResult(detected);
     }
 }

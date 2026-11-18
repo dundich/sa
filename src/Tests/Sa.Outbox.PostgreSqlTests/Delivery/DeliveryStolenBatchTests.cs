@@ -2,10 +2,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Sa.Outbox.Delivery;
+using Sa.Outbox.PlugServices;
 using Sa.Outbox.PostgreSql.Commands;
 using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.Publication;
-using Sa.Outbox.PlugServices;
 
 namespace Sa.Outbox.PostgreSqlTests.Delivery;
 
@@ -93,15 +93,17 @@ public sealed class DeliveryStolenBatchTests(DeliveryStolenBatchTests.Fixture fi
 
         // The filter carries the transaction id that FinishDelivery will insist on matching, so
         // it must be the same filter used to rent.
-        var filter = new OutboxMessageFilter(
-            TransactId: "test-stolen-batch-1",
-            ConsumerGroupId: "test1",
-            PayloadType: nameof(TestMessage),
-            TenantId: StolenTenantId,
-            Part: "root_1",
-            FromDate: new DateTimeOffset(now.Date.AddDays(-1), now.Offset),
-            ToDate: now,
-            NowDate: now);
+        var filter = new OutboxMessageFilter
+        {
+            TransactId = "test-stolen-batch-1",
+            ConsumerGroupId = "test1",
+            PayloadType = nameof(TestMessage),
+            TenantId = StolenTenantId,
+            Part = "root_1",
+            FromDate = new DateTimeOffset(now.Date.AddDays(-1), now.Offset),
+            ToDate = now,
+            NowDate = now
+        };
 
         IOutboxContextOperations<TestMessage>[] buffer = new IOutboxContextOperations<TestMessage>[4];
 
@@ -145,15 +147,17 @@ public sealed class DeliveryStolenBatchTests(DeliveryStolenBatchTests.Fixture fi
 
         var mark = fixture.Logger.Mark;
 
-        var filter = new OutboxMessageFilter(
-            TransactId: "test-stolen-batch-2",
-            ConsumerGroupId: "test2",
-            PayloadType: nameof(TestMessage),
-            TenantId: IntactTenantId,
-            Part: "root_1",
-            FromDate: new DateTimeOffset(now.Date.AddDays(-1), now.Offset),
-            ToDate: now,
-            NowDate: now);
+        var filter = new OutboxMessageFilter
+        {
+            TransactId = "test-stolen-batch-2",
+            ConsumerGroupId = "test2",
+            PayloadType = nameof(TestMessage),
+            TenantId = IntactTenantId,
+            Part = "root_1",
+            FromDate = new DateTimeOffset(now.Date.AddDays(-1), now.Offset),
+            ToDate = now,
+            NowDate = now
+        };
 
         IOutboxContextOperations<TestMessage>[] buffer = new IOutboxContextOperations<TestMessage>[4];
 
@@ -192,7 +196,7 @@ public sealed class DeliveryStolenBatchTests(DeliveryStolenBatchTests.Fixture fi
               AND {fields.TaskTransactId} = @trn
             """;
 
-        var affected = await fixture.DataSource.ExecuteNonQuery(sql, cmd =>
+        var affected = await fixture.DataSource.ExecuteNonQueryAsync(sql, cmd =>
         {
             cmd.Parameters.Add(new NpgsqlParameter<int>(SqlParamNames.TenantId, filter.TenantId));
             cmd.Parameters.Add(new NpgsqlParameter<string>(SqlParamNames.ConsumerGroup, filter.ConsumerGroupId));

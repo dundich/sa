@@ -13,6 +13,7 @@ Reusable infrastructure libraries for distributed .NET 10 systems — **Native A
 - [Libraries](#libraries)
   - [Sa.Configuration — CLI Arguments & Secrets](#saconfiguration--cli-arguments--secrets)
   - [Sa.Configuration.PostgreSql — Dynamic DB Configuration](#saconfigurationpostgresql--dynamic-db-configuration)
+  - [Sa.Data.PostgreSql — Npgsql Data Client](#sadatapostgresql--npgsql-data-client)
   - [Sa.Data.S3 — S3 Data Client](#sadatas3--s3-data-client)
   - [Sa.Data.TempFolder — Temporary Folder Manager](#sadatatempfolder--temporary-folder-manager)
   - [Sa.Outbox — Transactional Outbox Core](#saoutbox--transactional-outbox-core)
@@ -45,6 +46,12 @@ Adds a PostgreSQL-backed `IConfigurationSource` so configuration changes in the 
 
 ---
 
+
+### [Sa.Data.PostgreSql](src/Libraries/Data/Sa.Data.PostgreSql) — Npgsql Data Client
+
+Lightweight Npgsql wrapper: `IPgDataSource` with keyed DI registration, `ExecuteNonQuery`/`ExecuteScalar`/`ExecuteReader` helpers, typed row mapping, transactions, and SQL command extensions — no ORM, Native AOT friendly.
+
+---
 
 ### [Sa.Data.S3](src/Libraries/Data/Sa.Data.S3) — S3 Data Client
 

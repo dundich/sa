@@ -11,7 +11,7 @@ public sealed class WorkQueueTryEnqueueTests
         private int _processed;
         public int Processed => Volatile.Read(ref _processed);
 
-        public Task Execute(int input, CancellationToken ct)
+        public Task ExecuteAsync(int input, CancellationToken ct)
         {
             Interlocked.Increment(ref _processed);
             return Task.CompletedTask;
@@ -22,8 +22,8 @@ public sealed class WorkQueueTryEnqueueTests
     public async Task TryEnqueue_AcceptsWhenBufferHasSpace()
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2));
 
@@ -47,8 +47,8 @@ public sealed class WorkQueueTryEnqueueTests
     {
         var processor = new CountingProcessor();
         var statuses = new ConcurrentBag<(int Item, SaWorkStatus Status)>();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(2)
                 .WithStatusCallback((item, status, _) => statuses.Add((item, status))));
@@ -75,8 +75,8 @@ public sealed class WorkQueueTryEnqueueTests
     public void TryEnqueue_NeverBlocksOrThrowsWhenFull_RegardlessOfStrategy(SaEnqueueStrategy strategy)
     {
         var processor = new CountingProcessor();
-        using var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        using var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(0)
                 .WithQueueCapacity(1)
                 .WithEnqueueStrategy(strategy));
@@ -92,12 +92,12 @@ public sealed class WorkQueueTryEnqueueTests
     public async Task TryEnqueue_ThrowsWhenStopped()
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2));
 
-        await queue.Enqueue(1, TestToken);
+        await queue.EnqueueAsync(1, TestToken);
         await queue.WaitForIdleAsync(cancellationToken: TestToken);
 
         queue.Shutdown();
@@ -111,8 +111,8 @@ public sealed class WorkQueueTryEnqueueTests
     public void TryEnqueue_ThrowsWhenDisposed()
     {
         var processor = new CountingProcessor();
-        var queue = new SaWorkQueue<int>(
-            SaWorkQueueOptions<int>.Create(processor)
+        var queue = new SaWorkChannel<int>(
+            SaWorkQueueOptions.Create<int>(processor)
                 .WithConcurrencyLimit(1)
                 .WithQueueCapacity(2));
 

@@ -3,21 +3,23 @@ using static Sa.Media.Echo.CrossFeedSeparator;
 namespace Sa.Media.Echo;
 
 /// <summary>CLI options for the cross-feed audio separation pipeline.</summary>
-public sealed record AudioSeparationOptions(
-    /// <summary>Path to the input PCM 16-bit stereo WAV file.</summary>
-    string InputPath,
+public sealed record AudioSeparationOptions
+{
+    /// <summary>Path of the input WAV file.</summary>
+    public required string InputPath { get; init; }
 
-    /// <summary>Optional output WAV path. Auto-generated from input filename if null.</summary>
-    string? OutputPath = null,
+    /// <summary>Output path; defaults to the input path next to an <c>.echo</c> suffix.</summary>
+    public string? OutputPath { get; init; }
 
-    /// <summary>Separation mode: <c>"linear"</c> or <c>"aggressive"</c>.</summary>
-    ProcessingMode Processing = ProcessingMode.Auto,
+    /// <summary>Separation mode.</summary>
+    public ProcessingMode Processing { get; init; } = ProcessingMode.Auto;
 
     /// <summary>dB threshold for single-speaker region detection.</summary>
-    double DominanceThresholdDb = 6.0,
+    public double DominanceThresholdDb { get; init; } = 6.0;
 
     /// <summary>Power-law exponent for spectral mask sharpening.</summary>
-    double SpectralMaskPower = 4.0,
+    public double SpectralMaskPower { get; init; } = 4.0;
 
     /// <summary>Minimum mask floor in [0, 1] — prevents gain from collapsing to zero.</summary>
-    double MaskFloor = 0.01);
+    public double MaskFloor { get; init; } = 0.01;
+}

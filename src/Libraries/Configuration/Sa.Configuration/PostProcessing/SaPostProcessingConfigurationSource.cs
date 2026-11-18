@@ -18,5 +18,13 @@ internal sealed class SaPostProcessingConfigurationSource(
     SaConfigurationState state) : IConfigurationSource, ISaPostProcessingSource
 {
     public IConfigurationProvider Build(IConfigurationBuilder builder)
-        => new SaPostProcessingConfigurationProvider(getInnerConfiguration, state);
+    {
+        SaPostProcessingConfigurationProvider provider = new(getInnerConfiguration, state);
+
+        // The reloader recomputes the pass after refreshing the dynamic providers; without this
+        // registration the aliases and placeholders would lag one reload behind.
+        SaConfigurationRuntime.GetOrAdd(builder).RegisterPostProcessingProvider(provider);
+
+        return provider;
+    }
 }
