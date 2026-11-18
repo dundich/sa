@@ -1,170 +1,90 @@
-# Sa — Набор инфраструктурных библиотек для .NET 10
+# Sa — инфраструктурные библиотеки для .NET 10
 
 **Русский** | [English](README.md)
 
-Переиспользуемые инфраструктурные библиотек для .NET 10, совместимые с **Native AOT**, с включённым `nullable`, построенные на современных примитивах .NET.
+Готовые строительные блоки для распределённых .NET-сервисов: конфигурация, доступ к данным, transactional outbox, файловое хранилище, медиа, планирование. Совместимы с **Native AOT**, `nullable` включён, без ORM.
 
-> ⚠️ **Стабильность.** Все пакеты пока в major-version `0` (`0.x.y`), поэтому публичные API могут меняться ломающим образом между релизами без предупреждения — используйте на свой страх и риск.
+> ⚠️ **До 1.0.** Все пакеты пока на `0.x.y`, поэтому публичный API может меняться ломающим образом между релизами без предупреждения.
 
----
+Название каждой библиотеки — ссылка на её каталог, а в каждом каталоге есть `Readme.md` с API, регистрацией в DI, настройками и примерами. Здесь — только ответ на вопрос «какую задачу решает библиотека».
 
 ## Содержание
 
-- [Библиотеки](#библиотеки)
-  - [Sa.Configuration — Аргументы командной строки и секреты](#saconfiguration--аргументы-командной-строки-и-секреты)
-  - [Sa.Configuration.PostgreSql — Динамическая конфигурация из PostgreSQL](#saconfigurationpostgresql--динамическая-конфигурация-из-postgresql)
-  - [Sa.Data.S3 — S3-клиент для данных](#sadatas3--s3-клиент-для-данных)
-  - [Sa.Data.TempFolder — Управление временными каталогами](#sadatatempfolder--управление-временными-каталогами)
-  - [Sa.Outbox.PostgreSql — Реализация на PostgreSQL](#saoutboxpostgresql--реализация-на-postgresql)
-  - [Sa.Partitional.PostgreSql — Декларативное партиционирование](#sapartitionalpostgresql--декларативное-партиционирование)
-  - [Sa.Schedule — Планировщик задач](#saschedule--планировщик-задач)
-  - [Sa.HybridFileStorage — Мульти- провайдерное хранилище](#sahybridfilestorage--мульти--провайдерное-хранилище)
-  - [Sa.Media — Асинхронное чтение WAV](#samedia--асинхронное-чтение-wav)
-  - [Sa.Media.FFmpeg — Обёртка FFmpeg для .NET](#samediaffmpeg--обёртка-ffmpeg-для-net)
-  - [Sa.Utils.WorkQueue — Асинхронная очередь с ограничением параллелизма](#sautilsworkqueue--асинхронная-очередь-с-ограничением-параллелизма)
+- [Конфигурация](#конфигурация)
+- [Данные](#данные)
+- [Outbox](#outbox)
+- [Файловое хранилище](#файловое-хранилище)
+- [Медиа](#медиа)
+- [Планирование и параллелизм](#планирование-и-параллелизм)
 - [Примеры](#примеры)
-- [Тесты](#тесты)
-- [Сборка](#сборка)
-- [Участие](#участие)
-- [Архитектура](#архитектура)
+- [Сборка и тесты](#сборка-и-тесты)
+- [Подробности](#подробности)
 - [Лицензия](#лицензия)
 
-## Библиотеки
+## Конфигурация
 
-### [Sa.Configuration](src/Libraries/Configuration/Sa.Configuration) — Аргументы командной строки и секреты
+- **[Sa.Configuration](src/Libraries/Configuration/Sa.Configuration)** — типизированный доступ к аргументам командной строки и к секретам из файлов, переменных окружения или host-key файлов.
+- **[Sa.Configuration.PostgreSql](src/Libraries/Configuration/Sa.Configuration.PostgreSql)** — хранит конфигурацию в таблице PostgreSQL, поэтому изменение применяется на лету, без редеплоя.
 
-`Arguments` — парсер аргументов командной строки с типизированными геттерами (`GetBool`, `GetInt`, `GetTimeSpan` и т.д.). `Secrets` — безопасное управление секретами из файлов, переменных окружения и host-key файлов с цепочками хранилищ и шаблонизацией `${secret:key}`.
+## Данные
 
----
+- **[Sa.Data.PostgreSql](src/Libraries/Data/Sa.Data.PostgreSql)** — тонкая обёртка над Npgsql: именованные источники данных, помощники запросов, типизированный маппинг строк, транзакции; без ORM.
+- **[Sa.Data.S3](src/Libraries/Data/Sa.Data.S3)** — S3-совместимый клиент для работы с бакетами и объектами.
+- **[Sa.Data.TempFolder](src/Libraries/Data/Sa.Data.TempFolder)** — один управляемый временный каталог на задачу: безопасные подпапки, очистка по возрасту, контроль свободного места.
+- **[Sa.Partitional.PostgreSql](src/Libraries/Misc/Sa.Partitional.PostgreSql)** — декларативное партиционирование таблиц: партиции создаются заранее, старые данные удаляются по политике хранения.
 
-### [Sa.Configuration.PostgreSql](src/Libraries/Configuration/Sa.Configuration.PostgreSql) — Динамическая конфигурация из PostgreSQL
+## Outbox
 
-Добавляет источник конфигурации на основе PostgreSQL, поэтому изменения в базе применяются в приложении без редеплоя.
+Паттерн [transactional outbox](https://microservices.io/patterns/data/transactional-outbox.html): сообщение записывается в той же транзакции, что и бизнес-изменение, а затем доставляется с повторами.
 
+- **[Sa.Outbox](src/Libraries/Outbox/Sa.Outbox)** — ядро, не зависящее от провайдера: контракты, батчи, повторы, статусы доставки. Включает in-memory провайдер для разработки и тестов.
+- **[Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql)** — готовый к продакшену провайдер для PostgreSQL.
+- **[Sa.Outbox.Redis](src/Libraries/Outbox/Sa.Outbox.Redis)** — провайдер для Redis: уже пригоден к использованию, но его API ещё может меняться.
 
----
+## Файловое хранилище
 
-### [Sa.Data.S3](src/Libraries/Data/Sa.Data.S3) — S3-клиент для данных
+- **[Sa.HybridFileStorage](src/Libraries/Hybrid/Sa.HybridFileStorage)** — единый интерфейс загрузки/скачивания/удаления поверх нескольких бэкендов с автоматическим последовательным фейловером между ними.
+  - Провайдеры: **[FileSystem](src/Libraries/Hybrid/Sa.HybridFileStorage.FileSystem)**, **[S3](src/Libraries/Hybrid/Sa.HybridFileStorage.S3)**, **[PostgreSQL](src/Libraries/Hybrid/Sa.HybridFileStorage.Postgres)**.
 
-Minio-compatible S3-клиент для операций с данными.
+## Медиа
 
----
+- **[Sa.Media](src/Libraries/Media/Sa.Media)** — экономный по памяти полностью асинхронный читатель WAV: разбор заголовка, сэмплы по каналам, PCM16/24/32 и IEEE float.
+- **[Sa.Media.FFmpeg](src/Libraries/Media/Sa.Media.FFmpeg)** — обёртка над FFmpeg со встроенными статическими бинарниками (win-x64, linux-x64), ставить ничего не нужно: метаданные, конвертация аудио, разделение/объединение каналов, работа через потоки.
 
-### [Sa.Data.TempFolder](src/Libraries/Data/Sa.Data.TempFolder) — Управление временными каталогами
+## Планирование и параллелизм
 
-`AddSaTempFolder` регистрирует ключевой `ITempFolder` (корневой каталог + стратегии): защищённые путём подпапки, отложенная фиксация активности записью, возрастная фоновая очистка с «спуском» по уровням, учёт объёма и контроль свободного места с edge-событиями, режим read-only и keyed-мультиинстансальную регистрацию.
-
----
-
-### [Sa.Outbox.PostgreSql](src/Libraries/Outbox/Sa.Outbox.PostgreSql) — Реализация на PostgreSQL
-
-Реализация **Transactional Outbox** на PostgreSQL. Сообщения фиксируются в outbox-таблице вместе с бизнес-операциями в одной транзакции, затем доставляются с повторами и отслеживанием статуса. Потребление — конкурентное (`SKIP LOCKED`), координация оффсетов — advisory-замками. Применение — на вашем страхе и риске.
-
-In-memory провайдер (`AddSaOutboxUsingInMemory`) входит в пакет `Sa.Outbox`: это reference-реализация точки подключения и замена хранилища для dev/test — без базы, Docker и конфигурации, без долговечности и межпроцессной доставки.
-
----
-
-### [Sa.Partitional.PostgreSql](src/Libraries/Misc/Sa.Partitional.PostgreSql) — Декларативное партиционирование
-
-Декларативное партиционирование таблиц PostgreSQL (range по дню/месяцу/году и list) с fluent-билдером, автоматической миграцией будущей партиций, очисткой по политике удержания и in-memory кэшем, автоматически инвалидируемым при runtime-изменениях.
-
----
-
-### [Sa.Schedule](src/Libraries/Misc/Sa.Schedule) — Планировщик задач
-
-Конфигурируемые задачи по расписанию с поддержкой cron-выражений, фиксированных интервалов и одноразовых запусков, со стратегиями ошибок на уровне задачи, повторами, лимитами параллелизма, интерцепторами и управлением старт/стоп/перезапуск на лету.
-
----
-
-### [Sa.HybridFileStorage](src/Libraries/Hybrid/Sa.HybridFileStorage) — Мульти- провайдерное хранилище
-
-`IHybridFileStorage` абстрагирует загрузку/выгрузку/удаление между несколькими провайдерами (FileSystem, S3, PostgreSQL) с автоматическим последовательным фейловером, пакетными операциями и интерцепторами на каждом провайдере. Провайдеры eagerly валидируют опции при регистрации, поэтому ошибка конфигурации проявляется рано, а не на каждой операции.
-
-Првайдеры: [`Sa.HybridFileStorage.FileSystem`](src/Libraries/Hybrid/Sa.HybridFileStorage.FileSystem), [`Sa.HybridFileStorage.S3`](src/Libraries/Hybrid/Sa.HybridFileStorage.S3), [`Sa.HybridFileStorage.Postgres`](src/Libraries/Hybrid/Sa.HybridFileStorage.Postgres).
-
----
-
-### [Sa.Media](src/Libraries/Media/Sa.Media) — Асинхронное чтение WAV
-
-Памятно-эффективный полностью асинхронный читатель WAV на базе `System.IO.Pipelines`: разбирает заголовок, читает сырые или нормализованные double-сэмплы по каналам, конвертирует между PCM16/24/32 и IEEE float, выдаёт потоковые чанки с настраиваемым размером батча.
-
----
-
-### [Sa.Media.FFmpeg](src/Libraries/Media/Sa.Media.FFmpeg) — Обёртка FFmpeg для .NET
-
-Кроссплатформная обёртка над FFmpeg со встроенными статическими бинарниками (win-x64, linux-x64) — работает без установки. Включает извлечение метаданных, конвертацию аудио (PCM S16/S32 LE, F32 LE, raw, MP3, OGG), разделение/объединение каналов, потоковый ввод/вывод через стримы и DI.
-
----
-
-### [Sa.Utils.WorkQueue](src/Libraries/Misc/Sa.Utils.WorkQueue) — Асинхронная очередь с ограничением параллелизма
-
-Высокопроизводительная асинхронная очередь задач на `System.Threading.Channels` с ограниченной ёмкостью и back-pressure (стратегии заполнения при переполнении: `Wait`/`Skip`/`Throw`). Изменяемый на лету параллелизм (`ConcurrencyLimit`/`MaxConcurrency`) с динамическим масштабированием, порядком отмены ридеров (`Lifo`•`Fifo`•`RoundRobin`•`Random`) и режимами отмены (`Hard`/`Soft`). DI, безопасный (идемпотентный) shutdown, стратегии ошибок и обратные вызовы статусов.
-
----
+- **[Sa.Schedule](src/Libraries/Misc/Sa.Schedule)** — запускает задачи по cron-выражениям, фиксированным интервалам или одноразово, с повторами, лимитами параллелизма и управлением старт/стоп на лету.
+- **[Sa.Utils.WorkQueue](src/Libraries/Misc/Sa.Utils.WorkQueue)** — асинхронная очередь задач с ограниченной ёмкостью, back-pressure и лимитом параллелизма, который можно менять на лету.
 
 ## Примеры
 
-В `src/Samples/`:
+Десять запускаемых примеров — по одному на библиотеку, с командой запуска и ожидаемым выводом — лежат в [`src/Samples/`](src/Samples/README.md).
 
-| Образец | Описание |
-|---------|----------|
-| [Configuration.Web](src/Samples/Configuration.Web) | CLI-аргументы + секреты в ASP.NET |
-| [FFMpeg.Console](src/Samples/FFMpeg.Console) | Извлечение метаданных FFmpeg |
-| [HybridFileStorage.Console](src/Samples/HybridFileStorage.Console) | Мульти- провайдерное хранилище |
-| [InMemoryOutbox.ConsoleApp](src/Samples/InMemoryOutbox.ConsoleApp) | Outbox без инфраструктуры (in-memory провайдер) |
-| [Partitional.ConsoleApp](src/Samples/Partitional.ConsoleApp) | Декларативное партиционирование |
-| [PgOutbox.ConsoleApp](src/Samples/PgOutbox.ConsoleApp) | Паттерн Outbox |
-| [Schedule.Console](src/Samples/Schedule.Console) | Планировщик задач |
-| [Schedule.Configuration.Console](src/Samples/Schedule.Configuration.Console) | Задачи по расписанию с подтягиванием настроек из appsettings.json |
-| [Echo](src/Samples/Echo) | Разделение аудиоканалов на базе Sa.Media |
-| [WorkQueue.Console](src/Samples/WorkQueue.Console) | Демо Sa.WorkQueue с изменением параллелизма на лету |
+## Сборка и тесты
 
----
-
-## Тесты
-
-В `src/Tests/`: 17 тестовых проектов на **xunit v3** с **Testcontainers** (PostgreSQL + SeaweedFS) для интеграционных тестов.
-
----
-
-## Сборка
+Нужен **.NET 10 SDK**, для интеграционных тестов — запущенный **Docker**.
 
 ```bash
-# Полная сборка (clean + restore + build)
-./build-sh/do-build.sh
-
-# Запуск тестов
-./build-sh/do-test.sh
-
-# Создание NuGet-пакетов
-./build-sh/do-package.sh
+./build-sh/do-build.sh     # clean, restore, build
+./build-sh/do-test.sh      # собрать и прогнать все тесты
+./build-sh/do-package.sh   # собрать NuGet-пакеты
 ```
 
-Прямые команды dotnet:
+Можно и напрямую: `dotnet build src/Sa.slnx -c Release`, затем `dotnet test --solution src/Sa.slnx -c Release --no-build --no-restore`.
 
-```bash
-dotnet restore src/Sa.slnx
-dotnet build src/Sa.slnx -c Release
-dotnet test --solution src/Sa.slnx -c Release --no-build --no-restore
-```
+Для тех, кто меняет код: тесты поднимают настоящие контейнеры PostgreSQL и SeaweedFS, поэтому правила сборки, фильтрации и ограничения параллелизма описаны в [`AGENTS.md`](AGENTS.md).
 
----
+## Подробности
 
-## Участие
+Этот README — карта; детали лежат рядом с кодом.
 
-Ограничения сборки, тестов и упаковки — в [`AGENTS.md`](AGENTS.md); словарь предметной области —
-[`GLOSSARY.md`](GLOSSARY.md).
-
----
-
-## Архитектура
-
-- Целевая платформа — **.NET 10.0** с **Native AOT**
-- **Central Package Management** — версии в `Directory.Packages.props`
-- Общие утилиты в **Sa** линкуются в consuming-проект через `<Compile Include="..." Link="..."/>`
-- Все пакеты используют SDK-style csproj с implicit usings, nullable и анализаторами
-- Решение управляется через `.slnx`
-- Тесты на **xunit v3** с **Testcontainers** (PostgreSQL + SeaweedFS), изоляция на класс теста
+| Что | Где |
+|-----|-----|
+| API, регистрация в DI, настройки, примеры | `Readme.md` в каталоге каждой библиотеки |
+| Синтаксис cron | [English](src/Libraries/Misc/Sa.Schedule/Cron/CRON.md) · [Русский](src/Libraries/Misc/Sa.Schedule/Cron/CRON-ru.md) |
+| Общий код `Sa` (линкуется в пакеты, не публикуется) | [src/Libraries/Sa/Readme.md](src/Libraries/Sa/Readme.md) |
+| Структура решения, сборка, тесты, упаковка | [AGENTS.md](AGENTS.md) |
+| Словарь предметной области | [GLOSSARY.md](GLOSSARY.md) |
 
 ## Лицензия
 

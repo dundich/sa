@@ -2,11 +2,11 @@
 
 **English** | [Русский](README-ru.md)
 
-Collection of runnable samples demonstrating each library in the **Sa** suite.  
-All samples target **.NET 10.0**, use **Native AOT**, and follow the same DI + Generic Host pattern.
+Collection of runnable samples demonstrating each library in the **Sa** suite.
+All samples target **.NET 10.0**, most are published as **Native AOT**, and they follow the same DI + Generic Host pattern.
 
-> **Infrastructure:** most samples require PostgreSQL (and sometimes Minio).  
-> Start shared infrastructure with: `docker-compose up -d` (see [`docker-compose.yml`](./docker-compose.yml)).
+> **Infrastructure:** only three samples need a database — `Configuration.Web`, `Partitional.ConsoleApp` and `PgOutbox.ConsoleApp` use PostgreSQL.
+> Start it with `docker-compose up -d db` (see [`docker-compose.yml`](./docker-compose.yml)).
 
 ---
 
@@ -21,6 +21,9 @@ All samples target **.NET 10.0**, use **Native AOT**, and follow the same DI + G
 | 5 | [PgOutbox.ConsoleApp](#5-pgoutboxconsoleapp) | `Sa.Outbox.PostgreSql` | Console | Reliable message publishing via Outbox pattern |
 | 6 | [Schedule.Console](#6-scheduleconsole) | `Sa.Schedule` | Console | Scheduled job executor with failure strategies |
 | 7 | [WorkQueue.Console](#7-workqueueconsole) | `Sa.Utils.WorkQueue` | Console | Bounded queue with runtime concurrency scaling and per-item error strategies |
+| 8 | [InMemoryOutbox.ConsoleApp](#8-inmemoryoutboxconsoleapp) | `Sa.Outbox` (in-memory) | Console | Outbox with no database, no Docker and no connection string |
+| 9 | [Schedule.Configuration.Console](#9-scheduleconfigurationconsole) | `Sa.Schedule` | Console | Jobs re-timed and disabled from appsettings.json |
+| 10 | [Echo](#10-echo) | `Sa.Media` | Console | Cross-feed channel separation of a stereo WAV |
 
 ---
 
@@ -263,6 +266,97 @@ Scaled down -> concurrency = 2
 Processed 10 items, queue is idle: True
 Enabled after shutdown: False
 *** THE END ***
+```
+
+---
+
+## 8. InMemoryOutbox.ConsoleApp
+
+Demonstrates the same publish → consume pipeline as `PgOutbox.ConsoleApp`, but the outbox lives in process memory — no database, no Docker, no connection string.
+
+### What it does
+
+1. Registers the in-memory provider with `AddSaOutboxUsingInMemory(...)`.
+2. Publishes 4 messages across two tenants.
+3. A `PrintConsumer` receives them in batches and acknowledges each message with `Ok()`.
+4. Waits for all 4 acknowledgements, then shuts the host down.
+
+The consumers do not know which provider is behind them: swapping `AddSaOutboxUsingInMemory` for `AddSaOutboxUsingPostgreSql` is the only change needed for the durable version.
+
+### Run
+
+```powershell
+dotnet run --project InMemoryOutbox.ConsoleApp
+```
+
+### Expected output
+
+```
+In-memory Outbox — no database, no Docker.
+info: InMemoryOutbox.PrintConsumer[1]
+      [print] tenant 1 #1: 01 — Hi from tenant 1
+      ...
+All messages delivered. The store lives in process memory only — restart loses it.
+```
+
+---
+
+## 9. Schedule.Configuration.Console
+
+Demonstrates `Sa.Schedule` where the jobs are declared in code and then re-timed or disabled from `appsettings.json` — configuration wins over code, no rebuild needed.
+
+### What it does
+
+1. Declares three jobs in code with defaults: `Heartbeat` every 30s, `SlowReport` every 2s, `NightlyCleanup` every 15min.
+2. Calls `FromConfiguration("Schedule")`, so the `Schedule:Jobs` section overrides them:
+   - `Heartbeat` → every 2s and fires at startup (`Immediate`);
+   - `SlowReport` → `Disabled`;
+   - `NightlyCleanup` → cron `0 3 * * *`.
+3. Prints the bound options, then runs for 12 seconds so the override is visible.
+
+### Run
+
+```powershell
+dotnet run --project Schedule.Configuration.Console
+```
+
+### Expected output
+
+```
+appsettings.json (Schedule:Jobs) — the code defaults above are overridden:
+  Heartbeat        Immediate=True  Every=00:00:02
+  SlowReport       Disabled=True
+  NightlyCleanup   Cron=0 3 * * *
+```
+
+---
+
+## 10. Echo
+
+Demonstrates cross-feed channel separation on `Sa.Media`: a stereo recording is processed so that content shared by both channels is suppressed — a simple "remove the vocal" effect.
+
+### What it does
+
+1. Reads a stereo WAV (path from the first argument).
+2. Runs `CrossFeedSeparator` with `AudioSeparationOptions`.
+3. Writes the result to a temporary `.wav` file, prints its size, then deletes it.
+
+### Run
+
+```powershell
+# From the repository root; without an argument the sample uses
+# src/Tests/Sa.MediaTests/data/pсmS16Le.wav
+dotnet run --project src/Samples/Echo -- <path-to-stereo-wav>
+```
+
+The default path is resolved relative to the repository root, so run this one from there rather than from `src/Samples`.
+
+### Expected output
+
+```
+Wrote suppressed output: <random>.wav
+Output size: 96077 bytes
+Result deleted.
 ```
 
 ---

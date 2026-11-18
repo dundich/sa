@@ -2,11 +2,11 @@
 
 **Русский** | [English](README.md)
 
-Набор runnable-примеров, демонстрирующих каждую библиотеку из набора **Sa**.  
-Все примеры целеют **.NET 10.0**, используют **Native AOT** и следуют одному паттерну DI + Generic Host.
+Набор запускаемых примеров, демонстрирующих каждую библиотеку из набора **Sa**.
+Все примеры нацелены на **.NET 10.0**, большинство публикуется как **Native AOT**, и все следуют одному паттерну DI + Generic Host.
 
-> **Инфраструктура:** большинству примеров нужен PostgreSQL (иногда Minio).  
-> Запустите общую инфраструктуру: `docker-compose up -d` (см. [`docker-compose.yml`](./docker-compose.yml)).
+> **Инфраструктура:** база нужна только трём примерам — `Configuration.Web`, `Partitional.ConsoleApp` и `PgOutbox.ConsoleApp` используют PostgreSQL.
+> Запустите её командой `docker-compose up -d db` (см. [`docker-compose.yml`](./docker-compose.yml)).
 
 ---
 
@@ -21,6 +21,9 @@
 | 5 | [PgOutbox.ConsoleApp](#5-pgoutboxconsoleapp) | `Sa.Outbox.PostgreSql` | Console | Надёжная публикация сообщений через паттерн Outbox |
 | 6 | [Schedule.Console](#6-scheduleconsole) | `Sa.Schedule` | Console | Планировщик задач с стратегиями обработки ошибок |
 | 7 | [WorkQueue.Console](#7-workqueueconsole) | `Sa.Utils.WorkQueue` | Console | Очередь с ограниченным параллелизмом и динамическим изменением ёмкости на лету |
+| 8 | [InMemoryOutbox.ConsoleApp](#8-inmemoryoutboxconsoleapp) | `Sa.Outbox` (in-memory) | Console | Outbox без базы, Docker и connection string |
+| 9 | [Schedule.Configuration.Console](#9-scheduleconfigurationconsole) | `Sa.Schedule` | Console | Расписание и отключение задач из appsettings.json |
+| 10 | [Echo](#10-echo) | `Sa.Media` | Console | Подавление общего сигнала двух каналов стерео-WAV |
 
 ---
 
@@ -263,6 +266,97 @@ Scaled down -> concurrency = 2
 Processed 10 items, queue is idle: True
 Enabled after shutdown: False
 *** THE END ***
+```
+
+---
+
+## 8. InMemoryOutbox.ConsoleApp
+
+Тот же конвейер publish → consume, что и в `PgOutbox.ConsoleApp`, но outbox живёт в памяти процесса — без базы, Docker и connection string.
+
+### Что делает
+
+1. Регистрирует in-memory провайдер через `AddSaOutboxUsingInMemory(...)`.
+2. Публикует 4 сообщения для двух тенантов.
+3. `PrintConsumer` получает их батчами и подтверждает каждое через `Ok()`.
+4. Ждёт подтверждения всех 4 сообщений и останавливает хост.
+
+Консьюмеры не знают, какой провайдер за ними стоит: чтобы перейти на долговечный вариант, достаточно заменить `AddSaOutboxUsingInMemory` на `AddSaOutboxUsingPostgreSql`.
+
+### Запуск
+
+```powershell
+dotnet run --project InMemoryOutbox.ConsoleApp
+```
+
+### Ожидаемый вывод
+
+```
+In-memory Outbox — no database, no Docker.
+info: InMemoryOutbox.PrintConsumer[1]
+      [print] tenant 1 #1: 01 — Hi from tenant 1
+      ...
+All messages delivered. The store lives in process memory only — restart loses it.
+```
+
+---
+
+## 9. Schedule.Configuration.Console
+
+`Sa.Schedule`, где задачи объявлены в коде, а затем переопределяются по времени и отключаются из `appsettings.json` — конфигурация важнее кода, пересборка не нужна.
+
+### Что делает
+
+1. Объявляет три задачи в коде со значениями по умолчанию: `Heartbeat` каждые 30с, `SlowReport` каждые 2с, `NightlyCleanup` каждые 15 минут.
+2. Вызывает `FromConfiguration("Schedule")`, и секция `Schedule:Jobs` переопределяет их:
+   - `Heartbeat` → каждые 2с и запуск сразу при старте (`Immediate`);
+   - `SlowReport` → `Disabled`;
+   - `NightlyCleanup` → cron `0 3 * * *`.
+3. Печатает связанные опции и работает 12 секунд, чтобы переопределение было видно.
+
+### Запуск
+
+```powershell
+dotnet run --project Schedule.Configuration.Console
+```
+
+### Ожидаемый вывод
+
+```
+appsettings.json (Schedule:Jobs) — the code defaults above are overridden:
+  Heartbeat        Immediate=True  Every=00:00:02
+  SlowReport       Disabled=True
+  NightlyCleanup   Cron=0 3 * * *
+```
+
+---
+
+## 10. Echo
+
+Подавление общего сигнала двух каналов на `Sa.Media`: из стереозаписи убирается то, что одинаково звучит в обоих каналах, — простой эффект «минус вокал».
+
+### Что делает
+
+1. Читает стерео-WAV (путь — первый аргумент).
+2. Запускает `CrossFeedSeparator` с `AudioSeparationOptions`.
+3. Пишет результат во временный `.wav`, печатает его размер и удаляет файл.
+
+### Запуск
+
+```powershell
+# Из корня репозитория; без аргумента берётся
+# src/Tests/Sa.MediaTests/data/pсmS16Le.wav
+dotnet run --project src/Samples/Echo -- <path-to-stereo-wav>
+```
+
+Путь по умолчанию отсчитывается от корня репозитория, поэтому запускайте этот пример оттуда, а не из `src/Samples`.
+
+### Ожидаемый вывод
+
+```
+Wrote suppressed output: <random>.wav
+Output size: 96077 bytes
+Result deleted.
 ```
 
 ---
