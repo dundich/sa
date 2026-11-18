@@ -495,6 +495,14 @@ settings.CleanupSettings.ExecutionInterval = TimeSpan.FromHours(2);
 
 Практический эффект: после утери offset, передеплоя или первого старта группы `WithMinOffset(group, DateTimeOffset.UtcNow)` заставит консьюмера начать «с сейчас», а не пережевывать всю историческую очередь. Обратите внимание: пол вычисляется по `msg_created_at`, как он записан в базе, — сообщения с временем публикации старее пола намеренно пропускаются, даже если пришли с опозданием.
 
+### Пример
+
+```csharp
+settings.ConsumeSettings
+    .WithMinOffset("cg_order_consumer", DateTimeOffset.UtcNow)  // пропустить всё, что опубликовано раньше
+    .WithMinOffset("cg_analytics", Guid.Parse("01913a2e-8f3c-7a1e-8f3c-0a2b3c4d5e6f"));
+```
+
 ---
 
 ## PgOutboxDeliveryOptions
