@@ -2,116 +2,34 @@
 
 **English** | [Русский](Readme-ru.md)
 
-A .NET package that assembles and extends configuration:
+`Sa.Configuration` assembles .NET configuration from the usual sources — `appsettings.json`, environment variables, command-line arguments, secret files and a database — and adds three things the standard `Microsoft.Extensions.Configuration` does not have:
 
-1. **Builds the layer stack** — static sources (appsettings, environment variables, arguments, secrets) and dynamic ones (a database) in one deterministic order, with a builder for the two strategies.
-2. **Substitutes secrets into configuration** — instead of hardcoding passwords and keys, you write `{{sa_pg_password}}` in the config, and the package fills in the real value from a file, an environment variable, or a command-line argument.
-3. **Overlays per-client settings** — every client has its own configuration root with the same key names, laid over the shared values, and is addressable as a keyed `IConfiguration`.
-4. **Reloads only the dynamic layer** — `ISaConfigurationReloader` refreshes the database sources (and the values derived from them) without re-reading the files, and registers no background service unless you ask for one.
-5. **Parses command-line arguments** — `--key value`, `--key=value`, `-flag`, and so on.
+- **secrets instead of hardcoding** — the config keeps `{{sa_pg_password}}` and the real value comes from a file, an environment variable or an argument;
+- **key aliases** — a flat name (`auth_base_url`) and a nested path (`sa:scope:api:auth:base_url`) start meaning the same thing;
+- **per-client overlays** — every client gets its own root with the same key names over the shared values, reachable as a keyed `IConfiguration`.
 
-It plugs into the standard `Microsoft.Extensions.Configuration` pipeline, so it slots right into a normal ASP.NET setup.
+On top of that, the package reloads only the dynamic layer and parses command-line arguments. All of it plugs into the standard pipeline, so an ASP.NET app needs one line.
+
+## Contents
+
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [How the configuration is built](#how-the-configuration-is-built)
+- [Secrets](#secrets)
+- [Key aliases](#key-aliases)
+- [Clients: core and overlays](#clients-core-and-overlays)
+- [Dynamic layer reload](#dynamic-layer-reload)
+- [Command-line arguments](#command-line-arguments)
+- [Alongside Sa.Configuration.PostgreSql](#alongside-saconfigurationpostgresql)
+- [Full DI example](#full-di-example)
+- [Details](#details)
+- [License](#license)
 
 ## Installation
 
 ```bash
 dotnet add package Sa.Configuration
 ```
-
----
-
-## Contents
-
-- [Installation](#installation)
-- [What it can do](#what-it-can-do)
-- [Layers and the builder](#layers-and-the-builder)
-- [Quick start](#quick-start)
-  - [1. Wire up the package in `Program.cs`](#1-wire-up-the-package-in-programcs)
-  - [2. Create a secrets file `secrets.txt`](#2-create-a-secrets-file-secretstxt)
-  - [3. Write placeholders in `appsettings.json`](#3-write-placeholders-in-appsettingsjson)
-  - [4. Read the configuration as usual](#4-read-the-configuration-as-usual)
-- [Where secrets come from (priority order)](#where-secrets-come-from-priority-order)
-- [Encrypted secrets](#encrypted-secrets)
-  - [Example encrypted file](#example-encrypted-file)
-  - [Encodings](#encodings)
-- [Optional placeholders](#optional-placeholders)
-- [Key aliases](#key-aliases)
-  - [The problem](#the-problem)
-  - [How to set it](#how-to-set-it)
-  - [Several registrations (multisetup)](#several-registrations-multisetup)
-  - [The alias must be the last word](#the-alias-must-be-the-last-word)
-  - [Custom transforms](#custom-transforms)
-  - [What happens after that](#what-happens-after-that)
-  - [Where the value is looked up](#where-the-value-is-looked-up)
-  - [Who overrides whom](#who-overrides-whom)
-  - [Details](#details)
-  - [Cheat sheet](#cheat-sheet)
-- [Use with Sa.Configuration.PostgreSql](#use-with-saconfigurationpostgresql)
-- [Clients (core + per-client overlays)](#clients-core--per-client-overlays)
-- [Dynamic reload](#dynamic-reload)
-- [Full DI example](#full-di-example)
-- [Command-line arguments](#command-line-arguments)
-- [Working with secrets directly](#working-with-secrets-directly)
-- [License](#license)
-
-## What it can do
-
-- **Automatic secret substitution** — `{{key}}` placeholders are replaced with real values. See [Quick start](#quick-start).
-- **Value cleanup** — values are trimmed at the edges and stripped of surrounding quotes (`'`, `"`, `` ` ``). Details in [Encodings](#encodings).
-- **Cycle protection** — nested placeholders are expanded up to 3 levels deep. If a cycle forms, you get a clear `InvalidOperationException`. Details in [Secrets](SecretStore/Readme.md).
-- **Optional placeholders** — `{{?key}}` instead of `{{key}}`: if the secret is missing, the string becomes `null` instead of failing with an error.
-- **Multiple stores at once** — [`Secrets`](SecretStore/Readme.md) can combine any number of stores (`ISecretStore`). The one added last wins. Stores can be added at runtime, including from multiple threads.
-- **Argument parsing** — [`Arguments`](CommandLine/Readme.md) understands `--key value`, `--key=value`, `-flag`. Negative numbers are treated as values, not flags. Quotes are stripped. `__` in a parameter name is read as the `:` separator.
-- **Environments** — automatically picks up `secrets.{Environment}.txt` for Development/Staging/Production.
-- **Key aliases** — [Key aliases](#key-aliases): you can link a "flat" setting name (say, `auth_base_url` from the PHP world) to a nested C# path (`sa:scope:api:auth:base_url`). Works across all sources at once.
-- **Encryption** — encrypted `secrets*.pub` files (AES-256-GCM) can be committed to the repo. Encryption keys are plain or `base64:`. Clients, environments, `.env`, and Unicode are supported. See [Encrypted secrets](#encrypted-secrets).
-- **Layer builder** — `AddSaConfiguration(sa => ...)` assembles static and dynamic sources in a fixed order. See [Layers and the builder](#layers-and-the-builder).
-- **Per-client configuration** — the core holds the shared keys, every client gets its own root with the same key names, built from the flat rows the providers return and reachable as a keyed `IConfiguration`. See [Clients](#clients-core--per-client-overlays).
-- **Dynamic reload** — only the database sources are refreshed, and the aliases/placeholders are recomputed from the fresh values. No timer by default. See [Dynamic reload](#dynamic-reload).
-
----
-
-## Layers and the builder
-
-Configuration is assembled from two kinds of sources:
-
-| Layer | Typical sources | How it changes at runtime |
-|-------|-----------------|---------------------------|
-| **Static** | `appsettings.json`, `appsettings.{environment}.json`, environment variables, command-line arguments, `secrets*.txt` | a file edit (`reloadOnChange`), an explicit `IConfigurationRoot.Reload()`, or a restart |
-| **Dynamic** | PostgreSQL, or any `ISaDynamicConfigurationSource` | `ISaConfigurationReloader.ReloadDynamic[Async]()` — and only this layer is re-read |
-
-`AddSaConfiguration(sa => ...)` is the builder. It keeps one rule: **later sources override earlier ones**, and the secret/alias pass is always kept after every source registered through it.
-
-```csharp
-// Strategy 1 — static only: files, environment, arguments, secrets.
-builder.Configuration.AddSaConfiguration(sa =>
-{
-    sa.UseStandardSources();   // appsettings.json → appsettings.{env}.json → env vars → args
-    sa.UseSecrets();           // {{placeholder}} + key aliases
-});
-```
-
-```csharp
-// Strategy 2 — static + dynamic core. Clients are registered separately (see Clients below).
-builder.Configuration.AddSaConfiguration(sa =>
-{
-    sa.UseStandardSources();                                                // static
-    sa.UseSecrets();                                                        // {{…}} + aliases
-    sa.UseDynamic(new DatabaseConfigurationSource(                          // dynamic, overrides static
-        new PostgreSqlConfigurationOptions("SELECT key, value FROM setting"),
-        PgConfigurationConnection.FromServices()));
-});
-```
-
-| Method | What it adds |
-|--------|--------------|
-| `UseStandardSources(...)` | `appsettings.json`, `appsettings.{env}.json`, environment variables, arguments. **Idempotent**: in ASP.NET Core / generic host the host already added them, so the method is a no-op there. |
-| `UseSecrets(...)` | the existing secret pipeline: placeholders, key aliases, the command-line source. |
-| `UseDynamic(source)` | a source whose values change at runtime; placed after the static ones. |
-| `Use(source)` | any `IConfigurationSource`, for the few sources without a dedicated method. |
-| `Finalize()` | moves the pass after everything (needed only when sources are added to `sa.Builder` directly). |
-
-A source registered after the last Sa call is a normal provider and beats the pass for the keys it holds; `Finalize()` (or `sa.Builder.Add(...)` followed by `Finalize()`) is the explicit way to restore the order.
 
 ## Quick start
 
@@ -122,7 +40,8 @@ using Sa.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Hook up arguments + secrets from files/ENV/CLI
+// Arguments + secrets from files/ENV/CLI. appsettings and environment variables are
+// already added by the host — nothing is added twice.
 builder.Configuration.AddSaConfiguration();
 
 var app = builder.Build();
@@ -171,132 +90,55 @@ var pgConn = app.Configuration["sa:pg:connection"];
 // → "User ID=postgres;Password=superSecret123;Host=localhost;..."
 ```
 
----
+## How the configuration is built
 
-## Where secrets come from (priority order)
+Sources fall into two layers:
 
-Sources are checked in order. The first one that has the value wins. Higher in the list means more important:
+| Layer | What it is | How it changes at runtime |
+|-------|------------|---------------------------|
+| **Static** | `appsettings.json`, `appsettings.{env}.json`, environment variables, arguments, `secrets*.txt` | file edit, `IConfigurationRoot.Reload()`, or a restart |
+| **Dynamic** | PostgreSQL or any other `ISaDynamicConfigurationSource` | `ISaConfigurationReloader.ReloadDynamic[Async]()` — **only** this layer is re-read |
+
+One rule: **a source added later overrides the earlier one**. The secrets/alias pass always runs after the sources, so it sees the assembled configuration.
+
+```csharp
+builder.Configuration.AddSaConfiguration(sa =>
+{
+    sa.UseStandardSources();   // appsettings.json → appsettings.{env}.json → env → args
+    sa.UseSecrets();           // {{…}} and key aliases
+
+    // Optional: the dynamic layer overrides the static one.
+    sa.UseDynamic(new DatabaseConfigurationSource(
+        new PostgreSqlConfigurationOptions("SELECT key, value FROM setting"),
+        PgConfigurationConnection.FromServices()));
+});
+```
+
+`UseStandardSources()` is idempotent: ASP.NET Core and the generic host already add those sources, so the method does nothing. The other builder methods are in [Builder: methods and order](#builder-methods-and-order).
+
+## Secrets
+
+### Where secrets come from
+
+Sources are checked in order; the first hit wins:
 
 | # | Source | Example |
 |---|--------|---------|
 | 1 | Command-line arguments | `--sa_pg_password=...` |
 | 2 | Environment variables | `SA_PG_PASSWORD=...` |
 | 3 | `.env.{env}` / `.env` | `SA_SECRETS_DECRYPTION_KEY=...` |
-| 4 | `secrets.{client}.{env}.pub` / `secrets.{client}.pub` | encrypted secrets committed to the repo |
-| 5 | `secrets.{env}.pub` / `secrets.pub` | encrypted default values |
-| 6 | `secrets.{env}.txt` | regular environment-specific file |
-| 7 | `secrets.txt` | regular base file |
+| 4 | `secrets.{client}.{env}.pub` / `secrets.{client}.pub` | encrypted client secrets |
+| 5 | `secrets.{env}.pub` / `secrets.pub` | encrypted defaults |
+| 6 | `secrets.{env}.txt` | plain file for one environment |
+| 7 | `secrets.txt` | plain base file |
 
-Put simply: the command line overrides everything, environment variables override files, and environment-specific files override the base file.
+In short: the command line overrides everything, environment variables override files, an environment file overrides the base file.
 
-What `{env}` means: the environment name taken from `DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `environment`. If none is set — `Production`. Want a short name like `dev`? Set `DOTNET_ENVIRONMENT=dev`, and all file names will follow it.
+`{env}` is `DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `environment`; if none is set, `Production` is used. For a short name like `dev`, set `DOTNET_ENVIRONMENT=dev` — the file names follow it.
 
----
+### Placeholders
 
-## Encrypted secrets
-
-Encrypted files can be safely committed to the repo: values are encrypted with AES-256-GCM, while key names and comments stay readable — convenient for diffs.
-
-How to use:
-
-1. Create `secrets*.pub` files.
-2. Set the decryption key:
-
-```bash
-export SA_SECRETS_DECRYPTION_CLIENT=lsr
-export SA_SECRETS_DECRYPTION_KEY=...        # or base64:<32-byte key>
-# the same variables can go into .env (the .env itself is not committed)
-```
-
-Possible file names:
-
-- `secrets.pub`
-- `secrets.{env}.pub`
-- `secrets.{client}.pub`
-- `secrets.{client}.{env}.pub`
-
-`{env}` is the exact environment name (`Development`, `Production`, or whatever is in `DOTNET_ENVIRONMENT`).
-
-The `.pub` extension marks a file that is safe to commit; the contents are AES-256-GCM ciphertext, not a public key.
-
-### Example encrypted file
-
-Here's the same `secrets.txt` from the [quick start](#2-create-a-secrets-file-secretstxt), but encrypted for client `lsr` and environment `dev`:
-
-```
-# saenc: v1
-# saenc: kdf=pbkdf2-sha256
-# saenc: iterations=600000
-# saenc: salt=dFgi+38h+4oDUbhsLEUaXg==
-# saenc: client=lsr
-# saenc: env=dev
-# Postgres
-sa_pg_host=ENC1:RkVQFBmvvoUBMLkGSXznSaS9mW0h9MVPltZIz4Oou9Q/PEjWiw==
-sa_pg_user=ENC1:pBA9GEfkNcZ8+OxP2KWlsfgzDigAq/NWopcYW4GKH4+Qo5Zr
-sa_pg_password=ENC1:8zPuIVo2/qAa9OO9mafijG1OYuq1Ku6i7Hg8QRoG2Q8n25dtvb0P7Z1x
-
-# API keys
-api_key=ENC1:Nzz7pPfq4K6rrAixJWQhN37Inu/n6jL+rkFGpJbKyfqAuOs4Aw==
-jwt_secret=ENC1:MHP6RX5G7Xc5v+QaSkdhaxVRDRQg8NfCr4OjJzw0BhNEFFgv
-```
-
-What stays readable: keys, comments, header. What gets encrypted: only the values.
-
-This block was actually generated by `do-secrets.sh` with the one-time passphrase `demo-passphrase-not-a-real-secret` — so `decrypt` and `check` can be tested directly on it.
-
-The same approach with a "raw" key (no `iterations` / `salt`, `kdf=none`, key `SA_SECRETS_DECRYPTION_KEY=base64:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=`):
-
-```
-# saenc: v1
-# saenc: kdf=none
-# saenc: client=lsr
-# saenc: env=prod
-sa_pg_password=ENC1:fFodkm/LnlPzC6wIu32wkVAvCbXx6th6qG/So7DsX7MSmOUPpRumfOxb
-```
-
-Scripts for encryption and verification live in the repo:
-
-```bash
-./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets.lsr.dev.pub
-./build-sh/do-secrets.sh decrypt secrets.lsr.dev.pub
-./build-sh/do-secrets.sh check
-```
-
-Important behavior: if an encrypted file exists but the key isn't found, the application **fails at startup**. This is intentional — so it never silently falls back to plaintext.
-
-Format, per-client keys, and error handling are described in `SecretStore/Readme.md`.
-
-### Encodings
-
-Everything runs in UTF-8. The only "non-UTF-8" token in a file is the Base64 payload (ciphertext).
-
-| What | How it works |
-|------|--------------|
-| File encoding | UTF-8. BOM is allowed and ignored. Files without BOM are read as UTF-8 — if yours are CP1251/CP866, re-save them as UTF-8. |
-| Line endings | LF, CRLF, and CR are read correctly. When writing (`SecretsCipher` / `do-secrets.sh`), LF is always used, so re-encryption doesn't break diffs. |
-| How a value becomes ciphertext | UTF-8 bytes → AES-256-GCM → `nonce(12) ‖ tag(16) ‖ ciphertext` → standard Base64 on one line. |
-| Value prefix | `ENC1:` — format version 1 marker. It isn't authenticated itself; the key name is authenticated, so the blob can't be moved to another key. |
-| Payload length | `4 × ceil((28 + UTF-8 byte count) / 3)`. Examples: `localhost` (9 bytes) → 52 chars, `superSecret123` (14 bytes) → 56, `Привет` (12 bytes) → 56. |
-| Unicode | Keys and values round-trip as UTF-8: `Привет`, `pä£s=word`, emoji. Non-ASCII takes more bytes — hence the longer blob. |
-| `=` inside values | Allowed. The line is split on the first `=`, so `api_key=abc=123` is preserved intact. |
-| Empty values | Encrypted and restored empty (`empty=`), no error. |
-| Whitespace | Keys and values are trimmed at the edges (` key = value ` → `key=value`). Internal spaces are kept. |
-| Comments | A line that starts with `#` after trim is copied verbatim. A `# saenc:` comment in the source file is rejected as "already encrypted". |
-| Header metadata | `client` / `env` are trimmed, must not contain line breaks, and are checked against the file name on load. |
-| Passphrase | Any UTF-8 text, trimmed. Spaces and non-ASCII are allowed. |
-| "Raw" key | `base64:` + Base64 exactly 32 bytes (44 chars with padding). Any other length → `32 bytes` error. |
-| Salt | Base64 16 random bytes (24 chars) in the `# saenc: salt=` line. Length is checked, so editing the salt by hand breaks decryption. |
-| Case | Key names, `ENC1:`, `base64:`, and header fields are case-sensitive. `# saenc: kdf=PBKDF2-SHA256` is not accepted. |
-| Placeholder names | `{{key}}` matches `\w+` (Unicode letters, digits, underscore). Hyphens, dots, and spaces don't match — `{{api-key}}` stays as-is. |
-| What gets substituted | The value is trimmed and stripped of quotes `'`, `"`, `` ` `` before being inserted into the configuration string. |
-
-`.env` (which stores the decryption key) has its own rules: `KEY=VALUE`, `export KEY=VALUE`, `#` comments, optional UTF-8 BOM, CRLF/LF, quotes `'`, `"`, `` ` ``, and escaping of `\n`, `\r`, `\t`, `\"`, `\\` inside double quotes. Unknown escape sequences such as the Windows path `"C:\Users"` keep the backslash.
-
----
-
-## Optional placeholders
-
-Normally, if a secret isn't found, that's an error. But sometimes a setting is needed "if present". That's what `{{?key}}` is for:
+A plain `{{key}}` requires the secret to exist. When a setting is optional, write `{{?key}}`:
 
 ```json
 {
@@ -304,24 +146,62 @@ Normally, if a secret isn't found, that's an error. But sometimes a setting is n
 }
 ```
 
-If `feature_flag` isn't found in any store — the whole string becomes `null`. No exceptions.
+If `feature_flag` is found in no store, the whole string becomes `null` — no exception. Moreover, inside the configuration pipeline (`AddSaConfiguration` / `AddSaPostSecretProcessing`) **any** missing secret yields `null` rather than an error; the strict mode applies only to a direct `PopulateSecrets` call.
 
-By the way, in the configuration chain (`AddSaConfiguration` / `AddSaPostSecretProcessing`), **any** missing secret — even a regular `{{key}}` — yields `null` instead of an exception. So behavior there is softer than calling `PopulateSecrets` directly.
+On substitution the value is trimmed and stripped of quotes `'`, `"`, `` ` ``. Nested placeholders expand up to 3 levels; a cycle produces a clear `InvalidOperationException`.
 
----
+### Encrypted secrets
+
+`secrets*.pub` files can be committed: values are encrypted with AES-256-GCM while key names and comments stay readable. The decryption key comes from environment variables:
+
+```bash
+export SA_SECRETS_DECRYPTION_CLIENT=lsr
+export SA_SECRETS_DECRYPTION_KEY=...        # or base64:<32-byte key>
+# the same variables can go into .env (the .env itself is not committed)
+```
+
+```bash
+./build-sh/do-secrets.sh encrypt secrets.txt --client lsr --env dev -o secrets.lsr.dev.pub
+./build-sh/do-secrets.sh decrypt secrets.lsr.dev.pub
+./build-sh/do-secrets.sh check
+```
+
+If an encrypted file exists but the key is missing, the app **fails at startup** — there is no silent fallback to plaintext.
+
+How the format works, which encoding pitfalls exist and how decryption behaves — in [SecretStore/Readme.md](SecretStore/Readme.md#encodings-and-value-format).
+
+### Secrets outside `IConfiguration`
+
+Sometimes secrets are needed outside configuration — in a console tool, for instance. Then `Secrets` is used directly:
+
+```csharp
+using Sa.Configuration.SecretStore;
+
+// Default chain: CLI → ENV → .env → secrets*.pub → secrets.{env}.txt → secrets.txt
+var secrets = Secrets.CreateDefault();
+
+string? connection = secrets.PopulateSecrets("Server={{host}};Pwd={{sa_pg_password}}");
+string? password   = secrets.GetSecret("sa_pg_password");
+```
+
+A custom chain is any `ISecretStore` (file, environment variables, arguments, in-memory) plus `AddStore(...)`; priority is LIFO, the store added last wins. The base file name and the environment are options:
+
+```csharp
+var secrets = new Secrets(new FileSecretStore("my-secrets.txt"));
+secrets.AddStore(new InMemorySecretStore().AddSecret("override_key", "override_value"));
+
+var custom = Secrets.CreateDefault(new SecretOptions
+{
+    FileName = "app-secrets.txt",
+    EnvironmentName = "Staging",
+});
+```
+
+Details and the built-in stores — in [SecretStore/Readme.md](SecretStore/Readme.md).
 
 ## Key aliases
 
-### The problem
-
-The same setting may have different names in different systems:
-
-- In PHP (or in a database written by PHP) — a flat key: `auth_base_url`.
-- In C# it's more convenient as a nested path: `sa:scope:api:auth:base_url`.
-
-Rewriting the config or the code just for this is annoying. An alias links the two names: "when someone asks for the path — look at the flat key".
-
-### How to set it
+One setting is sometimes named differently in different systems: PHP or the database uses the flat `auth_base_url`, while C# prefers the path `sa:scope:api:auth:base_url`. An alias links the two names without rewriting either the config or the code:
 
 ```csharp
 using Sa.Configuration;
@@ -339,158 +219,46 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 });
 ```
 
-On the left — the path C# reads. On the right — the name under which the value actually lives.
-
-### Several registrations (multisetup)
-
-Calling `AddSaConfiguration` more than once is supported and adds up:
-
-```csharp
-builder.Configuration
-    .AddSaConfiguration(new SecretOptions { KeyAliases = { ["sa:…:base_url"] = "auth_base_url" } })
-    .AddSaConfiguration(new SecretOptions { KeyAliases = { ["sa:…:token_ttl"] = "auth_token_ttl" } });
-```
-
-- every call **merges** its `KeyAliases` into one accumulated map; for a canonical key declared twice the **last** call wins;
-- the secret options (`FileName`, `LoadDotEnv`, `Encryption`, `Args`) also come from the **last** call;
-- only **one** pass and **one** command-line source are registered, so secrets are read once, on the first build (registration itself doesn't touch the files);
-- `CanonicalValueWins` is a single flag, so its value is taken from the last call as well.
-
-### The alias must be the last word
-
-The pass derives values and therefore wins over every provider registered **before** it. A provider added **after** the last `AddSaConfiguration` is an ordinary provider and beats the alias for the keys it holds. Call `FinalizeSaConfiguration()` as the last configuration step when sources are registered later:
-
-```csharp
-builder.Configuration
-    .AddSaPostgreSqlConfiguration(...)   // a source holding canonical keys
-    .AddSaConfiguration(...)             // aliases
-    .FinalizeSaConfiguration();          // the pass goes after everything
-```
-
-### Custom transforms
-
-The final pass is extensible: `AddSaConfigurationTransform` appends a step that receives the merged configuration and returns **only** the keys it changes. Transforms run after the built-in ones (placeholders, then aliases) in registration order, and each one sees the previous ones' output:
-
-```csharp
-public sealed class StripPrefixTransform(string prefix) : ISaConfigurationTransform
-{
-    public IEnumerable<KeyValuePair<string, string?>> Apply(ISaConfigurationView configuration)
-        => configuration.Values
-            .Where(c => c.Key.StartsWith(prefix, StringComparison.Ordinal))
-            .Select(c => new KeyValuePair<string, string?>(c.Key[prefix.Length..], c.Value));
-}
-
-builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("legacy:"));
-```
-
-### What happens after that
-
-Both names return the same value:
+Left is the path C# reads, right is the name the value actually lives under. After the pass both keys return the same value, and the flat key does not disappear:
 
 ```csharp
 app.Configuration["sa:scope:api:auth:base_url"]; // → "https://php.example.com"
 app.Configuration["auth_base_url"];               // → "https://php.example.com"
 ```
 
-The flat key doesn't go anywhere — it stays accessible. PHP code keeps working as before, and C# code gets its nested path.
+Default behaviour:
 
-### Where the value is looked up
-
-The alias applies to the **final** configuration — the one already assembled from **all** sources (files, ENV, PostgreSQL, etc.). So the flat key and the canonical path can live **in different sources**:
-
-- `auth_base_url` — in the PostgreSQL source.
-- `sa:scope:api:auth:base_url` — in `appsettings.json`.
-
-The alias will glue them together, and both paths will return the same value.
-
-### Who overrides whom
-
-- **By default, the alias wins.** A non-empty value from the flat key is written into the canonical path.
-- **With `CanonicalValueWins = true`** — the other way round: the canonical value has priority. The alias fills the path only if it's empty.
-
-```csharp
-builder.Configuration.AddSaConfiguration(new SecretOptions
-{
-    KeyAliases = new KeyAliasOptions
-    {
-        KeyAliases = { ["sa:scope:api:auth:base_url"] = "auth_base_url" },
-        CanonicalValueWins = true,   // canonical value wins
-    },
-});
-```
-
-- **If the alias is empty or missing** — the canonical path is not touched. It keeps its value (if any) or stays absent, and then a lower-priority source is responsible for it. No fake values are inserted.
-
-### Details
-
-- **Case doesn't matter**: `Auth_Base_Url` and `auth_base_url` are the same.
-- **`__` = `:`**: in the mapping you can write `sa__scope__api__auth__base_url` — same as `sa:scope:api:auth:base_url`.
-- **An empty key or an empty string in the mapping** — a startup error. Such an alias would never match anything, so it's better to fail fast than silently do nothing.
-- **An empty mapping** — nothing changes, the pipeline works as usual.
-- **`Reload()`** — the pass is recomputed: a key that disappeared from its source or from the mapping stops being served.
-
-### Cheat sheet
+- an empty or missing alias value does not touch the canonical path — the lower-priority source answers for it;
+- a non-empty flat value is written into the path (`CanonicalValueWins = true` reverses that priority);
+- the alias applies to the **assembled** configuration, so the flat key and the path may live in different sources;
+- keys are compared case-insensitively, and `__` in the mapping is read as `:`.
 
 | I want | Setting |
 |--------|---------|
 | Link a flat key to a nested path | `KeyAliases["path"] = "flat_key"` |
-| Flat key wins | default |
-| Nested path wins | `CanonicalValueWins = true` |
-| Value missing | path isn't touched, the lower-priority source is used |
+| The flat key wins | default |
+| The nested path wins | `CanonicalValueWins = true` |
+| No value | the path is untouched, the lower-priority source answers |
 
----
+Registration order, `FinalizeSaConfiguration()`, custom transforms and edge cases — in [Aliases: full rules](#aliases-full-rules).
 
-## Use with Sa.Configuration.PostgreSql
+## Clients: core and overlays
 
-The PostgreSQL package adds a dynamic source. Give it a connection strategy, then keep the Sa
-pass after it — `AddSaPostgreSqlConfiguration` already does that for you:
-
-```csharp
-using Sa.Configuration;
-using Sa.Configuration.PostgreSql;
-
-// The application's own pool (or NpgsqlDataSource): nothing extra is created.
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings"));
-
-// Or an explicit pool, or a connection string owned by the source:
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    appDataSource, new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings"));
-builder.Configuration.AddSaPostgreSqlConfiguration(
-    "Host=db;Database=app;Username=app;Password=…",
-    new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings"));
-```
-
-Aliases declared in the secret layer apply on top of the database values, and the database layer
-overrides the static one (it is registered later). See the package README for the query shapes and
-the reload details.
-
----
-
-## Clients (core + per-client overlays)
-
-The core configuration keeps the shared, fixed set of keys. A client does not prefix anything: it
-gets its **own configuration root** with the **same key names**, laid over the core values. Reading a
-client resolves its own value first and falls back to the core one.
+The core holds the shared values. A client has **its own root** with **the same key names**, laid over the shared ones: reading takes the client value first and falls back to the core.
 
 ```text
-core ("s3_url" = "A")                 ← shared value
-client1 ("s3_url" = "B1")             ← separate root, same key name
-client2 ("s3_url" = "C")              ← separate root, same key name
+core ("s3_url" = "A")                     ← shared value
+client1 ("s3_url" = "B1")                 ← separate root, same key name
+client2 ("s3_url" = "C")                  ← separate root, same key name
 
-cf["s3_url"]      → "A"
-clients.GetClient("client1")["s3_url"] → "B1"
-clients.GetClient("client2")["s3_url"] → "C"
+cf["s3_url"]                             → "A"
+clients.GetClient("client1")["s3_url"]   → "B1"
+clients.GetClient("client2")["s3_url"]   → "C"
 ```
 
-There is no `sa:clients:{client}:{key}` prefix and no shared dictionary: the client roots are
-independent, so one client's values can never leak into the core or into another client. Key names
-are a convention, not a schema — a client may introduce keys the core does not have.
+There is no `sa:clients:{client}:{key}` prefix: the roots are independent, so one client's values cannot leak into the core or into another client. A client exists as soon as a provider has returned at least one row for it.
 
-### Data: core table + `client_settings`
-
-The canonical shape is two tables. The shared values live in `setting`; each client's overrides live
-in `client_settings`, split by `client_id`:
+The canonical shape is two tables: shared values in `setting`, overrides in `client_settings` keyed by `client_id`.
 
 ```sql
 CREATE TABLE setting (
@@ -517,13 +285,7 @@ INSERT INTO client_settings (client_id, key, value) VALUES
     ('client2', 'language', 'de');
 ```
 
-### Registration: providers returning flat rows
-
-A provider is a callback registered with `clients.Add<T1[,T2[,T3]]>(...)`. Its one to three
-parameters are resolved from the container when the rows are read (plus a `CancellationToken`), and
-it returns flat `(client_id, key, value)` rows for **every** client at once. The registry groups the
-rows by `client_id` and builds one root per client, so a provider knows nothing about client roots,
-splitters or prefixes — it just returns rows.
+A provider is a callback that returns flat rows `(client_id, key, value)` for **all** clients at once; the registry does the grouping. The callback's dependencies (up to three plus a `CancellationToken`) come from DI:
 
 ```csharp
 using Sa.Configuration.Clients;
@@ -532,58 +294,17 @@ builder.Services.AddSingleton<IClientSettingsStore, PgClientSettingsStore>();
 
 builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
 {
-    // Up to three dependencies come from DI; the callback returns rows for all clients.
     clients.Add<IClientSettingsStore>(
         (store, cancellationToken) => store.LoadAllAsync(cancellationToken));
 });
 ```
 
-The row type is `ClientSetting(clientId, key, value)` — exactly the shape a query returns:
-
-```csharp
-public async ValueTask<IReadOnlyList<ClientSetting>> LoadAllAsync(CancellationToken ct)
-{
-    List<ClientSetting> rows = [];
-
-    await dataSource.ExecuteReaderAsync(
-        "SELECT client_id, key, value FROM client_settings",
-        (reader, _) => rows.Add(new ClientSetting(
-            reader.GetString(0), reader.GetString(1), reader.GetString(2))),
-        initCommand: null,
-        ct);
-
-    return rows;
-}
-```
-
-A client needs no separate declaration: it exists as soon as any provider returns a row for it. The
-providers are called lazily on first access and again on `ReloadAsync()` /
-`ReloadDynamicAsync()`, so a new row in `client_settings` becomes addressable without a restart.
-
-Several providers can be registered and are merged per client; a later row for the same client and
-key wins:
-
-```csharp
-builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
-{
-    clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
-
-    clients.Add<IDefaultsStore, ILogger<Clients>>(
-        (defaults, logger, ct) => defaults.LoadAsync(logger, ct));
-});
-```
-
-### Clients from a configuration section (no database)
-
-When the clients are already in static configuration, `UseConfiguration` registers the same kind of
-provider over a section. The children of the section are the client ids; the keys inside a client's
-section use the same names as the core configuration and are read **without** the section prefix.
+When the clients live in the static configuration, no database is needed:
 
 ```json
 {
   "s3_url": "A",
   "theme": "dark",
-  "language": "en",
 
   "clients": {
     "acme": { "s3_url": "B1", "theme": "light" },
@@ -597,191 +318,25 @@ builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
     clients.UseConfiguration(builder.Configuration));
 ```
 
-`clients.Clients` → `["acme", "beta"]`; `clients.GetClient("acme")["s3_url"]` → `"B1"`;
-`clients.GetClient("acme")["language"]` → `"en"` (the core value). The registry is live: a client
-added to the section appears after a reload, and existing client values are re-read on every
-`ReloadDynamicAsync()`.
-
-A different layout — only the section path changes:
-
-```csharp
-clients.UseConfiguration(builder.Configuration, new ConfigurationClientSourceOptions
-{
-    SectionPath = "tenants",        // tenants:acme:s3_url, tenants:beta:s3_url, …
-});
-```
-
-`UseConfiguration` is a provider like any other, so it can be combined with `clients.Add<T>(...)`;
-the rows from all providers are merged per client.
-
-### DI variants
-
-| Shape | When to use |
-|---|---|
-| `clients.Add<T1>((t1, ct) => rows)` | the provider needs one DI service and returns all clients' rows |
-| `clients.Add<T1, T2>((t1, t2, ct) => rows)` | two services (a store and a logger, say) |
-| `clients.Add<T1, T2, T3>((t1, t2, t3, ct) => rows)` | three services |
-| `clients.UseConfiguration(configuration)` | the clients and their values live in a configuration section (`clients:{id}:{key}`), no database involved |
-| `AttachAsync(client, source)` | a client appears at runtime (a plugin, a manually provisioned tenant, a test) |
-| `clients.Configure(o => …)` | adjust `ThrowForUnknownClient` / `EagerLoad` |
-
-### Reading
+Reading:
 
 ```csharp
 public sealed class SettingsEndpoints(IConfiguration core, IClientConfigurations clients)
 {
-    public string CoreS3Url => core["s3_url"]!;                       // "A"
-    public string Client1S3Url => clients.GetClient("client1")["s3_url"]!; // "B1"
-    public string Client2S3Url => clients.GetClient("client2")["s3_url"]!; // "C"
-
-    public IReadOnlyCollection<string> Known => clients.Clients;       // from providers + attached
+    public string CoreS3Url => core["s3_url"]!;                              // "A"
+    public string Client1S3Url => clients.GetClient("client1")["s3_url"]!;   // "B1"
+    public string Client2S3Url => clients.GetClient("client2")["s3_url"]!;   // "C"
+    public IReadOnlyCollection<string> Known => clients.Clients;             // ["client1", "client2"]
 }
 ```
 
-Rules:
+An unknown client sees only the core; `TryGet` never throws, even with `ThrowForUnknownClient`. Providers are called lazily and again on `ReloadDynamicAsync()`, so a new client appears without a restart.
 
-- a client value wins over the core value of the same key; a missing client value falls back to the
-  core one and is never invented;
-- a client sees only its own root plus the core — never another client's values; with the
-  section-based provider the clients section is meta-data of the overlay and is hidden from every
-  view, so one client cannot read another client's rows through the core fallback;
-- a blank row (a `value` that is empty or whitespace) is dropped while the rows are read and
-  delegates to the core value — `ClientConfigurationOptions.SkipEmptyValues`, on by default, mirrors
-  the core database layer; set it to `false` to make a blank an explicit value of its own. A blank a
-  transform produced is written after the rows are read and always stays local to the client;
-- an unknown client reads the core values; `TryGet` reports whether it is actually known and never
-  throws, not even with `ThrowForUnknownClient` (only `GetClient` does);
-- `Clients` is the union of the ids the providers returned and the runtime attachments, so a client
-  added to the database appears after `ReloadDynamicAsync()`;
-- **rows are rewritten by the same pass as the core** — a client's values go through the transform
-  chain too, so `{{placeholder}}` secrets are substituted and key aliases are resolved inside the
-  client's own rows (alias sources are read from the client first, the core second). A derived value
-  that only mirrors the core is not copied into the overlay, so the client keeps reading the core
-  live. A row the pass cannot resolve (a missing secret) reads as a blank for that client, not as
-  the core value and not as the literal `{{…}}`. The section-based provider (`UseConfiguration`) is
-  the exception: the core pass blanks an unresolved placeholder **before** the section is read, so
-  that row never reaches the registry and the client falls back to the core value;
-- keys use the canonical `:` spelling: `sa__pg__host` in a row is the same setting as `sa:pg:host`.
+Overlay rules, keyed injection (`[FromKeyedServices("acme")] IConfiguration`), and attaching/removing clients at runtime — in [Clients: full rules](#clients-full-rules).
 
-Sections work across both roots:
+## Dynamic layer reload
 
-```csharp
-IConfiguration db = clients.GetClient("client1").GetSection("db");
-db["host"]; // client1's value when present, otherwise the core value
-```
-
-### Aliases and placeholders inside a client overlay
-
-A client's rows go through the same pass as the core, so a client can keep its settings under
-whatever flat names its own system uses:
-
-```csharp
-builder.Configuration.AddSaConfiguration(sa =>
-{
-    sa.UseSecrets(new SecretOptions
-    {
-        KeyAliases = new KeyAliasOptions
-        {
-            KeyAliases = { ["sa:scope:api:auth:base_url"] = "auth_base_url" },
-        },
-    });
-});
-
-builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
-    clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct)));
-```
-
-```text
-core:    auth_base_url = https://core.example.com   → sa:scope:api:auth:base_url = https://core.example.com
-client1: auth_base_url = https://acme.example.com   → sa:scope:api:auth:base_url = https://acme.example.com
-client2: (no such row)                              → https://core.example.com, read live from the core
-
-client1: api_token = {{acme_token}}                 → the resolved secret, never the literal
-```
-
-The alias source is looked up in the client first and in the core second, and a client's value never
-crosses into the core or into another client. A derived value that only mirrors the core is not
-copied into the overlay, so a change in the core is visible without reloading the client rows.
-
-### Keyed injection
-
-When the client id is known at compile time, resolve its configuration by key — the handler or
-constructor receives the client's own root directly.
-
-```csharp
-using Microsoft.Extensions.DependencyInjection;   // [FromKeyedServices]
-
-public static class Clients
-{
-    public const string Acme = "acme";
-    public const string Beta = "beta";
-}
-
-builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
-    clients.UseConfiguration(builder.Configuration));
-
-// Minimal API: the known client comes from the container, no registry lookup in the body.
-app.MapGet("/acme/settings", ([FromKeyedServices(Clients.Acme)] IConfiguration acme) => new
-{
-    S3Url = acme["s3_url"],        // "B1"
-    Theme = acme["theme"],         // "light"
-    Language = acme["language"],   // "en" — core fallback
-});
-
-// A regular service: the same keyed injection in the constructor.
-public sealed class AcmeStorage([FromKeyedServices(Clients.Acme)] IConfiguration configuration)
-{
-    public string S3Url => configuration["s3_url"]!;
-}
-
-// Code that holds an IServiceProvider (a factory, a startup task):
-IConfiguration beta = app.Services.GetRequiredKeyedService<IConfiguration>(Clients.Beta);
-beta["s3_url"];                    // "C"
-```
-
-The key is the client id used in `client_settings.client_id` (or the section's child key) and is
-matched case-insensitively. Injection is per resolution — a client attached or refreshed later is
-visible on the next request without re-registering anything.
-
-A name known only at runtime cannot be a compile-time key, so pass the id and ask the registry:
-
-```csharp
-app.MapGet("/settings/{client}", (string client, IClientConfigurations clients) =>
-    new { Client = client, S3Url = clients.GetClient(client)["s3_url"] });
-```
-
-The keyed registration uses `KeyedService.AnyKey`, so `GetRequiredKeyedService<IConfiguration>(id)`
-works for a name that only exists at runtime. Enumerating keyed services does not enumerate clients —
-use `IClientConfigurations.Clients` for that.
-
-### Runtime attach and removal
-
-```csharp
-await clients.AttachAsync("acme", new MemoryConfigurationSource
-{
-    InitialData = new Dictionary<string, string?> { ["s3_url"] = "B1" },
-});
-
-await clients.RemoveAsync("acme");   // the view falls back to the core again
-```
-
-`AttachAsync` replaces an existing overlay of the same client and disposes the replaced one.
-`RemoveAsync` returns `false` and changes nothing for a client a provider still reports — its overlay
-would be rebuilt on the next access, so the call reports that there was nothing to remove. Only a
-runtime attachment can be removed.
-
-Views returned by `GetClient` are live: they ask the registry for the current root on every access,
-so an attach/remove/reload is visible through a reference obtained earlier — including a view of a
-client that was unknown when the reference was obtained. The same goes for the change token:
-`GetReloadToken()` on a view composes the core, the overlay and the registry, so a callback fires on
-an attach or a remove as well, not only on a reload. The registry is thread-safe.
-
----
-
-## Dynamic reload
-
-`IConfigurationRoot.Reload()` reloads **every** provider, including the files on disk. When only the
-database layer should be refreshed, use the runtime:
+`IConfigurationRoot.Reload()` re-reads **all** providers, files included. When only the database layer should be refreshed, use the runtime:
 
 ```csharp
 ISaConfigurationReloader reloader = app.Services.GetRequiredService<ISaConfigurationReloader>();
@@ -789,39 +344,64 @@ ISaConfigurationReloader reloader = app.Services.GetRequiredService<ISaConfigura
 await reloader.ReloadDynamicAsync(cancellationToken);
 ```
 
-What it does: reloads the dynamic providers, then recomputes the post-processing pass (placeholders,
-aliases, custom transforms) from the fresh values, then raises the reload tokens. Static providers
-are not touched; their file watchers keep working as usual.
+Dynamic providers are reloaded, the pass (placeholders, aliases, custom transforms) is recomputed from the fresh values, and reload tokens are raised. Static providers and their file watchers are untouched. A failed load keeps the previous snapshot: a temporary database problem never blanks a working configuration.
 
-Getting the service — and whether anything runs in the background:
+No background service is registered unless asked for:
 
 ```csharp
-builder.Services.AddSaConfigurationRuntime(builder.Configuration);                 // manual only, no hosted service
+builder.Services.AddSaConfigurationRuntime(builder.Configuration);   // manual only
 builder.Services.AddSaConfigurationRuntime(builder.Configuration, o =>
 {
-    o.InitialLoad = SaDynamicInitialLoad.Hosted;      // one-shot load before the server starts
-    o.DynamicReload = true;                           // periodic polling — opt-in
+    o.InitialLoad = SaDynamicInitialLoad.Hosted;      // load before the server starts
+    o.DynamicReload = true;                           // periodic polling
     o.DynamicReloadInterval = TimeSpan.FromSeconds(15);
 });
 ```
 
-| Option | Default | Meaning |
-|--------|---------|---------|
-| `InitialLoad` | `Explicit` | `Explicit` — nothing happens until you call `EnsureInitializedAsync`; `Hosted` — a one-shot hook loads before the first request and a failure fails the start; `Background` — the host starts first, the load is logged if it fails |
-| `DynamicReload` | `false` | registers exactly one hosted service with a `PeriodicTimer`; without it no timer exists |
-| `DynamicReloadInterval` | 30 s | polling period |
-| `DynamicReloadInitialDelay` | `null` | delay before the first poll (one interval by default) |
+All options and the late-binding (`FromServices`) behaviour — in [Dynamic reload: options](#dynamic-reload-options).
 
-A late-bound connection (`PgConfigurationConnection.FromServices()`) is resolved from the container
-during `EnsureInitializedAsync`, i.e. after `builder.Build()`; with an explicit
-`DataSource`/`ConnectionString` no initialization step is needed. Initialization is idempotent, and a
-failed periodic reload is logged while the previous snapshot stays in effect.
+## Command-line arguments
 
----
+```csharp
+using Sa.Configuration.CommandLine;
+
+// some.exe --config_db /share/data.db --debug --port -5
+var args = new Arguments(args);
+
+string? configDb  = args["config_db"];       // → "/share/data.db"
+bool?   debug     = args.GetBool("debug");   // → true
+int?    port      = args.GetInt("port");     // → -5
+TimeSpan? timeout = args.GetTimeSpan("timeout");
+```
+
+Supported: `--key value`, `--key=value`, `-key value`, `-key=value` and the boolean `-flag`; negative numbers are treated as values. A double underscore in a name is how you spell `:`: `--sa__pg__host` is read as `sa:pg:host`.
+
+Full format coverage, typed getters and edge cases — in [CommandLine/Readme.md](CommandLine/Readme.md).
+
+## Alongside Sa.Configuration.PostgreSql
+
+The PostgreSQL package adds a dynamic source and places the secrets pass after it:
+
+```csharp
+using Sa.Configuration.PostgreSql;
+
+// The app pool (or an NpgsqlDataSource): nothing extra is created.
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings"));
+
+// Or an explicit pool, or a connection string owned by the source itself:
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    appDataSource, new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings"));
+builder.Configuration.AddSaPostgreSqlConfiguration(
+    "Host=db;Database=app;Username=app;Password=…",
+    new PostgreSqlConfigurationOptions("SELECT key, value FROM app_settings"));
+```
+
+The database layer is registered after the static sources, so it overrides them; aliases apply on top of the database values. Query shapes and reload details — in [the package README](../Sa.Configuration.PostgreSql/Readme.md).
 
 ## Full DI example
 
-Static + dynamic core + two clients, with one connection pool and no background service unless asked:
+Static config + core dynamic source + two clients, one connection pool, and no background service unless asked:
 
 ```csharp
 using Sa.Configuration;
@@ -830,7 +410,7 @@ using Sa.Configuration.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Static: the host already added appsettings/env/args, so UseStandardSources is a no-op here.
+// Static: the host already added appsettings/env/args, so UseStandardSources does nothing here.
 // The dynamic source reads the shared values through the pool registered below.
 builder.Configuration.AddSaConfiguration(sa =>
 {
@@ -843,8 +423,8 @@ builder.Configuration.AddSaConfiguration(sa =>
 builder.Services.AddSaPostgreSqlDataSource("orders", b => b.FromConfiguration("Postgres"));
 builder.Services.AddSingleton<IClientSettingsStore, PgClientSettingsStore>();
 
-// Every client gets its own root; keys are stored verbatim, no prefix. The provider resolves its
-// store from DI and returns `(client_id, key, value)` rows for all clients at once.
+// Every client gets its own root; keys are stored as-is, without a prefix. The provider takes
+// the store from DI and returns `(client_id, key, value)` rows for all clients at once.
 builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
 {
     clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
@@ -882,8 +462,7 @@ app.MapPost("/reload", async (ISaConfigurationReloader reloader) =>
 app.Run();
 ```
 
-The provider behind `clients.Add<IClientSettingsStore>(...)` — one query, flat rows, grouped by the
-registry:
+The provider behind `clients.Add<IClientSettingsStore>(...)` — one query, flat rows, the registry does the grouping:
 
 ```csharp
 public interface IClientSettingsStore
@@ -909,7 +488,7 @@ public sealed class PgClientSettingsStore(IPgDataSource dataSource) : IClientSet
 }
 ```
 
-Sample data — the core table and the per-client table:
+Sample data — the core table and the client table:
 
 ```sql
 CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -927,9 +506,9 @@ CREATE TABLE client_settings (
 );
 
 INSERT INTO client_settings (client_id, key, value) VALUES
-    ('acme', 's3_url',   'B1'),   -- acme overrides only its s3_url
+    ('acme', 's3_url',   'B1'),   -- acme overrides only s3_url
     ('acme', 'theme',    'light'),
-    ('beta', 's3_url',   'C'),    -- beta has its own value too
+    ('beta', 's3_url',   'C'),    -- beta has its own value
     ('beta', 'language', 'de');
 ```
 
@@ -938,83 +517,220 @@ INSERT INTO client_settings (client_id, key, value) VALUES
 `GET /settings/beta` → `C` / `dark` / `de`;
 `GET /settings/unknown` → `A` / `dark` / `en`.
 
-## Command-line arguments
+## Details
+
+The sections below are reference material: the full rules and every option. The main text covers them briefly and links here.
+
+### Aliases: full rules
+
+**Several registrations.** `AddSaConfiguration` can be called more than once — the calls accumulate:
 
 ```csharp
-using Sa.Configuration.CommandLine;
-
-// some.exe --config_db /share/data.db --debug --port -5
-var args = new Arguments(args);
-
-string? configDb = args["config_db"];       // → "/share/data.db"
-bool?   debug    = args.GetBool("debug");   // → true
-int?    port     = args.GetInt("port");     // → -5
-TimeSpan? timeout = args.GetTimeSpan("timeout");
+builder.Configuration
+    .AddSaConfiguration(new SecretOptions { KeyAliases = { ["sa:…:base_url"] = "auth_base_url" } })
+    .AddSaConfiguration(new SecretOptions { KeyAliases = { ["sa:…:token_ttl"] = "auth_token_ttl" } });
 ```
 
-Supported formats:
+- each call **appends** its `KeyAliases` to one shared map; if a canonical key is declared twice, the **last** call wins;
+- secret options (`FileName`, `LoadDotEnv`, `Encryption`, `Args`) also come from the **last** call;
+- exactly **one** pass and **one** command-line source are registered, so secrets are read once — on the first `Build()` (registration itself does not touch files);
+- `CanonicalValueWins` is one flag for the whole map, also taken from the last call.
 
-```
---key value
---key=value
--key value
--key=value
--flag            → flag=true (boolean flag)
---key -5         → value "-5" (negative numbers are never treated as flags)
-```
-
-> **`__` as `:`** — a double underscore in a parameter name is the environment-variable-style way of writing the `:` separator. So `--sa__pg__host` is stored and read as `sa:pg:host`. Single underscores are data, not separators. `args["sa__pg__host"]` and `args["sa:pg:host"]` are interchangeable, and typed getters work the same way.
-
-Typed methods return `null` if the parameter is absent or invalid:
-
-| Method | Type | How it converts |
-|--------|------|-----------------|
-| `GetBool()` | `bool?` | `"true"/"1"/"yes"/"on"` → `true` |
-| `GetInt()` | `int?` | `int.TryParse(..., InvariantCulture)` |
-| `GetFloat()` | `float?` | same |
-| `GetLong()` | `long?` | same |
-| `GetTimeSpan()` | `TimeSpan?` | `TimeSpan.TryParse(..., InvariantCulture)` |
-
-Check whether a parameter is present with `args.Contains("key")`. Full dictionary — `args.Parameters`.
-
----
-
-## Working with secrets directly
-
-Sometimes secrets are needed outside `IConfiguration`. Then use `Secrets` directly:
+**Order.** The pass writes derived values and therefore overrides every source registered **before** it. A source added **after** the last `AddSaConfiguration` is a normal provider: for its keys it overrides the alias. When sources are registered later, call `FinalizeSaConfiguration()` as the last step:
 
 ```csharp
-using Sa.Configuration.SecretStore;
-
-// Default chain (top to bottom by priority):
-// CLI args → ENV variables → .env → secrets*.pub → secrets.{Env}.txt → secrets.txt
-var secrets = Secrets.CreateDefault();
-
-string? result   = secrets.PopulateSecrets("Server={{host}};Pwd={{sa_pg_password}}");
-string? password = secrets.GetSecret("sa_pg_password");
+builder.Configuration
+    .AddSaPostgreSqlConfiguration(...)   // a source with canonical keys
+    .AddSaConfiguration(...)             // aliases
+    .FinalizeSaConfiguration();          // the pass moves to the end
 ```
 
-Custom chain — any `ISecretStore` (`FileSecretStore`, `EnvironmentVariableSecretStore`, `CommandLineArgsSecretStore`, `InMemorySecretStore`):
+**Custom transforms.** `AddSaConfigurationTransform` adds a step that receives the assembled configuration and returns **only** the keys it changes. Transforms run after the built-in ones (placeholders, then aliases) in registration order, and each sees the previous results:
 
 ```csharp
-var secrets = new Secrets(new FileSecretStore("my-secrets.txt"));
-secrets.AddStore(new InMemorySecretStore().AddSecret("override_key", "override_value"));
-// LIFO: the new store has the highest priority
-```
-
-You can configure the base file name and environment:
-
-```csharp
-Secrets.CreateDefault(new SecretOptions
+public sealed class StripPrefixTransform(string prefix) : ISaConfigurationTransform
 {
-    FileName = "app-secrets.txt",
-    EnvironmentName = "Staging"
+    public IEnumerable<KeyValuePair<string, string?>> Apply(ISaConfigurationView configuration)
+        => configuration.Values
+            .Where(c => c.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(c => new KeyValuePair<string, string?>(c.Key[prefix.Length..], c.Value));
+}
+
+builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("legacy:"));
+```
+
+**Where the value is looked up.** The alias applies to the assembled configuration built from **all** sources, so the flat key and the canonical path may live in different places: `auth_base_url` in PostgreSQL, `sa:scope:api:auth:base_url` in `appsettings.json`. The alias joins them.
+
+**Who overrides whom.**
+
+- by default a non-empty flat value is written into the canonical path;
+- with `CanonicalValueWins = true` the canonical value has priority, and the alias fills the path only when it is empty:
+
+```csharp
+builder.Configuration.AddSaConfiguration(new SecretOptions
+{
+    KeyAliases = new KeyAliasOptions
+    {
+        KeyAliases = { ["sa:scope:api:auth:base_url"] = "auth_base_url" },
+        CanonicalValueWins = true,
+    },
 });
 ```
 
-`Secrets.GetEnvironmentName()` takes the environment name from `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` / `environment`, defaulting to `Production`.
+- when the alias is empty or missing, the canonical path is untouched: it keeps its value or stays missing, and the lower-priority source answers for it.
 
----
+**Small print.**
+
+- case does not matter: `Auth_Base_Url` and `auth_base_url` are the same;
+- `__` = `:`: `sa__scope__api__auth__base_url` is equivalent to `sa:scope:api:auth:base_url`;
+- an empty key or empty string in the mapping is a startup error (such an alias could never match);
+- an empty mapping changes nothing;
+- `Reload()` recomputes the pass: a key that disappeared from a source or from the mapping stops being served.
+
+### Clients: full rules
+
+**Providers.** The `clients.Add<T1[,T2[,T3]]>(...)` callback receives one to three services from the container plus a `CancellationToken` and returns `(client_id, key, value)` rows for all clients at once. The provider knows nothing about roots, splitters or prefixes.
+
+| Shape | When to use |
+|---|---|
+| `clients.Add<T1>((t1, ct) => rows)` | the provider needs one DI service |
+| `clients.Add<T1, T2>((t1, t2, ct) => rows)` | two services (say, a store and a logger) |
+| `clients.Add<T1, T2, T3>((t1, t2, t3, ct) => rows)` | three services |
+| `clients.UseConfiguration(configuration)` | clients and values live in a configuration section, no database needed |
+| `AttachAsync(client, source)` | a client appears at runtime |
+| `clients.Configure(o => …)` | tune `ThrowForUnknownClient` / `EagerLoad` |
+
+Several providers can be registered — their rows are merged per client, and on a key collision the later row wins:
+
+```csharp
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+{
+    clients.Add<IClientSettingsStore>((store, ct) => store.LoadAllAsync(ct));
+
+    clients.Add<IDefaultsStore, ILogger<Clients>>(
+        (defaults, logger, ct) => defaults.LoadAsync(logger, ct));
+});
+```
+
+**Clients from a section.** `UseConfiguration` registers the same kind of provider over a section: child elements are client ids, keys inside are named like the core ones and are read **without** the section prefix. A different layout changes only the path:
+
+```csharp
+clients.UseConfiguration(builder.Configuration, new ConfigurationClientSourceOptions
+{
+    SectionPath = "tenants",        // tenants:acme:s3_url, tenants:beta:s3_url, …
+});
+```
+
+**Reading rules.**
+
+- a client value beats the core value for the same key; when the client has none, the core value is used;
+- a client sees only its own root plus the core — never another client's values; the clients section of the section provider is hidden from every view;
+- an empty string is dropped when rows are read and falls back to the core value — `ClientConfigurationOptions.SkipEmptyValues` (on by default); `false` makes an empty string an explicit client value; an empty value produced by a transform stays local to the client;
+- an unknown client reads core values; `TryGet` reports whether it is known and never throws, even with `ThrowForUnknownClient` (only `GetClient` throws);
+- `Clients` is the union of ids returned by providers and clients attached at runtime;
+- client rows go through the same pass as the core: placeholders are substituted and aliases expand inside the client's own rows (the alias source is looked up in the client first, then in the core). A derived value that merely repeats the core is not copied into the overlay — the client reads the core live; an unresolved placeholder reads as an empty string on the client. The exception is the section provider: the core pass nulls an unresolved placeholder **before** the section is read, so the client takes the core value;
+- keys use the canonical `:` form: `sa__pg__host` is the same setting as `sa:pg:host`.
+
+Sections work over both roots:
+
+```csharp
+IConfiguration db = clients.GetClient("client1").GetSection("db");
+db["host"]; // the client1 value if present, otherwise the core value
+```
+
+**Aliases and placeholders inside a client overlay** work like the core:
+
+```text
+core:    auth_base_url = https://core.example.com   → sa:scope:api:auth:base_url = https://core.example.com
+client1: auth_base_url = https://acme.example.com   → sa:scope:api:auth:base_url = https://acme.example.com
+client2: (no such row)                              → https://core.example.com, read live from the core
+
+client1: api_token = {{acme_token}}                 → the substituted secret, never a literal
+```
+
+**Keyed injection.** When the client id is known at compile time, its root is resolved by key:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;   // [FromKeyedServices]
+
+public static class Clients
+{
+    public const string Acme = "acme";
+    public const string Beta = "beta";
+}
+
+builder.Services.AddSaClientConfigurations(builder.Configuration, clients =>
+    clients.UseConfiguration(builder.Configuration));
+
+// Minimal API: the known client comes from the container.
+app.MapGet("/acme/settings", ([FromKeyedServices(Clients.Acme)] IConfiguration acme) => new
+{
+    S3Url = acme["s3_url"],        // "B1"
+    Theme = acme["theme"],         // "light"
+    Language = acme["language"],   // "en" — core fallback
+});
+
+// A regular service: the same keyed injection in the constructor.
+public sealed class AcmeStorage([FromKeyedServices(Clients.Acme)] IConfiguration configuration)
+{
+    public string S3Url => configuration["s3_url"]!;
+}
+
+// Code that has an IServiceProvider:
+IConfiguration beta = app.Services.GetRequiredKeyedService<IConfiguration>(Clients.Beta);
+beta["s3_url"];                    // "C"
+```
+
+The key is the client id from `client_settings.client_id` (or a child key of the section), compared case-insensitively. Injection happens on every resolve, so a client added or updated later is visible on the next request without re-registration. The keyed registration uses `KeyedService.AnyKey`, so a name known only at runtime works too. Enumerating keyed services does not enumerate clients — use `IClientConfigurations.Clients` for that.
+
+A name known only at runtime is passed to the registry:
+
+```csharp
+app.MapGet("/settings/{client}", (string client, IClientConfigurations clients) =>
+    new { Client = client, S3Url = clients.GetClient(client)["s3_url"] });
+```
+
+**Attaching and removing at runtime.**
+
+```csharp
+await clients.AttachAsync("acme", new MemoryConfigurationSource
+{
+    InitialData = new Dictionary<string, string?> { ["s3_url"] = "B1" },
+});
+
+await clients.RemoveAsync("acme");   // the view falls back to core values again
+```
+
+`AttachAsync` replaces an existing overlay for the same client and disposes the replaced one. `RemoveAsync` returns `false` and changes nothing for a client a provider still returns: its overlay would be rebuilt on the next access anyway. Only an attachment added at runtime can be removed.
+
+Views returned by `GetClient` are live: on each access they ask the registry for the current root, so attach/remove/reload is visible through a reference obtained earlier. `GetReloadToken()` on such a view composes the core, the overlay and the registry, so the callback fires on attach/remove as well. The registry is thread-safe.
+
+### Builder: methods and order
+
+| Method | What it adds |
+|--------|--------------|
+| `UseStandardSources(...)` | `appsettings.json`, `appsettings.{env}.json`, environment variables, arguments. **Idempotent**: in ASP.NET Core / the generic host the host already added them, so the method does nothing |
+| `UseSecrets(...)` | the existing secrets pipeline: placeholders, aliases, the arguments source |
+| `UseDynamic(source)` | a source whose values change at runtime; placed after the static ones |
+| `Use(source)` | any `IConfigurationSource` — for sources without a dedicated method |
+| `Finalize()` | moves the pass to the end; needed only when sources are added directly to `sa.Builder` |
+
+A source registered after the last Sa call is a normal provider and overrides the pass for its keys. `Finalize()` (or `sa.Builder.Add(...)`, then `Finalize()`) is the explicit way to restore the order.
+
+### Dynamic reload: options
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `InitialLoad` | `Explicit` | `Explicit` — nothing happens until you call `EnsureInitializedAsync`; `Hosted` — a one-shot hook loads before the first request and fails the startup on error; `Background` — the host starts immediately and the error is logged |
+| `DynamicReload` | `false` | registers exactly one hosted service with a `PeriodicTimer`; without it there is no timer |
+| `DynamicReloadInterval` | 30 s | polling period |
+| `DynamicReloadInitialDelay` | `null` | delay before the first poll (one interval by default) |
+
+Late binding (`PgConfigurationConnection.FromServices()`) resolves from the container during `EnsureInitializedAsync`, i.e. after `builder.Build()`; with an explicit `DataSource`/`ConnectionString` the init step is not needed. Initialization is idempotent; a failed periodic reload is just logged, and the previous snapshot stays in force.
+
+### Encodings and value format
+
+Encodings, the `ENC1:` format, payload length, Unicode behaviour and `.env` rules are described in [SecretStore/Readme.md](SecretStore/Readme.md#encodings-and-value-format).
 
 ## License
 
