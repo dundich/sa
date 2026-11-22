@@ -143,10 +143,19 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
         /// cycle returns 0 would then be trivially true for the wrong reason, and any future row
         /// that is not terminal would silently make the handled count depend on execution order.
         /// </summary>
+        /// <summary>
+        /// The consumer group for one row of the 2xx theory. A group id is used verbatim as a DI
+        /// key, a settings key, a job name and part of a partition name, so it must be canonical
+        /// (lowercase ASCII letters, digits and underscores) — the enum name is lowercased, not
+        /// pasted in as-is.
+        /// </summary>
+        public static string SuccessGroup(Action action)
+            => $"{SuccessStatus}_{action}".ToLowerInvariant();
+
         private static IReadOnlyList<string> SuccessStatusCases { get; } =
             [.. Enum.GetValues<Action>()
                 .Where(a => a is Action.Ok or Action.Created or Action.Accepted or Action.NoContent or Action.Aborted)
-                .Select(a => $"{SuccessStatus}_{a}")];
+                .Select(SuccessGroup)];
 
         public static IReadOnlyList<string> All { get; } =
         [
@@ -426,7 +435,7 @@ public class DeliveryConsumerStatusTests(DeliveryConsumerStatusTests.Fixture fix
 
         // A group per case: the five rows of this theory must not share one consumer group, or the
         // count this test asserts on would include the rows left behind by the cases before it.
-        var settings = fixture.SettingsFor($"{Groups.SuccessStatus}_{action}");
+        var settings = fixture.SettingsFor(Groups.SuccessGroup(action));
         await DrainAsync();
 
         Plans.Set(id, new Plan(action, TimeSpan.Zero));
