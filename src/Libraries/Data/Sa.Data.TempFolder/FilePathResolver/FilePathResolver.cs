@@ -450,15 +450,26 @@ public sealed class FilePathResolver : IFilePathResolver
         if (!asRelativePath)
             return full;
 
-        return full.StartsWith(ConfiguredPath + Path.DirectorySeparatorChar, s_pathComparison)
+        // The root itself already ends with a separator ("/", "C:\"): appending a second one
+        // would build "//" and no direct child would ever match.
+        var rootWithSeparator = ConfiguredPath.EndsWith(Path.DirectorySeparatorChar)
+            ? ConfiguredPath
+            : ConfiguredPath + Path.DirectorySeparatorChar;
+
+        return full.StartsWith(rootWithSeparator, s_pathComparison)
             ? Path.GetRelativePath(ConfiguredPath, full)
             : full;
     }
 
-    /// <summary>Normalizes separators to the platform default and drops any trailing separator.</summary>
+    /// <summary>
+    /// Normalizes separators to the platform default and drops a trailing separator — while
+    /// keeping a filesystem root intact (<c>/</c>, <c>C:\</c>, a UNC share): trimming *its*
+    /// separator would leave <c>""</c> or a drive-relative <c>"C:"</c>, which no longer names the
+    /// root. <see cref="Path.TrimEndingDirectorySeparator(string)"/> knows the difference.
+    /// </summary>
     private static string Normalize(string path)
-        => path
-            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
-            .Replace('/', Path.DirectorySeparatorChar)
-            .TrimEnd(s_separators);
+        => Path.TrimEndingDirectorySeparator(
+            path
+                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar));
 }
