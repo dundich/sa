@@ -81,4 +81,24 @@ public sealed class FileSystemStorageReadOnlyTests : IAsyncLifetime
         Assert.True(downloaded);
         Assert.Equal("read me"u8.ToArray(), target.ToArray());
     }
+
+    [Fact]
+    public async Task GetMetadata_OnAReadOnlyStorage_IsServed()
+    {
+        // Metadata is parsed from the ID and mutates nothing, so the flag does not gate it.
+        var metadata = await Storage.GetMetadataAsync($"fs://{Basket}/1/report.pdf", Token);
+
+        Assert.NotNull(metadata);
+        Assert.Equal("report.pdf", metadata.FileName);
+        Assert.Equal(1, metadata.TenantId);
+    }
+
+    [Fact]
+    public async Task Download_OfAMissingFile_ReturnsFalse()
+    {
+        Assert.False(await Storage.DownloadAsync(
+            $"fs://{Basket}/1/missing.txt",
+            static (_, _) => Task.CompletedTask,
+            Token));
+    }
 }

@@ -23,4 +23,9 @@
     <ProjectReference Include="..\..\Data\Sa.Data.TempFolder\Sa.Data.TempFolder.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- PathSanitizer is internal but pure: the suite tests it directly, without DI or a disk. -->
+    <InternalsVisibleTo Include="Sa.HybridFileStorage.FileSystemTests" />
+  </ItemGroup>
+
 </Project>

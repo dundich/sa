@@ -8,12 +8,13 @@ using Sa.HybridFileStorage.FileSystem;
 namespace Sa.HybridFileStorage.FileSystemTests;
 
 /// <summary>
-/// Behaviour the provider keeps now that file I/O — and with it the transient-failure retries —
-/// belongs to <see cref="Sa.Data.TempFolder.TempFolder"/>. The deterministic retry mechanics are
-/// covered there; this class only pins the contract the storage still exposes to its callers:
-/// a normal operation succeeds, an existing file deletes, a missing one reports <c>false</c>.
+/// The contract the storage exposes to its callers — upload, download, delete, metadata — now that
+/// file I/O and its transient-failure retries belong to
+/// <see cref="Sa.Data.TempFolder.TempFolder"/>. The deterministic retry mechanics are covered
+/// there; this class pins the storage's own edges: successful operations, "no file" as
+/// <c>false</c>/<c>null</c>, argument guards, cancellation, and the undeletable-file branch.
 /// </summary>
-public sealed class FileRetryBehaviorTests : IAsyncLifetime
+public sealed class FileStorageContractTests : IAsyncLifetime
 {
     private readonly string _testDir =
         Path.Combine(Path.GetTempPath(), $"retry_{Path.GetRandomFileName()}");
@@ -189,6 +190,153 @@ public sealed class FileRetryBehaviorTests : IAsyncLifetime
         Assert.NotNull(metadata);
         Assert.Equal("2024/report.pdf", metadata.FileName);
         Assert.Equal(42, metadata.TenantId);
+    }
+
+    [Fact]
+    public async Task DownloadAsync_NullArguments_Throw()
+    {
+        using var provider = BuildStorage();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => storage.DownloadAsync(null!, static (_, _) => Task.CompletedTask, _cts.Token));
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => storage.DownloadAsync("fs://share/1/x.txt", null!, _cts.Token));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_NullFileId_Throws()
+    {
+        using var provider = BuildStorage();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => storage.DeleteAsync(null!, _cts.Token));
+    }
+
+    [Fact]
+    public async Task DownloadAsync_PreCancelledToken_Throws()
+    {
+        // The token is checked before the activity gate, so an operation nobody waits for any more
+        // never starts — and never cancels a running cleanup pass on its way out.
+        using var provider = BuildStorage();
+        var storage = provider.GetRequiredService<IFileStorage>();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            storage.DownloadAsync("fs://share/1/x.txt", static (_, _) => Task.CompletedTask, cts.Token));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_PreCancelledToken_Throws()
+    {
+        using var provider = BuildStorage();
+        var storage = provider.GetRequiredService<IFileStorage>();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => storage.DeleteAsync("fs://share/1/x.txt", cts.Token));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_UndeletableFile_ReturnsFalse()
+    {
+        // The temp folder retries a transient I/O failure and rethrows it; the storage maps the
+        // survivor to "not deleted", which is the contract this provider had when it deleted files
+        // itself. Made deterministic with a real permission denial rather than a mock.
+        using var provider = BuildStorage();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        var upload = await storage.UploadAsync(
+            new UploadFileInput { FileName = "locked.txt", TenantId = 1 },
+            FixtureHelper.GetByteStream(),
+            _cts.Token);
+
+        var parent = Path.GetDirectoryName(upload.AbsoluteUrl)!;
+
+        if (OperatingSystem.IsWindows())
+        {
+            File.SetAttributes(upload.AbsoluteUrl, FileAttributes.ReadOnly);
+        }
+        else
+        {
+            File.SetUnixFileMode(parent, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        }
+
+        try
+        {
+            var deleted = await storage.DeleteAsync(upload.FileId, _cts.Token);
+
+            if (!File.Exists(upload.AbsoluteUrl))
+            {
+                // A superuser or a filesystem with permission checking off cannot produce the
+                // failure this branch exists for.
+                Assert.Skip("the platform did not enforce the write permission");
+            }
+
+            Assert.False(deleted);
+            Assert.True(File.Exists(upload.AbsoluteUrl));
+        }
+        finally
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                File.SetAttributes(upload.AbsoluteUrl, FileAttributes.Normal);
+            }
+            else
+            {
+                File.SetUnixFileMode(
+                    parent,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GetMetadataAsync_NullFileId_ReturnsNull()
+    {
+        // The predicate swallows the missing id: metadata is a lookup, not a command, and a null
+        // ID simply belongs to no storage.
+        using var provider = BuildStorage();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        Assert.Null(await storage.GetMetadataAsync(null!, _cts.Token));
+    }
+
+    [Fact]
+    public async Task GetMetadataAsync_MalformedId_ReturnsNull()
+    {
+        using var provider = BuildStorage();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        // Inside the basket, but not a file ID of this layout: the tenant is not a number.
+        Assert.Null(await storage.GetMetadataAsync("fs://share/abc/x.txt", _cts.Token));
+    }
+
+    [Fact]
+    public async Task GetMetadataAsync_FileMissingOnDisk_StillReportsMetadata()
+    {
+        // Metadata is parsed from the ID, never probed on disk — a listing must not turn into one
+        // stat per row.
+        using var provider = BuildStorage();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        var metadata = await storage.GetMetadataAsync("fs://share/1/never-uploaded.txt", _cts.Token);
+
+        Assert.NotNull(metadata);
+        Assert.Equal("never-uploaded.txt", metadata.FileName);
+        Assert.Equal(1, metadata.TenantId);
+    }
+
+    private ServiceProvider BuildStorage()
+    {
+        var services = new ServiceCollection()
+            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddSingleton<ILoggerFactory, NullLoggerFactory>()
+            .AddFsStorage(_testDir);
+
+        return services.BuildServiceProvider();
     }
 }
 

@@ -33,7 +33,7 @@ public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UploadAsync_NullFileName_ThrowsArgumentNullException()
+    public async Task UploadAsync_NullMetadata_ThrowsArgumentNullException()
     {
         // Arrange
         var services = new ServiceCollection()
@@ -44,9 +44,87 @@ public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
         using var provider = services.BuildServiceProvider();
         var storage = provider.GetRequiredService<IFileStorage>();
 
-        // Act & Assert
-        await Assert.ThrowsAnyAsync<Exception>(() =>
+        // Act & Assert — metadata is required; without it there is nothing to validate or name.
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
             storage.UploadAsync(null!, FixtureHelper.GetByteStream(), _cts.Token));
+    }
+
+    [Fact]
+    public async Task UploadAsync_NullFileName_ThrowsArgumentException()
+    {
+        var services = new ServiceCollection()
+            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddSingleton<ILoggerFactory, NullLoggerFactory>()
+            .AddFsStorage(_testDir);
+
+        using var provider = services.BuildServiceProvider();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            storage.UploadAsync(
+                new UploadFileInput { FileName = null!, TenantId = 1 },
+                FixtureHelper.GetByteStream(),
+                _cts.Token));
+    }
+
+    [Fact]
+    public async Task UploadAsync_BlankFileName_ThrowsArgumentException()
+    {
+        // `UploadFileInput.Validate` owns the "cannot be null or empty" rule and runs before the
+        // sanitizer, so a whitespace-only name never reaches it.
+        var services = new ServiceCollection()
+            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddSingleton<ILoggerFactory, NullLoggerFactory>()
+            .AddFsStorage(_testDir);
+
+        using var provider = services.BuildServiceProvider();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            storage.UploadAsync(
+                new UploadFileInput { FileName = "   ", TenantId = 1 },
+                FixtureHelper.GetByteStream(),
+                _cts.Token));
+
+        Assert.Contains("File name", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UploadAsync_NullStream_ThrowsArgumentNullException()
+    {
+        var services = new ServiceCollection()
+            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddSingleton<ILoggerFactory, NullLoggerFactory>()
+            .AddFsStorage(_testDir);
+
+        using var provider = services.BuildServiceProvider();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            storage.UploadAsync(
+                new UploadFileInput { FileName = "x.txt", TenantId = 1 },
+                null!,
+                _cts.Token));
+    }
+
+    [Fact]
+    public async Task UploadAsync_NegativeTenantId_ThrowsArgumentException()
+    {
+        var services = new ServiceCollection()
+            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddSingleton<ILoggerFactory, NullLoggerFactory>()
+            .AddFsStorage(_testDir);
+
+        using var provider = services.BuildServiceProvider();
+        var storage = provider.GetRequiredService<IFileStorage>();
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            storage.UploadAsync(
+                new UploadFileInput { FileName = "x.txt", TenantId = -1 },
+                FixtureHelper.GetByteStream(),
+                _cts.Token));
+
+        Assert.Contains("TenantId", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -62,7 +140,7 @@ public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
         var storage = provider.GetRequiredService<IFileStorage>();
 
         // Act & Assert
-        var ex = await Assert.ThrowsAnyAsync<Exception>(() =>
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
             storage.UploadAsync(new UploadFileInput { FileName = string.Empty, TenantId = 1 }, FixtureHelper.GetByteStream(), _cts.Token));
 
         Assert.Contains("File name cannot be", ex.Message);
@@ -105,9 +183,10 @@ public sealed class PathSanitizerBlackBoxTests : IAsyncLifetime
             FixtureHelper.GetByteStream(),
             _cts.Token);
 
-        // Assert — file ID should use normalized separators
-        Assert.NotNull(result);
-        Assert.NotEmpty(result.FileId);
+        // Assert — the ID is the portable shape: forward slashes on every OS, no rewrite of the
+        // segments the caller supplied.
+        Assert.Equal("fs://share/1/nested/path/file.txt", result.FileId);
+        Assert.DoesNotContain('\\', result.FileId);
     }
 
     [Fact]

@@ -122,4 +122,43 @@ public sealed class FileSystemStoragePathTests : IAsyncLifetime
         Assert.True(downloaded);
         Assert.Equal(expected, target.ToArray());
     }
+
+    [Theory]
+    [InlineData("fs://share")]
+    [InlineData("fs://share/1")]
+    public void CanProcess_AcceptsATruncatedId_ItIsStillInsideTheBasket(string fileId)
+    {
+        // Ownership is about the scope, not about the file: the hybrid chain routes such an ID to
+        // this storage, and the operations below report "no file" instead of a directory failure.
+        Assert.True(Storage.CanProcess(fileId));
+    }
+
+    [Theory]
+    [InlineData("fs://share")]
+    [InlineData("fs://share/1")]
+    public async Task Download_TruncatedId_ReturnsFalse(string fileId)
+    {
+        // The path really is an existing directory — without the file-ID check the temp folder
+        // would reject it with InvalidOperationException instead of the "no file" contract.
+        Directory.CreateDirectory(Path.Combine(_root, Basket, "1"));
+
+        var downloaded = await Storage.DownloadAsync(
+            fileId,
+            static (_, _) => Task.CompletedTask,
+            Token);
+
+        Assert.False(downloaded);
+    }
+
+    [Theory]
+    [InlineData("fs://share")]
+    [InlineData("fs://share/1")]
+    public async Task Delete_TruncatedId_ReturnsFalse_AndLeavesTheDirectory(string fileId)
+    {
+        var tenantDir = Path.Combine(_root, Basket, "1");
+        Directory.CreateDirectory(tenantDir);
+
+        Assert.False(await Storage.DeleteAsync(fileId, Token));
+        Assert.True(Directory.Exists(tenantDir), "a truncated ID must never delete a directory");
+    }
 }

@@ -456,6 +456,66 @@ public sealed class FileSystemStorageRegistrationTests : IDisposable
     // ---------- service collection shape ----------
 
     [Fact]
+    public void Register_FromConfigurationTwice_LastPathWins()
+    {
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["First:Basket"] = "first_basket",
+                ["Second:Basket"] = "second_basket",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(configuration);
+        services.AddFsStorage(_testDir, Name, b => b
+            .FromConfiguration("First")
+            .FromConfiguration("Second"));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Equal("second_basket", Options(provider).Basket);
+    }
+
+    [Fact]
+    public void Register_SystemTempRootWithPrefix_IsStillRejected()
+    {
+        // The storage's own rule is stricter than the temp folder's: even a scoped instance is
+        // refused as a storage root, because the OS wipes the system temp folder and shares it.
+        var services = new ServiceCollection();
+        services.AddFsStorageWithTempFolder(Name, tb => tb.Options(ob => ob.Configure(o =>
+        {
+            o.RootPath = Path.GetTempPath();
+            o.FolderPrefix = "fs_store_";
+        })));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<IFileStorage>());
+
+        Assert.Contains("system temp", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Register_TwoStorages_UnkeyedAliasResolvesTheLastRegistration()
+    {
+        // The unkeyed alias is the single-storage convenience: with several registrations it keeps
+        // resolving the last one, which is otherwise invisible from the outside.
+        var secondRoot = Path.Combine(_testDir, "second");
+
+        var services = new ServiceCollection();
+        services.AddFsStorage(_testDir, "one");
+        services.AddFsStorage(secondRoot, "two");
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Same(
+            provider.GetRequiredKeyedService<IFileStorage>("two"),
+            provider.GetRequiredService<IFileStorage>());
+    }
+
+    [Fact]
     public void Register_ReturnsTheCollection_SoChainingWorks()
     {
         var services = new ServiceCollection();

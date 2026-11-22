@@ -40,6 +40,15 @@ public sealed class FileSystemConcurrencyTests : IAsyncLifetime
         var storage = provider.GetRequiredService<IFileStorage>();
 
         const int uploadCount = 20;
+
+        // A distinct payload per file: a truncated or cross-wired write must be visible, and a
+        // unique-name check alone cannot see it.
+        var payloads = new byte[uploadCount][];
+        for (var i = 0; i < uploadCount; i++)
+        {
+            payloads[i] = FixtureHelper.GetByteArray(1024);
+        }
+
         var tasks = new List<Task<StorageResult>>();
 
         // Act — concurrent uploads
@@ -48,7 +57,7 @@ public sealed class FileSystemConcurrencyTests : IAsyncLifetime
             var index = i;
             tasks.Add(Task.Run(async () =>
             {
-                using var stream = FixtureHelper.GetByteStream(1024);
+                using var stream = new MemoryStream(payloads[index]);
                 return await storage.UploadAsync(
                     new UploadFileInput { FileName = $"file_{index}.txt", TenantId = 1 },
                     stream,
@@ -60,14 +69,19 @@ public sealed class FileSystemConcurrencyTests : IAsyncLifetime
 
         // Assert — all should succeed with unique file IDs
         Assert.Equal(uploadCount, results.Length);
-        var uniqueIds = new HashSet<string>(results.Select(r => r.FileId));
-        Assert.Equal(uploadCount, uniqueIds.Count);
+        Assert.Equal(uploadCount, results.Select(r => r.FileId).Distinct().Count());
 
-        // Verify each file can be downloaded
-        foreach (var result in results)
+        // …and every file must come back byte-for-byte, under its own ID.
+        for (var i = 0; i < uploadCount; i++)
         {
-            var downloaded = await storage.DownloadAsync(result.FileId, (_, _) => Task.CompletedTask, _cts.Token);
-            Assert.True(downloaded);
+            using var target = new MemoryStream();
+
+            Assert.True(await storage.DownloadAsync(
+                results[i].FileId,
+                async (stream, ct) => await stream.CopyToAsync(target, ct),
+                _cts.Token));
+
+            Assert.Equal(payloads[i], target.ToArray());
         }
     }
 
