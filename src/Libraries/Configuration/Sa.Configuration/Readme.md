@@ -559,6 +559,32 @@ public sealed class StripPrefixTransform(string prefix) : ISaConfigurationTransf
 builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("legacy:"));
 ```
 
+**Shorthand transforms.** Two overloads cover the common cases without a class of their own.
+
+*Per-key rules* — each registered rule maps the current value of one key to its new value:
+
+```csharp
+builder.Configuration.AddSaConfigurationValueTransform(rules => rules
+    .Add("s3_url",  value => value?.Trim())                        // "  https://s3  " → "https://s3"
+    .Add("timeout", value => value is null ? null : $"{value}s")); // "30" → "30s"
+```
+
+A rule runs only for a key that exists — inside a client overlay that is the client's value, or the core value it falls back to — so it never adds a key. Returning the value it received is not a change: an untouched key is not copied into the pass, and a client overlay keeps reading the core live. Returning `null` blanks the key.
+
+*A lambda that returns pairs* — use it to add a key or to expand one key into several:
+
+```csharp
+builder.Configuration.AddSaConfigurationTransform(view =>
+    view.TryGetValue("key1", out string? raw) && raw is not null
+        ? raw.Split(',', StringSplitOptions.TrimEntries)
+             .Select((item, index) => new KeyValuePair<string, string?>($"key1:{index}", item))
+        : []);
+
+// key1 = "s1,s2,s3" → key1:0 = s1, key1:1 = s2, key1:2 = s3
+```
+
+Both forms are ordinary transforms: they run after the built-in ones in registration order and apply to client overlays too.
+
 **Where the value is looked up.** The alias applies to the assembled configuration built from **all** sources, so the flat key and the canonical path may live in different places: `auth_base_url` in PostgreSQL, `sa:scope:api:auth:base_url` in `appsettings.json`. The alias joins them.
 
 **Who overrides whom.**

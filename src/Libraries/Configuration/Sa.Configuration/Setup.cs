@@ -99,6 +99,60 @@ public static class Setup
     }
 
     /// <summary>
+    /// Appends a custom transform written as a lambda.
+    /// </summary>
+    /// <remarks>
+    /// Same contract as <see cref="AddSaConfigurationTransform(IConfigurationBuilder, ISaConfigurationTransform)"/>:
+    /// the callback receives the merged configuration and returns only the keys it changes. Use this
+    /// form when a step has to add a key that does not exist or to expand one key into several.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/> or
+    /// <paramref name="apply"/> is null.</exception>
+    public static IConfigurationBuilder AddSaConfigurationTransform(
+        this IConfigurationBuilder builder,
+        Func<ISaConfigurationView, IEnumerable<KeyValuePair<string, string?>>> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return builder.AddSaConfigurationTransform(new DelegateTransform(apply));
+    }
+
+    /// <summary>
+    /// Appends a per-key transform: each registered rule maps the current value of one key to its
+    /// new value.
+    /// </summary>
+    /// <remarks>
+    /// This is the short form for the common case — "rewrite the value of these keys":
+    /// <code>
+    /// builder.Configuration.AddSaConfigurationValueTransform(rules => rules
+    ///     .Add("s3_url", value =&gt; value?.Trim())
+    ///     .Add("timeout", value =&gt; value is null ? null : $"{value}s"));
+    /// </code>
+    /// A rule runs only when its key exists (in a client overlay that means the client's own value,
+    /// or the core one it falls back to), so it never adds a key. Returning the received value is not
+    /// a change, so an untouched key is not copied into the pass data. To add keys or turn one key
+    /// into several, use the delegate overload of <see cref="AddSaConfigurationTransform(IConfigurationBuilder, Func{ISaConfigurationView, IEnumerable{KeyValuePair{string, string}}})"/>.
+    /// <para>
+    /// Rules run after the built-in transforms and after the class-based ones registered before them,
+    /// in registration order, and each rule sees the values produced by the earlier transforms.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/> or
+    /// <paramref name="configure"/> is null.</exception>
+    public static IConfigurationBuilder AddSaConfigurationValueTransform(
+        this IConfigurationBuilder builder,
+        Action<SaConfigurationValueTransformBuilder> configure)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        SaConfigurationValueTransformBuilder rules = new();
+        configure(rules);
+
+        return builder.AddSaConfigurationTransform(new ValueTransform(rules.Snapshot()));
+    }
+
+    /// <summary>
     /// Moves the final pass to the end of the source list, after every source registered so far.
     /// </summary>
     /// <remarks>

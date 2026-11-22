@@ -559,6 +559,32 @@ public sealed class StripPrefixTransform(string prefix) : ISaConfigurationTransf
 builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("legacy:"));
 ```
 
+**Сокращённые трансформы.** Две перегрузки закрывают частые случаи без отдельного класса.
+
+*Правила по ключам* — каждое зарегистрированное правило отображает текущее значение одного ключа в новое:
+
+```csharp
+builder.Configuration.AddSaConfigurationValueTransform(rules => rules
+    .Add("s3_url",  value => value?.Trim())                        // "  https://s3  " → "https://s3"
+    .Add("timeout", value => value is null ? null : $"{value}s")); // "30" → "30s"
+```
+
+Правило выполняется только для существующего ключа — в клиентском оверлее это значение клиента или core-значение, на которое он падает, — поэтому ключ оно не добавляет. Возврат полученного значения не считается изменением: незатронутый ключ не копируется в пасс, а клиентский оверлей продолжает читать core живьём. Возврат `null` обнуляет ключ.
+
+*Лямбда, возвращающая пары* — для добавления ключа или разворачивания одного ключа в несколько:
+
+```csharp
+builder.Configuration.AddSaConfigurationTransform(view =>
+    view.TryGetValue("key1", out string? raw) && raw is not null
+        ? raw.Split(',', StringSplitOptions.TrimEntries)
+             .Select((item, index) => new KeyValuePair<string, string?>($"key1:{index}", item))
+        : []);
+
+// key1 = "s1,s2,s3" → key1:0 = s1, key1:1 = s2, key1:2 = s3
+```
+
+Обе формы — обычные трансформы: выполняются после встроенных в порядке регистрации и применяются к клиентским оверлеям тоже.
+
 **Где ищется значение.** Алиас применяется к итоговой конфигурации, собранной из **всех** источников, поэтому плоский ключ и канонический путь могут лежать в разных местах: `auth_base_url` — в PostgreSQL, `sa:scope:api:auth:base_url` — в `appsettings.json`. Алиас их склеит.
 
 **Кто кого перекрывает.**
