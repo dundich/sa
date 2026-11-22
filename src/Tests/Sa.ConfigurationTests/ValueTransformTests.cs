@@ -132,6 +132,48 @@ public class ValueTransformTests
         Assert.Equal("B", clients.GetClient("acme")["s3_url"]);
     }
 
+    [Fact]
+    public void Rule_DoesNotRewriteACoreOwnedKeyTwiceInAnOverlay()
+    {
+        ConfigurationManager core = new();
+        core.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["timeout"] = "30",
+            ["theme"] = "dark",
+        });
+        core.AddSaConfigurationValueTransform(rules => rules
+            .Add("timeout", value => value is null ? null : $"{value}s"));
+
+        Assert.Equal("30s", core["timeout"]);
+
+        using ClientConfigurations clients = Registry(core, new ProviderRows
+        {
+            Items = [new("acme", "theme", "light")],
+        });
+
+        // The rule does not run for a key the client does not own, so the core value is not
+        // transformed a second time ("30ss").
+        Assert.Equal("30s", clients.GetClient("acme")["timeout"]);
+    }
+
+    [Fact]
+    public void Rules_AcceptTheEnvironmentSpellingOfAKey()
+    {
+        ConfigurationBuilder builder = new();
+        builder.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["sa:pg:host"] = " db ",
+        });
+
+        builder.AddSaConfigurationValueTransform(rules => rules
+            .Add("sa__pg__host", value => value?.Trim()));
+
+        IConfiguration config = builder.Build();
+
+        Assert.Equal("db", config["sa:pg:host"]);
+        Assert.Equal("db", config["sa__pg__host"]);
+    }
+
     private sealed class MutableSource : IConfigurationSource
     {
         public Dictionary<string, string?> Data { get; } = new(StringComparer.OrdinalIgnoreCase);

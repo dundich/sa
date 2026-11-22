@@ -19,8 +19,9 @@ public sealed class SaConfigurationValueTransformBuilder
     /// Adds a rule: the value of <paramref name="key"/> is passed through <paramref name="map"/>.
     /// </summary>
     /// <remarks>
-    /// Registering the same key twice keeps the last rule. The rule runs only when the key exists;
-    /// returning the received value blanks nothing and copies nothing.
+    /// Registering the same key twice keeps the last rule — the key is compared in the canonical
+    /// <c>:</c> spelling, so <c>sa__pg__host</c> and <c>sa:pg:host</c> are the same rule. The rule
+    /// runs only when the key exists; returning the received value blanks nothing and copies nothing.
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="key"/> is blank.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
@@ -29,7 +30,9 @@ public sealed class SaConfigurationValueTransformBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(map);
 
-        _rules[key] = map;
+        // Normalized like a configuration lookup, so a rule spelled sa__pg__host matches the
+        // canonical sa:pg:host the view exposes.
+        _rules[ConfigurationKey.Normalize(key)] = map;
         return this;
     }
 

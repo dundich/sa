@@ -255,7 +255,7 @@ builder.Configuration.AddSaConfigurationValueTransform(rules => rules
     .Add("timeout", value => value is null ? null : $"{value}s")); // "30" → "30s"
 ```
 
-A rule runs only for a key that exists and only reports an actual change, so nothing is copied or shadowed: an untouched key keeps reading its source, and a client overlay keeps reading the core.
+A rule runs only for a key that exists in the layer it runs over and only reports an actual change, so nothing is copied or shadowed: an untouched key keeps reading its source, and a key a client does not own keeps reading the core — its rule is not run a second time over the already transformed core value.
 
 To add a key, expand one key into several, or keep state between loads, use `AddSaConfigurationTransform` — with a lambda returning pairs or with a class implementing `ISaConfigurationTransform`. Transforms run after placeholders and aliases, in registration order, and apply to client overlays too.
 
@@ -621,9 +621,9 @@ public sealed class StripPrefixTransform(string prefix) : ISaConfigurationTransf
 builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("legacy:"));
 ```
 
-**Rules.** `AddSaConfigurationValueTransform` takes a callback that registers `key → map` rules; registering the same key twice keeps the last rule.
+**Rules.** `AddSaConfigurationValueTransform` takes a callback that registers `key → map` rules; the key is matched in the canonical `:` spelling, so `sa__pg__host` and `sa:pg:host` are one rule, and registering the same key twice keeps the last rule.
 
-- a rule runs only when its key exists, so it never adds a key;
+- a rule runs only for a key present in the layer, so it never adds a key; in a client overlay that means the client's own rows — a core-owned key is left to the core pass;
 - returning the received value is not a change: the key is not written to the pass and keeps reading its source;
 - returning `null` blanks the key — `null` in the core, `string.Empty` for a client's own key, the same rule a class transform's `null` follows;
 - the rules of one registration are applied as one step: they do not see each other's output, but they do see earlier transforms' output.
@@ -632,7 +632,7 @@ builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("lega
 
 **Order.** Transforms run after the built-in ones (placeholders, then aliases) in registration order, each seeing the previous step's output. This does not depend on where `AddSaConfigurationTransform` sits relative to `AddSaConfiguration`, because the built-in steps are rebuilt for every load. `Reload()` recomputes the whole chain.
 
-**Client overlays.** The same chain runs over every client overlay, with the client's own rows first and the core as a fallback. A step that returns the value it received is skipped, so a key the client does not own keeps following the core instead of freezing a copy of it.
+**Client overlays.** The same chain runs over every client overlay, with the client's own rows first and the core as a fallback. A per-key rule only sees the client's own rows, so a core-owned key is never rewritten twice; a step that returns the value it received is skipped, so a key the client does not own keeps following the core instead of freezing a copy of it.
 
 ### Clients: full rules
 

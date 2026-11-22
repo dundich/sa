@@ -128,9 +128,10 @@ public static class Setup
     ///     .Add("s3_url", value =&gt; value?.Trim())
     ///     .Add("timeout", value =&gt; value is null ? null : $"{value}s"));
     /// </code>
-    /// A rule runs only when its key exists (in a client overlay that means the client's own value,
-    /// or the core one it falls back to), so it never adds a key. Returning the received value is not
-    /// a change, so an untouched key is not copied into the pass data. To add keys or turn one key
+    /// A rule runs only when its key exists in the layer it runs over, so it never adds a key. In a
+    /// client overlay that means the client's own rows: a key the client does not own is left to
+    /// the core pass, which has already transformed it. Returning the received value is not a
+    /// change, so an untouched key is not copied into the pass data. To add keys or turn one key
     /// into several, use the delegate overload of <see cref="AddSaConfigurationTransform(IConfigurationBuilder, Func{ISaConfigurationView, IEnumerable{KeyValuePair{string, string}}})"/>.
     /// <para>
     /// Rules run after the built-in transforms and after the class-based ones registered before them,
