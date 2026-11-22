@@ -41,6 +41,11 @@ public partial interface IDeliveryBuilder
     /// Adds scoped delivery for the specified consumer and message type without an explicit consumer group ID.
     /// A default group name is derived from <typeparamref name="TConsumer"/> using the configured naming strategy.
     /// </summary>
+    /// <remarks>
+    /// The derived name is an identity and is used verbatim, exactly like an explicit
+    /// <c>consumerGroupId</c>: the configured <see cref="IConsumerGroupNamingStrategy"/> must return
+    /// only lowercase ASCII letters, digits and underscores.
+    /// </remarks>
     /// <typeparam name="TConsumer">The type of consumer.</typeparam>
     /// <typeparam name="TMessage">The type of message.</typeparam>
     /// <param name="configure">An optional action to configure the delivery settings via builder.</param>
@@ -52,6 +57,8 @@ public partial interface IDeliveryBuilder
     /// The <paramref name="configure"/> callback still has the final word.
     /// </param>
     /// <returns>The delivery builder instance.</returns>
+    /// <exception cref="ArgumentException">The naming strategy returned a blank name or one containing
+    /// a character outside <c>[a-z0-9_]</c>.</exception>
     IDeliveryBuilder AddDeliveryScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
         Guid? jobId = null,
@@ -91,6 +98,11 @@ public partial interface IDeliveryBuilder
     /// Adds singleton delivery for the specified consumer and message type without an explicit consumer group ID.
     /// A default group name is derived from <typeparamref name="TConsumer"/> using the configured naming strategy.
     /// </summary>
+    /// <remarks>
+    /// The derived name is an identity and is used verbatim, exactly like an explicit
+    /// <c>consumerGroupId</c>: the configured <see cref="IConsumerGroupNamingStrategy"/> must return
+    /// only lowercase ASCII letters, digits and underscores.
+    /// </remarks>
     /// <typeparam name="TConsumer">The type of consumer.</typeparam>
     /// <typeparam name="TMessage">The type of message.</typeparam>
     /// <param name="configure">An optional action to configure the delivery settings via builder.</param>
@@ -102,6 +114,8 @@ public partial interface IDeliveryBuilder
     /// The <paramref name="configure"/> callback still has the final word.
     /// </param>
     /// <returns>The delivery builder instance.</returns>
+    /// <exception cref="ArgumentException">The naming strategy returned a blank name or one containing
+    /// a character outside <c>[a-z0-9_]</c>.</exception>
     IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
         Guid? jobId = null,
@@ -111,6 +125,13 @@ public partial interface IDeliveryBuilder
     /// <summary>
     /// Sets the default naming strategy used to derive consumer group names when no explicit <c>consumerGroupId</c> is provided.
     /// </summary>
+    /// <remarks>
+    /// The strategy's name is an identity, not a label: it is used verbatim, so it must contain only
+    /// lowercase ASCII letters, digits and underscores. The check runs when a name is derived (the
+    /// <c>AddDelivery</c> overloads without an id and <c>GetConsumerGroupName</c>), so a strategy that
+    /// returns <c>Orders-V2</c> fails registration with <see cref="ArgumentException"/> instead of
+    /// being rewritten to <c>orders_v2</c>.
+    /// </remarks>
     /// <param name="strategy">The naming strategy implementation to use.</param>
     /// <returns>The delivery builder instance.</returns>
     IDeliveryBuilder ConfigureDefaultNamingStrategy(IConsumerGroupNamingStrategy strategy);

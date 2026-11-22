@@ -62,7 +62,22 @@ internal sealed class DeliveryBuilder(IServiceCollection services, string scopeK
         return this;
     }
 
-    public string GetConsumerGroupName<TConsumer>() => _defaultNamingStrategy.GetConsumerGroupName<TConsumer>();
+    /// <summary>
+    /// Derives the group name for <typeparamref name="TConsumer"/> from the configured naming
+    /// strategy, validating it with the same rule as an explicit <c>consumerGroupId</c>.
+    /// </summary>
+    /// <remarks>
+    /// A strategy is a source of identity too: the name it returns is used verbatim as the consumer's
+    /// DI key, the settings key, the job name and part of the PostgreSQL partition name. Validating
+    /// here keeps the error attributable to the strategy instead of surfacing from the
+    /// <c>AddDelivery</c> overload that received the derived name.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The strategy returned a blank name or one containing a
+    /// character outside <c>[a-z0-9_]</c>.</exception>
+    public string GetConsumerGroupName<TConsumer>()
+        => EnsureValidConsumerGroupId(
+            _defaultNamingStrategy.GetConsumerGroupName<TConsumer>(),
+            source: "the configured IConsumerGroupNamingStrategy");
 
     public IDeliveryBuilder ConfigureDefaultNamingStrategy(IConsumerGroupNamingStrategy strategy)
     {
@@ -83,10 +98,16 @@ internal sealed class DeliveryBuilder(IServiceCollection services, string scopeK
     /// <c>es_group</c> both became <c>es_group</c>, <c>ES_GROUP</c> became <c>es_group</c>) made two
     /// distinct registrations collapse into one, so the caller now gets a loud error.
     /// </summary>
-    /// <param name="consumerGroupId">The id supplied to <c>AddDelivery</c>.</param>
+    /// <param name="consumerGroupId">The id supplied to <c>AddDelivery</c>, or returned by an
+    /// <see cref="IConsumerGroupNamingStrategy"/>.</param>
+    /// <param name="source">
+    /// Who supplied the id when it is not the caller of <c>AddDelivery</c> — named in the error so a
+    /// naming strategy can be recognised as the origin.
+    /// </param>
+    /// <returns>The id, unchanged.</returns>
     /// <exception cref="ArgumentException">The id is blank or contains a character outside
     /// <c>[a-z0-9_]</c>.</exception>
-    internal static void EnsureValidConsumerGroupId(string? consumerGroupId)
+    internal static string EnsureValidConsumerGroupId(string? consumerGroupId, string? source = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(consumerGroupId);
 
@@ -99,8 +120,11 @@ internal sealed class DeliveryBuilder(IServiceCollection services, string scopeK
                 $"Consumer group id '{consumerGroupId}' is invalid: the character '{c}' is not " +
                 "allowed. A group id is used verbatim as the consumer's DI key, the settings key, " +
                 "the job name and part of the PostgreSQL partition name, so it must contain only " +
-                "lowercase ASCII letters, digits and underscores (for example 'es_group').",
+                "lowercase ASCII letters, digits and underscores (for example 'es_group')." +
+                (source is null ? string.Empty : $" The id was supplied by {source}."),
                 nameof(consumerGroupId));
         }
+
+        return consumerGroupId;
     }
 }

@@ -120,6 +120,10 @@ Only lowercase ASCII letters, digits and underscores are accepted; `es-group`, `
 like throw `ArgumentException` instead of being silently rewritten to `es_group`, so two
 registrations can never collapse into one group.
 
+The same rule covers a name derived by `IConsumerGroupNamingStrategy` (the `AddDelivery` overloads
+without an id): a strategy that returns `Orders-V2` also fails registration instead of becoming
+`orders_v2`. The error names the strategy as the source.
+
 ## Empty-Queue Wait Policy
 
 Empty-queue back-off is opt-in per consumer group. Set the base `Interval` (used while work flows) and the cap `IdleMaxInterval` (used while empty):

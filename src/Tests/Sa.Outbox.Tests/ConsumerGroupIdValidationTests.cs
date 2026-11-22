@@ -67,6 +67,39 @@ public class ConsumerGroupIdValidationTests
         Assert.NotNull(manager.GetSettings(groupId));
     }
 
+    [Theory]
+    [InlineData("Orders-V2")]
+    [InlineData("ORDERS")]
+    public void DefaultNamingStrategy_WithNonCanonicalName_ThrowsNamingTheStrategy(string name)
+    {
+        var services = new ServiceCollection();
+
+        ArgumentException error = Assert.Throws<ArgumentException>(() =>
+            services.AddSaOutbox(builder => builder.WithDeliveries(deliveries => deliveries
+                .ConfigureDefaultNamingStrategy(new FixedNamingStrategy(name))
+                .AddDelivery<TestConsumer, TestMessage>())));
+
+        Assert.Contains(name, error.Message, StringComparison.Ordinal);
+        Assert.Contains("IConsumerGroupNamingStrategy", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DefaultNamingStrategy_WithCanonicalName_RegistersItVerbatim()
+    {
+        const string groupId = "cg_custom_name";
+        var services = new ServiceCollection();
+
+        services.AddSaOutbox(builder => builder.WithDeliveries(deliveries => deliveries
+            .ConfigureDefaultNamingStrategy(new FixedNamingStrategy(groupId))
+            .AddDelivery<TestConsumer, TestMessage>()));
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+        var manager = sp.GetRequiredService<IOutboxConsumerManager>();
+
+        Assert.True(manager.IsRegistered(groupId));
+        Assert.NotNull(manager.GetSettings(groupId));
+    }
+
     private static void Register(string groupId, bool scoped)
     {
         var services = new ServiceCollection();
@@ -77,5 +110,10 @@ public class ConsumerGroupIdValidationTests
             else
                 deliveries.AddDelivery<TestConsumer, TestMessage>(groupId);
         }));
+    }
+
+    private sealed class FixedNamingStrategy(string name) : IConsumerGroupNamingStrategy
+    {
+        public string GetConsumerGroupName<TConsumer>() => name;
     }
 }
