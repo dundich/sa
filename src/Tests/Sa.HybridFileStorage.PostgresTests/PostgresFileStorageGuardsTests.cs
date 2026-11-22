@@ -16,6 +16,7 @@ public sealed class PostgresFileStorageGuardsTests(PostgresFileStorageGuardsTest
 {
     private const string ReadOnlyKey = "guarded_readonly";
     private const string LimitedKey = "guarded_limited";
+    private const string ExtensionKey = "guarded_extension";
     private const int MaxBytes = 32;
 
     public sealed class Fixture : PgDataSourceFixture<IFileStorage>
@@ -24,11 +25,14 @@ public sealed class PostgresFileStorageGuardsTests(PostgresFileStorageGuardsTest
         {
             Register(ReadOnlyKey, o => o.IsReadOnly = true);
             Register(LimitedKey, o => o.MaxUploadSizeBytes = MaxBytes);
+            Register(ExtensionKey, _ => { });
         }
 
         public IFileStorage ReadOnly => ServiceProvider.GetRequiredKeyedService<IFileStorage>(ReadOnlyKey);
 
         public IFileStorage Limited => ServiceProvider.GetRequiredKeyedService<IFileStorage>(LimitedKey);
+
+        public IFileStorage Extensions => ServiceProvider.GetRequiredKeyedService<IFileStorage>(ExtensionKey);
 
         private void Register(string key, Action<PostgresFileStorageOptions> configure)
             => Services.AddSaPostgreSqlFileStorageChained(key, b => b.Options(ob => ob.Configure(o =>
@@ -77,6 +81,24 @@ public sealed class PostgresFileStorageGuardsTests(PostgresFileStorageGuardsTest
             fixture.ReadOnly.UploadAsync(
                 new UploadFileInput { FileName = "a.txt", TenantId = 1 },
                 null!, fixture.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ReadOnly_Download_MissingFile_ReturnsFalse()
+    {
+        // Reads are not gated by the flag — a read-only storage over a table it never wrote must
+        // still answer "not found" instead of refusing.
+        Assert.False(await fixture.ReadOnly.DownloadAsync(
+            "pg://share/1/1773210911/none.txt",
+            static (_, _) => Task.CompletedTask,
+            fixture.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ReadOnly_GetMetadata_MissingFile_ReturnsNull()
+    {
+        Assert.Null(await fixture.ReadOnly.GetMetadataAsync(
+            "pg://share/1/1773210911/none.txt", fixture.CancellationToken));
     }
 
     [Fact]
@@ -133,6 +155,31 @@ public sealed class PostgresFileStorageGuardsTests(PostgresFileStorageGuardsTest
             fixture.CancellationToken);
 
         Assert.Equal(0L, count);
+    }
+
+    [Fact]
+    public async Task OverlongExtension_IsRejected_BeforeAnyDdl()
+    {
+        // The check used to run after EnsurePartsAsync, so a rejected upload still created the table
+        // and a partition. This registration's table is touched by nothing else, so its absence is
+        // observable.
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("x"));
+        string name = "a." + new string('e', PostgresFileStorageTable.FileExtMaxLength + 1);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            fixture.Extensions.UploadAsync(
+                new UploadFileInput { FileName = name, TenantId = 1 },
+                content,
+                fixture.CancellationToken));
+
+        Assert.Equal("metadata", ex.ParamName);
+
+        long created = await fixture.DataSource.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM pg_class WHERE relname = @table AND relnamespace = 'public'::regnamespace",
+            cmd => cmd.Parameters.Add(new("table", ExtensionKey)),
+            fixture.CancellationToken);
+
+        Assert.Equal(0, created);
     }
 
     private static async Task<StorageResult> Upload(

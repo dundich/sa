@@ -76,6 +76,15 @@ public sealed class PostgresFileStorageOptionsTests
         Assert.Throws<ArgumentException>(() => options.Validate());
     }
 
+    [Fact]
+    public void Validate_Accepts_A63CharacterTableName()
+    {
+        var options = ValidOptions();
+        options.TableName = "a" + new string('b', 62);
+
+        options.Validate();
+    }
+
     // ---------- StorageType ----------
 
     [Theory]
@@ -143,6 +152,7 @@ public sealed class PostgresFileStorageOptionsTests
     [InlineData("")]
     [InlineData("  ")]
     [InlineData("1storage")]
+    [InlineData("storage.public")]
     [InlineData("storage; DROP SCHEMA x")]
     public void Validate_Rejects_MalformedSchemaName(string schemaName)
     {
@@ -193,6 +203,32 @@ public sealed class PostgresFileStorageOptionsTests
     {
         var options = ValidOptions();
         options.MaxUploadSizeBytes = 0;
+
+        options.Validate();
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(99)]
+    public void Validate_Rejects_UndefinedPartByRange(int value)
+    {
+        // The value is mapped to a PgPartBy at registration; an undefined one used to escape
+        // validation and fail there without naming the property.
+        var options = ValidOptions();
+        options.PartByRange = (PartByRange)value;
+
+        var ex = Assert.Throws<ArgumentException>(() => options.Validate());
+        Assert.Equal(nameof(PostgresFileStorageOptions.PartByRange), ex.ParamName);
+    }
+
+    [Theory]
+    [InlineData(PartByRange.Day)]
+    [InlineData(PartByRange.Month)]
+    [InlineData(PartByRange.Year)]
+    public void Validate_Accepts_EveryDefinedPartByRange(PartByRange partByRange)
+    {
+        var options = ValidOptions();
+        options.PartByRange = partByRange;
 
         options.Validate();
     }

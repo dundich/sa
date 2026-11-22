@@ -1,4 +1,5 @@
 using Sa.HybridFileStorage.Domain;
+using Sa.HybridFileStorage.Postgres;
 using System.Text;
 
 namespace Sa.HybridFileStorage.PostgresTests;
@@ -18,8 +19,6 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
     [Fact]
     public async Task UploadFileAsync()
     {
-        Console.WriteLine(fixture.ConnectionString);
-
         // Arrange
         var input = new UploadFileInput { FileName = "test.txt", TenantId = 1 };
         using MemoryStream fileContent = await CreateStream(fixture.CancellationToken);
@@ -42,8 +41,12 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
 
         Assert.True(Sub.CanProcess(result.FileId));
 
-        var meta = Sub.GetMetadataAsync(result.FileId, fixture.CancellationToken);
+        var meta = await Sub.GetMetadataAsync(result.FileId, fixture.CancellationToken);
         Assert.NotNull(meta);
+        Assert.Equal("test.txt", meta.FileName);
+        Assert.Equal(1, meta.TenantId);
+        Assert.Equal(StorageNaming.DefaultBasket, meta.Basket);
+        Assert.Equal("pg", meta.StorageType);
     }
 
 
@@ -257,8 +260,6 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
     [Fact]
     public async Task Upload2FileAsync()
     {
-        Console.WriteLine(fixture.ConnectionString);
-
         // Arrange
         var metadata = new UploadFileInput { FileName = "test1.txt", TenantId = 1 };
         using MemoryStream first = await CreateStream(fixture.CancellationToken);
@@ -288,8 +289,6 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
     [InlineData("./data/12345.wav")]
     public async Task UploadWavFileAsync(string filePath)
     {
-        Console.WriteLine(fixture.ConnectionString);
-
         // Arrange
         var metadata = new UploadFileInput { FileName = filePath, TenantId = 1 };
         using var fileContent = File.OpenRead(filePath);
@@ -300,12 +299,187 @@ public sealed class PostgresFileStorageTests(PostgresFileStorageTests.Fixture fi
     }
 
 
+    // ---------- upload guards and normalisation ----------
+
+    [Fact]
+    public async Task UploadAsync_NullMetadata_ThrowsArgumentNullException()
+    {
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("x"));
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            Sub.UploadAsync(null!, content, fixture.CancellationToken));
+    }
+
+    [Fact]
+    public async Task UploadAsync_PreCancelledToken_Throws()
+    {
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("x"));
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Sub.UploadAsync(
+                new UploadFileInput { FileName = "cancelled.txt", TenantId = 1 },
+                content,
+                cts.Token));
+    }
+
+    [Fact]
+    public async Task UploadAsync_SeekableStreamAtAPosition_StoresOnlyTheRemainder()
+    {
+        // The caller's position is respected, like the filesystem provider does it: Npgsql writes a
+        // Stream parameter from its current position, so `size` has to describe the same bytes.
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("HEADpayload"));
+        content.Position = 4;
+
+        var upload = await Sub.UploadAsync(
+            new UploadFileInput { FileName = "remainder.bin", TenantId = 51 },
+            content,
+            fixture.CancellationToken);
+
+        long size = await fixture.DataSource.ExecuteScalarAsync<long>(
+            "SELECT size FROM public.files WHERE id = @id",
+            cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
+
+        byte[] stored = await fixture.DataSource.ExecuteScalarAsync<byte[]>(
+            "SELECT data FROM public.files WHERE id = @id",
+            cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
+
+        Assert.Equal(7, size);
+        Assert.Equal(Encoding.UTF8.GetBytes("payload"), stored);
+    }
+
+    [Fact]
+    public async Task UploadAsync_SeekableStreamAtItsEnd_StoresAnEmptyFile()
+    {
+        // The other end of the "position is respected" rule: nothing remains to copy, so the row is
+        // a zero-byte file — not a negative size, and not the whole stream.
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("consumed"));
+        content.Position = content.Length;
+
+        var upload = await Sub.UploadAsync(
+            new UploadFileInput { FileName = "empty-remainder.bin", TenantId = 52 },
+            content,
+            fixture.CancellationToken);
+
+        long size = await fixture.DataSource.ExecuteScalarAsync<long>(
+            "SELECT size FROM public.files WHERE id = @id",
+            cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
+
+        Assert.Equal(0, size);
+    }
+
+    [Fact]
+    public async Task UploadAsync_LeadingSeparators_AreNormalisedInTheRowAndTheId()
+    {
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("x"));
+
+        var upload = await Sub.UploadAsync(
+            new UploadFileInput { FileName = "/api/files/x.txt", TenantId = 61 },
+            content,
+            fixture.CancellationToken);
+
+        Assert.EndsWith("/api/files/x.txt", upload.FileId);
+
+        string? rowName = await fixture.DataSource.ExecuteScalarAsync<string>(
+            "SELECT name FROM public.files WHERE id = @id",
+            cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
+
+        Assert.Equal("api/files/x.txt", rowName);
+
+        var metadata = await Sub.GetMetadataAsync(upload.FileId, fixture.CancellationToken);
+        Assert.NotNull(metadata);
+        Assert.Equal("api/files/x.txt", metadata.FileName);
+
+        // The metadata name and the name inside the ID are the same string — a metadata row that
+        // cannot be rebuilt into its own file ID is a trap for every caller.
+        Assert.True(FileIdParser.TryParse(
+            upload.FileId, FileIdFormat.WithTimestamp, out _, out _, out _, out string parsedName));
+        Assert.Equal(metadata.FileName, parsedName);
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("\\")]
+    [InlineData("///")]
+    public async Task UploadAsync_NameOfOnlySeparators_IsRejected(string fileName)
+    {
+        // Normalised away to nothing, the name would produce `pg://share/1/<stamp>/` — an ID this
+        // storage claims through CanProcess but cannot parse back, i.e. a file nobody can read.
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("x"));
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            Sub.UploadAsync(
+                new UploadFileInput { FileName = fileName, TenantId = 1 },
+                content,
+                fixture.CancellationToken));
+
+        Assert.Equal("metadata", ex.ParamName);
+        Assert.Contains("separator", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UploadAsync_StampsCreatedAtWithUtcMidnight()
+    {
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("x"));
+
+        var upload = await Sub.UploadAsync(
+            new UploadFileInput { FileName = "stamped.txt", TenantId = 71 },
+            content,
+            fixture.CancellationToken);
+
+        long createdAt = await fixture.DataSource.ExecuteScalarAsync<long>(
+            "SELECT created_at FROM public.files WHERE id = @id",
+            cmd => cmd.Parameters.Add(new("id", upload.FileId)), fixture.CancellationToken);
+
+        long today = PostgresFileStorage.StartOfUtcDay(TimeProvider.System.GetUtcNow()).ToUnixTimeSeconds();
+
+        // A midnight crossing between the upload and this read can shift the day by one.
+        Assert.Contains(createdAt, new[] { today - 86_400, today, today + 86_400 });
+        Assert.Equal(0, createdAt % 86_400);
+
+        // The stamp embedded in the ID is the same day the row records.
+        Assert.True(FileIdParser.TryParse(
+            upload.FileId, FileIdFormat.WithTimestamp, out _, out _, out long idStamp, out _));
+        Assert.Equal(createdAt, idStamp);
+    }
+
+    [Theory]
+    [InlineData(2026, 11, 23, 1, 3, 2026, 11, 22)]  // 01:00+03:00 is the previous UTC day
+    [InlineData(2026, 11, 22, 23, -5, 2026, 11, 23)] // 23:00-05:00 is the next UTC day
+    [InlineData(2026, 11, 22, 12, 0, 2026, 11, 22)]
+    public void StartOfUtcDay_UsesTheUtcCalendar_NotTheCallersOffset(
+        int year,
+        int month,
+        int day,
+        int hour,
+        int offsetHours,
+        int expectedYear,
+        int expectedMonth,
+        int expectedDay)
+    {
+        // The stamp must not depend on the host's time zone: GetUtcNow().Date went through an
+        // implicit DateTime -> DateTimeOffset conversion that re-applied the local offset.
+        var instant = new DateTimeOffset(year, month, day, hour, 0, 0, TimeSpan.FromHours(offsetHours));
+
+        var start = PostgresFileStorage.StartOfUtcDay(instant);
+
+        Assert.Equal(TimeSpan.Zero, start.Offset);
+        Assert.Equal(
+            new DateTimeOffset(expectedYear, expectedMonth, expectedDay, 0, 0, 0, TimeSpan.Zero),
+            start);
+    }
+
     private static async Task<MemoryStream> CreateStream(CancellationToken cancellationToken)
     {
         var fileContent = new MemoryStream();
         var writer = new StreamWriter(fileContent);
         await writer.WriteAsync(DataContent);
         await writer.FlushAsync(cancellationToken);
+
+        // The storage reads a seekable stream from its current position — the writer leaves it at
+        // the end, so the helper hands back a stream ready to be read from the start.
+        fileContent.Position = 0;
         return fileContent;
     }
 
